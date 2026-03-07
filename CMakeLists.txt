@@ -13,4 +13,13 @@ FetchContent_MakeAvailable(raylib)
 
 add_executable(raythm src/main.cpp)
 
-target_link_libraries(raythm PRIVATE raylib)
+# BASSライブラリ
+target_include_directories(raythm PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass)
+target_link_libraries(raythm PRIVATE raylib ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib)
+
+# bass.dll を実行ファイルと同じディレクトリにコピー
+add_custom_command(TARGET raythm POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_SOURCE_DIR}/libs/bass/bass.dll
+        $<TARGET_FILE_DIR:raythm>/bass.dll
+)
