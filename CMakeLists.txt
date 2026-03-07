@@ -11,7 +11,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(raylib)
 
-add_executable(raythm src/main.cpp)
+add_executable(raythm src/main.cpp
+        libs/bass/bass.h)
 
 # BASSライブラリ
 target_include_directories(raythm PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass)
