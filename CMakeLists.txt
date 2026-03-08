@@ -12,7 +12,16 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(raylib)
 
 add_executable(raythm src/main.cpp
-        libs/bass/bass.h)
+        libs/bass/bass.h
+        src/audio.cpp
+        src/audio.h
+        src/ui/button.cpp
+        src/ui/button.h
+        src/ui/ui_element.h
+        src/ui/ui_render_queue.cpp
+        src/ui/ui_render_queue.h
+        src/ui/ui_renderer.cpp
+        src/ui/ui_renderer.h)
 
 # BASSライブラリ
 target_include_directories(raythm PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass)
