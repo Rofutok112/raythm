@@ -2,7 +2,7 @@
 #include "audio.h"
 
 int main() {
-    InitWindow(1280, 720, "ふじさとる");
+    InitWindow(1280, 720, "test");
     SetTargetFPS(120);
 
     Camera3D camera = {};
