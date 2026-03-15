@@ -5,8 +5,20 @@
 #ifndef RAYTHM_BUTTON_H
 #define RAYTHM_BUTTON_H
 
+#include "ui_element.h"
 
-class button {
+class ui_render_queue;
+
+class button final : public ui_element {
+public:
+    button(Rectangle rect, Color color);
+
+    void set_color(Color color);
+    [[nodiscard]] Color color() const;
+    void build_render_data(ui_render_queue &queue) const override;
+
+private:
+    Color color_;
 };
 
 

@@ -5,9 +5,10 @@
 #include "ui_renderer.h"
 
 void ui_renderer::render(const ui_render_queue &q) {
-    for (auto &cmd : q.get_render_commands()) {
+    for (const auto &cmd : q.get_render_commands()) {
         switch (cmd.kind) {
             case render_command::type::rect :
+                DrawRectangleRec(cmd.bounds, cmd.color);
                 break;
             case render_command::type::text :
                 break;

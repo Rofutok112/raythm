@@ -5,9 +5,11 @@
 #pragma once
 #include "raylib.h"
 
+class ui_render_queue;
+
 class ui_element {
 public:
     virtual ~ui_element() = default;
     Rectangle bounds;
-    virtual void build_render_data() const = 0;
+    virtual void build_render_data(ui_render_queue &queue) const = 0;
 };

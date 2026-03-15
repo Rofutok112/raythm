@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <memory_resource>
 #include <vector>
 #include "raylib.h"
 
@@ -18,7 +19,7 @@ class ui_render_queue {
 public:
     void enqueue(const render_command &cmd);
     void clear();
-    [[nodiscard]] std::pmr::vector<render_command> get_render_commands() const;
+    [[nodiscard]] const std::pmr::vector<render_command> &get_render_commands() const;
 private:
     std::pmr::vector<render_command> commands_;
 };
