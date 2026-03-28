@@ -22,6 +22,8 @@ add_executable(raythm src/main.cpp
         src/input_handler.h
         src/judge_system.cpp
         src/judge_system.h
+        src/score_system.cpp
+        src/score_system.h
         src/song_loader.cpp
         src/song_loader.h
         src/timing_engine.cpp
@@ -67,6 +69,12 @@ add_executable(judge_system_smoke
         src/judge_system_smoke.cpp
         src/timing_engine.cpp
         src/timing_engine.h)
+
+add_executable(score_system_smoke
+        src/data_models.h
+        src/score_system.cpp
+        src/score_system.h
+        src/score_system_smoke.cpp)
 
 # BASSライブラリ
 target_include_directories(raythm PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass)
