@@ -213,3 +213,107 @@ classDiagram
     song_load_result --> song_data : contains
     song_data --> song_meta
 ```
+
+## Phase 3-1: 入力ハンドラー
+
+```mermaid
+classDiagram
+    class input_handler {
+        -key_config key_config_
+        -array~bool~ prev_state_
+        -array~bool~ curr_state_
+        +update() void
+        +is_lane_just_pressed(int lane) bool
+        +is_lane_held(int lane) bool
+        +is_lane_just_released(int lane) bool
+    }
+
+    class key_config {
+        +array~int, 4~ keys_4
+        +array~int, 6~ keys_6
+        +get_lane_keys(int key_count) span~int~
+    }
+
+    input_handler --> key_config
+```
+
+## Phase 3-2: タイミングエンジン
+
+```mermaid
+classDiagram
+    class timing_engine {
+        -vector~timing_event~ timing_events_
+        -int resolution_
+        +init(vector~timing_event~ events, int resolution) void
+        +tick_to_ms(int tick) double
+        +ms_to_tick(double ms) int
+        +get_bpm_at(int tick) float
+    }
+
+    timing_engine --> timing_event
+```
+
+## Phase 3-3: 判定システム
+
+```mermaid
+classDiagram
+    class judge_system {
+        -array~double, 5~ judge_windows_
+        -vector~note_state~ note_states_
+        +init(vector~note_data~ notes, timing_engine engine) void
+        +update(double current_ms, input_handler input) void
+        +get_last_judge() optional~judge_event~
+        +get_note_states() vector~note_state~
+    }
+
+    class note_state {
+        +note_data note_ref
+        +double target_ms
+        +bool judged
+        +judge_result result
+        +bool holding
+    }
+
+    class judge_event {
+        +judge_result result
+        +double offset_ms
+        +int lane
+    }
+
+    judge_system --> note_state : manages
+    judge_system --> judge_event : emits
+    note_state --> judge_result
+    judge_event --> judge_result
+```
+
+## Phase 3-4: スコア・ゲージ
+
+```mermaid
+classDiagram
+    class score_system {
+        -int score_
+        -int combo_
+        -int max_combo_
+        -array~int, 5~ judge_counts_
+        -int total_notes_
+        -int fast_count_
+        -int slow_count_
+        -double offset_sum_
+        +init(int total_notes) void
+        +on_judge(judge_event event) void
+        +get_score() int
+        +get_combo() int
+        +get_result_data() result_data
+    }
+
+    class gauge {
+        -float value_
+        +on_judge(judge_result result) void
+        +get_value() float
+        +is_cleared() bool
+    }
+
+    score_system --> judge_event
+    score_system --> result_data : produces
+    gauge --> judge_result
+```
