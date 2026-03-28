@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh repo:*)",
+      "Bash(gh project:*)",
+      "Bash(gh auth:*)"
+    ]
+  }
+}
