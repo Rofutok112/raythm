@@ -1,0 +1,15 @@
+[Metadata]
+chartId=invalid-metadata
+keyCount=5
+difficulty=Another
+level=10
+chartAuthor=Codex
+formatVersion=1
+resolution=480
+
+[Timing]
+bpm,0,180
+meter,0,4/4
+
+[Notes]
+tap,0,0

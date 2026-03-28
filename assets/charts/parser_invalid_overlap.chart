@@ -1,0 +1,16 @@
+[Metadata]
+chartId=invalid-overlap
+keyCount=4
+difficulty=Hyper
+level=8
+chartAuthor=Codex
+formatVersion=1
+resolution=480
+
+[Timing]
+bpm,0,160
+meter,0,4/4
+
+[Notes]
+hold,0,1,960
+tap,480,1
