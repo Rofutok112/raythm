@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <memory_resource>
 #include <vector>
 #include "raylib.h"
 
