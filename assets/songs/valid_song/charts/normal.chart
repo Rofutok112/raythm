@@ -1,0 +1,17 @@
+[Metadata]
+chartId=sample-song-normal
+keyCount=4
+difficulty=Normal
+level=5
+chartAuthor=Codex
+formatVersion=1
+resolution=480
+
+[Timing]
+bpm,0,150
+meter,0,4/4
+
+[Notes]
+tap,0,0
+tap,480,1
+hold,960,2,1440

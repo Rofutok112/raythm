@@ -18,6 +18,8 @@ add_executable(raythm src/main.cpp
         src/chart_parser.cpp
         src/chart_parser.h
         src/data_models.h
+        src/song_loader.cpp
+        src/song_loader.h
         src/scene.cpp
         src/scene.h
         src/scene_manager.cpp
@@ -30,6 +32,14 @@ add_executable(chart_parser_smoke
         src/chart_parser.h
         src/chart_parser_smoke.cpp
         src/data_models.h)
+
+add_executable(song_loader_smoke
+        src/chart_parser.cpp
+        src/chart_parser.h
+        src/data_models.h
+        src/song_loader.cpp
+        src/song_loader.h
+        src/song_loader_smoke.cpp)
 
 # BASSライブラリ
 target_include_directories(raythm PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass)

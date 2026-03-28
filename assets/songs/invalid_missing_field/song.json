@@ -1,0 +1,9 @@
+{
+  "songId": "broken-song",
+  "title": "Broken Song",
+  "artist": "Codex",
+  "audioFile": "audio.mp3",
+  "jacketFile": "jacket.png",
+  "previewStartMs": 8000,
+  "songVersion": 1
+}
