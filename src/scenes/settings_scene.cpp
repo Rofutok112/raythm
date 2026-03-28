@@ -9,6 +9,7 @@
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "title_scene.h"
+#include "virtual_screen.h"
 
 settings_scene::settings_scene(scene_manager& manager) : scene(manager) {
 }
@@ -66,6 +67,7 @@ void settings_scene::update(float dt) {
 void settings_scene::draw() {
     const char* frame_rate_label = g_settings.target_fps == 0 ? "Unlimited" : TextFormat("%d", g_settings.target_fps);
 
+    virtual_screen::begin();
     draw_scene_frame("Settings", "ENTER or ESC: Back to Title", {124, 58, 237, 255});
     DrawText("Audio Offset: 0 ms", 130, 300, 36, BLACK);
     DrawText(TextFormat("Note Speed: %.3f", g_settings.note_speed), 130, 360, 36, BLACK);
@@ -75,4 +77,8 @@ void settings_scene::draw() {
     DrawText("LEFT/RIGHT: Camera Angle", 130, 586, 24, GRAY);
     DrawText("UP/DOWN: Note Speed    Q/E: Lane Width", 130, 620, 24, GRAY);
     DrawText("Z/X: Frame Rate", 130, 654, 24, GRAY);
+    virtual_screen::end();
+
+    ClearBackground(BLACK);
+    virtual_screen::draw_to_screen();
 }

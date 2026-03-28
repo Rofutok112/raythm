@@ -15,6 +15,7 @@
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select_scene.h"
+#include "virtual_screen.h"
 
 namespace {
 
@@ -407,24 +408,35 @@ bool play_scene::get_lane_view_bounds(const Camera3D& camera, float& lane_start_
 }
 
 // 3Dシーン・2D HUD・ポーズオーバーレイの描画を統括する。
+// 3D は物理解像度で直接描画し、2D HUD は仮想スクリーン経由でスケーリングする。
 void play_scene::draw() {
-    ClearBackground(RAYWHITE);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, {255, 255, 255, 255}, {241, 243, 246, 255});
-
     if (!initialized_) {
+        virtual_screen::begin();
+        ClearBackground(RAYWHITE);
+        DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, {255, 255, 255, 255}, {241, 243, 246, 255});
         DrawText("Play", 96, 90, 44, {220, 38, 38, 255});
         DrawText(status_text_.c_str(), 96, 170, 28, {230, 232, 238, 255});
         DrawText("ESC: Back to Song Select", 96, 225, 22, {138, 148, 166, 255});
+        virtual_screen::end();
+
+        ClearBackground(BLACK);
+        virtual_screen::draw_to_screen();
         return;
     }
 
-    const Camera3D camera = make_play_camera();
+    // 3D を物理解像度で直接描画
+    ClearBackground(RAYWHITE);
+    DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(), {255, 255, 255, 255}, {241, 243, 246, 255});
 
+    const Camera3D camera = make_play_camera();
     BeginMode3D(camera);
     draw_lanes(camera);
     draw_notes(camera);
     EndMode3D();
 
+    // 2D HUD を仮想スクリーンに描画して透過合成
+    virtual_screen::begin();
+    ClearBackground(BLANK);
     draw_hud();
     draw_judge_feedback();
     if (intro_playing_) {
@@ -433,10 +445,12 @@ void play_scene::draw() {
     if (failure_transition_playing_) {
         draw_failure_overlay();
     }
-
     if (paused_) {
         draw_pause_overlay();
     }
+    virtual_screen::end();
+
+    virtual_screen::draw_to_screen(true);
 }
 
 void play_scene::draw_lanes(const Camera3D& camera) const {

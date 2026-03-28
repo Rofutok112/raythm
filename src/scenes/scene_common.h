@@ -2,6 +2,8 @@
 
 #include "raylib.h"
 
+// 仮想解像度。すべての2D UIはこの座標系で描画される。
+// 実際の表示は virtual_screen を通じてウィンドウサイズにスケーリングされる。
 constexpr int kScreenWidth = 1280;
 constexpr int kScreenHeight = 720;
 

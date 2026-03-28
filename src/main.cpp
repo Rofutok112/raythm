@@ -2,12 +2,15 @@
 #include "game_settings.h"
 #include "raylib.h"
 #include "scene_manager.h"
+#include "virtual_screen.h"
 
 int main() {
     InitWindow(1920, 1080, "raythm");
     SetTraceLogLevel(LOG_WARNING);
     SetTargetFPS(g_settings.target_fps);
     SetExitKey(KEY_NULL);
+
+    virtual_screen::init();
 
     scene_manager manager;
     manager.set_initial_scene(std::unique_ptr<scene>(new title_scene(manager)));
@@ -26,5 +29,6 @@ int main() {
         EndDrawing();
     }
 
+    virtual_screen::cleanup();
     CloseWindow();
 }

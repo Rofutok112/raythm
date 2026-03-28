@@ -12,6 +12,7 @@
 #include "scene_manager.h"
 #include "song_loader.h"
 #include "title_scene.h"
+#include "virtual_screen.h"
 
 namespace {
 constexpr float kRowHeight = 60.0f;
@@ -231,7 +232,7 @@ void song_select_scene::update(float dt) {
         return;
     }
 
-    const Vector2 mouse = GetMousePosition();
+    const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const float wheel = GetMouseWheelMove();
     song_change_anim_t_ = std::max(0.0f, song_change_anim_t_ - dt * 4.0f);
 
@@ -333,6 +334,7 @@ void song_select_scene::update(float dt) {
 }
 
 void song_select_scene::draw() {
+    virtual_screen::begin();
     ClearBackground(RAYWHITE);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, {255, 255, 255, 255}, {241, 243, 246, 255});
     DrawRectangleRec(kLeftPanelRect, Color{248, 249, 251, 255});
@@ -415,7 +417,7 @@ void song_select_scene::draw() {
 
         const int iy = static_cast<int>(item_y);
         const Rectangle row_rect = {864.0f, item_y - 8.0f, 322.0f, 44.0f};
-        const bool hovered = CheckCollisionPointRec(GetMousePosition(), row_rect);
+        const bool hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), row_rect);
         if (is_selected) {
             DrawRectangleRec(row_rect, hovered ? Color{214, 220, 227, 255} : Color{223, 228, 234, 255});
         } else if (hovered) {
@@ -433,7 +435,7 @@ void song_select_scene::draw() {
                 const chart_option& chart = *filtered[static_cast<size_t>(chart_index)];
                 const bool child_selected = chart_index == difficulty_index_;
                 const Rectangle child_rect = {896.0f, child_y - 6.0f, 258.0f, 28.0f};
-                const bool child_hovered = CheckCollisionPointRec(GetMousePosition(), child_rect);
+                const bool child_hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), child_rect);
                 if (child_selected) {
                     DrawRectangleRec(child_rect, child_hovered ? Color{214, 220, 227, 255} : Color{223, 228, 234, 255});
                 } else if (child_hovered) {
@@ -466,4 +468,8 @@ void song_select_scene::draw() {
     }
 
     DrawText("ESC: Back", 1080, 662, 22, GRAY);
+    virtual_screen::end();
+
+    ClearBackground(BLACK);
+    virtual_screen::draw_to_screen();
 }
