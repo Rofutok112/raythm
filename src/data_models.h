@@ -93,6 +93,22 @@ enum class judge_result {
     miss
 };
 
+// 判定処理用に保持する各ノートの状態。
+struct note_state {
+    note_data note_ref;
+    double target_ms = 0.0;
+    bool judged = false;
+    judge_result result = judge_result::miss;
+    bool holding = false;
+};
+
+// 1 件の判定イベント。
+struct judge_event {
+    judge_result result = judge_result::miss;
+    double offset_ms = 0.0;
+    int lane = 0;
+};
+
 // 達成率に応じたランク種別。
 enum class rank {
     ss,
