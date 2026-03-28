@@ -14,6 +14,7 @@ public:
     void update(double current_ms, const input_handler& input);
     std::optional<judge_event> get_last_judge() const;
     std::vector<note_state> get_note_states() const;
+    const std::vector<note_state>& note_states() const;
 
 private:
     judge_result evaluate_offset(double offset_ms) const;

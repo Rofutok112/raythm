@@ -97,6 +97,7 @@ enum class judge_result {
 struct note_state {
     note_data note_ref;
     double target_ms = 0.0;
+    double end_target_ms = 0.0;
     bool judged = false;
     judge_result result = judge_result::miss;
     bool holding = false;
@@ -129,6 +130,7 @@ struct result_data {
     int fast_count = 0;
     int slow_count = 0;
     rank clear_rank = rank::f;
+    bool failed = false;
     bool is_full_combo = false;
     bool is_all_perfect = false;
 };

@@ -32,7 +32,19 @@ add_executable(raythm src/main.cpp
         src/scene.h
         src/scene_manager.cpp
         src/scene_manager.h
-        src/game_scenes.cpp
+        src/game_settings.h
+        src/scene_common.cpp
+        src/scene_common.h
+        src/title_scene.cpp
+        src/title_scene.h
+        src/song_select_scene.cpp
+        src/song_select_scene.h
+        src/play_scene.cpp
+        src/play_scene.h
+        src/result_scene.cpp
+        src/result_scene.h
+        src/settings_scene.cpp
+        src/settings_scene.h
         src/game_scenes.h)
 
 add_executable(chart_parser_smoke
