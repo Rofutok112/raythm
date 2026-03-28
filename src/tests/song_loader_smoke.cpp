@@ -7,7 +7,8 @@
 
 namespace {
 std::string songs_root() {
-    const std::filesystem::path repo_root = std::filesystem::path(__FILE__).parent_path().parent_path();
+    const std::filesystem::path repo_root =
+        std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
     return (repo_root / "assets" / "songs").string();
 }
 }
