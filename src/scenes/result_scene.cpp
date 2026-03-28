@@ -7,6 +7,7 @@
 #include "scene_manager.h"
 #include "song_select_scene.h"
 #include "title_scene.h"
+#include "virtual_screen.h"
 
 result_scene::result_scene(scene_manager& manager, result_data result, bool ranking_enabled)
     : scene(manager), result_(result), ranking_enabled_(ranking_enabled) {
@@ -25,6 +26,7 @@ void result_scene::update(float dt) {
 
 // スコア・ランク・達成率・判定内訳・コンボ情報・ランキング資格を表示する。
 void result_scene::draw() {
+    virtual_screen::begin();
     draw_scene_frame("Result", "ENTER: Retry Flow    ESC: Title", {202, 138, 4, 255});
     if (result_.failed) {
         DrawText("FAILED", 130, 228, 48, Color{220, 38, 38, 255});
@@ -63,4 +65,8 @@ void result_scene::draw() {
              478, 26, GRAY);
     DrawText(ranking_enabled_ ? "Ranking: Eligible" : "Ranking: Disabled", 130, 522, 24,
              ranking_enabled_ ? Color{14, 146, 108, 255} : Color{220, 38, 38, 255});
+    virtual_screen::end();
+
+    ClearBackground(BLACK);
+    virtual_screen::draw_to_screen();
 }

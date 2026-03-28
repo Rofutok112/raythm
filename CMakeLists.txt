@@ -45,6 +45,8 @@ add_executable(raythm src/main.cpp
         src/scenes/result_scene.h
         src/scenes/settings_scene.cpp
         src/scenes/settings_scene.h
+        src/scenes/virtual_screen.cpp
+        src/scenes/virtual_screen.h
         src/game_scenes.h)
 
 add_executable(chart_parser_smoke

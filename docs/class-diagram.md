@@ -317,3 +317,104 @@ classDiagram
     score_system --> result_data : produces
     gauge --> judge_result
 ```
+
+## Phase 4-1: プレイ画面
+
+```mermaid
+classDiagram
+    class play_scene {
+        -input_handler input_handler_
+        -timing_engine timing_engine_
+        -judge_system judge_system_
+        -score_system score_system_
+        -gauge gauge_
+        -audio audio_
+        -chart_data chart_
+        -Camera3D camera_
+        -double current_ms_
+        -bool paused_
+        -bool pause_used_
+        +on_enter() void
+        +update(float dt) void
+        +draw() void
+        +on_exit() void
+        -draw_lanes() void
+        -draw_notes() void
+        -draw_hud() void
+        -draw_judge_effect() void
+        -handle_pause() void
+        -check_song_end() void
+    }
+
+    play_scene --> input_handler
+    play_scene --> timing_engine
+    play_scene --> judge_system
+    play_scene --> score_system
+    play_scene --> gauge
+    play_scene --> audio
+    play_scene --> chart_data
+```
+
+## Phase 4-2: 曲選択画面
+
+```mermaid
+classDiagram
+    class song_select_scene {
+        -vector~song_data~ songs_
+        -int selected_index_
+        -int selected_chart_index_
+        -int current_key_count_
+        +on_enter() void
+        +update(float dt) void
+        +draw() void
+        +on_exit() void
+        -select_song() void
+        -switch_difficulty() void
+        -switch_key_count() void
+    }
+
+    song_select_scene --> song_data
+    song_select_scene --> song_loader
+```
+
+## Phase 4-3: リザルト画面
+
+```mermaid
+classDiagram
+    class result_scene {
+        -result_data result_
+        -song_meta song_meta_
+        -chart_meta chart_meta_
+        +on_enter() void
+        +update(float dt) void
+        +draw() void
+        +on_exit() void
+    }
+
+    result_scene --> result_data
+    result_scene --> song_meta
+    result_scene --> chart_meta
+```
+
+## Phase 4-4: タイトル・設定画面
+
+```mermaid
+classDiagram
+    class title_scene {
+        +on_enter() void
+        +update(float dt) void
+        +draw() void
+        +on_exit() void
+    }
+
+    class settings_scene {
+        -key_config key_config_
+        -float camera_angle_
+        +on_enter() void
+        +update(float dt) void
+        +draw() void
+        +on_exit() void
+    }
+
+    settings_scene --> key_config
+```

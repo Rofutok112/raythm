@@ -7,6 +7,7 @@
 #include "scene_manager.h"
 #include "settings_scene.h"
 #include "song_select_scene.h"
+#include "virtual_screen.h"
 
 title_scene::title_scene(scene_manager& manager) : scene(manager) {
 }
@@ -24,7 +25,12 @@ void title_scene::update(float dt) {
 
 // タイトルロゴと操作案内を描画する。
 void title_scene::draw() {
+    virtual_screen::begin();
     draw_scene_frame("Title", "ENTER: Song Select    S: Settings", {32, 129, 226, 255});
     DrawText("raythm", 130, 300, 92, BLACK);
     DrawText("Scene management bootstrap", 136, 400, 28, GRAY);
+    virtual_screen::end();
+
+    ClearBackground(BLACK);
+    virtual_screen::draw_to_screen();
 }
