@@ -1,0 +1,128 @@
+#include "judge_system.h"
+
+#include <cmath>
+
+void judge_system::init(const std::vector<note_data>& notes, const timing_engine& engine) {
+    note_states_.clear();
+    note_states_.reserve(notes.size());
+    last_judge_.reset();
+
+    for (const note_data& note : notes) {
+        note_state state;
+        state.note_ref = note;
+        state.target_ms = engine.tick_to_ms(note.tick);
+        state.end_target_ms = engine.tick_to_ms(note.type == note_type::hold ? note.end_tick : note.tick);
+        note_states_.push_back(state);
+    }
+}
+
+void judge_system::update(double current_ms, const input_handler& input) {
+    last_judge_.reset();
+
+    for (note_state& state : note_states_) {
+        if (state.note_ref.type != note_type::hold || !state.holding) {
+            continue;
+        }
+
+        if (current_ms >= state.end_target_ms) {
+            state.holding = false;
+            continue;
+        }
+
+        if (input.is_lane_just_released(state.note_ref.lane)) {
+            state.holding = false;
+            state.judged = true;
+            state.result = judge_result::miss;
+            emit_judge(judge_result::miss, current_ms - state.target_ms, state.note_ref.lane);
+            return;
+        }
+    }
+
+    for (int lane = 0; lane < 6; ++lane) {
+        if (!input.is_lane_just_pressed(lane)) {
+            continue;
+        }
+
+        note_state* candidate = nullptr;
+        for (note_state& state : note_states_) {
+            if (state.judged || state.note_ref.lane != lane) {
+                continue;
+            }
+
+            const double offset_ms = current_ms - state.target_ms;
+            if (offset_ms < -judge_windows_[3]) {
+                continue;
+            }
+
+            if (!is_in_judgement_window(offset_ms)) {
+                continue;
+            }
+
+            candidate = &state;
+            break;
+        }
+
+        if (candidate == nullptr) {
+            continue;
+        }
+
+        const double offset_ms = current_ms - candidate->target_ms;
+        const judge_result result = evaluate_offset(offset_ms);
+        candidate->judged = true;
+        candidate->result = result;
+        candidate->holding = candidate->note_ref.type == note_type::hold && result != judge_result::miss;
+        emit_judge(result, offset_ms, lane);
+        return;
+    }
+
+    for (note_state& state : note_states_) {
+        if (state.judged) {
+            continue;
+        }
+
+        const double offset_ms = current_ms - state.target_ms;
+        if (offset_ms > judge_windows_[3]) {
+            state.judged = true;
+            state.result = judge_result::miss;
+            emit_judge(judge_result::miss, offset_ms, state.note_ref.lane);
+            return;
+        }
+    }
+}
+
+std::optional<judge_event> judge_system::get_last_judge() const {
+    return last_judge_;
+}
+
+std::vector<note_state> judge_system::get_note_states() const {
+    return note_states_;
+}
+
+const std::vector<note_state>& judge_system::note_states() const {
+    return note_states_;
+}
+
+judge_result judge_system::evaluate_offset(double offset_ms) const {
+    const double absolute_offset = std::fabs(offset_ms);
+    if (absolute_offset <= judge_windows_[0]) {
+        return judge_result::perfect;
+    }
+    if (absolute_offset <= judge_windows_[1]) {
+        return judge_result::great;
+    }
+    if (absolute_offset <= judge_windows_[2]) {
+        return judge_result::good;
+    }
+    if (absolute_offset <= judge_windows_[3]) {
+        return judge_result::bad;
+    }
+    return judge_result::miss;
+}
+
+bool judge_system::is_in_judgement_window(double offset_ms) const {
+    return std::fabs(offset_ms) <= judge_windows_[3];
+}
+
+void judge_system::emit_judge(judge_result result, double offset_ms, int lane) {
+    last_judge_ = judge_event{result, offset_ms, lane};
+}

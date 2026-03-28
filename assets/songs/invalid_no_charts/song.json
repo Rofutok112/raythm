@@ -1,0 +1,10 @@
+{
+  "songId": "no-chart-song",
+  "title": "No Chart Song",
+  "artist": "Codex",
+  "baseBpm": 128.0,
+  "audioFile": "audio.mp3",
+  "jacketFile": "jacket.png",
+  "previewStartMs": 56000,
+  "songVersion": 2
+}
