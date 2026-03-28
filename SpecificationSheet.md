@@ -68,6 +68,7 @@ Song/
 | `jacketFile`     | `string` | ジャケット画像ファイル名  |
 | `previewStartMs` | `int`    | 選曲画面プレビュー開始位置 |
 | `songVersion`    | `int`    | パッケージバージョン    |
+| `previewStartMs` | `float`  | サビの始まる時間（sec） |
 
 ### 2.4 識別子体系
 

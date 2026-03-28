@@ -1,0 +1,10 @@
+{
+  "songId": "sample-song-2",
+  "title": "Doumo minasan konnitiha koreha tesuto no nagai namae desu",
+  "artist": "Codex",
+  "baseBpm": 150.0,
+  "audioFile": "audio.mp3",
+  "jacketFile": "jacket.png",
+  "previewStartMs": 56000,
+  "songVersion": 1
+}

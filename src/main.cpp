@@ -4,7 +4,7 @@
 #include "scene_manager.h"
 
 int main() {
-    InitWindow(1280, 720, "raythm");
+    InitWindow(1920, 1080, "raythm");
     SetTraceLogLevel(LOG_WARNING);
     SetTargetFPS(g_settings.target_fps);
     SetExitKey(KEY_NULL);

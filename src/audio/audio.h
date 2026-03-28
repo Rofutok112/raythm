@@ -15,6 +15,8 @@ public:
     void play(bool restart = true) const;
     void pause() const;
     void stop() const;
+    void set_volume(float volume) const;
+    void set_position_seconds(double seconds) const;
     bool is_loaded() const;
     bool is_playing() const;
     double get_position_seconds() const;
