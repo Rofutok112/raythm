@@ -18,6 +18,8 @@ add_executable(raythm src/main.cpp
         src/chart_parser.cpp
         src/chart_parser.h
         src/data_models.h
+        src/input_handler.cpp
+        src/input_handler.h
         src/song_loader.cpp
         src/song_loader.h
         src/scene.cpp
@@ -41,9 +43,15 @@ add_executable(song_loader_smoke
         src/song_loader.h
         src/song_loader_smoke.cpp)
 
+add_executable(input_handler_smoke
+        src/input_handler.cpp
+        src/input_handler.h
+        src/input_handler_smoke.cpp)
+
 # BASSライブラリ
 target_include_directories(raythm PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass)
 target_link_libraries(raythm PRIVATE raylib ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib)
+target_link_libraries(input_handler_smoke PRIVATE raylib)
 
 # bass.dll を実行ファイルと同じディレクトリにコピー
 add_custom_command(TARGET raythm POST_BUILD

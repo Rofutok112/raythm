@@ -1,0 +1,79 @@
+#include "input_handler.h"
+
+#include <algorithm>
+#include <stdexcept>
+
+std::span<const KeyboardKey> key_config::get_lane_keys(int key_count) const {
+    if (key_count == 4) {
+        return std::span<const KeyboardKey>(keys_4);
+    }
+
+    if (key_count == 6) {
+        return std::span<const KeyboardKey>(keys_6);
+    }
+
+    throw std::invalid_argument("key_count must be 4 or 6");
+}
+
+input_handler::input_handler(key_config config) : key_config_(config) {
+}
+
+void input_handler::set_key_count(int key_count) {
+    if (key_count != 4 && key_count != 6) {
+        throw std::invalid_argument("key_count must be 4 or 6");
+    }
+
+    key_count_ = key_count;
+    prev_state_.fill(false);
+    curr_state_.fill(false);
+}
+
+void input_handler::update() {
+    std::array<bool, kMaxLanes> next_state = {};
+    const std::span<const KeyboardKey> lane_keys = key_config_.get_lane_keys(key_count_);
+
+    for (int lane = 0; lane < key_count_; ++lane) {
+        next_state[static_cast<size_t>(lane)] = IsKeyDown(lane_keys[static_cast<size_t>(lane)]);
+    }
+
+    prev_state_ = curr_state_;
+    curr_state_ = next_state;
+}
+
+void input_handler::update_from_lane_states(std::span<const bool> lane_states) {
+    if (lane_states.size() != static_cast<size_t>(key_count_)) {
+        throw std::invalid_argument("lane_states size must match key_count");
+    }
+
+    std::array<bool, kMaxLanes> next_state = {};
+    std::copy(lane_states.begin(), lane_states.end(), next_state.begin());
+
+    prev_state_ = curr_state_;
+    curr_state_ = next_state;
+}
+
+bool input_handler::is_lane_just_pressed(int lane) const {
+    if (lane < 0 || lane >= key_count_) {
+        return false;
+    }
+
+    const size_t index = static_cast<size_t>(lane);
+    return curr_state_[index] && !prev_state_[index];
+}
+
+bool input_handler::is_lane_held(int lane) const {
+    if (lane < 0 || lane >= key_count_) {
+        return false;
+    }
+
+    return curr_state_[static_cast<size_t>(lane)];
+}
+
+bool input_handler::is_lane_just_released(int lane) const {
+    if (lane < 0 || lane >= key_count_) {
+        return false;
+    }
+
+    const size_t index = static_cast<size_t>(lane);
+    return !curr_state_[index] && prev_state_[index];
+}
