@@ -17,6 +17,19 @@ struct song_meta {
     int song_version = 0;
 };
 
+// 曲一覧で扱う読み込み済み楽曲データ。
+struct song_data {
+    song_meta meta;
+    std::vector<std::string> chart_paths;
+    std::string directory;
+};
+
+// 楽曲ローダーの結果。
+struct song_load_result {
+    std::vector<song_data> songs;
+    std::vector<std::string> errors;
+};
+
 // 譜面ごとの差分情報を表すメタデータ。
 struct chart_meta {
     std::string chart_id;
