@@ -11,6 +11,7 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
         note_state state;
         state.note_ref = note;
         state.target_ms = engine.tick_to_ms(note.tick);
+        state.end_target_ms = engine.tick_to_ms(note.type == note_type::hold ? note.end_tick : note.tick);
         note_states_.push_back(state);
     }
 }
@@ -19,8 +20,16 @@ void judge_system::update(double current_ms, const input_handler& input) {
     last_judge_.reset();
 
     for (note_state& state : note_states_) {
-        if (state.note_ref.type == note_type::hold && state.holding &&
-            input.is_lane_just_released(state.note_ref.lane)) {
+        if (state.note_ref.type != note_type::hold || !state.holding) {
+            continue;
+        }
+
+        if (current_ms >= state.end_target_ms) {
+            state.holding = false;
+            continue;
+        }
+
+        if (input.is_lane_just_released(state.note_ref.lane)) {
             state.holding = false;
             state.judged = true;
             state.result = judge_result::miss;
@@ -86,6 +95,10 @@ std::optional<judge_event> judge_system::get_last_judge() const {
 }
 
 std::vector<note_state> judge_system::get_note_states() const {
+    return note_states_;
+}
+
+const std::vector<note_state>& judge_system::note_states() const {
     return note_states_;
 }
 
