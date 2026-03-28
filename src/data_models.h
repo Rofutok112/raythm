@@ -3,6 +3,7 @@
 #include <array>
 #include <string>
 
+// 曲一覧で扱う楽曲メタデータ。
 struct song_meta {
     std::string song_id;
     std::string title;
@@ -14,6 +15,7 @@ struct song_meta {
     int song_version = 0;
 };
 
+// 譜面ごとの差分情報を表すメタデータ。
 struct chart_meta {
     std::string chart_id;
     int key_count = 0;
@@ -24,11 +26,13 @@ struct chart_meta {
     int resolution = 0;
 };
 
+// タイミングイベントの種類。
 enum class timing_event_type {
     bpm,
     meter
 };
 
+// BPM や拍子変更を表す譜面イベント。
 struct timing_event {
     timing_event_type type = timing_event_type::bpm;
     int tick = 0;
@@ -37,11 +41,13 @@ struct timing_event {
     int denominator = 4;
 };
 
+// ノート入力の種類。
 enum class note_type {
     tap,
     hold
 };
 
+// 1 ノート分の譜面データ。
 struct note_data {
     note_type type = note_type::tap;
     int tick = 0;
@@ -49,6 +55,7 @@ struct note_data {
     int end_tick = 0;
 };
 
+// 判定処理の結果種別。
 enum class judge_result {
     perfect,
     great,
@@ -57,6 +64,7 @@ enum class judge_result {
     miss
 };
 
+// 達成率に応じたランク種別。
 enum class rank {
     ss,
     s,
@@ -66,6 +74,7 @@ enum class rank {
     f
 };
 
+// リザルト画面で表示する集計結果。
 struct result_data {
     int score = 0;
     float achievement = 0.0f;
