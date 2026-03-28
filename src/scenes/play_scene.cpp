@@ -34,7 +34,8 @@ constexpr Color kLaneColor = {182, 186, 194, 255};
 
 // assets/songs から最初の曲パッケージを読み込んで返す。
 std::optional<song_data> load_sample_song() {
-    const std::filesystem::path repo_root = std::filesystem::path(__FILE__).parent_path().parent_path();
+    const std::filesystem::path repo_root =
+        std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
     song_load_result result = song_loader::load_all((repo_root / "assets" / "songs").string());
     if (result.songs.empty()) {
         return std::nullopt;
@@ -254,7 +255,7 @@ void play_scene::update(float dt) {
         if (paused_) {
             ranking_enabled_ = false;
             audio_player_.pause();
-        } else if (audio_player_.is_loaded()) {
+        } else if (audio_player_.is_loaded() && !intro_playing_) {
             audio_player_.play(false);
             auto_paused_by_focus_ = false;
         }
@@ -274,6 +275,7 @@ void play_scene::update(float dt) {
 
     if (intro_playing_) {
         intro_timer_ = std::max(0.0f, intro_timer_ - dt);
+        input_handler_.update();
         const Camera3D cam = make_play_camera();
         float ls = 0.0f, jz = 0.0f, le = 0.0f;
         if (get_lane_view_bounds(cam, ls, jz, le)) {

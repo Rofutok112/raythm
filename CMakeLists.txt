@@ -13,83 +13,99 @@ FetchContent_MakeAvailable(raylib)
 
 add_executable(raythm src/main.cpp
         libs/bass/bass.h
-        src/audio.cpp
-        src/audio.h
-        src/chart_parser.cpp
-        src/chart_parser.h
-        src/data_models.h
-        src/input_handler.cpp
-        src/input_handler.h
-        src/judge_system.cpp
-        src/judge_system.h
-        src/score_system.cpp
-        src/score_system.h
-        src/song_loader.cpp
-        src/song_loader.h
-        src/timing_engine.cpp
-        src/timing_engine.h
-        src/scene.cpp
-        src/scene.h
-        src/scene_manager.cpp
-        src/scene_manager.h
-        src/game_settings.h
-        src/scene_common.cpp
-        src/scene_common.h
-        src/title_scene.cpp
-        src/title_scene.h
-        src/song_select_scene.cpp
-        src/song_select_scene.h
-        src/play_scene.cpp
-        src/play_scene.h
-        src/result_scene.cpp
-        src/result_scene.h
-        src/settings_scene.cpp
-        src/settings_scene.h
+        src/audio/audio.cpp
+        src/audio/audio.h
+        src/gameplay/chart_parser.cpp
+        src/gameplay/chart_parser.h
+        src/models/data_models.h
+        src/gameplay/input_handler.cpp
+        src/gameplay/input_handler.h
+        src/gameplay/judge_system.cpp
+        src/gameplay/judge_system.h
+        src/gameplay/score_system.cpp
+        src/gameplay/score_system.h
+        src/gameplay/song_loader.cpp
+        src/gameplay/song_loader.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/core/scene.cpp
+        src/core/scene.h
+        src/core/scene_manager.cpp
+        src/core/scene_manager.h
+        src/gameplay/game_settings.h
+        src/scenes/scene_common.cpp
+        src/scenes/scene_common.h
+        src/scenes/title_scene.cpp
+        src/scenes/title_scene.h
+        src/scenes/song_select_scene.cpp
+        src/scenes/song_select_scene.h
+        src/scenes/play_scene.cpp
+        src/scenes/play_scene.h
+        src/scenes/result_scene.cpp
+        src/scenes/result_scene.h
+        src/scenes/settings_scene.cpp
+        src/scenes/settings_scene.h
         src/game_scenes.h)
 
 add_executable(chart_parser_smoke
-        src/chart_parser.cpp
-        src/chart_parser.h
-        src/chart_parser_smoke.cpp
-        src/data_models.h)
+        src/gameplay/chart_parser.cpp
+        src/gameplay/chart_parser.h
+        src/tests/chart_parser_smoke.cpp
+        src/models/data_models.h)
 
 add_executable(song_loader_smoke
-        src/chart_parser.cpp
-        src/chart_parser.h
-        src/data_models.h
-        src/song_loader.cpp
-        src/song_loader.h
-        src/song_loader_smoke.cpp)
+        src/gameplay/chart_parser.cpp
+        src/gameplay/chart_parser.h
+        src/models/data_models.h
+        src/gameplay/song_loader.cpp
+        src/gameplay/song_loader.h
+        src/tests/song_loader_smoke.cpp)
 
 add_executable(input_handler_smoke
-        src/input_handler.cpp
-        src/input_handler.h
-        src/input_handler_smoke.cpp)
+        src/gameplay/input_handler.cpp
+        src/gameplay/input_handler.h
+        src/tests/input_handler_smoke.cpp)
 
 add_executable(timing_engine_smoke
-        src/data_models.h
-        src/timing_engine.cpp
-        src/timing_engine.h
-        src/timing_engine_smoke.cpp)
+        src/models/data_models.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/tests/timing_engine_smoke.cpp)
 
 add_executable(judge_system_smoke
-        src/data_models.h
-        src/input_handler.cpp
-        src/input_handler.h
-        src/judge_system.cpp
-        src/judge_system.h
-        src/judge_system_smoke.cpp
-        src/timing_engine.cpp
-        src/timing_engine.h)
+        src/models/data_models.h
+        src/gameplay/input_handler.cpp
+        src/gameplay/input_handler.h
+        src/gameplay/judge_system.cpp
+        src/gameplay/judge_system.h
+        src/tests/judge_system_smoke.cpp
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h)
 
 add_executable(score_system_smoke
-        src/data_models.h
-        src/score_system.cpp
-        src/score_system.h
-        src/score_system_smoke.cpp)
+        src/models/data_models.h
+        src/gameplay/score_system.cpp
+        src/gameplay/score_system.h
+        src/tests/score_system_smoke.cpp)
+
+set(RAYTHM_INCLUDE_DIRS
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/audio
+        ${CMAKE_SOURCE_DIR}/src/core
+        ${CMAKE_SOURCE_DIR}/src/gameplay
+        ${CMAKE_SOURCE_DIR}/src/models
+        ${CMAKE_SOURCE_DIR}/src/scenes
+        ${CMAKE_SOURCE_DIR}/src/tests
+)
 
 # BASSライブラリ
-target_include_directories(raythm PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass)
+target_include_directories(raythm PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(chart_parser_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(song_loader_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(input_handler_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(timing_engine_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(judge_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(score_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_link_libraries(raythm PRIVATE raylib ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
