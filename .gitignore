@@ -11,6 +11,8 @@ install_manifest.txt
 compile_commands.json
 .idea/
 libs/
+.claude/
+.codex/
 
 # OS generated files
 .DS_Store
@@ -36,3 +38,5 @@ Thumbs.db
 
 # Logs
 *.log
+
+
