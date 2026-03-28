@@ -5,6 +5,6 @@
   "baseBpm": 150.0,
   "audioFile": "audio.mp3",
   "jacketFile": "jacket.png",
-  "previewStartMs": 12000,
+  "previewStartMs": 56000,
   "songVersion": 1
 }

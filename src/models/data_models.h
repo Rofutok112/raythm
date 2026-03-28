@@ -13,6 +13,7 @@ struct song_meta {
     float base_bpm = 0.0f;
     std::string audio_file;
     std::string jacket_file;
+    float preview_start_seconds = 0.0f;
     int preview_start_ms = 0;
     int song_version = 0;
 };

@@ -4,6 +4,7 @@
 
 #include "audio.h"
 
+#include <algorithm>
 #include <iostream>
 
 #include "bass.h"
@@ -54,6 +55,19 @@ void audio::pause() const {
 void audio::stop() const {
     if (handle_ != 0) {
         BASS_ChannelStop(handle_);
+    }
+}
+
+void audio::set_volume(float volume) const {
+    if (handle_ != 0) {
+        BASS_ChannelSetAttribute(handle_, BASS_ATTRIB_VOL, std::clamp(volume, 0.0f, 1.0f));
+    }
+}
+
+void audio::set_position_seconds(double seconds) const {
+    if (handle_ != 0) {
+        const QWORD position = BASS_ChannelSeconds2Bytes(handle_, std::max(0.0, seconds));
+        BASS_ChannelSetPosition(handle_, position, BASS_POS_BYTE);
     }
 }
 

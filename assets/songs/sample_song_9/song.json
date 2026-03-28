@@ -1,0 +1,10 @@
+{
+  "songId": "sample-song-9",
+  "title": "Sample Song 9",
+  "artist": "Codex",
+  "baseBpm": 150.0,
+  "audioFile": "audio.mp3",
+  "jacketFile": "jacket.png",
+  "previewStartMs": 56000,
+  "songVersion": 1
+}

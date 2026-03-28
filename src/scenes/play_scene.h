@@ -16,6 +16,7 @@
 class play_scene final : public scene {
 public:
     explicit play_scene(scene_manager& manager, int key_count);
+    play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count);
 
     void on_enter() override;
     void on_exit() override;
@@ -65,6 +66,7 @@ private:
     audio audio_player_;
     std::optional<chart_data> chart_data_;
     std::optional<song_data> song_data_;
+    std::optional<std::string> selected_chart_path_;
     std::optional<judge_event> last_judge_;
     std::optional<judge_event> display_judge_;
     result_data final_result_;

@@ -143,19 +143,38 @@ std::optional<float> ground_z_offset(float height, float angle_rad, float half_f
 play_scene::play_scene(scene_manager& manager, int key_count) : scene(manager), key_count_(key_count) {
 }
 
+play_scene::play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count)
+    : scene(manager), key_count_(key_count), song_data_(std::move(song)), selected_chart_path_(std::move(chart_path)) {
+}
+
 // 譜面・オーディオの読み込みとゲーム状態の初期化を行う。
 void play_scene::on_enter() {
     camera_angle_degrees_ = g_settings.camera_angle_degrees;
     lane_speed_ = g_settings.note_speed;
     input_handler_.set_key_count(key_count_);
-    song_data_ = load_sample_song();
+
     if (!song_data_.has_value()) {
-        status_text_ = "No playable song package found";
-        initialized_ = false;
-        return;
+        song_data_ = load_sample_song();
+        if (!song_data_.has_value()) {
+            status_text_ = "No playable song package found";
+            initialized_ = false;
+            return;
+        }
     }
 
-    chart_data_ = load_chart_for_key_count(*song_data_, key_count_);
+    if (selected_chart_path_.has_value()) {
+        const chart_parse_result parse_result = song_loader::load_chart(*selected_chart_path_);
+        if (parse_result.success && parse_result.data.has_value()) {
+            chart_data_ = parse_result.data;
+        } else {
+            status_text_ = "Failed to load selected chart";
+            initialized_ = false;
+            return;
+        }
+    } else {
+        chart_data_ = load_chart_for_key_count(*song_data_, key_count_);
+    }
+
     if (!chart_data_.has_value()) {
         status_text_ = "No chart found for selected key mode";
         initialized_ = false;
