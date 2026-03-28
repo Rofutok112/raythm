@@ -15,6 +15,7 @@ add_executable(raythm src/main.cpp
         libs/bass/bass.h
         src/audio.cpp
         src/audio.h
+        src/data_models.h
         src/scene.cpp
         src/scene.h
         src/scene_manager.cpp
