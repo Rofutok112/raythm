@@ -99,7 +99,7 @@ struct result_data {
     float avg_offset = 0.0f;
     int fast_count = 0;
     int slow_count = 0;
-    rank rank = rank::f;
+    rank clear_rank = rank::f;
     bool is_full_combo = false;
     bool is_all_perfect = false;
 };

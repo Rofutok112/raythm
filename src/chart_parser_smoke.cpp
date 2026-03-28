@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -6,6 +7,11 @@
 #include "chart_parser.h"
 
 namespace {
+std::string chart_path(const std::string& file_name) {
+    const std::filesystem::path repo_root = std::filesystem::path(__FILE__).parent_path().parent_path();
+    return (repo_root / "assets" / "charts" / file_name).string();
+}
+
 bool expect_success(const std::string& path) {
     const chart_parse_result result = chart_parser::parse(path);
     if (!result.success || !result.data.has_value()) {
@@ -43,9 +49,9 @@ bool expect_failure(const std::string& path, const std::string& expected_fragmen
 int main() {
     bool ok = true;
 
-    ok = expect_success("assets/charts/parser_valid.chart") && ok;
-    ok = expect_failure("assets/charts/parser_invalid_overlap.chart", "overlapping notes") && ok;
-    ok = expect_failure("assets/charts/parser_invalid_metadata.chart", "keyCount must be 4 or 6") && ok;
+    ok = expect_success(chart_path("parser_valid.chart")) && ok;
+    ok = expect_failure(chart_path("parser_invalid_overlap.chart"), "overlapping notes") && ok;
+    ok = expect_failure(chart_path("parser_invalid_metadata.chart"), "keyCount must be 4 or 6") && ok;
 
     if (!ok) {
         return EXIT_FAILURE;

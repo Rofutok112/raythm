@@ -112,7 +112,10 @@ std::optional<note_type> parse_note_type(const std::string& value) {
 chart_parse_result chart_parser::parse(const std::string& file_path) {
     std::ifstream input(file_path);
     if (!input.is_open()) {
-        return {false, std::nullopt, {"Failed to open chart file: " + file_path}};
+        chart_parse_result result;
+        result.success = false;
+        result.errors.push_back("Failed to open chart file: " + file_path);
+        return result;
     }
 
     std::map<std::string, std::vector<numbered_line>> sections;
@@ -124,13 +127,13 @@ chart_parse_result chart_parser::parse(const std::string& file_path) {
     while (std::getline(input, line)) {
         ++line_number;
         const std::string trimmed = trim(line);
-        if (trimmed.empty() || trimmed.starts_with('#')) {
+        if (trimmed.empty() || trimmed.front() == '#') {
             continue;
         }
 
         if (trimmed.front() == '[' && trimmed.back() == ']') {
             current_section = trimmed.substr(1, trimmed.size() - 2);
-            if (sections.contains(current_section)) {
+            if (sections.find(current_section) != sections.end()) {
                 errors.push_back(format_line_error(line_number, "Duplicate section [" + current_section + "]"));
             } else {
                 sections[current_section] = {};
@@ -148,13 +151,16 @@ chart_parse_result chart_parser::parse(const std::string& file_path) {
 
     const std::array<std::string, 3> required_sections = {"Metadata", "Timing", "Notes"};
     for (const std::string& section : required_sections) {
-        if (!sections.contains(section)) {
+        if (sections.find(section) == sections.end()) {
             errors.push_back("Missing required section [" + section + "]");
         }
     }
 
     if (!errors.empty()) {
-        return {false, std::nullopt, errors};
+        chart_parse_result result;
+        result.success = false;
+        result.errors = std::move(errors);
+        return result;
     }
 
     chart_data data;
@@ -168,10 +174,16 @@ chart_parse_result chart_parser::parse(const std::string& file_path) {
     }
 
     if (!errors.empty()) {
-        return {false, std::nullopt, errors};
+        chart_parse_result result;
+        result.success = false;
+        result.errors = std::move(errors);
+        return result;
     }
 
-    return {true, data, {}};
+    chart_parse_result result;
+    result.success = true;
+    result.data = std::move(data);
+    return result;
 }
 
 chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines, std::vector<std::string>& errors) {
@@ -241,7 +253,7 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
     };
 
     for (const std::string& name : required_fields) {
-        if (!seen_keys.contains(name)) {
+        if (seen_keys.find(name) == seen_keys.end()) {
             errors.push_back("Missing required metadata field: " + name);
         }
     }
