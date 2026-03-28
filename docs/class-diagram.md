@@ -155,3 +155,61 @@ classDiagram
     result_data --> rank
     result_data --> judge_result
 ```
+
+## Phase 2-1: 譜面パーサー
+
+```mermaid
+classDiagram
+    class chart_parser {
+        <<static>>
+        +parse(string file_path) chart_parse_result
+        -parse_metadata(vector~string~ lines) chart_meta
+        -parse_timing(vector~string~ lines) vector~timing_event~
+        -parse_notes(vector~string~ lines) vector~note_data~
+        -validate(chart_data data) vector~string~
+    }
+
+    class chart_data {
+        +chart_meta meta
+        +vector~timing_event~ timing_events
+        +vector~note_data~ notes
+    }
+
+    class chart_parse_result {
+        +bool success
+        +optional~chart_data~ data
+        +vector~string~ errors
+    }
+
+    chart_parser --> chart_parse_result : returns
+    chart_parse_result --> chart_data : contains
+    chart_data --> chart_meta
+    chart_data --> timing_event
+    chart_data --> note_data
+```
+
+## Phase 2-2: 楽曲ローダー
+
+```mermaid
+classDiagram
+    class song_loader {
+        +load_all(string songs_dir) song_load_result
+        +load_chart(string path) chart_parse_result
+    }
+
+    class song_data {
+        +song_meta meta
+        +vector~string~ chart_paths
+        +string directory
+    }
+
+    class song_load_result {
+        +vector~song_data~ songs
+        +vector~string~ errors
+    }
+
+    song_loader --> song_load_result : returns
+    song_loader --> chart_parse_result : returns
+    song_load_result --> song_data : contains
+    song_data --> song_meta
+```
