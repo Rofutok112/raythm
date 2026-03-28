@@ -20,6 +20,8 @@ add_executable(raythm src/main.cpp
         src/data_models.h
         src/input_handler.cpp
         src/input_handler.h
+        src/judge_system.cpp
+        src/judge_system.h
         src/song_loader.cpp
         src/song_loader.h
         src/timing_engine.cpp
@@ -56,10 +58,21 @@ add_executable(timing_engine_smoke
         src/timing_engine.h
         src/timing_engine_smoke.cpp)
 
+add_executable(judge_system_smoke
+        src/data_models.h
+        src/input_handler.cpp
+        src/input_handler.h
+        src/judge_system.cpp
+        src/judge_system.h
+        src/judge_system_smoke.cpp
+        src/timing_engine.cpp
+        src/timing_engine.h)
+
 # BASSライブラリ
 target_include_directories(raythm PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass)
 target_link_libraries(raythm PRIVATE raylib ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
+target_link_libraries(judge_system_smoke PRIVATE raylib)
 
 # bass.dll を実行ファイルと同じディレクトリにコピー
 add_custom_command(TARGET raythm POST_BUILD
