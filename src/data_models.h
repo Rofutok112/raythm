@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include <string>
+#include <vector>
 
 // 曲一覧で扱う楽曲メタデータ。
 struct song_meta {
@@ -55,6 +57,20 @@ struct note_data {
     int end_tick = 0;
 };
 
+// 1 譜面分のパース済みデータ。
+struct chart_data {
+    chart_meta meta;
+    std::vector<timing_event> timing_events;
+    std::vector<note_data> notes;
+};
+
+// 譜面パーサーの結果。
+struct chart_parse_result {
+    bool success = false;
+    std::optional<chart_data> data;
+    std::vector<std::string> errors;
+};
+
 // 判定処理の結果種別。
 enum class judge_result {
     perfect,
@@ -83,7 +99,7 @@ struct result_data {
     float avg_offset = 0.0f;
     int fast_count = 0;
     int slow_count = 0;
-    rank rank = rank::f;
+    rank clear_rank = rank::f;
     bool is_full_combo = false;
     bool is_all_perfect = false;
 };
