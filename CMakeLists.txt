@@ -22,6 +22,8 @@ add_executable(raythm src/main.cpp
         src/input_handler.h
         src/song_loader.cpp
         src/song_loader.h
+        src/timing_engine.cpp
+        src/timing_engine.h
         src/scene.cpp
         src/scene.h
         src/scene_manager.cpp
@@ -47,6 +49,12 @@ add_executable(input_handler_smoke
         src/input_handler.cpp
         src/input_handler.h
         src/input_handler_smoke.cpp)
+
+add_executable(timing_engine_smoke
+        src/data_models.h
+        src/timing_engine.cpp
+        src/timing_engine.h
+        src/timing_engine_smoke.cpp)
 
 # BASSライブラリ
 target_include_directories(raythm PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass)
