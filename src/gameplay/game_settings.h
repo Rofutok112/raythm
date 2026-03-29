@@ -23,6 +23,8 @@ struct game_settings {
     float camera_angle_degrees = 45.0f;
     float lane_width = 3.5f;
     float note_speed = 0.045f;
+    float bgm_volume = 1.0f;
+    float se_volume = 1.0f;
     int target_fps = 144;
     key_config keys;
     int resolution_index = 1;  // デフォルト 1920x1080

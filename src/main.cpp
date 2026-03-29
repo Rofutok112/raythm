@@ -8,6 +8,8 @@
 
 int main() {
     load_settings(g_settings);
+    audio_manager::instance().set_bgm_volume(g_settings.bgm_volume);
+    audio_manager::instance().set_se_volume(g_settings.se_volume);
 
     const resolution_preset& preset = kResolutionPresets[g_settings.resolution_index];
     InitWindow(preset.width, preset.height, "raythm");
