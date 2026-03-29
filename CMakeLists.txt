@@ -15,6 +15,8 @@ add_executable(raythm src/main.cpp
         libs/bass/bass.h
         src/audio/audio.cpp
         src/audio/audio.h
+        src/audio/audio_manager.cpp
+        src/audio/audio_manager.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
         src/models/data_models.h
@@ -93,6 +95,14 @@ add_executable(score_system_smoke
         src/gameplay/score_system.h
         src/tests/score_system_smoke.cpp)
 
+add_executable(audio_manager_smoke
+        libs/bass/bass.h
+        src/audio/audio.cpp
+        src/audio/audio.h
+        src/audio/audio_manager.cpp
+        src/audio/audio_manager.h
+        src/tests/audio_manager_smoke.cpp)
+
 set(RAYTHM_INCLUDE_DIRS
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/src/audio
@@ -111,13 +121,21 @@ target_include_directories(input_handler_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(timing_engine_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(judge_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(score_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(audio_manager_smoke PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass ${RAYTHM_INCLUDE_DIRS})
 target_link_libraries(raythm PRIVATE raylib ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
+target_link_libraries(audio_manager_smoke PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib)
 
 # bass.dll を実行ファイルと同じディレクトリにコピー
 add_custom_command(TARGET raythm POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${CMAKE_SOURCE_DIR}/libs/bass/bass.dll
         $<TARGET_FILE_DIR:raythm>/bass.dll
+)
+
+add_custom_command(TARGET audio_manager_smoke POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_SOURCE_DIR}/libs/bass/bass.dll
+        $<TARGET_FILE_DIR:audio_manager_smoke>/bass.dll
 )
