@@ -6,6 +6,8 @@
 
 #include <string>
 
+// 移行期間中の互換ラッパ。
+// BASS 初期化責務は audio_manager に寄せ、既存 scene は次段の issue で置換する。
 class audio {
 public:
     audio();
@@ -24,5 +26,4 @@ public:
 
 private:
     unsigned long handle_ = 0;
-    static int instance_count_;
 };

@@ -5,17 +5,12 @@
 #include "audio.h"
 
 #include <algorithm>
-#include <iostream>
 
+#include "audio_manager.h"
 #include "bass.h"
 
-int audio::instance_count_ = 0;
-
 audio::audio() {
-    if (instance_count_ == 0 && !BASS_Init(-1, 44100, 0, nullptr, nullptr)) {
-        std::cout << "[audio/Error] An error occurred during initialization";
-    }
-    ++instance_count_;
+    audio_manager::instance().retain_legacy_client();
 }
 
 audio::~audio() {
@@ -24,11 +19,7 @@ audio::~audio() {
         BASS_StreamFree(handle_);
         handle_ = 0;
     }
-
-    --instance_count_;
-    if (instance_count_ == 0) {
-        BASS_Free();
-    }
+    audio_manager::instance().release_legacy_client();
 }
 
 void audio::load(const std::string& file_path) {
