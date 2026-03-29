@@ -9,4 +9,11 @@ public:
 
     void update(float dt) override;
     void draw() override;
+
+private:
+    bool quitting_ = false;
+    float quit_fade_t_ = 0.0f;
+    float esc_hold_t_ = 0.0f;
+    bool transitioning_to_song_select_ = false;
+    float transition_fade_t_ = 0.0f;
 };

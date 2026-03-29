@@ -2,13 +2,21 @@
 #include "game_settings.h"
 #include "raylib.h"
 #include "scene_manager.h"
+#include "settings_io.h"
 #include "virtual_screen.h"
 
 int main() {
-    InitWindow(1311, 603, "raythm");
+    load_settings(g_settings);
+
+    const resolution_preset& preset = kResolutionPresets[g_settings.resolution_index];
+    InitWindow(preset.width, preset.height, "raythm");
     SetTraceLogLevel(LOG_WARNING);
     SetTargetFPS(g_settings.target_fps);
     SetExitKey(KEY_NULL);
+
+    if (g_settings.fullscreen) {
+        ToggleFullscreen();
+    }
 
     virtual_screen::init();
 

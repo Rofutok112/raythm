@@ -33,6 +33,9 @@ add_executable(raythm src/main.cpp
         src/core/scene_manager.cpp
         src/core/scene_manager.h
         src/gameplay/game_settings.h
+        src/gameplay/key_names.h
+        src/gameplay/settings_io.cpp
+        src/gameplay/settings_io.h
         src/scenes/scene_common.cpp
         src/scenes/scene_common.h
         src/scenes/title_scene.cpp
