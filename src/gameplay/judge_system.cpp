@@ -6,6 +6,7 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
     note_states_.clear();
     note_states_.reserve(notes.size());
     last_judge_.reset();
+    judge_events_.clear();
 
     for (const note_data& note : notes) {
         note_state state;
@@ -18,6 +19,7 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
 
 void judge_system::update(double current_ms, const input_handler& input) {
     last_judge_.reset();
+    judge_events_.clear();
 
     for (note_state& state : note_states_) {
         if (state.note_ref.type != note_type::hold || !state.holding) {
@@ -34,7 +36,6 @@ void judge_system::update(double current_ms, const input_handler& input) {
             state.judged = true;
             state.result = judge_result::miss;
             emit_judge(judge_result::miss, current_ms - state.target_ms, state.note_ref.lane);
-            return;
         }
     }
 
@@ -72,7 +73,6 @@ void judge_system::update(double current_ms, const input_handler& input) {
         candidate->result = result;
         candidate->holding = candidate->note_ref.type == note_type::hold && result != judge_result::miss;
         emit_judge(result, offset_ms, lane);
-        return;
     }
 
     for (note_state& state : note_states_) {
@@ -85,13 +85,16 @@ void judge_system::update(double current_ms, const input_handler& input) {
             state.judged = true;
             state.result = judge_result::miss;
             emit_judge(judge_result::miss, offset_ms, state.note_ref.lane);
-            return;
         }
     }
 }
 
 std::optional<judge_event> judge_system::get_last_judge() const {
     return last_judge_;
+}
+
+const std::vector<judge_event>& judge_system::get_judge_events() const {
+    return judge_events_;
 }
 
 std::vector<note_state> judge_system::get_note_states() const {
@@ -124,5 +127,7 @@ bool judge_system::is_in_judgement_window(double offset_ms) const {
 }
 
 void judge_system::emit_judge(judge_result result, double offset_ms, int lane) {
-    last_judge_ = judge_event{result, offset_ms, lane};
+    judge_event event{result, offset_ms, lane};
+    judge_events_.push_back(event);
+    last_judge_ = event;
 }

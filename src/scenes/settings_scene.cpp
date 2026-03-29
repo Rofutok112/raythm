@@ -182,7 +182,7 @@ void settings_scene::update_gameplay() {
             g_settings.camera_angle_degrees = 5.0f + ratio * (90.0f - 5.0f);
         } else if (active_slider_ == general_slider::lane_width) {
             const float ratio = slider_ratio_from_mouse(kGeneralRows[2], mouse);
-            g_settings.lane_width = 0.6f + ratio * (5.0f - 0.6f);
+            g_settings.lane_width = 0.6f + ratio * (10.0f - 0.6f);
         }
     }
 }
@@ -425,13 +425,14 @@ void settings_scene::draw_gameplay() {
         const Rectangle track = slider_track_rect(kGeneralRows[i]);
         DrawRectangleRec(track, Color{214, 219, 226, 255});
 
+        // スライダーの最大値
         float ratio = 0.0f;
         if (i == 0) {
             ratio = (g_settings.note_speed - 0.020f) / (0.090f - 0.020f);
         } else if (i == 1) {
             ratio = (g_settings.camera_angle_degrees - 5.0f) / (90.0f - 5.0f);
         } else {
-            ratio = (g_settings.lane_width - 0.6f) / (5.0f - 0.6f);
+            ratio = (g_settings.lane_width - 0.6f) / (10.0f - 0.6f);
         }
         ratio = clamp01(ratio);
 

@@ -32,16 +32,14 @@ int main() {
 
     input.update_from_lane_states(std::array<bool, 4>{false, true, true, false});
     judge.update(1000.0, input);
-    const std::optional<judge_event> simultaneous_judge = judge.get_last_judge();
-    if (!simultaneous_judge.has_value() || simultaneous_judge->lane != 1) {
-        std::cerr << "Simultaneous press judge failed\n";
+    const std::vector<judge_event>& simultaneous_judges = judge.get_judge_events();
+    if (simultaneous_judges.size() != 2 || simultaneous_judges[0].lane != 1 || simultaneous_judges[1].lane != 2) {
+        std::cerr << "Simultaneous press judges failed\n";
         return EXIT_FAILURE;
     }
-
-    judge.update(1000.0, input);
-    const std::optional<judge_event> second_simultaneous_judge = judge.get_last_judge();
-    if (!second_simultaneous_judge.has_value() || second_simultaneous_judge->lane != 2) {
-        std::cerr << "Independent simultaneous judge failed\n";
+    const std::optional<judge_event> simultaneous_judge = judge.get_last_judge();
+    if (!simultaneous_judge.has_value() || simultaneous_judge->lane != 2) {
+        std::cerr << "Last simultaneous judge failed\n";
         return EXIT_FAILURE;
     }
 
