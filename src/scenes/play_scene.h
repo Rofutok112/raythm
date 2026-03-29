@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "audio.h"
+#include "audio_manager.h"
 #include "judge_system.h"
 #include "scene.h"
 #include "score_system.h"
@@ -65,7 +65,6 @@ private:
     input_handler input_handler_;
     timing_engine timing_engine_;
     judge_system judge_system_;
-    audio audio_player_;
     std::optional<chart_data> chart_data_;
     std::optional<song_data> song_data_;
     std::optional<std::string> selected_chart_path_;

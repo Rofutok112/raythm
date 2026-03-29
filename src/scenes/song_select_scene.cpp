@@ -95,7 +95,7 @@ void song_select_scene::on_enter() {
 }
 
 void song_select_scene::on_exit() {
-    preview_audio_.stop();
+    audio_manager::instance().stop_preview();
     preview_song_id_.clear();
     pending_preview_song_.reset();
     active_preview_song_.reset();
@@ -162,7 +162,7 @@ void song_select_scene::queue_preview_for_selected_song() {
     }
 
     pending_preview_song_ = song->song;
-    if (preview_song_id_.empty() || !preview_audio_.is_loaded()) {
+    if (preview_song_id_.empty() || !audio_manager::instance().is_preview_loaded()) {
         start_preview(*song);
         return;
     }
@@ -171,18 +171,19 @@ void song_select_scene::queue_preview_for_selected_song() {
 }
 
 void song_select_scene::start_preview(const song_entry& song) {
+    audio_manager& audio = audio_manager::instance();
     const std::filesystem::path audio_path = std::filesystem::path(song.song.directory) / song.song.meta.audio_file;
-    preview_audio_.load(audio_path.string());
-    if (!preview_audio_.is_loaded()) {
+    audio.load_preview(audio_path.string());
+    if (!audio.is_preview_loaded()) {
         preview_song_id_.clear();
         preview_volume_ = 0.0f;
         preview_fade_direction_ = 0;
         return;
     }
 
-    preview_audio_.set_position_seconds(song.song.meta.preview_start_seconds);
-    preview_audio_.set_volume(0.0f);
-    preview_audio_.play(false);
+    audio.seek_preview(song.song.meta.preview_start_seconds);
+    audio.set_preview_volume(0.0f);
+    audio.play_preview(false);
     preview_volume_ = 0.0f;
     preview_song_id_ = song.song.meta.song_id;
     active_preview_song_ = song.song;
@@ -193,9 +194,9 @@ void song_select_scene::start_preview(const song_entry& song) {
 void song_select_scene::update_preview(float dt) {
     if (preview_fade_direction_ < 0) {
         preview_volume_ = std::max(0.0f, preview_volume_ - dt * kPreviewFadeSpeed);
-        preview_audio_.set_volume(preview_volume_);
+        audio_manager::instance().set_preview_volume(preview_volume_);
         if (preview_volume_ <= 0.0f) {
-            preview_audio_.stop();
+            audio_manager::instance().stop_preview();
             preview_song_id_.clear();
             active_preview_song_.reset();
             preview_fade_direction_ = 0;
@@ -210,12 +211,13 @@ void song_select_scene::update_preview(float dt) {
         }
     } else if (preview_fade_direction_ > 0) {
         preview_volume_ = std::min(kPreviewMaxVolume, preview_volume_ + dt * kPreviewFadeSpeed);
-        preview_audio_.set_volume(preview_volume_);
+        audio_manager::instance().set_preview_volume(preview_volume_);
         if (preview_volume_ >= kPreviewMaxVolume) {
             preview_fade_direction_ = 0;
         }
-    } else if (active_preview_song_.has_value() && preview_audio_.is_loaded()) {
-        const double remaining = preview_audio_.get_length_seconds() - preview_audio_.get_position_seconds();
+    } else if (active_preview_song_.has_value() && audio_manager::instance().is_preview_loaded()) {
+        const double remaining = audio_manager::instance().get_preview_length_seconds() -
+                                 audio_manager::instance().get_preview_position_seconds();
         if (remaining <= 1.0) {
             preview_fade_direction_ = -1;
             pending_preview_song_ = *active_preview_song_;

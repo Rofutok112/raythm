@@ -205,9 +205,10 @@ void play_scene::on_enter() {
     score_system_.init(static_cast<int>(chart_data_->notes.size()));
     gauge_ = gauge{};
 
+    audio_manager& audio = audio_manager::instance();
     const std::filesystem::path audio_path =
         std::filesystem::path(song_data_->directory) / song_data_->meta.audio_file;
-    audio_player_.load(audio_path.string());
+    audio.load_bgm(audio_path.string());
 
     // 描画キューの初期化: 各レーンごとにノート index を集め、target_ms 昇順で inactive に積む
     const std::vector<note_state>& init_states = judge_system_.note_states();
@@ -242,7 +243,7 @@ void play_scene::on_enter() {
     }
 
     song_end_ms_ = std::max(timing_engine_.tick_to_ms(last_tick) + 2000.0,
-                            audio_player_.get_length_seconds() * 1000.0);
+                            audio.get_bgm_length_seconds() * 1000.0);
     current_ms_ = 0.0;
     paused_ms_ = 0.0;
     paused_ = false;
@@ -261,7 +262,7 @@ void play_scene::on_enter() {
 
 // オーディオを停止する。
 void play_scene::on_exit() {
-    audio_player_.stop();
+    audio_manager::instance().stop_bgm();
 }
 
 // 時刻進行・入力処理・判定更新・シーン遷移を行う。
@@ -282,7 +283,7 @@ void play_scene::update(float dt) {
             auto_paused_by_focus_ = true;
             ranking_enabled_ = false;
             paused_ms_ = current_ms_;
-            audio_player_.pause();
+            audio_manager::instance().pause_bgm();
         }
     }
 
@@ -292,9 +293,9 @@ void play_scene::update(float dt) {
         paused_ms_ = current_ms_;
         if (paused_) {
             ranking_enabled_ = false;
-            audio_player_.pause();
-        } else if (audio_player_.is_loaded() && !intro_playing_) {
-            audio_player_.play(false);
+            audio_manager::instance().pause_bgm();
+        } else if (audio_manager::instance().is_bgm_loaded() && !intro_playing_) {
+            audio_manager::instance().play_bgm(false);
             auto_paused_by_focus_ = false;
         }
     }
@@ -304,8 +305,8 @@ void play_scene::update(float dt) {
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             if (CheckCollisionPointRec(mouse, kPauseResumeRect)) {
                 paused_ = false;
-                if (audio_player_.is_loaded() && !intro_playing_) {
-                    audio_player_.play(false);
+                if (audio_manager::instance().is_bgm_loaded() && !intro_playing_) {
+                    audio_manager::instance().play_bgm(false);
                 }
                 auto_paused_by_focus_ = false;
                 return;
@@ -359,15 +360,17 @@ void play_scene::update(float dt) {
 
         if (intro_timer_ <= 0.0f) {
             intro_playing_ = false;
-            if (audio_player_.is_loaded()) {
-                audio_player_.play();
+            if (audio_manager::instance().is_bgm_loaded()) {
+                audio_manager::instance().play_bgm();
             }
         }
         return;
     }
 
     // 時刻をオーディオ位置から取得（オーディオ無しなら dt で進行）
-    current_ms_ = audio_player_.is_loaded() ? audio_player_.get_position_seconds() * 1000.0 : current_ms_ + dt * 1000.0;
+    current_ms_ = audio_manager::instance().is_bgm_loaded()
+                      ? audio_manager::instance().get_bgm_position_seconds() * 1000.0
+                      : current_ms_ + dt * 1000.0;
     input_handler_.update();
     judge_system_.update(current_ms_, input_handler_);
     last_judge_ = judge_system_.get_last_judge();
@@ -385,7 +388,7 @@ void play_scene::update(float dt) {
         ranking_enabled_ = false;
         failure_transition_playing_ = true;
         failure_transition_timer_ = kFailureTransitionDurationSeconds;
-        audio_player_.pause();
+        audio_manager::instance().pause_bgm();
         return;
     }
 
@@ -407,7 +410,7 @@ void play_scene::update(float dt) {
         final_result_ = score_system_.get_result_data();
         result_transition_playing_ = true;
         result_transition_timer_ = 0.0f;
-        audio_player_.pause();
+        audio_manager::instance().pause_bgm();
         return;
     }
 
