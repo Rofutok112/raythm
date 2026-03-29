@@ -6,6 +6,7 @@
 #include <memory>
 #include <span>
 
+#include "audio_manager.h"
 #include "game_settings.h"
 #include "key_names.h"
 #include "raylib.h"
@@ -17,27 +18,31 @@
 #include "virtual_screen.h"
 
 namespace {
-constexpr int kPageCount = 2;
-const char* kPageNames[] = {"General", "Key Config"};
+constexpr int kPageCount = 4;
+const char* kPageNames[] = {"Gameplay", "Audio", "Video", "Key Config"};
 constexpr Rectangle kSidebarRect = {24.0f, 44.0f, 256.0f, 660.0f};
 constexpr Rectangle kContentRect = {300.0f, 44.0f, 956.0f, 660.0f};
 constexpr Rectangle kTabRects[kPageCount] = {
     {48.0f, 196.0f, 208.0f, 42.0f},
     {48.0f, 246.0f, 208.0f, 42.0f},
+    {48.0f, 296.0f, 208.0f, 42.0f},
+    {48.0f, 346.0f, 208.0f, 42.0f},
 };
 constexpr Rectangle kBackRect = {48.0f, 622.0f, 208.0f, 42.0f};
 constexpr Rectangle kGeneralRows[] = {
-    {330.0f, 170.0f, 890.0f, 64.0f},
-    {330.0f, 248.0f, 890.0f, 64.0f},
-    {330.0f, 326.0f, 890.0f, 64.0f},
-    {330.0f, 404.0f, 890.0f, 64.0f},
-    {330.0f, 482.0f, 890.0f, 64.0f},
-    {330.0f, 560.0f, 890.0f, 64.0f},
+    {330.0f, 160.0f, 890.0f, 48.0f},
+    {330.0f, 220.0f, 890.0f, 48.0f},
+    {330.0f, 280.0f, 890.0f, 48.0f},
+    {330.0f, 380.0f, 890.0f, 48.0f},
+    {330.0f, 440.0f, 890.0f, 48.0f},
+    {330.0f, 540.0f, 890.0f, 48.0f},
+    {330.0f, 600.0f, 890.0f, 48.0f},
+    {330.0f, 660.0f, 890.0f, 48.0f},
 };
 constexpr Rectangle kKeyModeRect = {330.0f, 170.0f, 890.0f, 64.0f};
 constexpr float kSliderLeft = 548.0f;
 constexpr float kSliderWidth = 630.0f;
-constexpr float kSliderTopOffset = 34.0f;
+constexpr float kSliderTopOffset = 26.0f;
 constexpr float kArrowButtonSize = 34.0f;
 
 // キーコンフィグで使用可能なキーかどうか（UIキーと衝突しないもの）。
@@ -95,6 +100,15 @@ Rectangle inset_rect(Rectangle rect, float amount) {
 settings_scene::settings_scene(scene_manager& manager, return_target target) : scene(manager), return_target_(target) {
 }
 
+void settings_scene::on_enter() {
+    current_page_ = page::gameplay;
+    active_slider_ = general_slider::none;
+    listening_ = false;
+    key_config_slot_ = -1;
+    key_config_error_.clear();
+    error_timer_ = 0.0f;
+}
+
 void settings_scene::update(float dt) {
     error_timer_ = std::max(0.0f, error_timer_ - dt);
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
@@ -127,8 +141,14 @@ void settings_scene::update(float dt) {
     }
 
     switch (current_page_) {
-        case page::general:
-            update_general();
+        case page::gameplay:
+            update_gameplay();
+            break;
+        case page::audio:
+            update_audio();
+            break;
+        case page::video:
+            update_video();
             break;
         case page::key_config:
             update_key_config();
@@ -136,24 +156,8 @@ void settings_scene::update(float dt) {
     }
 }
 
-void settings_scene::update_general() {
+void settings_scene::update_gameplay() {
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    constexpr std::array<int, 4> kFrameRateOptions = {120, 144, 240, 0};
-    if (IsKeyPressed(KEY_Z)) {
-        size_t idx = 0;
-        for (size_t i = 0; i < kFrameRateOptions.size(); ++i) {
-            if (kFrameRateOptions[i] == g_settings.target_fps) { idx = i; break; }
-        }
-        idx = (idx + kFrameRateOptions.size() - 1) % kFrameRateOptions.size();
-        g_settings.target_fps = kFrameRateOptions[idx];
-    } else if (IsKeyPressed(KEY_X)) {
-        size_t idx = 0;
-        for (size_t i = 0; i < kFrameRateOptions.size(); ++i) {
-            if (kFrameRateOptions[i] == g_settings.target_fps) { idx = i; break; }
-        }
-        idx = (idx + 1) % kFrameRateOptions.size();
-        g_settings.target_fps = kFrameRateOptions[idx];
-    }
 
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
         active_slider_ = general_slider::none;
@@ -166,8 +170,6 @@ void settings_scene::update_general() {
             active_slider_ = general_slider::camera_angle;
         } else if (CheckCollisionPointRec(mouse, kGeneralRows[2])) {
             active_slider_ = general_slider::lane_width;
-        } else if (CheckCollisionPointRec(mouse, kGeneralRows[3])) {
-            active_slider_ = general_slider::frame_rate;
         }
     }
 
@@ -181,21 +183,65 @@ void settings_scene::update_general() {
         } else if (active_slider_ == general_slider::lane_width) {
             const float ratio = slider_ratio_from_mouse(kGeneralRows[2], mouse);
             g_settings.lane_width = 0.6f + ratio * (5.0f - 0.6f);
-        } else if (active_slider_ == general_slider::frame_rate) {
-            const float ratio = slider_ratio_from_mouse(kGeneralRows[3], mouse);
-            const int index = static_cast<int>(std::round(ratio * static_cast<float>(kFrameRateOptions.size() - 1)));
-            g_settings.target_fps =
-                kFrameRateOptions[static_cast<size_t>(std::clamp(index, 0, static_cast<int>(kFrameRateOptions.size()) - 1))];
         }
+    }
+}
+
+void settings_scene::update_audio() {
+    const Vector2 mouse = virtual_screen::get_virtual_mouse();
+
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        active_slider_ = general_slider::none;
+    }
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (CheckCollisionPointRec(mouse, kGeneralRows[0])) {
+            active_slider_ = general_slider::bgm_volume;
+        } else if (CheckCollisionPointRec(mouse, kGeneralRows[1])) {
+            active_slider_ = general_slider::se_volume;
+        }
+    }
+
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        if (active_slider_ == general_slider::bgm_volume) {
+            const float ratio = slider_ratio_from_mouse(kGeneralRows[0], mouse);
+            g_settings.bgm_volume = ratio;
+            audio_manager::instance().set_bgm_volume(g_settings.bgm_volume);
+            audio_manager::instance().set_preview_volume(g_settings.bgm_volume);
+        } else if (active_slider_ == general_slider::se_volume) {
+            const float ratio = slider_ratio_from_mouse(kGeneralRows[1], mouse);
+            g_settings.se_volume = ratio;
+            audio_manager::instance().set_se_volume(g_settings.se_volume);
+        }
+    }
+}
+
+void settings_scene::update_video() {
+    const Vector2 mouse = virtual_screen::get_virtual_mouse();
+    constexpr std::array<int, 4> kFrameRateOptions = {120, 144, 240, 0};
+
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        active_slider_ = general_slider::none;
+    }
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse, kGeneralRows[0])) {
+        active_slider_ = general_slider::frame_rate;
+    }
+
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && active_slider_ == general_slider::frame_rate) {
+        const float ratio = slider_ratio_from_mouse(kGeneralRows[0], mouse);
+        const int index = static_cast<int>(std::round(ratio * static_cast<float>(kFrameRateOptions.size() - 1)));
+        g_settings.target_fps =
+            kFrameRateOptions[static_cast<size_t>(std::clamp(index, 0, static_cast<int>(kFrameRateOptions.size()) - 1))];
     }
 
     bool resolution_changed = false;
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (CheckCollisionPointRec(mouse, arrow_left_rect(kGeneralRows[4]))) {
+        if (CheckCollisionPointRec(mouse, arrow_left_rect(kGeneralRows[1]))) {
             g_settings.resolution_index = std::max(0, g_settings.resolution_index - 1);
             resolution_changed = true;
-        } else if (CheckCollisionPointRec(mouse, arrow_right_rect(kGeneralRows[4]))) {
+        } else if (CheckCollisionPointRec(mouse, arrow_right_rect(kGeneralRows[1]))) {
             g_settings.resolution_index = std::min(kResolutionPresetCount - 1, g_settings.resolution_index + 1);
             resolution_changed = true;
         }
@@ -207,8 +253,8 @@ void settings_scene::update_general() {
     }
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (CheckCollisionPointRec(mouse, arrow_left_rect(kGeneralRows[5])) ||
-            CheckCollisionPointRec(mouse, arrow_right_rect(kGeneralRows[5]))) {
+        if (CheckCollisionPointRec(mouse, arrow_left_rect(kGeneralRows[2])) ||
+            CheckCollisionPointRec(mouse, arrow_right_rect(kGeneralRows[2]))) {
             g_settings.fullscreen = !g_settings.fullscreen;
             ToggleFullscreen();
         }
@@ -310,7 +356,8 @@ void settings_scene::draw() {
                  active ? BLACK : DARKGRAY);
     }
 
-    DrawText("Click tabs to switch pages", 48, 324, 20, Color{132, 136, 146, 255});
+    draw_marquee_text("Click tabs to switch pages", 48, 396, 20, Color{132, 136, 146, 255},
+                      208.0f, GetTime());
     const bool back_hovered = CheckCollisionPointRec(mouse, kBackRect);
     const bool back_pressed = back_hovered && mouse_down;
     const Rectangle back_draw_rect = back_pressed ? inset_rect(kBackRect, 1.5f) : kBackRect;
@@ -318,13 +365,38 @@ void settings_scene::draw() {
     DrawRectangleLinesEx(back_draw_rect, 2.0f, Color{206, 210, 218, 255});
     DrawText("BACK", static_cast<int>(back_draw_rect.x + 72.0f), static_cast<int>(back_draw_rect.y + 10.0f), 22, BLACK);
 
-    DrawText(current_page_ == page::general ? "General" : "Key Config", 330, 74, 34, BLACK);
-    DrawText(current_page_ == page::general ? "Display and play settings" : "Per-lane keyboard bindings",
-             332, 114, 20, Color{132, 136, 146, 255});
+    const char* page_title = "";
+    const char* page_subtitle = "";
+    switch (current_page_) {
+        case page::gameplay:
+            page_title = "Gameplay";
+            page_subtitle = "Play feel and lane settings";
+            break;
+        case page::audio:
+            page_title = "Audio";
+            page_subtitle = "BGM and sound effect volume";
+            break;
+        case page::video:
+            page_title = "Video";
+            page_subtitle = "Display and frame rate settings";
+            break;
+        case page::key_config:
+            page_title = "Key Config";
+            page_subtitle = "Per-lane keyboard bindings";
+            break;
+    }
+    DrawText(page_title, 330, 74, 34, BLACK);
+    DrawText(page_subtitle, 332, 114, 20, Color{132, 136, 146, 255});
 
     switch (current_page_) {
-        case page::general:
-            draw_general();
+        case page::gameplay:
+            draw_gameplay();
+            break;
+        case page::audio:
+            draw_audio();
+            break;
+        case page::video:
+            draw_video();
             break;
         case page::key_config:
             draw_key_config();
@@ -336,67 +408,117 @@ void settings_scene::draw() {
     virtual_screen::draw_to_screen();
 }
 
-void settings_scene::draw_general() {
+void settings_scene::draw_gameplay() {
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-    const char* fps_label = g_settings.target_fps == 0 ? "Unlimited" : TextFormat("%d", g_settings.target_fps);
-    const char* res_label = kResolutionPresets[g_settings.resolution_index].label;
-    const char* labels[] = {"Note Speed", "Camera Angle", "Lane Width", "Frame Rate", "Resolution", "Display"};
-    const char* values[] = {
+    const char* labels[] = {"Note Speed", "Camera Angle", "Lane Width"};
+    const std::string values[] = {
         TextFormat("%.3f", g_settings.note_speed),
         TextFormat("%.0f deg", g_settings.camera_angle_degrees),
         TextFormat("%.1f", g_settings.lane_width),
-        fps_label,
-        res_label,
-        g_settings.fullscreen ? "Fullscreen" : "Windowed",
     };
 
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 3; ++i) {
         DrawRectangleRec(kGeneralRows[i], Color{243, 245, 248, 255});
         DrawRectangleLinesEx(kGeneralRows[i], 2.0f, Color{206, 210, 218, 255});
-        DrawText(labels[i], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 16.0f), 24, BLACK);
-        if (i <= 3) {
-            const Rectangle track = slider_track_rect(kGeneralRows[i]);
-            DrawRectangleRec(track, Color{214, 219, 226, 255});
+        DrawText(labels[i], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, BLACK);
+        const Rectangle track = slider_track_rect(kGeneralRows[i]);
+        DrawRectangleRec(track, Color{214, 219, 226, 255});
 
-            float ratio = 0.0f;
-            if (i == 0) {
-                ratio = (g_settings.note_speed - 0.020f) / (0.090f - 0.020f);
-            } else if (i == 1) {
-                ratio = (g_settings.camera_angle_degrees - 5.0f) / (90.0f - 5.0f);
-            } else if (i == 2) {
-                ratio = (g_settings.lane_width - 0.6f) / (5.0f - 0.6f);
-            } else {
-                ratio = static_cast<float>(fps_option_index(g_settings.target_fps)) / 3.0f;
-            }
-            ratio = clamp01(ratio);
-
-            DrawRectangle(static_cast<int>(track.x), static_cast<int>(track.y), static_cast<int>(track.width * ratio), static_cast<int>(track.height),
-                          Color{132, 136, 146, 255});
-            const int knob_x = static_cast<int>(track.x + track.width * ratio);
-            DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, Color{72, 72, 72, 255});
-
-            const int value_width = MeasureText(values[i], 22);
-            DrawText(values[i], static_cast<int>(track.x + track.width - value_width), static_cast<int>(kGeneralRows[i].y + 10.0f), 22,
-                     Color{96, 100, 108, 255});
+        float ratio = 0.0f;
+        if (i == 0) {
+            ratio = (g_settings.note_speed - 0.020f) / (0.090f - 0.020f);
+        } else if (i == 1) {
+            ratio = (g_settings.camera_angle_degrees - 5.0f) / (90.0f - 5.0f);
         } else {
-            const Rectangle left_arrow = arrow_left_rect(kGeneralRows[i]);
-            const Rectangle right_arrow = arrow_right_rect(kGeneralRows[i]);
-            const bool left_hovered = CheckCollisionPointRec(mouse, left_arrow);
-            const bool right_hovered = CheckCollisionPointRec(mouse, right_arrow);
-            const Rectangle left_draw_rect = (left_hovered && mouse_down) ? inset_rect(left_arrow, 1.5f) : left_arrow;
-            const Rectangle right_draw_rect = (right_hovered && mouse_down) ? inset_rect(right_arrow, 1.5f) : right_arrow;
-            DrawRectangleRec(left_draw_rect, lerp_color(Color{229, 233, 238, 255}, Color{214, 220, 227, 255}, left_hovered ? 1.0f : 0.0f));
-            DrawRectangleRec(right_draw_rect, lerp_color(Color{229, 233, 238, 255}, Color{214, 220, 227, 255}, right_hovered ? 1.0f : 0.0f));
-            DrawRectangleLinesEx(left_draw_rect, 2.0f, Color{206, 210, 218, 255});
-            DrawRectangleLinesEx(right_draw_rect, 2.0f, Color{206, 210, 218, 255});
-            DrawText("<", static_cast<int>(left_draw_rect.x + 11.0f), static_cast<int>(left_draw_rect.y + 5.0f), 24, BLACK);
-            DrawText(">", static_cast<int>(right_draw_rect.x + 10.0f), static_cast<int>(right_draw_rect.y + 5.0f), 24, BLACK);
-
-            const int value_width = MeasureText(values[i], 24);
-            DrawText(values[i], static_cast<int>(left_arrow.x - value_width - 16.0f), static_cast<int>(kGeneralRows[i].y + 16.0f), 24,
-                     Color{96, 100, 108, 255});
+            ratio = (g_settings.lane_width - 0.6f) / (5.0f - 0.6f);
         }
+        ratio = clamp01(ratio);
+
+        DrawRectangle(static_cast<int>(track.x), static_cast<int>(track.y), static_cast<int>(track.width * ratio), static_cast<int>(track.height),
+                      Color{132, 136, 146, 255});
+        const int knob_x = static_cast<int>(track.x + track.width * ratio);
+        DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, Color{72, 72, 72, 255});
+
+        const int value_width = MeasureText(values[i].c_str(), 22);
+        DrawText(values[i].c_str(), static_cast<int>(track.x + track.width - value_width), static_cast<int>(kGeneralRows[i].y + 8.0f), 22,
+                 Color{96, 100, 108, 255});
+    }
+}
+
+void settings_scene::draw_audio() {
+    const char* labels[] = {"BGM Volume", "SE Volume"};
+    const std::string values[] = {
+        TextFormat("%d%%", static_cast<int>(std::round(g_settings.bgm_volume * 100.0f))),
+        TextFormat("%d%%", static_cast<int>(std::round(g_settings.se_volume * 100.0f))),
+    };
+
+    for (int row = 0; row < 2; ++row) {
+        const int i = row;
+        DrawRectangleRec(kGeneralRows[i], Color{243, 245, 248, 255});
+        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, Color{206, 210, 218, 255});
+        DrawText(labels[row], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, BLACK);
+
+        const Rectangle track = slider_track_rect(kGeneralRows[i]);
+        DrawRectangleRec(track, Color{214, 219, 226, 255});
+        const float ratio = row == 0 ? g_settings.bgm_volume : g_settings.se_volume;
+        DrawRectangle(static_cast<int>(track.x), static_cast<int>(track.y), static_cast<int>(track.width * ratio), static_cast<int>(track.height),
+                      Color{132, 136, 146, 255});
+        const int knob_x = static_cast<int>(track.x + track.width * ratio);
+        DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, Color{72, 72, 72, 255});
+
+        const int value_width = MeasureText(values[row].c_str(), 22);
+        DrawText(values[row].c_str(), static_cast<int>(track.x + track.width - value_width), static_cast<int>(kGeneralRows[i].y + 8.0f), 22,
+                 Color{96, 100, 108, 255});
+    }
+}
+
+void settings_scene::draw_video() {
+    const Vector2 mouse = virtual_screen::get_virtual_mouse();
+    const bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+    const std::string fps_label = g_settings.target_fps == 0 ? "Unlimited" : std::to_string(g_settings.target_fps);
+    const std::string res_label = kResolutionPresets[g_settings.resolution_index].label;
+    const std::string values[] = {fps_label, res_label, g_settings.fullscreen ? "Fullscreen" : "Windowed"};
+    const char* labels[] = {"Frame Rate", "Resolution", "Display"};
+
+    {
+        const int i = 0;
+        DrawRectangleRec(kGeneralRows[i], Color{243, 245, 248, 255});
+        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, Color{206, 210, 218, 255});
+        DrawText(labels[0], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, BLACK);
+        const Rectangle track = slider_track_rect(kGeneralRows[i]);
+        DrawRectangleRec(track, Color{214, 219, 226, 255});
+        const float ratio = static_cast<float>(fps_option_index(g_settings.target_fps)) / 3.0f;
+        DrawRectangle(static_cast<int>(track.x), static_cast<int>(track.y), static_cast<int>(track.width * ratio), static_cast<int>(track.height),
+                      Color{132, 136, 146, 255});
+        const int knob_x = static_cast<int>(track.x + track.width * ratio);
+        DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, Color{72, 72, 72, 255});
+        const int value_width = MeasureText(values[0].c_str(), 22);
+        DrawText(values[0].c_str(), static_cast<int>(track.x + track.width - value_width), static_cast<int>(kGeneralRows[i].y + 8.0f), 22,
+                 Color{96, 100, 108, 255});
+    }
+
+    for (int row = 0; row < 2; ++row) {
+        const int i = row + 1;
+        DrawRectangleRec(kGeneralRows[i], Color{243, 245, 248, 255});
+        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, Color{206, 210, 218, 255});
+        DrawText(labels[row + 1], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, BLACK);
+        const Rectangle left_arrow = arrow_left_rect(kGeneralRows[i]);
+        const Rectangle right_arrow = arrow_right_rect(kGeneralRows[i]);
+        const bool left_hovered = CheckCollisionPointRec(mouse, left_arrow);
+        const bool right_hovered = CheckCollisionPointRec(mouse, right_arrow);
+        const Rectangle left_draw_rect = (left_hovered && mouse_down) ? inset_rect(left_arrow, 1.5f) : left_arrow;
+        const Rectangle right_draw_rect = (right_hovered && mouse_down) ? inset_rect(right_arrow, 1.5f) : right_arrow;
+        DrawRectangleRec(left_draw_rect, lerp_color(Color{229, 233, 238, 255}, Color{214, 220, 227, 255}, left_hovered ? 1.0f : 0.0f));
+        DrawRectangleRec(right_draw_rect, lerp_color(Color{229, 233, 238, 255}, Color{214, 220, 227, 255}, right_hovered ? 1.0f : 0.0f));
+        DrawRectangleLinesEx(left_draw_rect, 2.0f, Color{206, 210, 218, 255});
+        DrawRectangleLinesEx(right_draw_rect, 2.0f, Color{206, 210, 218, 255});
+        DrawText("<", static_cast<int>(left_draw_rect.x + 11.0f), static_cast<int>(left_draw_rect.y + 5.0f), 24, BLACK);
+        DrawText(">", static_cast<int>(right_draw_rect.x + 10.0f), static_cast<int>(right_draw_rect.y + 5.0f), 24, BLACK);
+
+        const int value_width = MeasureText(values[row + 1].c_str(), 24);
+        DrawText(values[row + 1].c_str(), static_cast<int>(left_arrow.x - value_width - 16.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 24,
+                 Color{96, 100, 108, 255});
     }
 }
 

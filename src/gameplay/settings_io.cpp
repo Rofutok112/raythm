@@ -127,6 +127,10 @@ void load_settings(game_settings& settings) {
         settings.lane_width = std::clamp(std::stof(*v), 0.6f, 5.0f);
     if (auto v = extract_number_token(content, "noteSpeed"))
         settings.note_speed = std::clamp(std::stof(*v), 0.020f, 0.090f);
+    if (auto v = extract_number_token(content, "bgmVolume"))
+        settings.bgm_volume = std::clamp(std::stof(*v), 0.0f, 1.0f);
+    if (auto v = extract_number_token(content, "seVolume"))
+        settings.se_volume = std::clamp(std::stof(*v), 0.0f, 1.0f);
     if (auto v = extract_number_token(content, "targetFps"))
         settings.target_fps = std::stoi(*v);
     if (auto v = extract_number_token(content, "resolutionIndex"))
@@ -148,6 +152,8 @@ void save_settings(const game_settings& settings) {
     out << "  \"cameraAngle\": " << settings.camera_angle_degrees << ",\n";
     out << "  \"laneWidth\": " << settings.lane_width << ",\n";
     out << "  \"noteSpeed\": " << settings.note_speed << ",\n";
+    out << "  \"bgmVolume\": " << settings.bgm_volume << ",\n";
+    out << "  \"seVolume\": " << settings.se_volume << ",\n";
     out << "  \"targetFps\": " << settings.target_fps << ",\n";
     out << "  \"resolutionIndex\": " << settings.resolution_index << ",\n";
     out << "  \"fullscreen\": " << (settings.fullscreen ? "true" : "false") << ",\n";

@@ -194,7 +194,7 @@ void song_select_scene::start_preview(const song_entry& song) {
 void song_select_scene::update_preview(float dt) {
     if (preview_fade_direction_ < 0) {
         preview_volume_ = std::max(0.0f, preview_volume_ - dt * kPreviewFadeSpeed);
-        audio_manager::instance().set_preview_volume(preview_volume_);
+        audio_manager::instance().set_preview_volume(preview_volume_ * g_settings.bgm_volume);
         if (preview_volume_ <= 0.0f) {
             audio_manager::instance().stop_preview();
             preview_song_id_.clear();
@@ -211,7 +211,7 @@ void song_select_scene::update_preview(float dt) {
         }
     } else if (preview_fade_direction_ > 0) {
         preview_volume_ = std::min(kPreviewMaxVolume, preview_volume_ + dt * kPreviewFadeSpeed);
-        audio_manager::instance().set_preview_volume(preview_volume_);
+        audio_manager::instance().set_preview_volume(preview_volume_ * g_settings.bgm_volume);
         if (preview_volume_ >= kPreviewMaxVolume) {
             preview_fade_direction_ = 0;
         }
