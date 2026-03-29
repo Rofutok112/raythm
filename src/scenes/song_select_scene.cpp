@@ -18,9 +18,9 @@ namespace {
 constexpr float kRowHeight = 60.0f;
 constexpr float kScrollWheelStep = 80.0f;
 constexpr float kScrollLerpSpeed = 12.0f;
-constexpr Rectangle kSongListRect = {850.0f, 90.0f, 350.0f, 560.0f};
-constexpr Rectangle kLeftPanelRect = {80.0f, 90.0f, 720.0f, 560.0f};
-constexpr Rectangle kJacketRect = {120.0f, 130.0f, 300.0f, 300.0f};
+constexpr Rectangle kSongListRect = {790.0f, 44.0f, 466.0f, 660.0f};
+constexpr Rectangle kLeftPanelRect = {24.0f, 44.0f, 750.0f, 660.0f};
+constexpr Rectangle kJacketRect = {44.0f, 68.0f, 320.0f, 320.0f};
 constexpr float kPreviewFadeSpeed = 2.4f;
 constexpr float kPreviewMaxVolume = 0.55f;
 
@@ -296,7 +296,7 @@ void song_select_scene::update(float dt) {
                 // 子要素（譜面）のクリック判定
                 float child_y = item_y + 46.0f;
                 for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
-                    const Rectangle child_rect = {896.0f, child_y - 6.0f, 258.0f, 28.0f};
+                    const Rectangle child_rect = {kSongListRect.x + 46.0f, child_y - 6.0f, kSongListRect.width - 92.0f, 28.0f};
                     if (child_rect.y >= kSongListRect.y && child_rect.y + child_rect.height <= kSongListRect.y + kSongListRect.height &&
                         CheckCollisionPointRec(mouse, child_rect)) {
                         if (difficulty_index_ == chart_index) {
@@ -313,7 +313,7 @@ void song_select_scene::update(float dt) {
                 }
             }
 
-            const Rectangle row_rect = {864.0f, item_y - 8.0f, 322.0f, 44.0f};
+            const Rectangle row_rect = {kSongListRect.x + 14.0f, item_y - 8.0f, kSongListRect.width - 28.0f, 44.0f};
             if (row_rect.y >= kSongListRect.y && row_rect.y + row_rect.height <= kSongListRect.y + kSongListRect.height &&
                 CheckCollisionPointRec(mouse, row_rect)) {
                 if (selected_song_index_ != i) {
@@ -341,15 +341,16 @@ void song_select_scene::draw() {
     DrawRectangleRec(kSongListRect, Color{248, 249, 251, 255});
     DrawRectangleLinesEx(kLeftPanelRect, 2.0f, Color{206, 210, 218, 255});
     DrawRectangleLinesEx(kSongListRect, 2.0f, Color{206, 210, 218, 255});
-    DrawText("SONG SELECT", 90, 34, 34, BLACK);
-    DrawText("Mouse wheel: list    Click: song / chart    Double-click chart: play", 90, 66, 20, Color{124, 128, 136, 255});
+    DrawText("SONG SELECT", 30, 12, 30, BLACK);
 
     if (songs_.empty()) {
-        DrawText("No songs found", 130, 300, 36, BLACK);
+        DrawText("No songs found", 50, 300, 36, BLACK);
         if (!load_errors_.empty()) {
-            DrawText(load_errors_.front().c_str(), 130, 350, 22, Color{220, 38, 38, 255});
+            DrawText(load_errors_.front().c_str(), 50, 350, 22, Color{220, 38, 38, 255});
         }
-        DrawText("ESC: Back to Title", 130, 500, 24, GRAY);
+        virtual_screen::end();
+        ClearBackground(BLACK);
+        virtual_screen::draw_to_screen();
         return;
     }
 
@@ -368,27 +369,30 @@ void song_select_scene::draw() {
         const Rectangle source = {0.0f, 0.0f, static_cast<float>(jacket_texture_.width), static_cast<float>(jacket_texture_.height)};
         DrawTexturePro(jacket_texture_, source, kJacketRect, Vector2{0.0f, 0.0f}, 0.0f, Color{255, 255, 255, content_alpha});
     } else {
-        DrawText("JACKET", static_cast<int>(218 + content_offset_x * 0.35f), 265, 30, Color{126, 130, 138, content_alpha});
+        const int jacket_cx = static_cast<int>(kJacketRect.x + kJacketRect.width * 0.5f) - 45;
+        const int jacket_cy = static_cast<int>(kJacketRect.y + kJacketRect.height * 0.5f) - 15;
+        DrawText("JACKET", jacket_cx, jacket_cy, 30, Color{126, 130, 138, content_alpha});
     }
     DrawRectangleLinesEx(kJacketRect, 2.0f, Color{196, 200, 208, 255});
 
-    const float detail_max_width = kLeftPanelRect.x + kLeftPanelRect.width - 460.0f - 20.0f;
+    const float detail_x = kJacketRect.x + kJacketRect.width + 20.0f;
+    const float detail_max_width = kLeftPanelRect.x + kLeftPanelRect.width - detail_x - 16.0f;
     const double now = GetTime();
-    draw_marquee_text(song.song.meta.title.c_str(), static_cast<int>(460 + content_offset_x), 140, 40,
+    draw_marquee_text(song.song.meta.title.c_str(), static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 4.0f), 40,
                       Color{0, 0, 0, content_alpha}, detail_max_width, now);
-    draw_marquee_text(song.song.meta.artist.c_str(), static_cast<int>(460 + content_offset_x), 192, 28,
+    draw_marquee_text(song.song.meta.artist.c_str(), static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 56.0f), 28,
                       Color{80, 80, 80, content_alpha}, detail_max_width, now);
-    DrawText(TextFormat("BPM %.0f", song.song.meta.base_bpm), static_cast<int>(460 + content_offset_x), 236, 24,
-             Color{130, 130, 130, content_alpha});
+    DrawText(TextFormat("BPM %.0f", song.song.meta.base_bpm), static_cast<int>(detail_x + content_offset_x),
+             static_cast<int>(kJacketRect.y + 100.0f), 24, Color{130, 130, 130, content_alpha});
     if (selected_chart != nullptr) {
         DrawText(TextFormat("%s %s Lv.%d", key_mode_label(selected_chart->meta.key_count).c_str(),
                             selected_chart->meta.difficulty.c_str(), selected_chart->meta.level),
-                 static_cast<int>(460 + content_offset_x), 286, 28, Color{0, 0, 0, content_alpha});
-        DrawText(selected_chart->meta.chart_author.c_str(), static_cast<int>(460 + content_offset_x), 322, 20,
-                 Color{132, 136, 146, content_alpha});
+                 static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 150.0f), 28, Color{0, 0, 0, content_alpha});
+        DrawText(selected_chart->meta.chart_author.c_str(), static_cast<int>(detail_x + content_offset_x),
+                 static_cast<int>(kJacketRect.y + 186.0f), 20, Color{132, 136, 146, content_alpha});
     }
 
-    DrawText("Songs", 870, 112, 28, BLACK);
+    DrawText("Songs", static_cast<int>(kSongListRect.x + 20.0f), static_cast<int>(kSongListRect.y + 22.0f), 28, BLACK);
     DrawRectangleRec(kSongListRect, song_list_fill);
     DrawRectangleLinesEx(kSongListRect, 2.0f, panel_border);
 
@@ -416,25 +420,32 @@ void song_select_scene::draw() {
         }
 
         const int iy = static_cast<int>(item_y);
-        const Rectangle row_rect = {864.0f, item_y - 8.0f, 322.0f, 44.0f};
+        const float row_x = kSongListRect.x + 14.0f;
+        const float row_w = kSongListRect.width - 28.0f;
+        const int text_x = static_cast<int>(kSongListRect.x + 30.0f);
+        const float list_text_max_w = kSongListRect.width - 70.0f;
+        const Rectangle row_rect = {row_x, item_y - 8.0f, row_w, 44.0f};
         const bool hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), row_rect);
         if (is_selected) {
             DrawRectangleRec(row_rect, hovered ? Color{214, 220, 227, 255} : Color{223, 228, 234, 255});
         } else if (hovered) {
             DrawRectangleRec(row_rect, Color{236, 240, 245, 255});
         }
-        constexpr float kListTextMaxWidth = 280.0f;
-        draw_marquee_text(songs_[static_cast<size_t>(i)].song.meta.title.c_str(), 880, iy, 24,
-                          is_selected ? BLACK : DARKGRAY, kListTextMaxWidth, now, &list_clip);
-        draw_marquee_text(songs_[static_cast<size_t>(i)].song.meta.artist.c_str(), 880, iy + 22, 16,
-                          Color{132, 136, 146, 255}, kListTextMaxWidth, now, &list_clip);
+        draw_marquee_text(songs_[static_cast<size_t>(i)].song.meta.title.c_str(), text_x, iy, 24,
+                          is_selected ? BLACK : DARKGRAY, list_text_max_w, now, &list_clip);
+        draw_marquee_text(songs_[static_cast<size_t>(i)].song.meta.artist.c_str(), text_x, iy + 22, 16,
+                          Color{132, 136, 146, 255}, list_text_max_w, now, &list_clip);
 
         if (is_selected) {
+            const float child_x = kSongListRect.x + 46.0f;
+            const float child_w = kSongListRect.width - 92.0f;
+            const int child_text_x = static_cast<int>(kSongListRect.x + 58.0f);
+            const int author_x = static_cast<int>(kSongListRect.x + kSongListRect.width - 120.0f);
             float child_y = item_y + 46.0f;
             for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
                 const chart_option& chart = *filtered[static_cast<size_t>(chart_index)];
                 const bool child_selected = chart_index == difficulty_index_;
-                const Rectangle child_rect = {896.0f, child_y - 6.0f, 258.0f, 28.0f};
+                const Rectangle child_rect = {child_x, child_y - 6.0f, child_w, 28.0f};
                 const bool child_hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), child_rect);
                 if (child_selected) {
                     DrawRectangleRec(child_rect, child_hovered ? Color{214, 220, 227, 255} : Color{223, 228, 234, 255});
@@ -443,9 +454,9 @@ void song_select_scene::draw() {
                 }
                 DrawText(TextFormat("%s %s Lv.%d", key_mode_label(chart.meta.key_count).c_str(), chart.meta.difficulty.c_str(),
                                     chart.meta.level),
-                         908, static_cast<int>(child_y), 18,
+                         child_text_x, static_cast<int>(child_y), 18,
                          child_selected ? BLACK : DARKGRAY);
-                DrawText(chart.meta.chart_author.c_str(), 1086, static_cast<int>(child_y) + 1, 14, Color{132, 136, 146, 255});
+                DrawText(chart.meta.chart_author.c_str(), author_x, static_cast<int>(child_y) + 1, 14, Color{132, 136, 146, 255});
                 child_y += 30.0f;
             }
         }
@@ -467,7 +478,6 @@ void song_select_scene::draw() {
                       static_cast<int>(thumb_y), 6, static_cast<int>(thumb_h), Color{172, 178, 188, 255});
     }
 
-    DrawText("ESC: Back", 1080, 662, 22, GRAY);
     virtual_screen::end();
 
     ClearBackground(BLACK);
