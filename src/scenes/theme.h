@@ -64,8 +64,9 @@ struct ui_theme {
     Color pause_overlay;
     Color pause_panel;
 
-    // --- アクセント・ステータス（テーマ共通） ---
+    // --- アクセント・ステータス ---
     Color accent;               // チャートラベル等のアクセント色
+    Color combo;                // コンボ数表示
     Color error;                // エラー・失敗（赤）
     Color success;              // 成功・有効（緑）
     Color fast;                 // Fast 表示（青）
@@ -144,6 +145,7 @@ inline constexpr ui_theme kLightTheme = {
     .pause_panel = {248, 249, 251, 245},
     // accent/status
     .accent = {124, 58, 237, 255},
+    .combo = {100, 160, 255, 255},
     .error = {220, 38, 38, 255},
     .success = {14, 146, 108, 255},
     .fast = {50, 120, 220, 255},
@@ -220,6 +222,7 @@ inline constexpr ui_theme kDarkTheme = {
     .pause_panel = {32, 34, 38, 245},
     // accent/status
     .accent = {158, 100, 255, 255},
+    .combo = {120, 180, 255, 255},
     .error = {240, 60, 60, 255},
     .success = {40, 180, 130, 255},
     .fast = {80, 150, 240, 255},
