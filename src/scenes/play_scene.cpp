@@ -381,17 +381,18 @@ void play_scene::update(float dt) {
                       : current_ms_ + dt * 1000.0;
     input_handler_.update();
     judge_system_.update(current_ms_, input_handler_);
+    const std::vector<judge_event>& judge_events = judge_system_.get_judge_events();
     last_judge_ = judge_system_.get_last_judge();
-    if (last_judge_.has_value()) {
-        score_system_.on_judge(*last_judge_);
-        gauge_.on_judge(last_judge_->result);
-        if (!hitsound_path_.empty() && last_judge_->result != judge_result::miss) {
+    for (const judge_event& event : judge_events) {
+        score_system_.on_judge(event);
+        gauge_.on_judge(event.result);
+        if (!hitsound_path_.empty() && event.result != judge_result::miss) {
             audio_manager::instance().play_se(hitsound_path_);
         }
-        combo_display_ = score_system_.get_combo();
-        display_judge_ = last_judge_;
+        display_judge_ = event;
         judge_feedback_timer_ = 1.0f;
     }
+    combo_display_ = score_system_.get_combo();
 
     if (gauge_.get_value() <= 0.0f) {
         final_result_ = score_system_.get_result_data();

@@ -13,6 +13,7 @@ public:
     void init(const std::vector<note_data>& notes, const timing_engine& engine);
     void update(double current_ms, const input_handler& input);
     std::optional<judge_event> get_last_judge() const;
+    const std::vector<judge_event>& get_judge_events() const;
     std::vector<note_state> get_note_states() const;
     const std::vector<note_state>& note_states() const;
 
@@ -24,4 +25,5 @@ private:
     std::array<double, 5> judge_windows_ = {25.0, 50.0, 90.0, 130.0, 130.0};
     std::vector<note_state> note_states_;
     std::optional<judge_event> last_judge_;
+    std::vector<judge_event> judge_events_;
 };
