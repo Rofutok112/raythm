@@ -26,6 +26,8 @@ constexpr float kFailureFadeDurationSeconds = 1.0f;
 constexpr float kFailureHoldDurationSeconds = 1.0f;
 constexpr float kFailureTransitionDurationSeconds
     = kFailureFadeDurationSeconds + kFailureHoldDurationSeconds;
+constexpr float kResultTransitionDurationSeconds = 1.0f;
+constexpr float kResultFadeMaxAlpha = 0.65f;  // 暗転しきらない
 constexpr float kJudgementLineScreenRatioFromBottom = 0.10f;
 constexpr float kCameraHeight = 42.0f;
 constexpr float kCameraFovY = 42.0f;
@@ -329,7 +331,19 @@ void play_scene::update(float dt) {
     if (failure_transition_playing_) {
         failure_transition_timer_ = std::max(0.0f, failure_transition_timer_ - dt);
         if (failure_transition_timer_ <= 0.0f) {
-            manager_.change_scene(std::make_unique<result_scene>(manager_, final_result_, ranking_enabled_));
+            manager_.change_scene(std::make_unique<result_scene>(
+                manager_, final_result_, ranking_enabled_,
+                *song_data_, selected_chart_path_.value_or(""), chart_data_->meta, key_count_));
+        }
+        return;
+    }
+
+    if (result_transition_playing_) {
+        result_transition_timer_ = std::min(kResultTransitionDurationSeconds, result_transition_timer_ + dt);
+        if (result_transition_timer_ >= kResultTransitionDurationSeconds) {
+            manager_.change_scene(std::make_unique<result_scene>(
+                manager_, final_result_, ranking_enabled_,
+                *song_data_, selected_chart_path_.value_or(""), chart_data_->meta, key_count_));
         }
         return;
     }
@@ -384,10 +398,24 @@ void play_scene::update(float dt) {
         }
     }
 
+    // 全ノーツ判定済みなら Enter/クリックでリザルトへスキップ可能
+    const auto& states = judge_system_.note_states();
+    const bool chart_finished = !states.empty() &&
+        std::all_of(states.begin(), states.end(), [](const note_state& s) { return s.judged; });
+
+    if (chart_finished && (IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
+        final_result_ = score_system_.get_result_data();
+        result_transition_playing_ = true;
+        result_transition_timer_ = 0.0f;
+        audio_player_.pause();
+        return;
+    }
+
     // 曲終了でリザルト画面へ、Backspace で曲選択へ戻る
     if (current_ms_ >= song_end_ms_) {
         final_result_ = score_system_.get_result_data();
-        manager_.change_scene(std::make_unique<result_scene>(manager_, final_result_, ranking_enabled_));
+        result_transition_playing_ = true;
+        result_transition_timer_ = 0.0f;
     } else if (IsKeyPressed(KEY_BACKSPACE)) {
         manager_.change_scene(std::make_unique<song_select_scene>(manager_));
     }
@@ -485,6 +513,9 @@ void play_scene::draw() {
     }
     if (failure_transition_playing_) {
         draw_failure_overlay();
+    }
+    if (result_transition_playing_) {
+        draw_result_transition_overlay();
     }
     if (paused_) {
         draw_pause_overlay();
@@ -697,6 +728,12 @@ void play_scene::draw_failure_overlay() const {
     const char* text = "FAILED...";
     DrawText(text, kScreenWidth / 2 - MeasureText(text, 44) / 2, kScreenHeight / 2 - 22, 44,
              Fade({244, 246, 250, 255}, std::min(fade_progress * 1.15f, 1.0f)));
+}
+
+void play_scene::draw_result_transition_overlay() const {
+    const float progress = std::clamp(result_transition_timer_ / kResultTransitionDurationSeconds, 0.0f, 1.0f);
+    const unsigned char alpha = static_cast<unsigned char>(progress * kResultFadeMaxAlpha * 255.0f);
+    DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {0, 0, 0, alpha});
 }
 
 double play_scene::get_visual_ms() const {
