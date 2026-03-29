@@ -31,6 +31,10 @@ constexpr float kCameraHeight = 42.0f;
 constexpr float kCameraFovY = 42.0f;
 constexpr float kJudgeLineWorldZ = 12.0f;
 constexpr float kMaxGroundDistance = 1000.0f;
+constexpr Rectangle kPausePanelRect = {430.0f, 132.0f, 420.0f, 320.0f};
+constexpr Rectangle kPauseResumeRect = {470.0f, 220.0f, 340.0f, 42.0f};
+constexpr Rectangle kPauseRestartRect = {470.0f, 278.0f, 340.0f, 42.0f};
+constexpr Rectangle kPauseSongSelectRect = {470.0f, 336.0f, 340.0f, 42.0f};
 
 constexpr Color kLaneColor = {182, 186, 194, 255};
 
@@ -69,6 +73,16 @@ float lane_center_x(int lane, int key_count) {
 Color darkened_lane_color(Color color) {
     return {static_cast<unsigned char>(color.r * 0.7f), static_cast<unsigned char>(color.g * 0.7f),
             static_cast<unsigned char>(color.b * 0.72f), color.a};
+}
+
+Color lerp_color(Color from, Color to, float t) {
+    const float clamped = std::clamp(t, 0.0f, 1.0f);
+    return {
+        static_cast<unsigned char>(from.r + (to.r - from.r) * clamped),
+        static_cast<unsigned char>(from.g + (to.g - from.g) * clamped),
+        static_cast<unsigned char>(from.b + (to.b - from.b) * clamped),
+        static_cast<unsigned char>(from.a + (to.a - from.a) * clamped),
+    };
 }
 
 // 判定結果に対応する表示色を返す。
@@ -284,6 +298,31 @@ void play_scene::update(float dt) {
     }
 
     if (paused_) {
+        const Vector2 mouse = virtual_screen::get_virtual_mouse();
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (CheckCollisionPointRec(mouse, kPauseResumeRect)) {
+                paused_ = false;
+                if (audio_player_.is_loaded() && !intro_playing_) {
+                    audio_player_.play(false);
+                }
+                auto_paused_by_focus_ = false;
+                return;
+            }
+
+            if (CheckCollisionPointRec(mouse, kPauseRestartRect)) {
+                if (song_data_.has_value() && selected_chart_path_.has_value()) {
+                    manager_.change_scene(std::make_unique<play_scene>(manager_, *song_data_, *selected_chart_path_, key_count_));
+                } else {
+                    manager_.change_scene(std::make_unique<play_scene>(manager_, key_count_));
+                }
+                return;
+            }
+
+            if (CheckCollisionPointRec(mouse, kPauseSongSelectRect)) {
+                manager_.change_scene(std::make_unique<song_select_scene>(manager_));
+                return;
+            }
+        }
         return;
     }
 
@@ -611,9 +650,27 @@ void play_scene::draw_hud() const {
 
 void play_scene::draw_pause_overlay() const {
     DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {3, 6, 10, 150});
-    DrawText("PAUSED", kScreenWidth / 2 - 88, 174, 46, {244, 246, 250, 255});
-    DrawText(auto_paused_by_focus_ ? "Focus lost: press ESC to resume" : "ESC: Resume", kScreenWidth / 2 - 150, 234, 24,
-             {201, 206, 217, 255});
+    const Vector2 mouse = virtual_screen::get_virtual_mouse();
+    const bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+    DrawRectangleRec(kPausePanelRect, Color{248, 249, 251, 245});
+    DrawRectangleLinesEx(kPausePanelRect, 2.0f, Color{206, 210, 218, 255});
+    DrawText("PAUSED", static_cast<int>(kPausePanelRect.x + 134.0f), static_cast<int>(kPausePanelRect.y + 24.0f), 42, BLACK);
+
+    const Rectangle buttons[] = {kPauseResumeRect, kPauseRestartRect, kPauseSongSelectRect};
+    const char* labels[] = {"RESUME", "RESTART", "SONG SELECT"};
+    for (int i = 0; i < 3; ++i) {
+        const bool hovered = CheckCollisionPointRec(mouse, buttons[i]);
+        const bool pressed = hovered && mouse_down;
+        const Rectangle rect = pressed ? Rectangle{buttons[i].x + 1.5f, buttons[i].y + 1.5f, buttons[i].width - 3.0f, buttons[i].height - 3.0f}
+                                       : buttons[i];
+        DrawRectangleRec(rect, lerp_color(Color{243, 245, 248, 255}, Color{228, 233, 239, 255}, hovered ? 1.0f : 0.0f));
+        DrawRectangleLinesEx(rect, 2.0f, Color{206, 210, 218, 255});
+        const int text_width = MeasureText(labels[i], 24);
+        DrawText(labels[i], static_cast<int>(rect.x + rect.width * 0.5f - text_width * 0.5f), static_cast<int>(rect.y + 9.0f), 24, BLACK);
+    }
+
+    DrawText("ESC: Resume", static_cast<int>(kPausePanelRect.x + 24.0f), static_cast<int>(kPausePanelRect.y + 270.0f), 20,
+             Color{132, 136, 146, 255});
 }
 
 void play_scene::draw_judge_feedback() const {
