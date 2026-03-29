@@ -45,7 +45,9 @@ private:
     int difficulty_index_ = 0;
     float scroll_y_ = 0.0f;
     float scroll_y_target_ = 0.0f;
+    float settings_hover_t_ = 0.0f;
     float song_change_anim_t_ = 0.0f;
+    float scene_fade_in_t_ = 1.0f;
     audio preview_audio_;
     std::optional<song_data> pending_preview_song_;
     std::optional<song_data> active_preview_song_;

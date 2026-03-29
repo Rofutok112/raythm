@@ -152,6 +152,7 @@ play_scene::play_scene(scene_manager& manager, song_data song, std::string chart
 void play_scene::on_enter() {
     camera_angle_degrees_ = g_settings.camera_angle_degrees;
     lane_speed_ = g_settings.note_speed;
+    input_handler_ = input_handler(g_settings.keys);
     input_handler_.set_key_count(key_count_);
 
     if (!song_data_.has_value()) {

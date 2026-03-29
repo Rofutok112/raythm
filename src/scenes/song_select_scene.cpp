@@ -10,6 +10,7 @@
 #include "raylib.h"
 #include "scene_common.h"
 #include "scene_manager.h"
+#include "settings_scene.h"
 #include "song_loader.h"
 #include "title_scene.h"
 #include "virtual_screen.h"
@@ -18,6 +19,7 @@ namespace {
 constexpr float kRowHeight = 60.0f;
 constexpr float kScrollWheelStep = 80.0f;
 constexpr float kScrollLerpSpeed = 12.0f;
+constexpr Rectangle kSettingsButtonRect = {1094.0f, 8.0f, 162.0f, 30.0f};
 constexpr Rectangle kSongListRect = {790.0f, 44.0f, 466.0f, 660.0f};
 constexpr Rectangle kLeftPanelRect = {24.0f, 44.0f, 750.0f, 660.0f};
 constexpr Rectangle kJacketRect = {44.0f, 68.0f, 320.0f, 320.0f};
@@ -30,6 +32,16 @@ std::filesystem::path repo_root() {
 
 std::string key_mode_label(int key_count) {
     return key_count == 6 ? "6K" : "4K";
+}
+
+Color lerp_color(Color from, Color to, float t) {
+    const float clamped = std::clamp(t, 0.0f, 1.0f);
+    return {
+        static_cast<unsigned char>(from.r + (to.r - from.r) * clamped),
+        static_cast<unsigned char>(from.g + (to.g - from.g) * clamped),
+        static_cast<unsigned char>(from.b + (to.b - from.b) * clamped),
+        static_cast<unsigned char>(from.a + (to.a - from.a) * clamped),
+    };
 }
 
 }
@@ -45,6 +57,7 @@ void song_select_scene::on_enter() {
     scroll_y_ = 0.0f;
     scroll_y_target_ = 0.0f;
     song_change_anim_t_ = 1.0f;
+    scene_fade_in_t_ = 1.0f;
 
     const song_load_result load_result = song_loader::load_all((repo_root() / "assets" / "songs").string());
     load_errors_ = load_result.errors;
@@ -234,7 +247,16 @@ void song_select_scene::update(float dt) {
 
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const float wheel = GetMouseWheelMove();
+    if (IsKeyPressed(KEY_F1) ||
+        (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse, kSettingsButtonRect))) {
+        manager_.change_scene(std::make_unique<settings_scene>(manager_, settings_scene::return_target::song_select));
+        return;
+    }
+
+    settings_hover_t_ =
+        std::clamp(settings_hover_t_ + (CheckCollisionPointRec(mouse, kSettingsButtonRect) ? dt * 8.0f : -dt * 8.0f), 0.0f, 1.0f);
     song_change_anim_t_ = std::max(0.0f, song_change_anim_t_ - dt * 4.0f);
+    scene_fade_in_t_ = std::max(0.0f, scene_fade_in_t_ - dt / 0.3f);
 
     if (songs_.empty()) {
         return;
@@ -286,7 +308,7 @@ void song_select_scene::update(float dt) {
 
     // リスト内クリック: スクロールオフセットを考慮して当たり判定
     if (CheckCollisionPointRec(mouse, kSongListRect) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        const float list_top = kSongListRect.y + 60.0f;
+        const float list_top = kSongListRect.y + 12.0f;
         float item_y = list_top - scroll_y_;
         for (int i = 0; i < static_cast<int>(songs_.size()); ++i) {
             float row_h = kRowHeight;
@@ -342,6 +364,9 @@ void song_select_scene::draw() {
     DrawRectangleLinesEx(kLeftPanelRect, 2.0f, Color{206, 210, 218, 255});
     DrawRectangleLinesEx(kSongListRect, 2.0f, Color{206, 210, 218, 255});
     DrawText("SONG SELECT", 30, 12, 30, BLACK);
+    DrawRectangleRec(kSettingsButtonRect, lerp_color(Color{243, 245, 248, 255}, Color{228, 233, 239, 255}, settings_hover_t_));
+    DrawRectangleLinesEx(kSettingsButtonRect, 2.0f, Color{206, 210, 218, 255});
+    DrawText("SETTINGS", static_cast<int>(kSettingsButtonRect.x + 22.0f), static_cast<int>(kSettingsButtonRect.y + 6.0f), 20, BLACK);
 
     if (songs_.empty()) {
         DrawText("No songs found", 50, 300, 36, BLACK);
@@ -392,12 +417,12 @@ void song_select_scene::draw() {
                  static_cast<int>(kJacketRect.y + 186.0f), 20, Color{132, 136, 146, content_alpha});
     }
 
-    DrawText("Songs", static_cast<int>(kSongListRect.x + 20.0f), static_cast<int>(kSongListRect.y + 22.0f), 28, BLACK);
+    DrawText("Songs", static_cast<int>(kSongListRect.x + 20.0f), static_cast<int>(kSongListRect.y + 10.0f), 28, BLACK);
     DrawRectangleRec(kSongListRect, song_list_fill);
     DrawRectangleLinesEx(kSongListRect, 2.0f, panel_border);
 
     // スクロールオフセットを適用してリストを描画。クリッピング領域外のアイテムはスキップ。
-    const float list_top = kSongListRect.y + 60.0f;
+    const float list_top = kSongListRect.y + 12.0f;
     const float list_bottom = kSongListRect.y + kSongListRect.height - 12.0f;
     const Rectangle list_clip = {kSongListRect.x, list_top, kSongListRect.width, list_bottom - list_top};
     BeginScissorMode(static_cast<int>(list_clip.x), static_cast<int>(list_clip.y),
@@ -476,6 +501,11 @@ void song_select_scene::draw() {
                       static_cast<int>(kSongListRect.y + 12.0f), 6, static_cast<int>(track_h), Color{226, 230, 236, 255});
         DrawRectangle(static_cast<int>(kSongListRect.x + kSongListRect.width - 14.0f),
                       static_cast<int>(thumb_y), 6, static_cast<int>(thumb_h), Color{172, 178, 188, 255});
+    }
+
+    if (scene_fade_in_t_ > 0.0f) {
+        DrawRectangle(0, 0, kScreenWidth, kScreenHeight,
+                      Color{0, 0, 0, static_cast<unsigned char>(scene_fade_in_t_ * 0.65f * 255.0f)});
     }
 
     virtual_screen::end();
