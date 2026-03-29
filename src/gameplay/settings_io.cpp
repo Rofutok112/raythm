@@ -137,6 +137,8 @@ void load_settings(game_settings& settings) {
         settings.resolution_index = std::clamp(std::stoi(*v), 0, kResolutionPresetCount - 1);
     if (auto v = extract_bool(content, "fullscreen"))
         settings.fullscreen = *v;
+    if (auto v = extract_bool(content, "darkMode"))
+        settings.dark_mode = *v;
 
     if (auto v = extract_string(content, "keys4"))
         parse_key_array(*v, settings.keys.keys_4);
@@ -157,6 +159,7 @@ void save_settings(const game_settings& settings) {
     out << "  \"targetFps\": " << settings.target_fps << ",\n";
     out << "  \"resolutionIndex\": " << settings.resolution_index << ",\n";
     out << "  \"fullscreen\": " << (settings.fullscreen ? "true" : "false") << ",\n";
+    out << "  \"darkMode\": " << (settings.dark_mode ? "true" : "false") << ",\n";
     out << "  \"keys4\": \"" << keys_to_csv(settings.keys.keys_4) << "\",\n";
     out << "  \"keys6\": \"" << keys_to_csv(settings.keys.keys_6) << "\"\n";
     out << "}\n";

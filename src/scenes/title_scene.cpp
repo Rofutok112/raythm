@@ -6,6 +6,7 @@
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select_scene.h"
+#include "theme.h"
 #include "virtual_screen.h"
 
 title_scene::title_scene(scene_manager& manager) : scene(manager) {
@@ -49,13 +50,14 @@ void title_scene::update(float dt) {
 
 // タイトルロゴと操作案内を描画する。
 void title_scene::draw() {
+    const auto& t = *g_theme;
     virtual_screen::begin();
-    ClearBackground(RAYWHITE);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, {255, 255, 255, 255}, {241, 243, 246, 255});
-    DrawText("raythm", 72, 84, 124, BLACK);
-    DrawText("trace the line before the beat disappears", 82, 212, 30, Color{102, 106, 114, 255});
-    DrawText("ENTER: Song Select", 82, 644, 22, Color{132, 136, 146, 255});
-    DrawText("ESC: Quit", 82, 674, 22, Color{132, 136, 146, 255});
+    ClearBackground(t.bg);
+    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
+    DrawText("raythm", 72, 84, 124, t.text);
+    DrawText("trace the line before the beat disappears", 82, 212, 30, t.text_dim);
+    DrawText("ENTER: Song Select", 82, 644, 22, t.text_muted);
+    DrawText("ESC: Quit", 82, 674, 22, t.text_muted);
     if (transitioning_to_song_select_) {
         DrawRectangle(0, 0, kScreenWidth, kScreenHeight,
                       Color{0, 0, 0, static_cast<unsigned char>(std::min(0.65f, transition_fade_t_ * 0.65f) * 255.0f)});

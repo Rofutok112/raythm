@@ -29,6 +29,7 @@ struct game_settings {
     key_config keys;
     int resolution_index = 1;  // デフォルト 1920x1080
     bool fullscreen = false;
+    bool dark_mode = false;
 };
 
 inline game_settings g_settings;

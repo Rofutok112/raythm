@@ -14,6 +14,7 @@
 #include "scene_manager.h"
 #include "settings_io.h"
 #include "song_select_scene.h"
+#include "theme.h"
 #include "title_scene.h"
 #include "virtual_screen.h"
 
@@ -80,16 +81,6 @@ int fps_option_index(int target_fps) {
         }
     }
     return 1;
-}
-
-Color lerp_color(Color from, Color to, float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    return {
-        static_cast<unsigned char>(from.r + (to.r - from.r) * clamped),
-        static_cast<unsigned char>(from.g + (to.g - from.g) * clamped),
-        static_cast<unsigned char>(from.b + (to.b - from.b) * clamped),
-        static_cast<unsigned char>(from.a + (to.a - from.a) * clamped),
-    };
 }
 
 Rectangle inset_rect(Rectangle rect, float amount) {
@@ -259,6 +250,15 @@ void settings_scene::update_video() {
             ToggleFullscreen();
         }
     }
+
+    // テーマ切り替え
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (CheckCollisionPointRec(mouse, arrow_left_rect(kGeneralRows[3])) ||
+            CheckCollisionPointRec(mouse, arrow_right_rect(kGeneralRows[3]))) {
+            g_settings.dark_mode = !g_settings.dark_mode;
+            set_theme(g_settings.dark_mode);
+        }
+    }
 }
 
 void settings_scene::update_key_config() {
@@ -329,41 +329,42 @@ void settings_scene::update_key_config() {
 }
 
 void settings_scene::draw() {
+    const auto& t = *g_theme;
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
     virtual_screen::begin();
-    ClearBackground(RAYWHITE);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, {255, 255, 255, 255}, {241, 243, 246, 255});
-    DrawRectangleRec(kSidebarRect, Color{248, 249, 251, 255});
-    DrawRectangleRec(kContentRect, Color{248, 249, 251, 255});
-    DrawRectangleLinesEx(kSidebarRect, 2.0f, Color{206, 210, 218, 255});
-    DrawRectangleLinesEx(kContentRect, 2.0f, Color{206, 210, 218, 255});
+    ClearBackground(t.bg);
+    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
+    DrawRectangleRec(kSidebarRect, t.panel);
+    DrawRectangleRec(kContentRect, t.panel);
+    DrawRectangleLinesEx(kSidebarRect, 2.0f, t.border);
+    DrawRectangleLinesEx(kContentRect, 2.0f, t.border);
 
-    DrawText("SETTINGS", 46, 70, 34, BLACK);
-    DrawText("Saved on exit", 48, 112, 20, Color{132, 136, 146, 255});
+    DrawText("SETTINGS", 46, 70, 34, t.text);
+    DrawText("Saved on exit", 48, 112, 20, t.text_muted);
 
     for (int i = 0; i < kPageCount; ++i) {
         const bool active = static_cast<int>(current_page_) == i;
         const bool hovered = CheckCollisionPointRec(mouse, kTabRects[i]);
         const bool pressed = hovered && mouse_down;
         const Rectangle draw_rect = pressed ? inset_rect(kTabRects[i], 1.5f) : kTabRects[i];
-        const Color fill = active ? lerp_color(Color{223, 228, 234, 255}, Color{210, 216, 224, 255}, hovered ? 1.0f : 0.0f)
-                                  : lerp_color(Color{243, 245, 248, 255}, Color{228, 233, 239, 255}, hovered ? 1.0f : 0.0f);
-        const Color border = active ? Color{182, 186, 194, 255} : Color{206, 210, 218, 255};
+        const Color fill = active ? lerp_color(t.row_selected, t.row_active, hovered ? 1.0f : 0.0f)
+                                  : lerp_color(t.row, t.row_hover, hovered ? 1.0f : 0.0f);
+        const Color border = active ? t.border_active : t.border;
         DrawRectangleRec(draw_rect, fill);
         DrawRectangleLinesEx(draw_rect, 2.0f, border);
         DrawText(kPageNames[i], static_cast<int>(draw_rect.x + 14.0f), static_cast<int>(draw_rect.y + 10.0f), 22,
-                 active ? BLACK : DARKGRAY);
+                 active ? t.text : t.text_secondary);
     }
 
-    draw_marquee_text("Click tabs to switch pages", 48, 396, 20, Color{132, 136, 146, 255},
+    draw_marquee_text("Click tabs to switch pages", 48, 396, 20, t.text_muted,
                       208.0f, GetTime());
     const bool back_hovered = CheckCollisionPointRec(mouse, kBackRect);
     const bool back_pressed = back_hovered && mouse_down;
     const Rectangle back_draw_rect = back_pressed ? inset_rect(kBackRect, 1.5f) : kBackRect;
-    DrawRectangleRec(back_draw_rect, lerp_color(Color{243, 245, 248, 255}, Color{228, 233, 239, 255}, back_hovered ? 1.0f : 0.0f));
-    DrawRectangleLinesEx(back_draw_rect, 2.0f, Color{206, 210, 218, 255});
-    DrawText("BACK", static_cast<int>(back_draw_rect.x + 72.0f), static_cast<int>(back_draw_rect.y + 10.0f), 22, BLACK);
+    DrawRectangleRec(back_draw_rect, lerp_color(t.row, t.row_hover, back_hovered ? 1.0f : 0.0f));
+    DrawRectangleLinesEx(back_draw_rect, 2.0f, t.border);
+    DrawText("BACK", static_cast<int>(back_draw_rect.x + 72.0f), static_cast<int>(back_draw_rect.y + 10.0f), 22, t.text);
 
     const char* page_title = "";
     const char* page_subtitle = "";
@@ -385,8 +386,8 @@ void settings_scene::draw() {
             page_subtitle = "Per-lane keyboard bindings";
             break;
     }
-    DrawText(page_title, 330, 74, 34, BLACK);
-    DrawText(page_subtitle, 332, 114, 20, Color{132, 136, 146, 255});
+    DrawText(page_title, 330, 74, 34, t.text);
+    DrawText(page_subtitle, 332, 114, 20, t.text_muted);
 
     switch (current_page_) {
         case page::gameplay:
@@ -409,8 +410,7 @@ void settings_scene::draw() {
 }
 
 void settings_scene::draw_gameplay() {
-    const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+    const auto& t = *g_theme;
     const char* labels[] = {"Note Speed", "Camera Angle", "Lane Width"};
     const std::string values[] = {
         TextFormat("%.3f", g_settings.note_speed),
@@ -419,13 +419,12 @@ void settings_scene::draw_gameplay() {
     };
 
     for (int i = 0; i < 3; ++i) {
-        DrawRectangleRec(kGeneralRows[i], Color{243, 245, 248, 255});
-        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, Color{206, 210, 218, 255});
-        DrawText(labels[i], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, BLACK);
+        DrawRectangleRec(kGeneralRows[i], t.row);
+        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, t.border);
+        DrawText(labels[i], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, t.text);
         const Rectangle track = slider_track_rect(kGeneralRows[i]);
-        DrawRectangleRec(track, Color{214, 219, 226, 255});
+        DrawRectangleRec(track, t.slider_track);
 
-        // スライダーの最大値
         float ratio = 0.0f;
         if (i == 0) {
             ratio = (g_settings.note_speed - 0.020f) / (0.090f - 0.020f);
@@ -437,17 +436,18 @@ void settings_scene::draw_gameplay() {
         ratio = clamp01(ratio);
 
         DrawRectangle(static_cast<int>(track.x), static_cast<int>(track.y), static_cast<int>(track.width * ratio), static_cast<int>(track.height),
-                      Color{132, 136, 146, 255});
+                      t.slider_fill);
         const int knob_x = static_cast<int>(track.x + track.width * ratio);
-        DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, Color{72, 72, 72, 255});
+        DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, t.slider_knob);
 
         const int value_width = MeasureText(values[i].c_str(), 22);
         DrawText(values[i].c_str(), static_cast<int>(track.x + track.width - value_width), static_cast<int>(kGeneralRows[i].y + 8.0f), 22,
-                 Color{96, 100, 108, 255});
+                 t.text_dim);
     }
 }
 
 void settings_scene::draw_audio() {
+    const auto& t = *g_theme;
     const char* labels[] = {"BGM Volume", "SE Volume"};
     const std::string values[] = {
         TextFormat("%d%%", static_cast<int>(std::round(g_settings.bgm_volume * 100.0f))),
@@ -456,95 +456,98 @@ void settings_scene::draw_audio() {
 
     for (int row = 0; row < 2; ++row) {
         const int i = row;
-        DrawRectangleRec(kGeneralRows[i], Color{243, 245, 248, 255});
-        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, Color{206, 210, 218, 255});
-        DrawText(labels[row], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, BLACK);
+        DrawRectangleRec(kGeneralRows[i], t.row);
+        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, t.border);
+        DrawText(labels[row], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, t.text);
 
         const Rectangle track = slider_track_rect(kGeneralRows[i]);
-        DrawRectangleRec(track, Color{214, 219, 226, 255});
+        DrawRectangleRec(track, t.slider_track);
         const float ratio = row == 0 ? g_settings.bgm_volume : g_settings.se_volume;
         DrawRectangle(static_cast<int>(track.x), static_cast<int>(track.y), static_cast<int>(track.width * ratio), static_cast<int>(track.height),
-                      Color{132, 136, 146, 255});
+                      t.slider_fill);
         const int knob_x = static_cast<int>(track.x + track.width * ratio);
-        DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, Color{72, 72, 72, 255});
+        DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, t.slider_knob);
 
         const int value_width = MeasureText(values[row].c_str(), 22);
         DrawText(values[row].c_str(), static_cast<int>(track.x + track.width - value_width), static_cast<int>(kGeneralRows[i].y + 8.0f), 22,
-                 Color{96, 100, 108, 255});
+                 t.text_dim);
     }
 }
 
 void settings_scene::draw_video() {
+    const auto& t = *g_theme;
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
     const std::string fps_label = g_settings.target_fps == 0 ? "Unlimited" : std::to_string(g_settings.target_fps);
     const std::string res_label = kResolutionPresets[g_settings.resolution_index].label;
-    const std::string values[] = {fps_label, res_label, g_settings.fullscreen ? "Fullscreen" : "Windowed"};
-    const char* labels[] = {"Frame Rate", "Resolution", "Display"};
+    const std::string values[] = {fps_label, res_label, g_settings.fullscreen ? "Fullscreen" : "Windowed",
+                                  g_settings.dark_mode ? "Dark" : "Light"};
+    const char* labels[] = {"Frame Rate", "Resolution", "Display", "Theme"};
 
     {
         const int i = 0;
-        DrawRectangleRec(kGeneralRows[i], Color{243, 245, 248, 255});
-        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, Color{206, 210, 218, 255});
-        DrawText(labels[0], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, BLACK);
+        DrawRectangleRec(kGeneralRows[i], t.row);
+        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, t.border);
+        DrawText(labels[0], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, t.text);
         const Rectangle track = slider_track_rect(kGeneralRows[i]);
-        DrawRectangleRec(track, Color{214, 219, 226, 255});
+        DrawRectangleRec(track, t.slider_track);
         const float ratio = static_cast<float>(fps_option_index(g_settings.target_fps)) / 3.0f;
         DrawRectangle(static_cast<int>(track.x), static_cast<int>(track.y), static_cast<int>(track.width * ratio), static_cast<int>(track.height),
-                      Color{132, 136, 146, 255});
+                      t.slider_fill);
         const int knob_x = static_cast<int>(track.x + track.width * ratio);
-        DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, Color{72, 72, 72, 255});
+        DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, t.slider_knob);
         const int value_width = MeasureText(values[0].c_str(), 22);
         DrawText(values[0].c_str(), static_cast<int>(track.x + track.width - value_width), static_cast<int>(kGeneralRows[i].y + 8.0f), 22,
-                 Color{96, 100, 108, 255});
+                 t.text_dim);
     }
 
-    for (int row = 0; row < 2; ++row) {
+    for (int row = 0; row < 3; ++row) {
         const int i = row + 1;
-        DrawRectangleRec(kGeneralRows[i], Color{243, 245, 248, 255});
-        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, Color{206, 210, 218, 255});
-        DrawText(labels[row + 1], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, BLACK);
+        DrawRectangleRec(kGeneralRows[i], t.row);
+        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, t.border);
+        DrawText(labels[row + 1], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, t.text);
         const Rectangle left_arrow = arrow_left_rect(kGeneralRows[i]);
         const Rectangle right_arrow = arrow_right_rect(kGeneralRows[i]);
         const bool left_hovered = CheckCollisionPointRec(mouse, left_arrow);
         const bool right_hovered = CheckCollisionPointRec(mouse, right_arrow);
         const Rectangle left_draw_rect = (left_hovered && mouse_down) ? inset_rect(left_arrow, 1.5f) : left_arrow;
         const Rectangle right_draw_rect = (right_hovered && mouse_down) ? inset_rect(right_arrow, 1.5f) : right_arrow;
-        DrawRectangleRec(left_draw_rect, lerp_color(Color{229, 233, 238, 255}, Color{214, 220, 227, 255}, left_hovered ? 1.0f : 0.0f));
-        DrawRectangleRec(right_draw_rect, lerp_color(Color{229, 233, 238, 255}, Color{214, 220, 227, 255}, right_hovered ? 1.0f : 0.0f));
-        DrawRectangleLinesEx(left_draw_rect, 2.0f, Color{206, 210, 218, 255});
-        DrawRectangleLinesEx(right_draw_rect, 2.0f, Color{206, 210, 218, 255});
-        DrawText("<", static_cast<int>(left_draw_rect.x + 11.0f), static_cast<int>(left_draw_rect.y + 5.0f), 24, BLACK);
-        DrawText(">", static_cast<int>(right_draw_rect.x + 10.0f), static_cast<int>(right_draw_rect.y + 5.0f), 24, BLACK);
+        DrawRectangleRec(left_draw_rect, lerp_color(t.row, t.row_selected_hover, left_hovered ? 1.0f : 0.0f));
+        DrawRectangleRec(right_draw_rect, lerp_color(t.row, t.row_selected_hover, right_hovered ? 1.0f : 0.0f));
+        DrawRectangleLinesEx(left_draw_rect, 2.0f, t.border);
+        DrawRectangleLinesEx(right_draw_rect, 2.0f, t.border);
+        DrawText("<", static_cast<int>(left_draw_rect.x + 11.0f), static_cast<int>(left_draw_rect.y + 5.0f), 24, t.text);
+        DrawText(">", static_cast<int>(right_draw_rect.x + 10.0f), static_cast<int>(right_draw_rect.y + 5.0f), 24, t.text);
 
         const int value_width = MeasureText(values[row + 1].c_str(), 24);
         DrawText(values[row + 1].c_str(), static_cast<int>(left_arrow.x - value_width - 16.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 24,
-                 Color{96, 100, 108, 255});
+                 t.text_dim);
     }
 }
 
 void settings_scene::draw_key_config() {
+    const auto& t = *g_theme;
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-    DrawRectangleRec(kKeyModeRect, Color{243, 245, 248, 255});
-    DrawRectangleLinesEx(kKeyModeRect, 2.0f, Color{206, 210, 218, 255});
-    DrawText("Mode", static_cast<int>(kKeyModeRect.x + 18.0f), static_cast<int>(kKeyModeRect.y + 16.0f), 24, BLACK);
+    DrawRectangleRec(kKeyModeRect, t.row);
+    DrawRectangleLinesEx(kKeyModeRect, 2.0f, t.border);
+    DrawText("Mode", static_cast<int>(kKeyModeRect.x + 18.0f), static_cast<int>(kKeyModeRect.y + 16.0f), 24, t.text);
     const Rectangle mode_left = {kKeyModeRect.x + kKeyModeRect.width - 94.0f, kKeyModeRect.y + 15.0f, kArrowButtonSize, kArrowButtonSize};
     const Rectangle mode_right = {kKeyModeRect.x + kKeyModeRect.width - 50.0f, kKeyModeRect.y + 15.0f, kArrowButtonSize, kArrowButtonSize};
     const char* mode_label = key_config_mode_ == 0 ? "4K" : "6K";
     const int mode_label_width = MeasureText(mode_label, 24);
     DrawText(mode_label, static_cast<int>(mode_left.x - mode_label_width - 18.0f),
-             static_cast<int>(kKeyModeRect.y + 16.0f), 24, Color{96, 100, 108, 255});
+             static_cast<int>(kKeyModeRect.y + 16.0f), 24, t.text_dim);
     const bool mode_left_hovered = CheckCollisionPointRec(mouse, mode_left);
     const bool mode_right_hovered = CheckCollisionPointRec(mouse, mode_right);
     const Rectangle mode_left_draw = (mode_left_hovered && mouse_down) ? inset_rect(mode_left, 1.5f) : mode_left;
     const Rectangle mode_right_draw = (mode_right_hovered && mouse_down) ? inset_rect(mode_right, 1.5f) : mode_right;
-    DrawRectangleRec(mode_left_draw, lerp_color(Color{229, 233, 238, 255}, Color{214, 220, 227, 255}, mode_left_hovered ? 1.0f : 0.0f));
-    DrawRectangleRec(mode_right_draw, lerp_color(Color{229, 233, 238, 255}, Color{214, 220, 227, 255}, mode_right_hovered ? 1.0f : 0.0f));
-    DrawRectangleLinesEx(mode_left_draw, 2.0f, Color{206, 210, 218, 255});
-    DrawRectangleLinesEx(mode_right_draw, 2.0f, Color{206, 210, 218, 255});
-    DrawText("<", static_cast<int>(mode_left_draw.x + 11.0f), static_cast<int>(mode_left_draw.y + 5.0f), 24, BLACK);
-    DrawText(">", static_cast<int>(mode_right_draw.x + 10.0f), static_cast<int>(mode_right_draw.y + 5.0f), 24, BLACK);
+    DrawRectangleRec(mode_left_draw, lerp_color(t.row, t.row_selected_hover, mode_left_hovered ? 1.0f : 0.0f));
+    DrawRectangleRec(mode_right_draw, lerp_color(t.row, t.row_selected_hover, mode_right_hovered ? 1.0f : 0.0f));
+    DrawRectangleLinesEx(mode_left_draw, 2.0f, t.border);
+    DrawRectangleLinesEx(mode_right_draw, 2.0f, t.border);
+    DrawText("<", static_cast<int>(mode_left_draw.x + 11.0f), static_cast<int>(mode_left_draw.y + 5.0f), 24, t.text);
+    DrawText(">", static_cast<int>(mode_right_draw.x + 10.0f), static_cast<int>(mode_right_draw.y + 5.0f), 24, t.text);
 
     int y = 258;
 
@@ -559,20 +562,20 @@ void settings_scene::draw_key_config() {
         const Rectangle row_rect = {330.0f, static_cast<float>(y), 560.0f, 48.0f};
         const bool hovered = CheckCollisionPointRec(mouse, row_rect);
         const Rectangle draw_rect = (hovered && mouse_down) ? inset_rect(row_rect, 1.5f) : row_rect;
-        const Color fill = selected ? lerp_color(Color{223, 228, 234, 255}, Color{210, 216, 224, 255}, hovered ? 1.0f : 0.0f)
-                                    : lerp_color(Color{243, 245, 248, 255}, Color{228, 233, 239, 255}, hovered ? 1.0f : 0.0f);
+        const Color fill = selected ? lerp_color(t.row_selected, t.row_active, hovered ? 1.0f : 0.0f)
+                                    : lerp_color(t.row, t.row_hover, hovered ? 1.0f : 0.0f);
         DrawRectangleRec(draw_rect, fill);
-        DrawRectangleLinesEx(draw_rect, 2.0f, selected ? Color{182, 186, 194, 255} : Color{206, 210, 218, 255});
+        DrawRectangleLinesEx(draw_rect, 2.0f, selected ? t.border_active : t.border);
         const char* key_label = is_listening ? "Press a key..." : get_key_name(keys[static_cast<size_t>(i)]);
-        DrawText(TextFormat("Lane %d", i + 1), static_cast<int>(draw_rect.x + 18.0f), static_cast<int>(draw_rect.y + 12.0f), 24, BLACK);
+        DrawText(TextFormat("Lane %d", i + 1), static_cast<int>(draw_rect.x + 18.0f), static_cast<int>(draw_rect.y + 12.0f), 24, t.text);
         const int key_width = MeasureText(key_label, 24);
         DrawText(key_label, static_cast<int>(draw_rect.x + draw_rect.width - key_width - 18.0f), static_cast<int>(draw_rect.y + 12.0f), 24,
-                 is_listening ? Color{220, 38, 38, 255} : Color{96, 100, 108, 255});
+                 is_listening ? t.error : t.text_dim);
         y += 62;
     }
 
     if (error_timer_ > 0.0f && !key_config_error_.empty()) {
         const unsigned char alpha = static_cast<unsigned char>(std::min(error_timer_ / 0.3f, 1.0f) * 255.0f);
-        DrawText(key_config_error_.c_str(), 330, y + 8, 22, Color{220, 38, 38, alpha});
+        DrawText(key_config_error_.c_str(), 330, y + 8, 22, with_alpha(t.error, alpha));
     }
 }
