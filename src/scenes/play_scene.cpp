@@ -24,12 +24,13 @@ constexpr float kJudgeLineGlowHeight = 0.04f;
 constexpr float kIntroDurationSeconds = 2.0f;
 constexpr float kFailureFadeDurationSeconds = 1.0f;
 constexpr float kFailureHoldDurationSeconds = 1.0f;
-constexpr float kFailureTransitionDurationSeconds = kFailureFadeDurationSeconds + kFailureHoldDurationSeconds;
+constexpr float kFailureTransitionDurationSeconds
+    = kFailureFadeDurationSeconds + kFailureHoldDurationSeconds;
 constexpr float kJudgementLineScreenRatioFromBottom = 0.10f;
 constexpr float kCameraHeight = 42.0f;
 constexpr float kCameraFovY = 42.0f;
 constexpr float kJudgeLineWorldZ = 12.0f;
-constexpr float kMaxGroundDistance = 240.0f;
+constexpr float kMaxGroundDistance = 1000.0f;
 
 constexpr Color kLaneColor = {182, 186, 194, 255};
 
