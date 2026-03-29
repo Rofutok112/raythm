@@ -38,6 +38,8 @@ private:
     void draw_intro_overlay() const;
     // 失敗時の暗転演出を描画する。
     void draw_failure_overlay() const;
+    // リザルト遷移時のフェード演出を描画する。
+    void draw_result_transition_overlay() const;
     // カメラの高さ・角度・FOVから、判定ラインが画面上の指定位置に来るようカメラを構築する。
     Camera3D make_play_camera() const;
     // カメラの可視範囲からレーンのZ方向の手前端・判定位置・奥端を計算する。
@@ -76,6 +78,8 @@ private:
     float intro_timer_ = 2.0f;
     bool failure_transition_playing_ = false;
     float failure_transition_timer_ = 0.0f;
+    bool result_transition_playing_ = false;
+    float result_transition_timer_ = 0.0f;
 
     // 描画用スライディングウィンドウ。
     // 各レーンごとに inactive / active を持ち、レーン内では target_ms 昇順を保証する。
