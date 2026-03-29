@@ -66,7 +66,6 @@ struct ui_theme {
 
     // --- アクセント・ステータス ---
     Color accent;               // チャートラベル等のアクセント色
-    Color combo;                // コンボ数表示
     Color error;                // エラー・失敗（赤）
     Color success;              // 成功・有効（緑）
     Color fast;                 // Fast 表示（青）
@@ -131,7 +130,7 @@ inline constexpr ui_theme kLightTheme = {
     .hud_health_label = {72, 78, 90, 255},
     .hud_health_bg = {235, 238, 242, 255},
     .hud_health_border = {96, 104, 116, 255},
-    .hud_combo = {240, 244, 250, 255},
+    .hud_combo = {214, 218, 228, 255},
     .hud_combo_label = {209, 214, 224, 255},
     .hud_failure_text = {244, 246, 250, 255},
     // game elements
@@ -145,7 +144,6 @@ inline constexpr ui_theme kLightTheme = {
     .pause_panel = {248, 249, 251, 245},
     // accent/status
     .accent = {124, 58, 237, 255},
-    .combo = {100, 160, 255, 255},
     .error = {220, 38, 38, 255},
     .success = {14, 146, 108, 255},
     .fast = {50, 120, 220, 255},
@@ -203,12 +201,12 @@ inline constexpr ui_theme kDarkTheme = {
     .scrollbar_thumb = {90, 94, 102, 255},
     // hud
     .hud_score = {220, 222, 228, 255},
-    .hud_time = {180, 184, 194, 255},
+    .hud_time = {130, 136, 148, 255},
     .hud_fps = {130, 136, 148, 255},
     .hud_health_label = {180, 186, 198, 255},
     .hud_health_bg = {36, 38, 44, 255},
     .hud_health_border = {120, 128, 140, 255},
-    .hud_combo = {220, 224, 230, 255},
+    .hud_combo = {130, 136, 148, 255},
     .hud_combo_label = {140, 144, 154, 255},
     .hud_failure_text = {220, 222, 228, 255},
     // game elements
@@ -222,7 +220,6 @@ inline constexpr ui_theme kDarkTheme = {
     .pause_panel = {32, 34, 38, 245},
     // accent/status
     .accent = {158, 100, 255, 255},
-    .combo = {120, 180, 255, 255},
     .error = {240, 60, 60, 255},
     .success = {40, 180, 130, 255},
     .fast = {80, 150, 240, 255},

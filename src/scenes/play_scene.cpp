@@ -671,10 +671,10 @@ void play_scene::draw_hud() const {
 
     // コンボ数（画面中央に大きく表示）
     if (combo_display_ > 0) {
-        const Color combo_color = Fade(g_theme->combo, paused_ ? 0.18f : 0.32f);
+        const Color combo_color = g_theme->hud_combo;
         const std::string combo_text = TextFormat("%03d", combo_display_);
         DrawText(combo_text.c_str(), kScreenWidth / 2 - MeasureText(combo_text.c_str(), 86) / 2, 228, 86, combo_color);
-        DrawText("COMBO", kScreenWidth / 2 - MeasureText("COMBO", 24) / 2, 306, 24, Fade(g_theme->combo, 0.20f));
+        DrawText("COMBO", kScreenWidth / 2 - MeasureText("COMBO", 24) / 2, 306, 24, combo_color);
     }
 }
 
