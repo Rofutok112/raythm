@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "raylib.h"
-#include "audio.h"
+#include "audio_manager.h"
 #include "data_models.h"
 #include "scene.h"
 
@@ -48,7 +48,6 @@ private:
     float settings_hover_t_ = 0.0f;
     float song_change_anim_t_ = 0.0f;
     float scene_fade_in_t_ = 1.0f;
-    audio preview_audio_;
     std::optional<song_data> pending_preview_song_;
     std::optional<song_data> active_preview_song_;
     std::string preview_song_id_;
