@@ -3,15 +3,17 @@
 #include <algorithm>
 #include <cmath>
 
-void draw_scene_frame(const char* title, const char* subtitle, Color accent) {
-    ClearBackground({18, 24, 38, 255});
+#include "theme.h"
 
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, {28, 36, 54, 255}, {12, 16, 26, 255});
-    DrawRectangleRounded({80.0f, 80.0f, 1120.0f, 560.0f}, 0.04f, 8, {245, 247, 250, 235});
+void draw_scene_frame(const char* title, const char* subtitle, Color accent) {
+    ClearBackground(g_theme->bg);
+
+    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, g_theme->bg, g_theme->bg_alt);
+    DrawRectangleRounded({80.0f, 80.0f, 1120.0f, 560.0f}, 0.04f, 8, g_theme->panel);
     DrawRectangleRoundedLinesEx({80.0f, 80.0f, 1120.0f, 560.0f}, 0.04f, 8, 3.0f, accent);
 
     DrawText(title, 130, 130, 44, accent);
-    DrawText(subtitle, 130, 190, 24, DARKGRAY);
+    DrawText(subtitle, 130, 190, 24, g_theme->text_secondary);
 }
 
 void draw_marquee_text(const char* text, int x, int y, int font_size, Color color, float max_width, double time,

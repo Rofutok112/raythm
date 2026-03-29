@@ -15,6 +15,7 @@
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select_scene.h"
+#include "theme.h"
 #include "virtual_screen.h"
 
 namespace {
@@ -37,8 +38,6 @@ constexpr Rectangle kPausePanelRect = {430.0f, 132.0f, 420.0f, 320.0f};
 constexpr Rectangle kPauseResumeRect = {470.0f, 220.0f, 340.0f, 42.0f};
 constexpr Rectangle kPauseRestartRect = {470.0f, 278.0f, 340.0f, 42.0f};
 constexpr Rectangle kPauseSongSelectRect = {470.0f, 336.0f, 340.0f, 42.0f};
-
-constexpr Color kLaneColor = {182, 186, 194, 255};
 
 // assets/songs から最初の曲パッケージを読み込んで返す。
 std::optional<song_data> load_sample_song() {
@@ -81,31 +80,16 @@ Color darkened_lane_color(Color color) {
             static_cast<unsigned char>(color.b * 0.72f), color.a};
 }
 
-Color lerp_color(Color from, Color to, float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    return {
-        static_cast<unsigned char>(from.r + (to.r - from.r) * clamped),
-        static_cast<unsigned char>(from.g + (to.g - from.g) * clamped),
-        static_cast<unsigned char>(from.b + (to.b - from.b) * clamped),
-        static_cast<unsigned char>(from.a + (to.a - from.a) * clamped),
-    };
-}
-
 // 判定結果に対応する表示色を返す。
 Color judge_color(judge_result result) {
     switch (result) {
-        case judge_result::perfect:
-            return {239, 244, 255, 255};
-        case judge_result::great:
-            return {123, 211, 255, 255};
-        case judge_result::good:
-            return {141, 211, 173, 255};
-        case judge_result::bad:
-            return {255, 190, 92, 255};
-        case judge_result::miss:
-            return {255, 107, 107, 255};
+        case judge_result::perfect: return g_theme->judge_perfect;
+        case judge_result::great:   return g_theme->judge_great;
+        case judge_result::good:    return g_theme->judge_good;
+        case judge_result::bad:     return g_theme->judge_bad;
+        case judge_result::miss:    return g_theme->judge_miss;
     }
-    return RAYWHITE;
+    return g_theme->text;
 }
 
 // 判定結果に対応する表示テキストを返す。
@@ -496,11 +480,11 @@ bool play_scene::get_lane_view_bounds(const Camera3D& camera, float& lane_start_
 void play_scene::draw() {
     if (!initialized_) {
         virtual_screen::begin();
-        ClearBackground(RAYWHITE);
-        DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, {255, 255, 255, 255}, {241, 243, 246, 255});
-        DrawText("Play", 96, 90, 44, {220, 38, 38, 255});
-        DrawText(status_text_.c_str(), 96, 170, 28, {230, 232, 238, 255});
-        DrawText("ESC: Back to Song Select", 96, 225, 22, {138, 148, 166, 255});
+        ClearBackground(g_theme->bg);
+        DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, g_theme->bg, g_theme->bg_alt);
+        DrawText("Play", 96, 90, 44, g_theme->error);
+        DrawText(status_text_.c_str(), 96, 170, 28, g_theme->text);
+        DrawText("ESC: Back to Song Select", 96, 225, 22, g_theme->text_hint);
         virtual_screen::end();
 
         ClearBackground(BLACK);
@@ -509,8 +493,8 @@ void play_scene::draw() {
     }
 
     // 3D を物理解像度で直接描画
-    ClearBackground(RAYWHITE);
-    DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(), {255, 255, 255, 255}, {241, 243, 246, 255});
+    ClearBackground(g_theme->bg);
+    DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(), g_theme->bg, g_theme->bg_alt);
 
     const Camera3D camera = make_play_camera();
     BeginMode3D(camera);
@@ -552,17 +536,17 @@ void play_scene::draw_lanes(const Camera3D& camera) const {
     for (int lane = 0; lane < key_count_; ++lane) {
         const float center_x = lane_center_x(lane, key_count_);
         const bool lane_held = input_handler_.is_lane_held(lane);
-        const Color lane_fill = lane_held ? darkened_lane_color(kLaneColor) : kLaneColor;
+        const Color lane_fill = lane_held ? darkened_lane_color(g_theme->lane) : g_theme->lane;
         DrawCube({center_x, -0.08f, (lane_start_z + lane_end_z) * 0.5f}, g_settings.lane_width, 0.05f,
                  lane_end_z - lane_start_z, lane_fill);
         DrawCubeWires({center_x, -0.08f, (lane_start_z + lane_end_z) * 0.5f}, g_settings.lane_width, 0.05f,
-                      lane_end_z - lane_start_z, {120, 130, 148, 180});
+                      lane_end_z - lane_start_z, g_theme->lane_wire);
     }
 
     // 判定ライン（半透明の板 + グロー）を描画
     const float total_width = key_count_ * g_settings.lane_width + (key_count_ - 1) * kLaneGap;
-    DrawCube({0.0f, 0.01f, judgement_z}, total_width + 0.9f, 0.01f, 0.62f, {90, 150, 190, 110});
-    DrawCube({0.0f, 0.02f, judgement_z}, total_width + 0.5f, kJudgeLineGlowHeight, 0.38f, {180, 230, 255, 200});
+    DrawCube({0.0f, 0.01f, judgement_z}, total_width + 0.9f, 0.01f, 0.62f, g_theme->judge_line);
+    DrawCube({0.0f, 0.02f, judgement_z}, total_width + 0.5f, kJudgeLineGlowHeight, 0.38f, g_theme->judge_line_glow);
 }
 
 void play_scene::update_draw_queues(float judgement_z, float lane_start_z, float lane_end_z, double visual_ms) {
@@ -621,8 +605,8 @@ void play_scene::draw_notes(const Camera3D& camera) const {
     }
 
     const std::vector<note_state>& note_states = judge_system_.note_states();
-    const Color note_color = {233, 238, 244, 255};
-    const Color note_outline = {120, 128, 138, 255};
+    const Color note_color = g_theme->note_color;
+    const Color note_outline = g_theme->note_outline;
     const double visual_ms = get_visual_ms();
 
     for (int lane = 0; lane < key_count_; ++lane) {
@@ -668,39 +652,39 @@ void play_scene::draw_hud() const {
     const float fill_width = (health_width - inset * 2.0f) * (gauge_.get_value() / 100.0f);
 
     // スコアと経過時間
-    DrawText(TextFormat("SCORE %07d", result.score), 48, 34, 30, {230, 232, 238, 255});
+    DrawText(TextFormat("SCORE %07d", result.score), 48, 34, 30, g_theme->hud_score);
     DrawText(time_text.c_str(), kScreenWidth / 2 - MeasureText(time_text.c_str(), 30) / 2, 34, 30,
-             {214, 218, 228, 255});
-    DrawText(TextFormat("FPS %d", GetFPS()), 48, 70, 22, {160, 166, 178, 255});
+             g_theme->hud_time);
+    DrawText(TextFormat("FPS %d", GetFPS()), 48, 70, 22, g_theme->hud_fps);
 
     // ヘルスゲージ（70%以上で緑、未満で赤）
-    DrawText("HEALTH", kScreenWidth - 238, 10, 24, {72, 78, 90, 255});
+    DrawText("HEALTH", kScreenWidth - 238, 10, 24, g_theme->hud_health_label);
     DrawRectangle(static_cast<int>(health_left), static_cast<int>(health_top), static_cast<int>(health_width),
-                  static_cast<int>(health_height), {235, 238, 242, 255});
-    DrawRectangleLinesEx({health_left, health_top, health_width, health_height}, 3.0f, {96, 104, 116, 255});
+                  static_cast<int>(health_height), g_theme->hud_health_bg);
+    DrawRectangleLinesEx({health_left, health_top, health_width, health_height}, 3.0f, g_theme->hud_health_border);
 
     if (fill_width > 0.0f) {
-        const Color fill_color = gauge_.get_value() >= 70.0f ? Color{99, 204, 161, 255} : Color{228, 109, 98, 255};
+        const Color fill_color = gauge_.get_value() >= 70.0f ? g_theme->health_high : g_theme->health_low;
         DrawRectangle(static_cast<int>(health_left + inset), static_cast<int>(health_top + inset),
                       static_cast<int>(fill_width), static_cast<int>(health_height - inset * 2.0f), fill_color);
     }
 
     // コンボ数（画面中央に大きく表示）
     if (combo_display_ > 0) {
-        const Color combo_color = Fade({240, 244, 250, 255}, paused_ ? 0.18f : 0.32f);
+        const Color combo_color = Fade(g_theme->hud_combo, paused_ ? 0.18f : 0.32f);
         const std::string combo_text = TextFormat("%03d", combo_display_);
         DrawText(combo_text.c_str(), kScreenWidth / 2 - MeasureText(combo_text.c_str(), 86) / 2, 228, 86, combo_color);
-        DrawText("COMBO", kScreenWidth / 2 - MeasureText("COMBO", 24) / 2, 306, 24, Fade({209, 214, 224, 255}, 0.55f));
+        DrawText("COMBO", kScreenWidth / 2 - MeasureText("COMBO", 24) / 2, 306, 24, Fade(g_theme->hud_combo_label, 0.55f));
     }
 }
 
 void play_scene::draw_pause_overlay() const {
-    DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {3, 6, 10, 150});
+    DrawRectangle(0, 0, kScreenWidth, kScreenHeight, g_theme->pause_overlay);
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-    DrawRectangleRec(kPausePanelRect, Color{248, 249, 251, 245});
-    DrawRectangleLinesEx(kPausePanelRect, 2.0f, Color{206, 210, 218, 255});
-    DrawText("PAUSED", static_cast<int>(kPausePanelRect.x + 134.0f), static_cast<int>(kPausePanelRect.y + 24.0f), 42, BLACK);
+    DrawRectangleRec(kPausePanelRect, g_theme->pause_panel);
+    DrawRectangleLinesEx(kPausePanelRect, 2.0f, g_theme->border);
+    DrawText("PAUSED", static_cast<int>(kPausePanelRect.x + 134.0f), static_cast<int>(kPausePanelRect.y + 24.0f), 42, g_theme->text);
 
     const Rectangle buttons[] = {kPauseResumeRect, kPauseRestartRect, kPauseSongSelectRect};
     const char* labels[] = {"RESUME", "RESTART", "SONG SELECT"};
@@ -709,14 +693,14 @@ void play_scene::draw_pause_overlay() const {
         const bool pressed = hovered && mouse_down;
         const Rectangle rect = pressed ? Rectangle{buttons[i].x + 1.5f, buttons[i].y + 1.5f, buttons[i].width - 3.0f, buttons[i].height - 3.0f}
                                        : buttons[i];
-        DrawRectangleRec(rect, lerp_color(Color{243, 245, 248, 255}, Color{228, 233, 239, 255}, hovered ? 1.0f : 0.0f));
-        DrawRectangleLinesEx(rect, 2.0f, Color{206, 210, 218, 255});
+        DrawRectangleRec(rect, lerp_color(g_theme->row, g_theme->row_hover, hovered ? 1.0f : 0.0f));
+        DrawRectangleLinesEx(rect, 2.0f, g_theme->border);
         const int text_width = MeasureText(labels[i], 24);
-        DrawText(labels[i], static_cast<int>(rect.x + rect.width * 0.5f - text_width * 0.5f), static_cast<int>(rect.y + 9.0f), 24, BLACK);
+        DrawText(labels[i], static_cast<int>(rect.x + rect.width * 0.5f - text_width * 0.5f), static_cast<int>(rect.y + 9.0f), 24, g_theme->text);
     }
 
     DrawText("ESC: Resume", static_cast<int>(kPausePanelRect.x + 24.0f), static_cast<int>(kPausePanelRect.y + 270.0f), 20,
-             Color{132, 136, 146, 255});
+             g_theme->text_muted);
 }
 
 void play_scene::draw_judge_feedback() const {
@@ -742,7 +726,7 @@ void play_scene::draw_failure_overlay() const {
     DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {0, 0, 0, alpha});
     const char* text = "FAILED...";
     DrawText(text, kScreenWidth / 2 - MeasureText(text, 44) / 2, kScreenHeight / 2 - 22, 44,
-             Fade({244, 246, 250, 255}, std::min(fade_progress * 1.15f, 1.0f)));
+             Fade(g_theme->hud_failure_text, std::min(fade_progress * 1.15f, 1.0f)));
 }
 
 void play_scene::draw_result_transition_overlay() const {

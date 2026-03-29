@@ -8,6 +8,7 @@
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select_scene.h"
+#include "theme.h"
 #include "virtual_screen.h"
 
 namespace {
@@ -19,18 +20,6 @@ constexpr Rectangle kScoreRect = {48.0f, 180.0f, 580.0f, 108.0f};
 constexpr Rectangle kJudgeRect = {48.0f, 312.0f, 580.0f, 260.0f};
 constexpr Rectangle kStatsRect = {660.0f, 240.0f, 572.0f, 332.0f};
 
-Color rank_color(rank r) {
-    switch (r) {
-        case rank::ss: return {200, 50, 200, 255};  // マゼンタ
-        case rank::s:  return {200, 50, 200, 255};
-        case rank::a:  return {220, 50, 50, 255};    // 赤
-        case rank::b:  return {50, 100, 220, 255};   // 青
-        case rank::c:  return {210, 180, 30, 255};   // 黄色
-        case rank::f:  return {120, 120, 120, 255};  // グレー
-    }
-    return DARKGRAY;
-}
-
 const char* rank_label(rank r) {
     switch (r) {
         case rank::ss: return "SS";
@@ -41,6 +30,18 @@ const char* rank_label(rank r) {
         case rank::f:  return "F";
     }
     return "?";
+}
+
+Color rank_color(rank r) {
+    switch (r) {
+        case rank::ss: return g_theme->rank_ss;
+        case rank::s:  return g_theme->rank_s;
+        case rank::a:  return g_theme->rank_a;
+        case rank::b:  return g_theme->rank_b;
+        case rank::c:  return g_theme->rank_c;
+        case rank::f:  return g_theme->rank_f;
+    }
+    return g_theme->text_secondary;
 }
 
 const char* key_mode_label(int key_count) {
@@ -68,34 +69,35 @@ void result_scene::update(float dt) {
 }
 
 void result_scene::draw() {
+    const auto& t = *g_theme;
     virtual_screen::begin();
-    ClearBackground(RAYWHITE);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, {255, 255, 255, 255}, {241, 243, 246, 255});
+    ClearBackground(t.bg);
+    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
 
     // メインパネル
-    DrawRectangleRec(kMainPanel, Color{248, 249, 251, 255});
-    DrawRectangleLinesEx(kMainPanel, 2.0f, Color{206, 210, 218, 255});
+    DrawRectangleRec(kMainPanel, t.panel);
+    DrawRectangleLinesEx(kMainPanel, 2.0f, t.border);
 
     // 楽曲情報
-    DrawRectangleRec(kSongInfoRect, Color{240, 242, 246, 255});
-    DrawRectangleLinesEx(kSongInfoRect, 1.5f, Color{216, 220, 228, 255});
+    DrawRectangleRec(kSongInfoRect, t.section);
+    DrawRectangleLinesEx(kSongInfoRect, 1.5f, t.border_light);
     const float song_info_max_w = kSongInfoRect.width - 32.0f;
     const double now = GetTime();
     {
         const int sy = static_cast<int>(kSongInfoRect.y + (kSongInfoRect.height - 82) * 0.5f);
         const int lx = static_cast<int>(kSongInfoRect.x + 16);
-        draw_marquee_text(song_.meta.title.c_str(), lx, sy, 32, BLACK, song_info_max_w, now);
-        draw_marquee_text(song_.meta.artist.c_str(), lx, sy + 38, 22, Color{100, 104, 112, 255}, song_info_max_w, now);
+        draw_marquee_text(song_.meta.title.c_str(), lx, sy, 32, t.text, song_info_max_w, now);
+        draw_marquee_text(song_.meta.artist.c_str(), lx, sy + 38, 22, t.text_dim, song_info_max_w, now);
         const char* chart_label = TextFormat("%s %s Lv.%d", key_mode_label(chart_.key_count),
                                              chart_.difficulty.c_str(), chart_.level);
         const int chart_label_w = MeasureText(chart_label, 20);
-        DrawText(chart_label, lx, sy + 66, 20, Color{124, 58, 237, 255});
-        DrawText(chart_.chart_author.c_str(), lx + chart_label_w + 16, sy + 66, 20, Color{132, 136, 146, 255});
+        DrawText(chart_label, lx, sy + 66, 20, t.accent);
+        DrawText(chart_.chart_author.c_str(), lx + chart_label_w + 16, sy + 66, 20, t.text_muted);
     }
 
     // ランク表示
-    DrawRectangleRec(kRankRect, Color{240, 242, 246, 255});
-    DrawRectangleLinesEx(kRankRect, 1.5f, Color{216, 220, 228, 255});
+    DrawRectangleRec(kRankRect, t.section);
+    DrawRectangleLinesEx(kRankRect, 1.5f, t.border_light);
     const char* rlabel = rank_label(result_.clear_rank);
     const Color rcolor = rank_color(result_.clear_rank);
     const int rank_text_w = MeasureText(rlabel, 96);
@@ -108,36 +110,36 @@ void result_scene::draw() {
     if (result_.is_all_perfect) {
         DrawText("ALL PERFECT",
                  static_cast<int>(kRankRect.x + kRankRect.width * 0.5f) - MeasureText("ALL PERFECT", 20) / 2,
-                 static_cast<int>(kRankRect.y + kRankRect.height - 28), 20, Color{200, 50, 200, 255});
+                 static_cast<int>(kRankRect.y + kRankRect.height - 28), 20, t.all_perfect);
     } else if (result_.is_full_combo) {
         DrawText("FULL COMBO",
                  static_cast<int>(kRankRect.x + kRankRect.width * 0.5f) - MeasureText("FULL COMBO", 20) / 2,
-                 static_cast<int>(kRankRect.y + kRankRect.height - 28), 20, Color{14, 146, 108, 255});
+                 static_cast<int>(kRankRect.y + kRankRect.height - 28), 20, t.full_combo);
     }
 
     // FAILED 表示
     if (result_.failed) {
         DrawText("FAILED",
                  static_cast<int>(kRankRect.x + kRankRect.width + 20),
-                 static_cast<int>(kRankRect.y + 20), 40, Color{220, 38, 38, 255});
+                 static_cast<int>(kRankRect.y + 20), 40, t.error);
     }
 
     // スコア・精度（フレーム中央に配置）
-    DrawRectangleRec(kScoreRect, Color{240, 242, 246, 255});
-    DrawRectangleLinesEx(kScoreRect, 1.5f, Color{216, 220, 228, 255});
+    DrawRectangleRec(kScoreRect, t.section);
+    DrawRectangleLinesEx(kScoreRect, 1.5f, t.border_light);
     {
         const int content_h = 36 + 8 + 36;  // 2行 + 間隔
         const int start_y = static_cast<int>(kScoreRect.y + (kScoreRect.height - content_h) * 0.5f);
         const int lx = static_cast<int>(kScoreRect.x + 16);
-        DrawText("SCORE", lx, start_y + 6, 20, Color{120, 124, 132, 255});
-        DrawText(TextFormat("%07d", result_.score), lx + 100, start_y, 36, BLACK);
-        DrawText("ACCURACY", lx, start_y + 8 + 36 + 6, 20, Color{120, 124, 132, 255});
-        DrawText(TextFormat("%.2f%%", result_.achievement), lx + 140, start_y + 8 + 36, 36, Color{50, 54, 62, 255});
+        DrawText("SCORE", lx, start_y + 6, 20, t.text_dim);
+        DrawText(TextFormat("%07d", result_.score), lx + 100, start_y, 36, t.text);
+        DrawText("ACCURACY", lx, start_y + 8 + 36 + 6, 20, t.text_dim);
+        DrawText(TextFormat("%.2f%%", result_.achievement), lx + 140, start_y + 8 + 36, 36, t.text_secondary);
     }
 
     // 判定内訳（フレーム中央に配置）
-    DrawRectangleRec(kJudgeRect, Color{240, 242, 246, 255});
-    DrawRectangleLinesEx(kJudgeRect, 1.5f, Color{216, 220, 228, 255});
+    DrawRectangleRec(kJudgeRect, t.section);
+    DrawRectangleLinesEx(kJudgeRect, 1.5f, t.border_light);
 
     struct judge_row {
         const char* label;
@@ -145,11 +147,11 @@ void result_scene::draw() {
         Color color;
     };
     const judge_row rows[] = {
-        {"PERFECT", result_.judge_counts[0], {239, 244, 255, 255}},
-        {"GREAT",   result_.judge_counts[1], {123, 211, 255, 255}},
-        {"GOOD",    result_.judge_counts[2], {141, 211, 173, 255}},
-        {"BAD",     result_.judge_counts[3], {255, 190, 92, 255}},
-        {"MISS",    result_.judge_counts[4], {255, 107, 107, 255}},
+        {"PERFECT", result_.judge_counts[0], t.judge_perfect},
+        {"GREAT",   result_.judge_counts[1], t.judge_great},
+        {"GOOD",    result_.judge_counts[2], t.judge_good},
+        {"BAD",     result_.judge_counts[3], t.judge_bad},
+        {"MISS",    result_.judge_counts[4], t.judge_miss},
     };
 
     {
@@ -160,15 +162,15 @@ void result_scene::draw() {
         const int jx = static_cast<int>(kJudgeRect.x + 16);
         for (const auto& row : rows) {
             DrawRectangle(jx, jy - 2, 160, 30, row.color);
-            DrawText(row.label, jx + 8, jy + 2, 22, Color{30, 34, 42, 255});
-            DrawText(TextFormat("%d", row.count), jx + 176, jy + 2, 22, BLACK);
+            DrawText(row.label, jx + 8, jy + 2, 22, t.text);
+            DrawText(TextFormat("%d", row.count), jx + 176, jy + 2, 22, t.text);
             jy += judge_row_h;
         }
     }
 
     // 統計情報（フレーム中央に配置）
-    DrawRectangleRec(kStatsRect, Color{240, 242, 246, 255});
-    DrawRectangleLinesEx(kStatsRect, 1.5f, Color{216, 220, 228, 255});
+    DrawRectangleRec(kStatsRect, t.section);
+    DrawRectangleLinesEx(kStatsRect, 1.5f, t.border_light);
 
     {
         constexpr int stat_row_h = 40;
@@ -177,31 +179,30 @@ void result_scene::draw() {
         int sy = static_cast<int>(kStatsRect.y + (kStatsRect.height - stat_content_h - 40) * 0.5f);
         const int sx = static_cast<int>(kStatsRect.x + 24);
         const int sv = static_cast<int>(kStatsRect.x + 200);
-        const Color label_color = {120, 124, 132, 255};
 
-        DrawText("Max Combo", sx, sy, 24, label_color);
-        DrawText(TextFormat("%d", result_.max_combo), sv, sy, 24, BLACK);
+        DrawText("Max Combo", sx, sy, 24, t.text_dim);
+        DrawText(TextFormat("%d", result_.max_combo), sv, sy, 24, t.text);
         sy += stat_row_h;
 
-        DrawText("Avg Offset", sx, sy, 24, label_color);
-        DrawText(TextFormat("%.1f ms", result_.avg_offset), sv, sy, 24, BLACK);
+        DrawText("Avg Offset", sx, sy, 24, t.text_dim);
+        DrawText(TextFormat("%.1f ms", result_.avg_offset), sv, sy, 24, t.text);
         sy += stat_row_h;
 
-        DrawText("Fast", sx, sy, 24, label_color);
-        DrawText(TextFormat("%d", result_.fast_count), sv, sy, 24, Color{50, 120, 220, 255});
+        DrawText("Fast", sx, sy, 24, t.text_dim);
+        DrawText(TextFormat("%d", result_.fast_count), sv, sy, 24, t.fast);
         sy += stat_row_h;
 
-        DrawText("Slow", sx, sy, 24, label_color);
-        DrawText(TextFormat("%d", result_.slow_count), sv, sy, 24, Color{220, 120, 50, 255});
+        DrawText("Slow", sx, sy, 24, t.text_dim);
+        DrawText(TextFormat("%d", result_.slow_count), sv, sy, 24, t.slow);
         sy += stat_row_h;
 
-        DrawText("Ranking", sx, sy, 24, label_color);
+        DrawText("Ranking", sx, sy, 24, t.text_dim);
         DrawText(ranking_enabled_ ? "Eligible" : "Disabled", sv, sy, 24,
-                 ranking_enabled_ ? Color{14, 146, 108, 255} : Color{220, 38, 38, 255});
+                 ranking_enabled_ ? t.success : t.error);
         sy += stat_row_h + 10;
 
         // 操作案内
-        DrawText("ENTER: Song Select    R: Retry", sx, sy, 20, Color{160, 164, 172, 255});
+        DrawText("ENTER: Song Select    R: Retry", sx, sy, 20, t.text_hint);
     }
 
     // フェードイン（暗い状態から明るくなる）

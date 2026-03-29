@@ -12,6 +12,7 @@
 #include "scene_manager.h"
 #include "settings_scene.h"
 #include "song_loader.h"
+#include "theme.h"
 #include "title_scene.h"
 #include "virtual_screen.h"
 
@@ -32,16 +33,6 @@ std::filesystem::path repo_root() {
 
 std::string key_mode_label(int key_count) {
     return key_count == 6 ? "6K" : "4K";
-}
-
-Color lerp_color(Color from, Color to, float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    return {
-        static_cast<unsigned char>(from.r + (to.r - from.r) * clamped),
-        static_cast<unsigned char>(from.g + (to.g - from.g) * clamped),
-        static_cast<unsigned char>(from.b + (to.b - from.b) * clamped),
-        static_cast<unsigned char>(from.a + (to.a - from.a) * clamped),
-    };
 }
 
 }
@@ -358,22 +349,23 @@ void song_select_scene::update(float dt) {
 }
 
 void song_select_scene::draw() {
+    const auto& t = *g_theme;
     virtual_screen::begin();
-    ClearBackground(RAYWHITE);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, {255, 255, 255, 255}, {241, 243, 246, 255});
-    DrawRectangleRec(kLeftPanelRect, Color{248, 249, 251, 255});
-    DrawRectangleRec(kSongListRect, Color{248, 249, 251, 255});
-    DrawRectangleLinesEx(kLeftPanelRect, 2.0f, Color{206, 210, 218, 255});
-    DrawRectangleLinesEx(kSongListRect, 2.0f, Color{206, 210, 218, 255});
-    DrawText("SONG SELECT", 30, 12, 30, BLACK);
-    DrawRectangleRec(kSettingsButtonRect, lerp_color(Color{243, 245, 248, 255}, Color{228, 233, 239, 255}, settings_hover_t_));
-    DrawRectangleLinesEx(kSettingsButtonRect, 2.0f, Color{206, 210, 218, 255});
-    DrawText("SETTINGS", static_cast<int>(kSettingsButtonRect.x + 22.0f), static_cast<int>(kSettingsButtonRect.y + 6.0f), 20, BLACK);
+    ClearBackground(t.bg);
+    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
+    DrawRectangleRec(kLeftPanelRect, t.panel);
+    DrawRectangleRec(kSongListRect, t.panel);
+    DrawRectangleLinesEx(kLeftPanelRect, 2.0f, t.border);
+    DrawRectangleLinesEx(kSongListRect, 2.0f, t.border);
+    DrawText("SONG SELECT", 30, 12, 30, t.text);
+    DrawRectangleRec(kSettingsButtonRect, lerp_color(t.row, t.row_hover, settings_hover_t_));
+    DrawRectangleLinesEx(kSettingsButtonRect, 2.0f, t.border);
+    DrawText("SETTINGS", static_cast<int>(kSettingsButtonRect.x + 22.0f), static_cast<int>(kSettingsButtonRect.y + 6.0f), 20, t.text);
 
     if (songs_.empty()) {
-        DrawText("No songs found", 50, 300, 36, BLACK);
+        DrawText("No songs found", 50, 300, 36, t.text);
         if (!load_errors_.empty()) {
-            DrawText(load_errors_.front().c_str(), 50, 350, 22, Color{220, 38, 38, 255});
+            DrawText(load_errors_.front().c_str(), 50, 350, 22, t.error);
         }
         virtual_screen::end();
         ClearBackground(BLACK);
@@ -385,43 +377,41 @@ void song_select_scene::draw() {
     const std::vector<const chart_option*> filtered = filtered_charts_for_selected_song();
     const chart_option* selected_chart =
         filtered.empty() ? nullptr : filtered[static_cast<size_t>(std::min<int>(difficulty_index_, static_cast<int>(filtered.size()) - 1))];
-    const Color panel_border = Color{206, 210, 218, 255};
-    const Color song_list_fill = Color{248, 249, 251, 255};
     const float content_anim = 1.0f - song_change_anim_t_;
     const float content_offset_x = 18.0f * song_change_anim_t_;
     const unsigned char content_alpha = static_cast<unsigned char>(145.0f + 110.0f * content_anim);
 
-    DrawRectangleRec(kJacketRect, Color{228, 231, 236, 255});
+    DrawRectangleRec(kJacketRect, t.section);
     if (jacket_loaded_) {
         const Rectangle source = {0.0f, 0.0f, static_cast<float>(jacket_texture_.width), static_cast<float>(jacket_texture_.height)};
         DrawTexturePro(jacket_texture_, source, kJacketRect, Vector2{0.0f, 0.0f}, 0.0f, Color{255, 255, 255, content_alpha});
     } else {
         const int jacket_cx = static_cast<int>(kJacketRect.x + kJacketRect.width * 0.5f) - 45;
         const int jacket_cy = static_cast<int>(kJacketRect.y + kJacketRect.height * 0.5f) - 15;
-        DrawText("JACKET", jacket_cx, jacket_cy, 30, Color{126, 130, 138, content_alpha});
+        DrawText("JACKET", jacket_cx, jacket_cy, 30, with_alpha(t.text_muted, content_alpha));
     }
-    DrawRectangleLinesEx(kJacketRect, 2.0f, Color{196, 200, 208, 255});
+    DrawRectangleLinesEx(kJacketRect, 2.0f, t.border_image);
 
     const float detail_x = kJacketRect.x + kJacketRect.width + 20.0f;
     const float detail_max_width = kLeftPanelRect.x + kLeftPanelRect.width - detail_x - 16.0f;
     const double now = GetTime();
     draw_marquee_text(song.song.meta.title.c_str(), static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 4.0f), 40,
-                      Color{0, 0, 0, content_alpha}, detail_max_width, now);
+                      with_alpha(t.text, content_alpha), detail_max_width, now);
     draw_marquee_text(song.song.meta.artist.c_str(), static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 56.0f), 28,
-                      Color{80, 80, 80, content_alpha}, detail_max_width, now);
+                      with_alpha(t.text_secondary, content_alpha), detail_max_width, now);
     DrawText(TextFormat("BPM %.0f", song.song.meta.base_bpm), static_cast<int>(detail_x + content_offset_x),
-             static_cast<int>(kJacketRect.y + 100.0f), 24, Color{130, 130, 130, content_alpha});
+             static_cast<int>(kJacketRect.y + 100.0f), 24, with_alpha(t.text_muted, content_alpha));
     if (selected_chart != nullptr) {
         DrawText(TextFormat("%s %s Lv.%d", key_mode_label(selected_chart->meta.key_count).c_str(),
                             selected_chart->meta.difficulty.c_str(), selected_chart->meta.level),
-                 static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 150.0f), 28, Color{0, 0, 0, content_alpha});
+                 static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 150.0f), 28, with_alpha(t.text, content_alpha));
         DrawText(selected_chart->meta.chart_author.c_str(), static_cast<int>(detail_x + content_offset_x),
-                 static_cast<int>(kJacketRect.y + 186.0f), 20, Color{132, 136, 146, content_alpha});
+                 static_cast<int>(kJacketRect.y + 186.0f), 20, with_alpha(t.text_muted, content_alpha));
     }
 
-    DrawText("Songs", static_cast<int>(kSongListRect.x + 20.0f), static_cast<int>(kSongListRect.y + 10.0f), 28, BLACK);
-    DrawRectangleRec(kSongListRect, song_list_fill);
-    DrawRectangleLinesEx(kSongListRect, 2.0f, panel_border);
+    DrawText("Songs", static_cast<int>(kSongListRect.x + 20.0f), static_cast<int>(kSongListRect.y + 10.0f), 28, t.text);
+    DrawRectangleRec(kSongListRect, t.panel);
+    DrawRectangleLinesEx(kSongListRect, 2.0f, t.border);
 
     // スクロールオフセットを適用してリストを描画。クリッピング領域外のアイテムはスキップ。
     const float list_top = kSongListRect.y + 12.0f;
@@ -454,14 +444,14 @@ void song_select_scene::draw() {
         const Rectangle row_rect = {row_x, item_y - 8.0f, row_w, 44.0f};
         const bool hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), row_rect);
         if (is_selected) {
-            DrawRectangleRec(row_rect, hovered ? Color{214, 220, 227, 255} : Color{223, 228, 234, 255});
+            DrawRectangleRec(row_rect, hovered ? t.row_selected_hover : t.row_selected);
         } else if (hovered) {
-            DrawRectangleRec(row_rect, Color{236, 240, 245, 255});
+            DrawRectangleRec(row_rect, t.row_list_hover);
         }
         draw_marquee_text(songs_[static_cast<size_t>(i)].song.meta.title.c_str(), text_x, iy, 24,
-                          is_selected ? BLACK : DARKGRAY, list_text_max_w, now, &list_clip);
+                          is_selected ? t.text : t.text_secondary, list_text_max_w, now, &list_clip);
         draw_marquee_text(songs_[static_cast<size_t>(i)].song.meta.artist.c_str(), text_x, iy + 22, 16,
-                          Color{132, 136, 146, 255}, list_text_max_w, now, &list_clip);
+                          t.text_muted, list_text_max_w, now, &list_clip);
 
         if (is_selected) {
             const float child_x = kSongListRect.x + 46.0f;
@@ -475,15 +465,15 @@ void song_select_scene::draw() {
                 const Rectangle child_rect = {child_x, child_y - 6.0f, child_w, 28.0f};
                 const bool child_hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), child_rect);
                 if (child_selected) {
-                    DrawRectangleRec(child_rect, child_hovered ? Color{214, 220, 227, 255} : Color{223, 228, 234, 255});
+                    DrawRectangleRec(child_rect, child_hovered ? t.row_selected_hover : t.row_selected);
                 } else if (child_hovered) {
-                    DrawRectangleRec(child_rect, Color{236, 240, 245, 255});
+                    DrawRectangleRec(child_rect, t.row_list_hover);
                 }
                 DrawText(TextFormat("%s %s Lv.%d", key_mode_label(chart.meta.key_count).c_str(), chart.meta.difficulty.c_str(),
                                     chart.meta.level),
                          child_text_x, static_cast<int>(child_y), 18,
-                         child_selected ? BLACK : DARKGRAY);
-                DrawText(chart.meta.chart_author.c_str(), author_x, static_cast<int>(child_y) + 1, 14, Color{132, 136, 146, 255});
+                         child_selected ? t.text : t.text_secondary);
+                DrawText(chart.meta.chart_author.c_str(), author_x, static_cast<int>(child_y) + 1, 14, t.text_muted);
                 child_y += 30.0f;
             }
         }
@@ -500,9 +490,9 @@ void song_select_scene::draw() {
         const float scroll_t = scroll_y_ / std::max(1.0f, content_h - view_h);
         const float thumb_y = kSongListRect.y + 12.0f + (track_h - thumb_h) * scroll_t;
         DrawRectangle(static_cast<int>(kSongListRect.x + kSongListRect.width - 14.0f),
-                      static_cast<int>(kSongListRect.y + 12.0f), 6, static_cast<int>(track_h), Color{226, 230, 236, 255});
+                      static_cast<int>(kSongListRect.y + 12.0f), 6, static_cast<int>(track_h), t.scrollbar_track);
         DrawRectangle(static_cast<int>(kSongListRect.x + kSongListRect.width - 14.0f),
-                      static_cast<int>(thumb_y), 6, static_cast<int>(thumb_h), Color{172, 178, 188, 255});
+                      static_cast<int>(thumb_y), 6, static_cast<int>(thumb_h), t.scrollbar_thumb);
     }
 
     if (scene_fade_in_t_ > 0.0f) {

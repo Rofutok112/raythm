@@ -4,10 +4,12 @@
 #include "raylib.h"
 #include "scene_manager.h"
 #include "settings_io.h"
+#include "theme.h"
 #include "virtual_screen.h"
 
 int main() {
     load_settings(g_settings);
+    set_theme(g_settings.dark_mode);
     audio_manager::instance().set_bgm_volume(g_settings.bgm_volume);
     audio_manager::instance().set_se_volume(g_settings.se_volume);
 
