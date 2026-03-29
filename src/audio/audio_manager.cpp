@@ -159,6 +159,19 @@ int audio_manager::play_se(const std::string& file_path, float volume) {
     return voice_id;
 }
 
+bool audio_manager::is_se_voice_active(int voice_id) const {
+    const auto it = se_voices().find(voice_id);
+    if (it == se_voices().end()) {
+        return false;
+    }
+
+    return is_voice_loaded(it->second.handle) && BASS_ChannelIsActive(it->second.handle) != BASS_ACTIVE_STOPPED;
+}
+
+std::size_t audio_manager::get_active_se_voice_count() const {
+    return se_voices().size();
+}
+
 void audio_manager::stop_se(int voice_id) {
     auto it = se_voices().find(voice_id);
     if (it == se_voices().end()) {

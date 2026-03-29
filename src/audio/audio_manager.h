@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 
 class audio;
@@ -38,6 +39,8 @@ public:
     double get_preview_length_seconds() const;
 
     int play_se(const std::string& file_path, float volume = 1.0f);
+    bool is_se_voice_active(int voice_id) const;
+    std::size_t get_active_se_voice_count() const;
     void stop_se(int voice_id);
     void stop_all_se();
     void set_se_volume(float volume);

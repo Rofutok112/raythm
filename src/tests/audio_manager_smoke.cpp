@@ -12,7 +12,7 @@ std::filesystem::path repo_root() {
 }
 
 int main() {
-    const std::filesystem::path audio_path = repo_root() / "assets" / "songs" / "valid_song" / "audio.mp3";
+    const std::filesystem::path audio_path = repo_root() / "assets" / "audio" / "hitsound.mp3" ;
     if (!std::filesystem::exists(audio_path)) {
         std::cerr << "Audio asset not found: " << audio_path.string() << '\n';
         return 1;
@@ -38,14 +38,35 @@ int main() {
     manager.seek_preview(1.0);
     manager.set_preview_volume(0.1f);
     manager.play_preview();
-
-    const int se_voice = manager.play_se(audio_path.string(), 0.05f);
-    if (se_voice == 0) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    const int se_voice_1 = manager.play_se(audio_path.string(), 0.5f);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    const int se_voice_2 = manager.play_se(audio_path.string(), 0.5f);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    const int se_voice_3 = manager.play_se(audio_path.string(), 0.5f);
+    if (se_voice_1 == 0 || se_voice_2 == 0 || se_voice_3 == 0) {
         std::cerr << "SE play failed\n";
         return 1;
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    if (se_voice_1 == se_voice_2 || se_voice_2 == se_voice_3 || se_voice_1 == se_voice_3) {
+        std::cerr << "SE voice ids were reused\n";
+        return 1;
+    }
+
+    if (manager.get_active_se_voice_count() < 3) {
+        std::cerr << "SE voice count did not grow for overlapping playback\n";
+        return 1;
+    }
+
+    const std::size_t active_count_before_stop = manager.get_active_se_voice_count();
+    manager.stop_se(se_voice_2);
+    if (manager.get_active_se_voice_count() >= active_count_before_stop) {
+        std::cerr << "SE voice count did not decrease after stop\n";
+        return 1;
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     manager.update();
 
     if (!manager.is_bgm_loaded() || !manager.is_preview_loaded()) {
