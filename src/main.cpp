@@ -1,3 +1,4 @@
+#include "audio_manager.h"
 #include "game_scenes.h"
 #include "game_settings.h"
 #include "raylib.h"
@@ -30,6 +31,7 @@ int main() {
             applied_target_fps = g_settings.target_fps;
         }
         const float dt = GetFrameTime();
+        audio_manager::instance().update();
         manager.update(dt);
 
         BeginDrawing();
@@ -38,5 +40,6 @@ int main() {
     }
 
     virtual_screen::cleanup();
+    audio_manager::instance().shutdown();
     CloseWindow();
 }
