@@ -51,6 +51,10 @@ std::optional<song_data> load_sample_song() {
     return result.songs.front();
 }
 
+std::filesystem::path repo_root() {
+    return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+}
+
 // 指定キー数に一致する譜面をパースして返す。見つからなければ nullopt。
 std::optional<chart_data> load_chart_for_key_count(const song_data& song, int key_count) {
     for (const std::string& chart_path : song.chart_paths) {
@@ -181,6 +185,9 @@ void play_scene::on_enter() {
         }
     }
 
+    const std::filesystem::path hitsound_path = repo_root() / "assets" / "audio" / "hitsound.mp3";
+    hitsound_path_ = std::filesystem::exists(hitsound_path) ? hitsound_path.string() : "";
+
     if (selected_chart_path_.has_value()) {
         const chart_parse_result parse_result = song_loader::load_chart(*selected_chart_path_);
         if (parse_result.success && parse_result.data.has_value()) {
@@ -263,6 +270,7 @@ void play_scene::on_enter() {
 // オーディオを停止する。
 void play_scene::on_exit() {
     audio_manager::instance().stop_bgm();
+    audio_manager::instance().stop_all_se();
 }
 
 // 時刻進行・入力処理・判定更新・シーン遷移を行う。
@@ -377,6 +385,9 @@ void play_scene::update(float dt) {
     if (last_judge_.has_value()) {
         score_system_.on_judge(*last_judge_);
         gauge_.on_judge(last_judge_->result);
+        if (!hitsound_path_.empty() && last_judge_->result != judge_result::miss) {
+            audio_manager::instance().play_se(hitsound_path_);
+        }
         combo_display_ = score_system_.get_combo();
         display_judge_ = last_judge_;
         judge_feedback_timer_ = 1.0f;

@@ -79,6 +79,7 @@ private:
     float failure_transition_timer_ = 0.0f;
     bool result_transition_playing_ = false;
     float result_transition_timer_ = 0.0f;
+    std::string hitsound_path_;
 
     // 描画用スライディングウィンドウ。
     // 各レーンごとに inactive / active を持ち、レーン内では target_ms 昇順を保証する。
