@@ -21,6 +21,8 @@ add_executable(raythm src/main.cpp
         src/platform/windows_input_source.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
+        src/gameplay/chart_serializer.cpp
+        src/gameplay/chart_serializer.h
         src/models/data_models.h
         src/gameplay/input_handler.cpp
         src/gameplay/input_handler.h
@@ -65,6 +67,14 @@ add_executable(chart_parser_smoke
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
         src/tests/chart_parser_smoke.cpp
+        src/models/data_models.h)
+
+add_executable(chart_serializer_smoke
+        src/gameplay/chart_parser.cpp
+        src/gameplay/chart_parser.h
+        src/gameplay/chart_serializer.cpp
+        src/gameplay/chart_serializer.h
+        src/tests/chart_serializer_smoke.cpp
         src/models/data_models.h)
 
 add_executable(song_loader_smoke
@@ -128,6 +138,7 @@ set(RAYTHM_INCLUDE_DIRS
 # BASSライブラリ
 target_include_directories(raythm PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_parser_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(chart_serializer_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_loader_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(input_handler_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(timing_engine_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
