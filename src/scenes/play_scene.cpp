@@ -147,6 +147,18 @@ const char* judge_text(judge_result result) {
     return "";
 }
 
+const char* input_source_text(input_update_source source) {
+    switch (source) {
+        case input_update_source::simulated:
+            return "simulated";
+        case input_update_source::native_windows:
+            return "native_windows";
+        case input_update_source::polling:
+            return "polling";
+    }
+    return "unknown";
+}
+
 // カメラ角度（度）から視線方向ベクトルを生成する。
 // 90度で真下、0度で水平。Y軸が上方向の座標系。
 Vector3 build_camera_forward(float camera_angle_degrees) {
@@ -693,6 +705,9 @@ void play_scene::draw_hud() const {
                           kFpsRect, g_theme->hud_fps, ui::text_align::right);
     ui::draw_text_in_rect(TextFormat("%.2f", current_ms_ / 1000.0), 30,
                           kTimeRect, g_theme->hud_time);
+    ui::draw_text_in_rect(TextFormat("INPUT %s (%d)", input_source_text(input_handler_.last_update_source()),
+                                     input_handler_.last_update_event_count()),
+                          20, {48.0f, 92.0f, 360.0f, 24.0f}, g_theme->hud_fps, ui::text_align::left);
 
     ui::draw_text_in_rect("HEALTH", 24, kHealthLabelRect,
                           g_theme->hud_health_label, ui::text_align::right);

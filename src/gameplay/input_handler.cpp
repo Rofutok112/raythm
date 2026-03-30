@@ -27,6 +27,8 @@ void input_handler::set_key_count(int key_count) {
     prev_state_.fill(false);
     curr_state_.fill(false);
     events_.clear();
+    last_update_source_ = input_update_source::polling;
+    last_update_event_count_ = 0;
 }
 
 void input_handler::update(double timestamp_ms) {
@@ -37,7 +39,9 @@ void input_handler::update(double timestamp_ms) {
     if (windows_input_source::instance().is_available()) {
         const std::vector<native_key_event> native_events = windows_input_source::instance().drain_events();
         if (!native_events.empty()) {
-            apply_native_events(native_events);
+            apply_native_events(native_events, timestamp_ms);
+            last_update_source_ = input_update_source::native_windows;
+            last_update_event_count_ = static_cast<int>(events_.size());
             return;
         }
     }
@@ -55,6 +59,8 @@ void input_handler::update(double timestamp_ms) {
     }
 
     curr_state_ = next_state;
+    last_update_source_ = input_update_source::polling;
+    last_update_event_count_ = static_cast<int>(events_.size());
 }
 
 void input_handler::update_from_lane_states(std::span<const bool> lane_states, double timestamp_ms) {
@@ -77,10 +83,20 @@ void input_handler::update_from_lane_states(std::span<const bool> lane_states, d
     }
 
     curr_state_ = next_state;
+    last_update_source_ = input_update_source::simulated;
+    last_update_event_count_ = static_cast<int>(events_.size());
 }
 
 std::span<const input_event> input_handler::events() const {
     return std::span<const input_event>(events_);
+}
+
+input_update_source input_handler::last_update_source() const {
+    return last_update_source_;
+}
+
+int input_handler::last_update_event_count() const {
+    return last_update_event_count_;
 }
 
 bool input_handler::is_lane_just_pressed(int lane) const {
@@ -119,7 +135,10 @@ int input_handler::find_lane_for_key(int key) const {
     return -1;
 }
 
-void input_handler::apply_native_events(std::span<const native_key_event> native_events) {
+void input_handler::apply_native_events(std::span<const native_key_event> native_events, double audio_time_ms) {
+    const double native_now_ms = windows_input_source::instance().current_time_ms();
+    const double audio_offset_ms = audio_time_ms - native_now_ms;
+
     for (const native_key_event& native_event : native_events) {
         const int lane = find_lane_for_key(native_event.key);
         if (lane < 0) {
@@ -133,6 +152,6 @@ void input_handler::apply_native_events(std::span<const native_key_event> native
         }
 
         curr_state_[index] = next_pressed;
-        events_.push_back({native_event.type, lane, native_event.timestamp_ms});
+        events_.push_back({native_event.type, lane, native_event.timestamp_ms + audio_offset_ms});
     }
 }

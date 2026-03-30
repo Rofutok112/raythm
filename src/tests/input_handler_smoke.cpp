@@ -53,10 +53,11 @@ int main() {
     windows_input_source::instance().enable_test_mode();
     handler = input_handler();
     handler.set_key_count(4);
+    windows_input_source::instance().set_test_current_time_ms(30.0);
     windows_input_source::instance().push_test_event({KEY_D, input_event_type::press, 10.0, 1});
     windows_input_source::instance().push_test_event({KEY_F, input_event_type::press, 10.5, 2});
     windows_input_source::instance().push_test_event({KEY_D, input_event_type::release, 20.0, 3});
-    handler.update(999.0);
+    handler.update(530.0);
 
     const std::span<const input_event> native_events = handler.events();
     if (native_events.size() != 3 || native_events[0].lane != 0 || native_events[1].lane != 1 ||
@@ -65,9 +66,9 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    if (native_events[0].timestamp_ms != 10.0 || native_events[1].timestamp_ms != 10.5 ||
-        native_events[2].timestamp_ms != 20.0) {
-        std::cerr << "Native event timestamps failed\n";
+    if (native_events[0].timestamp_ms != 510.0 || native_events[1].timestamp_ms != 510.5 ||
+        native_events[2].timestamp_ms != 520.0) {
+        std::cerr << "Native event audio-time conversion failed\n";
         return EXIT_FAILURE;
     }
 
@@ -77,9 +78,11 @@ int main() {
     }
 
     handler.set_key_count(6);
+    windows_input_source::instance().set_test_current_time_ms(40.0);
     windows_input_source::instance().push_test_event({KEY_L, input_event_type::press, 30.0, 4});
-    handler.update(999.0);
-    if (handler.events().size() != 1 || handler.events()[0].lane != 5 || !handler.is_lane_held(5)) {
+    handler.update(640.0);
+    if (handler.events().size() != 1 || handler.events()[0].lane != 5 || !handler.is_lane_held(5) ||
+        handler.events()[0].timestamp_ms != 630.0) {
         std::cerr << "Native 6-key mapping failed\n";
         return EXIT_FAILURE;
     }
