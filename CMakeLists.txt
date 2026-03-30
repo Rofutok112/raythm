@@ -17,6 +17,9 @@ add_executable(raythm src/main.cpp
         src/audio/audio.h
         src/audio/audio_manager.cpp
         src/audio/audio_manager.h
+        src/editor/editor_command.h
+        src/editor/editor_state.cpp
+        src/editor/editor_state.h
         src/platform/windows_input_source.cpp
         src/platform/windows_input_source.h
         src/gameplay/chart_parser.cpp
@@ -77,6 +80,15 @@ add_executable(chart_serializer_smoke
         src/tests/chart_serializer_smoke.cpp
         src/models/data_models.h)
 
+add_executable(editor_state_smoke
+        src/editor/editor_command.h
+        src/editor/editor_state.cpp
+        src/editor/editor_state.h
+        src/models/data_models.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/tests/editor_state_smoke.cpp)
+
 add_executable(song_loader_smoke
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
@@ -128,6 +140,7 @@ set(RAYTHM_INCLUDE_DIRS
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/src/audio
         ${CMAKE_SOURCE_DIR}/src/core
+        ${CMAKE_SOURCE_DIR}/src/editor
         ${CMAKE_SOURCE_DIR}/src/gameplay
         ${CMAKE_SOURCE_DIR}/src/models
         ${CMAKE_SOURCE_DIR}/src/scenes
@@ -139,6 +152,7 @@ set(RAYTHM_INCLUDE_DIRS
 target_include_directories(raythm PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_parser_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_serializer_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(editor_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_loader_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(input_handler_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(timing_engine_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
