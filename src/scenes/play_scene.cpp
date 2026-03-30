@@ -397,9 +397,10 @@ void play_scene::update(float dt) {
         return;
     }
 
-    // 時刻をオーディオ位置から取得（オーディオ無しなら dt で進行）
-    current_ms_ = audio_manager::instance().is_bgm_loaded()
-                      ? audio_manager::instance().get_bgm_position_seconds() * 1000.0
+    // プレイ中の基準時計は audio_manager から取得する。
+    const audio_clock_snapshot bgm_clock = audio_manager::instance().get_bgm_clock();
+    current_ms_ = bgm_clock.loaded
+                      ? bgm_clock.audio_time_seconds * 1000.0
                       : current_ms_ + dt * 1000.0;
     input_handler_.update(current_ms_);
     judge_system_.update(current_ms_, input_handler_);

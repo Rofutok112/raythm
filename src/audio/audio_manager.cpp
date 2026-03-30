@@ -96,6 +96,26 @@ double audio_manager::get_bgm_length_seconds() const {
     return get_voice_length_seconds(bgm_handle_);
 }
 
+audio_clock_snapshot audio_manager::get_bgm_clock() const {
+    return get_voice_clock(bgm_handle_);
+}
+
+double audio_manager::get_output_latency_seconds() const {
+    BASS_INFO info = {};
+    if (!initialized_ || BASS_GetInfo(&info) == FALSE) {
+        return 0.0;
+    }
+    return static_cast<double>(info.latency) / 1000.0;
+}
+
+double audio_manager::get_output_buffer_seconds() const {
+    BASS_INFO info = {};
+    if (!initialized_ || BASS_GetInfo(&info) == FALSE) {
+        return 0.0;
+    }
+    return static_cast<double>(info.minbuf) / 1000.0;
+}
+
 bool audio_manager::load_preview(const std::string& file_path) {
     if (!ensure_initialized()) {
         return false;
@@ -247,6 +267,22 @@ double audio_manager::get_voice_length_seconds(unsigned long handle) {
 
     const QWORD length = BASS_ChannelGetLength(handle, BASS_POS_BYTE);
     return BASS_ChannelBytes2Seconds(handle, length);
+}
+
+audio_clock_snapshot audio_manager::get_voice_clock(unsigned long handle) {
+    audio_clock_snapshot snapshot;
+    snapshot.loaded = is_voice_loaded(handle);
+    snapshot.playing = is_voice_playing(handle);
+    snapshot.stream_position_seconds = get_voice_position_seconds(handle);
+
+    BASS_INFO info = {};
+    if (BASS_GetInfo(&info) != FALSE) {
+        snapshot.device_latency_seconds = static_cast<double>(info.latency) / 1000.0;
+        snapshot.device_buffer_seconds = static_cast<double>(info.minbuf) / 1000.0;
+    }
+
+    snapshot.audio_time_seconds = snapshot.stream_position_seconds + snapshot.device_latency_seconds;
+    return snapshot;
 }
 
 void audio_manager::play_voice(unsigned long handle, bool restart) {

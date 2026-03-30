@@ -28,8 +28,28 @@ int main() {
         std::cerr << "BGM load failed\n";
         return 1;
     }
+    const audio_clock_snapshot initial_clock = manager.get_bgm_clock();
+    if (!initial_clock.loaded || initial_clock.stream_position_seconds < 0.0 ||
+        initial_clock.audio_time_seconds < initial_clock.stream_position_seconds) {
+        std::cerr << "Initial BGM clock snapshot is invalid\n";
+        return 1;
+    }
+
     manager.set_bgm_volume(0.2f);
     manager.play_bgm();
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    const audio_clock_snapshot playing_clock = manager.get_bgm_clock();
+    if (!playing_clock.loaded || !playing_clock.playing ||
+        playing_clock.stream_position_seconds <= initial_clock.stream_position_seconds) {
+        std::cerr << "BGM clock did not advance during playback\n";
+        return 1;
+    }
+
+    if (manager.get_output_latency_seconds() < 0.0 || manager.get_output_buffer_seconds() < 0.0) {
+        std::cerr << "Output timing information is invalid\n";
+        return 1;
+    }
 
     if (!manager.load_preview(audio_path.string())) {
         std::cerr << "Preview load failed\n";
