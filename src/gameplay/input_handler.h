@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "data_models.h"
+#include "platform/windows_input_source.h"
 #include "raylib.h"
 
 struct key_config {
@@ -30,6 +31,9 @@ public:
 
 private:
     static constexpr int kMaxLanes = 6;
+
+    int find_lane_for_key(int key) const;
+    void apply_native_events(std::span<const native_key_event> native_events);
 
     key_config key_config_;
     int key_count_ = 4;

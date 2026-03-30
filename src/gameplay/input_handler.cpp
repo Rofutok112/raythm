@@ -30,11 +30,19 @@ void input_handler::set_key_count(int key_count) {
 }
 
 void input_handler::update(double timestamp_ms) {
-    std::array<bool, kMaxLanes> next_state = {};
     const std::span<const KeyboardKey> lane_keys = key_config_.get_lane_keys(key_count_);
     events_.clear();
     prev_state_ = curr_state_;
 
+    if (windows_input_source::instance().is_available()) {
+        const std::vector<native_key_event> native_events = windows_input_source::instance().drain_events();
+        if (!native_events.empty()) {
+            apply_native_events(native_events);
+            return;
+        }
+    }
+
+    std::array<bool, kMaxLanes> next_state = {};
     for (int lane = 0; lane < key_count_; ++lane) {
         const KeyboardKey key = lane_keys[static_cast<size_t>(lane)];
         if (IsKeyPressed(key)) {
@@ -99,4 +107,32 @@ bool input_handler::is_lane_just_released(int lane) const {
 
     const size_t index = static_cast<size_t>(lane);
     return !curr_state_[index] && prev_state_[index];
+}
+
+int input_handler::find_lane_for_key(int key) const {
+    const std::span<const KeyboardKey> lane_keys = key_config_.get_lane_keys(key_count_);
+    for (int lane = 0; lane < key_count_; ++lane) {
+        if (static_cast<int>(lane_keys[static_cast<size_t>(lane)]) == key) {
+            return lane;
+        }
+    }
+    return -1;
+}
+
+void input_handler::apply_native_events(std::span<const native_key_event> native_events) {
+    for (const native_key_event& native_event : native_events) {
+        const int lane = find_lane_for_key(native_event.key);
+        if (lane < 0) {
+            continue;
+        }
+
+        const size_t index = static_cast<size_t>(lane);
+        const bool next_pressed = native_event.type == input_event_type::press;
+        if (curr_state_[index] == next_pressed) {
+            continue;
+        }
+
+        curr_state_[index] = next_pressed;
+        events_.push_back({native_event.type, lane, native_event.timestamp_ms});
+    }
 }

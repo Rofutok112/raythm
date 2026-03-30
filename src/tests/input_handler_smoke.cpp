@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "input_handler.h"
+#include "platform/windows_input_source.h"
 
 int main() {
     input_handler handler;
@@ -48,6 +49,42 @@ int main() {
         std::cerr << "6-key mode detection failed\n";
         return EXIT_FAILURE;
     }
+
+    windows_input_source::instance().enable_test_mode();
+    handler = input_handler();
+    handler.set_key_count(4);
+    windows_input_source::instance().push_test_event({KEY_D, input_event_type::press, 10.0, 1});
+    windows_input_source::instance().push_test_event({KEY_F, input_event_type::press, 10.5, 2});
+    windows_input_source::instance().push_test_event({KEY_D, input_event_type::release, 20.0, 3});
+    handler.update(999.0);
+
+    const std::span<const input_event> native_events = handler.events();
+    if (native_events.size() != 3 || native_events[0].lane != 0 || native_events[1].lane != 1 ||
+        native_events[2].type != input_event_type::release || native_events[2].lane != 0) {
+        std::cerr << "Native event ordering failed\n";
+        return EXIT_FAILURE;
+    }
+
+    if (native_events[0].timestamp_ms != 10.0 || native_events[1].timestamp_ms != 10.5 ||
+        native_events[2].timestamp_ms != 20.0) {
+        std::cerr << "Native event timestamps failed\n";
+        return EXIT_FAILURE;
+    }
+
+    if (handler.is_lane_held(0) || !handler.is_lane_held(1) || handler.is_lane_just_pressed(0)) {
+        std::cerr << "Native event state tracking failed\n";
+        return EXIT_FAILURE;
+    }
+
+    handler.set_key_count(6);
+    windows_input_source::instance().push_test_event({KEY_L, input_event_type::press, 30.0, 4});
+    handler.update(999.0);
+    if (handler.events().size() != 1 || handler.events()[0].lane != 5 || !handler.is_lane_held(5)) {
+        std::cerr << "Native 6-key mapping failed\n";
+        return EXIT_FAILURE;
+    }
+
+    windows_input_source::instance().shutdown();
 
     std::cout << "input_handler smoke test passed\n";
     return EXIT_SUCCESS;
