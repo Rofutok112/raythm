@@ -21,36 +21,40 @@ void judge_system::update(double current_ms, const input_handler& input) {
     last_judge_.reset();
     judge_events_.clear();
 
-    for (note_state& state : note_states_) {
-        if (state.note_ref.type != note_type::hold || !state.holding) {
+    for (const input_event& event : input.events()) {
+        if (event.type != input_event_type::release) {
             continue;
         }
 
-        if (current_ms >= state.end_target_ms) {
-            state.holding = false;
-            continue;
-        }
+        for (note_state& state : note_states_) {
+            if (state.note_ref.type != note_type::hold || !state.holding || state.note_ref.lane != event.lane) {
+                continue;
+            }
 
-        if (input.is_lane_just_released(state.note_ref.lane)) {
+            if (event.timestamp_ms >= state.end_target_ms) {
+                state.holding = false;
+                continue;
+            }
+
             state.holding = false;
             state.judged = true;
             state.result = judge_result::miss;
-            emit_judge(judge_result::miss, current_ms - state.target_ms, state.note_ref.lane);
+            emit_judge(judge_result::miss, event.timestamp_ms - state.target_ms, state.note_ref.lane);
         }
     }
 
-    for (int lane = 0; lane < 6; ++lane) {
-        if (!input.is_lane_just_pressed(lane)) {
+    for (const input_event& event : input.events()) {
+        if (event.type != input_event_type::press) {
             continue;
         }
 
         note_state* candidate = nullptr;
         for (note_state& state : note_states_) {
-            if (state.judged || state.note_ref.lane != lane) {
+            if (state.judged || state.note_ref.lane != event.lane) {
                 continue;
             }
 
-            const double offset_ms = current_ms - state.target_ms;
+            const double offset_ms = event.timestamp_ms - state.target_ms;
             if (offset_ms < -judge_windows_[3]) {
                 continue;
             }
@@ -67,12 +71,12 @@ void judge_system::update(double current_ms, const input_handler& input) {
             continue;
         }
 
-        const double offset_ms = current_ms - candidate->target_ms;
+        const double offset_ms = event.timestamp_ms - candidate->target_ms;
         const judge_result result = evaluate_offset(offset_ms);
         candidate->judged = true;
         candidate->result = result;
         candidate->holding = candidate->note_ref.type == note_type::hold && result != judge_result::miss;
-        emit_judge(result, offset_ms, lane);
+        emit_judge(result, offset_ms, event.lane);
     }
 
     for (note_state& state : note_states_) {

@@ -2,7 +2,9 @@
 
 #include <array>
 #include <span>
+#include <vector>
 
+#include "data_models.h"
 #include "raylib.h"
 
 struct key_config {
@@ -17,8 +19,10 @@ public:
     explicit input_handler(key_config config = {});
 
     void set_key_count(int key_count);
-    void update();
-    void update_from_lane_states(std::span<const bool> lane_states);
+    void update(double timestamp_ms);
+    void update_from_lane_states(std::span<const bool> lane_states, double timestamp_ms = 0.0);
+
+    std::span<const input_event> events() const;
 
     bool is_lane_just_pressed(int lane) const;
     bool is_lane_held(int lane) const;
@@ -31,4 +35,5 @@ private:
     int key_count_ = 4;
     std::array<bool, kMaxLanes> prev_state_ = {};
     std::array<bool, kMaxLanes> curr_state_ = {};
+    std::vector<input_event> events_;
 };

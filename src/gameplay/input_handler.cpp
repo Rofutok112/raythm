@@ -26,30 +26,53 @@ void input_handler::set_key_count(int key_count) {
     key_count_ = key_count;
     prev_state_.fill(false);
     curr_state_.fill(false);
+    events_.clear();
 }
 
-void input_handler::update() {
+void input_handler::update(double timestamp_ms) {
     std::array<bool, kMaxLanes> next_state = {};
     const std::span<const KeyboardKey> lane_keys = key_config_.get_lane_keys(key_count_);
+    events_.clear();
+    prev_state_ = curr_state_;
 
     for (int lane = 0; lane < key_count_; ++lane) {
-        next_state[static_cast<size_t>(lane)] = IsKeyDown(lane_keys[static_cast<size_t>(lane)]);
+        const KeyboardKey key = lane_keys[static_cast<size_t>(lane)];
+        if (IsKeyPressed(key)) {
+            events_.push_back({input_event_type::press, lane, timestamp_ms});
+        }
+        if (IsKeyReleased(key)) {
+            events_.push_back({input_event_type::release, lane, timestamp_ms});
+        }
+        next_state[static_cast<size_t>(lane)] = IsKeyDown(key);
     }
 
-    prev_state_ = curr_state_;
     curr_state_ = next_state;
 }
 
-void input_handler::update_from_lane_states(std::span<const bool> lane_states) {
+void input_handler::update_from_lane_states(std::span<const bool> lane_states, double timestamp_ms) {
     if (lane_states.size() != static_cast<size_t>(key_count_)) {
         throw std::invalid_argument("lane_states size must match key_count");
     }
 
     std::array<bool, kMaxLanes> next_state = {};
     std::copy(lane_states.begin(), lane_states.end(), next_state.begin());
-
+    events_.clear();
     prev_state_ = curr_state_;
+
+    for (int lane = 0; lane < key_count_; ++lane) {
+        const size_t index = static_cast<size_t>(lane);
+        if (next_state[index] && !prev_state_[index]) {
+            events_.push_back({input_event_type::press, lane, timestamp_ms});
+        } else if (!next_state[index] && prev_state_[index]) {
+            events_.push_back({input_event_type::release, lane, timestamp_ms});
+        }
+    }
+
     curr_state_ = next_state;
+}
+
+std::span<const input_event> input_handler::events() const {
+    return std::span<const input_event>(events_);
 }
 
 bool input_handler::is_lane_just_pressed(int lane) const {
