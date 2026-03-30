@@ -16,33 +16,49 @@
 #include "song_select_scene.h"
 #include "theme.h"
 #include "title_scene.h"
+#include "ui_draw.h"
 #include "virtual_screen.h"
 
 namespace {
 constexpr int kPageCount = 4;
 const char* kPageNames[] = {"Gameplay", "Audio", "Video", "Key Config"};
-constexpr Rectangle kSidebarRect = {24.0f, 44.0f, 256.0f, 660.0f};
-constexpr Rectangle kContentRect = {300.0f, 44.0f, 956.0f, 660.0f};
-constexpr Rectangle kTabRects[kPageCount] = {
-    {48.0f, 196.0f, 208.0f, 42.0f},
-    {48.0f, 246.0f, 208.0f, 42.0f},
-    {48.0f, 296.0f, 208.0f, 42.0f},
-    {48.0f, 346.0f, 208.0f, 42.0f},
-};
-constexpr Rectangle kBackRect = {48.0f, 622.0f, 208.0f, 42.0f};
+constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
+constexpr Rectangle kSidebarRect = ui::place(kScreenRect, 256.0f, 660.0f,
+                                             ui::anchor::top_left, ui::anchor::top_left,
+                                             {24.0f, 44.0f});
+constexpr Rectangle kContentRect = ui::place(kScreenRect, 956.0f, 660.0f,
+                                             ui::anchor::top_left, ui::anchor::top_left,
+                                             {300.0f, 44.0f});
+constexpr Rectangle kSidebarHeaderRect = ui::place(kSidebarRect, 208.0f, 62.0f,
+                                                   ui::anchor::top_left, ui::anchor::top_left,
+                                                   {22.0f, 26.0f});
+constexpr Rectangle kSidebarHintRect = ui::place(kSidebarRect, 208.0f, 24.0f,
+                                                 ui::anchor::top_left, ui::anchor::top_left,
+                                                 {24.0f, 352.0f});
+constexpr Rectangle kTabArea = ui::place(kSidebarRect, 208.0f, 4.0f * 42.0f + 3.0f * 8.0f,
+                                         ui::anchor::top_center, ui::anchor::top_center,
+                                         {0.0f, 152.0f});
+constexpr Rectangle kBackRect = ui::place(kSidebarRect, 208.0f, 42.0f,
+                                          ui::anchor::bottom_center, ui::anchor::bottom_center,
+                                          {0.0f, -38.0f});
+constexpr Rectangle kContentHeaderRect = ui::place(kContentRect, 560.0f, 60.0f,
+                                                   ui::anchor::top_left, ui::anchor::top_left,
+                                                   {30.0f, 30.0f});
 constexpr Rectangle kGeneralRows[] = {
-    {330.0f, 160.0f, 890.0f, 48.0f},
-    {330.0f, 220.0f, 890.0f, 48.0f},
-    {330.0f, 280.0f, 890.0f, 48.0f},
-    {330.0f, 380.0f, 890.0f, 48.0f},
-    {330.0f, 440.0f, 890.0f, 48.0f},
-    {330.0f, 540.0f, 890.0f, 48.0f},
-    {330.0f, 600.0f, 890.0f, 48.0f},
-    {330.0f, 660.0f, 890.0f, 48.0f},
+    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 116.0f}),
+    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 176.0f}),
+    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 236.0f}),
+    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 336.0f}),
+    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 396.0f}),
+    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 496.0f}),
+    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 556.0f}),
+    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 616.0f}),
 };
-constexpr Rectangle kKeyModeRect = {330.0f, 170.0f, 890.0f, 64.0f};
-constexpr float kSliderLeft = 548.0f;
-constexpr float kSliderWidth = 630.0f;
+constexpr Rectangle kKeyModeRect = ui::place(kContentRect, 890.0f, 64.0f,
+                                             ui::anchor::top_left, ui::anchor::top_left,
+                                             {30.0f, 126.0f});
+constexpr float kSliderLeftInset = 218.0f;
+constexpr float kSliderRightInset = 42.0f;
 constexpr float kSliderTopOffset = 26.0f;
 constexpr float kArrowButtonSize = 34.0f;
 
@@ -57,15 +73,30 @@ float clamp01(float value) {
 }
 
 Rectangle slider_track_rect(const Rectangle& row_rect) {
-    return {kSliderLeft, row_rect.y + kSliderTopOffset, kSliderWidth, 6.0f};
+    return ui::make_slider_layout(row_rect, kSliderLeftInset, kSliderRightInset, 200.0f, 18.0f, kSliderTopOffset).track_rect;
 }
 
 Rectangle arrow_left_rect(const Rectangle& row_rect) {
-    return {row_rect.x + row_rect.width - 94.0f, row_rect.y + 15.0f, kArrowButtonSize, kArrowButtonSize};
+    const Rectangle content = ui::inset(row_rect, ui::edge_insets::symmetric(0.0f, 18.0f));
+    const ui::rect_pair columns = ui::split_columns(content, 200.0f);
+    const Rectangle button_pair_area = ui::place(columns.second, kArrowButtonSize * 2.0f + 10.0f, kArrowButtonSize,
+                                                 ui::anchor::center_right, ui::anchor::center_right);
+    return {button_pair_area.x, button_pair_area.y, kArrowButtonSize, kArrowButtonSize};
 }
 
 Rectangle arrow_right_rect(const Rectangle& row_rect) {
-    return {row_rect.x + row_rect.width - 50.0f, row_rect.y + 15.0f, kArrowButtonSize, kArrowButtonSize};
+    const Rectangle left = arrow_left_rect(row_rect);
+    return {left.x + kArrowButtonSize + 10.0f, left.y, kArrowButtonSize, kArrowButtonSize};
+}
+
+Rectangle key_slot_rect(int index) {
+    return ui::place(kContentRect, 560.0f, 48.0f,
+                     ui::anchor::top_left, ui::anchor::top_left,
+                     {30.0f, 214.0f + static_cast<float>(index) * 62.0f});
+}
+
+void build_tab_rects(std::span<Rectangle> out) {
+    ui::vstack(kTabArea, 42.0f, 8.0f, out);
 }
 
 float slider_ratio_from_mouse(const Rectangle& row_rect, Vector2 mouse) {
@@ -81,10 +112,6 @@ int fps_option_index(int target_fps) {
         }
     }
     return 1;
-}
-
-Rectangle inset_rect(Rectangle rect, float amount) {
-    return {rect.x + amount, rect.y + amount, rect.width - amount * 2.0f, rect.height - amount * 2.0f};
 }
 }  // namespace
 
@@ -102,7 +129,6 @@ void settings_scene::on_enter() {
 
 void settings_scene::update(float dt) {
     error_timer_ = std::max(0.0f, error_timer_ - dt);
-    const Vector2 mouse = virtual_screen::get_virtual_mouse();
 
     // リスニング中はページ切り替え・画面遷移を無効にする
     if (listening_) {
@@ -110,7 +136,7 @@ void settings_scene::update(float dt) {
         return;
     }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse, kBackRect)) {
+    if (ui::is_clicked(kBackRect)) {
         save_settings(g_settings);
         if (return_target_ == return_target::song_select) {
             manager_.change_scene(std::make_unique<song_select_scene>(manager_));
@@ -120,14 +146,14 @@ void settings_scene::update(float dt) {
         return;
     }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        for (int i = 0; i < kPageCount; ++i) {
-            if (CheckCollisionPointRec(mouse, kTabRects[i])) {
-                current_page_ = static_cast<page>(i);
-                key_config_slot_ = -1;
-                listening_ = false;
-                break;
-            }
+    Rectangle tabs[kPageCount];
+    build_tab_rects(tabs);
+    for (int i = 0; i < kPageCount; ++i) {
+        if (ui::is_clicked(tabs[i])) {
+            current_page_ = static_cast<page>(i);
+            key_config_slot_ = -1;
+            listening_ = false;
+            break;
         }
     }
 
@@ -155,11 +181,11 @@ void settings_scene::update_gameplay() {
     }
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (CheckCollisionPointRec(mouse, kGeneralRows[0])) {
+        if (ui::is_hovered(kGeneralRows[0])) {
             active_slider_ = general_slider::note_speed;
-        } else if (CheckCollisionPointRec(mouse, kGeneralRows[1])) {
+        } else if (ui::is_hovered(kGeneralRows[1])) {
             active_slider_ = general_slider::camera_angle;
-        } else if (CheckCollisionPointRec(mouse, kGeneralRows[2])) {
+        } else if (ui::is_hovered(kGeneralRows[2])) {
             active_slider_ = general_slider::lane_width;
         }
     }
@@ -186,9 +212,9 @@ void settings_scene::update_audio() {
     }
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (CheckCollisionPointRec(mouse, kGeneralRows[0])) {
+        if (ui::is_hovered(kGeneralRows[0])) {
             active_slider_ = general_slider::bgm_volume;
-        } else if (CheckCollisionPointRec(mouse, kGeneralRows[1])) {
+        } else if (ui::is_hovered(kGeneralRows[1])) {
             active_slider_ = general_slider::se_volume;
         }
     }
@@ -215,7 +241,7 @@ void settings_scene::update_video() {
         active_slider_ = general_slider::none;
     }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse, kGeneralRows[0])) {
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && ui::is_hovered(kGeneralRows[0])) {
         active_slider_ = general_slider::frame_rate;
     }
 
@@ -228,14 +254,12 @@ void settings_scene::update_video() {
 
     bool resolution_changed = false;
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (CheckCollisionPointRec(mouse, arrow_left_rect(kGeneralRows[1]))) {
-            g_settings.resolution_index = std::max(0, g_settings.resolution_index - 1);
-            resolution_changed = true;
-        } else if (CheckCollisionPointRec(mouse, arrow_right_rect(kGeneralRows[1]))) {
-            g_settings.resolution_index = std::min(kResolutionPresetCount - 1, g_settings.resolution_index + 1);
-            resolution_changed = true;
-        }
+    if (ui::is_clicked(arrow_left_rect(kGeneralRows[1]))) {
+        g_settings.resolution_index = std::max(0, g_settings.resolution_index - 1);
+        resolution_changed = true;
+    } else if (ui::is_clicked(arrow_right_rect(kGeneralRows[1]))) {
+        g_settings.resolution_index = std::min(kResolutionPresetCount - 1, g_settings.resolution_index + 1);
+        resolution_changed = true;
     }
 
     if (resolution_changed) {
@@ -243,21 +267,17 @@ void settings_scene::update_video() {
         SetWindowSize(preset.width, preset.height);
     }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (CheckCollisionPointRec(mouse, arrow_left_rect(kGeneralRows[2])) ||
-            CheckCollisionPointRec(mouse, arrow_right_rect(kGeneralRows[2]))) {
-            g_settings.fullscreen = !g_settings.fullscreen;
-            ToggleFullscreen();
-        }
+    if (ui::is_clicked(arrow_left_rect(kGeneralRows[2])) ||
+        ui::is_clicked(arrow_right_rect(kGeneralRows[2]))) {
+        g_settings.fullscreen = !g_settings.fullscreen;
+        ToggleFullscreen();
     }
 
     // テーマ切り替え
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (CheckCollisionPointRec(mouse, arrow_left_rect(kGeneralRows[3])) ||
-            CheckCollisionPointRec(mouse, arrow_right_rect(kGeneralRows[3]))) {
-            g_settings.dark_mode = !g_settings.dark_mode;
-            set_theme(g_settings.dark_mode);
-        }
+    if (ui::is_clicked(arrow_left_rect(kGeneralRows[3])) ||
+        ui::is_clicked(arrow_right_rect(kGeneralRows[3]))) {
+        g_settings.dark_mode = !g_settings.dark_mode;
+        set_theme(g_settings.dark_mode);
     }
 }
 
@@ -300,71 +320,53 @@ void settings_scene::update_key_config() {
         return;
     }
 
-    const Vector2 mouse = virtual_screen::get_virtual_mouse();
+    const Rectangle mode_left = arrow_left_rect(kKeyModeRect);
+    const Rectangle mode_right = arrow_right_rect(kKeyModeRect);
+    if (ui::is_clicked(mode_left) || ui::is_clicked(mode_right)) {
+        key_config_mode_ = 1 - key_config_mode_;
+        key_config_slot_ = -1;
+        return;
+    }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        const Rectangle mode_left = {kKeyModeRect.x + kKeyModeRect.width - 94.0f, kKeyModeRect.y + 15.0f, kArrowButtonSize, kArrowButtonSize};
-        const Rectangle mode_right = {kKeyModeRect.x + kKeyModeRect.width - 50.0f, kKeyModeRect.y + 15.0f, kArrowButtonSize, kArrowButtonSize};
-        if (CheckCollisionPointRec(mouse, mode_left) || CheckCollisionPointRec(mouse, mode_right)) {
-            key_config_mode_ = 1 - key_config_mode_;
-            key_config_slot_ = -1;
-            return;
-        }
-
-        int y = 258;
-        for (int i = 0; i < max_keys; ++i) {
-            const Rectangle row_rect = {330.0f, static_cast<float>(y), 560.0f, 48.0f};
-            if (CheckCollisionPointRec(mouse, row_rect)) {
-                if (key_config_slot_ == i) {
-                    listening_ = true;
-                    key_config_error_.clear();
-                } else {
-                    key_config_slot_ = i;
-                }
-                return;
+    for (int i = 0; i < max_keys; ++i) {
+        const Rectangle row_rect = key_slot_rect(i);
+        if (ui::is_clicked(row_rect)) {
+            if (key_config_slot_ == i) {
+                listening_ = true;
+                key_config_error_.clear();
+            } else {
+                key_config_slot_ = i;
             }
-            y += 62;
+            return;
         }
     }
 }
 
 void settings_scene::draw() {
     const auto& t = *g_theme;
-    const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
     virtual_screen::begin();
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
-    DrawRectangleRec(kSidebarRect, t.panel);
-    DrawRectangleRec(kContentRect, t.panel);
-    DrawRectangleLinesEx(kSidebarRect, 2.0f, t.border);
-    DrawRectangleLinesEx(kContentRect, 2.0f, t.border);
+    ui::draw_panel(kSidebarRect);
+    ui::draw_panel(kContentRect);
 
-    DrawText("SETTINGS", 46, 70, 34, t.text);
-    DrawText("Saved on exit", 48, 112, 20, t.text_muted);
+    ui::draw_header_block(kSidebarHeaderRect, "SETTINGS", "Saved on exit");
 
+    Rectangle tabs[kPageCount];
+    build_tab_rects(tabs);
     for (int i = 0; i < kPageCount; ++i) {
-        const bool active = static_cast<int>(current_page_) == i;
-        const bool hovered = CheckCollisionPointRec(mouse, kTabRects[i]);
-        const bool pressed = hovered && mouse_down;
-        const Rectangle draw_rect = pressed ? inset_rect(kTabRects[i], 1.5f) : kTabRects[i];
-        const Color fill = active ? lerp_color(t.row_selected, t.row_active, hovered ? 1.0f : 0.0f)
-                                  : lerp_color(t.row, t.row_hover, hovered ? 1.0f : 0.0f);
-        const Color border = active ? t.border_active : t.border;
-        DrawRectangleRec(draw_rect, fill);
-        DrawRectangleLinesEx(draw_rect, 2.0f, border);
-        DrawText(kPageNames[i], static_cast<int>(draw_rect.x + 14.0f), static_cast<int>(draw_rect.y + 10.0f), 22,
-                 active ? t.text : t.text_secondary);
+        if (static_cast<int>(current_page_) == i) {
+            ui::draw_button_colored(tabs[i], kPageNames[i], 22,
+                                    t.row_selected, t.row_active, t.text);
+        } else {
+            ui::draw_button_colored(tabs[i], kPageNames[i], 22,
+                                    t.row, t.row_hover, t.text_secondary);
+        }
     }
 
-    draw_marquee_text("Click tabs to switch pages", 48, 396, 20, t.text_muted,
-                      208.0f, GetTime());
-    const bool back_hovered = CheckCollisionPointRec(mouse, kBackRect);
-    const bool back_pressed = back_hovered && mouse_down;
-    const Rectangle back_draw_rect = back_pressed ? inset_rect(kBackRect, 1.5f) : kBackRect;
-    DrawRectangleRec(back_draw_rect, lerp_color(t.row, t.row_hover, back_hovered ? 1.0f : 0.0f));
-    DrawRectangleLinesEx(back_draw_rect, 2.0f, t.border);
-    DrawText("BACK", static_cast<int>(back_draw_rect.x + 72.0f), static_cast<int>(back_draw_rect.y + 10.0f), 22, t.text);
+    draw_marquee_text("Click tabs to switch pages", static_cast<int>(kSidebarHintRect.x), static_cast<int>(kSidebarHintRect.y),
+                      20, t.text_muted, kSidebarHintRect.width, GetTime());
+    ui::draw_button(kBackRect, "BACK", 22);
 
     const char* page_title = "";
     const char* page_subtitle = "";
@@ -386,8 +388,7 @@ void settings_scene::draw() {
             page_subtitle = "Per-lane keyboard bindings";
             break;
     }
-    DrawText(page_title, 330, 74, 34, t.text);
-    DrawText(page_subtitle, 332, 114, 20, t.text_muted);
+    ui::draw_header_block(kContentHeaderRect, page_title, page_subtitle);
 
     switch (current_page_) {
         case page::gameplay:
@@ -410,7 +411,6 @@ void settings_scene::draw() {
 }
 
 void settings_scene::draw_gameplay() {
-    const auto& t = *g_theme;
     const char* labels[] = {"Note Speed", "Camera Angle", "Lane Width"};
     const std::string values[] = {
         TextFormat("%.3f", g_settings.note_speed),
@@ -419,12 +419,6 @@ void settings_scene::draw_gameplay() {
     };
 
     for (int i = 0; i < 3; ++i) {
-        DrawRectangleRec(kGeneralRows[i], t.row);
-        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, t.border);
-        DrawText(labels[i], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, t.text);
-        const Rectangle track = slider_track_rect(kGeneralRows[i]);
-        DrawRectangleRec(track, t.slider_track);
-
         float ratio = 0.0f;
         if (i == 0) {
             ratio = (g_settings.note_speed - 0.020f) / (0.090f - 0.020f);
@@ -433,21 +427,12 @@ void settings_scene::draw_gameplay() {
         } else {
             ratio = (g_settings.lane_width - 0.6f) / (10.0f - 0.6f);
         }
-        ratio = clamp01(ratio);
-
-        DrawRectangle(static_cast<int>(track.x), static_cast<int>(track.y), static_cast<int>(track.width * ratio), static_cast<int>(track.height),
-                      t.slider_fill);
-        const int knob_x = static_cast<int>(track.x + track.width * ratio);
-        DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, t.slider_knob);
-
-        const int value_width = MeasureText(values[i].c_str(), 22);
-        DrawText(values[i].c_str(), static_cast<int>(track.x + track.width - value_width), static_cast<int>(kGeneralRows[i].y + 8.0f), 22,
-                 t.text_dim);
+        ui::draw_slider_relative(kGeneralRows[i], labels[i], values[i].c_str(), clamp01(ratio),
+                                 kSliderLeftInset, kSliderRightInset, 22, kSliderTopOffset);
     }
 }
 
 void settings_scene::draw_audio() {
-    const auto& t = *g_theme;
     const char* labels[] = {"BGM Volume", "SE Volume"};
     const std::string values[] = {
         TextFormat("%d%%", static_cast<int>(std::round(g_settings.bgm_volume * 100.0f))),
@@ -456,100 +441,25 @@ void settings_scene::draw_audio() {
 
     for (int row = 0; row < 2; ++row) {
         const int i = row;
-        DrawRectangleRec(kGeneralRows[i], t.row);
-        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, t.border);
-        DrawText(labels[row], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, t.text);
-
-        const Rectangle track = slider_track_rect(kGeneralRows[i]);
-        DrawRectangleRec(track, t.slider_track);
         const float ratio = row == 0 ? g_settings.bgm_volume : g_settings.se_volume;
-        DrawRectangle(static_cast<int>(track.x), static_cast<int>(track.y), static_cast<int>(track.width * ratio), static_cast<int>(track.height),
-                      t.slider_fill);
-        const int knob_x = static_cast<int>(track.x + track.width * ratio);
-        DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, t.slider_knob);
-
-        const int value_width = MeasureText(values[row].c_str(), 22);
-        DrawText(values[row].c_str(), static_cast<int>(track.x + track.width - value_width), static_cast<int>(kGeneralRows[i].y + 8.0f), 22,
-                 t.text_dim);
+        ui::draw_slider_relative(kGeneralRows[i], labels[row], values[row].c_str(), ratio,
+                                 kSliderLeftInset, kSliderRightInset, 22, kSliderTopOffset);
     }
 }
 
 void settings_scene::draw_video() {
-    const auto& t = *g_theme;
-    const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
     const std::string fps_label = g_settings.target_fps == 0 ? "Unlimited" : std::to_string(g_settings.target_fps);
-    const std::string res_label = kResolutionPresets[g_settings.resolution_index].label;
-    const std::string values[] = {fps_label, res_label, g_settings.fullscreen ? "Fullscreen" : "Windowed",
-                                  g_settings.dark_mode ? "Dark" : "Light"};
-    const char* labels[] = {"Frame Rate", "Resolution", "Display", "Theme"};
-
-    {
-        const int i = 0;
-        DrawRectangleRec(kGeneralRows[i], t.row);
-        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, t.border);
-        DrawText(labels[0], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, t.text);
-        const Rectangle track = slider_track_rect(kGeneralRows[i]);
-        DrawRectangleRec(track, t.slider_track);
-        const float ratio = static_cast<float>(fps_option_index(g_settings.target_fps)) / 3.0f;
-        DrawRectangle(static_cast<int>(track.x), static_cast<int>(track.y), static_cast<int>(track.width * ratio), static_cast<int>(track.height),
-                      t.slider_fill);
-        const int knob_x = static_cast<int>(track.x + track.width * ratio);
-        DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, t.slider_knob);
-        const int value_width = MeasureText(values[0].c_str(), 22);
-        DrawText(values[0].c_str(), static_cast<int>(track.x + track.width - value_width), static_cast<int>(kGeneralRows[i].y + 8.0f), 22,
-                 t.text_dim);
-    }
-
-    for (int row = 0; row < 3; ++row) {
-        const int i = row + 1;
-        DrawRectangleRec(kGeneralRows[i], t.row);
-        DrawRectangleLinesEx(kGeneralRows[i], 2.0f, t.border);
-        DrawText(labels[row + 1], static_cast<int>(kGeneralRows[i].x + 18.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 22, t.text);
-        const Rectangle left_arrow = arrow_left_rect(kGeneralRows[i]);
-        const Rectangle right_arrow = arrow_right_rect(kGeneralRows[i]);
-        const bool left_hovered = CheckCollisionPointRec(mouse, left_arrow);
-        const bool right_hovered = CheckCollisionPointRec(mouse, right_arrow);
-        const Rectangle left_draw_rect = (left_hovered && mouse_down) ? inset_rect(left_arrow, 1.5f) : left_arrow;
-        const Rectangle right_draw_rect = (right_hovered && mouse_down) ? inset_rect(right_arrow, 1.5f) : right_arrow;
-        DrawRectangleRec(left_draw_rect, lerp_color(t.row, t.row_selected_hover, left_hovered ? 1.0f : 0.0f));
-        DrawRectangleRec(right_draw_rect, lerp_color(t.row, t.row_selected_hover, right_hovered ? 1.0f : 0.0f));
-        DrawRectangleLinesEx(left_draw_rect, 2.0f, t.border);
-        DrawRectangleLinesEx(right_draw_rect, 2.0f, t.border);
-        DrawText("<", static_cast<int>(left_draw_rect.x + 11.0f), static_cast<int>(left_draw_rect.y + 5.0f), 24, t.text);
-        DrawText(">", static_cast<int>(right_draw_rect.x + 10.0f), static_cast<int>(right_draw_rect.y + 5.0f), 24, t.text);
-
-        const int value_width = MeasureText(values[row + 1].c_str(), 24);
-        DrawText(values[row + 1].c_str(), static_cast<int>(left_arrow.x - value_width - 16.0f), static_cast<int>(kGeneralRows[i].y + 12.0f), 24,
-                 t.text_dim);
-    }
+    ui::draw_slider_relative(kGeneralRows[0], "Frame Rate", fps_label.c_str(),
+                             static_cast<float>(fps_option_index(g_settings.target_fps)) / 3.0f,
+                             kSliderLeftInset, kSliderRightInset, 22, kSliderTopOffset);
+    ui::draw_value_selector(kGeneralRows[1], "Resolution", kResolutionPresets[g_settings.resolution_index].label);
+    ui::draw_value_selector(kGeneralRows[2], "Display", g_settings.fullscreen ? "Fullscreen" : "Windowed");
+    ui::draw_value_selector(kGeneralRows[3], "Theme", g_settings.dark_mode ? "Dark" : "Light");
 }
 
 void settings_scene::draw_key_config() {
     const auto& t = *g_theme;
-    const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-    DrawRectangleRec(kKeyModeRect, t.row);
-    DrawRectangleLinesEx(kKeyModeRect, 2.0f, t.border);
-    DrawText("Mode", static_cast<int>(kKeyModeRect.x + 18.0f), static_cast<int>(kKeyModeRect.y + 16.0f), 24, t.text);
-    const Rectangle mode_left = {kKeyModeRect.x + kKeyModeRect.width - 94.0f, kKeyModeRect.y + 15.0f, kArrowButtonSize, kArrowButtonSize};
-    const Rectangle mode_right = {kKeyModeRect.x + kKeyModeRect.width - 50.0f, kKeyModeRect.y + 15.0f, kArrowButtonSize, kArrowButtonSize};
-    const char* mode_label = key_config_mode_ == 0 ? "4K" : "6K";
-    const int mode_label_width = MeasureText(mode_label, 24);
-    DrawText(mode_label, static_cast<int>(mode_left.x - mode_label_width - 18.0f),
-             static_cast<int>(kKeyModeRect.y + 16.0f), 24, t.text_dim);
-    const bool mode_left_hovered = CheckCollisionPointRec(mouse, mode_left);
-    const bool mode_right_hovered = CheckCollisionPointRec(mouse, mode_right);
-    const Rectangle mode_left_draw = (mode_left_hovered && mouse_down) ? inset_rect(mode_left, 1.5f) : mode_left;
-    const Rectangle mode_right_draw = (mode_right_hovered && mouse_down) ? inset_rect(mode_right, 1.5f) : mode_right;
-    DrawRectangleRec(mode_left_draw, lerp_color(t.row, t.row_selected_hover, mode_left_hovered ? 1.0f : 0.0f));
-    DrawRectangleRec(mode_right_draw, lerp_color(t.row, t.row_selected_hover, mode_right_hovered ? 1.0f : 0.0f));
-    DrawRectangleLinesEx(mode_left_draw, 2.0f, t.border);
-    DrawRectangleLinesEx(mode_right_draw, 2.0f, t.border);
-    DrawText("<", static_cast<int>(mode_left_draw.x + 11.0f), static_cast<int>(mode_left_draw.y + 5.0f), 24, t.text);
-    DrawText(">", static_cast<int>(mode_right_draw.x + 10.0f), static_cast<int>(mode_right_draw.y + 5.0f), 24, t.text);
-
-    int y = 258;
+    ui::draw_value_selector(kKeyModeRect, "Mode", key_config_mode_ == 0 ? "4K" : "6K");
 
     // キースロット表示
     const std::span<const KeyboardKey> keys = key_config_mode_ == 0
@@ -559,23 +469,20 @@ void settings_scene::draw_key_config() {
     for (int i = 0; i < count; ++i) {
         const bool selected = key_config_slot_ == i;
         const bool is_listening = selected && listening_;
-        const Rectangle row_rect = {330.0f, static_cast<float>(y), 560.0f, 48.0f};
-        const bool hovered = CheckCollisionPointRec(mouse, row_rect);
-        const Rectangle draw_rect = (hovered && mouse_down) ? inset_rect(row_rect, 1.5f) : row_rect;
-        const Color fill = selected ? lerp_color(t.row_selected, t.row_active, hovered ? 1.0f : 0.0f)
-                                    : lerp_color(t.row, t.row_hover, hovered ? 1.0f : 0.0f);
-        DrawRectangleRec(draw_rect, fill);
-        DrawRectangleLinesEx(draw_rect, 2.0f, selected ? t.border_active : t.border);
+        const Rectangle row_rect = key_slot_rect(i);
+        const ui::row_state row_state = ui::draw_selectable_row(row_rect, selected);
         const char* key_label = is_listening ? "Press a key..." : get_key_name(keys[static_cast<size_t>(i)]);
-        DrawText(TextFormat("Lane %d", i + 1), static_cast<int>(draw_rect.x + 18.0f), static_cast<int>(draw_rect.y + 12.0f), 24, t.text);
-        const int key_width = MeasureText(key_label, 24);
-        DrawText(key_label, static_cast<int>(draw_rect.x + draw_rect.width - key_width - 18.0f), static_cast<int>(draw_rect.y + 12.0f), 24,
-                 is_listening ? t.error : t.text_dim);
-        y += 62;
+        const ui::rect_pair columns = ui::split_columns(ui::inset(row_state.visual, 18.0f), 160.0f);
+        ui::draw_text_in_rect(TextFormat("Lane %d", i + 1), 24, columns.first, t.text, ui::text_align::left);
+        ui::draw_text_in_rect(key_label, 24, columns.second, is_listening ? t.error : t.text_dim, ui::text_align::right);
     }
 
     if (error_timer_ > 0.0f && !key_config_error_.empty()) {
         const unsigned char alpha = static_cast<unsigned char>(std::min(error_timer_ / 0.3f, 1.0f) * 255.0f);
-        DrawText(key_config_error_.c_str(), 330, y + 8, 22, with_alpha(t.error, alpha));
+        ui::draw_text_in_rect(key_config_error_.c_str(), 22,
+                              ui::place(kContentRect, 560.0f, 28.0f,
+                                        ui::anchor::top_left, ui::anchor::top_left,
+                                        {30.0f, 214.0f + static_cast<float>(count) * 62.0f + 8.0f}),
+                              with_alpha(t.error, alpha), ui::text_align::left);
     }
 }
