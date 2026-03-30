@@ -103,21 +103,21 @@ result_data score_system::get_result_data() const {
 
     const double max_achievement_points = static_cast<double>(std::max(total_notes_, 1) * kPerfectBase);
     const double earned_achievement_points =
-        static_cast<double>(judge_counts_[judge_index(judge_result::perfect)] * kPerfectBase +
-                            judge_counts_[judge_index(judge_result::great)] * kGreatBase +
-                            judge_counts_[judge_index(judge_result::good)] * kGoodBase +
-                            judge_counts_[judge_index(judge_result::bad)] * kBadBase);
-    result.achievement = static_cast<float>((earned_achievement_points / max_achievement_points) * 100.0);
+        judge_counts_[judge_index(judge_result::perfect)] * kPerfectBase +
+        judge_counts_[judge_index(judge_result::great)] * kGreatBase +
+        judge_counts_[judge_index(judge_result::good)] * kGoodBase +
+        judge_counts_[judge_index(judge_result::bad)] * kBadBase;
+    result.accuracy = static_cast<float>((earned_achievement_points / max_achievement_points) * 100.0);
 
-    if (result.achievement >= 99.0f) {
+    if (result.accuracy >= 99.0f) {
         result.clear_rank = rank::ss;
-    } else if (result.achievement >= 95.0f) {
+    } else if (result.accuracy >= 95.0f) {
         result.clear_rank = rank::s;
-    } else if (result.achievement >= 85.0f) {
+    } else if (result.accuracy >= 85.0f) {
         result.clear_rank = rank::a;
-    } else if (result.achievement >= 70.0f) {
+    } else if (result.accuracy >= 70.0f) {
         result.clear_rank = rank::b;
-    } else if (result.achievement >= 50.0f) {
+    } else if (result.accuracy >= 50.0f) {
         result.clear_rank = rank::c;
     } else {
         result.clear_rank = rank::f;

@@ -134,7 +134,7 @@ void result_scene::draw() {
         DrawText("SCORE", lx, start_y + 6, 20, t.text_dim);
         DrawText(TextFormat("%07d", result_.score), lx + 100, start_y, 36, t.text);
         DrawText("ACCURACY", lx, start_y + 8 + 36 + 6, 20, t.text_dim);
-        DrawText(TextFormat("%.2f%%", result_.achievement), lx + 140, start_y + 8 + 36, 36, t.text_secondary);
+        DrawText(TextFormat("%.2f%%", result_.accuracy), lx + 140, start_y + 8 + 36, 36, t.text_secondary);
     }
 
     // 判定内訳（フレーム中央に配置）

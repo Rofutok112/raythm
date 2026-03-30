@@ -39,7 +39,7 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    if (result.score <= 0 || result.achievement <= 0.0f) {
+    if (result.score <= 0 || result.accuracy <= 0.0f) {
         std::cerr << "Score normalization failed\n";
         return EXIT_FAILURE;
     }

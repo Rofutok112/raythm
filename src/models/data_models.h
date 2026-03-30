@@ -124,7 +124,7 @@ enum class rank {
 // リザルト画面で表示する集計結果。
 struct result_data {
     int score = 0;
-    float achievement = 0.0f;
+    float accuracy = 0.0f;
     std::array<int, 5> judge_counts = {};
     int max_combo = 0;
     float avg_offset = 0.0f;

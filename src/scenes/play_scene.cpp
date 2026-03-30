@@ -423,10 +423,10 @@ void play_scene::update(float dt) {
 // 判定ラインが画面下端から指定比率の位置に来るようカメラを構築する。
 Camera3D play_scene::make_play_camera() const {
     const float angle_rad = std::clamp(camera_angle_degrees_, 5.0f, 90.0f) * DEG2RAD;
-    const float half_fov_rad = kCameraFovY * DEG2RAD * 0.5f;
+    constexpr float half_fov_rad = kCameraFovY * DEG2RAD * 0.5f;
 
     // 判定ラインの画面位置を NDC に変換 (画面下端=-1, 上端=+1)
-    const float judge_ndc_y = (kJudgementLineScreenRatioFromBottom - 0.5f) * 2.0f;
+    constexpr float judge_ndc_y = (kJudgementLineScreenRatioFromBottom - 0.5f) * 2.0f;
     const std::optional<float> judge_offset = ground_z_offset(kCameraHeight, angle_rad, half_fov_rad, judge_ndc_y);
     const float camera_z = judge_offset.has_value() ? (kJudgeLineWorldZ - *judge_offset) : 0.0f;
 
@@ -446,7 +446,7 @@ Camera3D play_scene::make_play_camera() const {
 bool play_scene::get_lane_view_bounds(const Camera3D& camera, float& lane_start_z, float& judgement_z,
                                       float& lane_end_z) const {
     const float angle_rad = std::clamp(camera_angle_degrees_, 5.0f, 90.0f) * DEG2RAD;
-    const float half_fov_rad = kCameraFovY * DEG2RAD * 0.5f;
+    constexpr float half_fov_rad = kCameraFovY * DEG2RAD * 0.5f;
 
     // 画面下端 (ndc_y=-1) → 手前側
     const std::optional<float> near_offset = ground_z_offset(kCameraHeight, angle_rad, half_fov_rad, -1.0f);
@@ -644,29 +644,38 @@ void play_scene::draw_notes(const Camera3D& camera) const {
 void play_scene::draw_hud() const {
     const result_data result = score_system_.get_result_data();
     const std::string time_text = TextFormat("%.2f", current_ms_ / 1000.0);
-    const float health_left = static_cast<float>(kScreenWidth - 350);
-    const float health_top = 42.0f;
-    const float health_width = 260.0f;
-    const float health_height = 24.0f;
-    const float inset = 4.0f;
-    const float fill_width = (health_width - inset * 2.0f) * (gauge_.get_value() / 100.0f);
+    const std::string fps_text = TextFormat("FPS: %d", GetFPS());
+    constexpr int score_left = 48;
+    constexpr int score_top = 34;
+    constexpr int score_height = 30;
+    constexpr int health_left = kScreenWidth - 308;
+    constexpr int health_top = 58;
+    constexpr int health_width = 260;
+    constexpr int health_height = 24;
+    constexpr int inset = 4.0f;
+    const int fill_width = (health_width - inset * 2) * (gauge_.get_value() / 100.0f);
 
-    // スコアと経過時間
-    DrawText(TextFormat("SCORE %07d", result.score), 48, 34, 30, g_theme->hud_score);
+    // スコアと精度
+    DrawText(TextFormat("SCORE %07d", result.score), score_left, score_top, 30, g_theme->hud_score);
+    DrawText(TextFormat("Accuracy %.2f %%", result.accuracy), score_left, score_top + score_height, 22, g_theme->hud_score);
+
+    // FPS
+    DrawText(fps_text.c_str(), kScreenWidth - MeasureText(fps_text.c_str(), 20) - 10, kScreenHeight - 20, 20, g_theme->hud_fps);
+
+    // 経過時間（画面上中央）
     DrawText(time_text.c_str(), kScreenWidth / 2 - MeasureText(time_text.c_str(), 30) / 2, 34, 30,
-             g_theme->hud_time);
-    DrawText(TextFormat("FPS %d", GetFPS()), 48, 70, 22, g_theme->hud_fps);
+         g_theme->hud_time);
 
     // ヘルスゲージ（70%以上で緑、未満で赤）
-    DrawText("HEALTH", kScreenWidth - 238, 10, 24, g_theme->hud_health_label);
-    DrawRectangle(static_cast<int>(health_left), static_cast<int>(health_top), static_cast<int>(health_width),
-                  static_cast<int>(health_height), g_theme->hud_health_bg);
+    DrawText("HEALTH", health_left + health_width - 100, health_top - 24, 24, g_theme->hud_health_label);
+    DrawRectangle(health_left, health_top, health_width,
+                  health_height, g_theme->hud_health_bg);
     DrawRectangleLinesEx({health_left, health_top, health_width, health_height}, 3.0f, g_theme->hud_health_border);
 
-    if (fill_width > 0.0f) {
+    if (fill_width > 0) {
         const Color fill_color = gauge_.get_value() >= 70.0f ? g_theme->health_high : g_theme->health_low;
-        DrawRectangle(static_cast<int>(health_left + inset), static_cast<int>(health_top + inset),
-                      static_cast<int>(fill_width), static_cast<int>(health_height - inset * 2.0f), fill_color);
+        DrawRectangle(health_left + inset, health_top + inset,
+                      fill_width, static_cast<int>(health_height - inset * 2.0f), fill_color);
     }
 
     // コンボ数（画面中央に大きく表示）
@@ -686,7 +695,7 @@ void play_scene::draw_pause_overlay() const {
     DrawRectangleLinesEx(kPausePanelRect, 2.0f, g_theme->border);
     DrawText("PAUSED", static_cast<int>(kPausePanelRect.x + 134.0f), static_cast<int>(kPausePanelRect.y + 24.0f), 42, g_theme->text);
 
-    const Rectangle buttons[] = {kPauseResumeRect, kPauseRestartRect, kPauseSongSelectRect};
+    constexpr Rectangle buttons[] = {kPauseResumeRect, kPauseRestartRect, kPauseSongSelectRect};
     const char* labels[] = {"RESUME", "RESTART", "SONG SELECT"};
     for (int i = 0; i < 3; ++i) {
         const bool hovered = CheckCollisionPointRec(mouse, buttons[i]);
