@@ -7,47 +7,22 @@
 
 namespace {
 
-float measure_glyph_advance(const Font& font, int glyph_index, float scale) {
-    const int advance = font.glyphs[glyph_index].advanceX;
-    const float fallback_width = font.recs[glyph_index].width;
-    return static_cast<float>(advance != 0 ? advance : fallback_width) * scale;
-}
-
 void draw_text_clipped_horizontally(const char* text, float x, int y, int font_size, Color color, float clip_left, float clip_right) {
-    const Font font = GetFontDefault();
-    const float scale = static_cast<float>(font_size) / static_cast<float>(font.baseSize);
-    const float letter_spacing = scale;
-    float cursor_x = x;
-    const char* ptr = text;
-
-    while (*ptr != '\0') {
-        int codepoint_bytes = 0;
-        const int codepoint = GetCodepointNext(ptr, &codepoint_bytes);
-        if (codepoint_bytes <= 0) {
-            break;
-        }
-
-        ptr += codepoint_bytes;
-
-        if (codepoint == '\n') {
-            break;
-        }
-
-        const int glyph_index = GetGlyphIndex(font, codepoint);
-        const float advance = measure_glyph_advance(font, glyph_index, scale);
-        const float step = advance + letter_spacing;
-        const float glyph_left = cursor_x;
-        const float glyph_right = cursor_x + step;
-
-        if (glyph_right > clip_left && glyph_left < clip_right) {
-            DrawTextCodepoint(font, codepoint, {cursor_x, static_cast<float>(y)}, static_cast<float>(font_size), color);
-        }
-
-        cursor_x += step;
-        if (cursor_x >= clip_right) {
-            break;
-        }
+    if (text == nullptr || *text == '\0' || clip_right <= clip_left) {
+        return;
     }
+
+    const Font font = GetFontDefault();
+    const float font_size_f = static_cast<float>(font_size);
+    const float spacing = font_size_f / static_cast<float>(font.baseSize);
+    const int scissor_x = static_cast<int>(std::floor(clip_left));
+    const int scissor_y = static_cast<int>(std::floor(static_cast<float>(y)));
+    const int scissor_width = std::max(1, static_cast<int>(std::ceil(clip_right) - std::floor(clip_left)));
+    const int scissor_height = std::max(1, static_cast<int>(std::ceil(font_size_f)));
+
+    BeginScissorMode(scissor_x, scissor_y, scissor_width, scissor_height);
+    DrawTextEx(font, text, {x, static_cast<float>(y)}, font_size_f, spacing, color);
+    EndScissorMode();
 }
 
 }  // namespace

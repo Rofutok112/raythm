@@ -12,5 +12,5 @@ void draw_scene_frame(const char* title, const char* subtitle, Color accent);
 
 // テキストが max_width に収まらない場合、自動的に左右にスクロールするマーキー表示を行う。
 // 収まる場合はそのまま描画する。time にはアニメーションの基準時刻（GetTime() 等）を渡す。
-// 描画状態を関数外へ持ち出さないよう、内部ではシザー状態を変更しない。
+// 表示領域は内部でスコープ付きのシザー矩形を使ってピクセル単位にクリップする。
 void draw_marquee_text(const char* text, int x, int y, int font_size, Color color, float max_width, double time);
