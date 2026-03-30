@@ -111,6 +111,21 @@ public:
         return installed_ || test_mode_;
     }
 
+    double current_time_ms() const {
+        std::scoped_lock lock(mutex_);
+
+#ifdef _WIN32
+        if (installed_ && qpc_frequency_ != 0) {
+            LARGE_INTEGER counter = {};
+            if (QueryPerformanceCounter(&counter) != 0) {
+                return static_cast<double>(counter.QuadPart - qpc_origin_) * 1000.0 / static_cast<double>(qpc_frequency_);
+            }
+        }
+#endif
+
+        return test_current_time_ms_;
+    }
+
     std::vector<native_key_event> drain_events() {
         std::scoped_lock lock(mutex_);
         std::vector<native_key_event> drained;
@@ -127,6 +142,13 @@ public:
         queued_events_.clear();
         test_mode_ = true;
         sequence_ = 0;
+        test_current_time_ms_ = 0.0;
+    }
+
+    void set_test_current_time_ms(double current_time_ms) {
+        std::scoped_lock lock(mutex_);
+        test_mode_ = true;
+        test_current_time_ms_ = current_time_ms;
     }
 
     void push_test_event(native_key_event event) {
@@ -260,6 +282,7 @@ private:
     std::uint64_t sequence_ = 0;
     bool test_mode_ = false;
     bool installed_ = false;
+    double test_current_time_ms_ = 0.0;
 };
 
 }  // namespace
@@ -281,12 +304,20 @@ bool windows_input_source::is_available() const {
     return windows_input_source_state::instance().is_available();
 }
 
+double windows_input_source::current_time_ms() const {
+    return windows_input_source_state::instance().current_time_ms();
+}
+
 std::vector<native_key_event> windows_input_source::drain_events() {
     return windows_input_source_state::instance().drain_events();
 }
 
 void windows_input_source::enable_test_mode() {
     windows_input_source_state::instance().enable_test_mode();
+}
+
+void windows_input_source::set_test_current_time_ms(double current_time_ms) {
+    windows_input_source_state::instance().set_test_current_time_ms(current_time_ms);
 }
 
 void windows_input_source::push_test_event(native_key_event event) {

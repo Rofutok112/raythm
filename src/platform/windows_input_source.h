@@ -19,10 +19,12 @@ public:
     bool initialize(void* native_window_handle);
     void shutdown();
     bool is_available() const;
+    double current_time_ms() const;
 
     std::vector<native_key_event> drain_events();
 
     void enable_test_mode();
+    void set_test_current_time_ms(double current_time_ms);
     void push_test_event(native_key_event event);
 
 private:

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "judge_system.h"
+#include "platform/windows_input_source.h"
 
 int main() {
     timing_engine engine;
@@ -88,6 +89,23 @@ int main() {
         std::cerr << "6-key judge path failed\n";
         return EXIT_FAILURE;
     }
+
+    windows_input_source::instance().enable_test_mode();
+    judge_system native_audio_time_judge;
+    native_audio_time_judge.init({note_data{note_type::tap, 480, 0, 480}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    windows_input_source::instance().set_test_current_time_ms(30.0);
+    windows_input_source::instance().push_test_event({KEY_D, input_event_type::press, 10.0, 1});
+    input.update(520.0);
+    native_audio_time_judge.update(520.0, input);
+    const std::optional<judge_event> native_audio_time_event = native_audio_time_judge.get_last_judge();
+    if (!native_audio_time_event.has_value() || native_audio_time_event->result != judge_result::perfect ||
+        native_audio_time_event->offset_ms != 0.0) {
+        std::cerr << "Native input should be mapped onto audio time\n";
+        return EXIT_FAILURE;
+    }
+    windows_input_source::instance().shutdown();
 
     std::cout << "judge_system smoke test passed\n";
     return EXIT_SUCCESS;

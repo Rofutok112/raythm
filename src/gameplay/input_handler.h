@@ -15,6 +15,12 @@ struct key_config {
     std::span<const KeyboardKey> get_lane_keys(int key_count) const;
 };
 
+enum class input_update_source {
+    simulated,
+    native_windows,
+    polling
+};
+
 class input_handler {
 public:
     explicit input_handler(key_config config = {});
@@ -24,6 +30,8 @@ public:
     void update_from_lane_states(std::span<const bool> lane_states, double timestamp_ms = 0.0);
 
     std::span<const input_event> events() const;
+    input_update_source last_update_source() const;
+    int last_update_event_count() const;
 
     bool is_lane_just_pressed(int lane) const;
     bool is_lane_held(int lane) const;
@@ -33,11 +41,13 @@ private:
     static constexpr int kMaxLanes = 6;
 
     int find_lane_for_key(int key) const;
-    void apply_native_events(std::span<const native_key_event> native_events);
+    void apply_native_events(std::span<const native_key_event> native_events, double audio_time_ms);
 
     key_config key_config_;
     int key_count_ = 4;
     std::array<bool, kMaxLanes> prev_state_ = {};
     std::array<bool, kMaxLanes> curr_state_ = {};
     std::vector<input_event> events_;
+    input_update_source last_update_source_ = input_update_source::polling;
+    int last_update_event_count_ = 0;
 };
