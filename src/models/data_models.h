@@ -63,6 +63,19 @@ enum class note_type {
     hold
 };
 
+// 入力イベントの種別。
+enum class input_event_type {
+    press,
+    release
+};
+
+// 1 件の入力イベント。
+struct input_event {
+    input_event_type type = input_event_type::press;
+    int lane = 0;
+    double timestamp_ms = 0.0;
+};
+
 // 1 ノート分の譜面データ。
 struct note_data {
     note_type type = note_type::tap;

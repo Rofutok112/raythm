@@ -381,7 +381,7 @@ void play_scene::update(float dt) {
 
     if (intro_playing_) {
         intro_timer_ = std::max(0.0f, intro_timer_ - dt);
-        input_handler_.update();
+        input_handler_.update(current_ms_);
         const Camera3D cam = make_play_camera();
         float ls = 0.0f, jz = 0.0f, le = 0.0f;
         if (get_lane_view_bounds(cam, ls, jz, le)) {
@@ -401,7 +401,7 @@ void play_scene::update(float dt) {
     current_ms_ = audio_manager::instance().is_bgm_loaded()
                       ? audio_manager::instance().get_bgm_position_seconds() * 1000.0
                       : current_ms_ + dt * 1000.0;
-    input_handler_.update();
+    input_handler_.update(current_ms_);
     judge_system_.update(current_ms_, input_handler_);
     const std::vector<judge_event>& judge_events = judge_system_.get_judge_events();
     last_judge_ = judge_system_.get_last_judge();
