@@ -449,9 +449,9 @@ void song_select_scene::draw() {
             DrawRectangleRec(row_rect, t.row_list_hover);
         }
         draw_marquee_text(songs_[static_cast<size_t>(i)].song.meta.title.c_str(), text_x, iy, 24,
-                          is_selected ? t.text : t.text_secondary, list_text_max_w, now, &list_clip);
+                          is_selected ? t.text : t.text_secondary, list_text_max_w, now);
         draw_marquee_text(songs_[static_cast<size_t>(i)].song.meta.artist.c_str(), text_x, iy + 22, 16,
-                          t.text_muted, list_text_max_w, now, &list_clip);
+                          t.text_muted, list_text_max_w, now);
 
         if (is_selected) {
             const float child_x = kSongListRect.x + 46.0f;
