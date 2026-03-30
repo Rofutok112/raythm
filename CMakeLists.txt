@@ -51,6 +51,8 @@ add_executable(raythm src/main.cpp
         src/scenes/title_scene.h
         src/scenes/song_select_scene.cpp
         src/scenes/song_select_scene.h
+        src/scenes/editor_scene.cpp
+        src/scenes/editor_scene.h
         src/scenes/play_scene.cpp
         src/scenes/play_scene.h
         src/scenes/result_scene.cpp
