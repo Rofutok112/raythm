@@ -17,6 +17,8 @@ add_executable(raythm src/main.cpp
         src/audio/audio.h
         src/audio/audio_manager.cpp
         src/audio/audio_manager.h
+        src/platform/windows_input_source.cpp
+        src/platform/windows_input_source.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
         src/models/data_models.h
@@ -74,6 +76,8 @@ add_executable(song_loader_smoke
         src/tests/song_loader_smoke.cpp)
 
 add_executable(input_handler_smoke
+        src/platform/windows_input_source.cpp
+        src/platform/windows_input_source.h
         src/gameplay/input_handler.cpp
         src/gameplay/input_handler.h
         src/tests/input_handler_smoke.cpp)
@@ -86,6 +90,8 @@ add_executable(timing_engine_smoke
 
 add_executable(judge_system_smoke
         src/models/data_models.h
+        src/platform/windows_input_source.cpp
+        src/platform/windows_input_source.h
         src/gameplay/input_handler.cpp
         src/gameplay/input_handler.h
         src/gameplay/judge_system.cpp
