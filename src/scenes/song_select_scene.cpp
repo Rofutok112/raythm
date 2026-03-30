@@ -64,6 +64,19 @@ std::string key_mode_label(int key_count) {
     return key_count == 6 ? "6K" : "4K";
 }
 
+Rectangle intersect_rectangles(Rectangle a, Rectangle b) {
+    const float left = std::max(a.x, b.x);
+    const float top = std::max(a.y, b.y);
+    const float right = std::min(a.x + a.width, b.x + b.width);
+    const float bottom = std::min(a.y + a.height, b.y + b.height);
+    return {
+        left,
+        top,
+        std::max(0.0f, right - left),
+        std::max(0.0f, bottom - top)
+    };
+}
+
 }
 
 song_select_scene::song_select_scene(scene_manager& manager) : scene(manager) {
@@ -298,16 +311,22 @@ void song_select_scene::draw_song_row(const song_entry& song, float item_y, bool
     const Rectangle row_rect = {kSongListRect.x + 14.0f, item_y - 8.0f, kSongListRect.width - 28.0f, 44.0f};
     const int text_x = static_cast<int>(kSongListRect.x + 30.0f);
     const float list_text_max_w = kSongListRect.width - 70.0f;
+    const Rectangle title_clip_rect = intersect_rectangles({static_cast<float>(text_x), static_cast<float>(iy), list_text_max_w, 24.0f},
+                                                           kSongListViewRect);
+    const Rectangle artist_clip_rect = intersect_rectangles({static_cast<float>(text_x), static_cast<float>(iy + 22), list_text_max_w, 16.0f},
+                                                            kSongListViewRect);
 
     if (ui::is_hovered(row_rect) || is_selected) {
         const ui::row_state row_state = ui::draw_selectable_row(row_rect, is_selected, 0.0f);
         (void)row_state;
     }
 
-    draw_marquee_text(song.song.meta.title.c_str(), text_x, iy, 24,
-                      is_selected ? t.text : t.text_secondary, list_text_max_w, now);
-    draw_marquee_text(song.song.meta.artist.c_str(), text_x, iy + 22, 16,
-                      t.text_muted, list_text_max_w, now);
+    draw_marquee_text_clipped(song.song.meta.title.c_str(),
+                              title_clip_rect,
+                              24, is_selected ? t.text : t.text_secondary, now);
+    draw_marquee_text_clipped(song.song.meta.artist.c_str(),
+                              artist_clip_rect,
+                              16, t.text_muted, now);
 }
 
 void song_select_scene::draw_chart_rows(const std::vector<const chart_option*>& filtered, float item_y) const {

@@ -10,6 +10,9 @@ constexpr int kScreenHeight = 720;
 // メニュー系シーン共通のフレーム（グラデーション背景・角丸枠・タイトル文字列）を描画する。
 void draw_scene_frame(const char* title, const char* subtitle, Color accent);
 
+// clip_rect 内でピクセル単位にクリップしながらマーキー表示する。
+void draw_marquee_text_clipped(const char* text, Rectangle clip_rect, int font_size, Color color, double time);
+
 // テキストが max_width に収まらない場合、自動的に左右にスクロールするマーキー表示を行う。
 // 収まる場合はそのまま描画する。time にはアニメーションの基準時刻（GetTime() 等）を渡す。
 // 表示領域は内部でスコープ付きのシザー矩形を使ってピクセル単位にクリップする。
