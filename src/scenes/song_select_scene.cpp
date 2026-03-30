@@ -416,14 +416,20 @@ void song_select_scene::update(float dt) {
         difficulty_index_ = 0;
     }
 
+    const float content_height = compute_content_height();
+    const ui::scrollbar_interaction scrollbar = ui::update_vertical_scrollbar(
+        kSongListScrollbarTrackRect, content_height, scroll_y_target_, scrollbar_dragging_, scrollbar_drag_offset_);
+    scroll_y_target_ = scrollbar.scroll_offset;
+    if (scrollbar.changed || scrollbar.dragging) {
+        scroll_y_ = scroll_y_target_;
+    }
+
     // マウスホイールでスムーズスクロール
-    if (CheckCollisionPointRec(mouse, kSongListViewRect) && wheel != 0.0f) {
+    if (!scrollbar.dragging && CheckCollisionPointRec(mouse, kSongListViewRect) && wheel != 0.0f) {
         scroll_y_target_ -= wheel * kScrollWheelStep;
     }
 
     // スクロール目標値をコンテンツ範囲内にクランプ
-    const float list_view_height = kSongListViewRect.height;
-    const float content_height = compute_content_height();
     const float max_scroll = ui::vertical_scroll_metrics(kSongListScrollbarTrackRect, content_height, scroll_y_target_).max_scroll;
     scroll_y_target_ = std::clamp(scroll_y_target_, 0.0f, max_scroll);
 

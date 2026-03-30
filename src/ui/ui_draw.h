@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "raylib.h"
+#include "scene_common.h"
 #include "theme.h"
 #include "ui_hit.h"
 #include "ui_layout.h"
@@ -38,6 +39,12 @@ struct slider_layout {
     Rectangle label_rect;
     Rectangle track_rect;
     Rectangle value_rect;
+};
+
+struct scrollbar_interaction {
+    float scroll_offset;
+    bool changed;
+    bool dragging;
 };
 
 // 標準ボタンを描画する。hover で色変化、press で 1.5px 押し込み、テキスト中央揃え。
@@ -119,6 +126,17 @@ inline void draw_label_value(Rectangle rect, const char* label, const char* valu
                                   rect.width - label_width, rect.height};
     draw_text_in_rect(label, font_size, label_rect, label_color, text_align::left);
     draw_text_in_rect(value, font_size, value_rect, value_color, text_align::left);
+}
+
+inline void draw_label_value_marquee(Rectangle rect, const char* label, const char* value,
+                                     int font_size, Color label_color, Color value_color,
+                                     double time, float label_width = 200.0f) {
+    const Rectangle label_rect = {rect.x, rect.y, label_width, rect.height};
+    const Rectangle value_rect = {rect.x + label_width, rect.y,
+                                  rect.width - label_width, rect.height};
+    draw_text_in_rect(label, font_size, label_rect, label_color, text_align::left);
+    draw_marquee_text(value, static_cast<int>(value_rect.x), static_cast<int>(value_rect.y + 4.0f), font_size,
+                      value_color, value_rect.width, time);
 }
 
 inline selector_state draw_value_selector(Rectangle rect, const char* label, const char* value,
@@ -268,6 +286,46 @@ inline void draw_scrollbar(Rectangle track_rect, float content_height, float scr
 
     DrawRectangleRec(track_rect, track_color);
     DrawRectangleRec(metrics.thumb_rect, thumb_color);
+}
+
+inline scrollbar_interaction update_vertical_scrollbar(Rectangle track_rect, float content_height, float scroll_offset,
+                                                       bool& dragging, float& drag_offset,
+                                                       float min_thumb_height = 36.0f) {
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        dragging = false;
+    }
+
+    const scroll_metrics metrics = vertical_scroll_metrics(track_rect, content_height, scroll_offset, min_thumb_height);
+    if (metrics.max_scroll <= 0.0f) {
+        return {0.0f, false, false};
+    }
+
+    const Vector2 mouse = virtual_screen::get_virtual_mouse();
+    float next_offset = std::clamp(scroll_offset, 0.0f, metrics.max_scroll);
+    bool changed = false;
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse, track_rect)) {
+        if (CheckCollisionPointRec(mouse, metrics.thumb_rect)) {
+            dragging = true;
+            drag_offset = mouse.y - metrics.thumb_rect.y;
+        } else {
+            const float thumb_half = metrics.thumb_rect.height * 0.5f;
+            const float available = std::max(1.0f, track_rect.height - metrics.thumb_rect.height);
+            const float thumb_top = std::clamp(mouse.y - thumb_half - track_rect.y, 0.0f, available);
+            next_offset = metrics.max_scroll * (thumb_top / available);
+            changed = true;
+        }
+    }
+
+    if (dragging && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        const float available = std::max(1.0f, track_rect.height - metrics.thumb_rect.height);
+        const float thumb_top = std::clamp(mouse.y - drag_offset - track_rect.y, 0.0f, available);
+        next_offset = metrics.max_scroll * (thumb_top / available);
+        changed = true;
+    }
+
+    next_offset = std::clamp(next_offset, 0.0f, metrics.max_scroll);
+    return {next_offset, changed, dragging};
 }
 
 // ── オーバーレイ ────────────────────────────────────────

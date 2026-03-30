@@ -39,6 +39,8 @@ constexpr float kMinTicksPerPixel = 0.9f;
 constexpr float kMaxTicksPerPixel = 28.0f;
 constexpr float kMinVisibleTicks = 1920.0f;
 constexpr float kStartPaddingTicks = 240.0f;
+constexpr float kScrollLerpSpeed = 12.0f;
+constexpr float kScrollWheelViewportRatio = 0.36f;
 
 std::vector<timing_event> sorted_meter_events(const chart_data& data) {
     std::vector<timing_event> meter_events;
@@ -53,16 +55,6 @@ std::vector<timing_event> sorted_meter_events(const chart_data& data) {
     });
 
     return meter_events;
-}
-
-void draw_label_value_marquee(Rectangle rect, const char* label, const char* value,
-                              int font_size, Color label_color, Color value_color,
-                              float label_width, double time) {
-    const Rectangle label_rect = {rect.x, rect.y, label_width, rect.height};
-    const Rectangle value_rect = {rect.x + label_width, rect.y, rect.width - label_width, rect.height};
-    ui::draw_text_in_rect(label, font_size, label_rect, label_color, ui::text_align::left);
-    draw_marquee_text(value, static_cast<int>(value_rect.x), static_cast<int>(value_rect.y + 4.0f), font_size,
-                      value_color, value_rect.width, time);
 }
 
 }
@@ -93,6 +85,7 @@ void editor_scene::on_enter() {
     }
 
     bottom_tick_ = -kStartPaddingTicks;
+    bottom_tick_target_ = bottom_tick_;
     ticks_per_pixel_ = 2.0f;
     rebuild_meter_segments();
 
@@ -108,8 +101,6 @@ void editor_scene::on_enter() {
 }
 
 void editor_scene::update(float dt) {
-    (void) dt;
-
     if (IsKeyPressed(KEY_ESCAPE)) {
         manager_.change_scene(std::make_unique<song_select_scene>(manager_));
         return;
@@ -120,7 +111,7 @@ void editor_scene::update(float dt) {
         return;
     }
 
-    apply_scroll_and_zoom();
+    apply_scroll_and_zoom(dt);
 }
 
 void editor_scene::draw() {
@@ -350,38 +341,28 @@ std::string editor_scene::bar_beat_label(int tick) const {
     return std::to_string(measure) + ":" + std::to_string(beat_in_measure);
 }
 
-void editor_scene::apply_scroll_and_zoom() {
+void editor_scene::apply_scroll_and_zoom(float dt) {
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const float wheel = GetMouseWheelMove();
     const Rectangle content = timeline_content_rect();
     const Rectangle track = timeline_scrollbar_track_rect();
-
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        scrollbar_dragging_ = false;
-    }
-
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse, track)) {
-        const ui::scroll_metrics metrics = ui::vertical_scroll_metrics(track, content_height_pixels(), scroll_offset_pixels(), 40.0f);
-        if (CheckCollisionPointRec(mouse, metrics.thumb_rect)) {
-            scrollbar_dragging_ = true;
-            scrollbar_drag_offset_ = mouse.y - metrics.thumb_rect.y;
-        } else {
-            const float thumb_half = metrics.thumb_rect.height * 0.5f;
-            const float available = std::max(1.0f, track.height - metrics.thumb_rect.height);
-            const float thumb_top = std::clamp(mouse.y - thumb_half - track.y, 0.0f, available);
-            bottom_tick_ = -kStartPaddingTicks + (max_bottom_tick() + kStartPaddingTicks) * (thumb_top / available);
-        }
-    }
-
-    if (scrollbar_dragging_ && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        const ui::scroll_metrics metrics = ui::vertical_scroll_metrics(track, content_height_pixels(), scroll_offset_pixels(), 40.0f);
-        const float available = std::max(1.0f, track.height - metrics.thumb_rect.height);
-        const float thumb_top = std::clamp(mouse.y - scrollbar_drag_offset_ - track.y, 0.0f, available);
-        bottom_tick_ = -kStartPaddingTicks + (max_bottom_tick() + kStartPaddingTicks) * (thumb_top / available);
+    const ui::scrollbar_interaction scrollbar = ui::update_vertical_scrollbar(
+        track, content_height_pixels(), scroll_offset_pixels(), scrollbar_dragging_, scrollbar_drag_offset_, 40.0f);
+    bottom_tick_target_ = -kStartPaddingTicks + scrollbar.scroll_offset * ticks_per_pixel_;
+    if (scrollbar.changed || scrollbar.dragging) {
+        bottom_tick_ = bottom_tick_target_;
     }
 
     if (wheel == 0.0f || !CheckCollisionPointRec(mouse, content)) {
-        bottom_tick_ = std::clamp(bottom_tick_, -kStartPaddingTicks, max_bottom_tick());
+        bottom_tick_target_ = std::clamp(bottom_tick_target_, -kStartPaddingTicks, max_bottom_tick());
+        if (bottom_tick_target_ <= -kStartPaddingTicks || bottom_tick_target_ >= max_bottom_tick()) {
+            bottom_tick_ = bottom_tick_target_;
+            return;
+        }
+        bottom_tick_ += (bottom_tick_target_ - bottom_tick_) * std::min(1.0f, kScrollLerpSpeed * dt);
+        if (std::fabs(bottom_tick_ - bottom_tick_target_) < 0.5f) {
+            bottom_tick_ = bottom_tick_target_;
+        }
         return;
     }
 
@@ -389,12 +370,22 @@ void editor_scene::apply_scroll_and_zoom() {
         const int anchor_tick = timeline_y_to_tick(mouse.y);
         const float zoom_scale = wheel > 0.0f ? 0.85f : 1.15f;
         ticks_per_pixel_ = std::clamp(ticks_per_pixel_ * zoom_scale, kMinTicksPerPixel, kMaxTicksPerPixel);
-        bottom_tick_ = static_cast<float>(anchor_tick) - (mouse.y - content.y) * ticks_per_pixel_;
-        bottom_tick_ = std::clamp(bottom_tick_, -kStartPaddingTicks, max_bottom_tick());
+        bottom_tick_target_ = static_cast<float>(anchor_tick) - (mouse.y - content.y) * ticks_per_pixel_;
+        bottom_tick_target_ = std::clamp(bottom_tick_target_, -kStartPaddingTicks, max_bottom_tick());
+        bottom_tick_ = bottom_tick_target_;
         return;
     }
 
-    bottom_tick_ = std::clamp(bottom_tick_ - wheel * visible_tick_span() * 0.08f, -kStartPaddingTicks, max_bottom_tick());
+    bottom_tick_target_ = std::clamp(bottom_tick_target_ - wheel * visible_tick_span() * kScrollWheelViewportRatio,
+                                     -kStartPaddingTicks, max_bottom_tick());
+    if (bottom_tick_target_ <= -kStartPaddingTicks || bottom_tick_target_ >= max_bottom_tick()) {
+        bottom_tick_ = bottom_tick_target_;
+        return;
+    }
+    bottom_tick_ += (bottom_tick_target_ - bottom_tick_) * std::min(1.0f, kScrollLerpSpeed * dt);
+    if (std::fabs(bottom_tick_ - bottom_tick_target_) < 0.5f) {
+        bottom_tick_ = bottom_tick_target_;
+    }
 }
 
 void editor_scene::draw_left_panel() const {
@@ -411,10 +402,10 @@ void editor_scene::draw_left_panel() const {
     ui::draw_section(meta_box);
     ui::draw_label_value({meta_box.x + 12.0f, meta_box.y + 12.0f, meta_box.width - 24.0f, 28.0f},
                          "Mode", TextFormat("%dK", state_.data().meta.key_count), 18, t.text_muted, t.text, 86.0f);
-    draw_label_value_marquee({meta_box.x + 12.0f, meta_box.y + 42.0f, meta_box.width - 24.0f, 28.0f},
-                             "Level", state_.data().meta.difficulty.c_str(), 18, t.text_muted, t.text, 86.0f, now);
-    draw_label_value_marquee({meta_box.x + 12.0f, meta_box.y + 72.0f, meta_box.width - 24.0f, 28.0f},
-                             "Author", state_.data().meta.chart_author.c_str(), 18, t.text_muted, t.text, 86.0f, now);
+    ui::draw_label_value_marquee({meta_box.x + 12.0f, meta_box.y + 42.0f, meta_box.width - 24.0f, 28.0f},
+                                 "Level", state_.data().meta.difficulty.c_str(), 18, t.text_muted, t.text, now, 86.0f);
+    ui::draw_label_value_marquee({meta_box.x + 12.0f, meta_box.y + 72.0f, meta_box.width - 24.0f, 28.0f},
+                                 "Author", state_.data().meta.chart_author.c_str(), 18, t.text_muted, t.text, now, 86.0f);
     ui::draw_label_value({meta_box.x + 12.0f, meta_box.y + 100.0f, meta_box.width - 24.0f, 28.0f},
                          "Status", status_label, 18, t.text_muted,
                          state_.is_dirty() ? t.error : t.success, 86.0f);
@@ -460,9 +451,9 @@ void editor_scene::draw_right_panel() const {
             ? "BPM " + std::to_string(static_cast<int>(std::round(event.bpm)))
             : "METER " + std::to_string(event.numerator) + "/" + std::to_string(event.denominator);
         const std::string position = bar_beat_label(event.tick);
-        draw_label_value_marquee({timing_box.x + 12.0f, row_y, timing_box.width - 24.0f, 22.0f},
-                                 label.c_str(), position.c_str(), 16,
-                                 t.text_secondary, t.text_muted, 118.0f, now);
+        ui::draw_label_value_marquee({timing_box.x + 12.0f, row_y, timing_box.width - 24.0f, 22.0f},
+                                     label.c_str(), position.c_str(), 16,
+                                     t.text_secondary, t.text_muted, now, 118.0f);
         row_y += 24.0f;
     }
 
