@@ -38,7 +38,7 @@ void draw_scene_frame(const char* title, const char* subtitle, Color accent) {
     DrawText(subtitle, 130, 190, 24, g_theme->text_secondary);
 }
 
-void draw_marquee_text_clipped(const char* text, Rectangle clip_rect, int font_size, Color color, double time) {
+void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Color color, double time) {
     if (text == nullptr || *text == '\0' || clip_rect.width <= 0.0f || clip_rect.height <= 0.0f) {
         return;
     }
@@ -79,6 +79,6 @@ void draw_marquee_text_clipped(const char* text, Rectangle clip_rect, int font_s
 }
 
 void draw_marquee_text(const char* text, int x, int y, int font_size, Color color, float max_width, double time) {
-    draw_marquee_text_clipped(text, {static_cast<float>(x), static_cast<float>(y), max_width, static_cast<float>(font_size)},
-                              font_size, color, time);
+    draw_marquee_text(text, {static_cast<float>(x), static_cast<float>(y), max_width, static_cast<float>(font_size)},
+                      font_size, color, time);
 }

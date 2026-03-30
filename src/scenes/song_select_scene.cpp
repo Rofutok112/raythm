@@ -321,12 +321,10 @@ void song_select_scene::draw_song_row(const song_entry& song, float item_y, bool
         (void)row_state;
     }
 
-    draw_marquee_text_clipped(song.song.meta.title.c_str(),
-                              title_clip_rect,
-                              24, is_selected ? t.text : t.text_secondary, now);
-    draw_marquee_text_clipped(song.song.meta.artist.c_str(),
-                              artist_clip_rect,
-                              16, t.text_muted, now);
+    draw_marquee_text(song.song.meta.title.c_str(), title_clip_rect,
+                      24, is_selected ? t.text : t.text_secondary, now);
+    draw_marquee_text(song.song.meta.artist.c_str(), artist_clip_rect,
+                      16, t.text_muted, now);
 }
 
 void song_select_scene::draw_chart_rows(const std::vector<const chart_option*>& filtered, float item_y) const {
