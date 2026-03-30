@@ -50,7 +50,7 @@ private:
     Rectangle lane_rect(int lane) const;
     double beat_number_at_tick(int tick) const;
     std::string bar_beat_label(int tick) const;
-    void apply_scroll_and_zoom();
+    void apply_scroll_and_zoom(float dt);
     void draw_left_panel() const;
     void draw_right_panel() const;
     void draw_timeline() const;
@@ -66,6 +66,7 @@ private:
     std::vector<std::string> load_errors_;
     int audio_length_tick_ = 0;
     float bottom_tick_ = 0.0f;
+    float bottom_tick_target_ = 0.0f;
     float ticks_per_pixel_ = 2.0f;
     bool scrollbar_dragging_ = false;
     float scrollbar_drag_offset_ = 0.0f;

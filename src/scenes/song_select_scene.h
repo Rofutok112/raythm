@@ -58,6 +58,8 @@ private:
     std::string preview_song_id_;
     float preview_volume_ = 0.0f;
     int preview_fade_direction_ = 0;
+    bool scrollbar_dragging_ = false;
+    float scrollbar_drag_offset_ = 0.0f;
     Texture2D jacket_texture_{};
     bool jacket_loaded_ = false;
 };
