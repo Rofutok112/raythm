@@ -105,6 +105,23 @@ int main() {
         std::cerr << "Native input should be mapped onto audio time\n";
         return EXIT_FAILURE;
     }
+
+    judge_system native_simultaneous_judge;
+    native_simultaneous_judge.init({note_data{note_type::tap, 960, 1, 960}, note_data{note_type::tap, 960, 2, 960}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    windows_input_source::instance().set_test_current_time_ms(210.0);
+    windows_input_source::instance().push_test_event({KEY_F, input_event_type::press, 200.0, 2});
+    windows_input_source::instance().push_test_event({KEY_J, input_event_type::press, 200.0, 3});
+    input.update(1010.0);
+    native_simultaneous_judge.update(1010.0, input);
+    const std::vector<judge_event>& native_simultaneous_events = native_simultaneous_judge.get_judge_events();
+    if (native_simultaneous_events.size() != 2 || native_simultaneous_events[0].lane != 1 ||
+        native_simultaneous_events[1].lane != 2 || native_simultaneous_events[0].offset_ms != 0.0 ||
+        native_simultaneous_events[1].offset_ms != 0.0) {
+        std::cerr << "Native simultaneous judge failed\n";
+        return EXIT_FAILURE;
+    }
     windows_input_source::instance().shutdown();
 
     std::cout << "judge_system smoke test passed\n";
