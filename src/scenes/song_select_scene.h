@@ -35,6 +35,12 @@ private:
     void queue_preview_for_selected_song();
     void start_preview(const song_entry& song);
     void update_preview(float dt);
+    const chart_option* selected_chart_for(const std::vector<const chart_option*>& filtered) const;
+    void draw_song_details(const song_entry& song, const chart_option* selected_chart,
+                           float content_offset_x, unsigned char content_alpha) const;
+    void draw_song_list(const std::vector<const chart_option*>& filtered) const;
+    void draw_song_row(const song_entry& song, float item_y, bool is_selected, double now) const;
+    void draw_chart_rows(const std::vector<const chart_option*>& filtered, float item_y) const;
 
     // スクロールに必要な総コンテンツ高さを計算する。
     float compute_content_height() const;
@@ -45,7 +51,6 @@ private:
     int difficulty_index_ = 0;
     float scroll_y_ = 0.0f;
     float scroll_y_target_ = 0.0f;
-    float settings_hover_t_ = 0.0f;
     float song_change_anim_t_ = 0.0f;
     float scene_fade_in_t_ = 1.0f;
     std::optional<song_data> pending_preview_song_;

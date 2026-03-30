@@ -9,16 +9,37 @@
 #include "scene_manager.h"
 #include "song_select_scene.h"
 #include "theme.h"
+#include "ui_draw.h"
 #include "virtual_screen.h"
 
 namespace {
 
-constexpr Rectangle kMainPanel = {24.0f, 24.0f, 1232.0f, 672.0f};
-constexpr Rectangle kSongInfoRect = {48.0f, 48.0f, 580.0f, 108.0f};
-constexpr Rectangle kRankRect = {660.0f, 48.0f, 200.0f, 168.0f};
-constexpr Rectangle kScoreRect = {48.0f, 180.0f, 580.0f, 108.0f};
-constexpr Rectangle kJudgeRect = {48.0f, 312.0f, 580.0f, 260.0f};
-constexpr Rectangle kStatsRect = {660.0f, 240.0f, 572.0f, 332.0f};
+constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
+constexpr Rectangle kMainPanel = ui::inset(kScreenRect, 24.0f);
+constexpr Rectangle kContentRect = ui::inset(kMainPanel, 24.0f);
+constexpr Rectangle kLeftColRect = {kContentRect.x, kContentRect.y, 580.0f, kContentRect.height};
+constexpr Rectangle kRightColRect = {
+    kContentRect.x + 580.0f + 32.0f,
+    kContentRect.y,
+    kContentRect.width - 580.0f - 32.0f,
+    kContentRect.height
+};
+constexpr Rectangle kSongInfoRect = {kLeftColRect.x, kLeftColRect.y, kLeftColRect.width, 108.0f};
+constexpr Rectangle kScoreRect = {kLeftColRect.x, kLeftColRect.y + 132.0f, kLeftColRect.width, 108.0f};
+constexpr Rectangle kJudgeRect = {kLeftColRect.x, kLeftColRect.y + 264.0f, kLeftColRect.width, 260.0f};
+constexpr Rectangle kRankRect = {kRightColRect.x, kRightColRect.y, 200.0f, 168.0f};
+constexpr Rectangle kStatsRect = {kRightColRect.x, kRightColRect.y + 192.0f, kRightColRect.width, 332.0f};
+constexpr Rectangle kScoreContentRect = ui::inset(kScoreRect, 16.0f);
+constexpr Rectangle kRankTitleRect = {kRankRect.x, kRankRect.y, kRankRect.width, 120.0f};
+constexpr Rectangle kRankBadgeRect = {kRankRect.x, kRankRect.y + kRankRect.height - 40.0f, kRankRect.width, 24.0f};
+constexpr Rectangle kJudgeRowsRect = ui::inset(kJudgeRect, 16.0f);
+constexpr Rectangle kStatsRowsRect = ui::inset(kStatsRect, ui::edge_insets{24.0f, 24.0f, 68.0f, 24.0f});
+constexpr Rectangle kStatsHintRect = {
+    kStatsRect.x + 24.0f,
+    kStatsRect.y + kStatsRect.height - 46.0f,
+    kStatsRect.width - 48.0f,
+    24.0f
+};
 
 const char* rank_label(rank r) {
     switch (r) {
@@ -74,13 +95,10 @@ void result_scene::draw() {
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
 
-    // メインパネル
-    DrawRectangleRec(kMainPanel, t.panel);
-    DrawRectangleLinesEx(kMainPanel, 2.0f, t.border);
+    ui::draw_panel(kMainPanel);
 
     // 楽曲情報
-    DrawRectangleRec(kSongInfoRect, t.section);
-    DrawRectangleLinesEx(kSongInfoRect, 1.5f, t.border_light);
+    ui::draw_section(kSongInfoRect);
     const float song_info_max_w = kSongInfoRect.width - 32.0f;
     const double now = GetTime();
     {
@@ -96,25 +114,16 @@ void result_scene::draw() {
     }
 
     // ランク表示
-    DrawRectangleRec(kRankRect, t.section);
-    DrawRectangleLinesEx(kRankRect, 1.5f, t.border_light);
+    ui::draw_section(kRankRect);
     const char* rlabel = rank_label(result_.clear_rank);
     const Color rcolor = rank_color(result_.clear_rank);
-    const int rank_text_w = MeasureText(rlabel, 96);
-    DrawText(rlabel,
-             static_cast<int>(kRankRect.x + kRankRect.width * 0.5f) - rank_text_w / 2,
-             static_cast<int>(kRankRect.y + kRankRect.height * 0.5f) - 48,
-             96, rcolor);
+    ui::draw_text_in_rect(rlabel, 96, kRankTitleRect, rcolor);
 
     // 称号（Full Combo / All Perfect）
     if (result_.is_all_perfect) {
-        DrawText("ALL PERFECT",
-                 static_cast<int>(kRankRect.x + kRankRect.width * 0.5f) - MeasureText("ALL PERFECT", 20) / 2,
-                 static_cast<int>(kRankRect.y + kRankRect.height - 28), 20, t.all_perfect);
+        ui::draw_text_in_rect("ALL PERFECT", 20, kRankBadgeRect, t.all_perfect);
     } else if (result_.is_full_combo) {
-        DrawText("FULL COMBO",
-                 static_cast<int>(kRankRect.x + kRankRect.width * 0.5f) - MeasureText("FULL COMBO", 20) / 2,
-                 static_cast<int>(kRankRect.y + kRankRect.height - 28), 20, t.full_combo);
+        ui::draw_text_in_rect("FULL COMBO", 20, kRankBadgeRect, t.full_combo);
     }
 
     // FAILED 表示
@@ -125,21 +134,23 @@ void result_scene::draw() {
     }
 
     // スコア・精度（フレーム中央に配置）
-    DrawRectangleRec(kScoreRect, t.section);
-    DrawRectangleLinesEx(kScoreRect, 1.5f, t.border_light);
+    ui::draw_section(kScoreRect);
     {
-        const int content_h = 36 + 8 + 36;  // 2行 + 間隔
-        const int start_y = static_cast<int>(kScoreRect.y + (kScoreRect.height - content_h) * 0.5f);
-        const int lx = static_cast<int>(kScoreRect.x + 16);
-        DrawText("SCORE", lx, start_y + 6, 20, t.text_dim);
-        DrawText(TextFormat("%07d", result_.score), lx + 100, start_y, 36, t.text);
-        DrawText("ACCURACY", lx, start_y + 8 + 36 + 6, 20, t.text_dim);
-        DrawText(TextFormat("%.2f%%", result_.accuracy), lx + 140, start_y + 8 + 36, 36, t.text_secondary);
+        Rectangle score_rows[2];
+        ui::vstack(kScoreContentRect, 42.0f, 8.0f, score_rows);
+
+        const ui::rect_pair score_columns = ui::split_columns(score_rows[0], 100.0f);
+        ui::draw_text_in_rect("SCORE", 20, score_columns.first, t.text_dim, ui::text_align::left);
+        ui::draw_text_in_rect(TextFormat("%07d", result_.score), 36, score_columns.second, t.text, ui::text_align::left);
+
+        const ui::rect_pair accuracy_columns = ui::split_columns(score_rows[1], 140.0f);
+        ui::draw_text_in_rect("ACCURACY", 20, accuracy_columns.first, t.text_dim, ui::text_align::left);
+        ui::draw_text_in_rect(TextFormat("%.2f%%", result_.accuracy), 36, accuracy_columns.second,
+                              t.text_secondary, ui::text_align::left);
     }
 
     // 判定内訳（フレーム中央に配置）
-    DrawRectangleRec(kJudgeRect, t.section);
-    DrawRectangleLinesEx(kJudgeRect, 1.5f, t.border_light);
+    ui::draw_section(kJudgeRect);
 
     struct judge_row {
         const char* label;
@@ -155,54 +166,38 @@ void result_scene::draw() {
     };
 
     {
-        constexpr int judge_row_h = 42;
-        constexpr int judge_count = 5;
-        const int judge_content_h = judge_count * judge_row_h - (judge_row_h - 30);
-        int jy = static_cast<int>(kJudgeRect.y + (kJudgeRect.height - judge_content_h) * 0.5f);
-        const int jx = static_cast<int>(kJudgeRect.x + 16);
-        for (const auto& row : rows) {
-            DrawRectangle(jx, jy - 2, 160, 30, row.color);
-            DrawText(row.label, jx + 8, jy + 2, 22, t.text);
-            DrawText(TextFormat("%d", row.count), jx + 176, jy + 2, 22, t.text);
-            jy += judge_row_h;
+        Rectangle judge_rects[5];
+        ui::vstack(kJudgeRowsRect, 42.0f, 0.0f, judge_rects);
+        for (int i = 0; i < 5; ++i) {
+            const auto& row = rows[i];
+            const ui::row_state row_state = ui::draw_row(judge_rects[i], t.section, t.section, t.border_light, 0.0f);
+            const Rectangle content = ui::inset(row_state.visual, ui::edge_insets::symmetric(0.0f, 0.0f));
+            const Rectangle badge_rect = {content.x, content.y + 4.0f, 160.0f, 30.0f};
+            const Rectangle count_rect = {
+                content.x + 176.0f,
+                content.y,
+                content.width - 176.0f,
+                content.height
+            };
+            DrawRectangleRec(badge_rect, row.color);
+            ui::draw_text_in_rect(row.label, 22, badge_rect, t.text);
+            ui::draw_text_in_rect(TextFormat("%d", row.count), 22, count_rect, t.text, ui::text_align::left);
         }
     }
 
     // 統計情報（フレーム中央に配置）
-    DrawRectangleRec(kStatsRect, t.section);
-    DrawRectangleLinesEx(kStatsRect, 1.5f, t.border_light);
+    ui::draw_section(kStatsRect);
 
     {
-        constexpr int stat_row_h = 40;
-        constexpr int stat_count = 5;
-        const int stat_content_h = stat_count * stat_row_h;
-        int sy = static_cast<int>(kStatsRect.y + (kStatsRect.height - stat_content_h - 40) * 0.5f);
-        const int sx = static_cast<int>(kStatsRect.x + 24);
-        const int sv = static_cast<int>(kStatsRect.x + 200);
-
-        DrawText("Max Combo", sx, sy, 24, t.text_dim);
-        DrawText(TextFormat("%d", result_.max_combo), sv, sy, 24, t.text);
-        sy += stat_row_h;
-
-        DrawText("Avg Offset", sx, sy, 24, t.text_dim);
-        DrawText(TextFormat("%.1f ms", result_.avg_offset), sv, sy, 24, t.text);
-        sy += stat_row_h;
-
-        DrawText("Fast", sx, sy, 24, t.text_dim);
-        DrawText(TextFormat("%d", result_.fast_count), sv, sy, 24, t.fast);
-        sy += stat_row_h;
-
-        DrawText("Slow", sx, sy, 24, t.text_dim);
-        DrawText(TextFormat("%d", result_.slow_count), sv, sy, 24, t.slow);
-        sy += stat_row_h;
-
-        DrawText("Ranking", sx, sy, 24, t.text_dim);
-        DrawText(ranking_enabled_ ? "Eligible" : "Disabled", sv, sy, 24,
-                 ranking_enabled_ ? t.success : t.error);
-        sy += stat_row_h + 10;
-
-        // 操作案内
-        DrawText("ENTER: Song Select    R: Retry", sx, sy, 20, t.text_hint);
+        Rectangle stat_rows[5];
+        ui::vstack(kStatsRowsRect, 40.0f, 0.0f, stat_rows);
+        ui::draw_label_value(stat_rows[0], "Max Combo", TextFormat("%d", result_.max_combo), 24, t.text_dim, t.text);
+        ui::draw_label_value(stat_rows[1], "Avg Offset", TextFormat("%.1f ms", result_.avg_offset), 24, t.text_dim, t.text);
+        ui::draw_label_value(stat_rows[2], "Fast", TextFormat("%d", result_.fast_count), 24, t.text_dim, t.fast);
+        ui::draw_label_value(stat_rows[3], "Slow", TextFormat("%d", result_.slow_count), 24, t.text_dim, t.slow);
+        ui::draw_label_value(stat_rows[4], "Ranking", ranking_enabled_ ? "Eligible" : "Disabled",
+                             24, t.text_dim, ranking_enabled_ ? t.success : t.error);
+        ui::draw_text_in_rect("ENTER: Song Select    R: Retry", 20, kStatsHintRect, t.text_hint, ui::text_align::left);
     }
 
     // フェードイン（暗い状態から明るくなる）

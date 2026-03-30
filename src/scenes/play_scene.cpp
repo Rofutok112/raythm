@@ -16,6 +16,7 @@
 #include "scene_manager.h"
 #include "song_select_scene.h"
 #include "theme.h"
+#include "ui_draw.h"
 #include "virtual_screen.h"
 
 namespace {
@@ -34,10 +35,47 @@ constexpr float kCameraHeight = 42.0f;
 constexpr float kCameraFovY = 42.0f;
 constexpr float kJudgeLineWorldZ = 12.0f;
 constexpr float kMaxGroundDistance = 1000.0f;
-constexpr Rectangle kPausePanelRect = {430.0f, 132.0f, 420.0f, 320.0f};
-constexpr Rectangle kPauseResumeRect = {470.0f, 220.0f, 340.0f, 42.0f};
-constexpr Rectangle kPauseRestartRect = {470.0f, 278.0f, 340.0f, 42.0f};
-constexpr Rectangle kPauseSongSelectRect = {470.0f, 336.0f, 340.0f, 42.0f};
+constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
+constexpr Rectangle kPausePanelRect = ui::center(kScreenRect, 420.0f, 320.0f);
+constexpr Rectangle kPauseTitleRect = {kPausePanelRect.x, kPausePanelRect.y, kPausePanelRect.width, 64.0f};
+constexpr Rectangle kPauseButtonArea = {
+    kPausePanelRect.x + 40.0f,
+    kPausePanelRect.y + 88.0f,
+    340.0f,
+    3.0f * 42.0f + 2.0f * 16.0f
+};
+constexpr Rectangle kPauseHintRect = {
+    kPausePanelRect.x + 24.0f,
+    kPausePanelRect.y + kPausePanelRect.height - 50.0f,
+    kPausePanelRect.width - 48.0f,
+    30.0f
+};
+constexpr Rectangle kScoreRect = ui::place(kScreenRect, 400.0f, 60.0f,
+                                           ui::anchor::top_left, ui::anchor::top_left,
+                                           {48.0f, 34.0f});
+constexpr Rectangle kTimeRect = ui::place(kScreenRect, 200.0f, 30.0f,
+                                          ui::anchor::top_center, ui::anchor::top_center,
+                                          {0.0f, 34.0f});
+constexpr Rectangle kFpsRect = ui::place(kScreenRect, 120.0f, 20.0f,
+                                         ui::anchor::bottom_right, ui::anchor::bottom_right,
+                                         {-10.0f, 0.0f});
+constexpr Rectangle kHealthLabelRect = ui::place(kScreenRect, 100.0f, 24.0f,
+                                                 ui::anchor::top_right, ui::anchor::top_right,
+                                                 {-48.0f, 34.0f});
+constexpr Rectangle kHealthBarRect = ui::place(kScreenRect, 260.0f, 24.0f,
+                                               ui::anchor::top_right, ui::anchor::top_right,
+                                               {-48.0f, 58.0f});
+constexpr Rectangle kComboNumberRect = ui::place(kScreenRect, 300.0f, 86.0f,
+                                                 ui::anchor::center, ui::anchor::center,
+                                                 {0.0f, -80.0f});
+constexpr Rectangle kComboLabelRect = ui::place(kScreenRect, 200.0f, 24.0f,
+                                                ui::anchor::center, ui::anchor::center,
+                                                {0.0f, 0.0f});
+constexpr Rectangle kJudgeFeedbackRect = ui::place(kScreenRect, 320.0f, 42.0f,
+                                                   ui::anchor::center, ui::anchor::center,
+                                                   {0.0f, 34.0f});
+constexpr Rectangle kFailureTextRect = ui::place(kScreenRect, 360.0f, 44.0f,
+                                                 ui::anchor::center, ui::anchor::center);
 
 // assets/songs から最初の曲パッケージを読み込んで返す。
 std::optional<song_data> load_sample_song() {
@@ -293,30 +331,30 @@ void play_scene::update(float dt) {
     }
 
     if (paused_) {
-        const Vector2 mouse = virtual_screen::get_virtual_mouse();
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            if (CheckCollisionPointRec(mouse, kPauseResumeRect)) {
-                paused_ = false;
-                if (audio_manager::instance().is_bgm_loaded() && !intro_playing_) {
-                    audio_manager::instance().play_bgm(false);
-                }
-                auto_paused_by_focus_ = false;
-                return;
-            }
+        Rectangle buttons[3];
+        ui::vstack(kPauseButtonArea, 42.0f, 16.0f, buttons);
 
-            if (CheckCollisionPointRec(mouse, kPauseRestartRect)) {
-                if (song_data_.has_value() && selected_chart_path_.has_value()) {
-                    manager_.change_scene(std::make_unique<play_scene>(manager_, *song_data_, *selected_chart_path_, key_count_));
-                } else {
-                    manager_.change_scene(std::make_unique<play_scene>(manager_, key_count_));
-                }
-                return;
+        if (ui::is_clicked(buttons[0])) {
+            paused_ = false;
+            if (audio_manager::instance().is_bgm_loaded() && !intro_playing_) {
+                audio_manager::instance().play_bgm(false);
             }
+            auto_paused_by_focus_ = false;
+            return;
+        }
 
-            if (CheckCollisionPointRec(mouse, kPauseSongSelectRect)) {
-                manager_.change_scene(std::make_unique<song_select_scene>(manager_));
-                return;
+        if (ui::is_clicked(buttons[1])) {
+            if (song_data_.has_value() && selected_chart_path_.has_value()) {
+                manager_.change_scene(std::make_unique<play_scene>(manager_, *song_data_, *selected_chart_path_, key_count_));
+            } else {
+                manager_.change_scene(std::make_unique<play_scene>(manager_, key_count_));
             }
+            return;
+        }
+
+        if (ui::is_clicked(buttons[2])) {
+            manager_.change_scene(std::make_unique<song_select_scene>(manager_));
+            return;
         }
         return;
     }
@@ -643,73 +681,46 @@ void play_scene::draw_notes(const Camera3D& camera) const {
 
 void play_scene::draw_hud() const {
     const result_data result = score_system_.get_result_data();
-    const std::string time_text = TextFormat("%.2f", current_ms_ / 1000.0);
-    const std::string fps_text = TextFormat("FPS: %d", GetFPS());
-    constexpr int score_left = 48;
-    constexpr int score_top = 34;
-    constexpr int score_height = 30;
-    constexpr int health_left = kScreenWidth - 308;
-    constexpr int health_top = 58;
-    constexpr int health_width = 260;
-    constexpr int health_height = 24;
-    constexpr int inset = 4.0f;
-    const int fill_width = (health_width - inset * 2) * (gauge_.get_value() / 100.0f);
+    Rectangle score_rows[2];
+    ui::vstack(kScoreRect, 30.0f, 0.0f, score_rows);
+    ui::draw_text_in_rect(TextFormat("SCORE %07d", result.score), 30,
+                          score_rows[0], g_theme->hud_score, ui::text_align::left);
+    ui::draw_text_in_rect(TextFormat("Accuracy %.2f %%", result.accuracy), 22,
+                          score_rows[1], g_theme->hud_score, ui::text_align::left);
 
-    // スコアと精度
-    DrawText(TextFormat("SCORE %07d", result.score), score_left, score_top, 30, g_theme->hud_score);
-    DrawText(TextFormat("Accuracy %.2f %%", result.accuracy), score_left, score_top + score_height, 22, g_theme->hud_score);
+    ui::draw_text_in_rect(TextFormat("FPS: %d", GetFPS()), 20,
+                          kFpsRect, g_theme->hud_fps, ui::text_align::right);
+    ui::draw_text_in_rect(TextFormat("%.2f", current_ms_ / 1000.0), 30,
+                          kTimeRect, g_theme->hud_time);
 
-    // FPS
-    DrawText(fps_text.c_str(), kScreenWidth - MeasureText(fps_text.c_str(), 20) - 10, kScreenHeight - 20, 20, g_theme->hud_fps);
-
-    // 経過時間（画面上中央）
-    DrawText(time_text.c_str(), kScreenWidth / 2 - MeasureText(time_text.c_str(), 30) / 2, 34, 30,
-         g_theme->hud_time);
-
-    // ヘルスゲージ（70%以上で緑、未満で赤）
-    DrawText("HEALTH", health_left + health_width - 100, health_top - 24, 24, g_theme->hud_health_label);
-    DrawRectangle(health_left, health_top, health_width,
-                  health_height, g_theme->hud_health_bg);
-    DrawRectangleLinesEx({health_left, health_top, health_width, health_height}, 3.0f, g_theme->hud_health_border);
-
-    if (fill_width > 0) {
-        const Color fill_color = gauge_.get_value() >= 70.0f ? g_theme->health_high : g_theme->health_low;
-        DrawRectangle(health_left + inset, health_top + inset,
-                      fill_width, static_cast<int>(health_height - inset * 2.0f), fill_color);
-    }
+    ui::draw_text_in_rect("HEALTH", 24, kHealthLabelRect,
+                          g_theme->hud_health_label, ui::text_align::right);
+    ui::draw_progress_bar(kHealthBarRect, gauge_.get_value() / 100.0f,
+                          g_theme->hud_health_bg,
+                          gauge_.get_value() >= 70.0f ? g_theme->health_high : g_theme->health_low,
+                          g_theme->hud_health_border);
 
     // コンボ数（画面中央に大きく表示）
     if (combo_display_ > 0) {
-        const Color combo_color = g_theme->hud_combo;
-        const std::string combo_text = TextFormat("%03d", combo_display_);
-        DrawText(combo_text.c_str(), kScreenWidth / 2 - MeasureText(combo_text.c_str(), 86) / 2, 228, 86, combo_color);
-        DrawText("COMBO", kScreenWidth / 2 - MeasureText("COMBO", 24) / 2, 306, 24, combo_color);
+        ui::draw_text_in_rect(TextFormat("%03d", combo_display_), 86,
+                              kComboNumberRect, g_theme->hud_combo);
+        ui::draw_text_in_rect("COMBO", 24, kComboLabelRect, g_theme->hud_combo);
     }
 }
 
 void play_scene::draw_pause_overlay() const {
-    DrawRectangle(0, 0, kScreenWidth, kScreenHeight, g_theme->pause_overlay);
-    const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const bool mouse_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-    DrawRectangleRec(kPausePanelRect, g_theme->pause_panel);
-    DrawRectangleLinesEx(kPausePanelRect, 2.0f, g_theme->border);
-    DrawText("PAUSED", static_cast<int>(kPausePanelRect.x + 134.0f), static_cast<int>(kPausePanelRect.y + 24.0f), 42, g_theme->text);
+    ui::draw_fullscreen_overlay(g_theme->pause_overlay);
+    ui::draw_panel(kPausePanelRect);
+    ui::draw_text_in_rect("PAUSED", 42, kPauseTitleRect, g_theme->text);
 
-    constexpr Rectangle buttons[] = {kPauseResumeRect, kPauseRestartRect, kPauseSongSelectRect};
+    Rectangle buttons[3];
+    ui::vstack(kPauseButtonArea, 42.0f, 16.0f, buttons);
     const char* labels[] = {"RESUME", "RESTART", "SONG SELECT"};
     for (int i = 0; i < 3; ++i) {
-        const bool hovered = CheckCollisionPointRec(mouse, buttons[i]);
-        const bool pressed = hovered && mouse_down;
-        const Rectangle rect = pressed ? Rectangle{buttons[i].x + 1.5f, buttons[i].y + 1.5f, buttons[i].width - 3.0f, buttons[i].height - 3.0f}
-                                       : buttons[i];
-        DrawRectangleRec(rect, lerp_color(g_theme->row, g_theme->row_hover, hovered ? 1.0f : 0.0f));
-        DrawRectangleLinesEx(rect, 2.0f, g_theme->border);
-        const int text_width = MeasureText(labels[i], 24);
-        DrawText(labels[i], static_cast<int>(rect.x + rect.width * 0.5f - text_width * 0.5f), static_cast<int>(rect.y + 9.0f), 24, g_theme->text);
+        ui::draw_button(buttons[i], labels[i], 24);
     }
 
-    DrawText("ESC: Resume", static_cast<int>(kPausePanelRect.x + 24.0f), static_cast<int>(kPausePanelRect.y + 270.0f), 20,
-             g_theme->text_muted);
+    ui::draw_text_in_rect("ESC: Resume", 20, kPauseHintRect, g_theme->text_muted, ui::text_align::left);
 }
 
 void play_scene::draw_judge_feedback() const {
@@ -719,29 +730,29 @@ void play_scene::draw_judge_feedback() const {
 
     const Color color = Fade(judge_color(display_judge_->result), std::min(judge_feedback_timer_ / 1.0f, 1.0f));
     const char* text = judge_text(display_judge_->result);
-    DrawText(text, kScreenWidth / 2 - MeasureText(text, 42) / 2, 394, 42, color);
+    ui::draw_text_in_rect(text, 42, kJudgeFeedbackRect, color);
 }
 
 void play_scene::draw_intro_overlay() const {
     const float progress = 1.0f - std::clamp(intro_timer_ / kIntroDurationSeconds, 0.0f, 0.7f);
     const unsigned char alpha = static_cast<unsigned char>((1.0f - progress) * 255.0f);
-    DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {0, 0, 0, alpha});
+    ui::draw_fullscreen_overlay({0, 0, 0, alpha});
 }
 
 void play_scene::draw_failure_overlay() const {
     const float elapsed = kFailureTransitionDurationSeconds - failure_transition_timer_;
     const float fade_progress = std::clamp(elapsed / kFailureFadeDurationSeconds, 0.0f, 0.7f);
     const unsigned char alpha = static_cast<unsigned char>(fade_progress * 255.0f);
-    DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {0, 0, 0, alpha});
+    ui::draw_fullscreen_overlay({0, 0, 0, alpha});
     const char* text = "FAILED...";
-    DrawText(text, kScreenWidth / 2 - MeasureText(text, 44) / 2, kScreenHeight / 2 - 22, 44,
-             Fade(g_theme->hud_failure_text, std::min(fade_progress * 1.15f, 1.0f)));
+    ui::draw_text_in_rect(text, 44, kFailureTextRect,
+                          Fade(g_theme->hud_failure_text, std::min(fade_progress * 1.15f, 1.0f)));
 }
 
 void play_scene::draw_result_transition_overlay() const {
     const float progress = std::clamp(result_transition_timer_ / kResultTransitionDurationSeconds, 0.0f, 1.0f);
     const unsigned char alpha = static_cast<unsigned char>(progress * kResultFadeMaxAlpha * 255.0f);
-    DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {0, 0, 0, alpha});
+    ui::draw_fullscreen_overlay({0, 0, 0, alpha});
 }
 
 double play_scene::get_visual_ms() const {

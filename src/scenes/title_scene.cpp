@@ -7,7 +7,23 @@
 #include "scene_manager.h"
 #include "song_select_scene.h"
 #include "theme.h"
+#include "ui_draw.h"
 #include "virtual_screen.h"
+
+namespace {
+
+constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
+constexpr Rectangle kTitleHeaderRect = ui::place(kScreenRect, 760.0f, 170.0f,
+                                                 ui::anchor::top_left, ui::anchor::top_left,
+                                                 {72.0f, 84.0f});
+constexpr Rectangle kTitleRect = {kTitleHeaderRect.x, kTitleHeaderRect.y, kTitleHeaderRect.width, 124.0f};
+constexpr Rectangle kSubtitleRect = {kTitleHeaderRect.x + 10.0f, kTitleHeaderRect.y + 128.0f,
+                                     kTitleHeaderRect.width - 10.0f, 30.0f};
+constexpr Rectangle kHintAreaRect = ui::place(kScreenRect, 320.0f, 52.0f,
+                                              ui::anchor::bottom_left, ui::anchor::bottom_left,
+                                              {82.0f, -46.0f});
+
+}  // namespace
 
 title_scene::title_scene(scene_manager& manager) : scene(manager) {
 }
@@ -54,17 +70,20 @@ void title_scene::draw() {
     virtual_screen::begin();
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
-    DrawText("raythm", 72, 84, 124, t.text);
-    DrawText("trace the line before the beat disappears", 82, 212, 30, t.text_dim);
-    DrawText("ENTER: Song Select", 82, 644, 22, t.text_muted);
-    DrawText("ESC: Quit", 82, 674, 22, t.text_muted);
+    ui::draw_text_in_rect("raythm", 124, kTitleRect, t.text, ui::text_align::left);
+    ui::draw_text_in_rect("trace the line before the beat disappears", 30, kSubtitleRect, t.text_dim, ui::text_align::left);
+
+    Rectangle hint_rows[2];
+    ui::vstack(kHintAreaRect, 22.0f, 8.0f, hint_rows);
+    ui::draw_text_in_rect("ENTER: Song Select", 22, hint_rows[0], t.text_muted, ui::text_align::left);
+    ui::draw_text_in_rect("ESC: Quit", 22, hint_rows[1], t.text_muted, ui::text_align::left);
     if (transitioning_to_song_select_) {
-        DrawRectangle(0, 0, kScreenWidth, kScreenHeight,
-                      Color{0, 0, 0, static_cast<unsigned char>(std::min(0.65f, transition_fade_t_ * 0.65f) * 255.0f)});
+        ui::draw_fullscreen_overlay(
+            Color{0, 0, 0, static_cast<unsigned char>(std::min(0.65f, transition_fade_t_ * 0.65f) * 255.0f)});
     }
     if (quitting_) {
-        DrawRectangle(0, 0, kScreenWidth, kScreenHeight,
-                      Color{0, 0, 0, static_cast<unsigned char>(std::min(1.0f, quit_fade_t_) * 255.0f)});
+        ui::draw_fullscreen_overlay(
+            Color{0, 0, 0, static_cast<unsigned char>(std::min(1.0f, quit_fade_t_) * 255.0f)});
     }
     virtual_screen::end();
 

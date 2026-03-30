@@ -5,7 +5,7 @@
 `src/ui/` 以下のヘッダーオンリーライブラリ。2つの層で構成される:
 
 1. **レイアウト層** (`ui_layout.h`, `ui_text.h`, `ui_hit.h`): Rectangle の位置・サイズ計算とヒットテスト
-2. **描画ユーティリティ層** (`ui_draw.h`): ボタン・パネル等の頻出描画パターンをまとめた関数群
+2. **描画ユーティリティ層** (`ui_draw.h`): ボタン・パネル・行UI等の頻出描画パターンをまとめた関数群
 
 ### 設計思想
 
@@ -78,6 +78,28 @@ struct edge_insets {
 
 ```cpp
 enum class text_align { left, center, right };
+```
+
+#### `ui::rect_pair`
+
+2分割レイアウトの戻り値に使うシンプルな構造体。
+
+```cpp
+struct rect_pair {
+    Rectangle first;
+    Rectangle second;
+};
+```
+
+#### `ui::scroll_metrics`
+
+スクロールバー計算の戻り値。
+
+```cpp
+struct scroll_metrics {
+    float max_scroll;
+    Rectangle thumb_rect;
+};
 ```
 
 ---
@@ -167,6 +189,63 @@ constexpr Rectangle screen = {0, 0, 1280, 720};
 constexpr Rectangle dialog = ui::center(screen, 500, 300);
 // → {390, 210, 500, 300}
 ```
+
+#### `split_columns`
+
+```cpp
+constexpr rect_pair split_columns(Rectangle parent, float first_width,
+                                  float spacing = 0.0f);
+```
+
+`parent` を左右2カラムに分割する。`first_width` が左カラム幅、残りが右カラムになる。
+
+```cpp
+constexpr Rectangle row = {100, 100, 500, 48};
+constexpr ui::rect_pair cols = ui::split_columns(row, 180.0f, 16.0f);
+// cols.first  = {100, 100, 180, 48}
+// cols.second = {296, 100, 304, 48}
+```
+
+#### `split_rows`
+
+```cpp
+constexpr rect_pair split_rows(Rectangle parent, float first_height,
+                               float spacing = 0.0f);
+```
+
+`parent` を上下2行に分割する。タイトル行 + サブタイトル行のような構成に向く。
+
+```cpp
+constexpr Rectangle header = {40, 60, 400, 64};
+constexpr ui::rect_pair rows = ui::split_rows(header, 34.0f, 8.0f);
+// rows.first  = {40, 60, 400, 34}
+// rows.second = {40, 102, 400, 22}
+```
+
+#### `scroll_view`
+
+```cpp
+constexpr Rectangle scroll_view(Rectangle container, float header_height = 0.0f,
+                                float bottom_padding = 0.0f);
+```
+
+固定ヘッダや下余白を除いたスクロール対象領域を返す。
+
+```cpp
+constexpr Rectangle list_rect = {790, 44, 466, 660};
+constexpr Rectangle view_rect = ui::scroll_view(list_rect, 48.0f, 12.0f);
+// → {790, 92, 466, 600}
+```
+
+#### `vertical_scroll_metrics`
+
+```cpp
+inline scroll_metrics vertical_scroll_metrics(Rectangle track_rect, float content_height,
+                                              float scroll_offset,
+                                              float min_thumb_height = 36.0f);
+```
+
+表示領域の高さとコンテンツ高さから、最大スクロール量とサム矩形を計算する。
 
 #### `vstack`
 
@@ -371,6 +450,40 @@ ui::draw_button_colored(tab_rect, "Audio", 22,
                         g_theme->row, g_theme->row_hover, g_theme->text_secondary);
 ```
 
+#### `draw_row`
+
+```cpp
+struct row_state {
+    bool hovered;
+    bool pressed;
+    bool clicked;
+    Rectangle visual;
+};
+
+inline row_state draw_row(Rectangle rect, Color bg, Color bg_hover,
+                          Color border_color, float border_width = 2.0f);
+```
+
+行背景とボーダーだけを描画する汎用 helper。中のテキストやアイコンは呼び出し側が自由に載せる。
+
+```cpp
+const ui::row_state row = ui::draw_row(item_rect, g_theme->row, g_theme->row_hover, g_theme->border);
+ui::draw_text_in_rect("Lane 1", 24, ui::inset(row.visual, 18.0f), g_theme->text, ui::text_align::left);
+```
+
+#### `draw_selectable_row`
+
+```cpp
+inline row_state draw_selectable_row(Rectangle rect, bool selected,
+                                     float border_width = 2.0f);
+```
+
+選択状態付きの行UI。`settings_scene` のキー割当行や `song_select_scene` のリスト行に向く。
+
+```cpp
+const ui::row_state row = ui::draw_selectable_row(chart_rect, chart_index == difficulty_index_);
+```
+
 #### `draw_panel`
 
 ```cpp
@@ -414,6 +527,31 @@ inline void draw_label_value(Rectangle rect, const char* label, const char* valu
 ```cpp
 Rectangle row = {100, 100, 500, 40};
 ui::draw_label_value(row, "Max Combo", "342", 24, g_theme->text_dim, g_theme->text);
+```
+
+#### `draw_value_selector`
+
+```cpp
+struct selector_state {
+    row_state row;
+    button_state left;
+    button_state right;
+};
+
+inline selector_state draw_value_selector(Rectangle rect, const char* label, const char* value,
+                                          int font_size = 24, float button_size = 34.0f,
+                                          float label_width = 200.0f,
+                                          float content_padding = 18.0f);
+```
+
+`< value >` 型の選択行を描画する。解像度、テーマ、4K/6K 切り替えのようなUI向け。
+
+```cpp
+const ui::selector_state selector = ui::draw_value_selector(row, "Theme",
+    g_settings.dark_mode ? "Dark" : "Light");
+if (selector.left.clicked || selector.right.clicked) {
+    g_settings.dark_mode = !g_settings.dark_mode;
+}
 ```
 
 #### `draw_progress_bar`
@@ -462,6 +600,51 @@ if (drag >= 0.0f) {
 }
 ```
 
+#### `draw_slider_relative`
+
+```cpp
+inline float draw_slider_relative(Rectangle row_rect, const char* label, const char* value_text,
+                                  float ratio, float track_left_inset, float track_right_inset,
+                                  int font_size = 22, float track_top_offset = 26.0f,
+                                  float label_width = 200.0f, float content_padding = 18.0f);
+```
+
+`row_rect` を基準にトラックの左右インセットを相対指定するスライダー。設定画面のように同一レイアウトを複数行に並べる場合はこちらを推奨。
+
+```cpp
+ui::draw_slider_relative(row, "Note Speed", TextFormat("%.3f", g_settings.note_speed),
+                         ratio, 218.0f, 42.0f);
+```
+
+#### `draw_scrollbar`
+
+```cpp
+inline void draw_scrollbar(Rectangle track_rect, float content_height, float scroll_offset,
+                           Color track_color, Color thumb_color,
+                           float min_thumb_height = 36.0f);
+```
+
+縦スクロールバーを描画する。サム位置計算は `vertical_scroll_metrics()` を内部で使用する。
+
+```cpp
+ui::draw_scrollbar(kScrollbarTrack, compute_content_height(), scroll_y_,
+                   g_theme->scrollbar_track, g_theme->scrollbar_thumb);
+```
+
+#### `draw_header_block`
+
+```cpp
+inline void draw_header_block(Rectangle rect, const char* title, const char* subtitle,
+                              int title_size = 34, int subtitle_size = 20,
+                              float spacing = 8.0f);
+```
+
+タイトル + サブタイトルの見出しブロックを描画する。タイトル画面や設定画面のページヘッダ向け。
+
+```cpp
+ui::draw_header_block({48, 70, 320, 64}, "SETTINGS", "Saved on exit");
+```
+
 #### `draw_fullscreen_overlay`
 
 ```cpp
@@ -485,6 +668,8 @@ ui::draw_fullscreen_overlay(g_theme->pause_overlay);
 3. **手動テキスト中央揃えを `draw_text_in_rect` で置換**: `MeasureText` + 座標計算のパターンを除去
 4. **手動ヒットテストを `ui::is_hovered` / `ui::is_clicked` で置換**: `CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), ...)` のパターンを除去
 5. **描画パターンをユーティリティで置換**: ボタン・パネル・セクションの描画を `draw_button` / `draw_panel` / `draw_section` に集約
+6. **中間粒度のUIを helper 化する**: 選択行や値セレクタを `draw_selectable_row` / `draw_value_selector` に寄せる
+7. **スクロールやスライダーも親矩形基準で扱う**: `draw_slider_relative` と `scroll_view` / `draw_scrollbar` を優先する
 
 ### 移行の優先順序
 
@@ -879,8 +1064,14 @@ void settings_scene::draw_general_page() {
 | `is_hovered && IsMouseButtonReleased(...)` | `ui::is_clicked(rect)` |
 | `{rect.x + n, rect.y + n, rect.w - 2*n, rect.h - 2*n}` | `ui::inset(rect, n)` |
 | 複数の固定高さ Rectangle の羅列 | `ui::vstack(area, height, spacing, out)` |
+| 1行をラベル列 + 値列に分ける手計算 | `ui::split_columns(rect, width, spacing)` |
+| タイトル + サブタイトルの上下分割 | `ui::split_rows(rect, height, spacing)` |
 | `x + col * (w + gap)` 的なグリッド計算 | `ui::grid(parent, cols, w, h, hgap, vgap, out)` |
 | スライダー行（行背景+ラベル+トラック+つまみ+値の15行超） | `ui::draw_slider(row, label, value, ratio, ...)` |
+| スライダーのトラック位置を絶対座標で持つ | `ui::draw_slider_relative(row, label, value, ratio, left_inset, right_inset)` |
+| `< value >` 型の設定行 | `ui::draw_value_selector(rect, label, value)` |
+| hover / selected / pressed を持つ行背景 | `ui::draw_row(...)` / `ui::draw_selectable_row(...)` |
+| スクロール表示領域とスクロールバーの手計算 | `ui::scroll_view(...)` / `ui::vertical_scroll_metrics(...)` / `ui::draw_scrollbar(...)` |
 | `DrawRectangle(0, 0, kScreenWidth, kScreenHeight, overlay_color)` | `ui::draw_fullscreen_overlay(color)` |
 
 ### update() 内のヒットテスト移行

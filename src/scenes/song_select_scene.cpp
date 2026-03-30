@@ -14,16 +14,38 @@
 #include "song_loader.h"
 #include "theme.h"
 #include "title_scene.h"
+#include "ui_draw.h"
 #include "virtual_screen.h"
 
 namespace {
 constexpr float kRowHeight = 60.0f;
 constexpr float kScrollWheelStep = 80.0f;
 constexpr float kScrollLerpSpeed = 12.0f;
-constexpr Rectangle kSettingsButtonRect = {1094.0f, 8.0f, 162.0f, 30.0f};
-constexpr Rectangle kSongListRect = {790.0f, 44.0f, 466.0f, 660.0f};
-constexpr Rectangle kLeftPanelRect = {24.0f, 44.0f, 750.0f, 660.0f};
-constexpr Rectangle kJacketRect = {44.0f, 68.0f, 320.0f, 320.0f};
+constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
+constexpr Rectangle kSettingsButtonRect = ui::place(kScreenRect, 162.0f, 30.0f,
+                                                    ui::anchor::top_right, ui::anchor::top_right,
+                                                    {-24.0f, 8.0f});
+constexpr Rectangle kSongListRect = ui::place(kScreenRect, 466.0f, 660.0f,
+                                              ui::anchor::top_right, ui::anchor::top_right,
+                                              {-24.0f, 44.0f});
+constexpr Rectangle kLeftPanelRect = ui::place(kScreenRect, 750.0f, 660.0f,
+                                               ui::anchor::top_left, ui::anchor::top_left,
+                                               {24.0f, 44.0f});
+constexpr Rectangle kJacketRect = ui::place(kLeftPanelRect, 320.0f, 320.0f,
+                                            ui::anchor::top_left, ui::anchor::top_left,
+                                            {20.0f, 24.0f});
+constexpr Rectangle kSceneTitleRect = ui::place(kScreenRect, 360.0f, 30.0f,
+                                                ui::anchor::top_left, ui::anchor::top_left,
+                                                {30.0f, 12.0f});
+constexpr Rectangle kSongListTitleRect = ui::place(kSongListRect, 180.0f, 28.0f,
+                                                   ui::anchor::top_left, ui::anchor::top_left,
+                                                   {20.0f, 10.0f});
+constexpr float kSongListHeaderHeight = 48.0f;
+constexpr float kSongListBottomPadding = 12.0f;
+constexpr Rectangle kSongListViewRect = ui::scroll_view(kSongListRect, kSongListHeaderHeight, kSongListBottomPadding);
+constexpr Rectangle kSongListScrollbarTrackRect = ui::place(kSongListViewRect, 6.0f, kSongListViewRect.height,
+                                                            ui::anchor::top_right, ui::anchor::top_right,
+                                                            {-8.0f, 0.0f});
 constexpr float kPreviewFadeSpeed = 2.4f;
 constexpr float kPreviewMaxVolume = 0.55f;
 
@@ -216,6 +238,121 @@ void song_select_scene::update_preview(float dt) {
     }
 }
 
+const song_select_scene::chart_option* song_select_scene::selected_chart_for(
+    const std::vector<const chart_option*>& filtered) const {
+    if (filtered.empty()) {
+        return nullptr;
+    }
+    const int index = std::min<int>(difficulty_index_, static_cast<int>(filtered.size()) - 1);
+    return filtered[static_cast<size_t>(index)];
+}
+
+void song_select_scene::draw_song_details(const song_entry& song, const chart_option* selected_chart,
+                                          float content_offset_x, unsigned char content_alpha) const {
+    const auto& t = *g_theme;
+    ui::draw_section(kJacketRect);
+    if (jacket_loaded_) {
+        const Rectangle source = {0.0f, 0.0f, static_cast<float>(jacket_texture_.width), static_cast<float>(jacket_texture_.height)};
+        DrawTexturePro(jacket_texture_, source, kJacketRect, Vector2{0.0f, 0.0f}, 0.0f, Color{255, 255, 255, content_alpha});
+    } else {
+        ui::draw_text_in_rect("JACKET", 30, kJacketRect, with_alpha(t.text_muted, content_alpha));
+    }
+    DrawRectangleLinesEx(kJacketRect, 2.0f, t.border_image);
+
+    const float detail_x = kJacketRect.x + kJacketRect.width + 20.0f;
+    const float detail_max_width = kLeftPanelRect.x + kLeftPanelRect.width - detail_x - 16.0f;
+    const double now = GetTime();
+    draw_marquee_text(song.song.meta.title.c_str(), static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 4.0f), 40,
+                      with_alpha(t.text, content_alpha), detail_max_width, now);
+    draw_marquee_text(song.song.meta.artist.c_str(), static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 56.0f), 28,
+                      with_alpha(t.text_secondary, content_alpha), detail_max_width, now);
+    DrawText(TextFormat("BPM %.0f", song.song.meta.base_bpm), static_cast<int>(detail_x + content_offset_x),
+             static_cast<int>(kJacketRect.y + 100.0f), 24, with_alpha(t.text_muted, content_alpha));
+    if (selected_chart != nullptr) {
+        DrawText(TextFormat("%s %s Lv.%d", key_mode_label(selected_chart->meta.key_count).c_str(),
+                            selected_chart->meta.difficulty.c_str(), selected_chart->meta.level),
+                 static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 150.0f), 28, with_alpha(t.text, content_alpha));
+        DrawText(selected_chart->meta.chart_author.c_str(), static_cast<int>(detail_x + content_offset_x),
+                 static_cast<int>(kJacketRect.y + 186.0f), 20, with_alpha(t.text_muted, content_alpha));
+    }
+}
+
+void song_select_scene::draw_song_row(const song_entry& song, float item_y, bool is_selected, double now) const {
+    const auto& t = *g_theme;
+    const int iy = static_cast<int>(item_y);
+    const Rectangle row_rect = {kSongListRect.x + 14.0f, item_y - 8.0f, kSongListRect.width - 28.0f, 44.0f};
+    const int text_x = static_cast<int>(kSongListRect.x + 30.0f);
+    const float list_text_max_w = kSongListRect.width - 70.0f;
+
+    if (ui::is_hovered(row_rect) || is_selected) {
+        const ui::row_state row_state = ui::draw_selectable_row(row_rect, is_selected, 0.0f);
+        (void)row_state;
+    }
+
+    draw_marquee_text(song.song.meta.title.c_str(), text_x, iy, 24,
+                      is_selected ? t.text : t.text_secondary, list_text_max_w, now);
+    draw_marquee_text(song.song.meta.artist.c_str(), text_x, iy + 22, 16,
+                      t.text_muted, list_text_max_w, now);
+}
+
+void song_select_scene::draw_chart_rows(const std::vector<const chart_option*>& filtered, float item_y) const {
+    const auto& t = *g_theme;
+    const float child_x = kSongListRect.x + 46.0f;
+    const float child_w = kSongListRect.width - 92.0f;
+    const int child_text_x = static_cast<int>(kSongListRect.x + 58.0f);
+    const int author_x = static_cast<int>(kSongListRect.x + kSongListRect.width - 120.0f);
+    float child_y = item_y + 46.0f;
+    for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
+        const chart_option& chart = *filtered[static_cast<size_t>(chart_index)];
+        const bool child_selected = chart_index == difficulty_index_;
+        const Rectangle child_rect = {child_x, child_y - 6.0f, child_w, 28.0f};
+        if (ui::is_hovered(child_rect) || child_selected) {
+            const ui::row_state child_state = ui::draw_selectable_row(child_rect, child_selected, 0.0f);
+            (void)child_state;
+        }
+        DrawText(TextFormat("%s %s Lv.%d", key_mode_label(chart.meta.key_count).c_str(), chart.meta.difficulty.c_str(),
+                            chart.meta.level),
+                 child_text_x, static_cast<int>(child_y), 18,
+                 child_selected ? t.text : t.text_secondary);
+        DrawText(chart.meta.chart_author.c_str(), author_x, static_cast<int>(child_y) + 1, 14, t.text_muted);
+        child_y += 30.0f;
+    }
+}
+
+void song_select_scene::draw_song_list(const std::vector<const chart_option*>& filtered) const {
+    const auto& t = *g_theme;
+    ui::draw_text_in_rect("Songs", 28, kSongListTitleRect, t.text, ui::text_align::left);
+
+    BeginScissorMode(static_cast<int>(kSongListViewRect.x), static_cast<int>(kSongListViewRect.y),
+                     static_cast<int>(kSongListViewRect.width), static_cast<int>(kSongListViewRect.height));
+
+    const double now = GetTime();
+    float item_y = kSongListViewRect.y - scroll_y_;
+    for (int i = 0; i < static_cast<int>(songs_.size()); ++i) {
+        const bool is_selected = i == selected_song_index_;
+        float row_h = is_selected
+            ? kRowHeight + 14.0f + static_cast<float>(filtered.size()) * 30.0f
+            : kRowHeight;
+
+        if (item_y + row_h < kSongListViewRect.y) {
+            item_y += row_h;
+            continue;
+        }
+        if (item_y > kSongListViewRect.y + kSongListViewRect.height) {
+            break;
+        }
+
+        draw_song_row(songs_[static_cast<size_t>(i)], item_y, is_selected, now);
+        if (is_selected) {
+            draw_chart_rows(filtered, item_y);
+        }
+        item_y += row_h;
+    }
+    EndScissorMode();
+
+    ui::draw_scrollbar(kSongListScrollbarTrackRect, compute_content_height(), scroll_y_, t.scrollbar_track, t.scrollbar_thumb);
+}
+
 // 全曲リストの合計高さを返す（選択曲の展開分を含む）。
 float song_select_scene::compute_content_height() const {
     float total = 0.0f;
@@ -241,13 +378,11 @@ void song_select_scene::update(float dt) {
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const float wheel = GetMouseWheelMove();
     if (IsKeyPressed(KEY_F1) ||
-        (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse, kSettingsButtonRect))) {
+        ui::is_clicked(kSettingsButtonRect)) {
         manager_.change_scene(std::make_unique<settings_scene>(manager_, settings_scene::return_target::song_select));
         return;
     }
 
-    settings_hover_t_ =
-        std::clamp(settings_hover_t_ + (CheckCollisionPointRec(mouse, kSettingsButtonRect) ? dt * 8.0f : -dt * 8.0f), 0.0f, 1.0f);
     song_change_anim_t_ = std::max(0.0f, song_change_anim_t_ - dt * 4.0f);
     scene_fade_in_t_ = std::max(0.0f, scene_fade_in_t_ - dt / 0.3f);
 
@@ -267,14 +402,14 @@ void song_select_scene::update(float dt) {
     }
 
     // マウスホイールでスムーズスクロール
-    if (CheckCollisionPointRec(mouse, kSongListRect) && wheel != 0.0f) {
+    if (CheckCollisionPointRec(mouse, kSongListViewRect) && wheel != 0.0f) {
         scroll_y_target_ -= wheel * kScrollWheelStep;
     }
 
     // スクロール目標値をコンテンツ範囲内にクランプ
-    const float list_view_height = kSongListRect.height - 72.0f;  // 60px header + 12px bottom padding
+    const float list_view_height = kSongListViewRect.height;
     const float content_height = compute_content_height();
-    const float max_scroll = std::max(0.0f, content_height - list_view_height);
+    const float max_scroll = ui::vertical_scroll_metrics(kSongListScrollbarTrackRect, content_height, scroll_y_target_).max_scroll;
     scroll_y_target_ = std::clamp(scroll_y_target_, 0.0f, max_scroll);
 
     // 現在値を目標値に向けて補間（指数減衰）
@@ -300,9 +435,8 @@ void song_select_scene::update(float dt) {
     }
 
     // リスト内クリック: スクロールオフセットを考慮して当たり判定
-    if (CheckCollisionPointRec(mouse, kSongListRect) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        const float list_top = kSongListRect.y + 12.0f;
-        float item_y = list_top - scroll_y_;
+    if (CheckCollisionPointRec(mouse, kSongListViewRect) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        float item_y = kSongListViewRect.y - scroll_y_;
         for (int i = 0; i < static_cast<int>(songs_.size()); ++i) {
             float row_h = kRowHeight;
             if (i == selected_song_index_) {
@@ -312,7 +446,7 @@ void song_select_scene::update(float dt) {
                 float child_y = item_y + 46.0f;
                 for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
                     const Rectangle child_rect = {kSongListRect.x + 46.0f, child_y - 6.0f, kSongListRect.width - 92.0f, 28.0f};
-                    if (child_rect.y >= kSongListRect.y && child_rect.y + child_rect.height <= kSongListRect.y + kSongListRect.height &&
+                    if (child_rect.y >= kSongListViewRect.y && child_rect.y + child_rect.height <= kSongListViewRect.y + kSongListViewRect.height &&
                         CheckCollisionPointRec(mouse, child_rect)) {
                         if (difficulty_index_ == chart_index) {
                             // 選択中の難易度を再クリックでプレイ開始
@@ -329,7 +463,7 @@ void song_select_scene::update(float dt) {
             }
 
             const Rectangle row_rect = {kSongListRect.x + 14.0f, item_y - 8.0f, kSongListRect.width - 28.0f, 44.0f};
-            if (row_rect.y >= kSongListRect.y && row_rect.y + row_rect.height <= kSongListRect.y + kSongListRect.height &&
+            if (row_rect.y >= kSongListViewRect.y && row_rect.y + row_rect.height <= kSongListViewRect.y + kSongListViewRect.height &&
                 CheckCollisionPointRec(mouse, row_rect)) {
                 if (selected_song_index_ != i) {
                     selected_song_index_ = i;
@@ -353,19 +487,24 @@ void song_select_scene::draw() {
     virtual_screen::begin();
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
-    DrawRectangleRec(kLeftPanelRect, t.panel);
-    DrawRectangleRec(kSongListRect, t.panel);
-    DrawRectangleLinesEx(kLeftPanelRect, 2.0f, t.border);
-    DrawRectangleLinesEx(kSongListRect, 2.0f, t.border);
-    DrawText("SONG SELECT", 30, 12, 30, t.text);
-    DrawRectangleRec(kSettingsButtonRect, lerp_color(t.row, t.row_hover, settings_hover_t_));
-    DrawRectangleLinesEx(kSettingsButtonRect, 2.0f, t.border);
-    DrawText("SETTINGS", static_cast<int>(kSettingsButtonRect.x + 22.0f), static_cast<int>(kSettingsButtonRect.y + 6.0f), 20, t.text);
+    ui::draw_panel(kLeftPanelRect);
+    ui::draw_panel(kSongListRect);
+    ui::draw_text_in_rect("SONG SELECT", 30, kSceneTitleRect, t.text, ui::text_align::left);
+    ui::draw_button_colored(kSettingsButtonRect, "SETTINGS", 20,
+                            t.row, t.row_hover, t.text);
 
     if (songs_.empty()) {
-        DrawText("No songs found", 50, 300, 36, t.text);
+        ui::draw_text_in_rect("No songs found", 36,
+                              ui::place(kLeftPanelRect, 320.0f, 40.0f,
+                                        ui::anchor::center, ui::anchor::center,
+                                        {0.0f, -20.0f}),
+                              t.text);
         if (!load_errors_.empty()) {
-            DrawText(load_errors_.front().c_str(), 50, 350, 22, t.error);
+            ui::draw_text_in_rect(load_errors_.front().c_str(), 22,
+                                  ui::place(kLeftPanelRect, 620.0f, 28.0f,
+                                            ui::anchor::center, ui::anchor::center,
+                                            {0.0f, 28.0f}),
+                                  t.error);
         }
         virtual_screen::end();
         ClearBackground(BLACK);
@@ -375,125 +514,13 @@ void song_select_scene::draw() {
 
     const song_entry& song = songs_[static_cast<size_t>(selected_song_index_)];
     const std::vector<const chart_option*> filtered = filtered_charts_for_selected_song();
-    const chart_option* selected_chart =
-        filtered.empty() ? nullptr : filtered[static_cast<size_t>(std::min<int>(difficulty_index_, static_cast<int>(filtered.size()) - 1))];
+    const chart_option* selected_chart = selected_chart_for(filtered);
     const float content_anim = 1.0f - song_change_anim_t_;
     const float content_offset_x = 18.0f * song_change_anim_t_;
     const unsigned char content_alpha = static_cast<unsigned char>(145.0f + 110.0f * content_anim);
 
-    DrawRectangleRec(kJacketRect, t.section);
-    if (jacket_loaded_) {
-        const Rectangle source = {0.0f, 0.0f, static_cast<float>(jacket_texture_.width), static_cast<float>(jacket_texture_.height)};
-        DrawTexturePro(jacket_texture_, source, kJacketRect, Vector2{0.0f, 0.0f}, 0.0f, Color{255, 255, 255, content_alpha});
-    } else {
-        const int jacket_cx = static_cast<int>(kJacketRect.x + kJacketRect.width * 0.5f) - 45;
-        const int jacket_cy = static_cast<int>(kJacketRect.y + kJacketRect.height * 0.5f) - 15;
-        DrawText("JACKET", jacket_cx, jacket_cy, 30, with_alpha(t.text_muted, content_alpha));
-    }
-    DrawRectangleLinesEx(kJacketRect, 2.0f, t.border_image);
-
-    const float detail_x = kJacketRect.x + kJacketRect.width + 20.0f;
-    const float detail_max_width = kLeftPanelRect.x + kLeftPanelRect.width - detail_x - 16.0f;
-    const double now = GetTime();
-    draw_marquee_text(song.song.meta.title.c_str(), static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 4.0f), 40,
-                      with_alpha(t.text, content_alpha), detail_max_width, now);
-    draw_marquee_text(song.song.meta.artist.c_str(), static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 56.0f), 28,
-                      with_alpha(t.text_secondary, content_alpha), detail_max_width, now);
-    DrawText(TextFormat("BPM %.0f", song.song.meta.base_bpm), static_cast<int>(detail_x + content_offset_x),
-             static_cast<int>(kJacketRect.y + 100.0f), 24, with_alpha(t.text_muted, content_alpha));
-    if (selected_chart != nullptr) {
-        DrawText(TextFormat("%s %s Lv.%d", key_mode_label(selected_chart->meta.key_count).c_str(),
-                            selected_chart->meta.difficulty.c_str(), selected_chart->meta.level),
-                 static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 150.0f), 28, with_alpha(t.text, content_alpha));
-        DrawText(selected_chart->meta.chart_author.c_str(), static_cast<int>(detail_x + content_offset_x),
-                 static_cast<int>(kJacketRect.y + 186.0f), 20, with_alpha(t.text_muted, content_alpha));
-    }
-
-    DrawText("Songs", static_cast<int>(kSongListRect.x + 20.0f), static_cast<int>(kSongListRect.y + 10.0f), 28, t.text);
-    DrawRectangleRec(kSongListRect, t.panel);
-    DrawRectangleLinesEx(kSongListRect, 2.0f, t.border);
-
-    // スクロールオフセットを適用してリストを描画。クリッピング領域外のアイテムはスキップ。
-    const float list_top = kSongListRect.y + 12.0f;
-    const float list_bottom = kSongListRect.y + kSongListRect.height - 12.0f;
-    const Rectangle list_clip = {kSongListRect.x, list_top, kSongListRect.width, list_bottom - list_top};
-    BeginScissorMode(static_cast<int>(list_clip.x), static_cast<int>(list_clip.y),
-                     static_cast<int>(list_clip.width), static_cast<int>(list_clip.height));
-    float item_y = list_top - scroll_y_;
-    for (int i = 0; i < static_cast<int>(songs_.size()); ++i) {
-        const bool is_selected = i == selected_song_index_;
-        float row_h = kRowHeight;
-        if (is_selected) {
-            row_h = kRowHeight + 14.0f + static_cast<float>(filtered.size()) * 30.0f;
-        }
-
-        // 完全に画面外なら描画をスキップ
-        if (item_y + row_h < list_top) {
-            item_y += row_h;
-            continue;
-        }
-        if (item_y > list_bottom) {
-            break;
-        }
-
-        const int iy = static_cast<int>(item_y);
-        const float row_x = kSongListRect.x + 14.0f;
-        const float row_w = kSongListRect.width - 28.0f;
-        const int text_x = static_cast<int>(kSongListRect.x + 30.0f);
-        const float list_text_max_w = kSongListRect.width - 70.0f;
-        const Rectangle row_rect = {row_x, item_y - 8.0f, row_w, 44.0f};
-        const bool hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), row_rect);
-        if (is_selected) {
-            DrawRectangleRec(row_rect, hovered ? t.row_selected_hover : t.row_selected);
-        } else if (hovered) {
-            DrawRectangleRec(row_rect, t.row_list_hover);
-        }
-        draw_marquee_text(songs_[static_cast<size_t>(i)].song.meta.title.c_str(), text_x, iy, 24,
-                          is_selected ? t.text : t.text_secondary, list_text_max_w, now);
-        draw_marquee_text(songs_[static_cast<size_t>(i)].song.meta.artist.c_str(), text_x, iy + 22, 16,
-                          t.text_muted, list_text_max_w, now);
-
-        if (is_selected) {
-            const float child_x = kSongListRect.x + 46.0f;
-            const float child_w = kSongListRect.width - 92.0f;
-            const int child_text_x = static_cast<int>(kSongListRect.x + 58.0f);
-            const int author_x = static_cast<int>(kSongListRect.x + kSongListRect.width - 120.0f);
-            float child_y = item_y + 46.0f;
-            for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
-                const chart_option& chart = *filtered[static_cast<size_t>(chart_index)];
-                const bool child_selected = chart_index == difficulty_index_;
-                const Rectangle child_rect = {child_x, child_y - 6.0f, child_w, 28.0f};
-                const bool child_hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), child_rect);
-                if (child_selected) {
-                    DrawRectangleRec(child_rect, child_hovered ? t.row_selected_hover : t.row_selected);
-                } else if (child_hovered) {
-                    DrawRectangleRec(child_rect, t.row_list_hover);
-                }
-                DrawText(TextFormat("%s %s Lv.%d", key_mode_label(chart.meta.key_count).c_str(), chart.meta.difficulty.c_str(),
-                                    chart.meta.level),
-                         child_text_x, static_cast<int>(child_y), 18,
-                         child_selected ? t.text : t.text_secondary);
-                DrawText(chart.meta.chart_author.c_str(), author_x, static_cast<int>(child_y) + 1, 14, t.text_muted);
-                child_y += 30.0f;
-            }
-        }
-        item_y += row_h;
-    }
-    EndScissorMode();
-
-    // スクロールバー
-    const float content_h = compute_content_height();
-    const float view_h = list_bottom - list_top;
-    const float track_h = kSongListRect.height - 24.0f;
-    if (content_h > view_h) {
-        const float thumb_h = std::max(36.0f, track_h * (view_h / content_h));
-        const float scroll_t = scroll_y_ / std::max(1.0f, content_h - view_h);
-        const float thumb_y = kSongListRect.y + 12.0f + (track_h - thumb_h) * scroll_t;
-        DrawRectangle(static_cast<int>(kSongListRect.x + kSongListRect.width - 14.0f),
-                      static_cast<int>(kSongListRect.y + 12.0f), 6, static_cast<int>(track_h), t.scrollbar_track);
-        DrawRectangle(static_cast<int>(kSongListRect.x + kSongListRect.width - 14.0f),
-                      static_cast<int>(thumb_y), 6, static_cast<int>(thumb_h), t.scrollbar_thumb);
-    }
+    draw_song_details(song, selected_chart, content_offset_x, content_alpha);
+    draw_song_list(filtered);
 
     if (scene_fade_in_t_ > 0.0f) {
         DrawRectangle(0, 0, kScreenWidth, kScreenHeight,

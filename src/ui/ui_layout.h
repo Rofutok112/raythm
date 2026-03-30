@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <span>
 
 #include "raylib.h"
@@ -7,6 +8,16 @@
 // UI レイアウトシステム。
 // Rectangle の位置・サイズを計算する純粋関数群。描画はシーン側の責任。
 namespace ui {
+
+struct rect_pair {
+    Rectangle first;
+    Rectangle second;
+};
+
+struct scroll_metrics {
+    float max_scroll;
+    Rectangle thumb_rect;
+};
 
 // ── 型定義 ──────────────────────────────────────────────
 
@@ -100,6 +111,56 @@ constexpr Rectangle inset(Rectangle rect, float amount) {
 // parent の中央に w x h の Rectangle を配置する。
 constexpr Rectangle center(Rectangle parent, float w, float h) {
     return place(parent, w, h, anchor::center, anchor::center);
+}
+
+// parent を左右2カラムに分割する。first_width が左カラム幅、spacing が列間。
+constexpr rect_pair split_columns(Rectangle parent, float first_width, float spacing = 0.0f) {
+    return {
+        {parent.x, parent.y, first_width, parent.height},
+        {parent.x + first_width + spacing, parent.y,
+         parent.width - first_width - spacing, parent.height},
+    };
+}
+
+// parent を上下2行に分割する。first_height が上段高さ、spacing が行間。
+constexpr rect_pair split_rows(Rectangle parent, float first_height, float spacing = 0.0f) {
+    return {
+        {parent.x, parent.y, parent.width, first_height},
+        {parent.x, parent.y + first_height + spacing,
+         parent.width, parent.height - first_height - spacing},
+    };
+}
+
+// スクロールコンテナ内の実際の表示領域を返す。header_height は上部固定領域、bottom_padding は下余白。
+constexpr Rectangle scroll_view(Rectangle container, float header_height = 0.0f, float bottom_padding = 0.0f) {
+    return {
+        container.x,
+        container.y + header_height,
+        container.width,
+        container.height - header_height - bottom_padding,
+    };
+}
+
+// 垂直スクロールバーのサム位置と最大スクロール量を計算する。
+inline scroll_metrics vertical_scroll_metrics(Rectangle track_rect, float content_height, float scroll_offset,
+                                              float min_thumb_height = 36.0f) {
+    const float view_height = track_rect.height;
+    const float max_scroll = std::max(0.0f, content_height - view_height);
+    if (content_height <= view_height || view_height <= 0.0f) {
+        return {max_scroll, track_rect};
+    }
+
+    const float thumb_height = std::max(min_thumb_height, view_height * (view_height / content_height));
+    const float scroll_t = max_scroll > 0.0f ? std::clamp(scroll_offset / max_scroll, 0.0f, 1.0f) : 0.0f;
+    return {
+        max_scroll,
+        {
+            track_rect.x,
+            track_rect.y + (track_rect.height - thumb_height) * scroll_t,
+            track_rect.width,
+            thumb_height,
+        }
+    };
 }
 
 // ── スタック ────────────────────────────────────────────
