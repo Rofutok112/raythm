@@ -53,7 +53,11 @@ add_executable(raythm src/main.cpp
         src/scenes/theme.h
         src/scenes/virtual_screen.cpp
         src/scenes/virtual_screen.h
-        src/game_scenes.h)
+        src/game_scenes.h
+        src/ui/ui_layout.h
+        src/ui/ui_text.h
+        src/ui/ui_hit.h
+        src/ui/ui_draw.h)
 
 add_executable(chart_parser_smoke
         src/gameplay/chart_parser.cpp
@@ -111,6 +115,7 @@ set(RAYTHM_INCLUDE_DIRS
         ${CMAKE_SOURCE_DIR}/src/gameplay
         ${CMAKE_SOURCE_DIR}/src/models
         ${CMAKE_SOURCE_DIR}/src/scenes
+        ${CMAKE_SOURCE_DIR}/src/ui
         ${CMAKE_SOURCE_DIR}/src/tests
 )
 
