@@ -87,6 +87,23 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    handler = input_handler();
+    handler.set_key_count(4);
+    windows_input_source::instance().set_test_current_time_ms(110.0);
+    windows_input_source::instance().push_test_event({KEY_D, input_event_type::press, 100.0, 5});
+    windows_input_source::instance().push_test_event({KEY_F, input_event_type::press, 100.0, 6});
+    handler.update(610.0);
+    if (handler.events().size() != 2 || handler.events()[0].lane != 0 || handler.events()[1].lane != 1 ||
+        handler.events()[0].timestamp_ms != 600.0 || handler.events()[1].timestamp_ms != 600.0) {
+        std::cerr << "Native simultaneous conversion failed\n";
+        return EXIT_FAILURE;
+    }
+    if (handler.last_update_source() != input_update_source::native_windows ||
+        handler.last_update_event_count() != 2) {
+        std::cerr << "Input source metadata failed\n";
+        return EXIT_FAILURE;
+    }
+
     windows_input_source::instance().shutdown();
 
     std::cout << "input_handler smoke test passed\n";
