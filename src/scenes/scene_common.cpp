@@ -5,6 +5,53 @@
 
 #include "theme.h"
 
+namespace {
+
+float measure_glyph_advance(const Font& font, int glyph_index, float scale) {
+    const int advance = font.glyphs[glyph_index].advanceX;
+    const float fallback_width = font.recs[glyph_index].width;
+    return static_cast<float>(advance != 0 ? advance : fallback_width) * scale;
+}
+
+void draw_text_clipped_horizontally(const char* text, float x, int y, int font_size, Color color, float clip_left, float clip_right) {
+    const Font font = GetFontDefault();
+    const float scale = static_cast<float>(font_size) / static_cast<float>(font.baseSize);
+    const float letter_spacing = scale;
+    float cursor_x = x;
+    const char* ptr = text;
+
+    while (*ptr != '\0') {
+        int codepoint_bytes = 0;
+        const int codepoint = GetCodepointNext(ptr, &codepoint_bytes);
+        if (codepoint_bytes <= 0) {
+            break;
+        }
+
+        ptr += codepoint_bytes;
+
+        if (codepoint == '\n') {
+            break;
+        }
+
+        const int glyph_index = GetGlyphIndex(font, codepoint);
+        const float advance = measure_glyph_advance(font, glyph_index, scale);
+        const float step = advance + letter_spacing;
+        const float glyph_left = cursor_x;
+        const float glyph_right = cursor_x + step;
+
+        if (glyph_right > clip_left && glyph_left < clip_right) {
+            DrawTextCodepoint(font, codepoint, {cursor_x, static_cast<float>(y)}, static_cast<float>(font_size), color);
+        }
+
+        cursor_x += step;
+        if (cursor_x >= clip_right) {
+            break;
+        }
+    }
+}
+
+}  // namespace
+
 void draw_scene_frame(const char* title, const char* subtitle, Color accent) {
     ClearBackground(g_theme->bg);
 
@@ -16,8 +63,11 @@ void draw_scene_frame(const char* title, const char* subtitle, Color accent) {
     DrawText(subtitle, 130, 190, 24, g_theme->text_secondary);
 }
 
-void draw_marquee_text(const char* text, int x, int y, int font_size, Color color, float max_width, double time,
-                       const Rectangle* parent_clip) {
+void draw_marquee_text(const char* text, int x, int y, int font_size, Color color, float max_width, double time) {
+    if (text == nullptr || *text == '\0' || max_width <= 0.0f) {
+        return;
+    }
+
     const float text_width = static_cast<float>(MeasureText(text, font_size));
 
     // 収まるならそのまま描画
@@ -48,31 +98,6 @@ void draw_marquee_text(const char* text, int x, int y, int font_size, Color colo
         offset = overflow;
     }
 
-    // マーキー自体のクリップ領域
-    float clip_x = static_cast<float>(x);
-    float clip_y = static_cast<float>(y);
-    float clip_r = clip_x + max_width;
-    float clip_b = clip_y + static_cast<float>(font_size + 4);
-
-    // 親のクリップ領域が指定されていれば交差を取る
-    if (parent_clip != nullptr) {
-        clip_x = std::max(clip_x, parent_clip->x);
-        clip_y = std::max(clip_y, parent_clip->y);
-        clip_r = std::min(clip_r, parent_clip->x + parent_clip->width);
-        clip_b = std::min(clip_b, parent_clip->y + parent_clip->height);
-        if (clip_r <= clip_x || clip_b <= clip_y) {
-            return;
-        }
-    }
-
-    BeginScissorMode(static_cast<int>(clip_x), static_cast<int>(clip_y),
-                     static_cast<int>(clip_r - clip_x), static_cast<int>(clip_b - clip_y));
-    DrawText(text, x - static_cast<int>(offset), y, font_size, color);
-    EndScissorMode();
-
-    // 親のシザーを復元する
-    if (parent_clip != nullptr) {
-        BeginScissorMode(static_cast<int>(parent_clip->x), static_cast<int>(parent_clip->y),
-                         static_cast<int>(parent_clip->width), static_cast<int>(parent_clip->height));
-    }
+    draw_text_clipped_horizontally(text, static_cast<float>(x) - offset, y, font_size, color,
+                                   static_cast<float>(x), static_cast<float>(x) + max_width);
 }
