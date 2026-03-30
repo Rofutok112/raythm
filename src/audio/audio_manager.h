@@ -5,6 +5,15 @@
 
 class audio;
 
+struct audio_clock_snapshot {
+    bool loaded = false;
+    bool playing = false;
+    double stream_position_seconds = 0.0;
+    double audio_time_seconds = 0.0;
+    double device_latency_seconds = 0.0;
+    double device_buffer_seconds = 0.0;
+};
+
 class audio_manager final {
 public:
     static audio_manager& instance();
@@ -26,6 +35,9 @@ public:
     bool is_bgm_playing() const;
     double get_bgm_position_seconds() const;
     double get_bgm_length_seconds() const;
+    audio_clock_snapshot get_bgm_clock() const;
+    double get_output_latency_seconds() const;
+    double get_output_buffer_seconds() const;
 
     bool load_preview(const std::string& file_path);
     void play_preview(bool restart = true);
@@ -61,6 +73,7 @@ private:
     static bool is_voice_playing(unsigned long handle);
     static double get_voice_position_seconds(unsigned long handle);
     static double get_voice_length_seconds(unsigned long handle);
+    static audio_clock_snapshot get_voice_clock(unsigned long handle);
     static void play_voice(unsigned long handle, bool restart);
     static void pause_voice(unsigned long handle);
     static void stop_voice(unsigned long handle);
