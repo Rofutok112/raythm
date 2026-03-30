@@ -1,0 +1,72 @@
+#pragma once
+
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "raylib.h"
+#include "editor_state.h"
+#include "scene.h"
+#include "song_loader.h"
+
+class editor_scene final : public scene {
+public:
+    editor_scene(scene_manager& manager, song_data song, std::string chart_path);
+    editor_scene(scene_manager& manager, song_data song, int key_count);
+
+    void on_enter() override;
+    void update(float dt) override;
+    void draw() override;
+
+private:
+    struct grid_line {
+        int tick = 0;
+        bool major = false;
+        int measure = 1;
+        int beat = 1;
+    };
+
+    struct meter_segment {
+        int start_tick = 0;
+        int numerator = 4;
+        int denominator = 4;
+        int beat_index_offset = 0;
+        int measure_index_offset = 0;
+    };
+
+    chart_data make_new_chart_data() const;
+    void rebuild_meter_segments();
+    std::vector<grid_line> visible_grid_lines(int min_tick, int max_tick) const;
+    Rectangle timeline_content_rect() const;
+    Rectangle timeline_scrollbar_track_rect() const;
+    float visible_tick_span() const;
+    float content_tick_span() const;
+    float content_height_pixels() const;
+    float scroll_offset_pixels() const;
+    float max_bottom_tick() const;
+    float tick_to_timeline_y(int tick) const;
+    int timeline_y_to_tick(float y) const;
+    float lane_width() const;
+    Rectangle lane_rect(int lane) const;
+    double beat_number_at_tick(int tick) const;
+    std::string bar_beat_label(int tick) const;
+    void apply_scroll_and_zoom();
+    void draw_left_panel() const;
+    void draw_right_panel() const;
+    void draw_timeline() const;
+    void draw_timeline_grid(int min_tick, int max_tick) const;
+    void draw_timeline_notes() const;
+    void draw_cursor_hud() const;
+
+    song_data song_;
+    std::optional<std::string> chart_path_;
+    int new_chart_key_count_ = 4;
+    editor_state state_;
+    std::vector<meter_segment> meter_segments_;
+    std::vector<std::string> load_errors_;
+    int audio_length_tick_ = 0;
+    float bottom_tick_ = 0.0f;
+    float ticks_per_pixel_ = 2.0f;
+    bool scrollbar_dragging_ = false;
+    float scrollbar_drag_offset_ = 0.0f;
+};

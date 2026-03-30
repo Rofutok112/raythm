@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <memory>
 
+#include "editor_scene.h"
 #include "game_settings.h"
 #include "play_scene.h"
 #include "raylib.h"
@@ -37,6 +38,12 @@ constexpr Rectangle kJacketRect = ui::place(kLeftPanelRect, 320.0f, 320.0f,
 constexpr Rectangle kSceneTitleRect = ui::place(kScreenRect, 360.0f, 30.0f,
                                                 ui::anchor::top_left, ui::anchor::top_left,
                                                 {30.0f, 12.0f});
+constexpr Rectangle kActionPanelRect = ui::place(kLeftPanelRect, 710.0f, 72.0f,
+                                                 ui::anchor::bottom_center, ui::anchor::bottom_center,
+                                                 {0.0f, -18.0f});
+constexpr Rectangle kPlayButtonRect = {kActionPanelRect.x + 12.0f, kActionPanelRect.y + 26.0f, 214.0f, 34.0f};
+constexpr Rectangle kEditButtonRect = {kActionPanelRect.x + 248.0f, kActionPanelRect.y + 26.0f, 214.0f, 34.0f};
+constexpr Rectangle kNewChartButtonRect = {kActionPanelRect.x + 484.0f, kActionPanelRect.y + 26.0f, 214.0f, 34.0f};
 constexpr Rectangle kSongListTitleRect = ui::place(kSongListRect, 180.0f, 28.0f,
                                                    ui::anchor::top_left, ui::anchor::top_left,
                                                    {20.0f, 10.0f});
@@ -275,6 +282,14 @@ void song_select_scene::draw_song_details(const song_entry& song, const chart_op
         DrawText(selected_chart->meta.chart_author.c_str(), static_cast<int>(detail_x + content_offset_x),
                  static_cast<int>(kJacketRect.y + 186.0f), 20, with_alpha(t.text_muted, content_alpha));
     }
+
+    ui::draw_section(kActionPanelRect);
+    ui::draw_text_in_rect("Actions", 18,
+                          {kActionPanelRect.x + 14.0f, kActionPanelRect.y + 4.0f, 120.0f, 18.0f},
+                          t.text_hint, ui::text_align::left);
+    ui::draw_button_colored(kPlayButtonRect, "PLAY", 20, t.row_selected, t.row_active, t.text);
+    ui::draw_button_colored(kEditButtonRect, "EDIT", 20, t.row, t.row_hover, t.text);
+    ui::draw_button_colored(kNewChartButtonRect, "NEW", 20, t.row, t.row_hover, t.text);
 }
 
 void song_select_scene::draw_song_row(const song_entry& song, float item_y, bool is_selected, double now) const {
@@ -431,7 +446,39 @@ void song_select_scene::update(float dt) {
             manager_.change_scene(std::make_unique<play_scene>(manager_, selected_song()->song,
                                                                filtered[static_cast<size_t>(difficulty_index_)]->path,
                                                                filtered[static_cast<size_t>(difficulty_index_)]->meta.key_count));
+            return;
         }
+
+        if (IsKeyPressed(KEY_E)) {
+            manager_.change_scene(std::make_unique<editor_scene>(manager_, selected_song()->song,
+                                                                 filtered[static_cast<size_t>(difficulty_index_)]->path));
+            return;
+        }
+
+        if (IsKeyPressed(KEY_N)) {
+            manager_.change_scene(std::make_unique<editor_scene>(manager_, selected_song()->song,
+                                                                 filtered[static_cast<size_t>(difficulty_index_)]->meta.key_count));
+            return;
+        }
+    }
+
+    if (ui::is_clicked(kPlayButtonRect) && !filtered.empty()) {
+        manager_.change_scene(std::make_unique<play_scene>(manager_, selected_song()->song,
+                                                           filtered[static_cast<size_t>(difficulty_index_)]->path,
+                                                           filtered[static_cast<size_t>(difficulty_index_)]->meta.key_count));
+        return;
+    }
+
+    if (ui::is_clicked(kEditButtonRect) && !filtered.empty()) {
+        manager_.change_scene(std::make_unique<editor_scene>(manager_, selected_song()->song,
+                                                             filtered[static_cast<size_t>(difficulty_index_)]->path));
+        return;
+    }
+
+    if (ui::is_clicked(kNewChartButtonRect)) {
+        const int key_count = filtered.empty() ? 4 : filtered[static_cast<size_t>(difficulty_index_)]->meta.key_count;
+        manager_.change_scene(std::make_unique<editor_scene>(manager_, selected_song()->song, key_count));
+        return;
     }
 
     // リスト内クリック: スクロールオフセットを考慮して当たり判定
@@ -521,6 +568,10 @@ void song_select_scene::draw() {
 
     draw_song_details(song, selected_chart, content_offset_x, content_alpha);
     draw_song_list(filtered);
+    ui::draw_text_in_rect("ENTER/PLAY: Start   E/EDIT: Open Editor   N/NEW: Blank Chart", 18,
+                          ui::place(kScreenRect, 780.0f, 24.0f, ui::anchor::bottom_left, ui::anchor::bottom_left,
+                                    {24.0f, -10.0f}),
+                          t.text_hint, ui::text_align::left);
 
     if (scene_fade_in_t_ > 0.0f) {
         DrawRectangle(0, 0, kScreenWidth, kScreenHeight,
