@@ -63,6 +63,10 @@ struct ui_theme {
     Color note_outline;
     Color pause_overlay;
     Color pause_panel;
+    Color editor_grid_snap;
+    Color editor_grid_minor;
+    Color editor_grid_major;
+    Color editor_grid_major_glow;
 
     // --- アクセント・ステータス ---
     Color accent;               // チャートラベル等のアクセント色
@@ -142,6 +146,10 @@ inline constexpr ui_theme kLightTheme = {
     .note_outline = {120, 128, 138, 255},
     .pause_overlay = {3, 6, 10, 150},
     .pause_panel = {248, 249, 251, 245},
+    .editor_grid_snap = {216, 220, 228, 42},
+    .editor_grid_minor = {216, 220, 228, 82},
+    .editor_grid_major = {80, 80, 80, 220},
+    .editor_grid_major_glow = {182, 186, 194, 180},
     // accent/status
     .accent = {124, 58, 237, 255},
     .error = {220, 38, 38, 255},
@@ -218,6 +226,10 @@ inline constexpr ui_theme kDarkTheme = {
     .note_outline = {160, 168, 178, 255},
     .pause_overlay = {0, 0, 0, 180},
     .pause_panel = {32, 34, 38, 245},
+    .editor_grid_snap = {52, 56, 64, 80},
+    .editor_grid_minor = {52, 56, 64, 220},
+    .editor_grid_major = {80, 84, 92, 255},
+    .editor_grid_major_glow = {80, 84, 92, 180},
     // accent/status
     .accent = {158, 100, 255, 255},
     .error = {240, 60, 60, 255},
