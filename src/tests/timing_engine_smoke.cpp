@@ -58,6 +58,28 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    engine.init(events, 480, 120);
+
+    if (!nearly_equal(engine.tick_to_ms(0), 120.0)) {
+        std::cerr << "tick_to_ms with offset failed\n";
+        return EXIT_FAILURE;
+    }
+
+    if (!nearly_equal(engine.tick_to_ms(480), 620.0)) {
+        std::cerr << "tick_to_ms at first bpm change with offset failed\n";
+        return EXIT_FAILURE;
+    }
+
+    if (engine.ms_to_tick(120.0) != 0) {
+        std::cerr << "ms_to_tick at offset origin failed\n";
+        return EXIT_FAILURE;
+    }
+
+    if (engine.ms_to_tick(0.0) != -115) {
+        std::cerr << "ms_to_tick before offset failed\n";
+        return EXIT_FAILURE;
+    }
+
     if (engine.get_bpm_at(0) != 120.0f || engine.get_bpm_at(479) != 120.0f) {
         std::cerr << "get_bpm_at before change failed\n";
         return EXIT_FAILURE;

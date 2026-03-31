@@ -25,6 +25,11 @@ public:
     void draw() override;
 
 private:
+    enum class pending_action {
+        none,
+        exit_to_song_select,
+    };
+
     struct timeline_note_drag_state {
         bool active = false;
         int lane = 0;
@@ -41,7 +46,21 @@ private:
         int pending_key_count = 4;
     };
 
+    struct save_dialog_state {
+        bool open = false;
+        ui::text_input_state file_name_input;
+        std::string error;
+        bool submit_requested = false;
+        pending_action action_after_save = pending_action::none;
+    };
+
+    struct unsaved_changes_dialog_state {
+        bool open = false;
+        pending_action pending = pending_action::none;
+    };
+
     chart_data make_new_chart_data() const;
+    chart_data make_chart_data_for_save() const;
     std::optional<note_data> dragged_note() const;
     std::vector<size_t> sorted_timing_event_indices() const;
     editor_timeline_metrics timeline_metrics() const;
@@ -56,6 +75,7 @@ private:
     int snap_tick(int raw_tick) const;
     int default_timing_event_tick() const;
     void update_audio_clock();
+    void refresh_audio_length_tick();
     void update_note_hitsounds();
     void rebuild_waveform_data(const std::string& audio_path);
     void rebuild_waveform_samples();
@@ -87,8 +107,22 @@ private:
     void sync_metadata_inputs();
     bool has_active_metadata_input() const;
     bool apply_metadata_changes(bool clear_notes_for_key_count_change);
+    bool apply_chart_offset(int offset_ms);
+    std::string generated_chart_id(const std::string& difficulty) const;
+    std::string suggested_chart_file_name() const;
+    void open_save_dialog(pending_action action_after_save = pending_action::none);
+    void close_save_dialog();
+    bool save_to_path(const std::string& file_path);
+    bool save_chart();
+    bool save_chart_from_dialog();
+    void request_action(pending_action action);
+    void perform_action(pending_action action);
+    bool has_blocking_modal() const;
     void close_key_count_confirmation();
     void update_key_count_confirmation();
+    void update_unsaved_changes_dialog();
+    void draw_unsaved_changes_dialog() const;
+    void draw_save_dialog();
     void draw_key_count_confirmation() const;
 
     song_data song_;
@@ -118,6 +152,8 @@ private:
     std::optional<size_t> selected_note_index_;
     timeline_note_drag_state timeline_drag_;
     metadata_panel_state metadata_panel_;
+    save_dialog_state save_dialog_;
+    unsaved_changes_dialog_state unsaved_changes_dialog_;
     bool scrollbar_dragging_ = false;
     float scrollbar_drag_offset_ = 0.0f;
 };

@@ -6,6 +6,7 @@ level=5
 chartAuthor=Codex
 formatVersion=1
 resolution=480
+offset=18
 
 [Timing]
 bpm,0,150

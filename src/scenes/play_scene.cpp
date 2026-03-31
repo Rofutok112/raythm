@@ -241,7 +241,7 @@ void play_scene::on_enter() {
         return;
     }
 
-    timing_engine_.init(chart_data_->timing_events, chart_data_->meta.resolution);
+    timing_engine_.init(chart_data_->timing_events, chart_data_->meta.resolution, chart_data_->meta.offset);
     judge_system_.init(chart_data_->notes, timing_engine_);
     score_system_.init(static_cast<int>(chart_data_->notes.size()));
     gauge_ = gauge{};

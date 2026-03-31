@@ -239,6 +239,13 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
             } else {
                 meta.resolution = *parsed;
             }
+        } else if (key == "offset") {
+            const std::optional<int> parsed = parse_int(value);
+            if (!parsed.has_value()) {
+                errors.push_back(format_line_error(line.first, "offset must be an integer"));
+            } else {
+                meta.offset = *parsed;
+            }
         }
     }
 

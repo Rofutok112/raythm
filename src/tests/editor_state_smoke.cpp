@@ -19,6 +19,7 @@ chart_data make_chart() {
     data.meta.chart_author = "Codex";
     data.meta.format_version = 1;
     data.meta.resolution = 480;
+    data.meta.offset = 24;
     data.timing_events = {
         {timing_event_type::bpm, 0, 120.0f, 4, 4},
         {timing_event_type::meter, 0, 0.0f, 4, 4},
@@ -39,7 +40,7 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    if (!nearly_equal(state.engine().tick_to_ms(480), 500.0)) {
+    if (!nearly_equal(state.engine().tick_to_ms(480), 524.0)) {
         std::cerr << "initial timing engine state is invalid\n";
         return EXIT_FAILURE;
     }
@@ -83,7 +84,7 @@ int main() {
     }
 
     state.add_timing_event({timing_event_type::bpm, 480, 240.0f, 4, 4});
-    if (!nearly_equal(state.engine().tick_to_ms(960), 750.0)) {
+    if (!nearly_equal(state.engine().tick_to_ms(960), 774.0)) {
         std::cerr << "timing engine was not rebuilt after add_timing_event\n";
         return EXIT_FAILURE;
     }
@@ -98,7 +99,7 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    if (!nearly_equal(state.engine().tick_to_ms(480), 400.0)) {
+    if (!nearly_equal(state.engine().tick_to_ms(480), 424.0)) {
         std::cerr << "timing engine was not rebuilt after modify_timing_event\n";
         return EXIT_FAILURE;
     }
@@ -106,16 +107,17 @@ int main() {
     chart_meta updated_meta = state.data().meta;
     updated_meta.resolution = 960;
     updated_meta.level = 7;
+    updated_meta.offset = -12;
     if (!state.modify_metadata(updated_meta)) {
         std::cerr << "modify_metadata should succeed\n";
         return EXIT_FAILURE;
     }
-    if (state.data().meta.resolution != 960 || state.data().meta.level != 7) {
+    if (state.data().meta.resolution != 960 || state.data().meta.level != 7 || state.data().meta.offset != -12) {
         std::cerr << "modify_metadata did not update metadata\n";
         return EXIT_FAILURE;
     }
 
-    if (!nearly_equal(state.engine().tick_to_ms(480), 200.0)) {
+    if (!nearly_equal(state.engine().tick_to_ms(480), 188.0)) {
         std::cerr << "timing engine was not rebuilt after metadata change\n";
         return EXIT_FAILURE;
     }

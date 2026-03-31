@@ -51,7 +51,8 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
     output << "level=" << data.meta.level << '\n';
     output << "chartAuthor=" << data.meta.chart_author << '\n';
     output << "formatVersion=" << data.meta.format_version << '\n';
-    output << "resolution=" << data.meta.resolution << "\n\n";
+    output << "resolution=" << data.meta.resolution << '\n';
+    output << "offset=" << data.meta.offset << "\n\n";
 
     std::vector<timing_event> sorted_timing = data.timing_events;
     std::stable_sort(sorted_timing.begin(), sorted_timing.end(), [](const timing_event& left, const timing_event& right) {
