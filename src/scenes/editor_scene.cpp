@@ -709,7 +709,7 @@ void editor_scene::update_audio_clock() {
     }
 
     audio_time_seconds_ = seconds;
-    playback_tick_ = std::max(0, state_.engine().ms_to_tick(audio_time_seconds_ * 1000.0));
+    playback_tick_ = state_.engine().ms_to_tick(audio_time_seconds_ * 1000.0);
 }
 
 void editor_scene::refresh_audio_length_tick() {
@@ -810,7 +810,7 @@ void editor_scene::rebuild_waveform_samples() {
     for (const audio_waveform_peak& peak : waveform_summary_.peaks) {
         const double shifted_ms = peak.seconds * 1000.0 + static_cast<double>(waveform_offset_ms_);
         waveform_samples_.push_back({
-            shifted_ms >= 0.0 ? state_.engine().ms_to_tick(shifted_ms) : 0,
+            state_.engine().ms_to_tick(shifted_ms),
             peak.amplitude
         });
     }
@@ -1614,7 +1614,7 @@ void editor_scene::draw_right_panel() {
 
 void editor_scene::draw_timeline() const {
     const editor_timeline_metrics metrics = timeline_metrics();
-    const int min_tick = std::max(0, static_cast<int>(std::floor(bottom_tick_ - kMinVisibleTicks * 0.1f)));
+    const int min_tick = static_cast<int>(std::floor(bottom_tick_ - kMinVisibleTicks * 0.1f));
     const int max_tick = static_cast<int>(std::ceil(bottom_tick_ + visible_tick_span()));
     std::vector<editor_timeline_note> notes;
     notes.reserve(state_.data().notes.size());
