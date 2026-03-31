@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "raylib.h"
+#include "audio_waveform.h"
 #include "editor_meter_map.h"
 #include "editor_state.h"
 #include "editor_timeline_view.h"
@@ -48,6 +49,7 @@ private:
     float content_tick_span() const;
     float content_height_pixels() const;
     float scroll_offset_pixels() const;
+    float min_bottom_tick() const;
     float max_bottom_tick() const;
     int snap_division() const;
     int snap_interval() const;
@@ -55,6 +57,8 @@ private:
     int default_timing_event_tick() const;
     void update_audio_clock();
     void update_note_hitsounds();
+    void rebuild_waveform_data(const std::string& audio_path);
+    void rebuild_waveform_samples();
     void toggle_audio_playback();
     void seek_audio_to_tick(int tick, bool scroll_into_view);
     std::string playback_status_text() const;
@@ -102,6 +106,10 @@ private:
     int previous_playback_tick_ = 0;
     bool previous_audio_playing_ = false;
     std::string hitsound_path_;
+    bool waveform_visible_ = true;
+    int waveform_offset_ms_ = 0;
+    audio_waveform_summary waveform_summary_;
+    std::vector<editor_timeline_waveform_sample> waveform_samples_;
     float bottom_tick_ = 0.0f;
     float bottom_tick_target_ = 0.0f;
     float ticks_per_pixel_ = 2.0f;

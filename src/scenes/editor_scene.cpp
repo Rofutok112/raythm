@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "audio_manager.h"
+#include "audio_waveform.h"
 #include "chart_parser.h"
 #include "scene_common.h"
 #include "scene_manager.h"
@@ -44,11 +45,18 @@ constexpr float kMinVisibleTicks = 1920.0f;
 constexpr float kScrollLerpSpeed = 12.0f;
 constexpr float kScrollWheelViewportRatio = 0.36f;
 constexpr float kNoteHeadHeight = 14.0f;
+constexpr float kTimelineLeadInTicks = 960.0f;
 constexpr int kSnapDivisions[] = {1, 2, 4, 8, 16, 32};
 constexpr const char* kSnapLabels[] = {"1/1", "1/2", "1/4", "1/8", "1/16", "1/32"};
 constexpr Rectangle kHeaderToolsRect = ui::place(kHeaderRect, 168.0f, 34.0f,
                                                  ui::anchor::center_right, ui::anchor::center_right,
                                                  {-18.0f, 0.0f});
+constexpr Rectangle kWaveformOffsetRect = ui::place(kHeaderRect, 188.0f, 34.0f,
+                                                    ui::anchor::center_right, ui::anchor::center_right,
+                                                    {-338.0f, 0.0f});
+constexpr Rectangle kWaveformToggleRect = ui::place(kHeaderRect, 132.0f, 34.0f,
+                                                    ui::anchor::center_right, ui::anchor::center_right,
+                                                    {-198.0f, 0.0f});
 constexpr Rectangle kPlaybackRect = ui::place(kTimelineRect, 232.0f, 34.0f,
                                               ui::anchor::bottom_left, ui::anchor::bottom_left,
                                               {12.0f, -54.0f});
@@ -198,6 +206,10 @@ void editor_scene::on_enter() {
     previous_playback_tick_ = 0;
     previous_audio_playing_ = false;
     hitsound_path_.clear();
+    waveform_visible_ = true;
+    waveform_offset_ms_ = 0;
+    waveform_summary_ = {};
+    waveform_samples_.clear();
 
     if (chart_path_.has_value()) {
         const chart_parse_result result = chart_parser::parse(*chart_path_);
@@ -212,7 +224,7 @@ void editor_scene::on_enter() {
         state_.load(make_new_chart_data(), "");
     }
 
-    bottom_tick_ = 0.0f;
+    bottom_tick_ = min_bottom_tick();
     bottom_tick_target_ = bottom_tick_;
     ticks_per_pixel_ = 2.0f;
     snap_index_ = 4;
@@ -238,6 +250,7 @@ void editor_scene::on_enter() {
         const double length_ms = audio_manager::instance().get_bgm_length_seconds() * 1000.0;
         audio_length_tick_ = std::max(0, state_.engine().ms_to_tick(length_ms));
     }
+    rebuild_waveform_data(audio_path.string());
 
     const std::filesystem::path hitsound_path = repo_root() / "assets" / "audio" / "hitsound.mp3";
     hitsound_path_ = std::filesystem::exists(hitsound_path) ? hitsound_path.string() : "";
@@ -309,9 +322,6 @@ void editor_scene::draw() {
     ui::draw_panel(kHeaderRect);
 
     ui::draw_button_colored(kBackButtonRect, "BACK", 20, t.row, t.row_hover, t.text);
-    ui::draw_text_in_rect("CHART EDITOR", 28,
-                          ui::place(kHeaderRect, 280.0f, 32.0f, ui::anchor::center, ui::anchor::center),
-                          t.text);
 
     draw_left_panel();
     draw_timeline();
@@ -408,15 +418,19 @@ float editor_scene::content_tick_span() const {
 }
 
 float editor_scene::content_height_pixels() const {
-    return content_tick_span() / ticks_per_pixel_;
+    return (content_tick_span() - min_bottom_tick()) / ticks_per_pixel_;
 }
 
 float editor_scene::scroll_offset_pixels() const {
     return (max_bottom_tick() - bottom_tick_) / ticks_per_pixel_;
 }
 
+float editor_scene::min_bottom_tick() const {
+    return -kTimelineLeadInTicks;
+}
+
 float editor_scene::max_bottom_tick() const {
-    return std::max(0.0f, content_tick_span() - visible_tick_span());
+    return std::max(min_bottom_tick(), content_tick_span() - visible_tick_span());
 }
 
 int editor_scene::snap_division() const {
@@ -428,7 +442,7 @@ int editor_scene::snap_interval() const {
 }
 
 int editor_scene::snap_tick(int raw_tick) const {
-    return state_.snap_tick(raw_tick, snap_division());
+    return std::max(0, state_.snap_tick(std::max(0, raw_tick), snap_division()));
 }
 
 int editor_scene::default_timing_event_tick() const {
@@ -531,6 +545,29 @@ void editor_scene::update_note_hitsounds() {
 
     previous_playback_tick_ = playback_tick_;
     previous_audio_playing_ = true;
+}
+
+void editor_scene::rebuild_waveform_data(const std::string& audio_path) {
+    waveform_summary_ = {};
+    waveform_samples_.clear();
+    if (audio_path.empty() || !std::filesystem::exists(audio_path)) {
+        return;
+    }
+
+    waveform_summary_ = audio_waveform::build(audio_path);
+    rebuild_waveform_samples();
+}
+
+void editor_scene::rebuild_waveform_samples() {
+    waveform_samples_.clear();
+    waveform_samples_.reserve(waveform_summary_.peaks.size());
+    for (const audio_waveform_peak& peak : waveform_summary_.peaks) {
+        const double shifted_ms = peak.seconds * 1000.0 + static_cast<double>(waveform_offset_ms_);
+        waveform_samples_.push_back({
+            shifted_ms >= 0.0 ? state_.engine().ms_to_tick(shifted_ms) : 0,
+            peak.amplitude
+        });
+    }
 }
 
 std::string editor_scene::playback_status_text() const {
@@ -731,17 +768,17 @@ void editor_scene::apply_scroll_and_zoom(float dt) {
         ticks_per_pixel_ = std::clamp(ticks_per_pixel_ * zoom_scale, kMinTicksPerPixel, kMaxTicksPerPixel);
         bottom_tick_target_ = static_cast<float>(anchor_tick) -
                               (content.y + content.height - mouse.y) * ticks_per_pixel_;
-        bottom_tick_target_ = std::clamp(bottom_tick_target_, 0.0f, max_bottom_tick());
+        bottom_tick_target_ = std::clamp(bottom_tick_target_, min_bottom_tick(), max_bottom_tick());
     } else if (!audio_playing_ && wheel != 0.0f && CheckCollisionPointRec(mouse, content)) {
         bottom_tick_target_ = std::clamp(bottom_tick_target_ + wheel * visible_tick_span() * kScrollWheelViewportRatio,
-                                         0.0f, max_bottom_tick());
+                                         min_bottom_tick(), max_bottom_tick());
     } else if (audio_playing_) {
         bottom_tick_target_ = std::clamp(static_cast<float>(playback_tick_) - visible_tick_span() * kPlaybackFollowViewportRatio,
-                                         0.0f, max_bottom_tick());
+                                         min_bottom_tick(), max_bottom_tick());
     }
 
-    bottom_tick_target_ = std::clamp(bottom_tick_target_, 0.0f, max_bottom_tick());
-    if (bottom_tick_target_ <= 0.0f || bottom_tick_target_ >= max_bottom_tick()) {
+    bottom_tick_target_ = std::clamp(bottom_tick_target_, min_bottom_tick(), max_bottom_tick());
+    if (bottom_tick_target_ <= min_bottom_tick() || bottom_tick_target_ >= max_bottom_tick()) {
         bottom_tick_ = bottom_tick_target_;
         return;
     }
@@ -779,7 +816,7 @@ void editor_scene::select_timing_event(std::optional<size_t> index, bool scroll_
 
 void editor_scene::scroll_to_tick(int tick) {
     const float target = std::clamp(static_cast<float>(tick) - visible_tick_span() * 0.5f,
-                                    0.0f, max_bottom_tick());
+                                    min_bottom_tick(), max_bottom_tick());
     bottom_tick_target_ = target;
     bottom_tick_ = target;
 }
@@ -1213,6 +1250,8 @@ void editor_scene::draw_timeline() const {
         std::move(notes),
         selected_note_index_,
         audio_loaded_ ? std::optional<int>(playback_tick_) : std::nullopt,
+        &waveform_samples_,
+        waveform_visible_,
         preview_note,
         preview_has_overlap,
         min_tick,
@@ -1250,6 +1289,29 @@ void editor_scene::draw_header_tools() {
     ui::draw_label_value(ui::inset(kPlaybackRect, ui::edge_insets::symmetric(0.0f, 12.0f)),
                          "Audio", playback_status.c_str(), 16,
                          t.text, audio_loaded_ ? t.text_secondary : t.text_muted, 56.0f);
+
+    const std::string waveform_offset_label =
+        (waveform_offset_ms_ > 0 ? "+" : "") + std::to_string(waveform_offset_ms_) +
+        " ms";
+    const ui::selector_state waveform_offset = ui::draw_value_selector(
+        kWaveformOffsetRect, "Offset", waveform_offset_label.c_str(),
+        16, 24.0f, 68.0f, 10.0f);
+    if (waveform_offset.left.clicked) {
+        waveform_offset_ms_ = std::max(-10000, waveform_offset_ms_ - 5);
+        rebuild_waveform_samples();
+    } else if (waveform_offset.right.clicked) {
+        waveform_offset_ms_ = std::min(10000, waveform_offset_ms_ + 5);
+        rebuild_waveform_samples();
+    }
+
+    const ui::button_state waveform_toggle = ui::draw_button_colored(
+        kWaveformToggleRect, waveform_visible_ ? "WAVE ON" : "WAVE OFF", 16,
+        waveform_visible_ ? t.row_selected : t.row,
+        waveform_visible_ ? t.row_active : t.row_hover,
+        waveform_visible_ ? t.text : t.text_secondary);
+    if (waveform_toggle.clicked) {
+        waveform_visible_ = !waveform_visible_;
+    }
 
     // 描画は queue に寄せるが、ヒットテストはまだ即時計算のままにしている。
     // 次段で layer と hit test 優先順位を統合すると、modal / pause 系も同じ仕組みに載せられる。

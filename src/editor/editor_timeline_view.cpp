@@ -84,6 +84,24 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
     {
         ui::scoped_clip_rect clip_scope(content);
 
+        if (model.waveform_visible && model.waveform_samples != nullptr) {
+            const float center_x = content.x + content.width * 0.5f;
+            const bool dark_theme = t.bg.r < 128;
+            const unsigned char primary_alpha = dark_theme ? 84 : 24;
+            const unsigned char secondary_alpha = dark_theme ? 38 : 10;
+            for (const editor_timeline_waveform_sample& sample : *model.waveform_samples) {
+                if (sample.tick < model.min_tick || sample.tick > model.max_tick) {
+                    continue;
+                }
+
+                const float y = model.metrics.tick_to_y(sample.tick);
+                const float half_width = content.width * 0.5f * std::clamp(sample.amplitude, 0.0f, 1.0f);
+                ui::draw_line_f(center_x - half_width, y - 1.0f, center_x + half_width, y - 1.0f, with_alpha(t.accent, secondary_alpha));
+                ui::draw_line_f(center_x - half_width, y, center_x + half_width, y, with_alpha(t.accent, primary_alpha));
+                ui::draw_line_f(center_x - half_width, y + 1.0f, center_x + half_width, y + 1.0f, with_alpha(t.accent, secondary_alpha));
+            }
+        }
+
         for (int lane = 0; lane < std::max(1, model.metrics.key_count); ++lane) {
             const Rectangle rect = model.metrics.lane_rect(lane);
             DrawRectangleRec(rect, lane % 2 == 0 ? with_alpha(t.row, 20) : with_alpha(t.section, 20));

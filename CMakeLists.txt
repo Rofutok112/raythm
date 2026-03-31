@@ -17,6 +17,8 @@ add_executable(raythm src/main.cpp
         src/audio/audio.h
         src/audio/audio_manager.cpp
         src/audio/audio_manager.h
+        src/audio/audio_waveform.cpp
+        src/audio/audio_waveform.h
         src/editor/editor_command.h
         src/editor/editor_meter_map.cpp
         src/editor/editor_meter_map.h
