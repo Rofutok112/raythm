@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "raylib.h"
+#include "ui_coord.h"
 #include "scene_common.h"
 #include "theme.h"
 #include "ui_hit.h"
@@ -140,7 +141,7 @@ inline void draw_label_value_marquee(Rectangle rect, const char* label, const ch
     const Rectangle value_rect = {rect.x + label_width, rect.y,
                                   rect.width - label_width, rect.height};
     draw_text_in_rect(label, font_size, label_rect, label_color, text_align::left);
-    draw_marquee_text(value, static_cast<int>(value_rect.x), static_cast<int>(value_rect.y + 4.0f), font_size,
+    draw_marquee_text(value, value_rect.x, value_rect.y + 4.0f, font_size,
                       value_color, value_rect.width, time);
 }
 
@@ -235,8 +236,7 @@ inline void draw_progress_bar(Rectangle rect, float ratio,
     if (ratio > 0.0f) {
         const Rectangle fill_area = inset(rect, bar_inset);
         const float fill_w = fill_area.width * std::clamp(ratio, 0.0f, 1.0f);
-        DrawRectangle(static_cast<int>(fill_area.x), static_cast<int>(fill_area.y),
-                      static_cast<int>(fill_w), static_cast<int>(fill_area.height), fill);
+        draw_rect_f(fill_area.x, fill_area.y, fill_w, fill_area.height, fill);
     }
 }
 
@@ -277,13 +277,11 @@ inline float draw_slider(Rectangle row_rect, const char* label, const char* valu
     const Rectangle track = {track_left, row_rect.y + track_top_offset, track_width, 6.0f};
     const float clamped = std::clamp(ratio, 0.0f, 1.0f);
     DrawRectangleRec(track, g_theme->slider_track);
-    DrawRectangle(static_cast<int>(track.x), static_cast<int>(track.y),
-                  static_cast<int>(track.width * clamped), static_cast<int>(track.height),
-                  g_theme->slider_fill);
+    draw_rect_f(track.x, track.y, track.width * clamped, track.height, g_theme->slider_fill);
 
     // つまみ
-    const int knob_x = static_cast<int>(track.x + track.width * clamped);
-    DrawRectangle(knob_x - 6, static_cast<int>(track.y - 8.0f), 12, 22, g_theme->slider_knob);
+    const float knob_x = track.x + track.width * clamped;
+    draw_rect_f(knob_x - 6.0f, track.y - 8.0f, 12.0f, 22.0f, g_theme->slider_knob);
 
     // 値テキスト（右上）
     const Rectangle value_rect = {track.x, row_rect.y, track.width, track_top_offset};
@@ -311,12 +309,11 @@ inline float draw_slider_relative(Rectangle row_rect, const char* label, const c
 
     draw_text_in_rect(label, font_size, layout.label_rect, g_theme->text, text_align::left);
     DrawRectangleRec(layout.track_rect, g_theme->slider_track);
-    DrawRectangle(static_cast<int>(layout.track_rect.x), static_cast<int>(layout.track_rect.y),
-                  static_cast<int>(layout.track_rect.width * clamped), static_cast<int>(layout.track_rect.height),
-                  g_theme->slider_fill);
+    draw_rect_f(layout.track_rect.x, layout.track_rect.y,
+                layout.track_rect.width * clamped, layout.track_rect.height, g_theme->slider_fill);
 
-    const int knob_x = static_cast<int>(layout.track_rect.x + layout.track_rect.width * clamped);
-    DrawRectangle(knob_x - 6, static_cast<int>(layout.track_rect.y - 8.0f), 12, 22, g_theme->slider_knob);
+    const float knob_x = layout.track_rect.x + layout.track_rect.width * clamped;
+    draw_rect_f(knob_x - 6.0f, layout.track_rect.y - 8.0f, 12.0f, 22.0f, g_theme->slider_knob);
     draw_text_in_rect(value_text, font_size, layout.value_rect, g_theme->text_dim, text_align::right);
 
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), row_rect)) {

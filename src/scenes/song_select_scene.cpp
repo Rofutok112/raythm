@@ -282,18 +282,18 @@ void song_select_scene::draw_song_details(const song_entry& song, const chart_op
     const float detail_x = kJacketRect.x + kJacketRect.width + 20.0f;
     const float detail_max_width = kLeftPanelRect.x + kLeftPanelRect.width - detail_x - 16.0f;
     const double now = GetTime();
-    draw_marquee_text(song.song.meta.title.c_str(), static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 4.0f), 40,
+    draw_marquee_text(song.song.meta.title.c_str(), detail_x + content_offset_x, kJacketRect.y + 4.0f, 40,
                       with_alpha(t.text, content_alpha), detail_max_width, now);
-    draw_marquee_text(song.song.meta.artist.c_str(), static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 56.0f), 28,
+    draw_marquee_text(song.song.meta.artist.c_str(), detail_x + content_offset_x, kJacketRect.y + 56.0f, 28,
                       with_alpha(t.text_secondary, content_alpha), detail_max_width, now);
-    DrawText(TextFormat("BPM %.0f", song.song.meta.base_bpm), static_cast<int>(detail_x + content_offset_x),
-             static_cast<int>(kJacketRect.y + 100.0f), 24, with_alpha(t.text_muted, content_alpha));
+    ui::draw_text_f(TextFormat("BPM %.0f", song.song.meta.base_bpm), detail_x + content_offset_x,
+                    kJacketRect.y + 100.0f, 24, with_alpha(t.text_muted, content_alpha));
     if (selected_chart != nullptr) {
-        DrawText(TextFormat("%s %s Lv.%d", key_mode_label(selected_chart->meta.key_count).c_str(),
-                            selected_chart->meta.difficulty.c_str(), selected_chart->meta.level),
-                 static_cast<int>(detail_x + content_offset_x), static_cast<int>(kJacketRect.y + 150.0f), 28, with_alpha(t.text, content_alpha));
-        DrawText(selected_chart->meta.chart_author.c_str(), static_cast<int>(detail_x + content_offset_x),
-                 static_cast<int>(kJacketRect.y + 186.0f), 20, with_alpha(t.text_muted, content_alpha));
+        ui::draw_text_f(TextFormat("%s %s Lv.%d", key_mode_label(selected_chart->meta.key_count).c_str(),
+                                   selected_chart->meta.difficulty.c_str(), selected_chart->meta.level),
+                        detail_x + content_offset_x, kJacketRect.y + 150.0f, 28, with_alpha(t.text, content_alpha));
+        ui::draw_text_f(selected_chart->meta.chart_author.c_str(), detail_x + content_offset_x,
+                        kJacketRect.y + 186.0f, 20, with_alpha(t.text_muted, content_alpha));
     }
 
     ui::draw_section(kActionPanelRect);
@@ -307,13 +307,12 @@ void song_select_scene::draw_song_details(const song_entry& song, const chart_op
 
 void song_select_scene::draw_song_row(const song_entry& song, float item_y, bool is_selected, double now) const {
     const auto& t = *g_theme;
-    const int iy = static_cast<int>(item_y);
     const Rectangle row_rect = {kSongListRect.x + 14.0f, item_y - 8.0f, kSongListRect.width - 28.0f, 44.0f};
-    const int text_x = static_cast<int>(kSongListRect.x + 30.0f);
+    const float text_x = kSongListRect.x + 30.0f;
     const float list_text_max_w = kSongListRect.width - 70.0f;
-    const Rectangle title_clip_rect = intersect_rectangles({static_cast<float>(text_x), static_cast<float>(iy), list_text_max_w, 24.0f},
+    const Rectangle title_clip_rect = intersect_rectangles({text_x, item_y, list_text_max_w, 24.0f},
                                                            kSongListViewRect);
-    const Rectangle artist_clip_rect = intersect_rectangles({static_cast<float>(text_x), static_cast<float>(iy + 22), list_text_max_w, 16.0f},
+    const Rectangle artist_clip_rect = intersect_rectangles({text_x, item_y + 22.0f, list_text_max_w, 16.0f},
                                                             kSongListViewRect);
 
     if (ui::is_hovered(row_rect) || is_selected) {
@@ -331,8 +330,8 @@ void song_select_scene::draw_chart_rows(const std::vector<const chart_option*>& 
     const auto& t = *g_theme;
     const float child_x = kSongListRect.x + 46.0f;
     const float child_w = kSongListRect.width - 92.0f;
-    const int child_text_x = static_cast<int>(kSongListRect.x + 58.0f);
-    const int author_x = static_cast<int>(kSongListRect.x + kSongListRect.width - 120.0f);
+    const float child_text_x = kSongListRect.x + 58.0f;
+    const float author_x = kSongListRect.x + kSongListRect.width - 120.0f;
     float child_y = item_y + 46.0f;
     for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
         const chart_option& chart = *filtered[static_cast<size_t>(chart_index)];
@@ -342,11 +341,10 @@ void song_select_scene::draw_chart_rows(const std::vector<const chart_option*>& 
             const ui::row_state child_state = ui::draw_selectable_row(child_rect, child_selected, 0.0f);
             (void)child_state;
         }
-        DrawText(TextFormat("%s %s Lv.%d", key_mode_label(chart.meta.key_count).c_str(), chart.meta.difficulty.c_str(),
-                            chart.meta.level),
-                 child_text_x, static_cast<int>(child_y), 18,
-                 child_selected ? t.text : t.text_secondary);
-        DrawText(chart.meta.chart_author.c_str(), author_x, static_cast<int>(child_y) + 1, 14, t.text_muted);
+        ui::draw_text_f(TextFormat("%s %s Lv.%d", key_mode_label(chart.meta.key_count).c_str(), chart.meta.difficulty.c_str(),
+                                   chart.meta.level),
+                        child_text_x, child_y, 18, child_selected ? t.text : t.text_secondary);
+        ui::draw_text_f(chart.meta.chart_author.c_str(), author_x, child_y + 1.0f, 14, t.text_muted);
         child_y += 30.0f;
     }
 }
@@ -355,8 +353,7 @@ void song_select_scene::draw_song_list(const std::vector<const chart_option*>& f
     const auto& t = *g_theme;
     ui::draw_text_in_rect("Songs", 28, kSongListTitleRect, t.text, ui::text_align::left);
 
-    BeginScissorMode(static_cast<int>(kSongListViewRect.x), static_cast<int>(kSongListViewRect.y),
-                     static_cast<int>(kSongListViewRect.width), static_cast<int>(kSongListViewRect.height));
+    ui::begin_scissor_rect(kSongListViewRect);
 
     const double now = GetTime();
     float item_y = kSongListViewRect.y - scroll_y_;

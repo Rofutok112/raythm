@@ -102,15 +102,16 @@ void result_scene::draw() {
     const float song_info_max_w = kSongInfoRect.width - 32.0f;
     const double now = GetTime();
     {
-        const int sy = static_cast<int>(kSongInfoRect.y + (kSongInfoRect.height - 82) * 0.5f);
-        const int lx = static_cast<int>(kSongInfoRect.x + 16);
+        const float sy = kSongInfoRect.y + (kSongInfoRect.height - 82.0f) * 0.5f;
+        const float lx = kSongInfoRect.x + 16.0f;
         draw_marquee_text(song_.meta.title.c_str(), lx, sy, 32, t.text, song_info_max_w, now);
         draw_marquee_text(song_.meta.artist.c_str(), lx, sy + 38, 22, t.text_dim, song_info_max_w, now);
         const char* chart_label = TextFormat("%s %s Lv.%d", key_mode_label(chart_.key_count),
                                              chart_.difficulty.c_str(), chart_.level);
         const int chart_label_w = MeasureText(chart_label, 20);
-        DrawText(chart_label, lx, sy + 66, 20, t.accent);
-        DrawText(chart_.chart_author.c_str(), lx + chart_label_w + 16, sy + 66, 20, t.text_muted);
+        ui::draw_text_f(chart_label, lx, sy + 66.0f, 20, t.accent);
+        ui::draw_text_f(chart_.chart_author.c_str(), lx + static_cast<float>(chart_label_w) + 16.0f,
+                        sy + 66.0f, 20, t.text_muted);
     }
 
     // ランク表示
@@ -128,9 +129,7 @@ void result_scene::draw() {
 
     // FAILED 表示
     if (result_.failed) {
-        DrawText("FAILED",
-                 static_cast<int>(kRankRect.x + kRankRect.width + 20),
-                 static_cast<int>(kRankRect.y + 20), 40, t.error);
+        ui::draw_text_f("FAILED", kRankRect.x + kRankRect.width + 20.0f, kRankRect.y + 20.0f, 40, t.error);
     }
 
     // スコア・精度（フレーム中央に配置）

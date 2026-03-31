@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "theme.h"
+#include "ui_coord.h"
 
 namespace {
 
@@ -15,12 +16,8 @@ void draw_text_clipped(const char* text, float x, float y, int font_size, Color 
     const Font font = GetFontDefault();
     const float font_size_f = static_cast<float>(font_size);
     const float spacing = font_size_f / static_cast<float>(font.baseSize);
-    const int scissor_x = static_cast<int>(std::floor(clip_rect.x));
-    const int scissor_y = static_cast<int>(std::floor(clip_rect.y));
-    const int scissor_width = std::max(1, static_cast<int>(std::ceil(clip_rect.x + clip_rect.width) - std::floor(clip_rect.x)));
-    const int scissor_height = std::max(1, static_cast<int>(std::ceil(clip_rect.y + clip_rect.height) - std::floor(clip_rect.y)));
 
-    BeginScissorMode(scissor_x, scissor_y, scissor_width, scissor_height);
+    ui::begin_scissor_rect(clip_rect);
     DrawTextEx(font, text, {x, y}, font_size_f, spacing, color);
     EndScissorMode();
 }
@@ -34,8 +31,8 @@ void draw_scene_frame(const char* title, const char* subtitle, Color accent) {
     DrawRectangleRounded({80.0f, 80.0f, 1120.0f, 560.0f}, 0.04f, 8, g_theme->panel);
     DrawRectangleRoundedLinesEx({80.0f, 80.0f, 1120.0f, 560.0f}, 0.04f, 8, 3.0f, accent);
 
-    DrawText(title, 130, 130, 44, accent);
-    DrawText(subtitle, 130, 190, 24, g_theme->text_secondary);
+    ui::draw_text_f(title, 130.0f, 130.0f, 44, accent);
+    ui::draw_text_f(subtitle, 130.0f, 190.0f, 24, g_theme->text_secondary);
 }
 
 void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Color color, double time) {
@@ -78,7 +75,7 @@ void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Col
     draw_text_clipped(text, draw_x - offset, draw_y, font_size, color, clip_rect);
 }
 
-void draw_marquee_text(const char* text, int x, int y, int font_size, Color color, float max_width, double time) {
-    draw_marquee_text(text, {static_cast<float>(x), static_cast<float>(y), max_width, static_cast<float>(font_size)},
+void draw_marquee_text(const char* text, float x, float y, int font_size, Color color, float max_width, double time) {
+    draw_marquee_text(text, {x, y, max_width, static_cast<float>(font_size)},
                       font_size, color, time);
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "raylib.h"
+#include "ui_coord.h"
 #include "ui_layout.h"
 
 // テキスト配置ユーティリティ。
@@ -32,7 +33,7 @@ inline Vector2 text_position(const char* text, int font_size, Rectangle rect,
 inline void draw_text_in_rect(const char* text, int font_size, Rectangle rect,
                               Color color, text_align align = text_align::center) {
     const Vector2 pos = text_position(text, font_size, rect, align);
-    DrawText(text, static_cast<int>(pos.x), static_cast<int>(pos.y), font_size, color);
+    draw_text_f(text, pos.x, pos.y, font_size, color);
 }
 
 }  // namespace ui
