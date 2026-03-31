@@ -41,8 +41,9 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
     const auto& t = *g_theme;
     editor_timing_panel_result result;
 
-    const Rectangle timing_box = {model.content_rect.x, model.content_rect.y, model.content_rect.width, 262.0f};
-    const Rectangle editor_box = {model.content_rect.x, timing_box.y + timing_box.height + 12.0f, model.content_rect.width, 238.0f};
+    const Rectangle editor_box = {model.content_rect.x, model.content_rect.y + 372.0f, model.content_rect.width, 164.0f};
+    const Rectangle timing_box = {model.content_rect.x, model.content_rect.y, model.content_rect.width,
+                                  editor_box.y - model.content_rect.y - 12.0f};
 
     auto draw_bar_pick_row = [&](Rectangle rect, const char* label, const std::string& value,
                                  editor_timing_input_field field, float label_width = 84.0f) {
@@ -77,7 +78,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         ui::draw_text_in_rect(label, 16, label_rect,
                               selected ? t.text : t.text_secondary, ui::text_align::left);
 
-        const char* display_value = state.bar_pick_mode ? "Click Timeline" : value.c_str();
+        const char* display_value = state.bar_pick_mode ? "Click TL" : value.c_str();
         const Color value_color = state.bar_pick_mode ? t.accent : (value.empty() ? t.text_hint : t.text);
         ui::draw_text_in_rect(display_value, 16,
                               ui::inset(input_rect, ui::edge_insets::symmetric(0.0f, 10.0f)),
@@ -231,7 +232,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
 
         if (!state.input_error.empty()) {
             ui::draw_text_in_rect(state.input_error.c_str(), 16,
-                                  {editor_box.x + 12.0f, editor_box.y + 182.0f, editor_box.width - 24.0f, 36.0f},
+                                  {editor_box.x + 12.0f, editor_box.y + 128.0f, editor_box.width - 24.0f, 24.0f},
                                   t.error, ui::text_align::left);
         }
     } else {

@@ -1034,33 +1034,13 @@ void editor_scene::draw_right_panel() {
         metadata_panel_.chart_author_input.active = false;
     }
 
-    const Rectangle editor_box = {content.x, content.y + 262.0f + 12.0f, content.width, 238.0f};
+    const Rectangle editor_box = {content.x, content.y + 372.0f, content.width, 164.0f};
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
         timing_panel_.active_input_field != editor_timing_input_field::none &&
         !panel_result.clicked_input_row &&
         !CheckCollisionPointRec(mouse, editor_box)) {
         timing_panel_.active_input_field = editor_timing_input_field::none;
         timing_panel_.bar_pick_mode = false;
-    }
-
-    const Rectangle note_box = {content.x, editor_box.y + editor_box.height + 12.0f, content.width, 56.0f};
-    const auto& t = *g_theme;
-    ui::draw_section(note_box);
-    if (selected_note_index_.has_value() && *selected_note_index_ < state_.data().notes.size()) {
-        const note_data& note = state_.data().notes[*selected_note_index_];
-        ui::draw_label_value({note_box.x + 12.0f, note_box.y + 8.0f, note_box.width - 24.0f, 18.0f},
-                             "Note", note_type_label(note.type), 15,
-                             t.text_secondary, t.text, 56.0f);
-        ui::draw_label_value({note_box.x + 12.0f, note_box.y + 28.0f, note_box.width - 24.0f, 18.0f},
-                             "Tick", TextFormat("%d  lane %d", note.tick, note.lane + 1), 15,
-                             t.text_secondary, t.text_muted, 56.0f);
-    } else {
-        ui::draw_label_value({note_box.x + 12.0f, note_box.y + 8.0f, note_box.width - 24.0f, 18.0f},
-                             "Notes", TextFormat("%d", static_cast<int>(state_.data().notes.size())), 15,
-                             t.text_secondary, t.text, 56.0f);
-        ui::draw_label_value({note_box.x + 12.0f, note_box.y + 28.0f, note_box.width - 24.0f, 18.0f},
-                             "Undo", state_.can_undo() ? "Available" : "Empty", 15,
-                             t.text_secondary, state_.can_undo() ? t.success : t.text, 56.0f);
     }
 }
 
