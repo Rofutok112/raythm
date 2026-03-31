@@ -95,7 +95,7 @@ public:
 
 private:
     void rebuild() {
-        engine_.init(chart_.timing_events, chart_.meta.resolution);
+        engine_.init(chart_.timing_events, chart_.meta.resolution, chart_.meta.offset);
     }
 
     chart_data& chart_;
@@ -120,7 +120,7 @@ public:
 
 private:
     void rebuild() {
-        engine_.init(chart_.timing_events, chart_.meta.resolution);
+        engine_.init(chart_.timing_events, chart_.meta.resolution, chart_.meta.offset);
     }
 
     chart_data& chart_;
@@ -146,7 +146,7 @@ public:
 
 private:
     void rebuild() {
-        engine_.init(chart_.timing_events, chart_.meta.resolution);
+        engine_.init(chart_.timing_events, chart_.meta.resolution, chart_.meta.offset);
     }
 
     chart_data& chart_;
@@ -178,7 +178,7 @@ public:
 
 private:
     void rebuild() {
-        engine_.init(chart_.timing_events, chart_.meta.resolution);
+        engine_.init(chart_.timing_events, chart_.meta.resolution, chart_.meta.offset);
     }
 
     chart_data& chart_;
@@ -350,7 +350,7 @@ void editor_state::set_file_path(std::string file_path) {
 }
 
 void editor_state::rebuild_timing_engine() {
-    timing_engine_.init(chart_.timing_events, chart_.meta.resolution);
+    timing_engine_.init(chart_.timing_events, chart_.meta.resolution, chart_.meta.offset);
 }
 
 void editor_state::sync_dirty_flag() {

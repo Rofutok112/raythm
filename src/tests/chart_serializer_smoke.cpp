@@ -23,7 +23,8 @@ bool equal_chart_meta(const chart_meta& left, const chart_meta& right) {
            left.level == right.level &&
            left.chart_author == right.chart_author &&
            left.format_version == right.format_version &&
-           left.resolution == right.resolution;
+           left.resolution == right.resolution &&
+           left.offset == right.offset;
 }
 
 bool equal_timing_event(const timing_event& left, const timing_event& right) {
@@ -102,6 +103,7 @@ int main() {
     source.meta.chart_author = "Codex";
     source.meta.format_version = 1;
     source.meta.resolution = 480;
+    source.meta.offset = -35;
 
     source.timing_events = {
         {.type = timing_event_type::bpm, .tick = 960, .bpm = 180.5f, .numerator = 4, .denominator = 4},
@@ -125,6 +127,7 @@ int main() {
     const std::string content = read_text_file(output_path);
     bool ok = true;
 
+    ok = content.find("offset=-35") != std::string::npos && ok;
     ok = expect_contains_in_order(content, "meter,0,4/4", "bpm,960,180.5") && ok;
     ok = expect_contains_in_order(content, "tap,480,0", "hold,480,2,840") && ok;
 

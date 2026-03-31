@@ -40,6 +40,7 @@ struct chart_meta {
     std::string chart_author;
     int format_version = 0;
     int resolution = 0;
+    int offset = 0;
 };
 
 // タイミングイベントの種類。

@@ -10,12 +10,13 @@ double tick_delta_to_ms(int tick_delta, float bpm, int resolution) {
 }
 }
 
-void timing_engine::init(std::vector<timing_event> events, int resolution) {
+void timing_engine::init(std::vector<timing_event> events, int resolution, int offset_ms) {
     if (resolution <= 0) {
         throw std::invalid_argument("resolution must be greater than zero");
     }
 
     resolution_ = resolution;
+    offset_ms_ = offset_ms;
     bpm_segments_.clear();
 
     std::vector<timing_event> bpm_events;
@@ -76,20 +77,19 @@ double timing_engine::tick_to_ms(int tick) const {
         [](int target_tick, const bpm_segment& segment) { return target_tick < segment.start_tick; });
     const bpm_segment& segment = upper == bpm_segments_.begin() ? bpm_segments_.front() : *std::prev(upper);
 
-    return segment.start_ms + tick_delta_to_ms(tick - segment.start_tick, segment.bpm, resolution_);
+    return segment.start_ms + tick_delta_to_ms(tick - segment.start_tick, segment.bpm, resolution_) +
+           static_cast<double>(offset_ms_);
 }
 
 int timing_engine::ms_to_tick(double ms) const {
-    if (ms < 0.0) {
-        throw std::invalid_argument("ms must be zero or greater");
-    }
+    const double adjusted_ms = ms - static_cast<double>(offset_ms_);
 
     const auto upper = std::upper_bound(
-        bpm_segments_.begin(), bpm_segments_.end(), ms,
+        bpm_segments_.begin(), bpm_segments_.end(), adjusted_ms,
         [](double target_ms, const bpm_segment& segment) { return target_ms < segment.start_ms; });
     const bpm_segment& segment = upper == bpm_segments_.begin() ? bpm_segments_.front() : *std::prev(upper);
 
-    const double tick_delta = ms * 0.0 + (ms - segment.start_ms) * static_cast<double>(resolution_) *
+    const double tick_delta = (adjusted_ms - segment.start_ms) * static_cast<double>(resolution_) *
                               static_cast<double>(segment.bpm) / 60000.0;
     return segment.start_tick + static_cast<int>(std::lround(tick_delta));
 }

@@ -6,7 +6,7 @@
 
 class timing_engine {
 public:
-    void init(std::vector<timing_event> events, int resolution);
+    void init(std::vector<timing_event> events, int resolution, int offset_ms = 0);
     double tick_to_ms(int tick) const;
     int ms_to_tick(double ms) const;
     float get_bpm_at(int tick) const;
@@ -20,4 +20,5 @@ private:
 
     std::vector<bpm_segment> bpm_segments_;
     int resolution_ = 480;
+    int offset_ms_ = 0;
 };
