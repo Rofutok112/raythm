@@ -66,7 +66,9 @@ add_executable(raythm src/main.cpp
         src/ui/ui_layout.h
         src/ui/ui_text.h
         src/ui/ui_hit.h
-        src/ui/ui_draw.h)
+        src/ui/ui_draw.h
+        src/ui/ui_clip.cpp
+        src/ui/ui_clip.h)
 
 add_executable(chart_parser_smoke
         src/gameplay/chart_parser.cpp

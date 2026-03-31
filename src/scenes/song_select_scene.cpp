@@ -15,6 +15,7 @@
 #include "song_loader.h"
 #include "theme.h"
 #include "title_scene.h"
+#include "ui_clip.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
 
@@ -62,19 +63,6 @@ std::filesystem::path repo_root() {
 
 std::string key_mode_label(int key_count) {
     return key_count == 6 ? "6K" : "4K";
-}
-
-Rectangle intersect_rectangles(Rectangle a, Rectangle b) {
-    const float left = std::max(a.x, b.x);
-    const float top = std::max(a.y, b.y);
-    const float right = std::min(a.x + a.width, b.x + b.width);
-    const float bottom = std::min(a.y + a.height, b.y + b.height);
-    return {
-        left,
-        top,
-        std::max(0.0f, right - left),
-        std::max(0.0f, bottom - top)
-    };
 }
 
 }
@@ -310,10 +298,8 @@ void song_select_scene::draw_song_row(const song_entry& song, float item_y, bool
     const Rectangle row_rect = {kSongListRect.x + 14.0f, item_y - 8.0f, kSongListRect.width - 28.0f, 44.0f};
     const float text_x = kSongListRect.x + 30.0f;
     const float list_text_max_w = kSongListRect.width - 70.0f;
-    const Rectangle title_clip_rect = intersect_rectangles({text_x, item_y, list_text_max_w, 24.0f},
-                                                           kSongListViewRect);
-    const Rectangle artist_clip_rect = intersect_rectangles({text_x, item_y + 22.0f, list_text_max_w, 16.0f},
-                                                            kSongListViewRect);
+    const Rectangle title_clip_rect = {text_x, item_y, list_text_max_w, 24.0f};
+    const Rectangle artist_clip_rect = {text_x, item_y + 22.0f, list_text_max_w, 16.0f};
 
     if (ui::is_hovered(row_rect) || is_selected) {
         const ui::row_state row_state = ui::draw_selectable_row(row_rect, is_selected, 0.0f);
@@ -353,7 +339,7 @@ void song_select_scene::draw_song_list(const std::vector<const chart_option*>& f
     const auto& t = *g_theme;
     ui::draw_text_in_rect("Songs", 28, kSongListTitleRect, t.text, ui::text_align::left);
 
-    ui::begin_scissor_rect(kSongListViewRect);
+    ui::scoped_clip_rect clip_scope(kSongListViewRect);
 
     const double now = GetTime();
     float item_y = kSongListViewRect.y - scroll_y_;
@@ -377,8 +363,6 @@ void song_select_scene::draw_song_list(const std::vector<const chart_option*>& f
         }
         item_y += row_h;
     }
-    EndScissorMode();
-
     ui::draw_scrollbar(kSongListScrollbarTrackRect, compute_content_height(), scroll_y_, t.scrollbar_track, t.scrollbar_thumb);
 }
 

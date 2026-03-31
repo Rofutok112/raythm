@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "theme.h"
+#include "ui_clip.h"
 #include "ui_coord.h"
 
 namespace {
@@ -17,9 +18,8 @@ void draw_text_clipped(const char* text, float x, float y, int font_size, Color 
     const float font_size_f = static_cast<float>(font_size);
     const float spacing = font_size_f / static_cast<float>(font.baseSize);
 
-    ui::begin_scissor_rect(clip_rect);
+    ui::scoped_clip_rect clip_scope(clip_rect);
     DrawTextEx(font, text, {x, y}, font_size_f, spacing, color);
-    EndScissorMode();
 }
 
 }  // namespace
