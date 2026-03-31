@@ -106,7 +106,10 @@ int main() {
     chart_meta updated_meta = state.data().meta;
     updated_meta.resolution = 960;
     updated_meta.level = 7;
-    state.modify_metadata(updated_meta);
+    if (!state.modify_metadata(updated_meta)) {
+        std::cerr << "modify_metadata should succeed\n";
+        return EXIT_FAILURE;
+    }
     if (state.data().meta.resolution != 960 || state.data().meta.level != 7) {
         std::cerr << "modify_metadata did not update metadata\n";
         return EXIT_FAILURE;
@@ -114,6 +117,33 @@ int main() {
 
     if (!nearly_equal(state.engine().tick_to_ms(480), 200.0)) {
         std::cerr << "timing engine was not rebuilt after metadata change\n";
+        return EXIT_FAILURE;
+    }
+
+    chart_meta changed_key_count = state.data().meta;
+    changed_key_count.key_count = 6;
+    if (state.modify_metadata(changed_key_count)) {
+        std::cerr << "modify_metadata should reject key_count changes when notes remain\n";
+        return EXIT_FAILURE;
+    }
+
+    if (!state.modify_metadata(changed_key_count, true)) {
+        std::cerr << "modify_metadata should allow key_count changes when clearing notes\n";
+        return EXIT_FAILURE;
+    }
+
+    if (state.data().meta.key_count != 6 || !state.data().notes.empty()) {
+        std::cerr << "key_count change did not clear note data\n";
+        return EXIT_FAILURE;
+    }
+
+    if (!state.undo()) {
+        std::cerr << "undo should restore metadata and notes after key_count change\n";
+        return EXIT_FAILURE;
+    }
+
+    if (state.data().meta.key_count != 4 || state.data().notes.size() != 2) {
+        std::cerr << "undo did not restore note data after key_count change\n";
         return EXIT_FAILURE;
     }
 

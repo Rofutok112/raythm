@@ -6,6 +6,7 @@
 
 #include "data_models.h"
 #include "raylib.h"
+#include "ui_text_input.h"
 
 enum class editor_timing_input_field {
     none,
@@ -17,11 +18,11 @@ enum class editor_timing_input_field {
 };
 
 struct editor_timing_event_editor_inputs {
-    std::string bpm_bar;
-    std::string bpm_value;
-    std::string meter_bar;
-    std::string meter_numerator;
-    std::string meter_denominator;
+    ui::text_input_state bpm_bar;
+    ui::text_input_state bpm_value;
+    ui::text_input_state meter_bar;
+    ui::text_input_state meter_numerator;
+    ui::text_input_state meter_denominator;
 };
 
 struct editor_timing_panel_state {

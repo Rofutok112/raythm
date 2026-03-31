@@ -40,7 +40,6 @@ constexpr float kScrollbarGap = 10.0f;
 constexpr float kMinTicksPerPixel = 0.9f;
 constexpr float kMaxTicksPerPixel = 28.0f;
 constexpr float kMinVisibleTicks = 1920.0f;
-constexpr float kStartPaddingTicks = 240.0f;
 constexpr float kScrollLerpSpeed = 12.0f;
 constexpr float kScrollWheelViewportRatio = 0.36f;
 constexpr float kNoteHeadHeight = 14.0f;
@@ -51,6 +50,8 @@ constexpr Rectangle kHeaderToolsRect = ui::place(kHeaderRect, 360.0f, 34.0f,
                                                  {-18.0f, 0.0f});
 constexpr float kDropdownItemHeight = 30.0f;
 constexpr float kDropdownItemSpacing = 4.0f;
+constexpr Rectangle kMetadataConfirmRect = ui::place(kScreenRect, 420.0f, 196.0f,
+                                                     ui::anchor::center, ui::anchor::center);
 constexpr Rectangle kSnapDropdownRect = kHeaderToolsRect;
 constexpr Rectangle kSnapDropdownMenuRect = {
     kSnapDropdownRect.x,
@@ -62,6 +63,10 @@ constexpr Rectangle kSnapDropdownMenuRect = {
 
 const char* note_type_label(note_type type) {
     return type == note_type::hold ? "Hold" : "Tap";
+}
+
+const char* key_count_label(int key_count) {
+    return key_count == 6 ? "6K" : "4K";
 }
 
 editor_timeline_note make_timeline_note(const note_data& note) {
@@ -88,29 +93,8 @@ bool timing_event_sort_less(const timing_event& left, size_t left_index,
     return left_index < right_index;
 }
 
-bool accepts_decimal(editor_timing_input_field field) {
-    return field == editor_timing_input_field::bpm_value;
-}
-
-bool accepts_bar_beat(editor_timing_input_field field) {
-    return field == editor_timing_input_field::bpm_measure ||
-           field == editor_timing_input_field::meter_measure;
-}
-
-bool accepts_character(editor_timing_input_field field, int codepoint, const std::string& value) {
-    if (field == editor_timing_input_field::none) {
-        return false;
-    }
-    if (codepoint >= '0' && codepoint <= '9') {
-        return true;
-    }
-    if (codepoint == ':' && accepts_bar_beat(field) && value.find(':') == std::string::npos) {
-        return true;
-    }
-    if (codepoint == '.' && accepts_decimal(field) && value.find('.') == std::string::npos) {
-        return true;
-    }
-    return false;
+bool accepts_metadata_character(int codepoint, const std::string&) {
+    return codepoint >= 32 && codepoint <= 126;
 }
 
 bool try_parse_int(const std::string& text, int& out_value) {
@@ -201,7 +185,7 @@ void editor_scene::on_enter() {
         state_.load(make_new_chart_data(), "");
     }
 
-    bottom_tick_ = -kStartPaddingTicks;
+    bottom_tick_ = 0.0f;
     bottom_tick_target_ = bottom_tick_;
     ticks_per_pixel_ = 2.0f;
     snap_index_ = 4;
@@ -215,8 +199,10 @@ void editor_scene::on_enter() {
     timing_panel_.list_scrollbar_dragging = false;
     timing_panel_.list_scrollbar_drag_offset = 0.0f;
     timeline_drag_ = {};
+    sync_metadata_inputs();
     meter_map_.rebuild(state_.data());
     load_timing_event_inputs();
+    scroll_timing_list_to_bottom();
 
     const std::filesystem::path audio_path = std::filesystem::path(song_.directory) / song_.meta.audio_file;
     if (std::filesystem::exists(audio_path)) {
@@ -232,6 +218,11 @@ void editor_scene::on_enter() {
 void editor_scene::update(float dt) {
     rebuild_hit_regions();
 
+    if (metadata_panel_.key_count_confirm_open && IsKeyPressed(KEY_ESCAPE)) {
+        close_key_count_confirmation();
+        return;
+    }
+
     if (IsKeyPressed(KEY_ESCAPE)) {
         manager_.change_scene(std::make_unique<song_select_scene>(manager_));
         return;
@@ -239,6 +230,11 @@ void editor_scene::update(float dt) {
 
     if (ui::is_clicked(kBackButtonRect)) {
         manager_.change_scene(std::make_unique<song_select_scene>(manager_));
+        return;
+    }
+
+    if (metadata_panel_.key_count_confirm_open) {
+        update_key_count_confirmation();
         return;
     }
 
@@ -252,6 +248,10 @@ void editor_scene::rebuild_hit_regions() const {
     ui::begin_hit_regions();
     if (snap_dropdown_open_) {
         ui::register_hit_region(kSnapDropdownMenuRect, ui::draw_layer::overlay);
+    }
+    if (metadata_panel_.key_count_confirm_open) {
+        ui::register_hit_region(kScreenRect, ui::draw_layer::overlay);
+        ui::register_hit_region(kMetadataConfirmRect, ui::draw_layer::modal);
     }
 }
 
@@ -279,6 +279,9 @@ void editor_scene::draw() {
     draw_right_panel();
     draw_header_tools();
     draw_cursor_hud();
+    if (metadata_panel_.key_count_confirm_open) {
+        draw_key_count_confirmation();
+    }
 
     ui::flush_draw_queue();
     virtual_screen::end();
@@ -328,7 +331,7 @@ std::vector<size_t> editor_scene::sorted_timing_event_indices() const {
     std::stable_sort(indices.begin(), indices.end(), [this](size_t left_index, size_t right_index) {
         const timing_event& left = state_.data().timing_events[left_index];
         const timing_event& right = state_.data().timing_events[right_index];
-        return timing_event_sort_less(left, left_index, right, right_index);
+        return timing_event_sort_less(right, right_index, left, left_index);
     });
 
     return indices;
@@ -362,7 +365,7 @@ float editor_scene::content_tick_span() const {
     }
     max_tick = std::max(max_tick, audio_length_tick_);
 
-    return std::max(visible_tick_span(), static_cast<float>(max_tick) + state_.data().meta.resolution * 4.0f + kStartPaddingTicks);
+    return std::max(visible_tick_span(), static_cast<float>(max_tick) + state_.data().meta.resolution * 4.0f);
 }
 
 float editor_scene::content_height_pixels() const {
@@ -370,11 +373,11 @@ float editor_scene::content_height_pixels() const {
 }
 
 float editor_scene::scroll_offset_pixels() const {
-    return (bottom_tick_ + kStartPaddingTicks) / ticks_per_pixel_;
+    return (max_bottom_tick() - bottom_tick_) / ticks_per_pixel_;
 }
 
 float editor_scene::max_bottom_tick() const {
-    return std::max(-kStartPaddingTicks, content_tick_span() - visible_tick_span());
+    return std::max(0.0f, content_tick_span() - visible_tick_span());
 }
 
 int editor_scene::snap_division() const {
@@ -446,6 +449,7 @@ void editor_scene::handle_shortcuts() {
         }
         selected_note_index_.reset();
         sync_timing_event_selection();
+        sync_metadata_inputs();
         meter_map_.rebuild(state_.data());
         load_timing_event_inputs();
         timing_panel_.input_error.clear();
@@ -455,12 +459,14 @@ void editor_scene::handle_shortcuts() {
         state_.redo();
         selected_note_index_.reset();
         sync_timing_event_selection();
+        sync_metadata_inputs();
         meter_map_.rebuild(state_.data());
         load_timing_event_inputs();
         timing_panel_.input_error.clear();
     }
 
-    if (timing_panel_.active_input_field == editor_timing_input_field::none &&
+    if (!has_active_metadata_input() &&
+        timing_panel_.active_input_field == editor_timing_input_field::none &&
         IsKeyPressed(KEY_DELETE) && selected_note_index_.has_value()) {
         const size_t selected_index = *selected_note_index_;
         if (state_.remove_note(selected_index)) {
@@ -474,49 +480,8 @@ void editor_scene::handle_shortcuts() {
 }
 
 void editor_scene::handle_text_input() {
-    std::string* active_input = nullptr;
-    switch (timing_panel_.active_input_field) {
-        case editor_timing_input_field::bpm_measure:
-            active_input = &timing_panel_.inputs.bpm_bar;
-            break;
-        case editor_timing_input_field::bpm_value:
-            active_input = &timing_panel_.inputs.bpm_value;
-            break;
-        case editor_timing_input_field::meter_measure:
-            active_input = &timing_panel_.inputs.meter_bar;
-            break;
-        case editor_timing_input_field::meter_numerator:
-            active_input = &timing_panel_.inputs.meter_numerator;
-            break;
-        case editor_timing_input_field::meter_denominator:
-            active_input = &timing_panel_.inputs.meter_denominator;
-            break;
-        case editor_timing_input_field::none:
-            break;
-    }
-
-    if (active_input == nullptr) {
+    if (has_active_metadata_input() || metadata_panel_.key_count_confirm_open) {
         return;
-    }
-
-    int codepoint = GetCharPressed();
-    while (codepoint > 0) {
-        if (accepts_character(timing_panel_.active_input_field, codepoint, *active_input) && active_input->size() < 16) {
-            active_input->push_back(static_cast<char>(codepoint));
-            timing_panel_.input_error.clear();
-        }
-        codepoint = GetCharPressed();
-    }
-
-    if (IsKeyPressed(KEY_BACKSPACE) && !active_input->empty()) {
-        active_input->pop_back();
-        timing_panel_.input_error.clear();
-    }
-
-    if (IsKeyPressed(KEY_ENTER)) {
-        apply_selected_timing_event();
-        timing_panel_.active_input_field = editor_timing_input_field::none;
-        timing_panel_.bar_pick_mode = false;
     }
 }
 
@@ -534,15 +499,17 @@ void editor_scene::handle_timeline_interaction() {
                 const timing_event& event = state_.data().timing_events[*timing_panel_.selected_event_index];
                 const std::string value = std::to_string(position.measure) + ":" + std::to_string(position.beat);
                 if (event.type == timing_event_type::bpm) {
-                    timing_panel_.inputs.bpm_bar = value;
+                    timing_panel_.inputs.bpm_bar.value = value;
                 } else {
-                    timing_panel_.inputs.meter_bar = value;
+                    timing_panel_.inputs.meter_bar.value = value;
                 }
-                timing_panel_.input_error.clear();
+                apply_selected_timing_event();
             }
             timing_panel_.bar_pick_mode = false;
+            timing_panel_.active_input_field = editor_timing_input_field::none;
         } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || IsKeyPressed(KEY_ESCAPE)) {
             timing_panel_.bar_pick_mode = false;
+            timing_panel_.active_input_field = editor_timing_input_field::none;
         }
         return;
     }
@@ -596,14 +563,14 @@ void editor_scene::apply_scroll_and_zoom(float dt) {
     const Rectangle track = metrics.scrollbar_track_rect();
     const ui::scrollbar_interaction scrollbar = ui::update_vertical_scrollbar(
         track, content_height_pixels(), scroll_offset_pixels(), scrollbar_dragging_, scrollbar_drag_offset_, 40.0f);
-    bottom_tick_target_ = -kStartPaddingTicks + scrollbar.scroll_offset * ticks_per_pixel_;
+    bottom_tick_target_ = max_bottom_tick() - scrollbar.scroll_offset * ticks_per_pixel_;
     if (scrollbar.changed || scrollbar.dragging) {
         bottom_tick_ = bottom_tick_target_;
     }
 
     if (wheel == 0.0f || !CheckCollisionPointRec(mouse, content)) {
-        bottom_tick_target_ = std::clamp(bottom_tick_target_, -kStartPaddingTicks, max_bottom_tick());
-        if (bottom_tick_target_ <= -kStartPaddingTicks || bottom_tick_target_ >= max_bottom_tick()) {
+        bottom_tick_target_ = std::clamp(bottom_tick_target_, 0.0f, max_bottom_tick());
+        if (bottom_tick_target_ <= 0.0f || bottom_tick_target_ >= max_bottom_tick()) {
             bottom_tick_ = bottom_tick_target_;
             return;
         }
@@ -618,15 +585,16 @@ void editor_scene::apply_scroll_and_zoom(float dt) {
         const int anchor_tick = metrics.y_to_tick(mouse.y);
         const float zoom_scale = wheel > 0.0f ? 0.85f : 1.15f;
         ticks_per_pixel_ = std::clamp(ticks_per_pixel_ * zoom_scale, kMinTicksPerPixel, kMaxTicksPerPixel);
-        bottom_tick_target_ = static_cast<float>(anchor_tick) - (mouse.y - content.y) * ticks_per_pixel_;
-        bottom_tick_target_ = std::clamp(bottom_tick_target_, -kStartPaddingTicks, max_bottom_tick());
+        bottom_tick_target_ = static_cast<float>(anchor_tick) -
+                              (content.y + content.height - mouse.y) * ticks_per_pixel_;
+        bottom_tick_target_ = std::clamp(bottom_tick_target_, 0.0f, max_bottom_tick());
         bottom_tick_ = bottom_tick_target_;
         return;
     }
 
-    bottom_tick_target_ = std::clamp(bottom_tick_target_ - wheel * visible_tick_span() * kScrollWheelViewportRatio,
-                                     -kStartPaddingTicks, max_bottom_tick());
-    if (bottom_tick_target_ <= -kStartPaddingTicks || bottom_tick_target_ >= max_bottom_tick()) {
+    bottom_tick_target_ = std::clamp(bottom_tick_target_ + wheel * visible_tick_span() * kScrollWheelViewportRatio,
+                                     0.0f, max_bottom_tick());
+    if (bottom_tick_target_ <= 0.0f || bottom_tick_target_ >= max_bottom_tick()) {
         bottom_tick_ = bottom_tick_target_;
         return;
     }
@@ -664,7 +632,7 @@ void editor_scene::select_timing_event(std::optional<size_t> index, bool scroll_
 
 void editor_scene::scroll_to_tick(int tick) {
     const float target = std::clamp(static_cast<float>(tick) - visible_tick_span() * 0.5f,
-                                    -kStartPaddingTicks, max_bottom_tick());
+                                    0.0f, max_bottom_tick());
     bottom_tick_target_ = target;
     bottom_tick_ = target;
 }
@@ -676,6 +644,19 @@ void editor_scene::sync_timing_event_selection() {
             ? std::nullopt
             : std::optional<size_t>(state_.data().timing_events.size() - 1);
     }
+}
+
+void editor_scene::scroll_timing_list_to_bottom() {
+    constexpr float kTimingRowHeight = 30.0f;
+    constexpr float kTimingRowGap = 4.0f;
+    constexpr float kTimingListViewportHeight = 174.0f;
+
+    const size_t count = state_.data().timing_events.size();
+    const float content_height = count == 0
+        ? kTimingListViewportHeight
+        : static_cast<float>(count) * kTimingRowHeight +
+            static_cast<float>(std::max<int>(0, static_cast<int>(count) - 1)) * kTimingRowGap;
+    timing_panel_.list_scroll_offset = std::max(0.0f, content_height - kTimingListViewportHeight);
 }
 
 bool editor_scene::apply_selected_timing_event() {
@@ -695,11 +676,11 @@ bool editor_scene::apply_selected_timing_event() {
     if (updated.type == timing_event_type::bpm) {
         editor_meter_map::bar_beat_position position;
         float bpm = 0.0f;
-        if (!try_parse_bar_beat(timing_panel_.inputs.bpm_bar, position)) {
+        if (!try_parse_bar_beat(timing_panel_.inputs.bpm_bar.value, position)) {
             timing_panel_.input_error = "Bar must be in M:B format.";
             return false;
         }
-        if (!try_parse_float(timing_panel_.inputs.bpm_value, bpm) || bpm <= 0.0f) {
+        if (!try_parse_float(timing_panel_.inputs.bpm_value.value, bpm) || bpm <= 0.0f) {
             timing_panel_.input_error = "BPM must be greater than zero.";
             return false;
         }
@@ -714,15 +695,15 @@ bool editor_scene::apply_selected_timing_event() {
         editor_meter_map::bar_beat_position position;
         int numerator = 0;
         int denominator = 0;
-        if (!try_parse_bar_beat(timing_panel_.inputs.meter_bar, position)) {
+        if (!try_parse_bar_beat(timing_panel_.inputs.meter_bar.value, position)) {
             timing_panel_.input_error = "Bar must be in M:B format.";
             return false;
         }
-        if (!try_parse_int(timing_panel_.inputs.meter_numerator, numerator) || numerator <= 0) {
+        if (!try_parse_int(timing_panel_.inputs.meter_numerator.value, numerator) || numerator <= 0) {
             timing_panel_.input_error = "Numerator must be 1 or greater.";
             return false;
         }
-        if (!try_parse_int(timing_panel_.inputs.meter_denominator, denominator) || denominator <= 0) {
+        if (!try_parse_int(timing_panel_.inputs.meter_denominator.value, denominator) || denominator <= 0) {
             timing_panel_.input_error = "Denominator must be 1 or greater.";
             return false;
         }
@@ -815,20 +796,116 @@ void editor_scene::load_timing_event_inputs() {
         return;
     }
 
+    timing_panel_.inputs.bpm_bar.active = false;
+    timing_panel_.inputs.bpm_value.active = false;
+    timing_panel_.inputs.meter_bar.active = false;
+    timing_panel_.inputs.meter_numerator.active = false;
+    timing_panel_.inputs.meter_denominator.active = false;
+
     const timing_event& event = state_.data().timing_events[*timing_panel_.selected_event_index];
-    timing_panel_.inputs.bpm_bar = meter_map_.bar_beat_label(event.tick);
-    timing_panel_.inputs.bpm_value = TextFormat("%.1f", event.bpm);
-    timing_panel_.inputs.meter_bar = meter_map_.bar_beat_label(event.tick);
-    timing_panel_.inputs.meter_numerator = std::to_string(event.numerator);
-    timing_panel_.inputs.meter_denominator = std::to_string(event.denominator);
+    timing_panel_.inputs.bpm_bar.value = meter_map_.bar_beat_label(event.tick);
+    timing_panel_.inputs.bpm_value.value = TextFormat("%.1f", event.bpm);
+    timing_panel_.inputs.meter_bar.value = meter_map_.bar_beat_label(event.tick);
+    timing_panel_.inputs.meter_numerator.value = std::to_string(event.numerator);
+    timing_panel_.inputs.meter_denominator.value = std::to_string(event.denominator);
 }
 
 void editor_scene::clear_timing_event_inputs() {
-    timing_panel_.inputs.bpm_bar.clear();
-    timing_panel_.inputs.bpm_value.clear();
-    timing_panel_.inputs.meter_bar.clear();
-    timing_panel_.inputs.meter_numerator.clear();
-    timing_panel_.inputs.meter_denominator.clear();
+    timing_panel_.inputs.bpm_bar.value.clear();
+    timing_panel_.inputs.bpm_value.value.clear();
+    timing_panel_.inputs.meter_bar.value.clear();
+    timing_panel_.inputs.meter_numerator.value.clear();
+    timing_panel_.inputs.meter_denominator.value.clear();
+    timing_panel_.inputs.bpm_bar.active = false;
+    timing_panel_.inputs.bpm_value.active = false;
+    timing_panel_.inputs.meter_bar.active = false;
+    timing_panel_.inputs.meter_numerator.active = false;
+    timing_panel_.inputs.meter_denominator.active = false;
+}
+
+void editor_scene::sync_metadata_inputs() {
+    metadata_panel_.difficulty_input.value = state_.data().meta.difficulty;
+    metadata_panel_.chart_author_input.value = state_.data().meta.chart_author;
+    metadata_panel_.key_count = state_.data().meta.key_count;
+    metadata_panel_.error.clear();
+}
+
+bool editor_scene::has_active_metadata_input() const {
+    return metadata_panel_.difficulty_input.active || metadata_panel_.chart_author_input.active;
+}
+
+bool editor_scene::apply_metadata_changes(bool clear_notes_for_key_count_change) {
+    chart_meta updated = state_.data().meta;
+    updated.difficulty = metadata_panel_.difficulty_input.value;
+    updated.chart_author = metadata_panel_.chart_author_input.value;
+    updated.key_count = metadata_panel_.key_count;
+
+    const bool key_count_changed = updated.key_count != state_.data().meta.key_count;
+    if (key_count_changed && !clear_notes_for_key_count_change && !state_.data().notes.empty()) {
+        metadata_panel_.pending_key_count = updated.key_count;
+        metadata_panel_.key_count_confirm_open = true;
+        metadata_panel_.error = "Changing mode will clear all notes.";
+        return false;
+    }
+
+    if (!state_.modify_metadata(updated, clear_notes_for_key_count_change)) {
+        metadata_panel_.error = "Failed to update chart metadata.";
+        metadata_panel_.key_count = state_.data().meta.key_count;
+        return false;
+    }
+
+    if (key_count_changed) {
+        selected_note_index_.reset();
+    }
+
+    metadata_panel_.error.clear();
+    close_key_count_confirmation();
+    sync_metadata_inputs();
+    return true;
+}
+
+void editor_scene::close_key_count_confirmation() {
+    metadata_panel_.key_count_confirm_open = false;
+    metadata_panel_.pending_key_count = state_.data().meta.key_count;
+    metadata_panel_.key_count = state_.data().meta.key_count;
+}
+
+void editor_scene::update_key_count_confirmation() {
+    const Rectangle confirm_button = {kMetadataConfirmRect.x + 94.0f, kMetadataConfirmRect.y + 142.0f, 104.0f, 30.0f};
+    const Rectangle cancel_button = {kMetadataConfirmRect.x + 222.0f, kMetadataConfirmRect.y + 142.0f, 104.0f, 30.0f};
+
+    if (ui::is_clicked(confirm_button, ui::draw_layer::modal)) {
+        metadata_panel_.key_count = metadata_panel_.pending_key_count;
+        apply_metadata_changes(true);
+        return;
+    }
+
+    if (ui::is_clicked(cancel_button, ui::draw_layer::modal)) {
+        metadata_panel_.error.clear();
+        close_key_count_confirmation();
+    }
+}
+
+void editor_scene::draw_key_count_confirmation() const {
+    ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
+    ui::enqueue_panel(kMetadataConfirmRect, ui::draw_layer::modal);
+    ui::enqueue_text_in_rect("Change Key Mode", 28,
+                             {kMetadataConfirmRect.x + 20.0f, kMetadataConfirmRect.y + 18.0f,
+                              kMetadataConfirmRect.width - 40.0f, 30.0f},
+                             g_theme->text, ui::text_align::center, ui::draw_layer::modal);
+    ui::enqueue_text_in_rect("All placed notes will be cleared.", 18,
+                             {kMetadataConfirmRect.x + 28.0f, kMetadataConfirmRect.y + 70.0f,
+                              kMetadataConfirmRect.width - 56.0f, 24.0f},
+                             g_theme->text_secondary, ui::text_align::center, ui::draw_layer::modal);
+    ui::enqueue_text_in_rect(TextFormat("Switch to %s?", key_count_label(metadata_panel_.pending_key_count)), 18,
+                             {kMetadataConfirmRect.x + 28.0f, kMetadataConfirmRect.y + 98.0f,
+                              kMetadataConfirmRect.width - 56.0f, 24.0f},
+                             g_theme->text, ui::text_align::center, ui::draw_layer::modal);
+
+    const Rectangle confirm_button = {kMetadataConfirmRect.x + 94.0f, kMetadataConfirmRect.y + 142.0f, 104.0f, 30.0f};
+    const Rectangle cancel_button = {kMetadataConfirmRect.x + 222.0f, kMetadataConfirmRect.y + 142.0f, 104.0f, 30.0f};
+    ui::enqueue_button(confirm_button, "CONFIRM", 16, ui::draw_layer::modal, 1.5f);
+    ui::enqueue_button(cancel_button, "CANCEL", 16, ui::draw_layer::modal, 1.5f);
 }
 
 void editor_scene::draw_left_panel() {
@@ -844,22 +921,58 @@ void editor_scene::draw_left_panel() {
     draw_marquee_text(song_.meta.title.c_str(), song_title_rect.x,
                       song_title_rect.y + 2.0f, 18, t.text_secondary, song_title_rect.width, now);
 
-    const Rectangle meta_box = {content.x, content.y + 100.0f, content.width, 142.0f};
+    const Rectangle meta_box = {content.x, content.y + 100.0f, content.width, 214.0f};
     ui::draw_section(meta_box);
-    ui::draw_label_value({meta_box.x + 12.0f, meta_box.y + 12.0f, meta_box.width - 24.0f, 28.0f},
-                         "Mode", TextFormat("%dK", state_.data().meta.key_count), 18, t.text_muted, t.text, 86.0f);
-    ui::draw_label_value_marquee({meta_box.x + 12.0f, meta_box.y + 42.0f, meta_box.width - 24.0f, 28.0f},
-                                 "Level", state_.data().meta.difficulty.c_str(), 18, t.text_muted, t.text, now, 86.0f);
-    ui::draw_label_value_marquee({meta_box.x + 12.0f, meta_box.y + 72.0f, meta_box.width - 24.0f, 28.0f},
-                                 "Author", state_.data().meta.chart_author.c_str(), 18, t.text_muted, t.text, now, 86.0f);
-    ui::draw_label_value({meta_box.x + 12.0f, meta_box.y + 100.0f, meta_box.width - 24.0f, 28.0f},
-                         "Status", status_label, 18, t.text_muted,
-                         state_.is_dirty() ? t.error : t.success, 86.0f);
+    ui::draw_text_in_rect("Metadata", 22,
+                          {meta_box.x + 12.0f, meta_box.y + 10.0f, meta_box.width - 24.0f, 28.0f},
+                          t.text, ui::text_align::left);
+
+    const ui::text_input_result difficulty_result = ui::draw_text_input(
+        {meta_box.x + 12.0f, meta_box.y + 46.0f, meta_box.width - 24.0f, 34.0f},
+        metadata_panel_.difficulty_input, "Diff", "Difficulty", "New",
+        ui::draw_layer::base, 16, 24, accepts_metadata_character, 58.0f);
+    const ui::text_input_result author_result = ui::draw_text_input(
+        {meta_box.x + 12.0f, meta_box.y + 86.0f, meta_box.width - 24.0f, 34.0f},
+        metadata_panel_.chart_author_input, "Author", "Chart author", "Unknown",
+        ui::draw_layer::base, 16, 32, accepts_metadata_character, 58.0f);
+
+    if (difficulty_result.activated || author_result.activated) {
+        timing_panel_.active_input_field = editor_timing_input_field::none;
+        timing_panel_.bar_pick_mode = false;
+        timing_panel_.input_error.clear();
+    }
+
+    const ui::selector_state key_count_selector = ui::draw_value_selector(
+        {meta_box.x + 12.0f, meta_box.y + 126.0f, meta_box.width - 24.0f, 34.0f},
+        "Mode", key_count_label(metadata_panel_.key_count),
+        16, 26.0f, 58.0f, 12.0f);
+    if ((key_count_selector.left.clicked || key_count_selector.right.clicked) && !metadata_panel_.key_count_confirm_open) {
+        metadata_panel_.key_count = metadata_panel_.key_count == 4 ? 6 : 4;
+        metadata_panel_.error.clear();
+        apply_metadata_changes(false);
+    }
+
+    ui::draw_label_value({meta_box.x + 12.0f, meta_box.y + 170.0f, meta_box.width - 24.0f, 20.0f},
+                         "Status", status_label, 16, t.text_secondary,
+                         state_.is_dirty() ? t.error : t.success, 58.0f);
+
+    if (!metadata_panel_.error.empty()) {
+        ui::draw_text_in_rect(metadata_panel_.error.c_str(), 16,
+                              {meta_box.x + 12.0f, meta_box.y + 188.0f, meta_box.width - 24.0f, 20.0f},
+                              t.error, ui::text_align::left);
+    }
+
+    const bool apply_requested = difficulty_result.submitted || author_result.submitted;
+    if (apply_requested) {
+        apply_metadata_changes(false);
+        metadata_panel_.difficulty_input.active = false;
+        metadata_panel_.chart_author_input.active = false;
+    }
 
     const Rectangle tools_box = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 86.0f};
     ui::draw_section(tools_box);
     ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 16.0f, tools_box.width - 24.0f, 24.0f},
-                         "Resolution", TextFormat("%d", state_.data().meta.resolution), 16,
+                         "Mode", key_count_label(state_.data().meta.key_count), 16,
                          t.text_secondary, t.text, 92.0f);
     ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 44.0f, tools_box.width - 24.0f, 24.0f},
                          "Notes", TextFormat("%d", static_cast<int>(state_.data().notes.size())), 16,
@@ -899,6 +1012,8 @@ void editor_scene::draw_right_panel() {
 
     if (panel_result.selected_event_index.has_value()) {
         select_timing_event(panel_result.selected_event_index, true);
+        metadata_panel_.difficulty_input.active = false;
+        metadata_panel_.chart_author_input.active = false;
     }
     if (panel_result.add_bpm) {
         add_timing_event(timing_event_type::bpm);
@@ -914,34 +1029,18 @@ void editor_scene::draw_right_panel() {
         timing_panel_.active_input_field = editor_timing_input_field::none;
         timing_panel_.bar_pick_mode = false;
     }
+    if (panel_result.clicked_input_row) {
+        metadata_panel_.difficulty_input.active = false;
+        metadata_panel_.chart_author_input.active = false;
+    }
 
-    const Rectangle editor_box = {content.x, content.y + 262.0f + 12.0f, content.width, 238.0f};
+    const Rectangle editor_box = {content.x, content.y + 372.0f, content.width, 164.0f};
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
         timing_panel_.active_input_field != editor_timing_input_field::none &&
         !panel_result.clicked_input_row &&
         !CheckCollisionPointRec(mouse, editor_box)) {
         timing_panel_.active_input_field = editor_timing_input_field::none;
         timing_panel_.bar_pick_mode = false;
-    }
-
-    const Rectangle note_box = {content.x, editor_box.y + editor_box.height + 12.0f, content.width, 56.0f};
-    const auto& t = *g_theme;
-    ui::draw_section(note_box);
-    if (selected_note_index_.has_value() && *selected_note_index_ < state_.data().notes.size()) {
-        const note_data& note = state_.data().notes[*selected_note_index_];
-        ui::draw_label_value({note_box.x + 12.0f, note_box.y + 8.0f, note_box.width - 24.0f, 18.0f},
-                             "Note", note_type_label(note.type), 15,
-                             t.text_secondary, t.text, 56.0f);
-        ui::draw_label_value({note_box.x + 12.0f, note_box.y + 28.0f, note_box.width - 24.0f, 18.0f},
-                             "Tick", TextFormat("%d  lane %d", note.tick, note.lane + 1), 15,
-                             t.text_secondary, t.text_muted, 56.0f);
-    } else {
-        ui::draw_label_value({note_box.x + 12.0f, note_box.y + 8.0f, note_box.width - 24.0f, 18.0f},
-                             "Notes", TextFormat("%d", static_cast<int>(state_.data().notes.size())), 15,
-                             t.text_secondary, t.text, 56.0f);
-        ui::draw_label_value({note_box.x + 12.0f, note_box.y + 28.0f, note_box.width - 24.0f, 18.0f},
-                             "Undo", state_.can_undo() ? "Available" : "Empty", 15,
-                             t.text_secondary, state_.can_undo() ? t.success : t.text, 56.0f);
     }
 }
 

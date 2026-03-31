@@ -11,6 +11,7 @@
 #include "editor_timing_panel.h"
 #include "scene.h"
 #include "song_loader.h"
+#include "ui_text_input.h"
 
 class editor_scene final : public scene {
 public:
@@ -27,6 +28,15 @@ private:
         int lane = 0;
         int start_tick = 0;
         int current_tick = 0;
+    };
+
+    struct metadata_panel_state {
+        ui::text_input_state difficulty_input;
+        ui::text_input_state chart_author_input;
+        int key_count = 4;
+        std::string error;
+        bool key_count_confirm_open = false;
+        int pending_key_count = 4;
     };
 
     chart_data make_new_chart_data() const;
@@ -52,6 +62,7 @@ private:
     void select_timing_event(std::optional<size_t> index, bool scroll_into_view);
     void scroll_to_tick(int tick);
     void sync_timing_event_selection();
+    void scroll_timing_list_to_bottom();
     bool apply_selected_timing_event();
     void add_timing_event(timing_event_type type);
     void delete_selected_timing_event();
@@ -63,6 +74,12 @@ private:
     void draw_timeline() const;
     void draw_cursor_hud() const;
     void draw_header_tools();
+    void sync_metadata_inputs();
+    bool has_active_metadata_input() const;
+    bool apply_metadata_changes(bool clear_notes_for_key_count_change);
+    void close_key_count_confirmation();
+    void update_key_count_confirmation();
+    void draw_key_count_confirmation() const;
 
     song_data song_;
     std::optional<std::string> chart_path_;
@@ -79,6 +96,7 @@ private:
     bool snap_dropdown_open_ = false;
     std::optional<size_t> selected_note_index_;
     timeline_note_drag_state timeline_drag_;
+    metadata_panel_state metadata_panel_;
     bool scrollbar_dragging_ = false;
     float scrollbar_drag_offset_ = 0.0f;
 };

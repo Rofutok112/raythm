@@ -28,7 +28,7 @@ public:
     bool remove_timing_event(size_t index);
     bool modify_timing_event(size_t index, timing_event event);
 
-    void modify_metadata(chart_meta meta);
+    bool modify_metadata(chart_meta meta, bool clear_notes = false);
 
     const chart_data& data() const;
 
