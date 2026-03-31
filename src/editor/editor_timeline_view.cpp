@@ -32,12 +32,12 @@ float editor_timeline_metrics::visible_tick_span() const {
 
 float editor_timeline_metrics::tick_to_y(int tick) const {
     const Rectangle content = content_rect();
-    return content.y + (static_cast<float>(tick) - bottom_tick) / ticks_per_pixel;
+    return content.y + content.height - (static_cast<float>(tick) - bottom_tick) / ticks_per_pixel;
 }
 
 int editor_timeline_metrics::y_to_tick(float y) const {
     const Rectangle content = content_rect();
-    return static_cast<int>(std::lround(bottom_tick + (y - content.y) * ticks_per_pixel));
+    return static_cast<int>(std::lround(bottom_tick + (content.y + content.height - y) * ticks_per_pixel));
 }
 
 float editor_timeline_metrics::lane_width() const {

@@ -158,16 +158,21 @@ private:
 
 class modify_metadata_command final : public editor_command {
 public:
-    modify_metadata_command(chart_data& chart, timing_engine& engine, chart_meta updated)
-        : chart_(chart), engine_(engine), before_(chart.meta), after_(std::move(updated)) {}
+    modify_metadata_command(chart_data& chart, timing_engine& engine, chart_meta updated, bool clear_notes)
+        : chart_(chart), engine_(engine), before_(chart), after_(chart) {
+        after_.meta = std::move(updated);
+        if (clear_notes) {
+            after_.notes.clear();
+        }
+    }
 
     void execute() override {
-        chart_.meta = after_;
+        chart_ = after_;
         rebuild();
     }
 
     void undo() override {
-        chart_.meta = before_;
+        chart_ = before_;
         rebuild();
     }
 
@@ -178,8 +183,8 @@ private:
 
     chart_data& chart_;
     timing_engine& engine_;
-    chart_meta before_;
-    chart_meta after_;
+    chart_data before_;
+    chart_data after_;
 };
 }
 
@@ -284,9 +289,14 @@ bool editor_state::modify_timing_event(size_t index, timing_event event) {
     return true;
 }
 
-void editor_state::modify_metadata(chart_meta meta) {
-    history_.push(std::make_unique<modify_metadata_command>(chart_, timing_engine_, std::move(meta)));
+bool editor_state::modify_metadata(chart_meta meta, bool clear_notes) {
+    if (meta.key_count != chart_.meta.key_count && !clear_notes && !chart_.notes.empty()) {
+        return false;
+    }
+
+    history_.push(std::make_unique<modify_metadata_command>(chart_, timing_engine_, std::move(meta), clear_notes));
     sync_dirty_flag();
+    return true;
 }
 
 const chart_data& editor_state::data() const {
