@@ -51,6 +51,7 @@ struct editor_timeline_view_model {
     std::vector<editor_meter_map::grid_line> grid_lines;
     std::vector<editor_timeline_note> notes;
     std::optional<size_t> selected_note_index;
+    std::optional<int> playback_tick;
     std::optional<editor_timeline_note> preview_note;
     bool preview_has_overlap = false;
     int min_tick = 0;

@@ -144,6 +144,12 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             DrawRectangleRounded(info.head_rect, 0.3f, 6, fill);
             DrawRectangleLinesEx(info.head_rect, 1.5f, outline);
         }
+
+        if (model.playback_tick.has_value()) {
+            const float y = model.metrics.tick_to_y(*model.playback_tick);
+            ui::draw_line_f(content.x, y, content.x + content.width, y, with_alpha(t.accent, 240));
+            ui::draw_line_f(content.x, y + 1.0f, content.x + content.width, y + 1.0f, with_alpha(t.text, 170));
+        }
     }
 
     ui::draw_scrollbar(track, model.content_height_pixels, model.scroll_offset_pixels,

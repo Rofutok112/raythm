@@ -6,14 +6,39 @@
 #include "bass.h"
 
 namespace {
+constexpr unsigned long kLowLatencyUpdatePeriodMs = 10;
+constexpr unsigned long kLowLatencyDeviceBufferMs = 20;
+constexpr unsigned long kSeSampleMaxVoices = 16;
+
+struct se_sample_entry {
+    unsigned long handle = 0;
+};
+
 struct se_voice_entry {
     unsigned long handle = 0;
     float local_volume = 1.0f;
+    bool stream_fallback = false;
 };
+
+std::unordered_map<std::string, se_sample_entry>& se_samples() {
+    static std::unordered_map<std::string, se_sample_entry> samples;
+    return samples;
+}
 
 std::unordered_map<int, se_voice_entry>& se_voices() {
     static std::unordered_map<int, se_voice_entry> voices;
     return voices;
+}
+
+void free_se_samples() {
+    for (auto& [path, sample] : se_samples()) {
+        (void)path;
+        if (sample.handle != 0) {
+            BASS_SampleFree(sample.handle);
+            sample.handle = 0;
+        }
+    }
+    se_samples().clear();
 }
 }
 
@@ -31,12 +56,15 @@ bool audio_manager::initialize() {
         return true;
     }
 
+    BASS_SetConfig(BASS_CONFIG_UPDATEPERIOD, kLowLatencyUpdatePeriodMs);
+    BASS_SetConfig(BASS_CONFIG_DEV_BUFFER, kLowLatencyDeviceBufferMs);
     initialized_ = BASS_Init(-1, 44100, 0, nullptr, nullptr) != FALSE;
     return initialized_;
 }
 
 void audio_manager::shutdown() {
     stop_all_se();
+    free_se_samples();
     free_voice(bgm_handle_);
     free_voice(preview_handle_);
 
@@ -167,13 +195,32 @@ int audio_manager::play_se(const std::string& file_path, float volume) {
         return 0;
     }
 
-    unsigned long handle = create_stream(file_path);
+    unsigned long handle = 0;
+    bool stream_fallback = false;
+    auto sample_it = se_samples().find(file_path);
+    if (sample_it == se_samples().end()) {
+        const unsigned long sample_handle = BASS_SampleLoad(
+            FALSE, file_path.c_str(), 0, 0, kSeSampleMaxVoices, BASS_SAMPLE_OVER_POS);
+        if (sample_handle != 0) {
+            sample_it = se_samples().emplace(file_path, se_sample_entry{sample_handle}).first;
+        }
+    }
+
+    if (sample_it != se_samples().end() && sample_it->second.handle != 0) {
+        handle = BASS_SampleGetChannel(sample_it->second.handle, FALSE);
+    }
+
+    if (handle == 0) {
+        handle = create_stream(file_path);
+        stream_fallback = true;
+    }
+
     if (!is_voice_loaded(handle)) {
         return 0;
     }
 
     const int voice_id = next_se_voice_id_++;
-    se_voices()[voice_id] = {handle, std::clamp(volume, 0.0f, 1.0f)};
+    se_voices()[voice_id] = {handle, std::clamp(volume, 0.0f, 1.0f), stream_fallback};
     BASS_ChannelSetAttribute(handle, BASS_ATTRIB_VOL, se_voices()[voice_id].local_volume * se_volume_);
     play_voice(handle, true);
     return voice_id;
@@ -199,7 +246,9 @@ void audio_manager::stop_se(int voice_id) {
     }
 
     stop_voice(it->second.handle);
-    free_voice(it->second.handle);
+    if (it->second.stream_fallback) {
+        free_voice(it->second.handle);
+    }
     se_voices().erase(it);
 }
 
@@ -207,7 +256,9 @@ void audio_manager::stop_all_se() {
     for (auto& [voice_id, voice] : se_voices()) {
         (void)voice_id;
         stop_voice(voice.handle);
-        free_voice(voice.handle);
+        if (voice.stream_fallback) {
+            free_voice(voice.handle);
+        }
     }
     se_voices().clear();
 }
@@ -225,7 +276,9 @@ void audio_manager::set_se_volume(float volume) {
 void audio_manager::update() {
     for (auto it = se_voices().begin(); it != se_voices().end();) {
         if (!is_voice_loaded(it->second.handle) || BASS_ChannelIsActive(it->second.handle) == BASS_ACTIVE_STOPPED) {
-            free_voice(it->second.handle);
+            if (it->second.stream_fallback) {
+                free_voice(it->second.handle);
+            }
             it = se_voices().erase(it);
         } else {
             ++it;
