@@ -18,8 +18,14 @@ add_executable(raythm src/main.cpp
         src/audio/audio_manager.cpp
         src/audio/audio_manager.h
         src/editor/editor_command.h
+        src/editor/editor_meter_map.cpp
+        src/editor/editor_meter_map.h
         src/editor/editor_state.cpp
         src/editor/editor_state.h
+        src/editor/editor_timeline_view.cpp
+        src/editor/editor_timeline_view.h
+        src/editor/editor_timing_panel.cpp
+        src/editor/editor_timing_panel.h
         src/platform/windows_input_source.cpp
         src/platform/windows_input_source.h
         src/gameplay/chart_parser.cpp
@@ -86,6 +92,8 @@ add_executable(chart_serializer_smoke
 
 add_executable(editor_state_smoke
         src/editor/editor_command.h
+        src/editor/editor_meter_map.cpp
+        src/editor/editor_meter_map.h
         src/editor/editor_state.cpp
         src/editor/editor_state.h
         src/models/data_models.h
