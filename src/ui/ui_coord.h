@@ -60,8 +60,13 @@ inline void draw_rect_span(Rectangle rect, Color color) {
 }
 
 // Rectangle から安全なシザー領域を開始する。
-// floor/ceil で端数を広めに取り、幅・高さは最低 1 を保証する。
+// floor/ceil で端数を広めに取り、空矩形は画面外 1px に逃がして描画を無効化する。
 inline void begin_scissor_rect(Rectangle rect) {
+    if (rect.width <= 0.0f || rect.height <= 0.0f) {
+        BeginScissorMode(GetRenderWidth(), GetRenderHeight(), 1, 1);
+        return;
+    }
+
     const int sx = static_cast<int>(std::floor(rect.x));
     const int sy = static_cast<int>(std::floor(rect.y));
     const int sw = std::max(1, static_cast<int>(std::ceil(rect.x + rect.width) - std::floor(rect.x)));

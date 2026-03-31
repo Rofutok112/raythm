@@ -12,6 +12,7 @@
 #include "scene_manager.h"
 #include "song_select_scene.h"
 #include "theme.h"
+#include "ui_clip.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
 
@@ -659,7 +660,7 @@ void editor_scene::draw_timeline() const {
     const Rectangle track = timeline_scrollbar_track_rect();
 
     DrawRectangleRec(ui::inset(kTimelineRect, 10.0f), t.section);
-    ui::begin_scissor_rect(content);
+    ui::scoped_clip_rect clip_scope(content);
     draw_timeline_grid(min_tick, max_tick);
     draw_timeline_notes();
     if (note_dragging_) {
@@ -683,8 +684,6 @@ void editor_scene::draw_timeline() const {
         DrawRectangleRounded(info.head_rect, 0.3f, 6, fill);
         DrawRectangleLinesEx(info.head_rect, 1.5f, outline);
     }
-    EndScissorMode();
-
     ui::draw_scrollbar(track, content_height_pixels(), scroll_offset_pixels(),
                        t.scrollbar_track, t.scrollbar_thumb, 40.0f);
 
