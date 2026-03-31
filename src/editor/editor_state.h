@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <string>
 
 #include "editor_command.h"
@@ -32,6 +33,9 @@ public:
     const chart_data& data() const;
 
     const timing_engine& engine() const;
+
+    int snap_tick(int raw_tick, int division) const;
+    bool has_note_overlap(const note_data& note, std::optional<size_t> ignore_index = std::nullopt) const;
 
     bool is_dirty() const;
     const std::string& file_path() const;

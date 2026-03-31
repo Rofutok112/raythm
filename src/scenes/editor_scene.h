@@ -34,6 +34,13 @@ private:
         int measure_index_offset = 0;
     };
 
+    struct note_draw_info {
+        Rectangle head_rect = {};
+        Rectangle body_rect = {};
+        Rectangle tail_rect = {};
+        bool has_body = false;
+    };
+
     chart_data make_new_chart_data() const;
     void rebuild_meter_segments();
     std::vector<grid_line> visible_grid_lines(int min_tick, int max_tick) const;
@@ -50,13 +57,22 @@ private:
     Rectangle lane_rect(int lane) const;
     double beat_number_at_tick(int tick) const;
     std::string bar_beat_label(int tick) const;
+    int snap_division() const;
+    int snap_interval() const;
+    int snap_tick(int raw_tick) const;
+    std::optional<int> lane_at_position(Vector2 point) const;
+    std::optional<size_t> note_at_position(Vector2 point) const;
+    note_draw_info note_rects(const note_data& note) const;
+    void handle_shortcuts();
+    void handle_timeline_interaction();
     void apply_scroll_and_zoom(float dt);
-    void draw_left_panel() const;
+    void draw_left_panel();
     void draw_right_panel() const;
     void draw_timeline() const;
     void draw_timeline_grid(int min_tick, int max_tick) const;
     void draw_timeline_notes() const;
     void draw_cursor_hud() const;
+    void draw_header_tools();
 
     song_data song_;
     std::optional<std::string> chart_path_;
@@ -68,6 +84,13 @@ private:
     float bottom_tick_ = 0.0f;
     float bottom_tick_target_ = 0.0f;
     float ticks_per_pixel_ = 2.0f;
+    int snap_index_ = 4;
+    bool snap_dropdown_open_ = false;
+    std::optional<size_t> selected_note_index_;
+    bool note_dragging_ = false;
+    int drag_lane_ = 0;
+    int drag_start_tick_ = 0;
+    int drag_current_tick_ = 0;
     bool scrollbar_dragging_ = false;
     float scrollbar_drag_offset_ = 0.0f;
 };

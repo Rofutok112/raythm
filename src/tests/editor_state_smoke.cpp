@@ -44,6 +44,18 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    if (state.snap_tick(119, 16) != 120 || state.snap_tick(421, 8) != 480) {
+        std::cerr << "snap_tick did not round to the expected grid\n";
+        return EXIT_FAILURE;
+    }
+
+    if (!state.has_note_overlap({note_type::tap, 0, 0, 0}) ||
+        !state.has_note_overlap({note_type::tap, 700, 2, 700}) ||
+        state.has_note_overlap({note_type::tap, 240, 1, 240})) {
+        std::cerr << "has_note_overlap returned an unexpected result\n";
+        return EXIT_FAILURE;
+    }
+
     state.add_note({note_type::tap, 240, 1, 240});
     if (state.data().notes.size() != 3 || !state.can_undo() || state.can_redo() || !state.is_dirty()) {
         std::cerr << "add_note did not update history correctly\n";

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <iterator>
 #include <memory>
 
 #include "audio.h"
@@ -41,6 +42,9 @@ constexpr float kMinVisibleTicks = 1920.0f;
 constexpr float kStartPaddingTicks = 240.0f;
 constexpr float kScrollLerpSpeed = 12.0f;
 constexpr float kScrollWheelViewportRatio = 0.36f;
+constexpr float kNoteHeadHeight = 14.0f;
+constexpr int kSnapDivisions[] = {1, 2, 4, 8, 16, 32};
+constexpr const char* kSnapLabels[] = {"1/1", "1/2", "1/4", "1/8", "1/16", "1/32"};
 
 std::vector<timing_event> sorted_meter_events(const chart_data& data) {
     std::vector<timing_event> meter_events;
@@ -55,6 +59,10 @@ std::vector<timing_event> sorted_meter_events(const chart_data& data) {
     });
 
     return meter_events;
+}
+
+const char* note_type_label(note_type type) {
+    return type == note_type::hold ? "Hold" : "Tap";
 }
 
 }
@@ -87,6 +95,13 @@ void editor_scene::on_enter() {
     bottom_tick_ = -kStartPaddingTicks;
     bottom_tick_target_ = bottom_tick_;
     ticks_per_pixel_ = 2.0f;
+    snap_index_ = 4;
+    snap_dropdown_open_ = false;
+    selected_note_index_.reset();
+    note_dragging_ = false;
+    drag_lane_ = 0;
+    drag_start_tick_ = 0;
+    drag_current_tick_ = 0;
     rebuild_meter_segments();
 
     const std::filesystem::path audio_path = std::filesystem::path(song_.directory) / song_.meta.audio_file;
@@ -111,6 +126,8 @@ void editor_scene::update(float dt) {
         return;
     }
 
+    handle_shortcuts();
+    handle_timeline_interaction();
     apply_scroll_and_zoom(dt);
 }
 
@@ -130,16 +147,12 @@ void editor_scene::draw() {
     ui::draw_text_in_rect("CHART EDITOR", 28,
                           ui::place(kHeaderRect, 280.0f, 32.0f, ui::anchor::center, ui::anchor::center),
                           t.text);
-    const Rectangle title_rect = ui::place(kHeaderRect, 420.0f, 24.0f,
-                                           ui::anchor::center_right, ui::anchor::center_right,
-                                           {-20.0f, 0.0f});
-    draw_marquee_text(song_.meta.title.c_str(), static_cast<int>(title_rect.x), static_cast<int>(title_rect.y + 2.0f),
-                      20, t.text_secondary, title_rect.width, now);
 
     draw_left_panel();
     draw_timeline();
     draw_right_panel();
     draw_cursor_hud();
+    draw_header_tools();
 
     virtual_screen::end();
     ClearBackground(BLACK);
@@ -341,6 +354,156 @@ std::string editor_scene::bar_beat_label(int tick) const {
     return std::to_string(measure) + ":" + std::to_string(beat_in_measure);
 }
 
+int editor_scene::snap_division() const {
+    return kSnapDivisions[std::clamp(snap_index_, 0, static_cast<int>(std::size(kSnapDivisions)) - 1)];
+}
+
+int editor_scene::snap_interval() const {
+    return std::max(1, state_.data().meta.resolution * 4 / snap_division());
+}
+
+int editor_scene::snap_tick(int raw_tick) const {
+    return state_.snap_tick(raw_tick, snap_division());
+}
+
+std::optional<int> editor_scene::lane_at_position(Vector2 point) const {
+    const Rectangle content = timeline_content_rect();
+    if (!CheckCollisionPointRec(point, content)) {
+        return std::nullopt;
+    }
+
+    for (int lane = 0; lane < state_.data().meta.key_count; ++lane) {
+        if (CheckCollisionPointRec(point, lane_rect(lane))) {
+            return lane;
+        }
+    }
+
+    return std::nullopt;
+}
+
+editor_scene::note_draw_info editor_scene::note_rects(const note_data& note) const {
+    const Rectangle lane = lane_rect(note.lane);
+    const float start_y = tick_to_timeline_y(note.tick);
+    note_draw_info info;
+    info.head_rect = {lane.x + 6.0f, start_y - kNoteHeadHeight * 0.5f, lane.width - 12.0f, kNoteHeadHeight};
+
+    if (note.type == note_type::hold) {
+        const float end_y = tick_to_timeline_y(note.end_tick);
+        const float top = std::min(start_y, end_y);
+        const float height = std::fabs(end_y - start_y);
+        info.body_rect = {lane.x + lane.width * 0.3f, top, lane.width * 0.4f, std::max(height, 6.0f)};
+        info.tail_rect = {lane.x + 10.0f, end_y - 5.0f, lane.width - 20.0f, 10.0f};
+        info.has_body = true;
+    }
+
+    return info;
+}
+
+std::optional<size_t> editor_scene::note_at_position(Vector2 point) const {
+    const Rectangle content = timeline_content_rect();
+    if (!CheckCollisionPointRec(point, content)) {
+        return std::nullopt;
+    }
+
+    for (size_t i = state_.data().notes.size(); i > 0; --i) {
+        const size_t index = i - 1;
+        const note_data& note = state_.data().notes[index];
+        if (note.lane < 0 || note.lane >= state_.data().meta.key_count) {
+            continue;
+        }
+
+        const note_draw_info info = note_rects(note);
+        if (CheckCollisionPointRec(point, info.head_rect) ||
+            (info.has_body && (CheckCollisionPointRec(point, info.body_rect) || CheckCollisionPointRec(point, info.tail_rect)))) {
+            return index;
+        }
+    }
+
+    return std::nullopt;
+}
+
+void editor_scene::handle_shortcuts() {
+    if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_Z)) {
+        if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
+            state_.redo();
+        } else {
+            state_.undo();
+        }
+        selected_note_index_.reset();
+        rebuild_meter_segments();
+    }
+
+    if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_Y)) {
+        state_.redo();
+        selected_note_index_.reset();
+        rebuild_meter_segments();
+    }
+
+    if (IsKeyPressed(KEY_DELETE) && selected_note_index_.has_value()) {
+        const size_t selected_index = *selected_note_index_;
+        if (state_.remove_note(selected_index)) {
+            selected_note_index_.reset();
+        }
+    }
+
+    if (selected_note_index_.has_value() && *selected_note_index_ >= state_.data().notes.size()) {
+        selected_note_index_.reset();
+    }
+}
+
+void editor_scene::handle_timeline_interaction() {
+    const Vector2 mouse = virtual_screen::get_virtual_mouse();
+    const Rectangle content = timeline_content_rect();
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+        selected_note_index_ = note_at_position(mouse);
+    }
+
+    if (!CheckCollisionPointRec(mouse, content)) {
+        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+            note_dragging_ = false;
+        }
+        return;
+    }
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        const std::optional<int> lane = lane_at_position(mouse);
+        if (lane.has_value()) {
+            note_dragging_ = true;
+            drag_lane_ = *lane;
+            drag_start_tick_ = snap_tick(timeline_y_to_tick(mouse.y));
+            drag_current_tick_ = drag_start_tick_;
+        }
+    }
+
+    if (note_dragging_ && (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonReleased(MOUSE_BUTTON_LEFT))) {
+        drag_current_tick_ = snap_tick(timeline_y_to_tick(mouse.y));
+    }
+
+    if (!note_dragging_ || !IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        return;
+    }
+
+    note_dragging_ = false;
+    drag_current_tick_ = snap_tick(timeline_y_to_tick(mouse.y));
+
+    note_data note;
+    note.lane = drag_lane_;
+    note.tick = std::min(drag_start_tick_, drag_current_tick_);
+    note.end_tick = std::max(drag_start_tick_, drag_current_tick_);
+    note.type = (note.end_tick - note.tick) >= snap_interval() ? note_type::hold : note_type::tap;
+    if (note.type == note_type::tap) {
+        note.end_tick = note.tick;
+    }
+
+    if (state_.has_note_overlap(note)) {
+        return;
+    }
+
+    state_.add_note(note);
+    selected_note_index_ = state_.data().notes.empty() ? std::nullopt : std::optional<size_t>(state_.data().notes.size() - 1);
+}
+
 void editor_scene::apply_scroll_and_zoom(float dt) {
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const float wheel = GetMouseWheelMove();
@@ -388,17 +551,20 @@ void editor_scene::apply_scroll_and_zoom(float dt) {
     }
 }
 
-void editor_scene::draw_left_panel() const {
+void editor_scene::draw_left_panel() {
     const auto& t = *g_theme;
     const double now = GetTime();
     const Rectangle content = ui::inset(kLeftPanelRect, ui::edge_insets::uniform(16.0f));
     const bool has_file = !state_.file_path().empty();
     const char* status_label = state_.is_dirty() ? "Modified" : (has_file ? "Saved" : "Unsaved");
 
-    ui::draw_header_block(ui::place(content, content.width, 54.0f, ui::anchor::top_left, ui::anchor::top_left),
-                          "Chart", has_file ? "Existing chart" : "New chart", 28, 18, 4.0f);
+    const Rectangle header_rect = ui::place(content, content.width, 54.0f, ui::anchor::top_left, ui::anchor::top_left);
+    ui::draw_header_block(header_rect, "Chart", has_file ? "Existing chart" : "New chart", 28, 18, 4.0f);
+    const Rectangle song_title_rect = {header_rect.x, header_rect.y + 58.0f, header_rect.width, 24.0f};
+    draw_marquee_text(song_.meta.title.c_str(), static_cast<int>(song_title_rect.x),
+                      static_cast<int>(song_title_rect.y + 2.0f), 18, t.text_secondary, song_title_rect.width, now);
 
-    const Rectangle meta_box = {content.x, content.y + 72.0f, content.width, 142.0f};
+    const Rectangle meta_box = {content.x, content.y + 100.0f, content.width, 142.0f};
     ui::draw_section(meta_box);
     ui::draw_label_value({meta_box.x + 12.0f, meta_box.y + 12.0f, meta_box.width - 24.0f, 28.0f},
                          "Mode", TextFormat("%dK", state_.data().meta.key_count), 18, t.text_muted, t.text, 86.0f);
@@ -410,17 +576,14 @@ void editor_scene::draw_left_panel() const {
                          "Status", status_label, 18, t.text_muted,
                          state_.is_dirty() ? t.error : t.success, 86.0f);
 
-    const Rectangle tools_box = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 152.0f};
+    const Rectangle tools_box = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 86.0f};
     ui::draw_section(tools_box);
-    ui::draw_text_in_rect("Tools", 22,
-                          {tools_box.x + 12.0f, tools_box.y + 10.0f, tools_box.width - 24.0f, 28.0f},
-                          t.text, ui::text_align::left);
-    ui::draw_button_colored({tools_box.x + 12.0f, tools_box.y + 42.0f, tools_box.width - 24.0f, 30.0f},
-                            "ADD NOTE", 18, t.row, t.row_hover, t.text_hint);
-    ui::draw_button_colored({tools_box.x + 12.0f, tools_box.y + 78.0f, tools_box.width - 24.0f, 30.0f},
-                            "TIMING", 18, t.row, t.row_hover, t.text_hint);
-    ui::draw_button_colored({tools_box.x + 12.0f, tools_box.y + 114.0f, tools_box.width - 24.0f, 30.0f},
-                            "SAVE", 18, t.row, t.row_hover, t.text_hint);
+    ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 16.0f, tools_box.width - 24.0f, 24.0f},
+                         "Resolution", TextFormat("%d", state_.data().meta.resolution), 16,
+                         t.text_secondary, t.text, 92.0f);
+    ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 44.0f, tools_box.width - 24.0f, 24.0f},
+                         "Notes", TextFormat("%d", static_cast<int>(state_.data().notes.size())), 16,
+                         t.text_secondary, t.text, 92.0f);
 
     if (!load_errors_.empty()) {
         ui::draw_text_in_rect(load_errors_.front().c_str(), 18,
@@ -431,7 +594,6 @@ void editor_scene::draw_left_panel() const {
 
 void editor_scene::draw_right_panel() const {
     const auto& t = *g_theme;
-    const double now = GetTime();
     const Rectangle content = ui::inset(kRightPanelRect, ui::edge_insets::uniform(16.0f));
     const Rectangle timing_box = {content.x, content.y, content.width, 252.0f};
     const Rectangle property_box = {content.x, timing_box.y + timing_box.height + 12.0f, content.width, 198.0f};
@@ -451,9 +613,9 @@ void editor_scene::draw_right_panel() const {
             ? "BPM " + std::to_string(static_cast<int>(std::round(event.bpm)))
             : "METER " + std::to_string(event.numerator) + "/" + std::to_string(event.denominator);
         const std::string position = bar_beat_label(event.tick);
-        ui::draw_label_value_marquee({timing_box.x + 12.0f, row_y, timing_box.width - 24.0f, 22.0f},
-                                     label.c_str(), position.c_str(), 16,
-                                     t.text_secondary, t.text_muted, now, 118.0f);
+        ui::draw_label_value({timing_box.x + 12.0f, row_y, timing_box.width - 24.0f, 22.0f},
+                             label.c_str(), position.c_str(), 16,
+                             t.text_secondary, t.text_muted, 118.0f);
         row_y += 24.0f;
     }
 
@@ -461,21 +623,32 @@ void editor_scene::draw_right_panel() const {
     ui::draw_text_in_rect("Properties", 22,
                           {property_box.x + 12.0f, property_box.y + 10.0f, property_box.width - 24.0f, 28.0f},
                           t.text, ui::text_align::left);
-    ui::draw_text_in_rect("Selection pending", 18,
-                          {property_box.x + 12.0f, property_box.y + 50.0f, property_box.width - 24.0f, 22.0f},
-                          t.text_hint, ui::text_align::left);
-    ui::draw_label_value({property_box.x + 12.0f, property_box.y + 92.0f, property_box.width - 24.0f, 24.0f},
+    if (selected_note_index_.has_value() && *selected_note_index_ < state_.data().notes.size()) {
+        const note_data& note = state_.data().notes[*selected_note_index_];
+        ui::draw_label_value({property_box.x + 12.0f, property_box.y + 50.0f, property_box.width - 24.0f, 24.0f},
+                             "Type", note_type_label(note.type), 16,
+                             t.text_secondary, t.text, 82.0f);
+        ui::draw_label_value({property_box.x + 12.0f, property_box.y + 76.0f, property_box.width - 24.0f, 24.0f},
+                             "Tick", TextFormat("%d", note.tick), 16,
+                             t.text_secondary, t.text, 82.0f);
+        ui::draw_label_value({property_box.x + 12.0f, property_box.y + 102.0f, property_box.width - 24.0f, 24.0f},
+                             "Lane", TextFormat("%d", note.lane + 1), 16,
+                             t.text_secondary, t.text, 82.0f);
+        ui::draw_label_value({property_box.x + 12.0f, property_box.y + 128.0f, property_box.width - 24.0f, 24.0f},
+                             "End", note.type == note_type::hold ? TextFormat("%d", note.end_tick) : "-", 16,
+                             t.text_secondary, t.text, 82.0f);
+    } else {
+        ui::draw_text_in_rect("Right click a note to inspect it.", 18,
+                              {property_box.x + 12.0f, property_box.y + 50.0f, property_box.width - 24.0f, 22.0f},
+                              t.text_hint, ui::text_align::left);
+    }
+
+    ui::draw_label_value({property_box.x + 12.0f, property_box.y + 144.0f, property_box.width - 24.0f, 24.0f},
                          "Notes", TextFormat("%d", static_cast<int>(state_.data().notes.size())), 16,
                          t.text_secondary, t.text, 82.0f);
-    ui::draw_label_value({property_box.x + 12.0f, property_box.y + 118.0f, property_box.width - 24.0f, 24.0f},
-                         "Resolution", TextFormat("%d", state_.data().meta.resolution), 16,
-                         t.text_secondary, t.text, 82.0f);
-    ui::draw_label_value({property_box.x + 12.0f, property_box.y + 144.0f, property_box.width - 24.0f, 24.0f},
-                         "Undo", state_.can_undo() ? "Available" : "Empty", 16,
-                         t.text_secondary, t.text, 82.0f);
     ui::draw_label_value({property_box.x + 12.0f, property_box.y + 170.0f, property_box.width - 24.0f, 24.0f},
-                         "Redo", state_.can_redo() ? "Available" : "Empty", 16,
-                         t.text_secondary, t.text, 82.0f);
+                         "Undo", state_.can_undo() ? "Available" : "Empty", 16,
+                         t.text_secondary, state_.can_undo() ? t.success : t.text, 82.0f);
 }
 
 void editor_scene::draw_timeline() const {
@@ -490,6 +663,27 @@ void editor_scene::draw_timeline() const {
                      static_cast<int>(content.width), static_cast<int>(content.height));
     draw_timeline_grid(min_tick, max_tick);
     draw_timeline_notes();
+    if (note_dragging_) {
+        note_data preview;
+        preview.lane = drag_lane_;
+        preview.tick = std::min(drag_start_tick_, drag_current_tick_);
+        preview.end_tick = std::max(drag_start_tick_, drag_current_tick_);
+        preview.type = (preview.end_tick - preview.tick) >= snap_interval() ? note_type::hold : note_type::tap;
+        if (preview.type == note_type::tap) {
+            preview.end_tick = preview.tick;
+        }
+
+        const note_draw_info info = note_rects(preview);
+        const Color fill = state_.has_note_overlap(preview) ? with_alpha(t.error, 150) : with_alpha(t.success, 150);
+        const Color outline = state_.has_note_overlap(preview) ? t.error : t.success;
+        if (info.has_body) {
+            DrawRectangleRounded(info.body_rect, 0.4f, 6, fill);
+            DrawRectangleRounded(info.tail_rect, 0.4f, 6, fill);
+            DrawRectangleLinesEx(info.tail_rect, 1.5f, outline);
+        }
+        DrawRectangleRounded(info.head_rect, 0.3f, 6, fill);
+        DrawRectangleLinesEx(info.head_rect, 1.5f, outline);
+    }
     EndScissorMode();
 
     ui::draw_scrollbar(track, content_height_pixels(), scroll_offset_pixels(),
@@ -501,6 +695,7 @@ void editor_scene::draw_timeline() const {
 void editor_scene::draw_timeline_grid(int min_tick, int max_tick) const {
     const auto& t = *g_theme;
     const int key_count = std::max(1, state_.data().meta.key_count);
+    const Rectangle content = timeline_content_rect();
 
     for (int lane = 0; lane < key_count; ++lane) {
         const Rectangle rect = lane_rect(lane);
@@ -511,42 +706,52 @@ void editor_scene::draw_timeline_grid(int min_tick, int max_tick) const {
                               t.text_hint);
     }
 
+    const int interval = snap_interval();
+    const int first_snap_tick = std::max(0, (min_tick / interval) * interval);
+    for (int tick = first_snap_tick; tick <= max_tick; tick += interval) {
+        const float y = tick_to_timeline_y(tick);
+        DrawLine(static_cast<int>(content.x), static_cast<int>(y),
+                 static_cast<int>(content.x + content.width), static_cast<int>(y),
+                 with_alpha(t.border_light, 80));
+    }
+
     for (const grid_line& line : visible_grid_lines(min_tick, max_tick)) {
         const float y = tick_to_timeline_y(line.tick);
-        const Color color = line.major ? t.border_active : t.border_light;
-        const Rectangle content = timeline_content_rect();
+        const Color color = line.major ? with_alpha(t.border_active, 255) : with_alpha(t.border_light, 220);
         DrawLine(static_cast<int>(content.x), static_cast<int>(y),
                  static_cast<int>(content.x + content.width), static_cast<int>(y), color);
+        if (line.major) {
+            DrawLine(static_cast<int>(content.x), static_cast<int>(y + 1.0f),
+                     static_cast<int>(content.x + content.width), static_cast<int>(y + 1.0f),
+                     with_alpha(t.border_active, 180));
+        }
         DrawText(TextFormat("%d:%d", line.measure, line.beat), static_cast<int>(content.x + 8.0f), static_cast<int>(y - 10.0f),
-                 line.major ? 16 : 14, line.major ? t.text_secondary : t.text_hint);
+                 line.major ? 16 : 14, line.major ? t.text : t.text_secondary);
     }
 }
 
 void editor_scene::draw_timeline_notes() const {
     const auto& t = *g_theme;
-    for (const note_data& note : state_.data().notes) {
+    for (size_t i = 0; i < state_.data().notes.size(); ++i) {
+        const note_data& note = state_.data().notes[i];
         if (note.lane < 0 || note.lane >= state_.data().meta.key_count) {
             continue;
         }
 
-        const Rectangle lane = lane_rect(note.lane);
-        const float start_y = tick_to_timeline_y(note.tick);
-        const float head_height = 14.0f;
-        const Rectangle head_rect = {lane.x + 6.0f, start_y - head_height * 0.5f, lane.width - 12.0f, head_height};
+        const note_draw_info info = note_rects(note);
+        const bool selected = selected_note_index_.has_value() && *selected_note_index_ == i;
+        const Color head_fill = selected ? t.row_active : t.note_color;
+        const Color outline = selected ? t.border_active : t.note_outline;
+        const Color hold_fill = selected ? with_alpha(t.row_active, 200) : with_alpha(t.accent, 170);
 
-        if (note.type == note_type::hold) {
-            const float end_y = tick_to_timeline_y(note.end_tick);
-            const float top = std::min(start_y, end_y);
-            const float height = std::fabs(end_y - start_y);
-            const Rectangle hold_rect = {lane.x + lane.width * 0.3f, top, lane.width * 0.4f, std::max(height, 6.0f)};
-            const Rectangle tail_rect = {lane.x + 10.0f, end_y - 5.0f, lane.width - 20.0f, 10.0f};
-            DrawRectangleRounded(hold_rect, 0.4f, 6, with_alpha(t.accent, 170));
-            DrawRectangleRounded(tail_rect, 0.4f, 6, with_alpha(t.accent, 220));
-            DrawRectangleLinesEx(tail_rect, 1.5f, t.note_outline);
+        if (info.has_body) {
+            DrawRectangleRounded(info.body_rect, 0.4f, 6, hold_fill);
+            DrawRectangleRounded(info.tail_rect, 0.4f, 6, selected ? with_alpha(t.row_active, 230) : with_alpha(t.accent, 220));
+            DrawRectangleLinesEx(info.tail_rect, 1.5f, outline);
         }
 
-        DrawRectangleRounded(head_rect, 0.3f, 6, t.note_color);
-        DrawRectangleLinesEx(head_rect, 1.5f, t.note_outline);
+        DrawRectangleRounded(info.head_rect, 0.3f, 6, head_fill);
+        DrawRectangleLinesEx(info.head_rect, 1.5f, outline);
     }
 }
 
@@ -558,6 +763,7 @@ void editor_scene::draw_cursor_hud() const {
     }
 
     const int tick = std::max(0, timeline_y_to_tick(mouse.y));
+    const int snapped_tick = snap_tick(tick);
     const double beat = beat_number_at_tick(tick);
     const int whole_beat = std::max(0, static_cast<int>(std::floor(beat - 1.0)));
     const auto it = std::upper_bound(meter_segments_.begin(), meter_segments_.end(), tick,
@@ -573,6 +779,35 @@ void editor_scene::draw_cursor_hud() const {
                                          {12.0f, -12.0f});
     DrawRectangleRec(hud_rect, with_alpha(t.panel, 240));
     DrawRectangleLinesEx(hud_rect, 1.5f, t.border);
-    DrawText(TextFormat("bar %d:%d   beat %.2f", measure, beat_in_measure, beat),
+    DrawText(TextFormat("bar %d:%d   beat %.2f   snap %d", measure, beat_in_measure, beat, snapped_tick),
              static_cast<int>(hud_rect.x + 12.0f), static_cast<int>(hud_rect.y + 8.0f), 18, t.text);
+}
+
+void editor_scene::draw_header_tools() {
+    const auto& t = *g_theme;
+    const Rectangle tools_rect = ui::place(kHeaderRect, 360.0f, 34.0f,
+                                           ui::anchor::center_right, ui::anchor::center_right,
+                                           {-18.0f, 0.0f});
+    const Rectangle dropdown_rect = tools_rect;
+    const Rectangle dropdown_menu_rect = {
+        dropdown_rect.x,
+        dropdown_rect.y + dropdown_rect.height + 4.0f,
+        dropdown_rect.width,
+        12.0f + static_cast<float>(std::size(kSnapLabels)) * 30.0f + static_cast<float>(std::size(kSnapLabels) - 1) * 4.0f
+    };
+    const ui::dropdown_state dropdown = ui::draw_dropdown(dropdown_rect, dropdown_menu_rect,
+                                                          "Tools", kSnapLabels[snap_index_],
+                                                          std::span<const char* const>(kSnapLabels, std::size(kSnapLabels)),
+                                                          snap_index_, snap_dropdown_open_, 16, 64.0f);
+    if (dropdown.trigger.clicked) {
+        snap_dropdown_open_ = !snap_dropdown_open_;
+    }
+    if (dropdown.clicked_index >= 0) {
+        snap_index_ = dropdown.clicked_index;
+        snap_dropdown_open_ = false;
+    } else if (snap_dropdown_open_ && IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
+               !ui::is_hovered(dropdown_rect) &&
+               !CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), dropdown_menu_rect)) {
+        snap_dropdown_open_ = false;
+    }
 }
