@@ -309,6 +309,7 @@ void play_scene::on_exit() {
 
 // 時刻進行・入力処理・判定更新・シーン遷移を行う。
 void play_scene::update(float dt) {
+    rebuild_hit_regions();
     judge_feedback_timer_ = std::max(0.0f, judge_feedback_timer_ - dt);
 
     if (!initialized_) {
@@ -346,7 +347,7 @@ void play_scene::update(float dt) {
         Rectangle buttons[3];
         ui::vstack(kPauseButtonArea, 42.0f, 16.0f, buttons);
 
-        if (ui::is_clicked(buttons[0])) {
+        if (ui::is_clicked(buttons[0], ui::draw_layer::modal)) {
             paused_ = false;
             if (audio_manager::instance().is_bgm_loaded() && !intro_playing_) {
                 audio_manager::instance().play_bgm(false);
@@ -355,7 +356,7 @@ void play_scene::update(float dt) {
             return;
         }
 
-        if (ui::is_clicked(buttons[1])) {
+        if (ui::is_clicked(buttons[1], ui::draw_layer::modal)) {
             if (song_data_.has_value() && selected_chart_path_.has_value()) {
                 manager_.change_scene(std::make_unique<play_scene>(manager_, *song_data_, *selected_chart_path_, key_count_));
             } else {
@@ -364,7 +365,7 @@ void play_scene::update(float dt) {
             return;
         }
 
-        if (ui::is_clicked(buttons[2])) {
+        if (ui::is_clicked(buttons[2], ui::draw_layer::modal)) {
             manager_.change_scene(std::make_unique<song_select_scene>(manager_));
             return;
         }
@@ -471,6 +472,15 @@ void play_scene::update(float dt) {
     }
 }
 
+void play_scene::rebuild_hit_regions() const {
+    ui::begin_hit_regions();
+    if (paused_) {
+        ui::register_hit_region({0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)},
+                                ui::draw_layer::overlay);
+        ui::register_hit_region(kPausePanelRect, ui::draw_layer::modal);
+    }
+}
+
 // 判定ラインが画面下端から指定比率の位置に来るようカメラを構築する。
 Camera3D play_scene::make_play_camera() const {
     const float angle_rad = std::clamp(camera_angle_degrees_, 5.0f, 90.0f) * DEG2RAD;
@@ -555,6 +565,8 @@ void play_scene::draw() {
 
     // 2D HUD を仮想スクリーンに描画して透過合成
     virtual_screen::begin();
+    rebuild_hit_regions();
+    ui::begin_draw_queue();
     ClearBackground(BLANK);
     draw_hud();
     draw_judge_feedback();
@@ -570,6 +582,7 @@ void play_scene::draw() {
     if (paused_) {
         draw_pause_overlay();
     }
+    ui::flush_draw_queue();
     virtual_screen::end();
 
     virtual_screen::draw_to_screen(true);
@@ -696,47 +709,53 @@ void play_scene::draw_hud() const {
     const result_data result = score_system_.get_result_data();
     Rectangle score_rows[2];
     ui::vstack(kScoreRect, 30.0f, 0.0f, score_rows);
-    ui::draw_text_in_rect(TextFormat("SCORE %07d", result.score), 30,
-                          score_rows[0], g_theme->hud_score, ui::text_align::left);
-    ui::draw_text_in_rect(TextFormat("Accuracy %.2f %%", result.accuracy), 22,
-                          score_rows[1], g_theme->hud_score, ui::text_align::left);
+    ui::enqueue_text_in_rect(TextFormat("SCORE %07d", result.score), 30,
+                             score_rows[0], g_theme->hud_score, ui::text_align::left);
+    ui::enqueue_text_in_rect(TextFormat("Accuracy %.2f %%", result.accuracy), 22,
+                             score_rows[1], g_theme->hud_score, ui::text_align::left);
 
-    ui::draw_text_in_rect(TextFormat("FPS: %d", GetFPS()), 20,
-                          kFpsRect, g_theme->hud_fps, ui::text_align::right);
-    ui::draw_text_in_rect(TextFormat("%.2f", current_ms_ / 1000.0), 30,
-                          kTimeRect, g_theme->hud_time);
-    ui::draw_text_in_rect(TextFormat("INPUT %s (%d)", input_source_text(input_handler_.last_update_source()),
-                                     input_handler_.last_update_event_count()),
-                          20, {48.0f, 92.0f, 360.0f, 24.0f}, g_theme->hud_fps, ui::text_align::left);
+    ui::enqueue_text_in_rect(TextFormat("FPS: %d", GetFPS()), 20,
+                             kFpsRect, g_theme->hud_fps, ui::text_align::right);
+    ui::enqueue_text_in_rect(TextFormat("%.2f", current_ms_ / 1000.0), 30,
+                             kTimeRect, g_theme->hud_time);
+    ui::enqueue_text_in_rect(TextFormat("INPUT %s (%d)", input_source_text(input_handler_.last_update_source()),
+                                        input_handler_.last_update_event_count()),
+                             20, {48.0f, 92.0f, 360.0f, 24.0f}, g_theme->hud_fps, ui::text_align::left);
 
-    ui::draw_text_in_rect("HEALTH", 24, kHealthLabelRect,
-                          g_theme->hud_health_label, ui::text_align::right);
-    ui::draw_progress_bar(kHealthBarRect, gauge_.get_value() / 100.0f,
-                          g_theme->hud_health_bg,
-                          gauge_.get_value() >= 70.0f ? g_theme->health_high : g_theme->health_low,
-                          g_theme->hud_health_border);
+    ui::enqueue_text_in_rect("HEALTH", 24, kHealthLabelRect,
+                             g_theme->hud_health_label, ui::text_align::right);
+    ui::enqueue_draw_command(ui::draw_layer::base, [this]() {
+        ui::draw_progress_bar(kHealthBarRect, gauge_.get_value() / 100.0f,
+                              g_theme->hud_health_bg,
+                              gauge_.get_value() >= 70.0f ? g_theme->health_high : g_theme->health_low,
+                              g_theme->hud_health_border);
+    });
 
     // コンボ数（画面中央に大きく表示）
     if (combo_display_ > 0) {
-        ui::draw_text_in_rect(TextFormat("%03d", combo_display_), 86,
-                              kComboNumberRect, g_theme->hud_combo);
-        ui::draw_text_in_rect("COMBO", 24, kComboLabelRect, g_theme->hud_combo);
+        ui::enqueue_text_in_rect(TextFormat("%03d", combo_display_), 86,
+                                 kComboNumberRect, g_theme->hud_combo);
+        ui::enqueue_text_in_rect("COMBO", 24, kComboLabelRect, g_theme->hud_combo);
     }
 }
 
 void play_scene::draw_pause_overlay() const {
-    ui::draw_fullscreen_overlay(g_theme->pause_overlay);
-    ui::draw_panel(kPausePanelRect);
-    ui::draw_text_in_rect("PAUSED", 42, kPauseTitleRect, g_theme->text);
+    ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
+    ui::enqueue_panel(kPausePanelRect, ui::draw_layer::modal);
+    ui::enqueue_text_in_rect("PAUSED", 42, kPauseTitleRect, g_theme->text,
+                             ui::text_align::center, ui::draw_layer::modal);
 
     Rectangle buttons[3];
     ui::vstack(kPauseButtonArea, 42.0f, 16.0f, buttons);
     const char* labels[] = {"RESUME", "RESTART", "SONG SELECT"};
+    // ボタンの hit test は update() 側の即時計算を維持している。
+    // 次段では modal layer と入力優先順位を揃える。
     for (int i = 0; i < 3; ++i) {
-        ui::draw_button(buttons[i], labels[i], 24);
+        ui::enqueue_button(buttons[i], labels[i], 24, ui::draw_layer::modal);
     }
 
-    ui::draw_text_in_rect("ESC: Resume", 20, kPauseHintRect, g_theme->text_muted, ui::text_align::left);
+    ui::enqueue_text_in_rect("ESC: Resume", 20, kPauseHintRect, g_theme->text_muted,
+                             ui::text_align::left, ui::draw_layer::modal);
 }
 
 void play_scene::draw_judge_feedback() const {
@@ -746,29 +765,30 @@ void play_scene::draw_judge_feedback() const {
 
     const Color color = Fade(judge_color(display_judge_->result), std::min(judge_feedback_timer_ / 1.0f, 1.0f));
     const char* text = judge_text(display_judge_->result);
-    ui::draw_text_in_rect(text, 42, kJudgeFeedbackRect, color);
+    ui::enqueue_text_in_rect(text, 42, kJudgeFeedbackRect, color);
 }
 
 void play_scene::draw_intro_overlay() const {
     const float progress = 1.0f - std::clamp(intro_timer_ / kIntroDurationSeconds, 0.0f, 0.7f);
     const unsigned char alpha = static_cast<unsigned char>((1.0f - progress) * 255.0f);
-    ui::draw_fullscreen_overlay({0, 0, 0, alpha});
+    ui::enqueue_fullscreen_overlay({0, 0, 0, alpha}, ui::draw_layer::overlay);
 }
 
 void play_scene::draw_failure_overlay() const {
     const float elapsed = kFailureTransitionDurationSeconds - failure_transition_timer_;
     const float fade_progress = std::clamp(elapsed / kFailureFadeDurationSeconds, 0.0f, 0.7f);
     const unsigned char alpha = static_cast<unsigned char>(fade_progress * 255.0f);
-    ui::draw_fullscreen_overlay({0, 0, 0, alpha});
+    ui::enqueue_fullscreen_overlay({0, 0, 0, alpha}, ui::draw_layer::overlay);
     const char* text = "FAILED...";
-    ui::draw_text_in_rect(text, 44, kFailureTextRect,
-                          Fade(g_theme->hud_failure_text, std::min(fade_progress * 1.15f, 1.0f)));
+    ui::enqueue_text_in_rect(text, 44, kFailureTextRect,
+                             Fade(g_theme->hud_failure_text, std::min(fade_progress * 1.15f, 1.0f)),
+                             ui::text_align::center, ui::draw_layer::modal);
 }
 
 void play_scene::draw_result_transition_overlay() const {
     const float progress = std::clamp(result_transition_timer_ / kResultTransitionDurationSeconds, 0.0f, 1.0f);
     const unsigned char alpha = static_cast<unsigned char>(progress * kResultFadeMaxAlpha * 255.0f);
-    ui::draw_fullscreen_overlay({0, 0, 0, alpha});
+    ui::enqueue_fullscreen_overlay({0, 0, 0, alpha}, ui::draw_layer::overlay);
 }
 
 double play_scene::get_visual_ms() const {

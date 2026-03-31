@@ -20,6 +20,7 @@
 #include "virtual_screen.h"
 
 namespace {
+constexpr ui::draw_layer kSongSelectLayer = ui::draw_layer::base;
 constexpr float kRowHeight = 60.0f;
 constexpr float kScrollWheelStep = 80.0f;
 constexpr float kScrollLerpSpeed = 12.0f;
@@ -301,7 +302,7 @@ void song_select_scene::draw_song_row(const song_entry& song, float item_y, bool
     const Rectangle title_clip_rect = {text_x, item_y, list_text_max_w, 24.0f};
     const Rectangle artist_clip_rect = {text_x, item_y + 22.0f, list_text_max_w, 16.0f};
 
-    if (ui::is_hovered(row_rect) || is_selected) {
+    if (ui::is_hovered(row_rect, kSongSelectLayer) || is_selected) {
         const ui::row_state row_state = ui::draw_selectable_row(row_rect, is_selected, 0.0f);
         (void)row_state;
     }
@@ -323,7 +324,7 @@ void song_select_scene::draw_chart_rows(const std::vector<const chart_option*>& 
         const chart_option& chart = *filtered[static_cast<size_t>(chart_index)];
         const bool child_selected = chart_index == difficulty_index_;
         const Rectangle child_rect = {child_x, child_y - 6.0f, child_w, 28.0f};
-        if (ui::is_hovered(child_rect) || child_selected) {
+        if (ui::is_hovered(child_rect, kSongSelectLayer) || child_selected) {
             const ui::row_state child_state = ui::draw_selectable_row(child_rect, child_selected, 0.0f);
             (void)child_state;
         }
@@ -381,6 +382,7 @@ float song_select_scene::compute_content_height() const {
 }
 
 void song_select_scene::update(float dt) {
+    ui::begin_hit_regions();
     update_preview(dt);
 
     if (IsKeyPressed(KEY_ESCAPE)) {
@@ -391,7 +393,7 @@ void song_select_scene::update(float dt) {
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const float wheel = GetMouseWheelMove();
     if (IsKeyPressed(KEY_F1) ||
-        ui::is_clicked(kSettingsButtonRect)) {
+        ui::is_clicked(kSettingsButtonRect, kSongSelectLayer)) {
         manager_.change_scene(std::make_unique<settings_scene>(manager_, settings_scene::return_target::song_select));
         return;
     }
@@ -404,6 +406,7 @@ void song_select_scene::update(float dt) {
     }
 
     const int previous_song_index = selected_song_index_;
+    const bool song_list_hovered = ui::is_hovered(kSongListViewRect, kSongSelectLayer);
 
     // キー入力で曲選択
     if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
@@ -416,14 +419,15 @@ void song_select_scene::update(float dt) {
 
     const float content_height = compute_content_height();
     const ui::scrollbar_interaction scrollbar = ui::update_vertical_scrollbar(
-        kSongListScrollbarTrackRect, content_height, scroll_y_target_, scrollbar_dragging_, scrollbar_drag_offset_);
+        kSongListScrollbarTrackRect, content_height, scroll_y_target_, scrollbar_dragging_, scrollbar_drag_offset_,
+        kSongSelectLayer);
     scroll_y_target_ = scrollbar.scroll_offset;
     if (scrollbar.changed || scrollbar.dragging) {
         scroll_y_ = scroll_y_target_;
     }
 
     // マウスホイールでスムーズスクロール
-    if (!scrollbar.dragging && CheckCollisionPointRec(mouse, kSongListViewRect) && wheel != 0.0f) {
+    if (!scrollbar.dragging && song_list_hovered && wheel != 0.0f) {
         scroll_y_target_ -= wheel * kScrollWheelStep;
     }
 
@@ -466,27 +470,27 @@ void song_select_scene::update(float dt) {
         }
     }
 
-    if (ui::is_clicked(kPlayButtonRect) && !filtered.empty()) {
+    if (ui::is_clicked(kPlayButtonRect, kSongSelectLayer) && !filtered.empty()) {
         manager_.change_scene(std::make_unique<play_scene>(manager_, selected_song()->song,
                                                            filtered[static_cast<size_t>(difficulty_index_)]->path,
                                                            filtered[static_cast<size_t>(difficulty_index_)]->meta.key_count));
         return;
     }
 
-    if (ui::is_clicked(kEditButtonRect) && !filtered.empty()) {
+    if (ui::is_clicked(kEditButtonRect, kSongSelectLayer) && !filtered.empty()) {
         manager_.change_scene(std::make_unique<editor_scene>(manager_, selected_song()->song,
                                                              filtered[static_cast<size_t>(difficulty_index_)]->path));
         return;
     }
 
-    if (ui::is_clicked(kNewChartButtonRect)) {
+    if (ui::is_clicked(kNewChartButtonRect, kSongSelectLayer)) {
         const int key_count = filtered.empty() ? 4 : filtered[static_cast<size_t>(difficulty_index_)]->meta.key_count;
         manager_.change_scene(std::make_unique<editor_scene>(manager_, selected_song()->song, key_count));
         return;
     }
 
     // リスト内クリック: スクロールオフセットを考慮して当たり判定
-    if (CheckCollisionPointRec(mouse, kSongListViewRect) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    if (song_list_hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         float item_y = kSongListViewRect.y - scroll_y_;
         for (int i = 0; i < static_cast<int>(songs_.size()); ++i) {
             float row_h = kRowHeight;
@@ -498,7 +502,7 @@ void song_select_scene::update(float dt) {
                 for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
                     const Rectangle child_rect = {kSongListRect.x + 46.0f, child_y - 6.0f, kSongListRect.width - 92.0f, 28.0f};
                     if (child_rect.y >= kSongListViewRect.y && child_rect.y + child_rect.height <= kSongListViewRect.y + kSongListViewRect.height &&
-                        CheckCollisionPointRec(mouse, child_rect)) {
+                        ui::is_hovered(child_rect, kSongSelectLayer)) {
                         if (difficulty_index_ == chart_index) {
                             // 選択中の難易度を再クリックでプレイ開始
                             manager_.change_scene(std::make_unique<play_scene>(manager_, selected_song()->song,
@@ -515,7 +519,7 @@ void song_select_scene::update(float dt) {
 
             const Rectangle row_rect = {kSongListRect.x + 14.0f, item_y - 8.0f, kSongListRect.width - 28.0f, 44.0f};
             if (row_rect.y >= kSongListViewRect.y && row_rect.y + row_rect.height <= kSongListViewRect.y + kSongListViewRect.height &&
-                CheckCollisionPointRec(mouse, row_rect)) {
+                ui::is_hovered(row_rect, kSongSelectLayer)) {
                 if (selected_song_index_ != i) {
                     selected_song_index_ = i;
                     difficulty_index_ = 0;
