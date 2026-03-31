@@ -2,11 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <iterator>
 #include <memory>
 
-#include "audio.h"
+#include "audio_manager.h"
 #include "chart_parser.h"
 #include "scene_common.h"
 #include "scene_manager.h"
@@ -45,9 +46,12 @@ constexpr float kScrollWheelViewportRatio = 0.36f;
 constexpr float kNoteHeadHeight = 14.0f;
 constexpr int kSnapDivisions[] = {1, 2, 4, 8, 16, 32};
 constexpr const char* kSnapLabels[] = {"1/1", "1/2", "1/4", "1/8", "1/16", "1/32"};
-constexpr Rectangle kHeaderToolsRect = ui::place(kHeaderRect, 360.0f, 34.0f,
+constexpr Rectangle kHeaderToolsRect = ui::place(kHeaderRect, 168.0f, 34.0f,
                                                  ui::anchor::center_right, ui::anchor::center_right,
                                                  {-18.0f, 0.0f});
+constexpr Rectangle kPlaybackRect = ui::place(kTimelineRect, 232.0f, 34.0f,
+                                              ui::anchor::bottom_left, ui::anchor::bottom_left,
+                                              {12.0f, -54.0f});
 constexpr float kDropdownItemHeight = 30.0f;
 constexpr float kDropdownItemSpacing = 4.0f;
 constexpr Rectangle kMetadataConfirmRect = ui::place(kScreenRect, 420.0f, 196.0f,
@@ -60,6 +64,8 @@ constexpr Rectangle kSnapDropdownMenuRect = {
     12.0f + static_cast<float>(std::size(kSnapLabels)) * kDropdownItemHeight +
         static_cast<float>(std::size(kSnapLabels) - 1) * kDropdownItemSpacing
 };
+constexpr float kPlaybackFollowViewportRatio = 0.35f;
+constexpr float kPlaybackRestartEpsilonSeconds = 0.01f;
 
 const char* note_type_label(note_type type) {
     return type == note_type::hold ? "Hold" : "Tap";
@@ -158,6 +164,20 @@ bool try_parse_bar_beat(const std::string& text, editor_meter_map::bar_beat_posi
     return true;
 }
 
+std::string format_playback_time(double seconds) {
+    const int total_ms = std::max(0, static_cast<int>(std::lround(seconds * 1000.0)));
+    const int minutes = total_ms / 60000;
+    const int whole_seconds = (total_ms / 1000) % 60;
+    const int centiseconds = (total_ms % 1000) / 10;
+    char buffer[32];
+    std::snprintf(buffer, sizeof(buffer), "%02d:%02d.%02d", minutes, whole_seconds, centiseconds);
+    return buffer;
+}
+
+std::filesystem::path repo_root() {
+    return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+}
+
 }
 
 editor_scene::editor_scene(scene_manager& manager, song_data song, std::string chart_path)
@@ -171,6 +191,13 @@ editor_scene::editor_scene(scene_manager& manager, song_data song, int key_count
 void editor_scene::on_enter() {
     load_errors_.clear();
     audio_length_tick_ = 0;
+    audio_loaded_ = false;
+    audio_playing_ = false;
+    audio_time_seconds_ = 0.0;
+    playback_tick_ = 0;
+    previous_playback_tick_ = 0;
+    previous_audio_playing_ = false;
+    hitsound_path_.clear();
 
     if (chart_path_.has_value()) {
         const chart_parse_result result = chart_parser::parse(*chart_path_);
@@ -205,18 +232,28 @@ void editor_scene::on_enter() {
     scroll_timing_list_to_bottom();
 
     const std::filesystem::path audio_path = std::filesystem::path(song_.directory) / song_.meta.audio_file;
-    if (std::filesystem::exists(audio_path)) {
-        audio music;
-        music.load(audio_path.string());
-        if (music.is_loaded()) {
-            const double length_ms = music.get_length_seconds() * 1000.0;
-            audio_length_tick_ = std::max(0, state_.engine().ms_to_tick(length_ms));
-        }
+    if (std::filesystem::exists(audio_path) &&
+        audio_manager::instance().load_bgm(audio_path.string())) {
+        audio_loaded_ = true;
+        const double length_ms = audio_manager::instance().get_bgm_length_seconds() * 1000.0;
+        audio_length_tick_ = std::max(0, state_.engine().ms_to_tick(length_ms));
     }
+
+    const std::filesystem::path hitsound_path = repo_root() / "assets" / "audio" / "hitsound.mp3";
+    hitsound_path_ = std::filesystem::exists(hitsound_path) ? hitsound_path.string() : "";
+
+    update_audio_clock();
+    previous_playback_tick_ = playback_tick_;
+}
+
+void editor_scene::on_exit() {
+    audio_manager::instance().stop_bgm();
+    audio_manager::instance().stop_all_se();
 }
 
 void editor_scene::update(float dt) {
     rebuild_hit_regions();
+    update_audio_clock();
 
     if (metadata_panel_.key_count_confirm_open && IsKeyPressed(KEY_ESCAPE)) {
         close_key_count_confirmation();
@@ -241,6 +278,8 @@ void editor_scene::update(float dt) {
     handle_shortcuts();
     handle_text_input();
     handle_timeline_interaction();
+    update_audio_clock();
+    update_note_hitsounds();
     apply_scroll_and_zoom(dt);
 }
 
@@ -400,6 +439,108 @@ int editor_scene::default_timing_event_tick() const {
     return std::max(snap_interval(), snap_tick(static_cast<int>(bottom_tick_ + visible_tick_span() * 0.5f)));
 }
 
+void editor_scene::update_audio_clock() {
+    if (!audio_loaded_ || !audio_manager::instance().is_bgm_loaded()) {
+        audio_loaded_ = false;
+        audio_playing_ = false;
+        audio_time_seconds_ = 0.0;
+        playback_tick_ = 0;
+        return;
+    }
+
+    const audio_clock_snapshot bgm_clock = audio_manager::instance().get_bgm_clock();
+    audio_playing_ = bgm_clock.playing;
+    double seconds = audio_playing_ ? bgm_clock.audio_time_seconds : bgm_clock.stream_position_seconds;
+    const double length_seconds = audio_manager::instance().get_bgm_length_seconds();
+    if (length_seconds > 0.0) {
+        seconds = std::clamp(seconds, 0.0, length_seconds);
+    } else {
+        seconds = std::max(0.0, seconds);
+    }
+
+    audio_time_seconds_ = seconds;
+    playback_tick_ = std::max(0, state_.engine().ms_to_tick(audio_time_seconds_ * 1000.0));
+}
+
+void editor_scene::toggle_audio_playback() {
+    if (!audio_loaded_) {
+        return;
+    }
+
+    if (audio_manager::instance().is_bgm_playing()) {
+        audio_manager::instance().pause_bgm();
+    } else {
+        const double length_seconds = audio_manager::instance().get_bgm_length_seconds();
+        const double position_seconds = audio_manager::instance().get_bgm_position_seconds();
+        const bool restart = length_seconds > 0.0 &&
+                             position_seconds >= std::max(0.0, length_seconds - kPlaybackRestartEpsilonSeconds);
+        audio_manager::instance().play_bgm(restart);
+    }
+    update_audio_clock();
+    previous_playback_tick_ = playback_tick_;
+    previous_audio_playing_ = audio_playing_;
+}
+
+void editor_scene::seek_audio_to_tick(int tick, bool scroll_into_view) {
+    if (!audio_loaded_) {
+        return;
+    }
+
+    const int clamped_tick = std::max(0, tick);
+    const double target_ms = state_.engine().tick_to_ms(clamped_tick);
+    audio_manager::instance().seek_bgm(target_ms / 1000.0);
+    update_audio_clock();
+    previous_playback_tick_ = playback_tick_;
+    previous_audio_playing_ = audio_playing_;
+
+    if (scroll_into_view) {
+        scroll_to_tick(playback_tick_);
+    }
+}
+
+void editor_scene::update_note_hitsounds() {
+    if (!audio_loaded_ || hitsound_path_.empty()) {
+        previous_playback_tick_ = playback_tick_;
+        previous_audio_playing_ = audio_playing_;
+        return;
+    }
+
+    if (!audio_playing_) {
+        previous_playback_tick_ = playback_tick_;
+        previous_audio_playing_ = false;
+        return;
+    }
+
+    if (!previous_audio_playing_) {
+        previous_playback_tick_ = playback_tick_;
+        previous_audio_playing_ = true;
+        return;
+    }
+
+    if (playback_tick_ <= previous_playback_tick_) {
+        previous_playback_tick_ = playback_tick_;
+        previous_audio_playing_ = true;
+        return;
+    }
+
+    for (const note_data& note : state_.data().notes) {
+        if (note.tick > previous_playback_tick_ && note.tick <= playback_tick_) {
+            audio_manager::instance().play_se(hitsound_path_, 0.45f);
+        }
+    }
+
+    previous_playback_tick_ = playback_tick_;
+    previous_audio_playing_ = true;
+}
+
+std::string editor_scene::playback_status_text() const {
+    if (!audio_loaded_) {
+        return "No audio";
+    }
+
+    return std::string(audio_playing_ ? "Playing " : "Paused ") + format_playback_time(audio_time_seconds_);
+}
+
 std::optional<int> editor_scene::lane_at_position(Vector2 point) const {
     const editor_timeline_metrics metrics = timeline_metrics();
     const Rectangle content = metrics.content_rect();
@@ -441,6 +582,15 @@ std::optional<size_t> editor_scene::note_at_position(Vector2 point) const {
 }
 
 void editor_scene::handle_shortcuts() {
+    if (!has_active_metadata_input() &&
+        timing_panel_.active_input_field == editor_timing_input_field::none &&
+        !metadata_panel_.key_count_confirm_open &&
+        !timing_panel_.bar_pick_mode &&
+        !timeline_drag_.active &&
+        IsKeyPressed(KEY_SPACE)) {
+        toggle_audio_playback();
+    }
+
     if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_Z)) {
         if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
             state_.redo();
@@ -525,6 +675,12 @@ void editor_scene::handle_timeline_interaction() {
         return;
     }
 
+    if ((IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT)) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        seek_audio_to_tick(snap_tick(metrics.y_to_tick(mouse.y)), !audio_playing_);
+        timeline_drag_.active = false;
+        return;
+    }
+
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         const std::optional<int> lane = lane_at_position(mouse);
         if (lane.has_value()) {
@@ -568,32 +724,23 @@ void editor_scene::apply_scroll_and_zoom(float dt) {
         bottom_tick_ = bottom_tick_target_;
     }
 
-    if (wheel == 0.0f || !CheckCollisionPointRec(mouse, content)) {
-        bottom_tick_target_ = std::clamp(bottom_tick_target_, 0.0f, max_bottom_tick());
-        if (bottom_tick_target_ <= 0.0f || bottom_tick_target_ >= max_bottom_tick()) {
-            bottom_tick_ = bottom_tick_target_;
-            return;
-        }
-        bottom_tick_ += (bottom_tick_target_ - bottom_tick_) * std::min(1.0f, kScrollLerpSpeed * dt);
-        if (std::fabs(bottom_tick_ - bottom_tick_target_) < 0.5f) {
-            bottom_tick_ = bottom_tick_target_;
-        }
-        return;
-    }
-
-    if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) {
+    if (wheel != 0.0f && CheckCollisionPointRec(mouse, content) &&
+        (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) {
         const int anchor_tick = metrics.y_to_tick(mouse.y);
         const float zoom_scale = wheel > 0.0f ? 0.85f : 1.15f;
         ticks_per_pixel_ = std::clamp(ticks_per_pixel_ * zoom_scale, kMinTicksPerPixel, kMaxTicksPerPixel);
         bottom_tick_target_ = static_cast<float>(anchor_tick) -
                               (content.y + content.height - mouse.y) * ticks_per_pixel_;
         bottom_tick_target_ = std::clamp(bottom_tick_target_, 0.0f, max_bottom_tick());
-        bottom_tick_ = bottom_tick_target_;
-        return;
+    } else if (!audio_playing_ && wheel != 0.0f && CheckCollisionPointRec(mouse, content)) {
+        bottom_tick_target_ = std::clamp(bottom_tick_target_ + wheel * visible_tick_span() * kScrollWheelViewportRatio,
+                                         0.0f, max_bottom_tick());
+    } else if (audio_playing_) {
+        bottom_tick_target_ = std::clamp(static_cast<float>(playback_tick_) - visible_tick_span() * kPlaybackFollowViewportRatio,
+                                         0.0f, max_bottom_tick());
     }
 
-    bottom_tick_target_ = std::clamp(bottom_tick_target_ + wheel * visible_tick_span() * kScrollWheelViewportRatio,
-                                     0.0f, max_bottom_tick());
+    bottom_tick_target_ = std::clamp(bottom_tick_target_, 0.0f, max_bottom_tick());
     if (bottom_tick_target_ <= 0.0f || bottom_tick_target_ >= max_bottom_tick()) {
         bottom_tick_ = bottom_tick_target_;
         return;
@@ -1065,6 +1212,7 @@ void editor_scene::draw_timeline() const {
         meter_map_.visible_grid_lines(min_tick, max_tick),
         std::move(notes),
         selected_note_index_,
+        audio_loaded_ ? std::optional<int>(playback_tick_) : std::nullopt,
         preview_note,
         preview_has_overlap,
         min_tick,
@@ -1096,11 +1244,18 @@ void editor_scene::draw_cursor_hud() const {
 }
 
 void editor_scene::draw_header_tools() {
+    const auto& t = *g_theme;
+    ui::draw_section(kPlaybackRect);
+    const std::string playback_status = playback_status_text();
+    ui::draw_label_value(ui::inset(kPlaybackRect, ui::edge_insets::symmetric(0.0f, 12.0f)),
+                         "Audio", playback_status.c_str(), 16,
+                         t.text, audio_loaded_ ? t.text_secondary : t.text_muted, 56.0f);
+
     // 描画は queue に寄せるが、ヒットテストはまだ即時計算のままにしている。
     // 次段で layer と hit test 優先順位を統合すると、modal / pause 系も同じ仕組みに載せられる。
     const ui::dropdown_state dropdown = ui::enqueue_dropdown(
         kSnapDropdownRect, kSnapDropdownMenuRect,
-        "Tools", kSnapLabels[snap_index_],
+        "Snap", kSnapLabels[snap_index_],
         std::span<const char* const>(kSnapLabels, std::size(kSnapLabels)),
         snap_index_, snap_dropdown_open_,
         ui::draw_layer::base, ui::draw_layer::overlay,

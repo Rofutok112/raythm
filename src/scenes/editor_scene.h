@@ -19,6 +19,7 @@ public:
     editor_scene(scene_manager& manager, song_data song, int key_count);
 
     void on_enter() override;
+    void on_exit() override;
     void update(float dt) override;
     void draw() override;
 
@@ -52,6 +53,11 @@ private:
     int snap_interval() const;
     int snap_tick(int raw_tick) const;
     int default_timing_event_tick() const;
+    void update_audio_clock();
+    void update_note_hitsounds();
+    void toggle_audio_playback();
+    void seek_audio_to_tick(int tick, bool scroll_into_view);
+    std::string playback_status_text() const;
     std::optional<int> lane_at_position(Vector2 point) const;
     std::optional<size_t> note_at_position(Vector2 point) const;
     void rebuild_hit_regions() const;
@@ -89,6 +95,13 @@ private:
     editor_timing_panel_state timing_panel_;
     std::vector<std::string> load_errors_;
     int audio_length_tick_ = 0;
+    bool audio_loaded_ = false;
+    bool audio_playing_ = false;
+    double audio_time_seconds_ = 0.0;
+    int playback_tick_ = 0;
+    int previous_playback_tick_ = 0;
+    bool previous_audio_playing_ = false;
+    std::string hitsound_path_;
     float bottom_tick_ = 0.0f;
     float bottom_tick_target_ = 0.0f;
     float ticks_per_pixel_ = 2.0f;
