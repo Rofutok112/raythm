@@ -1107,3 +1107,18 @@ if (ui::is_clicked(kSettingsButtonRect)) {
 
 `play_scene.cpp` の 3D レンダリング（DrawCube, DrawCubeWires, Camera3D 関連）はレイアウトシステムの対象外。
 HUD（2D オーバーレイ）のみが移行対象。
+
+### draw queue の段階導入
+
+`ui_draw.h` には即時描画 API と併存できる frame-local の draw queue がある。
+`ui::begin_draw_queue()` でフレーム開始時にキューを初期化し、`ui::enqueue_*` で layer 付きコマンドを積み、最後に `ui::flush_draw_queue()` で layer 順に描画する。
+入力優先順位を揃えたいフレームでは `ui::begin_hit_regions()` で登録を初期化し、overlay / modal の矩形を `ui::register_hit_region()` で積んでから `ui::is_clicked(rect, layer)` を使う。
+
+- 最初の移行対象は dropdown / popover / modal のような overlay 系 UI
+- 既存の `draw_*` API はそのまま残し、scene ごとに段階移行する
+- 将来的には hit test 優先順位も同じ layer に揃える想定
+- `editor_scene.cpp` の dropdown と `play_scene.cpp` の pause / failure / result overlay は queue 化済み
+- `editor_scene.cpp` の dropdown と `play_scene.cpp` の pause ボタンは hit region も layer と連動済み
+- `settings_scene.cpp` の slider / selector / tab も layer-aware な hit test API へ移行済み
+- `song_select_scene.cpp` の settings / action button / song list / chart list / scrollbar も layer-aware な hit test API へ移行済み
+- 次段の候補は scene 共通の hit region 構築を helper 化して、overlay を持つ scene の update/draw 重複を減らすこと

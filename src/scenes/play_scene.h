@@ -44,6 +44,8 @@ private:
     Camera3D make_play_camera() const;
     // カメラの可視範囲からレーンのZ方向の手前端・判定位置・奥端を計算する。
     bool get_lane_view_bounds(const Camera3D& camera, float& lane_start_z, float& judgement_z, float& lane_end_z) const;
+    // 現在フレームの UI layer に対応する hit region を再構築する。
+    void rebuild_hit_regions() const;
     // 描画キューを更新する。inactive から active へのノート移動と、active からの除去を行う。
     void update_draw_queues(float judgement_z, float lane_start_z, float lane_end_z, double visual_ms);
     // 開始前演出を含めた描画用の時刻を返す。

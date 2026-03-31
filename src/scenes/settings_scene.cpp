@@ -20,6 +20,7 @@
 #include "virtual_screen.h"
 
 namespace {
+constexpr ui::draw_layer kSettingsLayer = ui::draw_layer::base;
 constexpr int kPageCount = 4;
 const char* kPageNames[] = {"Gameplay", "Audio", "Video", "Key Config"};
 constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
@@ -128,6 +129,7 @@ void settings_scene::on_enter() {
 }
 
 void settings_scene::update(float dt) {
+    ui::begin_hit_regions();
     error_timer_ = std::max(0.0f, error_timer_ - dt);
 
     // リスニング中はページ切り替え・画面遷移を無効にする
@@ -136,7 +138,7 @@ void settings_scene::update(float dt) {
         return;
     }
 
-    if (ui::is_clicked(kBackRect)) {
+    if (ui::is_clicked(kBackRect, kSettingsLayer)) {
         save_settings(g_settings);
         if (return_target_ == return_target::song_select) {
             manager_.change_scene(std::make_unique<song_select_scene>(manager_));
@@ -149,7 +151,7 @@ void settings_scene::update(float dt) {
     Rectangle tabs[kPageCount];
     build_tab_rects(tabs);
     for (int i = 0; i < kPageCount; ++i) {
-        if (ui::is_clicked(tabs[i])) {
+        if (ui::is_clicked(tabs[i], kSettingsLayer)) {
             current_page_ = static_cast<page>(i);
             key_config_slot_ = -1;
             listening_ = false;
@@ -181,11 +183,11 @@ void settings_scene::update_gameplay() {
     }
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (ui::is_hovered(kGeneralRows[0])) {
+        if (ui::is_hovered(kGeneralRows[0], kSettingsLayer)) {
             active_slider_ = general_slider::note_speed;
-        } else if (ui::is_hovered(kGeneralRows[1])) {
+        } else if (ui::is_hovered(kGeneralRows[1], kSettingsLayer)) {
             active_slider_ = general_slider::camera_angle;
-        } else if (ui::is_hovered(kGeneralRows[2])) {
+        } else if (ui::is_hovered(kGeneralRows[2], kSettingsLayer)) {
             active_slider_ = general_slider::lane_width;
         }
     }
@@ -212,9 +214,9 @@ void settings_scene::update_audio() {
     }
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (ui::is_hovered(kGeneralRows[0])) {
+        if (ui::is_hovered(kGeneralRows[0], kSettingsLayer)) {
             active_slider_ = general_slider::bgm_volume;
-        } else if (ui::is_hovered(kGeneralRows[1])) {
+        } else if (ui::is_hovered(kGeneralRows[1], kSettingsLayer)) {
             active_slider_ = general_slider::se_volume;
         }
     }
@@ -241,7 +243,7 @@ void settings_scene::update_video() {
         active_slider_ = general_slider::none;
     }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && ui::is_hovered(kGeneralRows[0])) {
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && ui::is_hovered(kGeneralRows[0], kSettingsLayer)) {
         active_slider_ = general_slider::frame_rate;
     }
 
@@ -254,10 +256,10 @@ void settings_scene::update_video() {
 
     bool resolution_changed = false;
 
-    if (ui::is_clicked(arrow_left_rect(kGeneralRows[1]))) {
+    if (ui::is_clicked(arrow_left_rect(kGeneralRows[1]), kSettingsLayer)) {
         g_settings.resolution_index = std::max(0, g_settings.resolution_index - 1);
         resolution_changed = true;
-    } else if (ui::is_clicked(arrow_right_rect(kGeneralRows[1]))) {
+    } else if (ui::is_clicked(arrow_right_rect(kGeneralRows[1]), kSettingsLayer)) {
         g_settings.resolution_index = std::min(kResolutionPresetCount - 1, g_settings.resolution_index + 1);
         resolution_changed = true;
     }
@@ -267,15 +269,15 @@ void settings_scene::update_video() {
         SetWindowSize(preset.width, preset.height);
     }
 
-    if (ui::is_clicked(arrow_left_rect(kGeneralRows[2])) ||
-        ui::is_clicked(arrow_right_rect(kGeneralRows[2]))) {
+    if (ui::is_clicked(arrow_left_rect(kGeneralRows[2]), kSettingsLayer) ||
+        ui::is_clicked(arrow_right_rect(kGeneralRows[2]), kSettingsLayer)) {
         g_settings.fullscreen = !g_settings.fullscreen;
         ToggleFullscreen();
     }
 
     // テーマ切り替え
-    if (ui::is_clicked(arrow_left_rect(kGeneralRows[3])) ||
-        ui::is_clicked(arrow_right_rect(kGeneralRows[3]))) {
+    if (ui::is_clicked(arrow_left_rect(kGeneralRows[3]), kSettingsLayer) ||
+        ui::is_clicked(arrow_right_rect(kGeneralRows[3]), kSettingsLayer)) {
         g_settings.dark_mode = !g_settings.dark_mode;
         set_theme(g_settings.dark_mode);
     }
@@ -322,7 +324,7 @@ void settings_scene::update_key_config() {
 
     const Rectangle mode_left = arrow_left_rect(kKeyModeRect);
     const Rectangle mode_right = arrow_right_rect(kKeyModeRect);
-    if (ui::is_clicked(mode_left) || ui::is_clicked(mode_right)) {
+    if (ui::is_clicked(mode_left, kSettingsLayer) || ui::is_clicked(mode_right, kSettingsLayer)) {
         key_config_mode_ = 1 - key_config_mode_;
         key_config_slot_ = -1;
         return;
@@ -330,7 +332,7 @@ void settings_scene::update_key_config() {
 
     for (int i = 0; i < max_keys; ++i) {
         const Rectangle row_rect = key_slot_rect(i);
-        if (ui::is_clicked(row_rect)) {
+        if (ui::is_clicked(row_rect, kSettingsLayer)) {
             if (key_config_slot_ == i) {
                 listening_ = true;
                 key_config_error_.clear();
@@ -428,7 +430,7 @@ void settings_scene::draw_gameplay() {
             ratio = (g_settings.lane_width - 0.6f) / (10.0f - 0.6f);
         }
         ui::draw_slider_relative(kGeneralRows[i], labels[i], values[i].c_str(), clamp01(ratio),
-                                 kSliderLeftInset, kSliderRightInset, 22, kSliderTopOffset);
+                                 kSliderLeftInset, kSliderRightInset, kSettingsLayer, 22, kSliderTopOffset);
     }
 }
 
@@ -443,7 +445,7 @@ void settings_scene::draw_audio() {
         const int i = row;
         const float ratio = row == 0 ? g_settings.bgm_volume : g_settings.se_volume;
         ui::draw_slider_relative(kGeneralRows[i], labels[row], values[row].c_str(), ratio,
-                                 kSliderLeftInset, kSliderRightInset, 22, kSliderTopOffset);
+                                 kSliderLeftInset, kSliderRightInset, kSettingsLayer, 22, kSliderTopOffset);
     }
 }
 
@@ -451,15 +453,15 @@ void settings_scene::draw_video() {
     const std::string fps_label = g_settings.target_fps == 0 ? "Unlimited" : std::to_string(g_settings.target_fps);
     ui::draw_slider_relative(kGeneralRows[0], "Frame Rate", fps_label.c_str(),
                              static_cast<float>(fps_option_index(g_settings.target_fps)) / 3.0f,
-                             kSliderLeftInset, kSliderRightInset, 22, kSliderTopOffset);
-    ui::draw_value_selector(kGeneralRows[1], "Resolution", kResolutionPresets[g_settings.resolution_index].label);
-    ui::draw_value_selector(kGeneralRows[2], "Display", g_settings.fullscreen ? "Fullscreen" : "Windowed");
-    ui::draw_value_selector(kGeneralRows[3], "Theme", g_settings.dark_mode ? "Dark" : "Light");
+                             kSliderLeftInset, kSliderRightInset, kSettingsLayer, 22, kSliderTopOffset);
+    ui::draw_value_selector(kGeneralRows[1], "Resolution", kResolutionPresets[g_settings.resolution_index].label, kSettingsLayer);
+    ui::draw_value_selector(kGeneralRows[2], "Display", g_settings.fullscreen ? "Fullscreen" : "Windowed", kSettingsLayer);
+    ui::draw_value_selector(kGeneralRows[3], "Theme", g_settings.dark_mode ? "Dark" : "Light", kSettingsLayer);
 }
 
 void settings_scene::draw_key_config() {
     const auto& t = *g_theme;
-    ui::draw_value_selector(kKeyModeRect, "Mode", key_config_mode_ == 0 ? "4K" : "6K");
+    ui::draw_value_selector(kKeyModeRect, "Mode", key_config_mode_ == 0 ? "4K" : "6K", kSettingsLayer);
 
     // キースロット表示
     const std::span<const KeyboardKey> keys = key_config_mode_ == 0
@@ -470,7 +472,10 @@ void settings_scene::draw_key_config() {
         const bool selected = key_config_slot_ == i;
         const bool is_listening = selected && listening_;
         const Rectangle row_rect = key_slot_rect(i);
-        const ui::row_state row_state = ui::draw_selectable_row(row_rect, selected);
+        const ui::row_state row_state = ui::draw_row(row_rect,
+                                                     selected ? t.row_selected : t.row,
+                                                     selected ? t.row_active : t.row_hover,
+                                                     selected ? t.border_active : t.border);
         const char* key_label = is_listening ? "Press a key..." : get_key_name(keys[static_cast<size_t>(i)]);
         const ui::rect_pair columns = ui::split_columns(ui::inset(row_state.visual, 18.0f), 160.0f);
         ui::draw_text_in_rect(TextFormat("Lane %d", i + 1), 24, columns.first, t.text, ui::text_align::left);

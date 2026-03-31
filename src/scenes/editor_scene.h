@@ -63,6 +63,7 @@ private:
     std::optional<int> lane_at_position(Vector2 point) const;
     std::optional<size_t> note_at_position(Vector2 point) const;
     note_draw_info note_rects(const note_data& note) const;
+    void rebuild_hit_regions() const;
     void handle_shortcuts();
     void handle_timeline_interaction();
     void apply_scroll_and_zoom(float dt);

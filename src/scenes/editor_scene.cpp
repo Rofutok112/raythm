@@ -46,6 +46,19 @@ constexpr float kScrollWheelViewportRatio = 0.36f;
 constexpr float kNoteHeadHeight = 14.0f;
 constexpr int kSnapDivisions[] = {1, 2, 4, 8, 16, 32};
 constexpr const char* kSnapLabels[] = {"1/1", "1/2", "1/4", "1/8", "1/16", "1/32"};
+constexpr Rectangle kHeaderToolsRect = ui::place(kHeaderRect, 360.0f, 34.0f,
+                                                 ui::anchor::center_right, ui::anchor::center_right,
+                                                 {-18.0f, 0.0f});
+constexpr float kDropdownItemHeight = 30.0f;
+constexpr float kDropdownItemSpacing = 4.0f;
+constexpr Rectangle kSnapDropdownRect = kHeaderToolsRect;
+constexpr Rectangle kSnapDropdownMenuRect = {
+    kSnapDropdownRect.x,
+    kSnapDropdownRect.y + kSnapDropdownRect.height + 4.0f,
+    kSnapDropdownRect.width,
+    12.0f + static_cast<float>(std::size(kSnapLabels)) * kDropdownItemHeight +
+        static_cast<float>(std::size(kSnapLabels) - 1) * kDropdownItemSpacing
+};
 
 std::vector<timing_event> sorted_meter_events(const chart_data& data) {
     std::vector<timing_event> meter_events;
@@ -117,6 +130,8 @@ void editor_scene::on_enter() {
 }
 
 void editor_scene::update(float dt) {
+    rebuild_hit_regions();
+
     if (IsKeyPressed(KEY_ESCAPE)) {
         manager_.change_scene(std::make_unique<song_select_scene>(manager_));
         return;
@@ -132,10 +147,19 @@ void editor_scene::update(float dt) {
     apply_scroll_and_zoom(dt);
 }
 
+void editor_scene::rebuild_hit_regions() const {
+    ui::begin_hit_regions();
+    if (snap_dropdown_open_) {
+        ui::register_hit_region(kSnapDropdownMenuRect, ui::draw_layer::overlay);
+    }
+}
+
 void editor_scene::draw() {
     const auto& t = *g_theme;
     const double now = GetTime();
     virtual_screen::begin();
+    rebuild_hit_regions();
+    ui::begin_draw_queue();
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
 
@@ -152,9 +176,10 @@ void editor_scene::draw() {
     draw_left_panel();
     draw_timeline();
     draw_right_panel();
-    draw_cursor_hud();
     draw_header_tools();
+    draw_cursor_hud();
 
+    ui::flush_draw_queue();
     virtual_screen::end();
     ClearBackground(BLACK);
     virtual_screen::draw_to_screen();
@@ -455,12 +480,13 @@ void editor_scene::handle_shortcuts() {
 void editor_scene::handle_timeline_interaction() {
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const Rectangle content = timeline_content_rect();
+    const bool timeline_hovered = ui::is_hovered(content, ui::draw_layer::base);
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
-        selected_note_index_ = note_at_position(mouse);
+        selected_note_index_ = timeline_hovered ? note_at_position(mouse) : std::nullopt;
     }
 
-    if (!CheckCollisionPointRec(mouse, content)) {
+    if (!timeline_hovered) {
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
             note_dragging_ = false;
         }
@@ -660,29 +686,31 @@ void editor_scene::draw_timeline() const {
     const Rectangle track = timeline_scrollbar_track_rect();
 
     DrawRectangleRec(ui::inset(kTimelineRect, 10.0f), t.section);
-    ui::scoped_clip_rect clip_scope(content);
-    draw_timeline_grid(min_tick, max_tick);
-    draw_timeline_notes();
-    if (note_dragging_) {
-        note_data preview;
-        preview.lane = drag_lane_;
-        preview.tick = std::min(drag_start_tick_, drag_current_tick_);
-        preview.end_tick = std::max(drag_start_tick_, drag_current_tick_);
-        preview.type = (preview.end_tick - preview.tick) >= snap_interval() ? note_type::hold : note_type::tap;
-        if (preview.type == note_type::tap) {
-            preview.end_tick = preview.tick;
-        }
+    {
+        ui::scoped_clip_rect clip_scope(content);
+        draw_timeline_grid(min_tick, max_tick);
+        draw_timeline_notes();
+        if (note_dragging_) {
+            note_data preview;
+            preview.lane = drag_lane_;
+            preview.tick = std::min(drag_start_tick_, drag_current_tick_);
+            preview.end_tick = std::max(drag_start_tick_, drag_current_tick_);
+            preview.type = (preview.end_tick - preview.tick) >= snap_interval() ? note_type::hold : note_type::tap;
+            if (preview.type == note_type::tap) {
+                preview.end_tick = preview.tick;
+            }
 
-        const note_draw_info info = note_rects(preview);
-        const Color fill = state_.has_note_overlap(preview) ? with_alpha(t.error, 150) : with_alpha(t.success, 150);
-        const Color outline = state_.has_note_overlap(preview) ? t.error : t.success;
-        if (info.has_body) {
-            DrawRectangleRounded(info.body_rect, 0.4f, 6, fill);
-            DrawRectangleRounded(info.tail_rect, 0.4f, 6, fill);
-            DrawRectangleLinesEx(info.tail_rect, 1.5f, outline);
+            const note_draw_info info = note_rects(preview);
+            const Color fill = state_.has_note_overlap(preview) ? with_alpha(t.error, 150) : with_alpha(t.success, 150);
+            const Color outline = state_.has_note_overlap(preview) ? t.error : t.success;
+            if (info.has_body) {
+                DrawRectangleRounded(info.body_rect, 0.4f, 6, fill);
+                DrawRectangleRounded(info.tail_rect, 0.4f, 6, fill);
+                DrawRectangleLinesEx(info.tail_rect, 1.5f, outline);
+            }
+            DrawRectangleRounded(info.head_rect, 0.3f, 6, fill);
+            DrawRectangleLinesEx(info.head_rect, 1.5f, outline);
         }
-        DrawRectangleRounded(info.head_rect, 0.3f, 6, fill);
-        DrawRectangleLinesEx(info.head_rect, 1.5f, outline);
     }
     ui::draw_scrollbar(track, content_height_pixels(), scroll_offset_pixels(),
                        t.scrollbar_track, t.scrollbar_thumb, 40.0f);
@@ -778,21 +806,15 @@ void editor_scene::draw_cursor_hud() const {
 }
 
 void editor_scene::draw_header_tools() {
-    const auto& t = *g_theme;
-    const Rectangle tools_rect = ui::place(kHeaderRect, 360.0f, 34.0f,
-                                           ui::anchor::center_right, ui::anchor::center_right,
-                                           {-18.0f, 0.0f});
-    const Rectangle dropdown_rect = tools_rect;
-    const Rectangle dropdown_menu_rect = {
-        dropdown_rect.x,
-        dropdown_rect.y + dropdown_rect.height + 4.0f,
-        dropdown_rect.width,
-        12.0f + static_cast<float>(std::size(kSnapLabels)) * 30.0f + static_cast<float>(std::size(kSnapLabels) - 1) * 4.0f
-    };
-    const ui::dropdown_state dropdown = ui::draw_dropdown(dropdown_rect, dropdown_menu_rect,
-                                                          "Tools", kSnapLabels[snap_index_],
-                                                          std::span<const char* const>(kSnapLabels, std::size(kSnapLabels)),
-                                                          snap_index_, snap_dropdown_open_, 16, 64.0f);
+    // 描画は queue に寄せるが、ヒットテストはまだ即時計算のままにしている。
+    // 次段で layer と hit test 優先順位を統合すると、modal / pause 系も同じ仕組みに載せられる。
+    const ui::dropdown_state dropdown = ui::enqueue_dropdown(
+        kSnapDropdownRect, kSnapDropdownMenuRect,
+        "Tools", kSnapLabels[snap_index_],
+        std::span<const char* const>(kSnapLabels, std::size(kSnapLabels)),
+        snap_index_, snap_dropdown_open_,
+        ui::draw_layer::base, ui::draw_layer::overlay,
+        16, 64.0f);
     if (dropdown.trigger.clicked) {
         snap_dropdown_open_ = !snap_dropdown_open_;
     }
@@ -800,8 +822,8 @@ void editor_scene::draw_header_tools() {
         snap_index_ = dropdown.clicked_index;
         snap_dropdown_open_ = false;
     } else if (snap_dropdown_open_ && IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
-               !ui::is_hovered(dropdown_rect) &&
-               !CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), dropdown_menu_rect)) {
+               !ui::is_hovered(kSnapDropdownRect, ui::draw_layer::base) &&
+               !ui::is_hovered(kSnapDropdownMenuRect, ui::draw_layer::overlay)) {
         snap_dropdown_open_ = false;
     }
 }
