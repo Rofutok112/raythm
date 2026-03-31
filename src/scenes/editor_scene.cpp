@@ -4,6 +4,7 @@
 #include <cmath>
 #include <filesystem>
 #include <iterator>
+#include <limits>
 #include <memory>
 
 #include "audio.h"
@@ -79,6 +80,107 @@ const char* note_type_label(note_type type) {
     return type == note_type::hold ? "Hold" : "Tap";
 }
 
+const char* timing_event_type_label(timing_event_type type) {
+    return type == timing_event_type::bpm ? "BPM" : "Meter";
+}
+
+bool timing_event_sort_less(const timing_event& left, size_t left_index,
+                            const timing_event& right, size_t right_index) {
+    if (left.tick != right.tick) {
+        return left.tick < right.tick;
+    }
+    if (left.type != right.type) {
+        return left.type == timing_event_type::bpm;
+    }
+    return left_index < right_index;
+}
+
+bool accepts_decimal(editor_scene::timing_input_field field) {
+    return field == editor_scene::timing_input_field::bpm_value;
+}
+
+bool accepts_bar_beat(editor_scene::timing_input_field field) {
+    return field == editor_scene::timing_input_field::bpm_measure ||
+           field == editor_scene::timing_input_field::meter_measure;
+}
+
+bool accepts_character(editor_scene::timing_input_field field, int codepoint, const std::string& value) {
+    if (field == editor_scene::timing_input_field::none) {
+        return false;
+    }
+    if (codepoint >= '0' && codepoint <= '9') {
+        return true;
+    }
+    if (codepoint == ':' && accepts_bar_beat(field) && value.find(':') == std::string::npos) {
+        return true;
+    }
+    if (codepoint == '.' && accepts_decimal(field) && value.find('.') == std::string::npos) {
+        return true;
+    }
+    return false;
+}
+
+bool try_parse_int(const std::string& text, int& out_value) {
+    if (text.empty()) {
+        return false;
+    }
+    try {
+        size_t consumed = 0;
+        const int value = std::stoi(text, &consumed);
+        if (consumed != text.size()) {
+            return false;
+        }
+        out_value = value;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool try_parse_float(const std::string& text, float& out_value) {
+    if (text.empty()) {
+        return false;
+    }
+    try {
+        size_t consumed = 0;
+        const float value = std::stof(text, &consumed);
+        if (consumed != text.size()) {
+            return false;
+        }
+        out_value = value;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool try_parse_bar_beat(const std::string& text, editor_scene::bar_beat_position& out_value) {
+    if (text.empty()) {
+        return false;
+    }
+
+    const size_t colon = text.find(':');
+    int measure = 0;
+    int beat = 1;
+    if (colon == std::string::npos) {
+        if (!try_parse_int(text, measure)) {
+            return false;
+        }
+    } else {
+        if (!try_parse_int(text.substr(0, colon), measure) ||
+            !try_parse_int(text.substr(colon + 1), beat)) {
+            return false;
+        }
+    }
+
+    if (measure <= 0 || beat <= 0) {
+        return false;
+    }
+
+    out_value = {measure, beat};
+    return true;
+}
+
 }
 
 editor_scene::editor_scene(scene_manager& manager, song_data song, std::string chart_path)
@@ -112,11 +214,19 @@ void editor_scene::on_enter() {
     snap_index_ = 4;
     snap_dropdown_open_ = false;
     selected_note_index_.reset();
+    selected_timing_event_index_ = state_.data().timing_events.empty() ? std::nullopt : std::optional<size_t>(0);
+    active_timing_input_field_ = timing_input_field::none;
+    timing_input_error_.clear();
+    timing_bar_pick_mode_ = false;
+    timing_list_scroll_offset_ = 0.0f;
+    timing_list_scrollbar_dragging_ = false;
+    timing_list_scrollbar_drag_offset_ = 0.0f;
     note_dragging_ = false;
     drag_lane_ = 0;
     drag_start_tick_ = 0;
     drag_current_tick_ = 0;
     rebuild_meter_segments();
+    load_timing_event_inputs();
 
     const std::filesystem::path audio_path = std::filesystem::path(song_.directory) / song_.meta.audio_file;
     if (std::filesystem::exists(audio_path)) {
@@ -143,6 +253,7 @@ void editor_scene::update(float dt) {
     }
 
     handle_shortcuts();
+    handle_text_input();
     handle_timeline_interaction();
     apply_scroll_and_zoom(dt);
 }
@@ -272,6 +383,21 @@ std::vector<editor_scene::grid_line> editor_scene::visible_grid_lines(int min_ti
     return lines;
 }
 
+std::vector<size_t> editor_scene::sorted_timing_event_indices() const {
+    std::vector<size_t> indices(state_.data().timing_events.size());
+    for (size_t i = 0; i < indices.size(); ++i) {
+        indices[i] = i;
+    }
+
+    std::stable_sort(indices.begin(), indices.end(), [this](size_t left_index, size_t right_index) {
+        const timing_event& left = state_.data().timing_events[left_index];
+        const timing_event& right = state_.data().timing_events[right_index];
+        return timing_event_sort_less(left, left_index, right, right_index);
+    });
+
+    return indices;
+}
+
 Rectangle editor_scene::timeline_content_rect() const {
     return {
         kTimelineRect.x + kTimelinePadding,
@@ -362,9 +488,9 @@ double editor_scene::beat_number_at_tick(int tick) const {
     return static_cast<double>(segment.beat_index_offset) + local_beats + 1.0;
 }
 
-std::string editor_scene::bar_beat_label(int tick) const {
+editor_scene::bar_beat_position editor_scene::bar_beat_at_tick(int tick) const {
     if (meter_segments_.empty()) {
-        return "1:1";
+        return {};
     }
 
     const auto it = std::upper_bound(meter_segments_.begin(), meter_segments_.end(), tick,
@@ -374,10 +500,54 @@ std::string editor_scene::bar_beat_label(int tick) const {
     const meter_segment& segment = it == meter_segments_.begin() ? meter_segments_.front() : *std::prev(it);
     const int numerator = std::max(segment.numerator, 1);
     const int beat_ticks = std::max(1, state_.data().meta.resolution * 4 / std::max(segment.denominator, 1));
-    const int local_beat_index = std::max(0, (tick - segment.start_tick) / beat_ticks);
-    const int measure = segment.measure_index_offset + local_beat_index / numerator + 1;
-    const int beat_in_measure = local_beat_index % numerator + 1;
-    return std::to_string(measure) + ":" + std::to_string(beat_in_measure);
+    const int local_beat_index = std::max(0, static_cast<int>(std::llround(
+        static_cast<double>(tick - segment.start_tick) / static_cast<double>(beat_ticks))));
+    return {
+        segment.measure_index_offset + local_beat_index / numerator + 1,
+        local_beat_index % numerator + 1
+    };
+}
+
+std::optional<int> editor_scene::tick_from_bar_beat(int measure, int beat) const {
+    if (measure <= 0 || beat <= 0 || meter_segments_.empty()) {
+        return std::nullopt;
+    }
+
+    for (size_t i = 0; i < meter_segments_.size(); ++i) {
+        const meter_segment& segment = meter_segments_[i];
+        const int first_measure = segment.measure_index_offset + 1;
+        const int next_measure = i + 1 < meter_segments_.size()
+            ? meter_segments_[i + 1].measure_index_offset + 1
+            : std::numeric_limits<int>::max();
+        if (measure < first_measure || measure >= next_measure) {
+            continue;
+        }
+
+        const int numerator = std::max(segment.numerator, 1);
+        if (beat > numerator) {
+            return std::nullopt;
+        }
+
+        const int beat_ticks = std::max(1, state_.data().meta.resolution * 4 / std::max(segment.denominator, 1));
+        const int measure_ticks = beat_ticks * numerator;
+        return segment.start_tick + (measure - first_measure) * measure_ticks + (beat - 1) * beat_ticks;
+    }
+
+    const meter_segment& segment = meter_segments_.back();
+    const int first_measure = segment.measure_index_offset + 1;
+    const int numerator = std::max(segment.numerator, 1);
+    if (measure < first_measure || beat > numerator) {
+        return std::nullopt;
+    }
+
+    const int beat_ticks = std::max(1, state_.data().meta.resolution * 4 / std::max(segment.denominator, 1));
+    const int measure_ticks = beat_ticks * numerator;
+    return segment.start_tick + (measure - first_measure) * measure_ticks + (beat - 1) * beat_ticks;
+}
+
+std::string editor_scene::bar_beat_label(int tick) const {
+    const bar_beat_position position = bar_beat_at_tick(tick);
+    return std::to_string(position.measure) + ":" + std::to_string(position.beat);
 }
 
 int editor_scene::snap_division() const {
@@ -390,6 +560,13 @@ int editor_scene::snap_interval() const {
 
 int editor_scene::snap_tick(int raw_tick) const {
     return state_.snap_tick(raw_tick, snap_division());
+}
+
+int editor_scene::default_timing_event_tick() const {
+    if (selected_timing_event_index_.has_value() && *selected_timing_event_index_ < state_.data().timing_events.size()) {
+        return snap_tick(state_.data().timing_events[*selected_timing_event_index_].tick + snap_interval());
+    }
+    return std::max(snap_interval(), snap_tick(static_cast<int>(bottom_tick_ + visible_tick_span() * 0.5f)));
 }
 
 std::optional<int> editor_scene::lane_at_position(Vector2 point) const {
@@ -456,16 +633,23 @@ void editor_scene::handle_shortcuts() {
             state_.undo();
         }
         selected_note_index_.reset();
+        sync_timing_event_selection();
         rebuild_meter_segments();
+        load_timing_event_inputs();
+        timing_input_error_.clear();
     }
 
     if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_Y)) {
         state_.redo();
         selected_note_index_.reset();
+        sync_timing_event_selection();
         rebuild_meter_segments();
+        load_timing_event_inputs();
+        timing_input_error_.clear();
     }
 
-    if (IsKeyPressed(KEY_DELETE) && selected_note_index_.has_value()) {
+    if (active_timing_input_field_ == timing_input_field::none &&
+        IsKeyPressed(KEY_DELETE) && selected_note_index_.has_value()) {
         const size_t selected_index = *selected_note_index_;
         if (state_.remove_note(selected_index)) {
             selected_note_index_.reset();
@@ -477,10 +661,78 @@ void editor_scene::handle_shortcuts() {
     }
 }
 
+void editor_scene::handle_text_input() {
+    std::string* active_input = nullptr;
+    switch (active_timing_input_field_) {
+        case timing_input_field::bpm_measure:
+            active_input = &timing_tick_input_;
+            break;
+        case timing_input_field::bpm_value:
+            active_input = &timing_bpm_input_;
+            break;
+        case timing_input_field::meter_measure:
+            active_input = &timing_measure_input_;
+            break;
+        case timing_input_field::meter_numerator:
+            active_input = &timing_numerator_input_;
+            break;
+        case timing_input_field::meter_denominator:
+            active_input = &timing_denominator_input_;
+            break;
+        case timing_input_field::none:
+            break;
+    }
+
+    if (active_input == nullptr) {
+        return;
+    }
+
+    int codepoint = GetCharPressed();
+    while (codepoint > 0) {
+        if (accepts_character(active_timing_input_field_, codepoint, *active_input) && active_input->size() < 16) {
+            active_input->push_back(static_cast<char>(codepoint));
+            timing_input_error_.clear();
+        }
+        codepoint = GetCharPressed();
+    }
+
+    if (IsKeyPressed(KEY_BACKSPACE) && !active_input->empty()) {
+        active_input->pop_back();
+        timing_input_error_.clear();
+    }
+
+    if (IsKeyPressed(KEY_ENTER)) {
+        apply_selected_timing_event();
+        active_timing_input_field_ = timing_input_field::none;
+        timing_bar_pick_mode_ = false;
+    }
+}
+
 void editor_scene::handle_timeline_interaction() {
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const Rectangle content = timeline_content_rect();
     const bool timeline_hovered = ui::is_hovered(content, ui::draw_layer::base);
+
+    if (timing_bar_pick_mode_) {
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && timeline_hovered && selected_timing_event_index_.has_value()) {
+            const int tick = snap_tick(timeline_y_to_tick(mouse.y));
+            const bar_beat_position position = bar_beat_at_tick(tick);
+            if (*selected_timing_event_index_ < state_.data().timing_events.size()) {
+                const timing_event& event = state_.data().timing_events[*selected_timing_event_index_];
+                const std::string value = std::to_string(position.measure) + ":" + std::to_string(position.beat);
+                if (event.type == timing_event_type::bpm) {
+                    timing_tick_input_ = value;
+                } else {
+                    timing_measure_input_ = value;
+                }
+                timing_input_error_.clear();
+            }
+            timing_bar_pick_mode_ = false;
+        } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || IsKeyPressed(KEY_ESCAPE)) {
+            timing_bar_pick_mode_ = false;
+        }
+        return;
+    }
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
         selected_note_index_ = timeline_hovered ? note_at_position(mouse) : std::nullopt;
@@ -578,6 +830,199 @@ void editor_scene::apply_scroll_and_zoom(float dt) {
     }
 }
 
+void editor_scene::select_timing_event(std::optional<size_t> index, bool scroll_into_view) {
+    selected_timing_event_index_ = index;
+    active_timing_input_field_ = timing_input_field::none;
+    timing_input_error_.clear();
+    timing_bar_pick_mode_ = false;
+    load_timing_event_inputs();
+
+    if (scroll_into_view && index.has_value() && *index < state_.data().timing_events.size()) {
+        scroll_to_tick(state_.data().timing_events[*index].tick);
+        const auto timing_indices = sorted_timing_event_indices();
+        const auto it = std::find(timing_indices.begin(), timing_indices.end(), *index);
+        if (it != timing_indices.end()) {
+            constexpr float kTimingRowHeight = 30.0f;
+            constexpr float kTimingRowGap = 4.0f;
+            constexpr float kTimingListViewportHeight = 174.0f;
+            const float row_top = static_cast<float>(std::distance(timing_indices.begin(), it)) * (kTimingRowHeight + kTimingRowGap);
+            const float row_bottom = row_top + kTimingRowHeight;
+            if (row_top < timing_list_scroll_offset_) {
+                timing_list_scroll_offset_ = row_top;
+            } else if (row_bottom > timing_list_scroll_offset_ + kTimingListViewportHeight) {
+                timing_list_scroll_offset_ = row_bottom - kTimingListViewportHeight;
+            }
+        }
+    }
+}
+
+void editor_scene::scroll_to_tick(int tick) {
+    const float target = std::clamp(static_cast<float>(tick) - visible_tick_span() * 0.5f,
+                                    -kStartPaddingTicks, max_bottom_tick());
+    bottom_tick_target_ = target;
+    bottom_tick_ = target;
+}
+
+void editor_scene::sync_timing_event_selection() {
+    if (selected_timing_event_index_.has_value() &&
+        *selected_timing_event_index_ >= state_.data().timing_events.size()) {
+        selected_timing_event_index_ = state_.data().timing_events.empty()
+            ? std::nullopt
+            : std::optional<size_t>(state_.data().timing_events.size() - 1);
+    }
+}
+
+bool editor_scene::apply_selected_timing_event() {
+    sync_timing_event_selection();
+    if (!selected_timing_event_index_.has_value()) {
+        timing_input_error_ = "Select a timing event first.";
+        return false;
+    }
+
+    const size_t index = *selected_timing_event_index_;
+    if (index >= state_.data().timing_events.size()) {
+        timing_input_error_ = "Selected timing event is out of range.";
+        return false;
+    }
+
+    timing_event updated = state_.data().timing_events[index];
+    if (updated.type == timing_event_type::bpm) {
+        bar_beat_position position;
+        float bpm = 0.0f;
+        if (!try_parse_bar_beat(timing_tick_input_, position)) {
+            timing_input_error_ = "Bar must be in M:B format.";
+            return false;
+        }
+        if (!try_parse_float(timing_bpm_input_, bpm) || bpm <= 0.0f) {
+            timing_input_error_ = "BPM must be greater than zero.";
+            return false;
+        }
+        const std::optional<int> tick = tick_from_bar_beat(position.measure, position.beat);
+        if (!tick.has_value()) {
+            timing_input_error_ = "Bar is outside the current meter layout.";
+            return false;
+        }
+        updated.tick = *tick;
+        updated.bpm = bpm;
+    } else {
+        bar_beat_position position;
+        int numerator = 0;
+        int denominator = 0;
+        if (!try_parse_bar_beat(timing_measure_input_, position)) {
+            timing_input_error_ = "Bar must be in M:B format.";
+            return false;
+        }
+        if (!try_parse_int(timing_numerator_input_, numerator) || numerator <= 0) {
+            timing_input_error_ = "Numerator must be 1 or greater.";
+            return false;
+        }
+        if (!try_parse_int(timing_denominator_input_, denominator) || denominator <= 0) {
+            timing_input_error_ = "Denominator must be 1 or greater.";
+            return false;
+        }
+        const std::optional<int> tick = tick_from_bar_beat(position.measure, position.beat);
+        if (!tick.has_value()) {
+            timing_input_error_ = "Bar is outside the current meter layout.";
+            return false;
+        }
+        updated.tick = *tick;
+        updated.numerator = numerator;
+        updated.denominator = denominator;
+    }
+
+    if (updated.type == timing_event_type::bpm && state_.data().timing_events[index].tick == 0 && updated.tick != 0) {
+        timing_input_error_ = "The BPM event at tick 0 must stay at tick 0.";
+        return false;
+    }
+
+    if (!state_.modify_timing_event(index, updated)) {
+        timing_input_error_ = "Failed to update the timing event.";
+        return false;
+    }
+
+    rebuild_meter_segments();
+    timing_input_error_.clear();
+    load_timing_event_inputs();
+    scroll_to_tick(updated.tick);
+    return true;
+}
+
+void editor_scene::add_timing_event(timing_event_type type) {
+    timing_event event;
+    event.type = type;
+    event.tick = default_timing_event_tick();
+    if (type == timing_event_type::bpm) {
+        event.bpm = state_.engine().get_bpm_at(event.tick);
+        event.numerator = 4;
+        event.denominator = 4;
+    } else {
+        const bar_beat_position position = bar_beat_at_tick(event.tick);
+        const std::optional<int> snapped_tick = tick_from_bar_beat(position.measure, 1);
+        event.tick = snapped_tick.value_or(event.tick);
+        event.bpm = 0.0f;
+        event.numerator = 4;
+        event.denominator = 4;
+    }
+
+    state_.add_timing_event(event);
+    rebuild_meter_segments();
+    select_timing_event(state_.data().timing_events.size() - 1, true);
+}
+
+void editor_scene::delete_selected_timing_event() {
+    sync_timing_event_selection();
+    if (!selected_timing_event_index_.has_value()) {
+        timing_input_error_ = "Select a timing event first.";
+        return;
+    }
+    if (!can_delete_selected_timing_event()) {
+        timing_input_error_ = "The BPM event at tick 0 cannot be deleted.";
+        return;
+    }
+
+    const size_t index = *selected_timing_event_index_;
+    if (!state_.remove_timing_event(index)) {
+        timing_input_error_ = "Failed to delete the timing event.";
+        return;
+    }
+
+    rebuild_meter_segments();
+    sync_timing_event_selection();
+    timing_input_error_.clear();
+    load_timing_event_inputs();
+}
+
+bool editor_scene::can_delete_selected_timing_event() const {
+    if (!selected_timing_event_index_.has_value() || *selected_timing_event_index_ >= state_.data().timing_events.size()) {
+        return false;
+    }
+    const timing_event& event = state_.data().timing_events[*selected_timing_event_index_];
+    return !(event.type == timing_event_type::bpm && event.tick == 0);
+}
+
+void editor_scene::load_timing_event_inputs() {
+    sync_timing_event_selection();
+    if (!selected_timing_event_index_.has_value() || *selected_timing_event_index_ >= state_.data().timing_events.size()) {
+        clear_timing_event_inputs();
+        return;
+    }
+
+    const timing_event& event = state_.data().timing_events[*selected_timing_event_index_];
+    timing_tick_input_ = bar_beat_label(event.tick);
+    timing_bpm_input_ = TextFormat("%.1f", event.bpm);
+    timing_measure_input_ = bar_beat_label(event.tick);
+    timing_numerator_input_ = std::to_string(event.numerator);
+    timing_denominator_input_ = std::to_string(event.denominator);
+}
+
+void editor_scene::clear_timing_event_inputs() {
+    timing_tick_input_.clear();
+    timing_bpm_input_.clear();
+    timing_measure_input_.clear();
+    timing_numerator_input_.clear();
+    timing_denominator_input_.clear();
+}
+
 void editor_scene::draw_left_panel() {
     const auto& t = *g_theme;
     const double now = GetTime();
@@ -619,63 +1064,235 @@ void editor_scene::draw_left_panel() {
     }
 }
 
-void editor_scene::draw_right_panel() const {
+void editor_scene::draw_right_panel() {
     const auto& t = *g_theme;
+    const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const Rectangle content = ui::inset(kRightPanelRect, ui::edge_insets::uniform(16.0f));
-    const Rectangle timing_box = {content.x, content.y, content.width, 252.0f};
-    const Rectangle property_box = {content.x, timing_box.y + timing_box.height + 12.0f, content.width, 198.0f};
+    const Rectangle timing_box = {content.x, content.y, content.width, 262.0f};
+    const Rectangle editor_box = {content.x, timing_box.y + timing_box.height + 12.0f, content.width, 238.0f};
+    const Rectangle note_box = {content.x, editor_box.y + editor_box.height + 12.0f, content.width, 56.0f};
+    bool clicked_input_row = false;
+
+    auto draw_input_row = [&](Rectangle rect, const char* label, const std::string& value,
+                              timing_input_field field, float label_width = 84.0f) {
+        const bool selected = active_timing_input_field_ == field;
+        const bool picking_bar = timing_bar_pick_mode_ &&
+                                 (field == timing_input_field::bpm_measure || field == timing_input_field::meter_measure);
+        const ui::row_state row = ui::draw_row(
+            rect,
+            selected ? t.row_selected : t.row,
+            selected ? t.row_selected_hover : t.row_hover,
+            selected ? t.border_active : t.border,
+            1.5f);
+        if (row.clicked) {
+            active_timing_input_field_ = field;
+            timing_bar_pick_mode_ = field == timing_input_field::bpm_measure ||
+                                    field == timing_input_field::meter_measure;
+            timing_input_error_.clear();
+            clicked_input_row = true;
+        }
+
+        const Rectangle content_rect = ui::inset(row.visual, ui::edge_insets::symmetric(0.0f, 12.0f));
+        const Rectangle label_rect = {content_rect.x, content_rect.y, label_width, content_rect.height};
+        const Rectangle input_rect = {
+            content_rect.x + label_width,
+            content_rect.y + 4.0f,
+            content_rect.width - label_width,
+            content_rect.height - 8.0f
+        };
+
+        DrawRectangleRec(input_rect, selected ? with_alpha(t.panel, 255) : with_alpha(t.section, 255));
+        DrawRectangleLinesEx(input_rect, 1.5f, picking_bar ? t.accent : (selected ? t.border_active : t.border_light));
+        ui::draw_text_in_rect(label, 16, label_rect, selected ? t.text : t.text_secondary, ui::text_align::left);
+
+        std::string display_value = value;
+        if (display_value.empty()) {
+            display_value = picking_bar ? "Click Timeline" : "Enter value";
+        }
+        if (picking_bar) {
+            display_value = "Click Timeline";
+        }
+        if (selected && !picking_bar && (GetTime() * 2.0 - std::floor(GetTime() * 2.0)) < 0.5) {
+            display_value += "_";
+        }
+
+        ui::draw_text_in_rect(display_value.c_str(), 16,
+                              ui::inset(input_rect, ui::edge_insets::symmetric(0.0f, 10.0f)),
+                              value.empty() && !selected ? t.text_hint : (picking_bar ? t.accent : t.text),
+                              ui::text_align::left);
+    };
 
     ui::draw_section(timing_box);
     ui::draw_text_in_rect("Timing Events", 22,
                           {timing_box.x + 12.0f, timing_box.y + 10.0f, timing_box.width - 24.0f, 28.0f},
                           t.text, ui::text_align::left);
 
-    float row_y = timing_box.y + 42.0f;
-    for (const timing_event& event : state_.data().timing_events) {
-        if (row_y + 24.0f > timing_box.y + timing_box.height - 8.0f) {
-            break;
-        }
+    const Rectangle timing_list_view_rect = {
+        timing_box.x + 10.0f,
+        timing_box.y + 42.0f,
+        timing_box.width - 32.0f,
+        timing_box.height - 88.0f
+    };
+    const Rectangle timing_list_scrollbar_rect = {
+        timing_list_view_rect.x + timing_list_view_rect.width + 6.0f,
+        timing_list_view_rect.y,
+        6.0f,
+        timing_list_view_rect.height
+    };
+    const auto timing_indices = sorted_timing_event_indices();
+    const float timing_row_height = 30.0f;
+    const float timing_row_gap = 4.0f;
+    const float timing_list_content_height = timing_indices.empty()
+        ? timing_list_view_rect.height
+        : static_cast<float>(timing_indices.size()) * timing_row_height +
+              static_cast<float>(std::max<int>(0, static_cast<int>(timing_indices.size()) - 1)) * timing_row_gap;
+    const float timing_list_max_scroll = std::max(0.0f, timing_list_content_height - timing_list_view_rect.height);
+    timing_list_scroll_offset_ = std::clamp(timing_list_scroll_offset_, 0.0f, timing_list_max_scroll);
 
-        const std::string label = event.type == timing_event_type::bpm
-            ? "BPM " + std::to_string(static_cast<int>(std::round(event.bpm)))
-            : "METER " + std::to_string(event.numerator) + "/" + std::to_string(event.denominator);
-        const std::string position = bar_beat_label(event.tick);
-        ui::draw_label_value({timing_box.x + 12.0f, row_y, timing_box.width - 24.0f, 22.0f},
-                             label.c_str(), position.c_str(), 16,
-                             t.text_secondary, t.text_muted, 118.0f);
-        row_y += 24.0f;
+    const ui::scrollbar_interaction timing_scrollbar = ui::update_vertical_scrollbar(
+        timing_list_scrollbar_rect, timing_list_content_height, timing_list_scroll_offset_,
+        timing_list_scrollbar_dragging_, timing_list_scrollbar_drag_offset_, 28.0f);
+    if (timing_scrollbar.changed || timing_scrollbar.dragging) {
+        timing_list_scroll_offset_ = timing_scrollbar.scroll_offset;
     }
 
-    ui::draw_section(property_box);
-    ui::draw_text_in_rect("Properties", 22,
-                          {property_box.x + 12.0f, property_box.y + 10.0f, property_box.width - 24.0f, 28.0f},
+    if (CheckCollisionPointRec(mouse, timing_list_view_rect) && GetMouseWheelMove() != 0.0f) {
+        timing_list_scroll_offset_ = std::clamp(
+            timing_list_scroll_offset_ - GetMouseWheelMove() * 42.0f,
+            0.0f, timing_list_max_scroll);
+    }
+
+    {
+        ui::scoped_clip_rect clip_scope(timing_list_view_rect);
+        float row_y = timing_list_view_rect.y - timing_list_scroll_offset_;
+        for (const size_t index : timing_indices) {
+            const timing_event& event = state_.data().timing_events[index];
+            const bool selected = selected_timing_event_index_.has_value() && *selected_timing_event_index_ == index;
+            const Rectangle row_rect = {timing_list_view_rect.x, row_y, timing_list_view_rect.width, timing_row_height};
+            const ui::row_state row = ui::draw_selectable_row(row_rect, selected, 1.5f);
+            if (row.clicked) {
+                select_timing_event(index, true);
+            }
+
+            const std::string label = std::string(timing_event_type_label(event.type)) + " " + bar_beat_label(event.tick);
+            const std::string value = event.type == timing_event_type::bpm
+                ? TextFormat("%.1f", event.bpm)
+                : TextFormat("%d/%d", event.numerator, event.denominator);
+            ui::draw_label_value(ui::inset(row.visual, ui::edge_insets::symmetric(0.0f, 10.0f)),
+                                 label.c_str(), value.c_str(), 15,
+                                 selected ? t.text : t.text_secondary,
+                                 selected ? t.text : t.text_muted, 118.0f);
+            row_y += timing_row_height + timing_row_gap;
+        }
+    }
+    ui::draw_scrollbar(timing_list_scrollbar_rect, timing_list_content_height, timing_list_scroll_offset_,
+                       t.scrollbar_track, t.scrollbar_thumb, 28.0f);
+
+    const float timing_button_gap = 8.0f;
+    const float timing_button_width = (timing_box.width - 24.0f - timing_button_gap * 2.0f) / 3.0f;
+    const Rectangle add_bpm_rect = {
+        timing_box.x + 12.0f,
+        timing_box.y + timing_box.height - 42.0f,
+        timing_button_width,
+        28.0f
+    };
+    const Rectangle add_meter_rect = {
+        add_bpm_rect.x + timing_button_width + timing_button_gap,
+        add_bpm_rect.y,
+        timing_button_width,
+        28.0f
+    };
+    const Rectangle delete_rect = {
+        add_meter_rect.x + timing_button_width + timing_button_gap,
+        add_bpm_rect.y,
+        timing_button_width,
+        28.0f
+    };
+    if (ui::draw_button(add_bpm_rect, "BPM", 14).clicked) {
+        add_timing_event(timing_event_type::bpm);
+    }
+    if (ui::draw_button(add_meter_rect, "Meter", 14).clicked) {
+        add_timing_event(timing_event_type::meter);
+    }
+    const bool delete_enabled = can_delete_selected_timing_event();
+    const ui::button_state delete_button = ui::draw_button_colored(
+        delete_rect, "Delete", 14,
+        delete_enabled ? t.row : t.section,
+        delete_enabled ? t.row_hover : t.section,
+        delete_enabled ? t.text : t.text_hint, 1.5f);
+    if (delete_enabled && delete_button.clicked) {
+        delete_selected_timing_event();
+    }
+
+    ui::draw_section(editor_box);
+    ui::draw_text_in_rect("Event Editor", 22,
+                          {editor_box.x + 12.0f, editor_box.y + 10.0f, editor_box.width - 24.0f, 28.0f},
                           t.text, ui::text_align::left);
-    if (selected_note_index_.has_value() && *selected_note_index_ < state_.data().notes.size()) {
-        const note_data& note = state_.data().notes[*selected_note_index_];
-        ui::draw_label_value({property_box.x + 12.0f, property_box.y + 50.0f, property_box.width - 24.0f, 24.0f},
-                             "Type", note_type_label(note.type), 16,
-                             t.text_secondary, t.text, 82.0f);
-        ui::draw_label_value({property_box.x + 12.0f, property_box.y + 76.0f, property_box.width - 24.0f, 24.0f},
-                             "Tick", TextFormat("%d", note.tick), 16,
-                             t.text_secondary, t.text, 82.0f);
-        ui::draw_label_value({property_box.x + 12.0f, property_box.y + 102.0f, property_box.width - 24.0f, 24.0f},
-                             "Lane", TextFormat("%d", note.lane + 1), 16,
-                             t.text_secondary, t.text, 82.0f);
-        ui::draw_label_value({property_box.x + 12.0f, property_box.y + 128.0f, property_box.width - 24.0f, 24.0f},
-                             "End", note.type == note_type::hold ? TextFormat("%d", note.end_tick) : "-", 16,
-                             t.text_secondary, t.text, 82.0f);
+
+    sync_timing_event_selection();
+    if (selected_timing_event_index_.has_value() && *selected_timing_event_index_ < state_.data().timing_events.size()) {
+        const timing_event& event = state_.data().timing_events[*selected_timing_event_index_];
+        ui::draw_label_value({editor_box.x + 12.0f, editor_box.y + 44.0f, editor_box.width - 24.0f, 22.0f},
+                             "Type", timing_event_type_label(event.type), 16,
+                             t.text_secondary, t.text, 76.0f);
+        if (event.type == timing_event_type::bpm) {
+            draw_input_row({editor_box.x + 12.0f, editor_box.y + 74.0f, editor_box.width - 24.0f, 32.0f},
+                           "Bar", timing_tick_input_, timing_input_field::bpm_measure);
+            draw_input_row({editor_box.x + 12.0f, editor_box.y + 112.0f, editor_box.width - 24.0f, 32.0f},
+                           "BPM", timing_bpm_input_, timing_input_field::bpm_value);
+        } else {
+            draw_input_row({editor_box.x + 12.0f, editor_box.y + 74.0f, editor_box.width - 24.0f, 32.0f},
+                           "Bar", timing_measure_input_, timing_input_field::meter_measure);
+            draw_input_row({editor_box.x + 12.0f, editor_box.y + 112.0f, (editor_box.width - 32.0f) * 0.5f, 32.0f},
+                           "Num", timing_numerator_input_, timing_input_field::meter_numerator, 40.0f);
+            draw_input_row({editor_box.x + 20.0f + (editor_box.width - 32.0f) * 0.5f, editor_box.y + 112.0f,
+                            (editor_box.width - 32.0f) * 0.5f, 32.0f},
+                           "Den", timing_denominator_input_, timing_input_field::meter_denominator, 40.0f);
+        }
+
+        if (!timing_input_error_.empty()) {
+            ui::draw_text_in_rect(timing_input_error_.c_str(), 16,
+                                  {editor_box.x + 12.0f, editor_box.y + 182.0f, editor_box.width - 24.0f, 36.0f},
+                                  t.error, ui::text_align::left);
+        }
+
+        if (ui::draw_button({editor_box.x + editor_box.width - 92.0f, editor_box.y + editor_box.height - 42.0f,
+                             80.0f, 28.0f}, "Apply", 14).clicked) {
+            apply_selected_timing_event();
+            active_timing_input_field_ = timing_input_field::none;
+            timing_bar_pick_mode_ = false;
+        }
     } else {
-        ui::draw_text_in_rect("Right click a note to inspect it.", 18,
-                              {property_box.x + 12.0f, property_box.y + 50.0f, property_box.width - 24.0f, 22.0f},
+        ui::draw_text_in_rect("Select a timing event from the list.", 18,
+                              {editor_box.x + 12.0f, editor_box.y + 54.0f, editor_box.width - 24.0f, 24.0f},
                               t.text_hint, ui::text_align::left);
     }
 
-    ui::draw_label_value({property_box.x + 12.0f, property_box.y + 144.0f, property_box.width - 24.0f, 24.0f},
-                         "Notes", TextFormat("%d", static_cast<int>(state_.data().notes.size())), 16,
-                         t.text_secondary, t.text, 82.0f);
-    ui::draw_label_value({property_box.x + 12.0f, property_box.y + 170.0f, property_box.width - 24.0f, 24.0f},
-                         "Undo", state_.can_undo() ? "Available" : "Empty", 16,
-                         t.text_secondary, state_.can_undo() ? t.success : t.text, 82.0f);
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+        active_timing_input_field_ != timing_input_field::none &&
+        !clicked_input_row &&
+        !CheckCollisionPointRec(mouse, editor_box)) {
+        active_timing_input_field_ = timing_input_field::none;
+        timing_bar_pick_mode_ = false;
+    }
+
+    ui::draw_section(note_box);
+    if (selected_note_index_.has_value() && *selected_note_index_ < state_.data().notes.size()) {
+        const note_data& note = state_.data().notes[*selected_note_index_];
+        ui::draw_label_value({note_box.x + 12.0f, note_box.y + 8.0f, note_box.width - 24.0f, 18.0f},
+                             "Note", note_type_label(note.type), 15,
+                             t.text_secondary, t.text, 56.0f);
+        ui::draw_label_value({note_box.x + 12.0f, note_box.y + 28.0f, note_box.width - 24.0f, 18.0f},
+                             "Tick", TextFormat("%d  lane %d", note.tick, note.lane + 1), 15,
+                             t.text_secondary, t.text_muted, 56.0f);
+    } else {
+        ui::draw_label_value({note_box.x + 12.0f, note_box.y + 8.0f, note_box.width - 24.0f, 18.0f},
+                             "Notes", TextFormat("%d", static_cast<int>(state_.data().notes.size())), 15,
+                             t.text_secondary, t.text, 56.0f);
+        ui::draw_label_value({note_box.x + 12.0f, note_box.y + 28.0f, note_box.width - 24.0f, 18.0f},
+                             "Undo", state_.can_undo() ? "Available" : "Empty", 15,
+                             t.text_secondary, state_.can_undo() ? t.success : t.text, 56.0f);
+    }
 }
 
 void editor_scene::draw_timeline() const {
@@ -736,16 +1353,16 @@ void editor_scene::draw_timeline_grid(int min_tick, int max_tick) const {
     const int first_snap_tick = std::max(0, (min_tick / interval) * interval);
     for (int tick = first_snap_tick; tick <= max_tick; tick += interval) {
         const float y = tick_to_timeline_y(tick);
-        ui::draw_line_f(content.x, y, content.x + content.width, y, with_alpha(t.border_light, 80));
+        ui::draw_line_f(content.x, y, content.x + content.width, y, t.editor_grid_snap);
     }
 
     for (const grid_line& line : visible_grid_lines(min_tick, max_tick)) {
         const float y = tick_to_timeline_y(line.tick);
-        const Color color = line.major ? with_alpha(t.border_active, 255) : with_alpha(t.border_light, 220);
+        const Color color = line.major ? t.editor_grid_major : t.editor_grid_minor;
         ui::draw_line_f(content.x, y, content.x + content.width, y, color);
         if (line.major) {
             ui::draw_line_f(content.x, y + 1.0f, content.x + content.width, y + 1.0f,
-                            with_alpha(t.border_active, 180));
+                            t.editor_grid_major_glow);
         }
         ui::draw_text_f(TextFormat("%d:%d", line.measure, line.beat), content.x + 8.0f, y - 10.0f,
                         line.major ? 16 : 14, line.major ? t.text : t.text_secondary);
