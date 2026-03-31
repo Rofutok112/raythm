@@ -35,6 +35,11 @@ struct selector_state {
     button_state right;
 };
 
+struct dropdown_state {
+    row_state trigger;
+    int clicked_index;
+};
+
 struct slider_layout {
     Rectangle label_rect;
     Rectangle track_rect;
@@ -163,6 +168,50 @@ inline selector_state draw_value_selector(Rectangle rect, const char* label, con
     const button_state left = draw_button(buttons[0], "<", font_size);
     const button_state right = draw_button(buttons[1], ">", font_size);
     return {row, left, right};
+}
+
+inline dropdown_state draw_dropdown(Rectangle trigger_rect, Rectangle menu_rect,
+                                    const char* label, const char* value,
+                                    std::span<const char* const> options,
+                                    int selected_index, bool open,
+                                    int font_size = 18, float label_width = 72.0f,
+                                    float content_padding = 12.0f,
+                                    float item_height = 30.0f, float item_spacing = 4.0f) {
+    const row_state trigger = draw_row(trigger_rect,
+                                       open ? g_theme->row_selected : g_theme->row,
+                                       open ? g_theme->row_selected_hover : g_theme->row_hover,
+                                       open ? g_theme->border_active : g_theme->border);
+    const Rectangle content = inset(trigger.visual, edge_insets::symmetric(0.0f, content_padding));
+    const rect_pair columns = split_columns(content, label_width);
+    const Rectangle arrow_rect = place(columns.second, 18.0f, columns.second.height,
+                                       anchor::center_right, anchor::center_right);
+    const Rectangle value_rect = {
+        columns.second.x,
+        columns.second.y,
+        std::max(0.0f, arrow_rect.x - columns.second.x - 8.0f),
+        columns.second.height
+    };
+
+    draw_text_in_rect(label, font_size, columns.first, g_theme->text, text_align::left);
+    draw_text_in_rect(value, font_size, value_rect, g_theme->text_dim, text_align::right);
+    draw_text_in_rect(open ? "^" : "v", font_size, arrow_rect, g_theme->text_dim);
+
+    int clicked_index = -1;
+    if (open) {
+        draw_section(menu_rect);
+        Rectangle item_rect = {menu_rect.x + 6.0f, menu_rect.y + 6.0f, menu_rect.width - 12.0f, item_height};
+        for (int i = 0; i < static_cast<int>(options.size()); ++i) {
+            const row_state option_row = draw_selectable_row(item_rect, i == selected_index, 1.5f);
+            draw_text_in_rect(options[i], font_size, inset(option_row.visual, edge_insets::symmetric(0.0f, 12.0f)),
+                              i == selected_index ? g_theme->text : g_theme->text_dim, text_align::left);
+            if (option_row.clicked) {
+                clicked_index = i;
+            }
+            item_rect.y += item_height + item_spacing;
+        }
+    }
+
+    return {trigger, clicked_index};
 }
 
 inline void draw_header_block(Rectangle rect, const char* title, const char* subtitle,

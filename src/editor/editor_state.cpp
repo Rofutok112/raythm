@@ -1,9 +1,28 @@
 #include "editor_state.h"
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <utility>
 
 namespace {
+struct note_span {
+    int start_tick = 0;
+    int end_tick = 0;
+};
+
+note_span make_note_span(const note_data& note) {
+    if (note.type == note_type::hold) {
+        return {std::min(note.tick, note.end_tick), std::max(note.tick, note.end_tick)};
+    }
+
+    return {note.tick, note.tick};
+}
+
+bool spans_overlap(const note_span& left, const note_span& right) {
+    return left.start_tick <= right.end_tick && right.start_tick <= left.end_tick;
+}
+
 class add_note_command final : public editor_command {
 public:
     add_note_command(chart_data& chart, note_data note) : chart_(chart), note_(std::move(note)) {}
@@ -276,6 +295,36 @@ const chart_data& editor_state::data() const {
 
 const timing_engine& editor_state::engine() const {
     return timing_engine_;
+}
+
+int editor_state::snap_tick(int raw_tick, int division) const {
+    const int clamped_division = std::max(1, division);
+    const int interval = std::max(1, chart_.meta.resolution * 4 / clamped_division);
+    return std::max(0, static_cast<int>(std::lround(static_cast<double>(raw_tick) / interval)) * interval);
+}
+
+bool editor_state::has_note_overlap(const note_data& note, std::optional<size_t> ignore_index) const {
+    if (note.lane < 0 || note.lane >= chart_.meta.key_count) {
+        return true;
+    }
+
+    const note_span candidate = make_note_span(note);
+    for (size_t i = 0; i < chart_.notes.size(); ++i) {
+        if (ignore_index.has_value() && *ignore_index == i) {
+            continue;
+        }
+
+        const note_data& existing = chart_.notes[i];
+        if (existing.lane != note.lane) {
+            continue;
+        }
+
+        if (spans_overlap(candidate, make_note_span(existing))) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool editor_state::is_dirty() const {
