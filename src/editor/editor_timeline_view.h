@@ -25,6 +25,11 @@ struct editor_timeline_note_draw_info {
     bool has_body = false;
 };
 
+struct editor_timeline_waveform_sample {
+    int tick = 0;
+    float amplitude = 0.0f;
+};
+
 struct editor_timeline_metrics {
     Rectangle panel_rect = {};
     float padding = 18.0f;
@@ -52,6 +57,8 @@ struct editor_timeline_view_model {
     std::vector<editor_timeline_note> notes;
     std::optional<size_t> selected_note_index;
     std::optional<int> playback_tick;
+    const std::vector<editor_timeline_waveform_sample>* waveform_samples = nullptr;
+    bool waveform_visible = false;
     std::optional<editor_timeline_note> preview_note;
     bool preview_has_overlap = false;
     int min_tick = 0;
