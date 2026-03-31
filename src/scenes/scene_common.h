@@ -16,4 +16,4 @@ void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Col
 // テキストが max_width に収まらない場合、自動的に左右にスクロールするマーキー表示を行う。
 // 収まる場合はそのまま描画する。time にはアニメーションの基準時刻（GetTime() 等）を渡す。
 // Rectangle ベース API への後方互換ラッパー。
-void draw_marquee_text(const char* text, int x, int y, int font_size, Color color, float max_width, double time);
+void draw_marquee_text(const char* text, float x, float y, int font_size, Color color, float max_width, double time);

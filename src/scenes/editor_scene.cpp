@@ -561,8 +561,8 @@ void editor_scene::draw_left_panel() {
     const Rectangle header_rect = ui::place(content, content.width, 54.0f, ui::anchor::top_left, ui::anchor::top_left);
     ui::draw_header_block(header_rect, "Chart", has_file ? "Existing chart" : "New chart", 28, 18, 4.0f);
     const Rectangle song_title_rect = {header_rect.x, header_rect.y + 58.0f, header_rect.width, 24.0f};
-    draw_marquee_text(song_.meta.title.c_str(), static_cast<int>(song_title_rect.x),
-                      static_cast<int>(song_title_rect.y + 2.0f), 18, t.text_secondary, song_title_rect.width, now);
+    draw_marquee_text(song_.meta.title.c_str(), song_title_rect.x,
+                      song_title_rect.y + 2.0f, 18, t.text_secondary, song_title_rect.width, now);
 
     const Rectangle meta_box = {content.x, content.y + 100.0f, content.width, 142.0f};
     ui::draw_section(meta_box);
@@ -659,8 +659,7 @@ void editor_scene::draw_timeline() const {
     const Rectangle track = timeline_scrollbar_track_rect();
 
     DrawRectangleRec(ui::inset(kTimelineRect, 10.0f), t.section);
-    BeginScissorMode(static_cast<int>(content.x), static_cast<int>(content.y),
-                     static_cast<int>(content.width), static_cast<int>(content.height));
+    ui::begin_scissor_rect(content);
     draw_timeline_grid(min_tick, max_tick);
     draw_timeline_notes();
     if (note_dragging_) {
@@ -710,23 +709,19 @@ void editor_scene::draw_timeline_grid(int min_tick, int max_tick) const {
     const int first_snap_tick = std::max(0, (min_tick / interval) * interval);
     for (int tick = first_snap_tick; tick <= max_tick; tick += interval) {
         const float y = tick_to_timeline_y(tick);
-        DrawLine(static_cast<int>(content.x), static_cast<int>(y),
-                 static_cast<int>(content.x + content.width), static_cast<int>(y),
-                 with_alpha(t.border_light, 80));
+        ui::draw_line_f(content.x, y, content.x + content.width, y, with_alpha(t.border_light, 80));
     }
 
     for (const grid_line& line : visible_grid_lines(min_tick, max_tick)) {
         const float y = tick_to_timeline_y(line.tick);
         const Color color = line.major ? with_alpha(t.border_active, 255) : with_alpha(t.border_light, 220);
-        DrawLine(static_cast<int>(content.x), static_cast<int>(y),
-                 static_cast<int>(content.x + content.width), static_cast<int>(y), color);
+        ui::draw_line_f(content.x, y, content.x + content.width, y, color);
         if (line.major) {
-            DrawLine(static_cast<int>(content.x), static_cast<int>(y + 1.0f),
-                     static_cast<int>(content.x + content.width), static_cast<int>(y + 1.0f),
-                     with_alpha(t.border_active, 180));
+            ui::draw_line_f(content.x, y + 1.0f, content.x + content.width, y + 1.0f,
+                            with_alpha(t.border_active, 180));
         }
-        DrawText(TextFormat("%d:%d", line.measure, line.beat), static_cast<int>(content.x + 8.0f), static_cast<int>(y - 10.0f),
-                 line.major ? 16 : 14, line.major ? t.text : t.text_secondary);
+        ui::draw_text_f(TextFormat("%d:%d", line.measure, line.beat), content.x + 8.0f, y - 10.0f,
+                        line.major ? 16 : 14, line.major ? t.text : t.text_secondary);
     }
 }
 
@@ -779,8 +774,8 @@ void editor_scene::draw_cursor_hud() const {
                                          {12.0f, -12.0f});
     DrawRectangleRec(hud_rect, with_alpha(t.panel, 240));
     DrawRectangleLinesEx(hud_rect, 1.5f, t.border);
-    DrawText(TextFormat("bar %d:%d   beat %.2f   snap %d", measure, beat_in_measure, beat, snapped_tick),
-             static_cast<int>(hud_rect.x + 12.0f), static_cast<int>(hud_rect.y + 8.0f), 18, t.text);
+    ui::draw_text_f(TextFormat("bar %d:%d   beat %.2f   snap %d", measure, beat_in_measure, beat, snapped_tick),
+                    hud_rect.x + 12.0f, hud_rect.y + 8.0f, 18, t.text);
 }
 
 void editor_scene::draw_header_tools() {

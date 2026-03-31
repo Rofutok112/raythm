@@ -364,7 +364,7 @@ void settings_scene::draw() {
         }
     }
 
-    draw_marquee_text("Click tabs to switch pages", static_cast<int>(kSidebarHintRect.x), static_cast<int>(kSidebarHintRect.y),
+    draw_marquee_text("Click tabs to switch pages", kSidebarHintRect.x, kSidebarHintRect.y,
                       20, t.text_muted, kSidebarHintRect.width, GetTime());
     ui::draw_button(kBackRect, "BACK", 22);
 
