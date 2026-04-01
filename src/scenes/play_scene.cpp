@@ -203,6 +203,13 @@ play_scene::play_scene(scene_manager& manager, song_data song, std::string chart
     : scene(manager), key_count_(key_count), song_data_(std::move(song)), selected_chart_path_(std::move(chart_path)) {
 }
 
+play_scene::play_scene(scene_manager& manager, song_data song, chart_data chart, int start_tick,
+                       editor_scene::resume_state editor_resume)
+    : scene(manager), key_count_(chart.meta.key_count), chart_data_(std::move(chart)),
+      song_data_(std::move(song)), editor_resume_state_(std::move(editor_resume)) {
+    start_tick_ = std::max(0, start_tick);
+}
+
 // 譜面・オーディオの読み込みとゲーム状態の初期化を行う。
 void play_scene::on_enter() {
     camera_angle_degrees_ = g_settings.camera_angle_degrees;
@@ -222,7 +229,9 @@ void play_scene::on_enter() {
     const std::filesystem::path hitsound_path = repo_root() / "assets" / "audio" / "hitsound.mp3";
     hitsound_path_ = std::filesystem::exists(hitsound_path) ? hitsound_path.string() : "";
 
-    if (selected_chart_path_.has_value()) {
+    if (chart_data_.has_value()) {
+        key_count_ = chart_data_->meta.key_count;
+    } else if (selected_chart_path_.has_value()) {
         const chart_parse_result parse_result = song_loader::load_chart(*selected_chart_path_);
         if (parse_result.success && parse_result.data.has_value()) {
             chart_data_ = parse_result.data;
@@ -242,6 +251,7 @@ void play_scene::on_enter() {
     }
 
     timing_engine_.init(chart_data_->timing_events, chart_data_->meta.resolution, chart_data_->meta.offset);
+    start_ms_ = std::max(0.0, timing_engine_.tick_to_ms(start_tick_));
     judge_system_.init(chart_data_->notes, timing_engine_);
     score_system_.init(static_cast<int>(chart_data_->notes.size()));
     gauge_ = gauge{};
@@ -250,6 +260,9 @@ void play_scene::on_enter() {
     const std::filesystem::path audio_path =
         std::filesystem::path(song_data_->directory) / song_data_->meta.audio_file;
     audio.load_bgm(audio_path.string());
+    if (start_ms_ > 0.0) {
+        audio.seek_bgm(start_ms_ / 1000.0);
+    }
 
     // 描画キューの初期化: 各レーンごとにノート index を集め、target_ms 昇順で inactive に積む
     const std::vector<note_state>& init_states = judge_system_.note_states();
@@ -285,10 +298,10 @@ void play_scene::on_enter() {
 
     song_end_ms_ = std::max(timing_engine_.tick_to_ms(last_tick) + 2000.0,
                             audio.get_bgm_length_seconds() * 1000.0);
-    current_ms_ = 0.0;
-    paused_ms_ = 0.0;
+    current_ms_ = start_ms_;
+    paused_ms_ = start_ms_;
     paused_ = false;
-    ranking_enabled_ = true;
+    ranking_enabled_ = !editor_resume_state_.has_value();
     auto_paused_by_focus_ = false;
     initialized_ = true;
     status_text_.clear();
@@ -299,6 +312,8 @@ void play_scene::on_enter() {
     intro_timer_ = kIntroDurationSeconds;
     failure_transition_playing_ = false;
     failure_transition_timer_ = 0.0f;
+    result_transition_playing_ = false;
+    result_transition_timer_ = 0.0f;
 }
 
 // オーディオを停止する。
@@ -314,7 +329,11 @@ void play_scene::update(float dt) {
 
     if (!initialized_) {
         if (IsKeyPressed(KEY_ESCAPE)) {
-            manager_.change_scene(std::make_unique<song_select_scene>(manager_));
+            if (editor_resume_state_.has_value() && song_data_.has_value()) {
+                manager_.change_scene(std::make_unique<editor_scene>(manager_, *song_data_, std::move(*editor_resume_state_)));
+            } else {
+                manager_.change_scene(std::make_unique<song_select_scene>(manager_));
+            }
         }
         return;
     }
@@ -330,7 +349,13 @@ void play_scene::update(float dt) {
         }
     }
 
-    // ESC でポーズ切り替え
+    // プレイテスト中の ESC はエディタへ戻る
+    if (editor_resume_state_.has_value() && IsKeyPressed(KEY_ESCAPE)) {
+        manager_.change_scene(std::make_unique<editor_scene>(manager_, *song_data_, std::move(*editor_resume_state_)));
+        return;
+    }
+
+    // 通常プレイでは ESC でポーズ切り替え
     if (IsKeyPressed(KEY_ESCAPE)) {
         paused_ = !paused_;
         paused_ms_ = current_ms_;
@@ -357,7 +382,10 @@ void play_scene::update(float dt) {
         }
 
         if (ui::is_clicked(buttons[1], ui::draw_layer::modal)) {
-            if (song_data_.has_value() && selected_chart_path_.has_value()) {
+            if (editor_resume_state_.has_value() && song_data_.has_value() && chart_data_.has_value()) {
+                manager_.change_scene(std::make_unique<play_scene>(
+                    manager_, *song_data_, *chart_data_, start_tick_, std::move(*editor_resume_state_)));
+            } else if (song_data_.has_value() && selected_chart_path_.has_value()) {
                 manager_.change_scene(std::make_unique<play_scene>(manager_, *song_data_, *selected_chart_path_, key_count_));
             } else {
                 manager_.change_scene(std::make_unique<play_scene>(manager_, key_count_));
@@ -375,9 +403,13 @@ void play_scene::update(float dt) {
     if (failure_transition_playing_) {
         failure_transition_timer_ = std::max(0.0f, failure_transition_timer_ - dt);
         if (failure_transition_timer_ <= 0.0f) {
-            manager_.change_scene(std::make_unique<result_scene>(
-                manager_, final_result_, ranking_enabled_,
-                *song_data_, selected_chart_path_.value_or(""), chart_data_->meta, key_count_));
+            if (editor_resume_state_.has_value() && song_data_.has_value()) {
+                manager_.change_scene(std::make_unique<editor_scene>(manager_, *song_data_, std::move(*editor_resume_state_)));
+            } else {
+                manager_.change_scene(std::make_unique<result_scene>(
+                    manager_, final_result_, ranking_enabled_,
+                    *song_data_, selected_chart_path_.value_or(""), chart_data_->meta, key_count_));
+            }
         }
         return;
     }
@@ -385,9 +417,13 @@ void play_scene::update(float dt) {
     if (result_transition_playing_) {
         result_transition_timer_ = std::min(kResultTransitionDurationSeconds, result_transition_timer_ + dt);
         if (result_transition_timer_ >= kResultTransitionDurationSeconds) {
-            manager_.change_scene(std::make_unique<result_scene>(
-                manager_, final_result_, ranking_enabled_,
-                *song_data_, selected_chart_path_.value_or(""), chart_data_->meta, key_count_));
+            if (editor_resume_state_.has_value() && song_data_.has_value()) {
+                manager_.change_scene(std::make_unique<editor_scene>(manager_, *song_data_, std::move(*editor_resume_state_)));
+            } else {
+                manager_.change_scene(std::make_unique<result_scene>(
+                    manager_, final_result_, ranking_enabled_,
+                    *song_data_, selected_chart_path_.value_or(""), chart_data_->meta, key_count_));
+            }
         }
         return;
     }
@@ -404,7 +440,7 @@ void play_scene::update(float dt) {
         if (intro_timer_ <= 0.0f) {
             intro_playing_ = false;
             if (audio_manager::instance().is_bgm_loaded()) {
-                audio_manager::instance().play_bgm();
+                audio_manager::instance().play_bgm(false);
             }
         }
         return;
@@ -793,7 +829,7 @@ void play_scene::draw_result_transition_overlay() const {
 
 double play_scene::get_visual_ms() const {
     if (intro_playing_) {
-        return -static_cast<double>(intro_timer_) * 1000.0;
+        return start_ms_ - static_cast<double>(intro_timer_) * 1000.0;
     }
     return current_ms_;
 }

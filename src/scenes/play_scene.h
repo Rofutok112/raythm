@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "audio_manager.h"
+#include "editor_scene.h"
 #include "judge_system.h"
 #include "scene.h"
 #include "score_system.h"
@@ -17,6 +18,8 @@ class play_scene final : public scene {
 public:
     explicit play_scene(scene_manager& manager, int key_count);
     play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count);
+    play_scene(scene_manager& manager, song_data song, chart_data chart, int start_tick,
+               editor_scene::resume_state editor_resume);
 
     void on_enter() override;
     void on_exit() override;
@@ -70,6 +73,7 @@ private:
     std::optional<chart_data> chart_data_;
     std::optional<song_data> song_data_;
     std::optional<std::string> selected_chart_path_;
+    std::optional<editor_scene::resume_state> editor_resume_state_;
     std::optional<judge_event> last_judge_;
     std::optional<judge_event> display_judge_;
     result_data final_result_;
@@ -82,6 +86,8 @@ private:
     bool result_transition_playing_ = false;
     float result_transition_timer_ = 0.0f;
     std::string hitsound_path_;
+    int start_tick_ = 0;
+    double start_ms_ = 0.0;
 
     // 描画用スライディングウィンドウ。
     // 各レーンごとに inactive / active を持ち、レーン内では target_ms 昇順を保証する。
