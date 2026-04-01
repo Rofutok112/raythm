@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -16,8 +17,20 @@
 
 class editor_scene final : public scene {
 public:
+    struct resume_state {
+        std::shared_ptr<editor_state> state;
+        int playback_tick = 0;
+        float bottom_tick = 0.0f;
+        float bottom_tick_target = 0.0f;
+        float ticks_per_pixel = 2.0f;
+        int snap_index = 4;
+        bool waveform_visible = true;
+        std::optional<size_t> selected_note_index;
+    };
+
     editor_scene(scene_manager& manager, song_data song, std::string chart_path);
     editor_scene(scene_manager& manager, song_data song, int key_count);
+    editor_scene(scene_manager& manager, song_data song, resume_state resume);
 
     void on_enter() override;
     void on_exit() override;
@@ -124,11 +137,14 @@ private:
     void draw_unsaved_changes_dialog() const;
     void draw_save_dialog();
     void draw_key_count_confirmation() const;
+    resume_state build_resume_state() const;
+    void start_playtest(int start_tick);
 
     song_data song_;
     std::optional<std::string> chart_path_;
     int new_chart_key_count_ = 4;
-    editor_state state_;
+    std::shared_ptr<editor_state> state_;
+    std::optional<resume_state> resume_state_;
     editor_meter_map meter_map_;
     editor_timing_panel_state timing_panel_;
     std::vector<std::string> load_errors_;
