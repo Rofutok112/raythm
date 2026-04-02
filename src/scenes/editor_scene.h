@@ -30,6 +30,7 @@ public:
 
     editor_scene(scene_manager& manager, song_data song, std::string chart_path);
     editor_scene(scene_manager& manager, song_data song, int key_count);
+    editor_scene(scene_manager& manager, song_data song, chart_meta initial_meta);
     editor_scene(scene_manager& manager, song_data song, resume_state resume);
 
     void on_enter() override;
@@ -53,6 +54,8 @@ private:
     struct metadata_panel_state {
         ui::text_input_state difficulty_input;
         ui::text_input_state chart_author_input;
+        ui::text_input_state chart_name_input;
+        ui::text_input_state description_input;
         int key_count = 4;
         std::string error;
         bool key_count_confirm_open = false;
@@ -142,6 +145,7 @@ private:
 
     song_data song_;
     std::optional<std::string> chart_path_;
+    std::optional<chart_meta> initial_meta_;
     int new_chart_key_count_ = 4;
     std::shared_ptr<editor_state> state_;
     std::optional<resume_state> resume_state_;

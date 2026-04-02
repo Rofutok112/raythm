@@ -8,6 +8,8 @@
 #include <sstream>
 #include <string_view>
 
+#include "path_utils.h"
+
 namespace {
 namespace fs = std::filesystem;
 
@@ -131,7 +133,7 @@ std::optional<float> parse_float(const std::string& value) {
 std::optional<song_meta> parse_song_meta(const fs::path& song_json_path, std::vector<std::string>& errors) {
     const std::string content = read_file(song_json_path);
     if (content.empty()) {
-        errors.push_back("Failed to read song metadata file: " + song_json_path.string());
+        errors.push_back("Failed to read song metadata file: " + path_utils::to_utf8(song_json_path));
         return std::nullopt;
     }
 
@@ -149,41 +151,41 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path, std::ve
     const std::optional<std::string> song_version = extract_json_number_token(content, "songVersion");
 
     if (!song_id.has_value()) {
-        errors.push_back("Missing required field songId in " + song_json_path.string());
+        errors.push_back("Missing required field songId in " + path_utils::to_utf8(song_json_path));
     } else {
         meta.song_id = *song_id;
     }
 
     if (!title.has_value()) {
-        errors.push_back("Missing required field title in " + song_json_path.string());
+        errors.push_back("Missing required field title in " + path_utils::to_utf8(song_json_path));
     } else {
         meta.title = *title;
     }
 
     if (!artist.has_value()) {
-        errors.push_back("Missing required field artist in " + song_json_path.string());
+        errors.push_back("Missing required field artist in " + path_utils::to_utf8(song_json_path));
     } else {
         meta.artist = *artist;
     }
 
     if (!audio_file.has_value()) {
-        errors.push_back("Missing required field audioFile in " + song_json_path.string());
+        errors.push_back("Missing required field audioFile in " + path_utils::to_utf8(song_json_path));
     } else {
         meta.audio_file = *audio_file;
     }
 
     if (!jacket_file.has_value()) {
-        errors.push_back("Missing required field jacketFile in " + song_json_path.string());
+        errors.push_back("Missing required field jacketFile in " + path_utils::to_utf8(song_json_path));
     } else {
         meta.jacket_file = *jacket_file;
     }
 
     if (!difficulty_bpm.has_value()) {
-        errors.push_back("Missing required field baseBpm in " + song_json_path.string());
+        errors.push_back("Missing required field baseBpm in " + path_utils::to_utf8(song_json_path));
     } else {
         const std::optional<float> parsed = parse_float(*difficulty_bpm);
         if (!parsed.has_value()) {
-            errors.push_back("baseBpm must be a number in " + song_json_path.string());
+            errors.push_back("baseBpm must be a number in " + path_utils::to_utf8(song_json_path));
         } else {
             meta.base_bpm = *parsed;
         }
@@ -194,7 +196,7 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path, std::ve
     if (preview_seconds_token.has_value()) {
         const std::optional<float> parsed = parse_float(*preview_seconds_token);
         if (!parsed.has_value()) {
-            errors.push_back("chorusStartSeconds must be a number in " + song_json_path.string());
+            errors.push_back("chorusStartSeconds must be a number in " + path_utils::to_utf8(song_json_path));
         } else {
             meta.preview_start_seconds = *parsed;
             meta.preview_start_ms = static_cast<int>(*parsed * 1000.0f);
@@ -202,21 +204,34 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path, std::ve
     } else if (preview_start_ms.has_value()) {
         const std::optional<int> parsed = parse_int(*preview_start_ms);
         if (!parsed.has_value()) {
-            errors.push_back("previewStartMs must be an integer in " + song_json_path.string());
+            errors.push_back("previewStartMs must be an integer in " + path_utils::to_utf8(song_json_path));
         } else {
             meta.preview_start_ms = *parsed;
             meta.preview_start_seconds = static_cast<float>(*parsed) / 1000.0f;
         }
     } else {
-        errors.push_back("Missing required field chorusStartSeconds in " + song_json_path.string());
+        errors.push_back("Missing required field chorusStartSeconds in " + path_utils::to_utf8(song_json_path));
+    }
+
+    const std::optional<std::string> sns_youtube = extract_json_string(content, "snsYoutube");
+    if (sns_youtube.has_value()) {
+        meta.sns_youtube = *sns_youtube;
+    }
+    const std::optional<std::string> sns_niconico = extract_json_string(content, "snsNiconico");
+    if (sns_niconico.has_value()) {
+        meta.sns_niconico = *sns_niconico;
+    }
+    const std::optional<std::string> sns_x = extract_json_string(content, "snsX");
+    if (sns_x.has_value()) {
+        meta.sns_x = *sns_x;
     }
 
     if (!song_version.has_value()) {
-        errors.push_back("Missing required field songVersion in " + song_json_path.string());
+        errors.push_back("Missing required field songVersion in " + path_utils::to_utf8(song_json_path));
     } else {
         const std::optional<int> parsed = parse_int(*song_version);
         if (!parsed.has_value()) {
-            errors.push_back("songVersion must be an integer in " + song_json_path.string());
+            errors.push_back("songVersion must be an integer in " + path_utils::to_utf8(song_json_path));
         } else {
             meta.song_version = *parsed;
         }
@@ -232,10 +247,10 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path, std::ve
 
 song_load_result song_loader::load_all(const std::string& songs_dir) {
     song_load_result result;
-    const fs::path root = songs_dir;
+    const fs::path root = path_utils::from_utf8(songs_dir);
 
     if (!fs::exists(root) || !fs::is_directory(root)) {
-        result.errors.push_back("Songs directory does not exist: " + root.string());
+        result.errors.push_back("Songs directory does not exist: " + path_utils::to_utf8(root));
         return result;
     }
 
@@ -247,7 +262,7 @@ song_load_result song_loader::load_all(const std::string& songs_dir) {
         const fs::path song_dir = entry.path();
         const fs::path song_json_path = song_dir / "song.json";
         if (!fs::exists(song_json_path)) {
-            result.errors.push_back("Skipping " + song_dir.string() + ": missing song.json");
+            result.errors.push_back("Skipping " + path_utils::to_utf8(song_dir) + ": missing song.json");
             continue;
         }
 
@@ -258,32 +273,24 @@ song_load_result song_loader::load_all(const std::string& songs_dir) {
             continue;
         }
 
-        const fs::path charts_dir = song_dir / "charts";
-        if (!fs::exists(charts_dir) || !fs::is_directory(charts_dir)) {
-            result.errors.push_back("Skipping " + song_dir.string() + ": missing charts directory");
-            continue;
-        }
-
         song_data song;
         song.meta = *meta;
-        song.directory = song_dir.string();
+        song.directory = path_utils::to_utf8(song_dir);
 
-        for (const fs::directory_entry& chart_entry : fs::directory_iterator(charts_dir)) {
-            if (!chart_entry.is_regular_file()) {
-                continue;
-            }
+        const fs::path charts_dir = song_dir / "charts";
+        if (fs::exists(charts_dir) && fs::is_directory(charts_dir)) {
+            for (const fs::directory_entry& chart_entry : fs::directory_iterator(charts_dir)) {
+                if (!chart_entry.is_regular_file()) {
+                    continue;
+                }
 
-            if (chart_entry.path().extension() == ".chart") {
-                song.chart_paths.push_back(chart_entry.path().string());
+                if (chart_entry.path().extension() == ".chart") {
+                    song.chart_paths.push_back(path_utils::to_utf8(chart_entry.path()));
+                }
             }
+            std::sort(song.chart_paths.begin(), song.chart_paths.end());
         }
 
-        if (song.chart_paths.empty()) {
-            result.errors.push_back("Skipping " + song_dir.string() + ": no chart files found");
-            continue;
-        }
-
-        std::sort(song.chart_paths.begin(), song.chart_paths.end());
         result.songs.push_back(song);
     }
 
@@ -296,4 +303,34 @@ song_load_result song_loader::load_all(const std::string& songs_dir) {
 
 chart_parse_result song_loader::load_chart(const std::string& path) {
     return chart_parser::parse(path);
+}
+
+void song_loader::attach_external_charts(const std::string& charts_dir, std::vector<song_data>& songs) {
+    const fs::path root = path_utils::from_utf8(charts_dir);
+    if (!fs::exists(root) || !fs::is_directory(root)) {
+        return;
+    }
+
+    for (const fs::directory_entry& entry : fs::directory_iterator(root)) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".chart") {
+            continue;
+        }
+
+        const chart_parse_result parse_result = chart_parser::parse(path_utils::to_utf8(entry.path()));
+        if (!parse_result.success || !parse_result.data.has_value()) {
+            continue;
+        }
+
+        const std::string& song_id = parse_result.data->meta.song_id;
+        if (song_id.empty()) {
+            continue;
+        }
+
+        for (song_data& song : songs) {
+            if (song.meta.song_id == song_id) {
+                song.chart_paths.push_back(path_utils::to_utf8(entry.path()));
+                break;
+            }
+        }
+    }
 }

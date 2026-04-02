@@ -6,6 +6,10 @@ level=5
 chartAuthor=Codex
 formatVersion=1
 resolution=480
+offset=0
+songId=sample-song-2
+chartName=mychart
+isPublic=false
 
 [Timing]
 bpm,0,150

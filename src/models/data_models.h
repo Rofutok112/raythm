@@ -16,6 +16,9 @@ struct song_meta {
     float preview_start_seconds = 0.0f;
     int preview_start_ms = 0;
     int song_version = 0;
+    std::string sns_youtube;
+    std::string sns_niconico;
+    std::string sns_x;
 };
 
 // 曲一覧で扱う読み込み済み楽曲データ。
@@ -34,6 +37,8 @@ struct song_load_result {
 // 譜面ごとの差分情報を表すメタデータ。
 struct chart_meta {
     std::string chart_id;
+    std::string song_id;
+    std::string chart_name;
     int key_count = 0;
     std::string difficulty;
     int level = 0;
@@ -41,6 +46,8 @@ struct chart_meta {
     int format_version = 0;
     int resolution = 0;
     int offset = 0;
+    bool is_public = false;
+    std::string description;
 };
 
 // タイミングイベントの種類。
