@@ -114,6 +114,15 @@ struct dropdown_state {
     int clicked_index;
 };
 
+struct context_menu_item {
+    const char* label;
+    bool enabled;
+};
+
+struct context_menu_state {
+    int clicked_index;
+};
+
 struct slider_layout {
     Rectangle label_rect;
     Rectangle track_rect;
@@ -472,6 +481,65 @@ inline dropdown_state enqueue_dropdown(Rectangle trigger_rect, Rectangle menu_re
     }
 
     return {trigger, clicked_index};
+}
+
+inline context_menu_state enqueue_context_menu(Rectangle menu_rect,
+                                               std::span<const context_menu_item> items,
+                                               draw_layer layer = draw_layer::overlay,
+                                               int font_size = 16,
+                                               float item_height = 30.0f,
+                                               float item_spacing = 4.0f) {
+    register_hit_region(menu_rect, layer);
+
+    int clicked_index = -1;
+    Rectangle item_rect = {menu_rect.x + 6.0f, menu_rect.y + 6.0f, menu_rect.width - 12.0f, item_height};
+    std::vector<std::string> item_labels;
+    std::vector<bool> item_enabled;
+    std::vector<row_state> item_states;
+    item_labels.reserve(items.size());
+    item_enabled.reserve(items.size());
+    item_states.reserve(items.size());
+
+    for (int i = 0; i < static_cast<int>(items.size()); ++i) {
+        const bool enabled = items[static_cast<size_t>(i)].enabled;
+        const bool pressed = enabled && is_mouse_button_down(item_rect, MOUSE_BUTTON_LEFT, layer);
+        const row_state state = {
+            enabled && is_hovered(item_rect, layer),
+            pressed,
+            enabled && is_mouse_button_released(item_rect, MOUSE_BUTTON_LEFT, layer),
+            pressed ? inset(item_rect, 1.5f) : item_rect
+        };
+        item_labels.emplace_back(items[static_cast<size_t>(i)].label != nullptr ? items[static_cast<size_t>(i)].label : "");
+        item_enabled.push_back(enabled);
+        item_states.push_back(state);
+        if (state.clicked) {
+            clicked_index = i;
+        }
+        item_rect.y += item_height + item_spacing;
+    }
+
+    enqueue_draw_command(layer, [menu_rect, item_height, item_spacing, font_size,
+                                 item_labels = std::move(item_labels),
+                                 item_enabled = std::move(item_enabled),
+                                 item_states = std::move(item_states)]() {
+        draw_section(menu_rect);
+        Rectangle draw_item_rect = {menu_rect.x + 6.0f, menu_rect.y + 6.0f, menu_rect.width - 12.0f, item_height};
+        for (int i = 0; i < static_cast<int>(item_labels.size()); ++i) {
+            const bool enabled = item_enabled[static_cast<size_t>(i)];
+            const row_state& state = item_states[static_cast<size_t>(i)];
+            detail::draw_row_visual(draw_item_rect, state.hovered, state.pressed,
+                                    enabled ? g_theme->row : with_alpha(g_theme->row, 180),
+                                    enabled ? g_theme->row_hover : with_alpha(g_theme->row, 180),
+                                    enabled ? g_theme->border : g_theme->border_light,
+                                    1.5f);
+            draw_text_in_rect(item_labels[static_cast<size_t>(i)].c_str(), font_size,
+                              inset(state.visual, edge_insets::symmetric(0.0f, 12.0f)),
+                              enabled ? g_theme->text : g_theme->text_muted, text_align::left);
+            draw_item_rect.y += item_height + item_spacing;
+        }
+    });
+
+    return {clicked_index};
 }
 
 inline void draw_header_block(Rectangle rect, const char* title, const char* subtitle,

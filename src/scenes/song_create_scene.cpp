@@ -68,10 +68,40 @@ std::string key_count_label(int key_count) {
     return key_count == 6 ? "6K" : "4K";
 }
 
+bool paths_match(const fs::path& left, const fs::path& right) {
+    std::error_code ec;
+    if (fs::exists(left, ec) && fs::exists(right, ec)) {
+        if (fs::equivalent(left, right, ec) && !ec) {
+            return true;
+        }
+    }
+
+    return left.lexically_normal() == right.lexically_normal();
+}
+
 }  // namespace
 
 song_create_scene::song_create_scene(scene_manager& manager)
     : scene(manager) {
+}
+
+song_create_scene::song_create_scene(scene_manager& manager, song_data song_to_edit)
+    : scene(manager), created_song_(song_to_edit), editing_song_(std::move(song_to_edit)) {
+    const song_meta& meta = editing_song_->meta;
+    title_input_.value = meta.title;
+    artist_input_.value = meta.artist;
+    bpm_input_.value = meta.base_bpm > 0.0f ? TextFormat("%.6g", meta.base_bpm) : "";
+    preview_ms_input_.value = std::to_string(meta.preview_start_ms);
+    sns_youtube_input_.value = meta.sns_youtube;
+    sns_niconico_input_.value = meta.sns_niconico;
+    sns_x_input_.value = meta.sns_x;
+
+    if (!meta.audio_file.empty()) {
+        audio_path_input_.value = path_utils::to_utf8(path_utils::join_utf8(editing_song_->directory, meta.audio_file));
+    }
+    if (!meta.jacket_file.empty()) {
+        jacket_path_input_.value = path_utils::to_utf8(path_utils::join_utf8(editing_song_->directory, meta.jacket_file));
+    }
 }
 
 void song_create_scene::update(float dt) {
@@ -86,8 +116,8 @@ void song_create_scene::update(float dt) {
 
 void song_create_scene::draw() {
     const auto& t = *g_theme;
-    const char* content_title = "New Song";
-    const char* content_subtitle = "Enter song metadata";
+    const char* content_title = is_edit_mode() ? "Edit Song" : "New Song";
+    const char* content_subtitle = is_edit_mode() ? "Update song metadata" : "Enter song metadata";
     switch (current_step_) {
         case step::song_metadata:
             break;
@@ -129,14 +159,14 @@ void song_create_scene::draw() {
 
 void song_create_scene::update_song_metadata() {
     if (IsKeyPressed(KEY_ESCAPE)) {
-        go_back_to_song_select();
+        go_back_to_song_select(editing_song_.has_value() ? editing_song_->meta.song_id : "");
         return;
     }
 }
 
 void song_create_scene::update_song_saved() {
     if (IsKeyPressed(KEY_ESCAPE)) {
-        go_back_to_song_select();
+        go_back_to_song_select(created_song_.meta.song_id);
         return;
     }
 }
@@ -209,16 +239,19 @@ void song_create_scene::draw_song_metadata() {
     constexpr float kButtonHeight = 44.0f;
     const Rectangle create_rect = {kFormX + kFormWidth - kButtonWidth, button_y, kButtonWidth, kButtonHeight};
     const Rectangle cancel_rect = {kFormX + kFormWidth - kButtonWidth * 2.0f - 12.0f, button_y, kButtonWidth, kButtonHeight};
+    const char* submit_label = is_edit_mode() ? "SAVE" : "CREATE";
+    const char* cancel_label = is_edit_mode() ? "BACK" : "CANCEL";
 
-    if (ui::draw_button(create_rect, "CREATE", 16).clicked) {
-        if (create_song()) {
+    if (ui::draw_button(create_rect, submit_label, 16).clicked) {
+        const bool success = is_edit_mode() ? save_song_edits() : create_song();
+        if (success && !is_edit_mode()) {
             current_step_ = step::song_saved;
             error_.clear();
         }
     }
 
-    if (ui::draw_button(cancel_rect, "CANCEL", 16).clicked) {
-        go_back_to_song_select();
+    if (ui::draw_button(cancel_rect, cancel_label, 16).clicked) {
+        go_back_to_song_select(editing_song_.has_value() ? editing_song_->meta.song_id : "");
         return;
     }
 
@@ -252,7 +285,7 @@ void song_create_scene::draw_song_saved() {
     }
 
     if (ui::draw_button(add_later_rect, "ADD LATER", 16).clicked) {
-        go_back_to_song_select();
+        go_back_to_song_select(created_song_.meta.song_id);
     }
 }
 
@@ -397,7 +430,122 @@ bool song_create_scene::create_song() {
     created_song_.meta = meta;
     created_song_.directory = path_utils::to_utf8(song_dir);
     created_song_.chart_paths.clear();
+    created_song_.source = content_source::app_data;
+    created_song_.can_edit = true;
+    created_song_.can_delete = true;
 
+    return true;
+}
+
+bool song_create_scene::save_song_edits() {
+    if (!editing_song_.has_value()) {
+        error_ = "No song selected for editing.";
+        return false;
+    }
+    if (title_input_.value.empty()) {
+        error_ = "Title is required.";
+        return false;
+    }
+    if (artist_input_.value.empty()) {
+        error_ = "Artist is required.";
+        return false;
+    }
+    if (audio_path_input_.value.empty()) {
+        error_ = "Audio file is required.";
+        return false;
+    }
+
+    const fs::path song_dir = path_utils::from_utf8(editing_song_->directory);
+    const fs::path audio_source = path_utils::from_utf8(audio_path_input_.value);
+    if (!fs::exists(audio_source)) {
+        error_ = "Audio file not found: " + audio_path_input_.value;
+        return false;
+    }
+
+    float base_bpm = 0.0f;
+    if (!bpm_input_.value.empty()) {
+        try {
+            base_bpm = std::stof(bpm_input_.value);
+        } catch (...) {
+            error_ = "Invalid BPM value.";
+            return false;
+        }
+    }
+
+    int preview_ms = 0;
+    if (!preview_ms_input_.value.empty()) {
+        try {
+            preview_ms = std::stoi(preview_ms_input_.value);
+        } catch (...) {
+            error_ = "Invalid preview start value.";
+            return false;
+        }
+    }
+
+    std::string audio_filename = editing_song_->meta.audio_file;
+    const fs::path current_audio_path = path_utils::join_utf8(editing_song_->directory, editing_song_->meta.audio_file);
+    if (!paths_match(audio_source, current_audio_path)) {
+        audio_filename = path_utils::to_utf8(audio_source.filename());
+        const fs::path audio_dest = song_dir / audio_filename;
+        try {
+            fs::copy_file(audio_source, audio_dest, fs::copy_options::overwrite_existing);
+        } catch (const std::exception& e) {
+            error_ = std::string("Failed to copy audio file: ") + e.what();
+            return false;
+        }
+    }
+
+    std::string jacket_filename = editing_song_->meta.jacket_file;
+    if (jacket_path_input_.value.empty()) {
+        jacket_filename.clear();
+    } else {
+        const fs::path jacket_source = path_utils::from_utf8(jacket_path_input_.value);
+        if (!fs::exists(jacket_source)) {
+            error_ = "Jacket file not found: " + jacket_path_input_.value;
+            return false;
+        }
+
+        const fs::path current_jacket_path = editing_song_->meta.jacket_file.empty()
+            ? fs::path()
+            : path_utils::join_utf8(editing_song_->directory, editing_song_->meta.jacket_file);
+        if (!editing_song_->meta.jacket_file.empty() && paths_match(jacket_source, current_jacket_path)) {
+            jacket_filename = editing_song_->meta.jacket_file;
+        } else {
+            jacket_filename = path_utils::to_utf8(jacket_source.filename());
+            const fs::path jacket_dest = song_dir / jacket_filename;
+            try {
+                fs::copy_file(jacket_source, jacket_dest, fs::copy_options::overwrite_existing);
+            } catch (const std::exception& e) {
+                error_ = std::string("Failed to copy jacket file: ") + e.what();
+                return false;
+            }
+        }
+    }
+
+    song_meta meta = editing_song_->meta;
+    meta.title = title_input_.value;
+    meta.artist = artist_input_.value;
+    meta.base_bpm = base_bpm;
+    meta.audio_file = audio_filename;
+    meta.jacket_file = jacket_filename;
+    meta.preview_start_ms = preview_ms;
+    meta.preview_start_seconds = static_cast<float>(preview_ms) / 1000.0f;
+    meta.sns_youtube = sns_youtube_input_.value;
+    meta.sns_niconico = sns_niconico_input_.value;
+    meta.sns_x = sns_x_input_.value;
+    if (meta.song_version <= 0) {
+        meta.song_version = 1;
+    }
+
+    if (!song_writer::write_song_json(meta, path_utils::to_utf8(song_dir))) {
+        error_ = "Failed to write song.json.";
+        return false;
+    }
+
+    editing_song_->meta = meta;
+    created_song_ = *editing_song_;
+    error_.clear();
+    go_back_to_song_select(meta.song_id);
     return true;
 }
 
@@ -435,6 +583,10 @@ bool song_create_scene::create_chart_and_open_editor() {
     return true;
 }
 
-void song_create_scene::go_back_to_song_select() {
-    manager_.change_scene(std::make_unique<song_select_scene>(manager_));
+void song_create_scene::go_back_to_song_select(const std::string& preferred_song_id) {
+    manager_.change_scene(std::make_unique<song_select_scene>(manager_, preferred_song_id));
+}
+
+bool song_create_scene::is_edit_mode() const {
+    return editing_song_.has_value();
 }

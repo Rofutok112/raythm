@@ -5,6 +5,15 @@
 
 namespace app_paths {
 
+// Directory containing the running executable.
+std::filesystem::path executable_dir();
+
+// Asset root. Prefer executable-relative assets for distribution, fall back to source tree in dev.
+std::filesystem::path assets_root();
+
+// assets/audio/
+std::filesystem::path audio_root();
+
 // AppData/Local/raythm/
 std::filesystem::path app_data_root();
 
@@ -22,6 +31,9 @@ std::filesystem::path chart_path(const std::string& chart_id);
 
 // Legacy: repo_root/assets/songs/
 std::filesystem::path legacy_songs_root();
+
+// AppData/Local/raythm/settings.json
+std::filesystem::path settings_path();
 
 // Create songs/ and charts/ directories if they don't exist.
 void ensure_directories();

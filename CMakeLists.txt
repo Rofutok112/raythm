@@ -187,11 +187,29 @@ target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
 target_link_libraries(audio_manager_smoke PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib)
 
+set(RAYTHM_RUNTIME_DLLS
+        ${CMAKE_SOURCE_DIR}/libs/bass/bass.dll
+)
+
+if(MINGW)
+    get_filename_component(RAYTHM_COMPILER_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    foreach(runtime_name IN ITEMS libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll)
+        set(runtime_path "${RAYTHM_COMPILER_BIN_DIR}/${runtime_name}")
+        if(EXISTS "${runtime_path}")
+            list(APPEND RAYTHM_RUNTIME_DLLS "${runtime_path}")
+        endif()
+    endforeach()
+endif()
+
 # bass.dll を実行ファイルと同じディレクトリにコピー
 add_custom_command(TARGET raythm POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${CMAKE_SOURCE_DIR}/libs/bass/bass.dll
-        $<TARGET_FILE_DIR:raythm>/bass.dll
+        ${RAYTHM_RUNTIME_DLLS}
+        $<TARGET_FILE_DIR:raythm>
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets
+        $<TARGET_FILE_DIR:raythm>/assets
+        COMMAND_EXPAND_LISTS
 )
 
 add_custom_command(TARGET audio_manager_smoke POST_BUILD
@@ -199,3 +217,7 @@ add_custom_command(TARGET audio_manager_smoke POST_BUILD
         ${CMAKE_SOURCE_DIR}/libs/bass/bass.dll
         $<TARGET_FILE_DIR:audio_manager_smoke>/bass.dll
 )
+
+install(TARGETS raythm RUNTIME DESTINATION .)
+install(FILES ${RAYTHM_RUNTIME_DLLS} DESTINATION .)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets DESTINATION .)

@@ -9,11 +9,13 @@
 #include <string>
 #include <string_view>
 
+#include "app_paths.h"
+
 namespace {
 namespace fs = std::filesystem;
 
 fs::path settings_path() {
-    return fs::path(__FILE__).parent_path().parent_path().parent_path() / "settings.json";
+    return app_paths::settings_path();
 }
 
 std::string read_file(const fs::path& path) {
@@ -147,6 +149,7 @@ void load_settings(game_settings& settings) {
 }
 
 void save_settings(const game_settings& settings) {
+    app_paths::ensure_directories();
     std::ofstream out(settings_path());
     if (!out.is_open()) return;
 

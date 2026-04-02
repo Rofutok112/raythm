@@ -58,14 +58,26 @@ inline bool is_hovered(Rectangle rect, draw_layer layer = draw_layer::base) {
            !is_blocked_by_higher_layer(rect, layer);
 }
 
+inline bool is_mouse_button_down(Rectangle rect, int mouse_button, draw_layer layer = draw_layer::base) {
+    return is_hovered(rect, layer) && IsMouseButtonDown(mouse_button);
+}
+
+inline bool is_mouse_button_pressed(Rectangle rect, int mouse_button, draw_layer layer = draw_layer::base) {
+    return is_hovered(rect, layer) && IsMouseButtonPressed(mouse_button);
+}
+
+inline bool is_mouse_button_released(Rectangle rect, int mouse_button, draw_layer layer = draw_layer::base) {
+    return is_hovered(rect, layer) && IsMouseButtonReleased(mouse_button);
+}
+
 // ホバー中かつマウスボタン押下中か。
 inline bool is_pressed(Rectangle rect, draw_layer layer = draw_layer::base) {
-    return is_hovered(rect, layer) && IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+    return is_mouse_button_down(rect, MOUSE_BUTTON_LEFT, layer);
 }
 
 // ホバー中かつマウスボタンを離した瞬間か（クリック判定）。
 inline bool is_clicked(Rectangle rect, draw_layer layer = draw_layer::base) {
-    return is_hovered(rect, layer) && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
+    return is_mouse_button_released(rect, MOUSE_BUTTON_LEFT, layer);
 }
 
 }  // namespace ui

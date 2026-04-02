@@ -8,6 +8,7 @@
 #include <sstream>
 #include <string_view>
 
+#include "app_paths.h"
 #include "path_utils.h"
 
 namespace {
@@ -243,9 +244,32 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path, std::ve
 
     return meta;
 }
+
+bool is_within_root(const fs::path& path, const fs::path& root) {
+    std::error_code ec;
+    const fs::path normalized_path = fs::weakly_canonical(path, ec);
+    if (ec) {
+        return false;
+    }
+
+    const fs::path normalized_root = fs::weakly_canonical(root, ec);
+    if (ec) {
+        return false;
+    }
+
+    auto path_it = normalized_path.begin();
+    auto root_it = normalized_root.begin();
+    for (; root_it != normalized_root.end(); ++root_it, ++path_it) {
+        if (path_it == normalized_path.end() || *path_it != *root_it) {
+            return false;
+        }
+    }
+
+    return true;
+}
 }
 
-song_load_result song_loader::load_all(const std::string& songs_dir) {
+song_load_result song_loader::load_all(const std::string& songs_dir, content_source source) {
     song_load_result result;
     const fs::path root = path_utils::from_utf8(songs_dir);
 
@@ -276,6 +300,9 @@ song_load_result song_loader::load_all(const std::string& songs_dir) {
         song_data song;
         song.meta = *meta;
         song.directory = path_utils::to_utf8(song_dir);
+        song.source = source;
+        song.can_edit = source == content_source::app_data;
+        song.can_delete = source == content_source::app_data;
 
         const fs::path charts_dir = song_dir / "charts";
         if (fs::exists(charts_dir) && fs::is_directory(charts_dir)) {
@@ -303,6 +330,15 @@ song_load_result song_loader::load_all(const std::string& songs_dir) {
 
 chart_parse_result song_loader::load_chart(const std::string& path) {
     return chart_parser::parse(path);
+}
+
+content_source song_loader::classify_chart_path(const std::string& path) {
+    const fs::path chart_path = path_utils::from_utf8(path);
+    if (is_within_root(chart_path, app_paths::app_data_root())) {
+        return content_source::app_data;
+    }
+
+    return content_source::legacy_assets;
 }
 
 void song_loader::attach_external_charts(const std::string& charts_dir, std::vector<song_data>& songs) {

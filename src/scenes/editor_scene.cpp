@@ -202,10 +202,6 @@ std::string format_playback_time(double seconds) {
     return buffer;
 }
 
-std::filesystem::path repo_root() {
-    return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
-}
-
 std::string trim_copy(std::string value) {
     value.erase(value.begin(), std::find_if(value.begin(), value.end(), [](unsigned char ch) {
         return std::isspace(ch) == 0;
@@ -322,7 +318,7 @@ void editor_scene::on_enter() {
     }
     rebuild_waveform_data(path_utils::to_utf8(audio_path));
 
-    const std::filesystem::path hitsound_path = repo_root() / "assets" / "audio" / "hitsound.mp3";
+    const std::filesystem::path hitsound_path = app_paths::audio_root() / "hitsound.mp3";
     hitsound_path_ = std::filesystem::exists(hitsound_path) ? path_utils::to_utf8(hitsound_path) : "";
 
     if (resume_state_.has_value() && audio_loaded_) {
@@ -644,7 +640,7 @@ void editor_scene::perform_action(pending_action action) {
         case pending_action::none:
             return;
         case pending_action::exit_to_song_select:
-            manager_.change_scene(std::make_unique<song_select_scene>(manager_));
+            manager_.change_scene(std::make_unique<song_select_scene>(manager_, song_.meta.song_id));
             return;
     }
 }
