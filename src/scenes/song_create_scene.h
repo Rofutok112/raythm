@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include "data_models.h"
@@ -10,6 +11,7 @@
 class song_create_scene final : public scene {
 public:
     explicit song_create_scene(scene_manager& manager);
+    song_create_scene(scene_manager& manager, song_data song_to_edit);
 
     void update(float dt) override;
     void draw() override;
@@ -26,8 +28,10 @@ private:
     void draw_chart_metadata();
 
     bool create_song();
+    bool save_song_edits();
     bool create_chart_and_open_editor();
-    void go_back_to_song_select();
+    void go_back_to_song_select(const std::string& preferred_song_id = "");
+    bool is_edit_mode() const;
 
     step current_step_ = step::song_metadata;
 
@@ -52,6 +56,7 @@ private:
 
     // Created song data (stored after song creation)
     song_data created_song_;
+    std::optional<song_data> editing_song_;
 
     std::string error_;
 };

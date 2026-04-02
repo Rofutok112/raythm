@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "app_paths.h"
 #include "game_settings.h"
 
 #include "path_utils.h"
@@ -81,17 +82,11 @@ constexpr Rectangle kFailureTextRect = ui::place(kScreenRect, 360.0f, 44.0f,
 
 // assets/songs から最初の曲パッケージを読み込んで返す。
 std::optional<song_data> load_sample_song() {
-    const std::filesystem::path repo_root =
-        std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
-    song_load_result result = song_loader::load_all(path_utils::to_utf8(repo_root / "assets" / "songs"));
+    song_load_result result = song_loader::load_all(path_utils::to_utf8(app_paths::legacy_songs_root()));
     if (result.songs.empty()) {
         return std::nullopt;
     }
     return result.songs.front();
-}
-
-std::filesystem::path repo_root() {
-    return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
 }
 
 // 指定キー数に一致する譜面をパースして返す。見つからなければ nullopt。
@@ -228,7 +223,7 @@ void play_scene::on_enter() {
         }
     }
 
-    const std::filesystem::path hitsound_path = repo_root() / "assets" / "audio" / "hitsound.mp3";
+    const std::filesystem::path hitsound_path = app_paths::audio_root() / "hitsound.mp3";
     hitsound_path_ = std::filesystem::exists(hitsound_path) ? path_utils::to_utf8(hitsound_path) : "";
 
     if (chart_data_.has_value()) {
