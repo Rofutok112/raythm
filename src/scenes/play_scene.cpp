@@ -9,6 +9,8 @@
 #include <vector>
 
 #include "game_settings.h"
+
+#include "path_utils.h"
 #include "raylib.h"
 #include "raymath.h"
 #include "result_scene.h"
@@ -81,7 +83,7 @@ constexpr Rectangle kFailureTextRect = ui::place(kScreenRect, 360.0f, 44.0f,
 std::optional<song_data> load_sample_song() {
     const std::filesystem::path repo_root =
         std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
-    song_load_result result = song_loader::load_all((repo_root / "assets" / "songs").string());
+    song_load_result result = song_loader::load_all(path_utils::to_utf8(repo_root / "assets" / "songs"));
     if (result.songs.empty()) {
         return std::nullopt;
     }
@@ -227,7 +229,7 @@ void play_scene::on_enter() {
     }
 
     const std::filesystem::path hitsound_path = repo_root() / "assets" / "audio" / "hitsound.mp3";
-    hitsound_path_ = std::filesystem::exists(hitsound_path) ? hitsound_path.string() : "";
+    hitsound_path_ = std::filesystem::exists(hitsound_path) ? path_utils::to_utf8(hitsound_path) : "";
 
     if (chart_data_.has_value()) {
         key_count_ = chart_data_->meta.key_count;
@@ -258,8 +260,8 @@ void play_scene::on_enter() {
 
     audio_manager& audio = audio_manager::instance();
     const std::filesystem::path audio_path =
-        std::filesystem::path(song_data_->directory) / song_data_->meta.audio_file;
-    audio.load_bgm(audio_path.string());
+        path_utils::join_utf8(song_data_->directory, song_data_->meta.audio_file);
+    audio.load_bgm(path_utils::to_utf8(audio_path));
     if (start_ms_ > 0.0) {
         audio.seek_bgm(start_ms_ / 1000.0);
     }

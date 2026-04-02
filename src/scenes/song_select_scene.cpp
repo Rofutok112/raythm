@@ -5,13 +5,17 @@
 #include <filesystem>
 #include <memory>
 
+#include "app_paths.h"
 #include "editor_scene.h"
 #include "game_settings.h"
+
+#include "path_utils.h"
 #include "play_scene.h"
 #include "raylib.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "settings_scene.h"
+#include "song_create_scene.h"
 #include "song_loader.h"
 #include "theme.h"
 #include "title_scene.h"
@@ -43,9 +47,10 @@ constexpr Rectangle kSceneTitleRect = ui::place(kScreenRect, 360.0f, 30.0f,
 constexpr Rectangle kActionPanelRect = ui::place(kLeftPanelRect, 710.0f, 72.0f,
                                                  ui::anchor::bottom_center, ui::anchor::bottom_center,
                                                  {0.0f, -18.0f});
-constexpr Rectangle kPlayButtonRect = {kActionPanelRect.x + 12.0f, kActionPanelRect.y + 26.0f, 214.0f, 34.0f};
-constexpr Rectangle kEditButtonRect = {kActionPanelRect.x + 248.0f, kActionPanelRect.y + 26.0f, 214.0f, 34.0f};
-constexpr Rectangle kNewChartButtonRect = {kActionPanelRect.x + 484.0f, kActionPanelRect.y + 26.0f, 214.0f, 34.0f};
+constexpr Rectangle kPlayButtonRect = {kActionPanelRect.x + 12.0f, kActionPanelRect.y + 26.0f, 160.0f, 34.0f};
+constexpr Rectangle kEditButtonRect = {kActionPanelRect.x + 184.0f, kActionPanelRect.y + 26.0f, 160.0f, 34.0f};
+constexpr Rectangle kNewChartButtonRect = {kActionPanelRect.x + 356.0f, kActionPanelRect.y + 26.0f, 160.0f, 34.0f};
+constexpr Rectangle kNewSongButtonRect = {kActionPanelRect.x + 528.0f, kActionPanelRect.y + 26.0f, 160.0f, 34.0f};
 constexpr Rectangle kSongListTitleRect = ui::place(kSongListRect, 180.0f, 28.0f,
                                                    ui::anchor::top_left, ui::anchor::top_left,
                                                    {20.0f, 10.0f});
@@ -81,10 +86,20 @@ void song_select_scene::on_enter() {
     song_change_anim_t_ = 1.0f;
     scene_fade_in_t_ = 1.0f;
 
-    const song_load_result load_result = song_loader::load_all((repo_root() / "assets" / "songs").string());
-    load_errors_ = load_result.errors;
+    // Load songs from both legacy and AppData directories.
+    const song_load_result legacy_result = song_loader::load_all(path_utils::to_utf8(app_paths::legacy_songs_root()));
+    const song_load_result appdata_result = song_loader::load_all(path_utils::to_utf8(app_paths::songs_root()));
+    load_errors_ = legacy_result.errors;
+    load_errors_.insert(load_errors_.end(), appdata_result.errors.begin(), appdata_result.errors.end());
 
-    for (const song_data& song : load_result.songs) {
+    // Merge all songs.
+    std::vector<song_data> all_songs = legacy_result.songs;
+    all_songs.insert(all_songs.end(), appdata_result.songs.begin(), appdata_result.songs.end());
+
+    // Attach charts from the shared AppData charts directory.
+    song_loader::attach_external_charts(path_utils::to_utf8(app_paths::charts_root()), all_songs);
+
+    for (const song_data& song : all_songs) {
         song_entry entry;
         entry.song = song;
 
@@ -107,9 +122,7 @@ void song_select_scene::on_enter() {
             return left.meta.difficulty < right.meta.difficulty;
         });
 
-        if (!entry.charts.empty()) {
-            songs_.push_back(std::move(entry));
-        }
+        songs_.push_back(std::move(entry));
     }
 
     queue_preview_for_selected_song();
@@ -164,12 +177,17 @@ void song_select_scene::load_jacket_for_selected_song() {
         return;
     }
 
-    const std::filesystem::path jacket_path = std::filesystem::path(song->song.directory) / song->song.meta.jacket_file;
-    if (!std::filesystem::exists(jacket_path)) {
+    if (song->song.meta.jacket_file.empty()) {
         return;
     }
 
-    jacket_texture_ = LoadTexture(jacket_path.string().c_str());
+    const std::filesystem::path jacket_path = path_utils::join_utf8(song->song.directory, song->song.meta.jacket_file);
+    if (!std::filesystem::exists(jacket_path) || !std::filesystem::is_regular_file(jacket_path)) {
+        return;
+    }
+
+    const std::string jacket_path_utf8 = path_utils::to_utf8(jacket_path);
+    jacket_texture_ = LoadTexture(jacket_path_utf8.c_str());
     jacket_loaded_ = jacket_texture_.id != 0;
 }
 
@@ -194,8 +212,8 @@ void song_select_scene::queue_preview_for_selected_song() {
 
 void song_select_scene::start_preview(const song_entry& song) {
     audio_manager& audio = audio_manager::instance();
-    const std::filesystem::path audio_path = std::filesystem::path(song.song.directory) / song.song.meta.audio_file;
-    audio.load_preview(audio_path.string());
+    const std::filesystem::path audio_path = path_utils::join_utf8(song.song.directory, song.song.meta.audio_file);
+    audio.load_preview(path_utils::to_utf8(audio_path));
     if (!audio.is_preview_loaded()) {
         preview_song_id_.clear();
         preview_volume_ = 0.0f;
@@ -289,9 +307,10 @@ void song_select_scene::draw_song_details(const song_entry& song, const chart_op
     ui::draw_text_in_rect("Actions", 18,
                           {kActionPanelRect.x + 14.0f, kActionPanelRect.y + 4.0f, 120.0f, 18.0f},
                           t.text_hint, ui::text_align::left);
-    ui::draw_button_colored(kPlayButtonRect, "PLAY", 20, t.row_selected, t.row_active, t.text);
-    ui::draw_button_colored(kEditButtonRect, "EDIT", 20, t.row, t.row_hover, t.text);
-    ui::draw_button_colored(kNewChartButtonRect, "NEW", 20, t.row, t.row_hover, t.text);
+    ui::draw_button_colored(kPlayButtonRect, "PLAY", 16, t.row_selected, t.row_active, t.text);
+    ui::draw_button_colored(kEditButtonRect, "EDIT", 16, t.row, t.row_hover, t.text);
+    ui::draw_button_colored(kNewChartButtonRect, "NEW CHART", 14, t.row, t.row_hover, t.text);
+    ui::draw_button_colored(kNewSongButtonRect, "NEW SONG", 14, t.row, t.row_hover, t.text);
 }
 
 void song_select_scene::draw_song_row(const song_entry& song, float item_y, bool is_selected, double now) const {
@@ -401,6 +420,11 @@ void song_select_scene::update(float dt) {
     song_change_anim_t_ = std::max(0.0f, song_change_anim_t_ - dt * 4.0f);
     scene_fade_in_t_ = std::max(0.0f, scene_fade_in_t_ - dt / 0.3f);
 
+    if (ui::is_clicked(kNewSongButtonRect, kSongSelectLayer)) {
+        manager_.change_scene(std::make_unique<song_create_scene>(manager_));
+        return;
+    }
+
     if (songs_.empty()) {
         return;
     }
@@ -470,20 +494,20 @@ void song_select_scene::update(float dt) {
         }
     }
 
-    if (ui::is_clicked(kPlayButtonRect, kSongSelectLayer) && !filtered.empty()) {
+    if (ui::is_clicked(kPlayButtonRect, kSongSelectLayer) && !filtered.empty() && selected_song() != nullptr) {
         manager_.change_scene(std::make_unique<play_scene>(manager_, selected_song()->song,
                                                            filtered[static_cast<size_t>(difficulty_index_)]->path,
                                                            filtered[static_cast<size_t>(difficulty_index_)]->meta.key_count));
         return;
     }
 
-    if (ui::is_clicked(kEditButtonRect, kSongSelectLayer) && !filtered.empty()) {
+    if (ui::is_clicked(kEditButtonRect, kSongSelectLayer) && !filtered.empty() && selected_song() != nullptr) {
         manager_.change_scene(std::make_unique<editor_scene>(manager_, selected_song()->song,
                                                              filtered[static_cast<size_t>(difficulty_index_)]->path));
         return;
     }
 
-    if (ui::is_clicked(kNewChartButtonRect, kSongSelectLayer)) {
+    if (ui::is_clicked(kNewChartButtonRect, kSongSelectLayer) && selected_song() != nullptr) {
         const int key_count = filtered.empty() ? 4 : filtered[static_cast<size_t>(difficulty_index_)]->meta.key_count;
         manager_.change_scene(std::make_unique<editor_scene>(manager_, selected_song()->song, key_count));
         return;

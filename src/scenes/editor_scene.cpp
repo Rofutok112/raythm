@@ -8,15 +8,19 @@
 #include <iterator>
 #include <memory>
 
+#include "app_paths.h"
 #include "audio_manager.h"
 #include "audio_waveform.h"
 #include "chart_parser.h"
 #include "chart_serializer.h"
+
+#include "path_utils.h"
 #include "play_scene.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select_scene.h"
 #include "theme.h"
+#include "uuid_util.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
@@ -245,6 +249,13 @@ editor_scene::editor_scene(scene_manager& manager, song_data song, int key_count
       new_chart_key_count_(key_count), state_(std::make_shared<editor_state>()) {
 }
 
+editor_scene::editor_scene(scene_manager& manager, song_data song, chart_meta initial_meta)
+    : scene(manager), song_(std::move(song)), chart_path_(std::nullopt),
+      initial_meta_(std::move(initial_meta)),
+      new_chart_key_count_(initial_meta_.has_value() ? initial_meta_->key_count : 4),
+      state_(std::make_shared<editor_state>()) {
+}
+
 editor_scene::editor_scene(scene_manager& manager, song_data song, resume_state resume)
     : scene(manager), song_(std::move(song)), chart_path_(std::nullopt),
       new_chart_key_count_(resume.state ? resume.state->data().meta.key_count : 4),
@@ -303,16 +314,16 @@ void editor_scene::on_enter() {
     load_timing_event_inputs();
     scroll_timing_list_to_bottom();
 
-    const std::filesystem::path audio_path = std::filesystem::path(song_.directory) / song_.meta.audio_file;
+    const std::filesystem::path audio_path = path_utils::join_utf8(song_.directory, song_.meta.audio_file);
     if (std::filesystem::exists(audio_path) &&
-        audio_manager::instance().load_bgm(audio_path.string())) {
+        audio_manager::instance().load_bgm(path_utils::to_utf8(audio_path))) {
         audio_loaded_ = true;
         refresh_audio_length_tick();
     }
-    rebuild_waveform_data(audio_path.string());
+    rebuild_waveform_data(path_utils::to_utf8(audio_path));
 
     const std::filesystem::path hitsound_path = repo_root() / "assets" / "audio" / "hitsound.mp3";
-    hitsound_path_ = std::filesystem::exists(hitsound_path) ? hitsound_path.string() : "";
+    hitsound_path_ = std::filesystem::exists(hitsound_path) ? path_utils::to_utf8(hitsound_path) : "";
 
     if (resume_state_.has_value() && audio_loaded_) {
         seek_audio_to_tick(resume_state_->playback_tick, false);
@@ -444,14 +455,19 @@ void editor_scene::draw() {
 
 chart_data editor_scene::make_new_chart_data() const {
     chart_data data;
-    data.meta.difficulty = "New";
-    data.meta.chart_id = generated_chart_id(data.meta.difficulty);
-    data.meta.key_count = new_chart_key_count_;
-    data.meta.level = 1;
-    data.meta.chart_author = "Unknown";
-    data.meta.format_version = 1;
-    data.meta.resolution = 480;
-    data.meta.offset = 0;
+    if (initial_meta_.has_value()) {
+        data.meta = *initial_meta_;
+    } else {
+        data.meta.difficulty = "New";
+        data.meta.chart_id = generated_chart_id(data.meta.difficulty);
+        data.meta.key_count = new_chart_key_count_;
+        data.meta.level = 1;
+        data.meta.chart_author = "Unknown";
+        data.meta.format_version = 1;
+        data.meta.resolution = 480;
+        data.meta.offset = 0;
+    }
+    data.meta.song_id = song_.meta.song_id;
     data.timing_events = {
         {timing_event_type::bpm, 0, std::max(song_.meta.base_bpm, 120.0f), 4, 4},
         {timing_event_type::meter, 0, 0.0f, 4, 4},
@@ -464,10 +480,18 @@ chart_data editor_scene::make_chart_data_for_save() const {
     if (state_->file_path().empty()) {
         data.meta.chart_id = generated_chart_id(data.meta.difficulty);
     }
+    data.meta.song_id = song_.meta.song_id;
     return data;
 }
 
 std::string editor_scene::generated_chart_id(const std::string& difficulty) const {
+    // For AppData-based songs, use UUID.
+    const bool is_appdata_song = song_.directory.find(path_utils::to_utf8(app_paths::songs_root())) != std::string::npos;
+    if (is_appdata_song) {
+        return generate_uuid();
+    }
+
+    // Legacy: slug-based ID.
     const std::string song_id = slugify(song_.meta.song_id);
     const std::string difficulty_slug = slugify(difficulty);
     if (!song_id.empty() && !difficulty_slug.empty()) {
@@ -513,7 +537,7 @@ void editor_scene::close_save_dialog() {
 
 bool editor_scene::save_to_path(const std::string& file_path) {
     const chart_data data = make_chart_data_for_save();
-    const std::filesystem::path path(file_path);
+    const std::filesystem::path path = path_utils::from_utf8(file_path);
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
     if (ec) {
@@ -521,13 +545,14 @@ bool editor_scene::save_to_path(const std::string& file_path) {
         return false;
     }
 
-    if (!chart_serializer::serialize(data, path.string())) {
+    if (!chart_serializer::serialize(data, path_utils::to_utf8(path))) {
         save_dialog_.error = "Failed to save the chart file.";
         return false;
     }
 
-    state_->mark_saved(path.string());
-    chart_path_ = path.string();
+    const std::string saved_path = path_utils::to_utf8(path);
+    state_->mark_saved(saved_path);
+    chart_path_ = saved_path;
     save_dialog_.error.clear();
     return true;
 }
@@ -542,6 +567,26 @@ bool editor_scene::save_chart() {
 }
 
 bool editor_scene::save_chart_from_dialog() {
+    // For AppData-based songs, save directly to charts directory using chart_id.
+    const bool is_appdata_song = song_.directory.find(path_utils::to_utf8(app_paths::songs_root())) != std::string::npos;
+    if (is_appdata_song) {
+        const std::string& chart_id = state_->data().meta.chart_id;
+        const std::filesystem::path dest = app_paths::chart_path(chart_id);
+        app_paths::ensure_directories();
+
+        if (!save_to_path(path_utils::to_utf8(dest))) {
+            return false;
+        }
+
+        const pending_action action = save_dialog_.action_after_save;
+        close_save_dialog();
+        if (action != pending_action::none) {
+            perform_action(action);
+        }
+        return true;
+    }
+
+    // Legacy save: prompt for filename in song's charts/ directory.
     std::string name = trim_copy(save_dialog_.file_name_input.value);
     if (name.empty()) {
         save_dialog_.error = "Enter a file name.";
@@ -562,12 +607,12 @@ bool editor_scene::save_chart_from_dialog() {
         return false;
     }
 
-    std::filesystem::path chart_path = std::filesystem::path(song_.directory) / "charts" / file_name;
+    std::filesystem::path chart_path = path_utils::from_utf8(song_.directory) / "charts" / file_name;
     if (chart_path.extension() != ".chart") {
         chart_path += ".chart";
     }
 
-    if (!save_to_path(chart_path.string())) {
+    if (!save_to_path(path_utils::to_utf8(chart_path))) {
         save_dialog_.file_name_input.active = true;
         return false;
     }
@@ -1323,18 +1368,23 @@ void editor_scene::clear_timing_event_inputs() {
 void editor_scene::sync_metadata_inputs() {
     metadata_panel_.difficulty_input.value = state_->data().meta.difficulty;
     metadata_panel_.chart_author_input.value = state_->data().meta.chart_author;
+    metadata_panel_.chart_name_input.value = state_->data().meta.chart_name;
+    metadata_panel_.description_input.value = state_->data().meta.description;
     metadata_panel_.key_count = state_->data().meta.key_count;
     metadata_panel_.error.clear();
 }
 
 bool editor_scene::has_active_metadata_input() const {
-    return metadata_panel_.difficulty_input.active || metadata_panel_.chart_author_input.active;
+    return metadata_panel_.difficulty_input.active || metadata_panel_.chart_author_input.active
+        || metadata_panel_.chart_name_input.active || metadata_panel_.description_input.active;
 }
 
 bool editor_scene::apply_metadata_changes(bool clear_notes_for_key_count_change) {
     chart_meta updated = state_->data().meta;
     updated.difficulty = metadata_panel_.difficulty_input.value;
     updated.chart_author = metadata_panel_.chart_author_input.value;
+    updated.chart_name = metadata_panel_.chart_name_input.value;
+    updated.description = metadata_panel_.description_input.value;
     updated.key_count = metadata_panel_.key_count;
     if (state_->file_path().empty()) {
         updated.chart_id = generated_chart_id(updated.difficulty);
@@ -1534,29 +1584,38 @@ void editor_scene::draw_left_panel() {
     draw_marquee_text(song_.meta.title.c_str(), song_title_rect.x,
                       song_title_rect.y + 2.0f, 18, t.text_secondary, song_title_rect.width, now);
 
-    const Rectangle meta_box = {content.x, content.y + 100.0f, content.width, 214.0f};
+    const Rectangle meta_box = {content.x, content.y + 100.0f, content.width, 294.0f};
     ui::draw_section(meta_box);
     ui::draw_text_in_rect("Metadata", 22,
                           {meta_box.x + 12.0f, meta_box.y + 10.0f, meta_box.width - 24.0f, 28.0f},
                           t.text, ui::text_align::left);
 
-    const ui::text_input_result difficulty_result = ui::draw_text_input(
+    const ui::text_input_result chart_name_result = ui::draw_text_input(
         {meta_box.x + 12.0f, meta_box.y + 46.0f, meta_box.width - 24.0f, 34.0f},
+        metadata_panel_.chart_name_input, "Name", "Chart name", nullptr,
+        ui::draw_layer::base, 16, 64, nullptr, 58.0f);
+    const ui::text_input_result difficulty_result = ui::draw_text_input(
+        {meta_box.x + 12.0f, meta_box.y + 86.0f, meta_box.width - 24.0f, 34.0f},
         metadata_panel_.difficulty_input, "Diff", "Difficulty", "New",
         ui::draw_layer::base, 16, 24, accepts_metadata_character, 58.0f);
     const ui::text_input_result author_result = ui::draw_text_input(
-        {meta_box.x + 12.0f, meta_box.y + 86.0f, meta_box.width - 24.0f, 34.0f},
+        {meta_box.x + 12.0f, meta_box.y + 126.0f, meta_box.width - 24.0f, 34.0f},
         metadata_panel_.chart_author_input, "Author", "Chart author", "Unknown",
         ui::draw_layer::base, 16, 32, accepts_metadata_character, 58.0f);
+    const ui::text_input_result description_result = ui::draw_text_input(
+        {meta_box.x + 12.0f, meta_box.y + 166.0f, meta_box.width - 24.0f, 34.0f},
+        metadata_panel_.description_input, "Desc", "Description", nullptr,
+        ui::draw_layer::base, 16, 256, nullptr, 58.0f);
 
-    if (difficulty_result.activated || author_result.activated) {
+    if (difficulty_result.activated || author_result.activated
+        || chart_name_result.activated || description_result.activated) {
         timing_panel_.active_input_field = editor_timing_input_field::none;
         timing_panel_.bar_pick_mode = false;
         timing_panel_.input_error.clear();
     }
 
     const ui::selector_state key_count_selector = ui::draw_value_selector(
-        {meta_box.x + 12.0f, meta_box.y + 126.0f, meta_box.width - 24.0f, 34.0f},
+        {meta_box.x + 12.0f, meta_box.y + 206.0f, meta_box.width - 24.0f, 34.0f},
         "Mode", key_count_label(metadata_panel_.key_count),
         16, 26.0f, 58.0f, 12.0f);
     if ((key_count_selector.left.clicked || key_count_selector.right.clicked) && !metadata_panel_.key_count_confirm_open) {
@@ -1565,21 +1624,24 @@ void editor_scene::draw_left_panel() {
         apply_metadata_changes(false);
     }
 
-    ui::draw_label_value({meta_box.x + 12.0f, meta_box.y + 170.0f, meta_box.width - 24.0f, 20.0f},
+    ui::draw_label_value({meta_box.x + 12.0f, meta_box.y + 250.0f, meta_box.width - 24.0f, 20.0f},
                          "Status", status_label, 16, t.text_secondary,
                          state_->is_dirty() ? t.error : t.success, 58.0f);
 
     if (!metadata_panel_.error.empty()) {
         ui::draw_text_in_rect(metadata_panel_.error.c_str(), 16,
-                              {meta_box.x + 12.0f, meta_box.y + 188.0f, meta_box.width - 24.0f, 20.0f},
+                              {meta_box.x + 12.0f, meta_box.y + 268.0f, meta_box.width - 24.0f, 20.0f},
                               t.error, ui::text_align::left);
     }
 
-    const bool apply_requested = difficulty_result.submitted || author_result.submitted;
+    const bool apply_requested = difficulty_result.submitted || author_result.submitted
+                              || chart_name_result.submitted || description_result.submitted;
     if (apply_requested) {
         apply_metadata_changes(false);
         metadata_panel_.difficulty_input.active = false;
         metadata_panel_.chart_author_input.active = false;
+        metadata_panel_.chart_name_input.active = false;
+        metadata_panel_.description_input.active = false;
     }
 
     const Rectangle tools_box = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 114.0f};

@@ -43,12 +43,19 @@ add_executable(raythm src/main.cpp
         src/gameplay/score_system.h
         src/gameplay/song_loader.cpp
         src/gameplay/song_loader.h
+        src/gameplay/song_writer.cpp
+        src/gameplay/song_writer.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/file_dialog.cpp
+        src/core/file_dialog.h
         src/core/scene.cpp
         src/core/scene.h
         src/core/scene_manager.cpp
         src/core/scene_manager.h
+        src/core/uuid_util.h
         src/gameplay/game_settings.h
         src/gameplay/key_names.h
         src/gameplay/settings_io.cpp
@@ -57,6 +64,8 @@ add_executable(raythm src/main.cpp
         src/scenes/scene_common.h
         src/scenes/title_scene.cpp
         src/scenes/title_scene.h
+        src/scenes/song_create_scene.cpp
+        src/scenes/song_create_scene.h
         src/scenes/song_select_scene.cpp
         src/scenes/song_select_scene.h
         src/scenes/editor_scene.cpp
@@ -173,7 +182,7 @@ target_include_directories(timing_engine_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(judge_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(score_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(audio_manager_smoke PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass ${RAYTHM_INCLUDE_DIRS})
-target_link_libraries(raythm PRIVATE raylib ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib)
+target_link_libraries(raythm PRIVATE raylib ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib comdlg32)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
 target_link_libraries(audio_manager_smoke PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib)

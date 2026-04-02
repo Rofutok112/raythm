@@ -6,6 +6,8 @@
 #include <iomanip>
 #include <limits>
 #include <sstream>
+
+#include "path_utils.h"
 #include <vector>
 
 namespace {
@@ -39,7 +41,7 @@ const char* note_type_name(note_type type) {
 }
 
 bool chart_serializer::serialize(const chart_data& data, const std::string& file_path) {
-    std::ofstream output(file_path, std::ios::trunc);
+    std::ofstream output(path_utils::from_utf8(file_path), std::ios::trunc);
     if (!output.is_open()) {
         return false;
     }
@@ -52,7 +54,18 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
     output << "chartAuthor=" << data.meta.chart_author << '\n';
     output << "formatVersion=" << data.meta.format_version << '\n';
     output << "resolution=" << data.meta.resolution << '\n';
-    output << "offset=" << data.meta.offset << "\n\n";
+    output << "offset=" << data.meta.offset << '\n';
+    if (!data.meta.song_id.empty()) {
+        output << "songId=" << data.meta.song_id << '\n';
+    }
+    if (!data.meta.chart_name.empty()) {
+        output << "chartName=" << data.meta.chart_name << '\n';
+    }
+    output << "isPublic=" << (data.meta.is_public ? "true" : "false") << '\n';
+    if (!data.meta.description.empty()) {
+        output << "description=" << data.meta.description << '\n';
+    }
+    output << '\n';
 
     std::vector<timing_event> sorted_timing = data.timing_events;
     std::stable_sort(sorted_timing.begin(), sorted_timing.end(), [](const timing_event& left, const timing_event& right) {

@@ -11,6 +11,8 @@
 #include <string_view>
 #include <utility>
 
+#include "path_utils.h"
+
 namespace {
 using numbered_line = std::pair<int, std::string>;
 
@@ -110,7 +112,7 @@ std::optional<note_type> parse_note_type(const std::string& value) {
 }
 
 chart_parse_result chart_parser::parse(const std::string& file_path) {
-    std::ifstream input(file_path);
+    std::ifstream input(path_utils::from_utf8(file_path));
     if (!input.is_open()) {
         chart_parse_result result;
         result.success = false;
@@ -246,6 +248,14 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
             } else {
                 meta.offset = *parsed;
             }
+        } else if (key == "songId") {
+            meta.song_id = value;
+        } else if (key == "chartName") {
+            meta.chart_name = value;
+        } else if (key == "isPublic") {
+            meta.is_public = (value == "true");
+        } else if (key == "description") {
+            meta.description = value;
         }
     }
 
