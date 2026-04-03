@@ -6,9 +6,9 @@
 #include <optional>
 
 #include "audio_manager.h"
-#include "play_flow_controller.h"
-#include "play_renderer.h"
-#include "play_session_loader.h"
+#include "play/play_flow_controller.h"
+#include "play/play_renderer.h"
+#include "play/play_session_loader.h"
 #include "raylib.h"
 #include "raymath.h"
 #include "result_scene.h"
