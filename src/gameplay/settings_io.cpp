@@ -13,8 +13,8 @@
 
 namespace {
 namespace fs = std::filesystem;
-constexpr float kMinNoteSpeed = 0.020f;
-constexpr float kMaxNoteSpeed = 1.000f;
+constexpr float kMinNoteSpeed = 0.010f;
+constexpr float kMaxNoteSpeed = 0.100f;
 
 fs::path settings_path() {
     return app_paths::settings_path();

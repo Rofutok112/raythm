@@ -12,8 +12,9 @@
 namespace {
 
 constexpr std::array<int, 4> kFrameRateOptions = {120, 144, 240, 0};
-constexpr float kMinNoteSpeed = 0.020f;
-constexpr float kMaxNoteSpeed = 1.000f;
+constexpr float kMinNoteSpeed = 0.010f;
+constexpr float kMaxNoteSpeed = 0.100f;
+constexpr float kNoteSpeedDisplayScale = 10.0f;
 
 }  // namespace
 
@@ -56,7 +57,7 @@ void settings_gameplay_page::update() {
 void settings_gameplay_page::draw() const {
     const char* labels[] = {"Note Speed", "Camera Angle", "Lane Width"};
     const std::string values[] = {
-        TextFormat("%.3f", settings_.note_speed),
+        TextFormat("%.1f", settings_.note_speed * kNoteSpeedDisplayScale),
         TextFormat("%.0f deg", settings_.camera_angle_degrees),
         TextFormat("%.1f", settings_.lane_width),
     };
