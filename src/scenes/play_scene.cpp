@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "audio_manager.h"
+#include "editor_scene.h"
 #include "play/play_flow_controller.h"
 #include "play/play_renderer.h"
 #include "play/play_session_loader.h"
@@ -62,7 +63,7 @@ play_scene::play_scene(scene_manager& manager, song_data song, std::string chart
 }
 
 play_scene::play_scene(scene_manager& manager, song_data song, chart_data chart, int start_tick,
-                       editor_scene::resume_state editor_resume)
+                       editor_resume_state editor_resume)
     : scene(manager) {
     request_.key_count = chart.meta.key_count;
     request_.song_data = std::move(song);

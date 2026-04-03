@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "editor_scene.h"
+#include "editor/editor_scene_types.h"
 #include "play/play_note_draw_queue.h"
 #include "play/play_session_types.h"
 #include "raylib.h"
@@ -14,7 +14,7 @@ public:
     explicit play_scene(scene_manager& manager, int key_count);
     play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count);
     play_scene(scene_manager& manager, song_data song, chart_data chart, int start_tick,
-               editor_scene::resume_state editor_resume);
+               editor_resume_state editor_resume);
 
     void on_enter() override;
     void on_exit() override;

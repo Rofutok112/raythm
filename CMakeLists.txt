@@ -19,15 +19,15 @@ add_executable(raythm src/main.cpp
         src/audio/audio_manager.h
         src/audio/audio_waveform.cpp
         src/audio/audio_waveform.h
-        src/editor/editor_command.h
-        src/editor/editor_meter_map.cpp
-        src/editor/editor_meter_map.h
-        src/editor/editor_state.cpp
-        src/editor/editor_state.h
-        src/editor/editor_timeline_view.cpp
-        src/editor/editor_timeline_view.h
-        src/editor/editor_timing_panel.cpp
-        src/editor/editor_timing_panel.h
+        src/scenes/editor/editor_command.h
+        src/scenes/editor/editor_meter_map.cpp
+        src/scenes/editor/editor_meter_map.h
+        src/scenes/editor/editor_state.cpp
+        src/scenes/editor/editor_state.h
+        src/scenes/editor/editor_timeline_view.cpp
+        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timing_panel.cpp
+        src/scenes/editor/editor_timing_panel.h
         src/platform/windows_input_source.cpp
         src/platform/windows_input_source.h
         src/gameplay/chart_parser.cpp
@@ -83,6 +83,19 @@ add_executable(raythm src/main.cpp
         src/scenes/song_select/song_select_state.h
         src/scenes/song_select_scene.cpp
         src/scenes/song_select_scene.h
+        src/scenes/editor/editor_flow_controller.cpp
+        src/scenes/editor/editor_flow_controller.h
+        src/scenes/editor/editor_panel_controller.cpp
+        src/scenes/editor/editor_panel_controller.h
+        src/scenes/editor/editor_scene_sync.cpp
+        src/scenes/editor/editor_scene_sync.h
+        src/scenes/editor/editor_scene_types.h
+        src/scenes/editor/editor_session_loader.cpp
+        src/scenes/editor/editor_session_loader.h
+        src/scenes/editor/editor_timeline_controller.cpp
+        src/scenes/editor/editor_timeline_controller.h
+        src/scenes/editor/editor_transport_controller.cpp
+        src/scenes/editor/editor_transport_controller.h
         src/scenes/editor_scene.cpp
         src/scenes/editor_scene.h
         src/scenes/play/play_flow_controller.cpp
@@ -133,11 +146,11 @@ add_executable(chart_serializer_smoke
         src/models/data_models.h)
 
 add_executable(editor_state_smoke
-        src/editor/editor_command.h
-        src/editor/editor_meter_map.cpp
-        src/editor/editor_meter_map.h
-        src/editor/editor_state.cpp
-        src/editor/editor_state.h
+        src/scenes/editor/editor_command.h
+        src/scenes/editor/editor_meter_map.cpp
+        src/scenes/editor/editor_meter_map.h
+        src/scenes/editor/editor_state.cpp
+        src/scenes/editor/editor_state.h
         src/models/data_models.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
@@ -212,8 +225,81 @@ add_executable(play_flow_controller_smoke
         src/scenes/play/play_note_draw_queue.cpp
         src/scenes/play/play_note_draw_queue.h
         src/scenes/play/play_session_types.h
-        src/scenes/editor_scene.h
+        src/scenes/editor/editor_scene_types.h
         src/tests/play_flow_controller_smoke.cpp)
+
+add_executable(editor_transport_controller_smoke
+        src/audio/audio_manager.h
+        src/audio/audio_waveform.h
+        src/scenes/editor/editor_command.h
+        src/scenes/editor/editor_meter_map.cpp
+        src/scenes/editor/editor_meter_map.h
+        src/scenes/editor/editor_state.cpp
+        src/scenes/editor/editor_state.h
+        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timing_panel.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/models/data_models.h
+        src/scenes/editor/editor_scene_types.h
+        src/scenes/editor/editor_transport_controller.cpp
+        src/scenes/editor/editor_transport_controller.h
+        src/tests/editor_transport_controller_smoke.cpp)
+
+add_executable(editor_flow_controller_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/path_utils.h
+        src/scenes/editor/editor_command.h
+        src/scenes/editor/editor_meter_map.cpp
+        src/scenes/editor/editor_meter_map.h
+        src/scenes/editor/editor_state.cpp
+        src/scenes/editor/editor_state.h
+        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timing_panel.h
+        src/gameplay/chart_serializer.cpp
+        src/gameplay/chart_serializer.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/models/data_models.h
+        src/scenes/editor/editor_flow_controller.cpp
+        src/scenes/editor/editor_flow_controller.h
+        src/scenes/editor/editor_scene_types.h
+        src/tests/editor_flow_controller_smoke.cpp)
+
+add_executable(editor_timeline_controller_smoke
+        src/audio/audio_manager.h
+        src/audio/audio_waveform.h
+        src/scenes/editor/editor_command.h
+        src/scenes/editor/editor_meter_map.cpp
+        src/scenes/editor/editor_meter_map.h
+        src/scenes/editor/editor_state.cpp
+        src/scenes/editor/editor_state.h
+        src/scenes/editor/editor_timeline_view.cpp
+        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timing_panel.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/models/data_models.h
+        src/scenes/editor/editor_scene_types.h
+        src/scenes/editor/editor_timeline_controller.cpp
+        src/scenes/editor/editor_timeline_controller.h
+        src/ui/ui_clip.cpp
+        src/ui/ui_clip.h
+        src/tests/editor_timeline_controller_smoke.cpp)
+
+add_executable(editor_panel_controller_smoke
+        src/audio/audio_manager.h
+        src/audio/audio_waveform.h
+        src/scenes/editor/editor_meter_map.h
+        src/scenes/editor/editor_state.h
+        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timing_panel.h
+        src/models/data_models.h
+        src/scenes/editor/editor_panel_controller.cpp
+        src/scenes/editor/editor_panel_controller.h
+        src/scenes/editor/editor_scene_types.h
+        src/tests/editor_panel_controller_smoke.cpp)
 
 add_executable(audio_manager_smoke
         libs/bass/bass.h
@@ -248,12 +334,17 @@ target_include_directories(judge_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(score_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(play_note_draw_queue_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(play_flow_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(editor_transport_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(editor_flow_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(editor_timeline_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(editor_panel_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(audio_manager_smoke PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass ${RAYTHM_INCLUDE_DIRS})
 target_link_libraries(raythm PRIVATE raylib ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib comdlg32)
 target_link_libraries(song_select_state_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
 target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
+target_link_libraries(editor_timeline_controller_smoke PRIVATE raylib)
 target_link_libraries(audio_manager_smoke PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib)
 
 set(RAYTHM_RUNTIME_DLLS

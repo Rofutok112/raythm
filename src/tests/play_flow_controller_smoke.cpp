@@ -104,7 +104,7 @@ int main() {
     {
         play_session_state state = make_initialized_state();
         state.song_data = song_data{};
-        state.editor_resume_state = editor_scene::resume_state{};
+        state.editor_resume_state = editor_resume_state{};
         play_note_draw_queue draw_queue;
         play_update_context context;
         context.escape_pressed = true;
