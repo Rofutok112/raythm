@@ -1,10 +1,40 @@
 #include <cstdlib>
+#include <cmath>
 #include <iostream>
 #include <vector>
 
 #include "play/play_note_draw_queue.h"
+#include "play/play_speed_compensation.h"
 
 int main() {
+    {
+        constexpr float kNoteSpeed = 0.045f;
+        const float reference_speed =
+            play_speed_compensation::compensated_lane_speed(kNoteSpeed, 45.0f);
+        if (std::fabs(reference_speed - kNoteSpeed) > 0.0001f) {
+            std::cerr << "Reference camera angle compensation failed\n";
+            return EXIT_FAILURE;
+        }
+
+        const float shallow_speed =
+            play_speed_compensation::compensated_lane_speed(kNoteSpeed, 20.0f);
+        const float steep_speed =
+            play_speed_compensation::compensated_lane_speed(kNoteSpeed, 85.0f);
+        if (!(shallow_speed > reference_speed) || !(steep_speed < reference_speed)) {
+            std::cerr << "Angle-based note speed compensation direction failed\n";
+            return EXIT_FAILURE;
+        }
+
+        const float shallow_screen_speed =
+            shallow_speed * play_speed_compensation::judge_line_projection_scale(20.0f);
+        const float reference_screen_speed =
+            reference_speed * play_speed_compensation::judge_line_projection_scale(45.0f);
+        if (std::fabs(shallow_screen_speed - reference_screen_speed) > 0.0001f) {
+            std::cerr << "Angle-based note speed compensation normalization failed\n";
+            return EXIT_FAILURE;
+        }
+    }
+
     play_note_draw_queue draw_queue;
 
     std::vector<note_state> note_states = {
