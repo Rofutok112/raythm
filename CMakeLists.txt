@@ -7,6 +7,24 @@ set(RAYTHM_PACKAGE_VERSION "0.1.0" CACHE STRING "Version string used for Windows
 set(RAYTHM_PACKAGE_FILE_NAME
         "raythm-${RAYTHM_PACKAGE_VERSION}-windows-x64"
         CACHE STRING "Package file name without extension")
+set(RAYTHM_BASS_DIR
+        "${CMAKE_SOURCE_DIR}/libs/bass"
+        CACHE PATH "Directory containing bass.h, bass.lib, and bass.dll")
+
+set(RAYTHM_BASS_HEADER "${RAYTHM_BASS_DIR}/bass.h")
+set(RAYTHM_BASS_IMPORT_LIB "${RAYTHM_BASS_DIR}/bass.lib")
+set(RAYTHM_BASS_RUNTIME_DLL "${RAYTHM_BASS_DIR}/bass.dll")
+
+foreach(required_bass_file IN ITEMS
+        "${RAYTHM_BASS_HEADER}"
+        "${RAYTHM_BASS_IMPORT_LIB}"
+        "${RAYTHM_BASS_RUNTIME_DLL}")
+    if(NOT EXISTS "${required_bass_file}")
+        message(FATAL_ERROR
+                "Missing required BASS dependency: ${required_bass_file}\n"
+                "Ensure libs/bass is checked into the repository or set RAYTHM_BASS_DIR to a directory containing bass.h, bass.lib, and bass.dll.")
+    endif()
+endforeach()
 
 include(FetchContent)
 FetchContent_Declare(
@@ -17,7 +35,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(raylib)
 
 add_executable(raythm src/main.cpp
-        libs/bass/bass.h
         src/audio/audio.cpp
         src/audio/audio.h
         src/audio/audio_manager.cpp
@@ -307,7 +324,6 @@ add_executable(editor_panel_controller_smoke
         src/tests/editor_panel_controller_smoke.cpp)
 
 add_executable(audio_manager_smoke
-        libs/bass/bass.h
         src/audio/audio.cpp
         src/audio/audio.h
         src/audio/audio_manager.cpp
@@ -327,7 +343,7 @@ set(RAYTHM_INCLUDE_DIRS
 )
 
 # BASSライブラリ
-target_include_directories(raythm PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(raythm PRIVATE ${RAYTHM_BASS_DIR} ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_parser_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_serializer_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(editor_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
@@ -343,17 +359,17 @@ target_include_directories(editor_transport_controller_smoke PRIVATE ${RAYTHM_IN
 target_include_directories(editor_flow_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(editor_timeline_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(editor_panel_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(audio_manager_smoke PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass ${RAYTHM_INCLUDE_DIRS})
-target_link_libraries(raythm PRIVATE raylib ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib comdlg32)
+target_include_directories(audio_manager_smoke PRIVATE ${RAYTHM_BASS_DIR} ${RAYTHM_INCLUDE_DIRS})
+target_link_libraries(raythm PRIVATE raylib ${RAYTHM_BASS_IMPORT_LIB} comdlg32)
 target_link_libraries(song_select_state_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
 target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_timeline_controller_smoke PRIVATE raylib)
-target_link_libraries(audio_manager_smoke PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib)
+target_link_libraries(audio_manager_smoke PRIVATE ${RAYTHM_BASS_IMPORT_LIB})
 
 set(RAYTHM_RUNTIME_DLLS
-        ${CMAKE_SOURCE_DIR}/libs/bass/bass.dll
+        ${RAYTHM_BASS_RUNTIME_DLL}
 )
 
 if(MINGW)
@@ -379,7 +395,7 @@ add_custom_command(TARGET raythm POST_BUILD
 
 add_custom_command(TARGET audio_manager_smoke POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${CMAKE_SOURCE_DIR}/libs/bass/bass.dll
+        ${RAYTHM_BASS_RUNTIME_DLL}
         $<TARGET_FILE_DIR:audio_manager_smoke>/bass.dll
 )
 

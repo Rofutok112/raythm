@@ -10,7 +10,11 @@ cmake_install.cmake
 install_manifest.txt
 compile_commands.json
 .idea/
-libs/
+libs/*
+!libs/bass/
+!libs/bass/bass.h
+!libs/bass/bass.lib
+!libs/bass/bass.dll
 .claude/
 .codex/
 
@@ -35,6 +39,8 @@ Thumbs.db
 *.out
 *.app
 *.user
+!libs/bass/bass.lib
+!libs/bass/bass.dll
 
 # Logs
 *.log
