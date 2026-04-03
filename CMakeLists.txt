@@ -66,6 +66,21 @@ add_executable(raythm src/main.cpp
         src/scenes/title_scene.h
         src/scenes/song_create_scene.cpp
         src/scenes/song_create_scene.h
+        src/scenes/song_select/song_catalog_service.cpp
+        src/scenes/song_select/song_catalog_service.h
+        src/scenes/song_select/song_preview_controller.cpp
+        src/scenes/song_select/song_preview_controller.h
+        src/scenes/song_select/song_select_detail_view.cpp
+        src/scenes/song_select/song_select_detail_view.h
+        src/scenes/song_select/song_select_layout.h
+        src/scenes/song_select/song_select_list_view.cpp
+        src/scenes/song_select/song_select_list_view.h
+        src/scenes/song_select/song_select_navigation.cpp
+        src/scenes/song_select/song_select_navigation.h
+        src/scenes/song_select/song_select_overlay_view.cpp
+        src/scenes/song_select/song_select_overlay_view.h
+        src/scenes/song_select/song_select_state.cpp
+        src/scenes/song_select/song_select_state.h
         src/scenes/song_select_scene.cpp
         src/scenes/song_select_scene.h
         src/scenes/editor_scene.cpp
@@ -128,6 +143,13 @@ add_executable(song_loader_smoke
         src/gameplay/song_loader.cpp
         src/gameplay/song_loader.h
         src/tests/song_loader_smoke.cpp)
+
+add_executable(song_select_state_smoke
+        src/models/data_models.h
+        src/scenes/song_select/song_select_layout.h
+        src/scenes/song_select/song_select_state.cpp
+        src/scenes/song_select/song_select_state.h
+        src/tests/song_select_state_smoke.cpp)
 
 add_executable(input_handler_smoke
         src/platform/windows_input_source.cpp
@@ -212,6 +234,7 @@ target_include_directories(chart_parser_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_serializer_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(editor_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_loader_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(song_select_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(input_handler_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(timing_engine_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(judge_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
@@ -220,6 +243,7 @@ target_include_directories(play_note_draw_queue_smoke PRIVATE ${RAYTHM_INCLUDE_D
 target_include_directories(play_flow_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(audio_manager_smoke PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass ${RAYTHM_INCLUDE_DIRS})
 target_link_libraries(raythm PRIVATE raylib ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib comdlg32)
+target_link_libraries(song_select_state_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
 target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
