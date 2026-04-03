@@ -98,6 +98,13 @@ add_executable(raythm src/main.cpp
         src/scenes/play/play_session_types.h
         src/scenes/result_scene.cpp
         src/scenes/result_scene.h
+        src/scenes/settings/settings_key_config_state.cpp
+        src/scenes/settings/settings_key_config_state.h
+        src/scenes/settings/settings_layout.h
+        src/scenes/settings/settings_pages.cpp
+        src/scenes/settings/settings_pages.h
+        src/scenes/settings/settings_runtime_applier.cpp
+        src/scenes/settings/settings_runtime_applier.h
         src/scenes/settings_scene.cpp
         src/scenes/settings_scene.h
         src/scenes/theme.h
