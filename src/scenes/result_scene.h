@@ -16,6 +16,8 @@ public:
     void draw() override;
 
 private:
+    void return_to_song_select() const;
+
     result_data result_;
     bool ranking_enabled_ = true;
     song_data song_;

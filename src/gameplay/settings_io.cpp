@@ -131,6 +131,8 @@ void load_settings(game_settings& settings) {
         settings.lane_width = std::clamp(std::stof(*v), 0.6f, 5.0f);
     if (auto v = extract_number_token(content, "noteSpeed"))
         settings.note_speed = std::clamp(std::stof(*v), kMinNoteSpeed, kMaxNoteSpeed);
+    if (auto v = extract_number_token(content, "globalNoteOffsetMs"))
+        settings.global_note_offset_ms = std::clamp(std::stoi(*v), -10000, 10000);
     if (auto v = extract_number_token(content, "bgmVolume"))
         settings.bgm_volume = std::clamp(std::stof(*v), 0.0f, 1.0f);
     if (auto v = extract_number_token(content, "seVolume"))
@@ -159,6 +161,7 @@ void save_settings(const game_settings& settings) {
     out << "  \"cameraAngle\": " << settings.camera_angle_degrees << ",\n";
     out << "  \"laneWidth\": " << settings.lane_width << ",\n";
     out << "  \"noteSpeed\": " << settings.note_speed << ",\n";
+    out << "  \"globalNoteOffsetMs\": " << settings.global_note_offset_ms << ",\n";
     out << "  \"bgmVolume\": " << settings.bgm_volume << ",\n";
     out << "  \"seVolume\": " << settings.se_volume << ",\n";
     out << "  \"targetFps\": " << settings.target_fps << ",\n";

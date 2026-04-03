@@ -35,6 +35,9 @@ std::filesystem::path legacy_songs_root();
 // AppData/Local/raythm/settings.json
 std::filesystem::path settings_path();
 
+// AppData/Local/raythm/song_offsets.txt
+std::filesystem::path song_offsets_path();
+
 // Create songs/ and charts/ directories if they don't exist.
 void ensure_directories();
 

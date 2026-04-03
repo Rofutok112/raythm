@@ -61,6 +61,8 @@ add_executable(raythm src/main.cpp
         src/gameplay/input_handler.h
         src/gameplay/judge_system.cpp
         src/gameplay/judge_system.h
+        src/gameplay/player_note_offsets.cpp
+        src/gameplay/player_note_offsets.h
         src/gameplay/score_system.cpp
         src/gameplay/score_system.h
         src/gameplay/song_loader.cpp

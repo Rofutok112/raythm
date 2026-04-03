@@ -85,6 +85,10 @@ std::filesystem::path settings_path() {
     return app_data_root() / "settings.json";
 }
 
+std::filesystem::path song_offsets_path() {
+    return app_data_root() / "song_offsets.txt";
+}
+
 void ensure_directories() {
     std::filesystem::create_directories(app_data_root());
     std::filesystem::create_directories(songs_root());

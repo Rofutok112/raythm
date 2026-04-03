@@ -52,6 +52,7 @@ void reset_for_enter(state& state) {
     state.confirmation_dialog = {};
     state.status_message.clear();
     state.status_message_is_error = false;
+    state.recent_result_offset.reset();
 }
 
 void tick_animations(state& state, float dt) {
