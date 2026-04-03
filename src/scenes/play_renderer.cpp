@@ -99,11 +99,12 @@ const char* input_source_text(input_update_source source) {
 
 void draw_hud(const play_session_state& state) {
     const result_data result = state.score_system.get_result_data();
+    const float live_accuracy = state.score_system.get_live_accuracy();
     Rectangle score_rows[2];
     ui::vstack(kScoreRect, 30.0f, 0.0f, score_rows);
     ui::enqueue_text_in_rect(TextFormat("SCORE %07d", result.score), 30,
                              score_rows[0], g_theme->hud_score, ui::text_align::left);
-    ui::enqueue_text_in_rect(TextFormat("Accuracy %.2f %%", result.accuracy), 22,
+    ui::enqueue_text_in_rect(TextFormat("Accuracy %.2f %%", live_accuracy), 22,
                              score_rows[1], g_theme->hud_score, ui::text_align::left);
 
     ui::enqueue_text_in_rect(TextFormat("FPS: %d", GetFPS()), 20,

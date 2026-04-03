@@ -44,6 +44,11 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    if (score.get_live_accuracy() != 62.5f) {
+        std::cerr << "Live accuracy aggregation failed\n";
+        return EXIT_FAILURE;
+    }
+
     gauge life_gauge;
     life_gauge.on_judge(judge_result::perfect);
     life_gauge.on_judge(judge_result::great);
