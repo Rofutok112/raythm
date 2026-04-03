@@ -1,0 +1,88 @@
+name: Windows Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel
+            git
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+
+      - name: Install NSIS
+        shell: powershell
+        run: |
+          choco install nsis --no-progress -y
+          "${env:ProgramFiles(x86)}\NSIS" >> $env:GITHUB_PATH
+
+      - name: Compute release metadata
+        id: meta
+        shell: powershell
+        run: |
+          $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+          $packageVersion = Get-Date -Format "yyyy.MM.dd"
+          $shortSha = "${env:GITHUB_SHA}".Substring(0, 7)
+          $assetName = "raythm-$packageVersion.$env:GITHUB_RUN_NUMBER-windows-x64"
+          $tag = "main-build-$timestamp-$shortSha"
+          $releaseName = "raythm main build $timestamp ($shortSha)"
+
+          "package_version=$packageVersion.$env:GITHUB_RUN_NUMBER" >> $env:GITHUB_OUTPUT
+          "asset_name=$assetName" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "release_name=$releaseName" >> $env:GITHUB_OUTPUT
+          "installer_path=dist/$assetName.exe" >> $env:GITHUB_OUTPUT
+
+      - name: Configure
+        shell: msys2 {0}
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          "-DRAYTHM_PACKAGE_VERSION=${{ steps.meta.outputs.package_version }}"
+          "-DRAYTHM_PACKAGE_FILE_NAME=${{ steps.meta.outputs.asset_name }}"
+
+      - name: Build
+        shell: msys2 {0}
+        run: cmake --build build --config Release --target raythm --parallel
+
+      - name: Package installer
+        shell: msys2 {0}
+        run: cpack --config build/CPackConfig.cmake -G NSIS -B dist
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.asset_name }}
+          path: ${{ steps.meta.outputs.installer_path }}
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.release_name }}
+          generate_release_notes: true
+          prerelease: true
+          files: ${{ steps.meta.outputs.installer_path }}

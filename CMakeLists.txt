@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 4.1)
 project(raythm)
 
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY ON)
+set(RAYTHM_PACKAGE_VERSION "0.1.0" CACHE STRING "Version string used for Windows release packages")
+set(RAYTHM_PACKAGE_FILE_NAME
+        "raythm-${RAYTHM_PACKAGE_VERSION}-windows-x64"
+        CACHE STRING "Package file name without extension")
 
 include(FetchContent)
 FetchContent_Declare(
@@ -381,3 +386,19 @@ add_custom_command(TARGET audio_manager_smoke POST_BUILD
 install(TARGETS raythm RUNTIME DESTINATION .)
 install(FILES ${RAYTHM_RUNTIME_DLLS} DESTINATION .)
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets DESTINATION .)
+
+if(WIN32)
+    set(CPACK_PACKAGE_NAME "raythm")
+    set(CPACK_PACKAGE_VENDOR "Rofutok112")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "beatmania-style rhythm game")
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "raythm")
+    set(CPACK_PACKAGE_VERSION "${RAYTHM_PACKAGE_VERSION}")
+    set(CPACK_PACKAGE_FILE_NAME "${RAYTHM_PACKAGE_FILE_NAME}")
+    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
+    set(CPACK_NSIS_DISPLAY_NAME "raythm")
+    set(CPACK_NSIS_PACKAGE_NAME "raythm")
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    set(CPACK_NSIS_MANIFEST_DPI_AWARE ON)
+    set(CPACK_MONOLITHIC_INSTALL ON)
+    include(CPack)
+endif()
