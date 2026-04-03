@@ -3,7 +3,7 @@
 #include <iostream>
 #include <string>
 
-#include "editor_state.h"
+#include "editor/editor_state.h"
 
 namespace {
 bool nearly_equal(double left, double right) {

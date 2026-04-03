@@ -3,7 +3,7 @@
 #include <optional>
 #include <string>
 
-#include "editor_scene.h"
+#include "editor/editor_scene_types.h"
 #include "input_handler.h"
 #include "judge_system.h"
 #include "score_system.h"
@@ -42,7 +42,7 @@ struct play_start_request {
     std::optional<song_data> song_data;
     std::optional<std::string> selected_chart_path;
     std::optional<chart_data> chart_data;
-    std::optional<editor_scene::resume_state> editor_resume_state;
+    std::optional<editor_resume_state> editor_resume_state;
     int start_tick = 0;
 };
 
@@ -73,7 +73,7 @@ struct play_session_state {
     std::optional<chart_data> chart_data;
     std::optional<song_data> song_data;
     std::optional<std::string> selected_chart_path;
-    std::optional<editor_scene::resume_state> editor_resume_state;
+    std::optional<editor_resume_state> editor_resume_state;
     std::optional<judge_event> last_judge;
     std::optional<judge_event> display_judge;
     result_data final_result;
