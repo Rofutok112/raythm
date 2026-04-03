@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,7 @@ struct chart_option {
 struct song_entry {
     song_data song;
     std::vector<chart_option> charts;
+    int local_note_offset_ms = 0;
 };
 
 struct catalog_data {
@@ -52,6 +54,12 @@ struct confirmation_dialog_state {
     int chart_index = -1;
 };
 
+struct recent_result_offset {
+    std::string song_id;
+    std::string chart_id;
+    float avg_offset_ms = 0.0f;
+};
+
 struct state {
     std::vector<song_entry> songs;
     std::vector<std::string> load_errors;
@@ -67,6 +75,7 @@ struct state {
     confirmation_dialog_state confirmation_dialog;
     std::string status_message;
     bool status_message_is_error = false;
+    std::optional<recent_result_offset> recent_result_offset;
 };
 
 const song_entry* selected_song(const state& state);

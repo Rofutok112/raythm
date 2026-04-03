@@ -95,6 +95,29 @@ inline Rectangle arrow_right_rect(const Rectangle& row_rect) {
     return {left.x + kArrowButtonSize + 10.0f, left.y, kArrowButtonSize, kArrowButtonSize};
 }
 
+inline Rectangle double_arrow_left_rect(const Rectangle& row_rect) {
+    const Rectangle content = ui::inset(row_rect, ui::edge_insets::symmetric(0.0f, 18.0f));
+    const ui::rect_pair columns = ui::split_columns(content, 200.0f);
+    const Rectangle button_pair_area = ui::place(columns.second, kArrowButtonSize * 4.0f + 30.0f, kArrowButtonSize,
+                                                 ui::anchor::center_right, ui::anchor::center_right);
+    return {button_pair_area.x, button_pair_area.y, kArrowButtonSize, kArrowButtonSize};
+}
+
+inline Rectangle single_arrow_left_rect(const Rectangle& row_rect) {
+    const Rectangle left = double_arrow_left_rect(row_rect);
+    return {left.x + kArrowButtonSize + 10.0f, left.y, kArrowButtonSize, kArrowButtonSize};
+}
+
+inline Rectangle single_arrow_right_rect(const Rectangle& row_rect) {
+    const Rectangle left = single_arrow_left_rect(row_rect);
+    return {left.x + kArrowButtonSize + 10.0f, left.y, kArrowButtonSize, kArrowButtonSize};
+}
+
+inline Rectangle double_arrow_right_rect(const Rectangle& row_rect) {
+    const Rectangle left = single_arrow_right_rect(row_rect);
+    return {left.x + kArrowButtonSize + 10.0f, left.y, kArrowButtonSize, kArrowButtonSize};
+}
+
 inline Rectangle key_slot_rect(int index) {
     return ui::place(kContentRect, 560.0f, 48.0f,
                      ui::anchor::top_left, ui::anchor::top_left,

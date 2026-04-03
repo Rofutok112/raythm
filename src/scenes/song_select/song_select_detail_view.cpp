@@ -1,5 +1,8 @@
 #include "song_select/song_select_detail_view.h"
 
+#include <cmath>
+#include <string>
+
 #include "scene_common.h"
 #include "song_select/song_select_layout.h"
 #include "theme.h"
@@ -13,6 +16,21 @@ std::string key_mode_label(int key_count) {
 
 const char* source_label(content_source source) {
     return source == content_source::app_data ? "AppData" : "Legacy";
+}
+
+std::string format_offset_label(int offset_ms) {
+    return (offset_ms > 0 ? "+" : "") + std::to_string(offset_ms) + "ms";
+}
+
+std::string format_recent_offset_label(float offset_ms) {
+    const int rounded_offset = static_cast<int>(std::lround(offset_ms));
+    if (rounded_offset > 0) {
+        return std::to_string(rounded_offset) + "ms";
+    }
+    if (rounded_offset < 0) {
+        return std::to_string(rounded_offset) + "ms";
+    }
+    return "0ms";
 }
 
 }  // namespace
@@ -55,6 +73,9 @@ void draw_song_details(const state& state, const preview_controller& preview_con
     const float content_anim = 1.0f - state.song_change_anim_t;
     const float content_offset_x = 18.0f * state.song_change_anim_t;
     const unsigned char content_alpha = static_cast<unsigned char>(145.0f + 110.0f * content_anim);
+    const int local_offset_ms = song->local_note_offset_ms;
+    const bool has_recent_result = state.recent_result_offset.has_value() &&
+                                   state.recent_result_offset->song_id == song->song.meta.song_id;
 
     ui::draw_section(layout::kJacketRect);
     if (preview_controller.jacket_loaded()) {
@@ -67,8 +88,8 @@ void draw_song_details(const state& state, const preview_controller& preview_con
     }
     DrawRectangleLinesEx(layout::kJacketRect, 2.0f, theme.border_image);
 
-    const float detail_x = layout::kJacketRect.x + layout::kJacketRect.width + 20.0f;
-    const float detail_max_width = layout::kLeftPanelRect.x + layout::kLeftPanelRect.width - detail_x - 16.0f;
+    const float detail_x = layout::kDetailColumnX;
+    const float detail_max_width = layout::kDetailColumnWidth;
     const double now = GetTime();
     draw_marquee_text(song->song.meta.title.c_str(), detail_x + content_offset_x, layout::kJacketRect.y + 4.0f, 40,
                       with_alpha(theme.text, content_alpha), detail_max_width, now);
@@ -87,6 +108,36 @@ void draw_song_details(const state& state, const preview_controller& preview_con
         ui::draw_text_f(selected_chart->meta.chart_author.c_str(), detail_x + content_offset_x,
                         layout::kJacketRect.y + 194.0f, 20, with_alpha(theme.text_muted, content_alpha));
     }
+
+    const std::string local_label = format_offset_label(local_offset_ms);
+    ui::draw_text_in_rect("Local Offset", 20, layout::kLocalOffsetLabelRect,
+                          with_alpha(theme.text, content_alpha), ui::text_align::left);
+
+    const Rectangle controls = layout::kLocalOffsetControlsRect;
+    const Rectangle value_rect = {controls.x, controls.y, 120.0f, controls.height};
+    ui::draw_text_in_rect(local_label.c_str(), 26, value_rect, with_alpha(theme.accent, content_alpha), ui::text_align::left);
+
+    ui::draw_button_colored(layout::local_offset_double_left_rect(), "<<", 18,
+                            with_alpha(theme.row, content_alpha), with_alpha(theme.row_hover, content_alpha),
+                            with_alpha(theme.text, content_alpha));
+    ui::draw_button_colored(layout::local_offset_left_rect(), "<", 18,
+                            with_alpha(theme.row, content_alpha), with_alpha(theme.row_hover, content_alpha),
+                            with_alpha(theme.text, content_alpha));
+    ui::draw_button_colored(layout::local_offset_right_rect(), ">", 18,
+                            with_alpha(theme.row, content_alpha), with_alpha(theme.row_hover, content_alpha),
+                            with_alpha(theme.text, content_alpha));
+    ui::draw_button_colored(layout::local_offset_double_right_rect(), ">>", 18,
+                            with_alpha(theme.row, content_alpha), with_alpha(theme.row_hover, content_alpha),
+                            with_alpha(theme.text, content_alpha));
+
+    const std::string auto_apply_label = has_recent_result
+        ? format_recent_offset_label(state.recent_result_offset->avg_offset_ms)
+        : "-";
+    ui::draw_button_colored(
+        layout::auto_apply_button_rect(), auto_apply_label.c_str(), 18,
+        has_recent_result ? with_alpha(theme.row, content_alpha) : with_alpha(theme.row, 170),
+        has_recent_result ? with_alpha(theme.row_hover, content_alpha) : with_alpha(theme.row, 170),
+        has_recent_result ? with_alpha(theme.text, content_alpha) : with_alpha(theme.text_muted, 210));
 }
 
 void draw_status_message(const state& state) {

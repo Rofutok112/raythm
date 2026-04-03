@@ -16,6 +16,10 @@ constexpr float kMinNoteSpeed = 0.010f;
 constexpr float kMaxNoteSpeed = 0.200f;
 constexpr float kNoteSpeedDisplayScale = 10.0f;
 
+std::string format_offset_label(int offset_ms) {
+    return (offset_ms > 0 ? "+" : "") + std::to_string(offset_ms) + " ms";
+}
+
 }  // namespace
 
 settings_gameplay_page::settings_gameplay_page(game_settings& settings) : settings_(settings) {
@@ -52,6 +56,16 @@ void settings_gameplay_page::update() {
             settings_.lane_width = 0.6f + ratio * (10.0f - 0.6f);
         }
     }
+
+    if (ui::is_clicked(settings::double_arrow_left_rect(settings::kGeneralRows[3]), settings::kLayer)) {
+        settings_.global_note_offset_ms = std::max(-10000, settings_.global_note_offset_ms - 5);
+    } else if (ui::is_clicked(settings::single_arrow_left_rect(settings::kGeneralRows[3]), settings::kLayer)) {
+        settings_.global_note_offset_ms = std::max(-10000, settings_.global_note_offset_ms - 1);
+    } else if (ui::is_clicked(settings::single_arrow_right_rect(settings::kGeneralRows[3]), settings::kLayer)) {
+        settings_.global_note_offset_ms = std::min(10000, settings_.global_note_offset_ms + 1);
+    } else if (ui::is_clicked(settings::double_arrow_right_rect(settings::kGeneralRows[3]), settings::kLayer)) {
+        settings_.global_note_offset_ms = std::min(10000, settings_.global_note_offset_ms + 5);
+    }
 }
 
 void settings_gameplay_page::draw() const {
@@ -75,6 +89,27 @@ void settings_gameplay_page::draw() const {
                                  settings::clamp01(ratio), settings::kSliderLeftInset, settings::kSliderRightInset,
                                  settings::kLayer, 22, settings::kSliderTopOffset);
     }
+
+    const std::string global_offset_label = format_offset_label(settings_.global_note_offset_ms);
+    const ui::row_state offset_row = ui::draw_row(settings::kGeneralRows[3], g_theme->row, g_theme->row_hover, g_theme->border);
+    const Rectangle content = ui::inset(offset_row.visual, ui::edge_insets::symmetric(0.0f, 18.0f));
+    const ui::rect_pair columns = ui::split_columns(content, 200.0f);
+    const Rectangle button_group = ui::place(columns.second, settings::kArrowButtonSize * 4.0f + 30.0f,
+                                             settings::kArrowButtonSize,
+                                             ui::anchor::center_right, ui::anchor::center_right);
+    const Rectangle value_rect = {
+        columns.second.x,
+        columns.second.y,
+        button_group.x - columns.second.x - 16.0f,
+        columns.second.height
+    };
+
+    ui::draw_text_in_rect("Global Offset", 22, columns.first, g_theme->text, ui::text_align::left);
+    ui::draw_text_in_rect(global_offset_label.c_str(), 22, value_rect, g_theme->text_dim, ui::text_align::right);
+    ui::draw_button(settings::double_arrow_left_rect(settings::kGeneralRows[3]), "<<", 22);
+    ui::draw_button(settings::single_arrow_left_rect(settings::kGeneralRows[3]), "<", 22);
+    ui::draw_button(settings::single_arrow_right_rect(settings::kGeneralRows[3]), ">", 22);
+    ui::draw_button(settings::double_arrow_right_rect(settings::kGeneralRows[3]), ">>", 22);
 }
 
 settings_audio_page::settings_audio_page(game_settings& settings, const settings_runtime_applier& runtime_applier)

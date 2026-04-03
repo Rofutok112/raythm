@@ -77,13 +77,21 @@ result_scene::result_scene(scene_manager& manager, result_data result, bool rank
       song_(std::move(song)), chart_path_(std::move(chart_path)), chart_(std::move(chart)), key_count_(key_count) {
 }
 
+void result_scene::return_to_song_select() const {
+    song_select::recent_result_offset recent_result;
+    recent_result.song_id = song_.meta.song_id;
+    recent_result.chart_id = chart_.chart_id;
+    recent_result.avg_offset_ms = result_.avg_offset;
+    manager_.change_scene(std::make_unique<song_select_scene>(manager_, song_.meta.song_id, chart_.chart_id, recent_result));
+}
+
 void result_scene::update(float dt) {
     fade_in_timer_ = std::max(0.0f, fade_in_timer_ - dt);
 
     if (IsKeyPressed(KEY_ENTER)) {
-        manager_.change_scene(std::make_unique<song_select_scene>(manager_));
+        return_to_song_select();
     } else if (IsKeyPressed(KEY_ESCAPE)) {
-        manager_.change_scene(std::make_unique<song_select_scene>(manager_));
+        return_to_song_select();
     } else if (IsKeyPressed(KEY_R)) {
         manager_.change_scene(std::make_unique<play_scene>(manager_, song_, chart_path_, key_count_));
     }
@@ -196,7 +204,8 @@ void result_scene::draw() {
         ui::draw_label_value(stat_rows[3], "Slow", TextFormat("%d", result_.slow_count), 24, t.text_dim, t.slow);
         ui::draw_label_value(stat_rows[4], "Ranking", ranking_enabled_ ? "Eligible" : "Disabled",
                              24, t.text_dim, ranking_enabled_ ? t.success : t.error);
-        ui::draw_text_in_rect("ENTER: Song Select    R: Retry", 20, kStatsHintRect, t.text_hint, ui::text_align::left);
+        ui::draw_text_in_rect("ENTER: Song Select    R: Retry    Use AUTO APPLY there", 20,
+                              kStatsHintRect, t.text_hint, ui::text_align::left);
     }
 
     // フェードイン（暗い状態から明るくなる）

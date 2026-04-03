@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include "raylib.h"
@@ -11,7 +12,9 @@
 
 class song_select_scene final : public scene {
 public:
-    explicit song_select_scene(scene_manager& manager, std::string preferred_song_id = "");
+    explicit song_select_scene(scene_manager& manager, std::string preferred_song_id = "",
+                               std::string preferred_chart_id = "",
+                               std::optional<song_select::recent_result_offset> recent_result_offset = std::nullopt);
 
     void on_enter() override;
     void on_exit() override;
@@ -23,6 +26,8 @@ private:
                              const std::string& preferred_chart_id = "");
     void sync_selected_song_media();
     void apply_delete_result(const song_select::delete_result& result);
+    bool adjust_selected_song_local_offset(int delta_ms);
+    bool apply_recent_result_offset();
     bool handle_song_list_pointer(Vector2 mouse, bool left_pressed, bool right_pressed);
     void apply_context_menu_command(song_select::context_menu_command command);
     void apply_confirmation_command(song_select::confirmation_command command);
@@ -30,4 +35,6 @@ private:
     song_select::state state_;
     song_select::preview_controller preview_controller_;
     std::string preferred_song_id_;
+    std::string preferred_chart_id_;
+    std::optional<song_select::recent_result_offset> recent_result_offset_;
 };

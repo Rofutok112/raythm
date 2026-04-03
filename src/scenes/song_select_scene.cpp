@@ -4,6 +4,7 @@
 #include <cmath>
 #include <utility>
 
+#include "player_note_offsets.h"
 #include "raylib.h"
 #include "scene_manager.h"
 #include "song_select/song_select_detail_view.h"
@@ -14,13 +15,27 @@
 #include "ui_draw.h"
 #include "virtual_screen.h"
 
-song_select_scene::song_select_scene(scene_manager& manager, std::string preferred_song_id)
-    : scene(manager), preferred_song_id_(std::move(preferred_song_id)) {
+namespace {
+
+std::string format_offset_label(int offset_ms) {
+    return (offset_ms > 0 ? "+" : "") + std::to_string(offset_ms) + "ms";
+}
+
+}  // namespace
+
+song_select_scene::song_select_scene(scene_manager& manager, std::string preferred_song_id,
+                                     std::string preferred_chart_id,
+                                     std::optional<song_select::recent_result_offset> recent_result_offset)
+    : scene(manager),
+      preferred_song_id_(std::move(preferred_song_id)),
+      preferred_chart_id_(std::move(preferred_chart_id)),
+      recent_result_offset_(std::move(recent_result_offset)) {
 }
 
 void song_select_scene::on_enter() {
     song_select::reset_for_enter(state_);
-    reload_song_library(preferred_song_id_);
+    state_.recent_result_offset = recent_result_offset_;
+    reload_song_library(preferred_song_id_, preferred_chart_id_);
 }
 
 void song_select_scene::on_exit() {
@@ -48,6 +63,42 @@ void song_select_scene::apply_delete_result(const song_select::delete_result& re
 
     reload_song_library(result.preferred_song_id, result.preferred_chart_id);
     song_select::queue_status_message(state_, result.message, false);
+}
+
+bool song_select_scene::adjust_selected_song_local_offset(int delta_ms) {
+    if (state_.selected_song_index < 0 || state_.selected_song_index >= static_cast<int>(state_.songs.size())) {
+        return false;
+    }
+
+    auto& song = state_.songs[static_cast<size_t>(state_.selected_song_index)];
+    const int next_offset = std::clamp(song.local_note_offset_ms + delta_ms, -1000, 1000);
+    if (!save_player_song_offset(song.song.meta.song_id, next_offset)) {
+        song_select::queue_status_message(state_, "Failed to save local offset.", true);
+        return false;
+    }
+
+    song.local_note_offset_ms = next_offset;
+    return true;
+}
+
+bool song_select_scene::apply_recent_result_offset() {
+    if (!state_.recent_result_offset.has_value()) {
+        return false;
+    }
+
+    const song_select::song_entry* selected = song_select::selected_song(state_);
+    if (selected == nullptr || selected->song.meta.song_id != state_.recent_result_offset->song_id) {
+        return false;
+    }
+
+    const int adjustment_ms = static_cast<int>(std::lround(state_.recent_result_offset->avg_offset_ms));
+    if (!adjust_selected_song_local_offset(adjustment_ms)) {
+        return false;
+    }
+
+    state_.recent_result_offset.reset();
+    recent_result_offset_.reset();
+    return true;
 }
 
 bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_pressed, bool right_pressed) {
@@ -232,6 +283,31 @@ void song_select_scene::update(float dt) {
     }
 
     if (state_.songs.empty()) {
+        return;
+    }
+
+    if (ui::is_clicked(song_select::layout::local_offset_double_left_rect(), song_select::layout::kSceneLayer)) {
+        adjust_selected_song_local_offset(-5);
+        return;
+    }
+
+    if (ui::is_clicked(song_select::layout::local_offset_left_rect(), song_select::layout::kSceneLayer)) {
+        adjust_selected_song_local_offset(-1);
+        return;
+    }
+
+    if (ui::is_clicked(song_select::layout::local_offset_right_rect(), song_select::layout::kSceneLayer)) {
+        adjust_selected_song_local_offset(1);
+        return;
+    }
+
+    if (ui::is_clicked(song_select::layout::local_offset_double_right_rect(), song_select::layout::kSceneLayer)) {
+        adjust_selected_song_local_offset(5);
+        return;
+    }
+
+    if (ui::is_clicked(song_select::layout::auto_apply_button_rect(), song_select::layout::kSceneLayer) &&
+        apply_recent_result_offset()) {
         return;
     }
 
