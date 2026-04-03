@@ -13,7 +13,7 @@ namespace {
 
 constexpr std::array<int, 4> kFrameRateOptions = {120, 144, 240, 0};
 constexpr float kMinNoteSpeed = 0.010f;
-constexpr float kMaxNoteSpeed = 0.100f;
+constexpr float kMaxNoteSpeed = 0.150f;
 constexpr float kNoteSpeedDisplayScale = 10.0f;
 
 }  // namespace
