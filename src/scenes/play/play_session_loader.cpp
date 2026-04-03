@@ -7,6 +7,7 @@
 #include "audio_manager.h"
 #include "game_settings.h"
 #include "path_utils.h"
+#include "play_speed_compensation.h"
 
 namespace {
 
@@ -51,7 +52,8 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.editor_resume_state = request.editor_resume_state;
     state.start_tick = std::max(0, request.start_tick);
     state.camera_angle_degrees = g_settings.camera_angle_degrees;
-    state.lane_speed = g_settings.note_speed;
+    state.lane_speed =
+        play_speed_compensation::compensated_lane_speed(g_settings.note_speed, state.camera_angle_degrees);
 
     if (!state.song_data.has_value()) {
         state.song_data = load_sample_song();

@@ -12,6 +12,9 @@
 namespace {
 
 constexpr std::array<int, 4> kFrameRateOptions = {120, 144, 240, 0};
+constexpr float kMinNoteSpeed = 0.010f;
+constexpr float kMaxNoteSpeed = 0.200f;
+constexpr float kNoteSpeedDisplayScale = 10.0f;
 
 }  // namespace
 
@@ -40,7 +43,7 @@ void settings_gameplay_page::update() {
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
         if (active_slider_ == slider::note_speed) {
             const float ratio = settings::slider_ratio_from_mouse(settings::kGeneralRows[0]);
-            settings_.note_speed = 0.020f + ratio * (0.090f - 0.020f);
+            settings_.note_speed = kMinNoteSpeed + ratio * (kMaxNoteSpeed - kMinNoteSpeed);
         } else if (active_slider_ == slider::camera_angle) {
             const float ratio = settings::slider_ratio_from_mouse(settings::kGeneralRows[1]);
             settings_.camera_angle_degrees = 5.0f + ratio * (90.0f - 5.0f);
@@ -54,7 +57,7 @@ void settings_gameplay_page::update() {
 void settings_gameplay_page::draw() const {
     const char* labels[] = {"Note Speed", "Camera Angle", "Lane Width"};
     const std::string values[] = {
-        TextFormat("%.3f", settings_.note_speed),
+        TextFormat("%.1f", settings_.note_speed * kNoteSpeedDisplayScale),
         TextFormat("%.0f deg", settings_.camera_angle_degrees),
         TextFormat("%.1f", settings_.lane_width),
     };
@@ -62,7 +65,7 @@ void settings_gameplay_page::draw() const {
     for (int i = 0; i < 3; ++i) {
         float ratio = 0.0f;
         if (i == 0) {
-            ratio = (settings_.note_speed - 0.020f) / (0.090f - 0.020f);
+            ratio = (settings_.note_speed - kMinNoteSpeed) / (kMaxNoteSpeed - kMinNoteSpeed);
         } else if (i == 1) {
             ratio = (settings_.camera_angle_degrees - 5.0f) / (90.0f - 5.0f);
         } else {

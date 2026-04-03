@@ -13,6 +13,8 @@
 
 namespace {
 namespace fs = std::filesystem;
+constexpr float kMinNoteSpeed = 0.010f;
+constexpr float kMaxNoteSpeed = 0.200f;
 
 fs::path settings_path() {
     return app_paths::settings_path();
@@ -128,7 +130,7 @@ void load_settings(game_settings& settings) {
     if (auto v = extract_number_token(content, "laneWidth"))
         settings.lane_width = std::clamp(std::stof(*v), 0.6f, 5.0f);
     if (auto v = extract_number_token(content, "noteSpeed"))
-        settings.note_speed = std::clamp(std::stof(*v), 0.020f, 0.090f);
+        settings.note_speed = std::clamp(std::stof(*v), kMinNoteSpeed, kMaxNoteSpeed);
     if (auto v = extract_number_token(content, "bgmVolume"))
         settings.bgm_volume = std::clamp(std::stof(*v), 0.0f, 1.0f);
     if (auto v = extract_number_token(content, "seVolume"))
