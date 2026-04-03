@@ -3,8 +3,8 @@
 #include <string>
 
 #include "editor_scene.h"
-#include "play_note_draw_queue.h"
-#include "play_session_types.h"
+#include "play/play_note_draw_queue.h"
+#include "play/play_session_types.h"
 #include "raylib.h"
 #include "scene.h"
 

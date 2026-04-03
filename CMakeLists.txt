@@ -70,17 +70,17 @@ add_executable(raythm src/main.cpp
         src/scenes/song_select_scene.h
         src/scenes/editor_scene.cpp
         src/scenes/editor_scene.h
-        src/scenes/play_flow_controller.cpp
-        src/scenes/play_flow_controller.h
-        src/scenes/play_note_draw_queue.cpp
-        src/scenes/play_note_draw_queue.h
-        src/scenes/play_renderer.cpp
-        src/scenes/play_renderer.h
+        src/scenes/play/play_flow_controller.cpp
+        src/scenes/play/play_flow_controller.h
+        src/scenes/play/play_note_draw_queue.cpp
+        src/scenes/play/play_note_draw_queue.h
+        src/scenes/play/play_renderer.cpp
+        src/scenes/play/play_renderer.h
         src/scenes/play_scene.cpp
         src/scenes/play_scene.h
-        src/scenes/play_session_loader.cpp
-        src/scenes/play_session_loader.h
-        src/scenes/play_session_types.h
+        src/scenes/play/play_session_loader.cpp
+        src/scenes/play/play_session_loader.h
+        src/scenes/play/play_session_types.h
         src/scenes/result_scene.cpp
         src/scenes/result_scene.h
         src/scenes/settings_scene.cpp
@@ -162,8 +162,8 @@ add_executable(score_system_smoke
 
 add_executable(play_note_draw_queue_smoke
         src/models/data_models.h
-        src/scenes/play_note_draw_queue.cpp
-        src/scenes/play_note_draw_queue.h
+        src/scenes/play/play_note_draw_queue.cpp
+        src/scenes/play/play_note_draw_queue.h
         src/tests/play_note_draw_queue_smoke.cpp)
 
 add_executable(play_flow_controller_smoke
@@ -178,11 +178,11 @@ add_executable(play_flow_controller_smoke
         src/gameplay/score_system.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
-        src/scenes/play_flow_controller.cpp
-        src/scenes/play_flow_controller.h
-        src/scenes/play_note_draw_queue.cpp
-        src/scenes/play_note_draw_queue.h
-        src/scenes/play_session_types.h
+        src/scenes/play/play_flow_controller.cpp
+        src/scenes/play/play_flow_controller.h
+        src/scenes/play/play_note_draw_queue.cpp
+        src/scenes/play/play_note_draw_queue.h
+        src/scenes/play/play_session_types.h
         src/scenes/editor_scene.h
         src/tests/play_flow_controller_smoke.cpp)
 
