@@ -114,14 +114,7 @@ result_data score_system::get_result_data() const {
                            judge_counts_[judge_index(judge_result::miss)] == 0;
     result.is_all_perfect = judged_notes_ > 0 &&
                             judge_counts_[judge_index(judge_result::perfect)] == judged_notes_;
-
-    const double max_achievement_points = static_cast<double>(std::max(total_notes_, 1) * kPerfectBase);
-    const double earned_achievement_points =
-        judge_counts_[judge_index(judge_result::perfect)] * kPerfectBase +
-        judge_counts_[judge_index(judge_result::great)] * kGreatBase +
-        judge_counts_[judge_index(judge_result::good)] * kGoodBase +
-        judge_counts_[judge_index(judge_result::bad)] * kBadBase;
-    result.accuracy = static_cast<float>((earned_achievement_points / max_achievement_points) * 100.0);
+    result.accuracy = get_live_accuracy();
 
     if (result.accuracy >= 99.0f) {
         result.clear_rank = rank::ss;
