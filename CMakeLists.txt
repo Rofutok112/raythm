@@ -70,8 +70,17 @@ add_executable(raythm src/main.cpp
         src/scenes/song_select_scene.h
         src/scenes/editor_scene.cpp
         src/scenes/editor_scene.h
+        src/scenes/play_flow_controller.cpp
+        src/scenes/play_flow_controller.h
+        src/scenes/play_note_draw_queue.cpp
+        src/scenes/play_note_draw_queue.h
+        src/scenes/play_renderer.cpp
+        src/scenes/play_renderer.h
         src/scenes/play_scene.cpp
         src/scenes/play_scene.h
+        src/scenes/play_session_loader.cpp
+        src/scenes/play_session_loader.h
+        src/scenes/play_session_types.h
         src/scenes/result_scene.cpp
         src/scenes/result_scene.h
         src/scenes/settings_scene.cpp
@@ -151,6 +160,32 @@ add_executable(score_system_smoke
         src/gameplay/score_system.h
         src/tests/score_system_smoke.cpp)
 
+add_executable(play_note_draw_queue_smoke
+        src/models/data_models.h
+        src/scenes/play_note_draw_queue.cpp
+        src/scenes/play_note_draw_queue.h
+        src/tests/play_note_draw_queue_smoke.cpp)
+
+add_executable(play_flow_controller_smoke
+        src/models/data_models.h
+        src/platform/windows_input_source.cpp
+        src/platform/windows_input_source.h
+        src/gameplay/input_handler.cpp
+        src/gameplay/input_handler.h
+        src/gameplay/judge_system.cpp
+        src/gameplay/judge_system.h
+        src/gameplay/score_system.cpp
+        src/gameplay/score_system.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/scenes/play_flow_controller.cpp
+        src/scenes/play_flow_controller.h
+        src/scenes/play_note_draw_queue.cpp
+        src/scenes/play_note_draw_queue.h
+        src/scenes/play_session_types.h
+        src/scenes/editor_scene.h
+        src/tests/play_flow_controller_smoke.cpp)
+
 add_executable(audio_manager_smoke
         libs/bass/bass.h
         src/audio/audio.cpp
@@ -181,10 +216,13 @@ target_include_directories(input_handler_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(timing_engine_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(judge_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(score_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(play_note_draw_queue_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(play_flow_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(audio_manager_smoke PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass ${RAYTHM_INCLUDE_DIRS})
 target_link_libraries(raythm PRIVATE raylib ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib comdlg32)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
+target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
 target_link_libraries(audio_manager_smoke PRIVATE ${CMAKE_SOURCE_DIR}/libs/bass/bass.lib)
 
 set(RAYTHM_RUNTIME_DLLS

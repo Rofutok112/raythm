@@ -10,6 +10,7 @@ public:
     void on_judge(const judge_event& event);
     int get_score() const;
     int get_combo() const;
+    float get_live_accuracy() const;
     result_data get_result_data() const;
 
 private:
