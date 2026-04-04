@@ -225,50 +225,49 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
     }
 
     const float total_width = state.key_count * g_settings.lane_width + (state.key_count - 1) * kLaneGap;
-    DrawCube({0.0f, 0.01f, judgement_z}, total_width + 0.9f, 0.01f, 0.62f, g_theme->judge_line);
-    DrawCube({0.0f, 0.02f, judgement_z}, total_width + 0.5f, kJudgeLineGlowHeight, 0.38f, g_theme->judge_line_glow);
 
-    if (!draw_queue.has_active_notes()) {
-        return;
-    }
+    if (draw_queue.has_active_notes()) {
+        const std::vector<note_state>& note_states = state.judge_system.note_states();
+        const Color note_color = g_theme->note_color;
+        const Color note_outline = g_theme->note_outline;
 
-    const std::vector<note_state>& note_states = state.judge_system.note_states();
-    const Color note_color = g_theme->note_color;
-    const Color note_outline = g_theme->note_outline;
+        for (int lane = 0; lane < state.key_count; ++lane) {
+            for (const size_t idx : draw_queue.active_indices_for_lane(lane)) {
+                const note_state& note_state = note_states[idx];
+                const float head_z = static_cast<float>(judgement_z + state.lane_speed * (note_state.target_ms - visual_ms));
+                const float center_x = lane_center_x(note_state.note_ref.lane, state.key_count);
 
-    for (int lane = 0; lane < state.key_count; ++lane) {
-        for (const size_t idx : draw_queue.active_indices_for_lane(lane)) {
-            const note_state& note_state = note_states[idx];
-            const float head_z = static_cast<float>(judgement_z + state.lane_speed * (note_state.target_ms - visual_ms));
-            const float center_x = lane_center_x(note_state.note_ref.lane, state.key_count);
-
-            if (note_state.note_ref.type == note_type::hold) {
-                const double tail_target_ms = state.timing_engine.tick_to_ms(note_state.note_ref.end_tick);
-                const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_ms));
-                const float visual_head_z = note_state.holding ? judgement_z : head_z;
-                const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);
-                const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);
-                const float hold_height = kHoldNoteBaseHeight * g_settings.note_height;
-                const float hold_wire_height = kHoldNoteWireHeight * g_settings.note_height;
-                if (segment_end > segment_start) {
-                    DrawCube({center_x, 0.30f, (segment_start + segment_end) * 0.5f}, g_settings.lane_width * 0.92f,
-                             hold_height, segment_end - segment_start, note_color);
-                    DrawCubeWires({center_x, 0.30f, (segment_start + segment_end) * 0.5f},
-                                  g_settings.lane_width * 0.94f, hold_wire_height, segment_end - segment_start + 0.04f,
-                                  note_outline);
+                if (note_state.note_ref.type == note_type::hold) {
+                    const double tail_target_ms = state.timing_engine.tick_to_ms(note_state.note_ref.end_tick);
+                    const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_ms));
+                    const float visual_head_z = note_state.holding ? judgement_z : head_z;
+                    const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);
+                    const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);
+                    const float hold_height = kHoldNoteBaseHeight * g_settings.note_height;
+                    const float hold_wire_height = kHoldNoteWireHeight * g_settings.note_height;
+                    if (segment_end > segment_start) {
+                        DrawCube({center_x, 0.30f, (segment_start + segment_end) * 0.5f}, g_settings.lane_width * 0.92f,
+                                 hold_height, segment_end - segment_start, note_color);
+                        DrawCubeWires({center_x, 0.30f, (segment_start + segment_end) * 0.5f},
+                                      g_settings.lane_width * 0.94f, hold_wire_height, segment_end - segment_start + 0.04f,
+                                      note_outline);
+                    }
                 }
-            }
 
-            if (note_state.note_ref.type == note_type::tap) {
-                DrawCube({center_x, 0.22f, head_z}, g_settings.lane_width * 0.92f,
-                         kTapNoteBaseHeight * g_settings.note_height,
-                         kTapNoteBaseLength * g_settings.note_height, note_color);
-                DrawCubeWires({center_x, 0.22f, head_z}, g_settings.lane_width * 0.92f,
-                              kTapNoteWireHeight * g_settings.note_height,
-                              kTapNoteWireLength * g_settings.note_height, note_outline);
+                if (note_state.note_ref.type == note_type::tap) {
+                    DrawCube({center_x, 0.22f, head_z}, g_settings.lane_width * 0.92f,
+                             kTapNoteBaseHeight * g_settings.note_height,
+                             kTapNoteBaseLength * g_settings.note_height, note_color);
+                    DrawCubeWires({center_x, 0.22f, head_z}, g_settings.lane_width * 0.92f,
+                                  kTapNoteWireHeight * g_settings.note_height,
+                                  kTapNoteWireLength * g_settings.note_height, note_outline);
+                }
             }
         }
     }
+
+    DrawCube({0.0f, 0.01f, judgement_z}, total_width + 0.9f, 0.01f, 0.62f, g_theme->judge_line);
+    DrawCube({0.0f, 0.02f, judgement_z}, total_width + 0.5f, kJudgeLineGlowHeight, 0.38f, g_theme->judge_line_glow);
 }
 
 void draw_overlay(const play_session_state& state) {
