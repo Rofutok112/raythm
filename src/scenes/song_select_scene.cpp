@@ -188,6 +188,7 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
         state_.confirmation_dialog.action = song_select::pending_confirmation_action::delete_song;
         state_.confirmation_dialog.song_index = state_.context_menu.song_index;
         state_.confirmation_dialog.chart_index = -1;
+        state_.confirmation_dialog.suppress_initial_pointer_cancel = true;
         song_select::close_context_menu(state_);
         return;
     case song_select::context_menu_command::edit_chart:
@@ -207,6 +208,7 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
         state_.confirmation_dialog.action = song_select::pending_confirmation_action::delete_chart;
         state_.confirmation_dialog.song_index = state_.context_menu.song_index;
         state_.confirmation_dialog.chart_index = state_.context_menu.chart_index;
+        state_.confirmation_dialog.suppress_initial_pointer_cancel = true;
         song_select::close_context_menu(state_);
         return;
     }
@@ -242,6 +244,12 @@ void song_select_scene::update(float dt) {
 
     preview_controller_.update(dt, song_select::selected_song(state_));
     song_select::tick_animations(state_, dt);
+
+    if (state_.confirmation_dialog.open &&
+        !IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
+        !IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+        state_.confirmation_dialog.suppress_initial_pointer_cancel = false;
+    }
 
     if (IsKeyPressed(KEY_ESCAPE)) {
         if (state_.confirmation_dialog.open) {
