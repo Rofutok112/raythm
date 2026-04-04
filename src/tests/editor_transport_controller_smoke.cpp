@@ -65,9 +65,12 @@ int main() {
         context.state = state.get();
         context.audio_loaded = true;
         context.audio_playing = false;
+        context.playback_tick = 480;
 
         const editor_transport_result result = editor_transport_controller::toggle_playback(context);
-        if (!result.request_play_bgm || result.request_pause_bgm) {
+        if (!result.request_play_bgm || result.request_pause_bgm ||
+            !result.next_space_playback_start_tick.has_value() ||
+            *result.next_space_playback_start_tick != 480) {
             std::cerr << "toggle_playback should request play for paused audio\n";
             return EXIT_FAILURE;
         }
@@ -78,9 +81,13 @@ int main() {
         context.state = state.get();
         context.audio_loaded = true;
         context.audio_playing = true;
+        context.space_playback_start_tick = 240;
 
         const editor_transport_result result = editor_transport_controller::toggle_playback(context);
-        if (!result.request_pause_bgm || result.request_play_bgm) {
+        if (!result.request_pause_bgm || result.request_play_bgm ||
+            !result.seek_bgm_seconds.has_value() ||
+            !nearly_equal(*result.seek_bgm_seconds, state->engine().tick_to_ms(240) / 1000.0) ||
+            result.next_space_playback_start_tick.has_value()) {
             std::cerr << "toggle_playback should request pause for playing audio\n";
             return EXIT_FAILURE;
         }
