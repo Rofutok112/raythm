@@ -43,6 +43,7 @@ public:
     void play_preview(bool restart = true);
     void pause_preview();
     void stop_preview();
+    void unload_preview();
     void set_preview_volume(float volume);
     void seek_preview(double seconds);
     bool is_preview_loaded() const;

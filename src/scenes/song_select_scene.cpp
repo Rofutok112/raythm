@@ -221,6 +221,7 @@ void song_select_scene::apply_confirmation_command(song_select::confirmation_com
         return;
     case song_select::confirmation_command::confirm:
         if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::delete_song) {
+            preview_controller_.stop();
             apply_delete_result(song_select::delete_song(state_, state_.confirmation_dialog.song_index));
         } else if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::delete_chart) {
             apply_delete_result(song_select::delete_chart(state_, state_.confirmation_dialog.song_index,
