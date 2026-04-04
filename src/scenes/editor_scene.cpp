@@ -768,6 +768,11 @@ void editor_scene::handle_timeline_interaction() {
     if (result.request_apply_selected_timing) {
         apply_selected_timing_event();
     }
+    if (result.note_to_delete_index.has_value()) {
+        if (state_->remove_note(*result.note_to_delete_index)) {
+            selected_note_index_.reset();
+        }
+    }
     if (result.note_to_add.has_value()) {
         state_->add_note(*result.note_to_add);
         selected_note_index_ = state_->data().notes.empty()

@@ -51,8 +51,8 @@ int main() {
             timing_panel,
             {state.get(), &meter_map, metrics, {lane_rect.x + lane_rect.width * 0.5f, y}, true,
              false, false, false, true, false, false, 4, std::nullopt, {}});
-        if (!result.selected_note_index.has_value() || *result.selected_note_index != 0) {
-            std::cerr << "right click should select the note under the cursor\n";
+        if (!result.note_to_delete_index.has_value() || *result.note_to_delete_index != 0) {
+            std::cerr << "right click should request deleting the note under the cursor\n";
             return EXIT_FAILURE;
         }
     }
