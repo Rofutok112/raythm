@@ -40,7 +40,7 @@ void judge_system::update(double current_ms, const input_handler& input) {
             state.holding = false;
             state.judged = true;
             state.result = evaluate_hold_release_offset(release_offset_ms);
-            emit_judge(state.result, release_offset_ms, state.note_ref.lane);
+            emit_judge(state.result, release_offset_ms, state.note_ref.lane, false);
         }
     }
 
@@ -142,8 +142,8 @@ bool judge_system::is_in_judgement_window(double offset_ms) const {
     return std::fabs(offset_ms) <= judge_windows_[3];
 }
 
-void judge_system::emit_judge(judge_result result, double offset_ms, int lane) {
-    judge_event event{result, offset_ms, lane};
+void judge_system::emit_judge(judge_result result, double offset_ms, int lane, bool play_hitsound) {
+    judge_event event{result, offset_ms, lane, play_hitsound};
     judge_events_.push_back(event);
     last_judge_ = event;
 }

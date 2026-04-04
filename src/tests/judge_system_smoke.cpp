@@ -30,6 +30,10 @@ int main() {
         std::cerr << "Tap perfect judge failed\n";
         return EXIT_FAILURE;
     }
+    if (!tap_judge->play_hitsound) {
+        std::cerr << "Tap judges should still play hitsounds\n";
+        return EXIT_FAILURE;
+    }
     if (tap_judge->offset_ms != 0.0) {
         std::cerr << "Tap judge should use event timestamp\n";
         return EXIT_FAILURE;
@@ -60,6 +64,10 @@ int main() {
         std::cerr << "Hold release miss should use end timing offset\n";
         return EXIT_FAILURE;
     }
+    if (hold_release_judge->play_hitsound) {
+        std::cerr << "Hold release judges should not play hitsounds\n";
+        return EXIT_FAILURE;
+    }
 
     judge_system hold_release_window_judge;
     hold_release_window_judge.init({note_data{note_type::hold, 960, 1, 1440}}, engine);
@@ -74,6 +82,10 @@ int main() {
     if (!hold_release_bad.has_value() || hold_release_bad->result != judge_result::bad ||
         hold_release_bad->offset_ms != -110.0) {
         std::cerr << "Early hold release should grade within the shared window\n";
+        return EXIT_FAILURE;
+    }
+    if (hold_release_bad->play_hitsound) {
+        std::cerr << "Graded hold release should not play hitsounds\n";
         return EXIT_FAILURE;
     }
 

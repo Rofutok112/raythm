@@ -138,6 +138,7 @@ struct judge_event {
     judge_result result = judge_result::miss;
     double offset_ms = 0.0;
     int lane = 0;
+    bool play_hitsound = true;
 };
 
 // 達成率に応じたランク種別。
