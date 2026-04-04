@@ -59,6 +59,10 @@ int main() {
         std::cerr << "Hold head judge should keep the note active until completion\n";
         return EXIT_FAILURE;
     }
+    if (judge.get_judge_events().size() != 2) {
+        std::cerr << "Hold head judge should not immediately emit an extra miss\n";
+        return EXIT_FAILURE;
+    }
 
     input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1100.0);
     judge.update(1100.0, input);

@@ -88,7 +88,7 @@ void judge_system::update(double current_ms, const input_handler& input) {
             state.completed = true;
         }
 
-        if (state.completed) {
+        if (state.judged) {
             continue;
         }
 
