@@ -32,6 +32,7 @@ public:
     void draw() override;
 
 private:
+    int computed_chart_level() const;
     chart_data make_chart_data_for_save() const;
     editor_resume_state build_resume_state() const;
     editor_scene_sync_context make_sync_context();

@@ -292,9 +292,6 @@ void song_create_scene::draw_song_saved() {
 void song_create_scene::draw_chart_metadata() {
     int row = 0;
 
-    ui::draw_text_input(make_row(row++), chart_name_input_, "Chart Name", "e.g. Normal",
-                        nullptr, kLayer, 16, 64, wide_text_filter, 120.0f);
-
     ui::draw_text_input(make_row(row++), difficulty_input_, "Difficulty", "Normal",
                         "Normal", kLayer, 16, 32, wide_text_filter, 120.0f);
 
@@ -314,9 +311,6 @@ void song_create_scene::draw_chart_metadata() {
 
     ui::draw_text_input(make_row(row++), chart_author_input_, "Author", "Your name",
                         nullptr, kLayer, 16, 64, wide_text_filter, 120.0f);
-
-    ui::draw_text_input(make_row(row++), chart_description_input_, "Description", "(optional)",
-                        nullptr, kLayer, 16, 256, wide_text_filter, 120.0f);
 
     const float button_y = kFormStartY + static_cast<float>(row) * (kRowHeight + kRowGap) + 16.0f;
     constexpr float kButtonWidth = 220.0f;
@@ -568,13 +562,11 @@ bool song_create_scene::create_chart_and_open_editor() {
     chart_meta meta;
     meta.chart_id = generate_uuid();
     meta.song_id = created_song_.meta.song_id;
-    meta.chart_name = chart_name_input_.value;
     meta.key_count = chart_key_count_;
     meta.difficulty = difficulty_input_.value;
     meta.level = level;
     meta.chart_author = chart_author_input_.value;
     meta.is_public = false;
-    meta.description = chart_description_input_.value;
     meta.format_version = 3;
     meta.resolution = 1920;
     meta.offset = 0;

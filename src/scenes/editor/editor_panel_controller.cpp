@@ -22,8 +22,6 @@ editor_metadata_panel_result editor_panel_controller::update_metadata_panel(
         result.request_apply_metadata = true;
         metadata_panel.difficulty_input.active = false;
         metadata_panel.chart_author_input.active = false;
-        metadata_panel.chart_name_input.active = false;
-        metadata_panel.description_input.active = false;
     }
 
     return result;

@@ -80,6 +80,8 @@ add_executable(raythm src/main.cpp
         src/platform/windows_input_source.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
         src/models/data_models.h
@@ -200,10 +202,20 @@ add_executable(chart_parser_smoke
 add_executable(chart_serializer_smoke
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
         src/tests/chart_serializer_smoke.cpp
         src/models/data_models.h)
+
+add_executable(chart_difficulty_smoke
+        src/models/data_models.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/tests/chart_difficulty_smoke.cpp)
 
 add_executable(editor_state_smoke
         src/scenes/editor/editor_command.h
@@ -397,6 +409,7 @@ set(RAYTHM_INCLUDE_DIRS
 target_include_directories(raythm PRIVATE ${RAYTHM_BASS_DIR} ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_parser_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_serializer_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(chart_difficulty_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(editor_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_loader_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_select_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})

@@ -58,13 +58,7 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
     if (!data.meta.song_id.empty()) {
         output << "songId=" << data.meta.song_id << '\n';
     }
-    if (!data.meta.chart_name.empty()) {
-        output << "chartName=" << data.meta.chart_name << '\n';
-    }
     output << "isPublic=" << (data.meta.is_public ? "true" : "false") << '\n';
-    if (!data.meta.description.empty()) {
-        output << "description=" << data.meta.description << '\n';
-    }
     output << '\n';
 
     std::vector<timing_event> sorted_timing = data.timing_events;

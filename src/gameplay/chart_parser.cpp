@@ -225,6 +225,8 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
             } else {
                 meta.level = *parsed;
             }
+        } else if (key == "chartName" || key == "description") {
+            // Accept legacy metadata fields for backward compatibility, but they are no longer used.
         } else if (key == "chartAuthor") {
             meta.chart_author = value;
         } else if (key == "formatVersion") {
@@ -250,12 +252,8 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
             }
         } else if (key == "songId") {
             meta.song_id = value;
-        } else if (key == "chartName") {
-            meta.chart_name = value;
         } else if (key == "isPublic") {
             meta.is_public = (value == "true");
-        } else if (key == "description") {
-            meta.description = value;
         }
     }
 

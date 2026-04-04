@@ -10,6 +10,7 @@
 
 #include "app_paths.h"
 #include "audio_manager.h"
+#include "chart_difficulty.h"
 #include "editor/editor_flow_controller.h"
 #include "editor/editor_session_loader.h"
 #include "path_utils.h"
@@ -424,7 +425,12 @@ chart_data editor_scene::make_chart_data_for_save() const {
         data.meta.chart_id = generated_chart_id(data.meta.difficulty);
     }
     data.meta.song_id = song_.meta.song_id;
+    data.meta.level = chart_difficulty::calculate_level(data);
     return data;
+}
+
+int editor_scene::computed_chart_level() const {
+    return chart_difficulty::calculate_level(make_chart_data_for_save());
 }
 
 std::string editor_scene::generated_chart_id(const std::string& difficulty) const {
@@ -982,16 +988,13 @@ bool editor_scene::can_delete_selected_timing_event() const {
 }
 
 bool editor_scene::has_active_metadata_input() const {
-    return metadata_panel_.difficulty_input.active || metadata_panel_.chart_author_input.active
-        || metadata_panel_.chart_name_input.active || metadata_panel_.description_input.active;
+    return metadata_panel_.difficulty_input.active || metadata_panel_.chart_author_input.active;
 }
 
 bool editor_scene::apply_metadata_changes(bool clear_notes_for_key_count_change) {
     chart_meta updated = state_->data().meta;
     updated.difficulty = metadata_panel_.difficulty_input.value;
     updated.chart_author = metadata_panel_.chart_author_input.value;
-    updated.chart_name = metadata_panel_.chart_name_input.value;
-    updated.description = metadata_panel_.description_input.value;
     updated.key_count = metadata_panel_.key_count;
     if (state_->file_path().empty()) {
         updated.chart_id = generated_chart_id(updated.difficulty);
@@ -1120,71 +1123,65 @@ void editor_scene::draw_left_panel() {
     draw_marquee_text(song_.meta.title.c_str(), song_title_rect.x,
                       song_title_rect.y + 2.0f, 18, t.text_secondary, song_title_rect.width, now);
 
-    const Rectangle meta_box = {content.x, content.y + 100.0f, content.width, 294.0f};
+    const Rectangle meta_box = {content.x, content.y + 100.0f, content.width, 214.0f};
     ui::draw_section(meta_box);
     ui::draw_text_in_rect("Metadata", 22,
                           {meta_box.x + 12.0f, meta_box.y + 10.0f, meta_box.width - 24.0f, 28.0f},
                           t.text, ui::text_align::left);
 
-    const ui::text_input_result chart_name_result = ui::draw_text_input(
-        {meta_box.x + 12.0f, meta_box.y + 46.0f, meta_box.width - 24.0f, 34.0f},
-        metadata_panel_.chart_name_input, "Name", "Chart name", nullptr,
-        ui::draw_layer::base, 16, 64, nullptr, 58.0f);
     const ui::text_input_result difficulty_result = ui::draw_text_input(
-        {meta_box.x + 12.0f, meta_box.y + 86.0f, meta_box.width - 24.0f, 34.0f},
+        {meta_box.x + 12.0f, meta_box.y + 46.0f, meta_box.width - 24.0f, 34.0f},
         metadata_panel_.difficulty_input, "Diff", "Difficulty", "New",
         ui::draw_layer::base, 16, 24, accepts_metadata_character, 58.0f);
     const ui::text_input_result author_result = ui::draw_text_input(
-        {meta_box.x + 12.0f, meta_box.y + 126.0f, meta_box.width - 24.0f, 34.0f},
+        {meta_box.x + 12.0f, meta_box.y + 86.0f, meta_box.width - 24.0f, 34.0f},
         metadata_panel_.chart_author_input, "Author", "Chart author", "Unknown",
         ui::draw_layer::base, 16, 32, accepts_metadata_character, 58.0f);
-    const ui::text_input_result description_result = ui::draw_text_input(
-        {meta_box.x + 12.0f, meta_box.y + 166.0f, meta_box.width - 24.0f, 34.0f},
-        metadata_panel_.description_input, "Desc", "Description", nullptr,
-        ui::draw_layer::base, 16, 256, nullptr, 58.0f);
 
     const ui::selector_state key_count_selector = ui::draw_value_selector(
-        {meta_box.x + 12.0f, meta_box.y + 206.0f, meta_box.width - 24.0f, 34.0f},
+        {meta_box.x + 12.0f, meta_box.y + 126.0f, meta_box.width - 24.0f, 34.0f},
         "Mode", key_count_label(metadata_panel_.key_count),
         16, 26.0f, 58.0f, 12.0f);
     const editor_metadata_panel_result panel_result = editor_panel_controller::update_metadata_panel(
         metadata_panel_,
         timing_panel_,
         {
-            difficulty_result.activated || author_result.activated || chart_name_result.activated || description_result.activated,
-            difficulty_result.submitted || author_result.submitted || chart_name_result.submitted || description_result.submitted,
+            difficulty_result.activated || author_result.activated,
+            difficulty_result.submitted || author_result.submitted,
             key_count_selector.left.clicked || key_count_selector.right.clicked,
         });
     if (panel_result.request_apply_metadata) {
         apply_metadata_changes(false);
     }
 
-    ui::draw_label_value({meta_box.x + 12.0f, meta_box.y + 250.0f, meta_box.width - 24.0f, 20.0f},
+    ui::draw_label_value({meta_box.x + 12.0f, meta_box.y + 170.0f, meta_box.width - 24.0f, 20.0f},
                          "Status", status_label, 16, t.text_secondary,
                          state_->is_dirty() ? t.error : t.success, 58.0f);
 
     if (!metadata_panel_.error.empty()) {
         ui::draw_text_in_rect(metadata_panel_.error.c_str(), 16,
-                              {meta_box.x + 12.0f, meta_box.y + 268.0f, meta_box.width - 24.0f, 20.0f},
+                              {meta_box.x + 12.0f, meta_box.y + 188.0f, meta_box.width - 24.0f, 20.0f},
                               t.error, ui::text_align::left);
     }
 
-    const Rectangle tools_box = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 114.0f};
-    ui::draw_section(tools_box);
-    ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 16.0f, tools_box.width - 24.0f, 24.0f},
+    const Rectangle tools_box_expanded = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 142.0f};
+    ui::draw_section(tools_box_expanded);
+    ui::draw_label_value({tools_box_expanded.x + 12.0f, tools_box_expanded.y + 16.0f, tools_box_expanded.width - 24.0f, 24.0f},
                          "Mode", key_count_label(state_->data().meta.key_count), 16,
                          t.text_secondary, t.text, 92.0f);
-    ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 44.0f, tools_box.width - 24.0f, 24.0f},
+    ui::draw_label_value({tools_box_expanded.x + 12.0f, tools_box_expanded.y + 44.0f, tools_box_expanded.width - 24.0f, 24.0f},
                          "Offset", TextFormat("%d ms", state_->data().meta.offset), 16,
                          t.text_secondary, t.text, 92.0f);
-
-    ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 72.0f, tools_box.width - 24.0f, 24.0f},
+    ui::draw_label_value({tools_box_expanded.x + 12.0f, tools_box_expanded.y + 72.0f, tools_box_expanded.width - 24.0f, 24.0f},
                          "Notes", TextFormat("%d", static_cast<int>(state_->data().notes.size())), 16,
+                         t.text_secondary, t.text, 92.0f);
+    ui::draw_label_value({tools_box_expanded.x + 12.0f, tools_box_expanded.y + 100.0f, tools_box_expanded.width - 24.0f, 24.0f},
+                         "Level", TextFormat("%d", computed_chart_level()), 16,
                          t.text_secondary, t.text, 92.0f);
 
     if (!load_errors_.empty()) {
         ui::draw_text_in_rect(load_errors_.front().c_str(), 18,
-                              {content.x, tools_box.y + tools_box.height + 18.0f, content.width, 52.0f},
+                              {content.x, tools_box_expanded.y + tools_box_expanded.height + 18.0f, content.width, 52.0f},
                               t.error, ui::text_align::left);
     }
 }

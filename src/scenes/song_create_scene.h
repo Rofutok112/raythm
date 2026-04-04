@@ -47,11 +47,9 @@ private:
     ui::text_input_state sns_x_input_;
 
     // Chart metadata inputs
-    ui::text_input_state chart_name_input_;
     ui::text_input_state difficulty_input_;
     ui::text_input_state level_input_;
     ui::text_input_state chart_author_input_;
-    ui::text_input_state chart_description_input_;
     int chart_key_count_ = 4;
 
     // Created song data (stored after song creation)
