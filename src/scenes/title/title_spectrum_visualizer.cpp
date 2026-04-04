@@ -36,20 +36,35 @@ Color with_alpha_scale(Color color, float alpha_scale) {
 
 void title_spectrum_visualizer::reset() {
     bars_.fill(0.0f);
+    dynamic_peak_ = 0.12f;
 }
 
 void title_spectrum_visualizer::update() {
     std::array<float, 128> spectrum = {};
     const bool has_audio = audio_manager::instance().get_bgm_fft256(spectrum);
+    std::array<float, kBarCount> targets = {};
+    float frame_peak = 0.0f;
 
     for (int i = 0; i < kBarCount; ++i) {
         float target = 0.0f;
         if (has_audio) {
             const float band = average_band_energy(spectrum, kSpectrumRanges[static_cast<size_t>(i)],
                                                    kSpectrumRanges[static_cast<size_t>(i + 1)]);
-            target = std::clamp(std::sqrt(std::max(0.0f, band)) * 7.5f, 0.0f, 1.0f);
+            target = std::sqrt(std::max(0.0f, band)) * 7.5f;
         }
+        targets[static_cast<size_t>(i)] = target;
+        frame_peak = std::max(frame_peak, target);
+    }
 
+    if (frame_peak > dynamic_peak_) {
+        dynamic_peak_ += (frame_peak - dynamic_peak_) * 0.18f;
+    } else {
+        dynamic_peak_ += (frame_peak - dynamic_peak_) * 0.04f;
+    }
+    dynamic_peak_ = std::max(0.12f, dynamic_peak_);
+
+    for (int i = 0; i < kBarCount; ++i) {
+        const float target = std::clamp(targets[static_cast<size_t>(i)] / dynamic_peak_, 0.0f, 1.0f);
         if (target > bars_[static_cast<size_t>(i)]) {
             bars_[static_cast<size_t>(i)] += (target - bars_[static_cast<size_t>(i)]) * 0.45f;
         } else {
@@ -68,16 +83,20 @@ void title_spectrum_visualizer::draw(const Rectangle& rect) const {
     const float bar_width =
         (rect.width - gap * static_cast<float>(kBarCount - 1)) / static_cast<float>(kBarCount);
     const float baseline = rect.y + rect.height;
+    const float max_height = rect.height * 0.7f;
 
     for (int i = 0; i < kBarCount; ++i) {
         const float value = std::clamp(bars_[static_cast<size_t>(i)], 0.0f, 1.0f);
+        if (value < 0.025f) {
+            continue;
+        }
         const float shaped_value = std::pow(value, 0.82f);
-        const float height = std::max(10.0f, rect.height * shaped_value);
+        const float height = max_height * shaped_value;
         const float x = rect.x + static_cast<float>(i) * (bar_width + gap);
         const Rectangle bar_rect = {x, baseline - height, bar_width, height};
-        const Rectangle glow_rect = {x, baseline - height, bar_width, rect.height};
-        DrawRectangleRec(glow_rect, with_alpha_scale(t.accent, 0.015f + shaped_value * 0.05f));
-        DrawRectangleRec(bar_rect, with_alpha_scale(t.accent, 0.10f + shaped_value * 0.24f));
-        DrawRectangleLinesEx(bar_rect, 1.0f, with_alpha_scale(t.text, 0.04f + shaped_value * 0.08f));
+        const float tail_height = std::min(max_height, height * 1.18f);
+        const Rectangle tail_rect = {x, baseline - tail_height, bar_width, tail_height};
+        DrawRectangleRec(tail_rect, with_alpha_scale(t.accent, 0.02f + shaped_value * 0.05f));
+        DrawRectangleRec(bar_rect, with_alpha_scale(t.accent, 0.12f + shaped_value * 0.22f));
     }
 }

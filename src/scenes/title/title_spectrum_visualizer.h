@@ -14,4 +14,5 @@ public:
 
 private:
     std::array<float, kBarCount> bars_ = {};
+    float dynamic_peak_ = 0.12f;
 };
