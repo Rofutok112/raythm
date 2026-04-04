@@ -32,7 +32,7 @@ void judge_system::update(double current_ms, const input_handler& input) {
             }
 
             if (event.timestamp_ms >= state.end_target_ms) {
-                state.holding = false;
+                complete_held_note(state, false);
                 continue;
             }
 
@@ -83,9 +83,7 @@ void judge_system::update(double current_ms, const input_handler& input) {
 
     for (note_state& state : note_states_) {
         if (state.holding && current_ms >= state.end_target_ms) {
-            emit_judge(judge_result::perfect, 0.0, state.note_ref.lane, false, false);
-            state.holding = false;
-            state.completed = true;
+            complete_held_note(state, true);
         }
 
         if (state.judged) {
@@ -144,6 +142,14 @@ judge_result judge_system::evaluate_hold_release_offset(double offset_ms) const 
 
 bool judge_system::is_in_judgement_window(double offset_ms) const {
     return std::fabs(offset_ms) <= judge_windows_[3];
+}
+
+void judge_system::complete_held_note(note_state& state, bool emit_display_judge) {
+    state.holding = false;
+    state.completed = true;
+    if (emit_display_judge) {
+        emit_judge(judge_result::perfect, 0.0, state.note_ref.lane, false, false);
+    }
 }
 
 void judge_system::emit_judge(judge_result result, double offset_ms, int lane,

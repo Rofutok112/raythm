@@ -21,6 +21,7 @@ private:
     judge_result evaluate_offset(double offset_ms) const;
     judge_result evaluate_hold_release_offset(double offset_ms) const;
     bool is_in_judgement_window(double offset_ms) const;
+    void complete_held_note(note_state& state, bool emit_display_judge);
     void emit_judge(judge_result result, double offset_ms, int lane,
                     bool play_hitsound = true, bool apply_gameplay_effects = true);
 

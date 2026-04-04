@@ -139,6 +139,24 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    judge_system hold_release_after_end_judge;
+    hold_release_after_end_judge.init({note_data{note_type::hold, 960, 1, 1440}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+    hold_release_after_end_judge.update(1000.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1510.0);
+    hold_release_after_end_judge.update(1510.0, input);
+    if (!hold_release_after_end_judge.note_states().front().completed ||
+        hold_release_after_end_judge.note_states().front().holding) {
+        std::cerr << "Releasing after hold end should still complete the note\n";
+        return EXIT_FAILURE;
+    }
+    if (hold_release_after_end_judge.get_last_judge().has_value()) {
+        std::cerr << "Releasing after hold end should not emit an extra judge\n";
+        return EXIT_FAILURE;
+    }
+
     judge_system miss_judge;
     miss_judge.init({note_data{note_type::tap, 480, 0, 480}}, engine);
     input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1200.0);
