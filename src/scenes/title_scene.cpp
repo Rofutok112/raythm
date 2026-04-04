@@ -1,9 +1,7 @@
 #include "title_scene.h"
 
-#include <filesystem>
 #include <memory>
 
-#include "audio_manager.h"
 #include "raylib.h"
 #include "scene_common.h"
 #include "scene_manager.h"
@@ -24,8 +22,11 @@ constexpr Rectangle kSubtitleRect = {kTitleHeaderRect.x + 10.0f, kTitleHeaderRec
 constexpr Rectangle kHintAreaRect = ui::place(kScreenRect, 320.0f, 52.0f,
                                               ui::anchor::bottom_left, ui::anchor::bottom_left,
                                               {82.0f, -46.0f});
-const std::filesystem::path kTitleIntroPath = std::filesystem::path("assets") / "audio" / "title_intro.mp3";
-const std::filesystem::path kTitleLoopPath = std::filesystem::path("assets") / "audio" / "title_loop.mp3";
+constexpr Rectangle kSpectrumRect = ui::place(kScreenRect, 760.0f, 150.0f,
+                                              ui::anchor::bottom_right, ui::anchor::bottom_right,
+                                              {-82.0f, -54.0f});
+constexpr const char* kTitleIntroPath = "assets/audio/title_intro.mp3";
+constexpr const char* kTitleLoopPath = "assets/audio/title_loop.mp3";
 
 }  // namespace
 
@@ -33,54 +34,20 @@ title_scene::title_scene(scene_manager& manager) : scene(manager) {
 }
 
 void title_scene::on_enter() {
-    intro_bgm_path_ = kTitleIntroPath.string();
-    loop_bgm_path_ = kTitleLoopPath.string();
-    start_title_bgm();
+    bgm_controller_.configure(kTitleIntroPath, kTitleLoopPath);
+    spectrum_visualizer_.reset();
+    bgm_controller_.on_enter();
 }
 
 void title_scene::on_exit() {
-    bgm_phase_ = bgm_phase::stopped;
-    audio_manager::instance().stop_bgm();
-}
-
-void title_scene::start_title_bgm() {
-    bgm_phase_ = bgm_phase::stopped;
-    if (intro_bgm_path_.empty() || !audio_manager::instance().load_bgm(intro_bgm_path_)) {
-        return;
-    }
-
-    audio_manager::instance().play_bgm(true);
-    bgm_phase_ = bgm_phase::intro;
-}
-
-void title_scene::update_title_bgm() {
-    if (bgm_phase_ == bgm_phase::stopped || !audio_manager::instance().is_bgm_loaded()) {
-        return;
-    }
-
-    if (audio_manager::instance().is_bgm_playing()) {
-        return;
-    }
-
-    if (bgm_phase_ == bgm_phase::intro) {
-        if (!loop_bgm_path_.empty() && audio_manager::instance().load_bgm(loop_bgm_path_)) {
-            audio_manager::instance().play_bgm(true);
-            bgm_phase_ = bgm_phase::loop;
-            return;
-        }
-        bgm_phase_ = bgm_phase::stopped;
-        return;
-    }
-
-    if (bgm_phase_ == bgm_phase::loop) {
-        audio_manager::instance().seek_bgm(0.0);
-        audio_manager::instance().play_bgm(true);
-    }
+    bgm_controller_.on_exit();
+    spectrum_visualizer_.reset();
 }
 
 // ENTER で曲選択、S で設定画面へ遷移する。
 void title_scene::update(float dt) {
-    update_title_bgm();
+    bgm_controller_.update();
+    spectrum_visualizer_.update();
 
     if (transitioning_to_song_select_) {
         transition_fade_t_ = std::min(1.0f, transition_fade_t_ + dt / 0.3f);
@@ -122,6 +89,7 @@ void title_scene::draw() {
     virtual_screen::begin();
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
+    spectrum_visualizer_.draw(kSpectrumRect);
     ui::draw_text_in_rect("raythm", 124, kTitleRect, t.text, ui::text_align::left);
     ui::draw_text_in_rect("trace the line before the beat disappears", 30, kSubtitleRect, t.text_dim, ui::text_align::left);
 
