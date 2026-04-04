@@ -35,16 +35,13 @@ Color fade_spectrum_color(Color base, float alpha_scale) {
     return with_alpha_scale(base, alpha_scale);
 }
 
-int band_group_for_index(int band_index, int band_count) {
-    const int low_end = band_count / 3;
-    const int mid_end = (band_count * 2) / 3;
-    if (band_index < low_end) {
-        return 0;
+float band_visual_weight(int band_index, int band_count) {
+    if (band_count <= 1) {
+        return 1.0f;
     }
-    if (band_index < mid_end) {
-        return 1;
-    }
-    return 2;
+
+    const float normalized_index = static_cast<float>(band_index) / static_cast<float>(band_count - 1);
+    return 0.52f + normalized_index * 0.68f;
 }
 
 }  // namespace
@@ -58,24 +55,17 @@ void title_spectrum_visualizer::update() {
     std::array<float, 128> spectrum = {};
     const bool has_audio = audio_manager::instance().get_bgm_fft256(spectrum);
     std::array<float, kBarCount> targets = {};
-    std::array<float, 3> group_peaks = {};
+    float frame_peak = 0.0f;
 
     for (int i = 0; i < kBarCount; ++i) {
         float target = 0.0f;
         if (has_audio) {
             const float band = average_band_energy(spectrum, kSpectrumRanges[static_cast<size_t>(i)],
                                                    kSpectrumRanges[static_cast<size_t>(i + 1)]);
-            target = std::sqrt(std::max(0.0f, band)) * 7.5f;
+            target = std::sqrt(std::max(0.0f, band)) * 7.5f * band_visual_weight(i, kBarCount);
         }
         targets[static_cast<size_t>(i)] = target;
-        const int group_index = band_group_for_index(i, kBarCount);
-        group_peaks[static_cast<size_t>(group_index)] =
-            std::max(group_peaks[static_cast<size_t>(group_index)], target);
-    }
-
-    float frame_peak = 0.0f;
-    for (float group_peak : group_peaks) {
-        frame_peak = std::max(frame_peak, group_peak);
+        frame_peak = std::max(frame_peak, target);
     }
 
     if (frame_peak > dynamic_peak_) {
@@ -86,9 +76,7 @@ void title_spectrum_visualizer::update() {
     dynamic_peak_ = std::max(0.12f, dynamic_peak_);
 
     for (int i = 0; i < kBarCount; ++i) {
-        const int group_index = band_group_for_index(i, kBarCount);
-        const float group_peak = std::max(0.12f, group_peaks[static_cast<size_t>(group_index)]);
-        const float target = std::clamp(targets[static_cast<size_t>(i)] / group_peak, 0.0f, 1.0f);
+        const float target = std::clamp(targets[static_cast<size_t>(i)] / dynamic_peak_, 0.0f, 1.0f);
         if (target > bars_[static_cast<size_t>(i)]) {
             bars_[static_cast<size_t>(i)] += (target - bars_[static_cast<size_t>(i)]) * 0.45f;
         } else {
