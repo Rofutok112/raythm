@@ -10,8 +10,9 @@
 namespace {
 
 constexpr std::array<int, title_spectrum_visualizer::kBarCount + 1> kSpectrumRanges = {
-    1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 17, 20,
-    24, 29, 35, 42, 50, 60, 72, 86, 102, 114, 122, 128
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+    17, 18, 20, 22, 24, 26, 28, 30, 33, 36, 39, 42, 46, 50, 54, 58,
+    63, 68, 73, 78, 84, 90, 96, 102, 108, 112, 116, 119, 122, 124, 126, 127, 128
 };
 
 float average_band_energy(const std::array<float, 128>& spectrum, int begin, int end) {
@@ -63,18 +64,20 @@ void title_spectrum_visualizer::draw(const Rectangle& rect) const {
     }
 
     const auto& t = *g_theme;
-    const float gap = 8.0f;
+    const float gap = 2.0f;
     const float bar_width =
         (rect.width - gap * static_cast<float>(kBarCount - 1)) / static_cast<float>(kBarCount);
     const float baseline = rect.y + rect.height;
 
     for (int i = 0; i < kBarCount; ++i) {
         const float value = std::clamp(bars_[static_cast<size_t>(i)], 0.0f, 1.0f);
-        const float height = std::max(4.0f, rect.height * value);
+        const float shaped_value = std::pow(value, 0.82f);
+        const float height = std::max(10.0f, rect.height * shaped_value);
         const float x = rect.x + static_cast<float>(i) * (bar_width + gap);
         const Rectangle bar_rect = {x, baseline - height, bar_width, height};
-        const float glow = 0.18f + value * 0.42f;
-        DrawRectangleRounded(bar_rect, 0.35f, 8, with_alpha_scale(t.accent, glow));
-        DrawRectangleRoundedLinesEx(bar_rect, 0.35f, 8, 1.0f, with_alpha_scale(t.text, 0.12f + value * 0.25f));
+        const Rectangle glow_rect = {x, baseline - height, bar_width, rect.height};
+        DrawRectangleRec(glow_rect, with_alpha_scale(t.accent, 0.015f + shaped_value * 0.05f));
+        DrawRectangleRec(bar_rect, with_alpha_scale(t.accent, 0.10f + shaped_value * 0.24f));
+        DrawRectangleLinesEx(bar_rect, 1.0f, with_alpha_scale(t.text, 0.04f + shaped_value * 0.08f));
     }
 }
