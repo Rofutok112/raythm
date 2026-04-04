@@ -124,6 +124,8 @@ add_executable(raythm src/main.cpp
         src/scenes/editor_scene.h
         src/scenes/play/play_flow_controller.cpp
         src/scenes/play/play_flow_controller.h
+        src/scenes/play/play_chart_filter.cpp
+        src/scenes/play/play_chart_filter.h
         src/scenes/play/play_note_draw_queue.cpp
         src/scenes/play/play_note_draw_queue.h
         src/scenes/play/play_renderer.cpp
@@ -238,6 +240,12 @@ add_executable(play_note_draw_queue_smoke
         src/scenes/play/play_note_draw_queue.cpp
         src/scenes/play/play_note_draw_queue.h
         src/tests/play_note_draw_queue_smoke.cpp)
+
+add_executable(play_chart_filter_smoke
+        src/models/data_models.h
+        src/scenes/play/play_chart_filter.cpp
+        src/scenes/play/play_chart_filter.h
+        src/tests/play_chart_filter_smoke.cpp)
 
 add_executable(play_flow_controller_smoke
         src/models/data_models.h
@@ -364,6 +372,7 @@ target_include_directories(timing_engine_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(judge_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(score_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(play_note_draw_queue_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(play_chart_filter_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(play_flow_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(editor_transport_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(editor_flow_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
