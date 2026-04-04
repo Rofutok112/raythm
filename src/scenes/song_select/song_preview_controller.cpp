@@ -64,7 +64,7 @@ void preview_controller::update(float dt, const song_entry* selected_song) {
 }
 
 void preview_controller::stop() {
-    audio_manager::instance().stop_preview();
+    audio_manager::instance().unload_preview();
     preview_song_id_.clear();
     jacket_song_id_.clear();
     pending_preview_song_.reset();

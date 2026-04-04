@@ -8,6 +8,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 #include "app_paths.h"
 
@@ -150,6 +151,17 @@ void load_settings(game_settings& settings) {
         parse_key_array(*v, settings.keys.keys_4);
     if (auto v = extract_string(content, "keys6"))
         parse_key_array(*v, settings.keys.keys_6);
+}
+
+void initialize_settings_storage(const game_settings& defaults) {
+    app_paths::ensure_directories();
+
+    std::error_code ec;
+    if (fs::exists(settings_path(), ec) && !ec) {
+        return;
+    }
+
+    save_settings(defaults);
 }
 
 void save_settings(const game_settings& settings) {

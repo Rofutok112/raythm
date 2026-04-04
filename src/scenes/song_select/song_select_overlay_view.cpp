@@ -100,7 +100,8 @@ confirmation_command draw_confirmation_dialog(const state& state) {
     if (confirm.clicked) {
         return confirmation_command::confirm;
     }
-    if (cancel.clicked || (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
+    if (cancel.clicked || (!state.confirmation_dialog.suppress_initial_pointer_cancel &&
+                           IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
                            !ui::is_hovered(layout::kConfirmDialogRect, layout::kModalLayer))) {
         return confirmation_command::cancel;
     }

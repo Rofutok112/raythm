@@ -52,6 +52,7 @@ struct confirmation_dialog_state {
     pending_confirmation_action action = pending_confirmation_action::none;
     int song_index = -1;
     int chart_index = -1;
+    bool suppress_initial_pointer_cancel = false;
 };
 
 struct recent_result_offset {
