@@ -35,6 +35,15 @@ Color fade_spectrum_color(Color base, float alpha_scale) {
     return with_alpha_scale(base, alpha_scale);
 }
 
+float band_visual_weight(int band_index, int band_count) {
+    if (band_count <= 1) {
+        return 1.0f;
+    }
+
+    const float normalized_index = static_cast<float>(band_index) / static_cast<float>(band_count - 1);
+    return 0.52f + normalized_index * 0.68f;
+}
+
 }  // namespace
 
 void title_spectrum_visualizer::reset() {
@@ -53,7 +62,7 @@ void title_spectrum_visualizer::update() {
         if (has_audio) {
             const float band = average_band_energy(spectrum, kSpectrumRanges[static_cast<size_t>(i)],
                                                    kSpectrumRanges[static_cast<size_t>(i + 1)]);
-            target = std::sqrt(std::max(0.0f, band)) * 7.5f;
+            target = std::sqrt(std::max(0.0f, band)) * 7.5f * band_visual_weight(i, kBarCount);
         }
         targets[static_cast<size_t>(i)] = target;
         frame_peak = std::max(frame_peak, target);
