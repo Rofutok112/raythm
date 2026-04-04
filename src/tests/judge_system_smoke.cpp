@@ -34,6 +34,10 @@ int main() {
         std::cerr << "Tap judges should still play hitsounds\n";
         return EXIT_FAILURE;
     }
+    if (!tap_judge->apply_gameplay_effects) {
+        std::cerr << "Tap judges should still affect gameplay\n";
+        return EXIT_FAILURE;
+    }
     if (tap_judge->offset_ms != 0.0) {
         std::cerr << "Tap judge should use event timestamp\n";
         return EXIT_FAILURE;
@@ -68,6 +72,10 @@ int main() {
         std::cerr << "Hold release judges should not play hitsounds\n";
         return EXIT_FAILURE;
     }
+    if (!hold_release_judge->apply_gameplay_effects) {
+        std::cerr << "Early hold release miss should still affect gameplay\n";
+        return EXIT_FAILURE;
+    }
 
     judge_system hold_release_window_judge;
     hold_release_window_judge.init({note_data{note_type::hold, 960, 1, 1440}}, engine);
@@ -88,6 +96,10 @@ int main() {
         std::cerr << "Graded hold release should not play hitsounds\n";
         return EXIT_FAILURE;
     }
+    if (!hold_release_bad->apply_gameplay_effects) {
+        std::cerr << "Graded hold release should still affect gameplay\n";
+        return EXIT_FAILURE;
+    }
 
     judge_system hold_release_success_judge;
     hold_release_success_judge.init({note_data{note_type::hold, 960, 1, 1440}}, engine);
@@ -97,8 +109,13 @@ int main() {
     hold_release_success_judge.update(1000.0, input);
     input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1510.0);
     hold_release_success_judge.update(1510.0, input);
-    if (hold_release_success_judge.get_last_judge().has_value()) {
-        std::cerr << "Holding through the end should not emit an extra judge\n";
+    const std::optional<judge_event> hold_release_success = hold_release_success_judge.get_last_judge();
+    if (!hold_release_success.has_value() || hold_release_success->result != judge_result::perfect) {
+        std::cerr << "Holding through the end should emit a perfect display judge\n";
+        return EXIT_FAILURE;
+    }
+    if (hold_release_success->play_hitsound || hold_release_success->apply_gameplay_effects) {
+        std::cerr << "Hold completion display judge should be presentation-only\n";
         return EXIT_FAILURE;
     }
     if (hold_release_success_judge.note_states().front().holding) {

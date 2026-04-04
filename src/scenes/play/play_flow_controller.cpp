@@ -122,8 +122,10 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
     const std::vector<judge_event>& judge_events = state.judge_system.get_judge_events();
     state.last_judge = state.judge_system.get_last_judge();
     for (const judge_event& event : judge_events) {
-        state.score_system.on_judge(event);
-        state.gauge.on_judge(event.result);
+        if (event.apply_gameplay_effects) {
+            state.score_system.on_judge(event);
+            state.gauge.on_judge(event.result);
+        }
         if (!state.hitsound_path.empty() && event.play_hitsound && event.result != judge_result::miss) {
             ++result.hitsound_count;
         }
