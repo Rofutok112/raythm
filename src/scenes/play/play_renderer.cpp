@@ -59,6 +59,8 @@ constexpr float kTapNoteWireHeight = 0.22f;
 constexpr float kTapNoteWireLength = 0.82f;
 constexpr float kHoldNoteBaseHeight = 0.12f;
 constexpr float kHoldNoteWireHeight = 0.14f;
+constexpr float kJudgeLineY = 0.40f;
+constexpr float kJudgeLineGlowY = 0.46f;
 
 float lane_center_x(int lane, int key_count) {
     const float total_width = key_count * g_settings.lane_width + (key_count - 1) * kLaneGap;
@@ -266,8 +268,8 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
         }
     }
 
-    DrawCube({0.0f, 0.01f, judgement_z}, total_width + 0.9f, 0.01f, 0.62f, g_theme->judge_line);
-    DrawCube({0.0f, 0.02f, judgement_z}, total_width + 0.5f, kJudgeLineGlowHeight, 0.38f, g_theme->judge_line_glow);
+    DrawCube({0.0f, kJudgeLineY, judgement_z}, total_width + 0.9f, 0.01f, 0.62f, g_theme->judge_line);
+    DrawCube({0.0f, kJudgeLineGlowY, judgement_z}, total_width + 0.5f, kJudgeLineGlowHeight, 0.38f, g_theme->judge_line_glow);
 }
 
 void draw_overlay(const play_session_state& state) {
