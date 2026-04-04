@@ -671,6 +671,7 @@ void editor_scene::handle_shortcuts() {
         transport_context.audio_playing = audio_playing_;
         transport_context.playback_tick = playback_tick_;
         transport_context.space_playback_start_tick = space_playback_start_tick_;
+        const std::optional<int> restore_tick = transport_context.space_playback_start_tick;
         const editor_transport_result transport_result =
             editor_transport_controller::toggle_playback(transport_context);
         space_playback_start_tick_ = transport_result.next_space_playback_start_tick;
@@ -687,6 +688,9 @@ void editor_scene::handle_shortcuts() {
             audio_manager::instance().play_bgm(restart);
         }
         sync_transport_state(true);
+        if (transport_result.request_pause_bgm && restore_tick.has_value()) {
+            scroll_to_tick(*restore_tick);
+        }
     }
 
     if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_Z)) {
