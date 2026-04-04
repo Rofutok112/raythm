@@ -116,8 +116,6 @@ add_executable(raythm src/main.cpp
         src/scenes/title_scene.h
         src/scenes/title/title_bgm_controller.cpp
         src/scenes/title/title_bgm_controller.h
-        src/scenes/title/title_logo_reactor.cpp
-        src/scenes/title/title_logo_reactor.h
         src/scenes/title/title_spectrum_visualizer.cpp
         src/scenes/title/title_spectrum_visualizer.h
         src/scenes/song_create_scene.cpp
