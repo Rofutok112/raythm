@@ -1,6 +1,7 @@
 #include "app_paths.h"
 
 #include <cstdlib>
+#include <system_error>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -90,9 +91,10 @@ std::filesystem::path song_offsets_path() {
 }
 
 void ensure_directories() {
-    std::filesystem::create_directories(app_data_root());
-    std::filesystem::create_directories(songs_root());
-    std::filesystem::create_directories(charts_root());
+    std::error_code ec;
+    std::filesystem::create_directories(app_data_root(), ec);
+    std::filesystem::create_directories(songs_root(), ec);
+    std::filesystem::create_directories(charts_root(), ec);
 }
 
 }
