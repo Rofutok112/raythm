@@ -16,6 +16,8 @@ namespace {
 namespace fs = std::filesystem;
 constexpr float kMinNoteSpeed = 0.010f;
 constexpr float kMaxNoteSpeed = 0.200f;
+constexpr float kMinNoteHeight = 0.5f;
+constexpr float kMaxNoteHeight = 2.0f;
 
 fs::path settings_path() {
     return app_paths::settings_path();
@@ -132,6 +134,8 @@ void load_settings(game_settings& settings) {
         settings.lane_width = std::clamp(std::stof(*v), 0.6f, 5.0f);
     if (auto v = extract_number_token(content, "noteSpeed"))
         settings.note_speed = std::clamp(std::stof(*v), kMinNoteSpeed, kMaxNoteSpeed);
+    if (auto v = extract_number_token(content, "noteHeight"))
+        settings.note_height = std::clamp(std::stof(*v), kMinNoteHeight, kMaxNoteHeight);
     if (auto v = extract_number_token(content, "globalNoteOffsetMs"))
         settings.global_note_offset_ms = std::clamp(std::stoi(*v), -10000, 10000);
     if (auto v = extract_number_token(content, "bgmVolume"))
@@ -173,6 +177,7 @@ void save_settings(const game_settings& settings) {
     out << "  \"cameraAngle\": " << settings.camera_angle_degrees << ",\n";
     out << "  \"laneWidth\": " << settings.lane_width << ",\n";
     out << "  \"noteSpeed\": " << settings.note_speed << ",\n";
+    out << "  \"noteHeight\": " << settings.note_height << ",\n";
     out << "  \"globalNoteOffsetMs\": " << settings.global_note_offset_ms << ",\n";
     out << "  \"bgmVolume\": " << settings.bgm_volume << ",\n";
     out << "  \"seVolume\": " << settings.se_volume << ",\n";

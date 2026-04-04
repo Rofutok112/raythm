@@ -53,6 +53,12 @@ constexpr Rectangle kJudgeFeedbackRect = ui::place(kScreenRect, 320.0f, 42.0f,
                                                    {0.0f, 34.0f});
 constexpr Rectangle kFailureTextRect = ui::place(kScreenRect, 360.0f, 44.0f,
                                                  ui::anchor::center, ui::anchor::center);
+constexpr float kTapNoteBaseHeight = 0.2f;
+constexpr float kTapNoteBaseLength = 0.78f;
+constexpr float kTapNoteWireHeight = 0.22f;
+constexpr float kTapNoteWireLength = 0.82f;
+constexpr float kHoldNoteBaseHeight = 0.12f;
+constexpr float kHoldNoteWireHeight = 0.14f;
 
 float lane_center_x(int lane, int key_count) {
     const float total_width = key_count * g_settings.lane_width + (key_count - 1) * kLaneGap;
@@ -242,18 +248,24 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
                 const float visual_head_z = note_state.holding ? judgement_z : head_z;
                 const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);
                 const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);
+                const float hold_height = kHoldNoteBaseHeight * g_settings.note_height;
+                const float hold_wire_height = kHoldNoteWireHeight * g_settings.note_height;
                 if (segment_end > segment_start) {
                     DrawCube({center_x, 0.30f, (segment_start + segment_end) * 0.5f}, g_settings.lane_width * 0.92f,
-                             0.12f, segment_end - segment_start, note_color);
+                             hold_height, segment_end - segment_start, note_color);
                     DrawCubeWires({center_x, 0.30f, (segment_start + segment_end) * 0.5f},
-                                  g_settings.lane_width * 0.94f, 0.14f, segment_end - segment_start + 0.04f,
+                                  g_settings.lane_width * 0.94f, hold_wire_height, segment_end - segment_start + 0.04f,
                                   note_outline);
                 }
             }
 
             if (note_state.note_ref.type == note_type::tap) {
-                DrawCube({center_x, 0.22f, head_z}, g_settings.lane_width * 0.92f, 0.2f, 0.78f, note_color);
-                DrawCubeWires({center_x, 0.22f, head_z}, g_settings.lane_width * 0.92f, 0.22f, 0.82f, note_outline);
+                DrawCube({center_x, 0.22f, head_z}, g_settings.lane_width * 0.92f,
+                         kTapNoteBaseHeight * g_settings.note_height,
+                         kTapNoteBaseLength * g_settings.note_height, note_color);
+                DrawCubeWires({center_x, 0.22f, head_z}, g_settings.lane_width * 0.92f,
+                              kTapNoteWireHeight * g_settings.note_height,
+                              kTapNoteWireLength * g_settings.note_height, note_outline);
             }
         }
     }
