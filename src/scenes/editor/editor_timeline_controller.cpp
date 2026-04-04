@@ -114,7 +114,13 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
     }
 
     if (context.right_pressed) {
-        result.selected_note_index = context.timeline_hovered ? note_at_position(context, context.mouse) : std::nullopt;
+        result.note_to_delete_index = context.timeline_hovered ? note_at_position(context, context.mouse) : std::nullopt;
+        if (result.note_to_delete_index.has_value() &&
+            result.selected_note_index.has_value() &&
+            *result.selected_note_index == *result.note_to_delete_index) {
+            result.selected_note_index.reset();
+        }
+        return result;
     }
 
     if (!context.timeline_hovered) {
