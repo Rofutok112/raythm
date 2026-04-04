@@ -9,6 +9,7 @@
 #include "platform/windows_input_source.h"
 
 int main() {
+    initialize_settings_storage(g_settings);
     load_settings(g_settings);
     set_theme(g_settings.dark_mode);
     audio_manager::instance().set_bgm_volume(g_settings.bgm_volume);

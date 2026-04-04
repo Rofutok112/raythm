@@ -159,6 +159,7 @@ struct editor_transport_context {
     std::optional<audio_clock_snapshot> bgm_clock;
     std::optional<double> bgm_length_seconds;
     std::optional<int> seek_tick;
+    std::optional<int> space_playback_start_tick;
 };
 
 struct editor_transport_result {
@@ -173,6 +174,7 @@ struct editor_transport_result {
     bool request_pause_bgm = false;
     std::optional<double> seek_bgm_seconds;
     int hitsound_count = 0;
+    std::optional<int> next_space_playback_start_tick;
 };
 
 struct editor_timeline_context {

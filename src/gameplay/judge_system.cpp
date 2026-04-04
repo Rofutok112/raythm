@@ -36,10 +36,11 @@ void judge_system::update(double current_ms, const input_handler& input) {
                 continue;
             }
 
+            const double release_offset_ms = event.timestamp_ms - state.end_target_ms;
             state.holding = false;
             state.judged = true;
-            state.result = judge_result::miss;
-            emit_judge(judge_result::miss, event.timestamp_ms - state.target_ms, state.note_ref.lane);
+            state.result = evaluate_hold_release_offset(release_offset_ms);
+            emit_judge(state.result, release_offset_ms, state.note_ref.lane);
         }
     }
 
@@ -80,6 +81,10 @@ void judge_system::update(double current_ms, const input_handler& input) {
     }
 
     for (note_state& state : note_states_) {
+        if (state.holding && current_ms >= state.end_target_ms) {
+            state.holding = false;
+        }
+
         if (state.judged) {
             continue;
         }
@@ -124,6 +129,13 @@ judge_result judge_system::evaluate_offset(double offset_ms) const {
         return judge_result::bad;
     }
     return judge_result::miss;
+}
+
+judge_result judge_system::evaluate_hold_release_offset(double offset_ms) const {
+    if (offset_ms >= 0.0) {
+        return judge_result::perfect;
+    }
+    return evaluate_offset(offset_ms);
 }
 
 bool judge_system::is_in_judgement_window(double offset_ms) const {

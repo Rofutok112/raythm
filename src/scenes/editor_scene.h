@@ -94,6 +94,7 @@ private:
     int playback_tick_ = 0;
     int previous_playback_tick_ = 0;
     bool previous_audio_playing_ = false;
+    std::optional<int> space_playback_start_tick_;
     std::string hitsound_path_;
     bool waveform_visible_ = true;
     int waveform_offset_ms_ = 0;

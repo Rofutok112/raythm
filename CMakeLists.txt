@@ -3,6 +3,9 @@ project(raythm)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY ON)
+set(RAYTHM_APP_ICON_PNG
+        "${CMAKE_SOURCE_DIR}/icon/icon_256.png"
+        CACHE FILEPATH "Source PNG used for the Windows app icon")
 set(RAYTHM_PACKAGE_VERSION "0.1.0" CACHE STRING "Version string used for Windows release packages")
 set(RAYTHM_PACKAGE_FILE_NAME
         "raythm-${RAYTHM_PACKAGE_VERSION}-windows-x64"
@@ -33,6 +36,29 @@ FetchContent_Declare(
         GIT_TAG         5.5
 )
 FetchContent_MakeAvailable(raylib)
+
+if(WIN32)
+    if(NOT EXISTS "${RAYTHM_APP_ICON_PNG}")
+        message(FATAL_ERROR "Missing required Windows app icon: ${RAYTHM_APP_ICON_PNG}")
+    endif()
+
+    find_program(RAYTHM_POWERSHELL_EXECUTABLE NAMES powershell pwsh REQUIRED)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${RAYTHM_APP_ICON_PNG}")
+
+    set(RAYTHM_APP_ICON_ICO "${CMAKE_CURRENT_BINARY_DIR}/raythm.ico")
+    set(RAYTHM_APP_ICON_RC "${CMAKE_CURRENT_BINARY_DIR}/raythm_app_icon.rc")
+
+    execute_process(
+            COMMAND "${RAYTHM_POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
+                    -File "${CMAKE_SOURCE_DIR}/cmake/convert_png_to_ico.ps1"
+                    -InputPng "${RAYTHM_APP_ICON_PNG}"
+                    -OutputIco "${RAYTHM_APP_ICON_ICO}"
+            COMMAND_ERROR_IS_FATAL ANY
+    )
+
+    configure_file("${CMAKE_SOURCE_DIR}/src/platform/windows_app_icon.rc.in"
+            "${RAYTHM_APP_ICON_RC}" @ONLY)
+endif()
 
 add_executable(raythm src/main.cpp
         src/audio/audio.cpp
@@ -124,6 +150,8 @@ add_executable(raythm src/main.cpp
         src/scenes/editor_scene.h
         src/scenes/play/play_flow_controller.cpp
         src/scenes/play/play_flow_controller.h
+        src/scenes/play/play_chart_filter.cpp
+        src/scenes/play/play_chart_filter.h
         src/scenes/play/play_note_draw_queue.cpp
         src/scenes/play/play_note_draw_queue.h
         src/scenes/play/play_renderer.cpp
@@ -154,6 +182,10 @@ add_executable(raythm src/main.cpp
         src/ui/ui_draw.h
         src/ui/ui_clip.cpp
         src/ui/ui_clip.h)
+
+if(WIN32)
+    target_sources(raythm PRIVATE "${RAYTHM_APP_ICON_RC}")
+endif()
 
 add_executable(chart_parser_smoke
         src/gameplay/chart_parser.cpp
@@ -195,6 +227,13 @@ add_executable(song_select_state_smoke
         src/scenes/song_select/song_select_state.h
         src/tests/song_select_state_smoke.cpp)
 
+add_executable(settings_io_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/gameplay/settings_io.cpp
+        src/gameplay/settings_io.h
+        src/tests/settings_io_smoke.cpp)
+
 add_executable(input_handler_smoke
         src/platform/windows_input_source.cpp
         src/platform/windows_input_source.h
@@ -231,6 +270,12 @@ add_executable(play_note_draw_queue_smoke
         src/scenes/play/play_note_draw_queue.cpp
         src/scenes/play/play_note_draw_queue.h
         src/tests/play_note_draw_queue_smoke.cpp)
+
+add_executable(play_chart_filter_smoke
+        src/models/data_models.h
+        src/scenes/play/play_chart_filter.cpp
+        src/scenes/play/play_chart_filter.h
+        src/tests/play_chart_filter_smoke.cpp)
 
 add_executable(play_flow_controller_smoke
         src/models/data_models.h
@@ -351,11 +396,13 @@ target_include_directories(chart_serializer_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS}
 target_include_directories(editor_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_loader_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_select_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(settings_io_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(input_handler_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(timing_engine_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(judge_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(score_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(play_note_draw_queue_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(play_chart_filter_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(play_flow_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(editor_transport_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(editor_flow_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
@@ -364,6 +411,7 @@ target_include_directories(editor_panel_controller_smoke PRIVATE ${RAYTHM_INCLUD
 target_include_directories(audio_manager_smoke PRIVATE ${RAYTHM_BASS_DIR} ${RAYTHM_INCLUDE_DIRS})
 target_link_libraries(raythm PRIVATE raylib ${RAYTHM_BASS_IMPORT_LIB} comdlg32)
 target_link_libraries(song_select_state_smoke PRIVATE raylib)
+target_link_libraries(settings_io_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
 target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
@@ -419,6 +467,8 @@ if(WIN32)
     set(CPACK_NSIS_PACKAGE_NAME "raythm")
     set(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
     set(CPACK_NSIS_MUI_FINISHPAGE_RUN "raythm.exe")
+    set(CPACK_NSIS_MUI_ICON "${RAYTHM_APP_ICON_ICO}")
+    set(CPACK_NSIS_MUI_UNIICON "${RAYTHM_APP_ICON_ICO}")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
     set(CPACK_NSIS_MANIFEST_DPI_AWARE ON)
     set(CPACK_MONOLITHIC_INSTALL ON)

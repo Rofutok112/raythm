@@ -165,6 +165,11 @@ void audio_manager::stop_preview() {
     stop_voice(preview_handle_);
 }
 
+void audio_manager::unload_preview() {
+    stop_voice(preview_handle_);
+    free_voice(preview_handle_);
+}
+
 void audio_manager::set_preview_volume(float volume) {
     preview_volume_ = std::clamp(volume, 0.0f, 1.0f);
     apply_preview_volume();

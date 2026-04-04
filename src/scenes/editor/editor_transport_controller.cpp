@@ -80,10 +80,16 @@ editor_transport_result editor_transport_controller::toggle_playback(const edito
 
     if (context.audio_playing) {
         result.request_pause_bgm = true;
+        result.next_space_playback_start_tick = std::nullopt;
+        if (context.state != nullptr && context.space_playback_start_tick.has_value()) {
+            result.seek_bgm_seconds =
+                context.state->engine().tick_to_ms(*context.space_playback_start_tick) / 1000.0;
+        }
         return result;
     }
 
     result.request_play_bgm = true;
+    result.next_space_playback_start_tick = context.playback_tick;
     return result;
 }
 

@@ -56,6 +56,43 @@ int main() {
         std::cerr << "Hold release miss failed\n";
         return EXIT_FAILURE;
     }
+    if (hold_release_judge->offset_ms != -400.0) {
+        std::cerr << "Hold release miss should use end timing offset\n";
+        return EXIT_FAILURE;
+    }
+
+    judge_system hold_release_window_judge;
+    hold_release_window_judge.init({note_data{note_type::hold, 960, 1, 1440}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+    hold_release_window_judge.update(1000.0, input);
+
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1390.0);
+    hold_release_window_judge.update(1390.0, input);
+    const std::optional<judge_event> hold_release_bad = hold_release_window_judge.get_last_judge();
+    if (!hold_release_bad.has_value() || hold_release_bad->result != judge_result::bad ||
+        hold_release_bad->offset_ms != -110.0) {
+        std::cerr << "Early hold release should grade within the shared window\n";
+        return EXIT_FAILURE;
+    }
+
+    judge_system hold_release_success_judge;
+    hold_release_success_judge.init({note_data{note_type::hold, 960, 1, 1440}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+    hold_release_success_judge.update(1000.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1510.0);
+    hold_release_success_judge.update(1510.0, input);
+    if (hold_release_success_judge.get_last_judge().has_value()) {
+        std::cerr << "Holding through the end should not emit an extra judge\n";
+        return EXIT_FAILURE;
+    }
+    if (hold_release_success_judge.note_states().front().holding) {
+        std::cerr << "Hold state should finish once the end timing has passed\n";
+        return EXIT_FAILURE;
+    }
 
     judge_system miss_judge;
     miss_judge.init({note_data{note_type::tap, 480, 0, 480}}, engine);

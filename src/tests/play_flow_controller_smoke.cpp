@@ -83,6 +83,28 @@ int main() {
     {
         play_session_state state = make_initialized_state();
         state.score_system.init(1);
+        state.song_data = song_data{};
+        state.editor_resume_state = editor_resume_state{};
+        for (int i = 0; i < 10; ++i) {
+            state.gauge.on_judge(judge_result::miss);
+        }
+
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.bgm_loaded = true;
+        context.bgm_audio_time_ms = 1200.0;
+
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (state.failure_transition_playing || state.final_result.failed || result.request_pause_bgm) {
+            std::cerr << "Editor playtest should not enter failure transition\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.score_system.init(1);
         state.timing_engine = make_basic_timing_engine();
         state.judge_system.init({note_data{note_type::tap, 480, 0, 480}}, state.timing_engine);
 
