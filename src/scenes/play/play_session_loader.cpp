@@ -8,6 +8,7 @@
 #include "game_settings.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
+#include "play_chart_filter.h"
 #include "play_speed_compensation.h"
 
 namespace {
@@ -89,6 +90,8 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
         draw_queue.clear();
         return state;
     }
+
+    state.chart_data = play_chart_filter::prepare_chart_for_playback(*state.chart_data, state.start_tick);
 
     state.input_handler = input_handler(g_settings.keys);
     state.input_handler.set_key_count(state.key_count);

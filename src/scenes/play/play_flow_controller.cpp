@@ -11,6 +11,10 @@ play_navigation_request navigate_after_transition(const play_session_state& stat
     return {play_navigation_target::result};
 }
 
+bool is_no_fail_playtest(const play_session_state& state) {
+    return state.editor_resume_state.has_value();
+}
+
 }  // namespace
 
 play_update_result play_flow_controller::update(play_session_state& state, play_note_draw_queue& draw_queue,
@@ -128,7 +132,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
     }
     state.combo_display = state.score_system.get_combo();
 
-    if (state.gauge.get_value() <= 0.0f) {
+    if (!is_no_fail_playtest(state) && state.gauge.get_value() <= 0.0f) {
         state.final_result = state.score_system.get_result_data();
         state.final_result.failed = true;
         state.ranking_enabled = false;
