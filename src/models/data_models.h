@@ -128,7 +128,8 @@ struct note_state {
     note_data note_ref;
     double target_ms = 0.0;
     double end_target_ms = 0.0;
-    bool judged = false;
+    bool judged = false;     // Head timing has been judged.
+    bool completed = false;  // The note no longer needs any further processing.
     judge_result result = judge_result::miss;
     bool holding = false;
 };
