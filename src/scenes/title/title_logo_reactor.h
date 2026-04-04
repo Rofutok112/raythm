@@ -7,6 +7,7 @@ public:
     void reset();
     void update(float dt);
 
+    [[nodiscard]] int transform_font_size(int base_font_size) const;
     [[nodiscard]] Rectangle transform_rect(const Rectangle& base_rect) const;
 
 private:

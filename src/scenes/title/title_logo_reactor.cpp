@@ -40,6 +40,11 @@ void title_logo_reactor::update(float dt) {
     }
 }
 
+int title_logo_reactor::transform_font_size(int base_font_size) const {
+    const float scale = 1.0f + pulse_ * 0.10f;
+    return std::max(1, static_cast<int>(std::round(static_cast<float>(base_font_size) * scale)));
+}
+
 Rectangle title_logo_reactor::transform_rect(const Rectangle& base_rect) const {
     const float width_expand = pulse_ * 22.0f;
     const float height_expand = pulse_ * 10.0f;

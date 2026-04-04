@@ -89,12 +89,13 @@ void title_scene::update(float dt) {
 // タイトルロゴと操作案内を描画する。
 void title_scene::draw() {
     const auto& t = *g_theme;
+    const int animated_title_font_size = logo_reactor_.transform_font_size(124);
     const Rectangle animated_title_rect = logo_reactor_.transform_rect(kTitleRect);
     virtual_screen::begin();
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
     spectrum_visualizer_.draw(kSpectrumRect);
-    ui::draw_text_in_rect("raythm", 124, animated_title_rect, t.text, ui::text_align::left);
+    ui::draw_text_in_rect("raythm", animated_title_font_size, animated_title_rect, t.text, ui::text_align::left);
     ui::draw_text_in_rect("trace the line before the beat disappears", 30, kSubtitleRect, t.text_dim, ui::text_align::left);
 
     Rectangle hint_rows[2];
