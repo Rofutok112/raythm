@@ -754,8 +754,14 @@ void editor_scene::handle_timeline_interaction() {
     timeline_drag_ = result.drag_state;
 
     if (result.request_seek) {
+        const bool was_playing = audio_playing_;
+        if (was_playing) {
+            audio_manager::instance().pause_bgm();
+            space_playback_start_tick_.reset();
+            sync_transport_state(true);
+        }
         seek_audio_to_tick(result.seek_tick);
-        if (result.scroll_seek_if_paused && !audio_playing_) {
+        if (was_playing || result.scroll_seek_if_paused) {
             scroll_to_tick(playback_tick_);
         }
     }
