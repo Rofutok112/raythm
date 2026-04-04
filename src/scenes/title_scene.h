@@ -2,6 +2,7 @@
 
 #include "scene.h"
 #include "title/title_bgm_controller.h"
+#include "title/title_logo_reactor.h"
 #include "title/title_spectrum_visualizer.h"
 
 // タイトル画面。曲選択画面・設定画面への遷移を提供する。
@@ -21,5 +22,6 @@ private:
     bool transitioning_to_song_select_ = false;
     float transition_fade_t_ = 0.0f;
     title_bgm_controller bgm_controller_;
+    title_logo_reactor logo_reactor_;
     title_spectrum_visualizer spectrum_visualizer_;
 };

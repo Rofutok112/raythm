@@ -35,18 +35,21 @@ title_scene::title_scene(scene_manager& manager) : scene(manager) {
 
 void title_scene::on_enter() {
     bgm_controller_.configure(kTitleIntroPath, kTitleLoopPath);
+    logo_reactor_.reset();
     spectrum_visualizer_.reset();
     bgm_controller_.on_enter();
 }
 
 void title_scene::on_exit() {
     bgm_controller_.on_exit();
+    logo_reactor_.reset();
     spectrum_visualizer_.reset();
 }
 
 // ENTER で曲選択、S で設定画面へ遷移する。
 void title_scene::update(float dt) {
     bgm_controller_.update();
+    logo_reactor_.update(dt);
     spectrum_visualizer_.update();
 
     if (transitioning_to_song_select_) {
@@ -86,11 +89,12 @@ void title_scene::update(float dt) {
 // タイトルロゴと操作案内を描画する。
 void title_scene::draw() {
     const auto& t = *g_theme;
+    const Rectangle animated_title_rect = logo_reactor_.transform_rect(kTitleRect);
     virtual_screen::begin();
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
     spectrum_visualizer_.draw(kSpectrumRect);
-    ui::draw_text_in_rect("raythm", 124, kTitleRect, t.text, ui::text_align::left);
+    ui::draw_text_in_rect("raythm", 124, animated_title_rect, t.text, ui::text_align::left);
     ui::draw_text_in_rect("trace the line before the beat disappears", 30, kSubtitleRect, t.text_dim, ui::text_align::left);
 
     Rectangle hint_rows[2];
