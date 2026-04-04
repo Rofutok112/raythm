@@ -90,6 +90,22 @@ bool judge_system::is_in_judgement_window(double offset_ms) const {
     return std::fabs(offset_ms) <= judge_windows_[3];
 }
 
+void judge_system::complete_due_hold_before(int lane, double timestamp_ms) {
+    if (lane < 0 || lane >= kMaxLanes) {
+        return;
+    }
+
+    const std::optional<size_t> active_hold = active_hold_indices_[static_cast<size_t>(lane)];
+    if (!active_hold.has_value()) {
+        return;
+    }
+
+    const note_state& state = note_states_[*active_hold];
+    if (state.holding && timestamp_ms >= state.end_target_ms) {
+        complete_held_note(*active_hold, false);
+    }
+}
+
 void judge_system::handle_hold_release(const input_event& event) {
     if (event.lane < 0 || event.lane >= kMaxLanes) {
         return;
@@ -123,6 +139,8 @@ void judge_system::handle_press(const input_event& event) {
     if (event.lane < 0 || event.lane >= kMaxLanes) {
         return;
     }
+
+    complete_due_hold_before(event.lane, event.timestamp_ms);
 
     const std::optional<size_t> candidate_index = find_press_candidate(event.lane, event.timestamp_ms);
     if (!candidate_index.has_value()) {
@@ -222,7 +240,10 @@ std::optional<size_t> judge_system::find_press_candidate(int lane, double timest
 
 void judge_system::complete_held_note(size_t note_index, bool emit_display_judge) {
     note_state& state = note_states_[note_index];
-    active_hold_indices_[static_cast<size_t>(state.note_ref.lane)].reset();
+    std::optional<size_t>& active_hold = active_hold_indices_[static_cast<size_t>(state.note_ref.lane)];
+    if (active_hold.has_value() && *active_hold == note_index) {
+        active_hold.reset();
+    }
     state.result = judge_result::perfect;
     state.holding = false;
     state.completed = true;

@@ -191,6 +191,28 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    judge_system adjacent_hold_judge;
+    adjacent_hold_judge.init({note_data{note_type::hold, 960, 1, 1440}, note_data{note_type::hold, 1440, 1, 1920}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+    adjacent_hold_judge.update(1000.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1460.0);
+    adjacent_hold_judge.update(1460.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1520.0);
+    adjacent_hold_judge.update(1520.0, input);
+    if (!adjacent_hold_judge.note_states()[0].completed || !adjacent_hold_judge.note_states()[1].holding ||
+        adjacent_hold_judge.note_states()[1].completed) {
+        std::cerr << "Next same-lane hold should stay active after previous hold ends\n";
+        return EXIT_FAILURE;
+    }
+    const std::optional<judge_event> adjacent_hold_judge_event = adjacent_hold_judge.get_last_judge();
+    if (!adjacent_hold_judge_event.has_value() || adjacent_hold_judge_event->result != judge_result::good ||
+        adjacent_hold_judge_event->lane != 1) {
+        std::cerr << "Next same-lane hold should still receive its graded head judge\n";
+        return EXIT_FAILURE;
+    }
+
     judge_system judge_6k;
     judge_6k.init({note_data{note_type::tap, 480, 5, 480}}, engine);
     input.set_key_count(6);

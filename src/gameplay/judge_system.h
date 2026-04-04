@@ -23,6 +23,7 @@ private:
     judge_result evaluate_offset(double offset_ms) const;
     judge_result evaluate_hold_release_offset(double offset_ms) const;
     bool is_in_judgement_window(double offset_ms) const;
+    void complete_due_hold_before(int lane, double timestamp_ms);
     void handle_hold_release(const input_event& event);
     void handle_press(const input_event& event);
     void resolve_hold_completions(double current_ms);
