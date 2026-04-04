@@ -6,7 +6,7 @@
 
 class title_spectrum_visualizer final {
 public:
-    static constexpr int kBarCount = 48;
+    static constexpr int kBarCount = 32;
 
     void reset();
     void update();

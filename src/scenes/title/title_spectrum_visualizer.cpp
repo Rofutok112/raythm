@@ -10,9 +10,8 @@
 namespace {
 
 constexpr std::array kSpectrumRanges = {
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-    17, 18, 20, 22, 24, 26, 28, 30, 33, 36, 39, 42, 46, 50, 54, 58,
-    63, 68, 73, 78, 84, 90, 96, 102, 108, 112, 116, 119, 122, 124, 126, 127, 128
+    1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 17, 20, 24, 29, 35, 42,
+    50, 58, 66, 74, 82, 90, 98, 104, 109, 113, 117, 120, 123, 125, 127, 128
 };
 
 float average_band_energy(const std::array<float, 128>& spectrum, int begin, int end) {
@@ -32,14 +31,8 @@ Color with_alpha_scale(Color color, float alpha_scale) {
     return color;
 }
 
-Color interpolate_spectrum_color(Color from, Color to, float t) {
-    const float clamped_t = std::clamp(t, 0.0f, 1.0f);
-    return {
-        static_cast<unsigned char>(from.r + (to.r - from.r) * clamped_t),
-        static_cast<unsigned char>(from.g + (to.g - from.g) * clamped_t),
-        static_cast<unsigned char>(from.b + (to.b - from.b) * clamped_t),
-        static_cast<unsigned char>(from.a + (to.a - from.a) * clamped_t),
-    };
+Color fade_spectrum_color(Color base, float alpha_scale) {
+    return with_alpha_scale(base, alpha_scale);
 }
 
 }  // namespace
@@ -89,11 +82,11 @@ void title_spectrum_visualizer::draw(const Rectangle& rect) const {
     }
 
     const auto& t = *g_theme;
-    const float gap = 2.0f;
+    const float gap = 4.0f;
     const float bar_width =
         (rect.width - gap * static_cast<float>(kBarCount - 1)) / static_cast<float>(kBarCount);
     const float baseline = rect.y + rect.height;
-    const Color high_band_color = with_alpha_scale(t.text, 0.36f);
+    const Color base_color = t.accent;
 
     for (int i = 0; i < kBarCount; ++i) {
         const float value = std::clamp(bars_[static_cast<size_t>(i)], 0.0f, 1.0f);
@@ -103,7 +96,7 @@ void title_spectrum_visualizer::draw(const Rectangle& rect) const {
         const float x = rect.x + static_cast<float>(i) * (bar_width + gap);
         const Rectangle bar_rect = {x, baseline - height, bar_width, height};
         const float color_t = static_cast<float>(i) / static_cast<float>(kBarCount - 1);
-        DrawRectangleRec(bar_rect,
-                         interpolate_spectrum_color(with_alpha_scale(t.accent, 0.40f), high_band_color, color_t));
+        const float alpha_scale = 0.42f - color_t * 0.24f;
+        DrawRectangleRec(bar_rect, fade_spectrum_color(base_color, alpha_scale));
     }
 }
