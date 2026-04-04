@@ -138,7 +138,7 @@ inline constexpr ui_theme kLightTheme = {
     .hud_combo_label = {209, 214, 224, 255},
     .hud_failure_text = {244, 246, 250, 255},
     // game elements
-    .lane = {172, 176, 184, 255},
+    .lane = {164, 168, 176, 255},
     .lane_wire = {120, 130, 148, 180},
     .judge_line = {90, 150, 190, 110},
     .judge_line_glow = {180, 230, 255, 200},
