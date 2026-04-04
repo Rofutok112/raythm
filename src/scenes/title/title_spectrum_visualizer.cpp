@@ -8,7 +8,6 @@
 
 namespace {
 
-constexpr Color kSpectrumTailColor = {108, 112, 120, 28};
 constexpr Color kSpectrumBarColor = {182, 186, 194, 92};
 
 constexpr std::array<int, title_spectrum_visualizer::kBarCount + 1> kSpectrumRanges = {
@@ -88,16 +87,11 @@ void title_spectrum_visualizer::draw(const Rectangle& rect) const {
 
     for (int i = 0; i < kBarCount; ++i) {
         const float value = std::clamp(bars_[static_cast<size_t>(i)], 0.0f, 1.0f);
-        if (value < 0.025f) {
-            continue;
-        }
         const float shaped_value = std::pow(value, 0.82f);
-        const float height = max_height * shaped_value;
+        const float min_height = rect.height * 0.012f;
+        const float height = min_height + (max_height - min_height) * shaped_value;
         const float x = rect.x + static_cast<float>(i) * (bar_width + gap);
         const Rectangle bar_rect = {x, baseline - height, bar_width, height};
-        const float tail_height = std::min(max_height, height * 1.18f);
-        const Rectangle tail_rect = {x, baseline - tail_height, bar_width, tail_height};
-        DrawRectangleRec(tail_rect, kSpectrumTailColor);
         DrawRectangleRec(bar_rect, kSpectrumBarColor);
     }
 }
