@@ -22,7 +22,9 @@ constexpr Rectangle kSubtitleRect = {kTitleHeaderRect.x + 10.0f, kTitleHeaderRec
 constexpr Rectangle kHintAreaRect = ui::place(kScreenRect, 320.0f, 52.0f,
                                               ui::anchor::bottom_left, ui::anchor::bottom_left,
                                               {82.0f, -46.0f});
-constexpr Rectangle kSpectrumRect = {0.0f, 92.0f, static_cast<float>(kScreenWidth), 588.0f};
+constexpr Rectangle kSpectrumRect = ui::place(kScreenRect, 760.0f, 150.0f,
+                                              ui::anchor::bottom_right, ui::anchor::bottom_right,
+                                              {-82.0f, -54.0f});
 constexpr const char* kTitleIntroPath = "assets/audio/title_intro.mp3";
 constexpr const char* kTitleLoopPath = "assets/audio/title_loop.mp3";
 

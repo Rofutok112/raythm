@@ -5,12 +5,11 @@
 #include <cmath>
 
 #include "audio_manager.h"
+#include "theme.h"
 
 namespace {
 
-constexpr Color kSpectrumBarColor = {182, 186, 194, 92};
-
-constexpr std::array<int, title_spectrum_visualizer::kBarCount + 1> kSpectrumRanges = {
+constexpr std::array kSpectrumRanges = {
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
     17, 18, 20, 22, 24, 26, 28, 30, 33, 36, 39, 42, 46, 50, 54, 58,
     63, 68, 73, 78, 84, 90, 96, 102, 108, 112, 116, 119, 122, 124, 126, 127, 128
@@ -79,6 +78,7 @@ void title_spectrum_visualizer::draw(const Rectangle& rect) const {
         return;
     }
 
+    const auto& t = *g_theme;
     const float gap = 2.0f;
     const float bar_width =
         (rect.width - gap * static_cast<float>(kBarCount - 1)) / static_cast<float>(kBarCount);
@@ -92,6 +92,6 @@ void title_spectrum_visualizer::draw(const Rectangle& rect) const {
         const float height = min_height + (max_height - min_height) * shaped_value;
         const float x = rect.x + static_cast<float>(i) * (bar_width + gap);
         const Rectangle bar_rect = {x, baseline - height, bar_width, height};
-        DrawRectangleRec(bar_rect, kSpectrumBarColor);
+        DrawRectangleRec(bar_rect, with_alpha_scale(t.accent, 0.36f));
     }
 }
