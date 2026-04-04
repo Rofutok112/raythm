@@ -38,7 +38,7 @@ void judge_system::update(double current_ms, const input_handler& input) {
 
             const double release_offset_ms = event.timestamp_ms - state.end_target_ms;
             state.holding = false;
-            state.judged = true;
+            state.completed = true;
             state.result = evaluate_hold_release_offset(release_offset_ms);
             emit_judge(state.result, release_offset_ms, state.note_ref.lane, false);
         }
@@ -75,6 +75,7 @@ void judge_system::update(double current_ms, const input_handler& input) {
         const double offset_ms = event.timestamp_ms - candidate->target_ms;
         const judge_result result = evaluate_offset(offset_ms);
         candidate->judged = true;
+        candidate->completed = candidate->note_ref.type != note_type::hold || result == judge_result::miss;
         candidate->result = result;
         candidate->holding = candidate->note_ref.type == note_type::hold && result != judge_result::miss;
         emit_judge(result, offset_ms, event.lane);
@@ -84,15 +85,17 @@ void judge_system::update(double current_ms, const input_handler& input) {
         if (state.holding && current_ms >= state.end_target_ms) {
             emit_judge(judge_result::perfect, 0.0, state.note_ref.lane, false, false);
             state.holding = false;
+            state.completed = true;
         }
 
-        if (state.judged) {
+        if (state.completed) {
             continue;
         }
 
         const double offset_ms = current_ms - state.target_ms;
         if (offset_ms > judge_windows_[3]) {
             state.judged = true;
+            state.completed = true;
             state.result = judge_result::miss;
             emit_judge(judge_result::miss, offset_ms, state.note_ref.lane);
         }

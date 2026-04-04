@@ -55,6 +55,10 @@ int main() {
         std::cerr << "Last simultaneous judge failed\n";
         return EXIT_FAILURE;
     }
+    if (!judge.note_states()[1].judged || judge.note_states()[1].completed || !judge.note_states()[1].holding) {
+        std::cerr << "Hold head judge should keep the note active until completion\n";
+        return EXIT_FAILURE;
+    }
 
     input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1100.0);
     judge.update(1100.0, input);
@@ -62,6 +66,10 @@ int main() {
     if (!hold_release_judge.has_value() || hold_release_judge->result != judge_result::miss ||
         hold_release_judge->lane != 1) {
         std::cerr << "Hold release miss failed\n";
+        return EXIT_FAILURE;
+    }
+    if (!judge.note_states()[1].completed || judge.note_states()[1].holding) {
+        std::cerr << "Released hold should be marked completed\n";
         return EXIT_FAILURE;
     }
     if (hold_release_judge->offset_ms != -400.0) {
@@ -116,6 +124,10 @@ int main() {
     }
     if (hold_release_success->play_hitsound || hold_release_success->apply_gameplay_effects) {
         std::cerr << "Hold completion display judge should be presentation-only\n";
+        return EXIT_FAILURE;
+    }
+    if (!hold_release_success_judge.note_states().front().completed) {
+        std::cerr << "Successful hold should be marked completed at the end\n";
         return EXIT_FAILURE;
     }
     if (hold_release_success_judge.note_states().front().holding) {

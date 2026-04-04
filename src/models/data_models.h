@@ -129,6 +129,7 @@ struct note_state {
     double target_ms = 0.0;
     double end_target_ms = 0.0;
     bool judged = false;
+    bool completed = false;
     judge_result result = judge_result::miss;
     bool holding = false;
 };

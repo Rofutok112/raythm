@@ -68,7 +68,7 @@ void play_note_draw_queue::update_visible_window(const std::vector<note_state>& 
         std::vector<size_t>& active = active_draw_notes_by_lane_[static_cast<size_t>(lane)];
         std::erase_if(active, [&](size_t idx) {
             const note_state& state = note_states[idx];
-            if (state.judged && !state.holding) {
+            if (state.completed && !state.holding) {
                 return true;
             }
             if (state.holding) {
