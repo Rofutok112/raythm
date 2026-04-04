@@ -156,8 +156,8 @@ inline constexpr ui_theme kLightTheme = {
     .success = {14, 146, 108, 255},
     .fast = {50, 120, 220, 255},
     .slow = {220, 120, 50, 255},
-    .health_high = {124, 58, 237, 255},
-    .health_low = {228, 109, 98, 255},
+    .health_high = {156, 110, 239, 255},
+    .health_low = {238, 146, 138, 255},
     .all_perfect = {200, 50, 200, 255},
     .full_combo = {14, 146, 108, 255},
     // judge
@@ -236,8 +236,8 @@ inline constexpr ui_theme kDarkTheme = {
     .success = {40, 180, 130, 255},
     .fast = {80, 150, 240, 255},
     .slow = {240, 150, 70, 255},
-    .health_high = {158, 100, 255, 255},
-    .health_low = {228, 109, 98, 255},
+    .health_high = {184, 146, 255, 255},
+    .health_low = {238, 140, 132, 255},
     .all_perfect = {220, 80, 220, 255},
     .full_combo = {40, 180, 130, 255},
     // judge
