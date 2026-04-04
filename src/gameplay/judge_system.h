@@ -21,7 +21,8 @@ private:
     judge_result evaluate_offset(double offset_ms) const;
     judge_result evaluate_hold_release_offset(double offset_ms) const;
     bool is_in_judgement_window(double offset_ms) const;
-    void emit_judge(judge_result result, double offset_ms, int lane);
+    void emit_judge(judge_result result, double offset_ms, int lane,
+                    bool play_hitsound = true, bool apply_gameplay_effects = true);
 
     std::array<double, 5> judge_windows_ = {25.0, 50.0, 90.0, 130.0, 130.0};
     std::vector<note_state> note_states_;

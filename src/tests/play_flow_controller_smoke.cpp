@@ -151,6 +151,33 @@ int main() {
         }
     }
 
+    {
+        play_session_state state = make_initialized_state();
+        state.score_system.init(1);
+        state.timing_engine = make_basic_timing_engine();
+        state.judge_system.init({note_data{note_type::hold, 480, 0, 960}}, state.timing_engine);
+        state.hitsound_path = "hitsound.mp3";
+
+        state.input_handler.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 500.0);
+        state.judge_system.update(500.0, state.input_handler);
+
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.bgm_audio_time_ms = 1000.0;
+
+        state.input_handler.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 1000.0);
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (!state.display_judge.has_value() || state.display_judge->result != judge_result::perfect) {
+            std::cerr << "Hold completion should surface perfect feedback\n";
+            return EXIT_FAILURE;
+        }
+        if (result.hitsound_count != 0 || state.score_system.get_combo() != 1) {
+            std::cerr << "Hold completion feedback should not add hitsound or extra score effects\n";
+            return EXIT_FAILURE;
+        }
+    }
+
     std::cout << "play_flow_controller smoke test passed\n";
     return EXIT_SUCCESS;
 }
