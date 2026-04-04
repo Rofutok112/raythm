@@ -47,7 +47,6 @@ if(WIN32)
 
     set(RAYTHM_APP_ICON_ICO "${CMAKE_CURRENT_BINARY_DIR}/raythm.ico")
     set(RAYTHM_APP_ICON_RC "${CMAKE_CURRENT_BINARY_DIR}/raythm_app_icon.rc")
-    file(TO_NATIVE_PATH "${RAYTHM_APP_ICON_ICO}" RAYTHM_APP_ICON_ICO_NATIVE)
 
     execute_process(
             COMMAND "${RAYTHM_POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
