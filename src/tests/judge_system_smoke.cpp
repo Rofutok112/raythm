@@ -178,6 +178,19 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    judge_system lane_progression_judge;
+    lane_progression_judge.init({note_data{note_type::tap, 480, 0, 480}, note_data{note_type::tap, 960, 0, 960}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 1000.0);
+    lane_progression_judge.update(1000.0, input);
+    const std::vector<judge_event>& lane_progression_events = lane_progression_judge.get_judge_events();
+    if (lane_progression_events.size() != 1 || lane_progression_events.front().lane != 0 ||
+        lane_progression_events.front().result != judge_result::perfect) {
+        std::cerr << "Lane-based candidate search should still reach the next in-window note\n";
+        return EXIT_FAILURE;
+    }
+
     judge_system judge_6k;
     judge_6k.init({note_data{note_type::tap, 480, 5, 480}}, engine);
     input.set_key_count(6);
