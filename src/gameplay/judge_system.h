@@ -19,6 +19,7 @@ public:
 
 private:
     judge_result evaluate_offset(double offset_ms) const;
+    judge_result evaluate_hold_release_offset(double offset_ms) const;
     bool is_in_judgement_window(double offset_ms) const;
     void emit_judge(judge_result result, double offset_ms, int lane);
 
