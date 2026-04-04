@@ -32,6 +32,16 @@ Color with_alpha_scale(Color color, float alpha_scale) {
     return color;
 }
 
+Color lerp_color(Color from, Color to, float t) {
+    const float clamped_t = std::clamp(t, 0.0f, 1.0f);
+    return {
+        static_cast<unsigned char>(from.r + (to.r - from.r) * clamped_t),
+        static_cast<unsigned char>(from.g + (to.g - from.g) * clamped_t),
+        static_cast<unsigned char>(from.b + (to.b - from.b) * clamped_t),
+        static_cast<unsigned char>(from.a + (to.a - from.a) * clamped_t),
+    };
+}
+
 }  // namespace
 
 void title_spectrum_visualizer::reset() {
@@ -83,15 +93,16 @@ void title_spectrum_visualizer::draw(const Rectangle& rect) const {
     const float bar_width =
         (rect.width - gap * static_cast<float>(kBarCount - 1)) / static_cast<float>(kBarCount);
     const float baseline = rect.y + rect.height;
-    const float max_height = rect.height * 0.7f;
+    const Color high_band_color = with_alpha_scale(t.text, 0.36f);
 
     for (int i = 0; i < kBarCount; ++i) {
         const float value = std::clamp(bars_[static_cast<size_t>(i)], 0.0f, 1.0f);
         const float shaped_value = std::pow(value, 0.82f);
         const float min_height = rect.height * 0.012f;
-        const float height = min_height + (max_height - min_height) * shaped_value;
+        const float height = min_height + (rect.height - min_height) * shaped_value;
         const float x = rect.x + static_cast<float>(i) * (bar_width + gap);
         const Rectangle bar_rect = {x, baseline - height, bar_width, height};
-        DrawRectangleRec(bar_rect, with_alpha_scale(t.accent, 0.36f));
+        const float color_t = static_cast<float>(i) / static_cast<float>(kBarCount - 1);
+        DrawRectangleRec(bar_rect, lerp_color(with_alpha_scale(t.accent, 0.40f), high_band_color, color_t));
     }
 }
