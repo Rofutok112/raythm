@@ -41,7 +41,7 @@ float band_visual_weight(int band_index, int band_count) {
     }
 
     const float normalized_index = static_cast<float>(band_index) / static_cast<float>(band_count - 1);
-    return 0.52f + normalized_index * 0.68f;
+    return 0.34f + normalized_index * 0.92f;
 }
 
 }  // namespace
