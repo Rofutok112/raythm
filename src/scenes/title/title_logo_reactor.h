@@ -11,5 +11,4 @@ public:
 
 private:
     float pulse_ = 0.0f;
-    float time_ = 0.0f;
 };
