@@ -32,7 +32,7 @@ Color with_alpha_scale(Color color, float alpha_scale) {
     return color;
 }
 
-Color lerp_color(Color from, Color to, float t) {
+Color interpolate_spectrum_color(Color from, Color to, float t) {
     const float clamped_t = std::clamp(t, 0.0f, 1.0f);
     return {
         static_cast<unsigned char>(from.r + (to.r - from.r) * clamped_t),
@@ -103,6 +103,7 @@ void title_spectrum_visualizer::draw(const Rectangle& rect) const {
         const float x = rect.x + static_cast<float>(i) * (bar_width + gap);
         const Rectangle bar_rect = {x, baseline - height, bar_width, height};
         const float color_t = static_cast<float>(i) / static_cast<float>(kBarCount - 1);
-        DrawRectangleRec(bar_rect, lerp_color(with_alpha_scale(t.accent, 0.40f), high_band_color, color_t));
+        DrawRectangleRec(bar_rect,
+                         interpolate_spectrum_color(with_alpha_scale(t.accent, 0.40f), high_band_color, color_t));
     }
 }
