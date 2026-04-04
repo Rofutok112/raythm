@@ -23,6 +23,7 @@ struct game_settings {
     float camera_angle_degrees = 45.0f;
     float lane_width = 3.5f;
     float note_speed = 0.045f;
+    float note_height = 1.0f;
     int global_note_offset_ms = 0;
     float bgm_volume = 1.0f;
     float se_volume = 1.0f;
