@@ -22,6 +22,23 @@
 5. `Updater.exe` が package を取得して適用する
 6. 成功したら新しい `raythm.exe` を起動する
 
+## Update Window
+
+Windows 版の `Launcher.exe` と `Updater.exe` はコンソールではなく GUI 実行です。
+
+そのため、黒いターミナルは通常出さず、`Updater` は小さな進捗ウィンドウで現在の段階を表示します。
+
+表示例:
+
+- `Preparing update...`
+- `Downloading update package...`
+- `Verifying package...`
+- `Extracting package...`
+- `Applying update...`
+- `Launching updated game...`
+
+致命的な失敗時は、この更新ウィンドウからエラーダイアログを出します。
+
 ## Files And Directories
 
 Updater が使う主な作業ディレクトリは `AppData/Local/raythm/updater/` 配下です。
@@ -117,6 +134,30 @@ Updater が使う主な作業ディレクトリは `AppData/Local/raythm/updater
 
 - `relaunching updater from temp copy`
 - `relaunching temp updater copy`
+
+## Why Temp Updater Is Still Created By Updater
+
+`temp-updater` を作る責務は、設計上は `Launcher` に寄せることもできます。
+
+ただし現在は `Updater` 側に置いています。主な理由は次です。
+
+- install root が最終的にどこになるかを updater が知っている
+- 管理者権限が必要かどうかを updater が判定している
+- 昇格後の実体から見て「いま install root 上で動いているか」を updater 自身が判断できる
+
+つまり今の構成では:
+
+- `Launcher` は更新有無の判断と `Updater` 起動だけ
+- `Updater` は「安全に apply できる実行形へ自分を切り替える」責務も持つ
+
+という分担です。
+
+将来的には、
+
+- `Launcher` が先に temp 作成まで行う
+- その後は final updater だけが download / verify / apply を担当する
+
+という形へ整理する余地はあります。現状は、install root と権限判定を updater 側に閉じるほうを優先しています。
 
 ## Important Detail About Relaunch
 

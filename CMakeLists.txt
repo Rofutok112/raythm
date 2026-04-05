@@ -261,6 +261,8 @@ add_executable(raythm_updater
         src/updater/update_release.h
         src/updater/update_paths.cpp
         src/updater/update_paths.h
+        src/updater/update_progress_window.cpp
+        src/updater/update_progress_window.h
         src/updater/update_log.cpp
         src/updater/update_log.h
         src/updater/update_version.cpp
@@ -274,6 +276,8 @@ set_target_properties(raythm_launcher PROPERTIES OUTPUT_NAME "Launcher")
 set_target_properties(raythm_updater PROPERTIES OUTPUT_NAME "Updater")
 
 if(WIN32)
+    set_target_properties(raythm_launcher PROPERTIES WIN32_EXECUTABLE TRUE)
+    set_target_properties(raythm_updater PROPERTIES WIN32_EXECUTABLE TRUE)
     target_sources(raythm PRIVATE "${RAYTHM_APP_ICON_RC}")
     target_sources(raythm_launcher PRIVATE "${RAYTHM_APP_ICON_RC}")
     target_sources(raythm_updater PRIVATE "${RAYTHM_APP_ICON_RC}")
