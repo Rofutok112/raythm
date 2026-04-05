@@ -1,6 +1,7 @@
 #include "audio_manager.h"
 #include "game_scenes.h"
 #include "game_settings.h"
+#include "official_content_sync.h"
 #include "raylib.h"
 #include "scene_manager.h"
 #include "settings_io.h"
@@ -10,6 +11,7 @@
 
 int main() {
     initialize_settings_storage(g_settings);
+    official_content_sync::synchronize();
     load_settings(g_settings);
     set_theme(g_settings.dark_mode);
     audio_manager::instance().set_bgm_volume(g_settings.bgm_volume);
