@@ -4,6 +4,7 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <optional>
 #include <sstream>
 #include <string_view>
@@ -51,6 +52,47 @@ std::string trim(std::string_view value) {
 bool is_chart_file_path(const fs::path& path) {
     const fs::path extension = path.extension();
     return extension == ".chart" || extension == ".rchart";
+}
+
+bool is_rchart_file_path(const fs::path& path) {
+    return path.extension() == ".rchart";
+}
+
+std::vector<fs::path> collect_chart_files_in_directory(const fs::path& directory) {
+    std::map<std::string, fs::path> by_stem;
+    if (!fs::exists(directory) || !fs::is_directory(directory)) {
+        return {};
+    }
+
+    for (const fs::directory_entry& chart_entry : fs::directory_iterator(directory)) {
+        if (!chart_entry.is_regular_file() || !is_chart_file_path(chart_entry.path())) {
+            continue;
+        }
+
+        const std::string stem = path_utils::to_utf8(chart_entry.path().stem());
+        const auto existing = by_stem.find(stem);
+        if (existing == by_stem.end() || is_rchart_file_path(chart_entry.path())) {
+            by_stem[stem] = chart_entry.path();
+        }
+    }
+
+    std::vector<fs::path> result;
+    result.reserve(by_stem.size());
+    for (const auto& [stem, path] : by_stem) {
+        (void)stem;
+        result.push_back(path);
+    }
+
+    std::sort(result.begin(), result.end(), [](const fs::path& left, const fs::path& right) {
+        if (left.stem() != right.stem()) {
+            return left.stem().wstring() < right.stem().wstring();
+        }
+        if (is_rchart_file_path(left) != is_rchart_file_path(right)) {
+            return is_rchart_file_path(left);
+        }
+        return left.wstring() < right.wstring();
+    });
+    return result;
 }
 
 std::string read_file(const fs::path& path) {
@@ -386,14 +428,8 @@ song_load_result song_loader::load_all(const std::string& songs_dir, content_sou
 
         const fs::path charts_dir = song_dir / "charts";
         if (fs::exists(charts_dir) && fs::is_directory(charts_dir)) {
-            for (const fs::directory_entry& chart_entry : fs::directory_iterator(charts_dir)) {
-                if (!chart_entry.is_regular_file()) {
-                    continue;
-                }
-
-                if (is_chart_file_path(chart_entry.path())) {
-                    song.chart_paths.push_back(path_utils::to_utf8(chart_entry.path()));
-                }
+            for (const fs::path& chart_path : collect_chart_files_in_directory(charts_dir)) {
+                song.chart_paths.push_back(path_utils::to_utf8(chart_path));
             }
             std::sort(song.chart_paths.begin(), song.chart_paths.end());
         }
@@ -438,14 +474,8 @@ song_load_result song_loader::load_directory(const std::string& song_dir_utf8, c
 
     const fs::path charts_dir = song_dir / "charts";
     if (fs::exists(charts_dir) && fs::is_directory(charts_dir)) {
-        for (const fs::directory_entry& chart_entry : fs::directory_iterator(charts_dir)) {
-            if (!chart_entry.is_regular_file()) {
-                continue;
-            }
-
-            if (is_chart_file_path(chart_entry.path())) {
-                song.chart_paths.push_back(path_utils::to_utf8(chart_entry.path()));
-            }
+        for (const fs::path& chart_path : collect_chart_files_in_directory(charts_dir)) {
+            song.chart_paths.push_back(path_utils::to_utf8(chart_path));
         }
         std::sort(song.chart_paths.begin(), song.chart_paths.end());
     }
@@ -476,10 +506,8 @@ void song_loader::attach_external_charts(const std::string& charts_dir, std::vec
         return;
     }
 
-    for (const fs::directory_entry& entry : fs::directory_iterator(root)) {
-        if (!entry.is_regular_file() || !is_chart_file_path(entry.path())) {
-            continue;
-        }
+    for (const fs::path& chart_path : collect_chart_files_in_directory(root)) {
+        const fs::directory_entry entry(chart_path);
 
         if (is_within_root(entry.path(), app_paths::official_charts_root())) {
             std::error_code ec;

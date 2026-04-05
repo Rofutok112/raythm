@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <unordered_map>
 #include <system_error>
 
 #include "app_paths.h"
@@ -38,6 +39,10 @@ bool is_within_root(const std::filesystem::path& path, const std::filesystem::pa
 bool is_chart_file_path(const std::filesystem::path& path) {
     const std::filesystem::path extension = path.extension();
     return extension == ".chart" || extension == ".rchart";
+}
+
+bool is_rchart_file_path(const std::filesystem::path& path) {
+    return path.extension() == ".rchart";
 }
 
 }  // namespace
@@ -89,6 +94,27 @@ catalog_data load_catalog() {
                 chart_source == content_source::app_data,
             });
         }
+
+        std::unordered_map<std::string, size_t> chart_index_by_id;
+        std::vector<chart_option> deduplicated_charts;
+        deduplicated_charts.reserve(entry.charts.size());
+        for (const chart_option& chart : entry.charts) {
+            const std::string dedupe_key = chart.meta.chart_id.empty() ? chart.path : chart.meta.chart_id;
+            const auto existing = chart_index_by_id.find(dedupe_key);
+            if (existing == chart_index_by_id.end()) {
+                chart_index_by_id[dedupe_key] = deduplicated_charts.size();
+                deduplicated_charts.push_back(chart);
+                continue;
+            }
+
+            chart_option& current = deduplicated_charts[existing->second];
+            const bool prefer_new = is_rchart_file_path(path_utils::from_utf8(chart.path)) &&
+                                    !is_rchart_file_path(path_utils::from_utf8(current.path));
+            if (prefer_new) {
+                current = chart;
+            }
+        }
+        entry.charts = std::move(deduplicated_charts);
 
         std::sort(entry.charts.begin(), entry.charts.end(), [](const chart_option& left, const chart_option& right) {
             if (left.meta.level != right.meta.level) {
