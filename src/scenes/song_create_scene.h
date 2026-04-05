@@ -17,19 +17,16 @@ public:
     void draw() override;
 
 private:
-    enum class step { song_metadata, song_saved, chart_metadata };
+    enum class step { song_metadata, song_saved };
 
     void update_song_metadata();
     void update_song_saved();
-    void update_chart_metadata();
 
     void draw_song_metadata();
     void draw_song_saved();
-    void draw_chart_metadata();
 
     bool create_song();
     bool save_song_edits();
-    bool create_chart_and_open_editor();
     void go_back_to_song_select(const std::string& preferred_song_id = "");
     bool is_edit_mode() const;
 
@@ -45,12 +42,6 @@ private:
     ui::text_input_state sns_youtube_input_;
     ui::text_input_state sns_niconico_input_;
     ui::text_input_state sns_x_input_;
-
-    // Chart metadata inputs
-    ui::text_input_state difficulty_input_;
-    ui::text_input_state level_input_;
-    ui::text_input_state chart_author_input_;
-    int chart_key_count_ = 4;
 
     // Created song data (stored after song creation)
     song_data created_song_;
