@@ -59,23 +59,23 @@ constexpr float kStaminaThreshold = 3.2f;
 // balance: 左右寄りの偏り
 // stamina: 数秒単位で高密度が続く持久力負荷
 // read: 見た目の詰まりや読みづらさ
-constexpr float kWeightDensity = 1.70f;
-constexpr float kWeightStream = 0.65f;
-constexpr float kWeightJump = 0.85f;
-constexpr float kWeightHold = 1.15f;
-constexpr float kWeightRelease = 0.70f;
-constexpr float kWeightOverlap = 1.40f;
+constexpr float kWeightDensity = 1.50f;
+constexpr float kWeightStream = 1.00f;
+constexpr float kWeightJump = 0.75f;
+constexpr float kWeightHold = 1.00f;
+constexpr float kWeightRelease = 1.10f;
+constexpr float kWeightOverlap = 1.20f;
 constexpr float kWeightPattern = 1.40f;
 constexpr float kWeightBalance = 0.35f;
-constexpr float kWeightStamina = 0.80f;
-constexpr float kWeightRead = 0.55f;
+constexpr float kWeightStamina = 0.5f;
+constexpr float kWeightRead = 1.20f;
 
 // 各要素の非線形補正。大きいほど、その要素の「高い値」を強調しやすい。
-constexpr float kGammaDensity = 1.18f;
+constexpr float kGammaDensity = 1.50f;
 constexpr float kGammaStream = 0.72f;
 constexpr float kGammaLane = 1.10f;
 constexpr float kGammaJumpTime = 0.55f;
-constexpr float kGammaHold = 1.35f;
+constexpr float kGammaHold = 1.10f;
 constexpr float kGammaRelease = 0.85f;
 constexpr float kGammaOverlapHold = 1.20f;
 constexpr float kGammaJack = 0.95f;
