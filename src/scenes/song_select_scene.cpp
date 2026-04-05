@@ -127,6 +127,11 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
 
     const auto hit = song_select::hit_test_song_list(state_, mouse);
     if (!hit.has_value()) {
+        if (right_pressed && CheckCollisionPointRec(mouse, song_select::layout::kSongListViewRect)) {
+            song_select::open_list_background_context_menu(
+                state_, song_select::layout::make_context_menu_rect(mouse, 3));
+            return true;
+        }
         return false;
     }
 
@@ -154,17 +159,17 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
         return true;
     }
 
-        if (right_pressed) {
-            const int chart_index = hit->song_index == state_.selected_song_index ? state_.difficulty_index : 0;
-            const bool song_changed = song_select::apply_song_selection(state_, hit->song_index, chart_index);
-            if (song_changed) {
-                sync_selected_song_media();
-            }
-            song_select::open_song_context_menu(
-                state_, hit->song_index,
-                song_select::layout::make_context_menu_rect(mouse, 5));
-            return true;
+    if (right_pressed) {
+        const int chart_index = hit->song_index == state_.selected_song_index ? state_.difficulty_index : 0;
+        const bool song_changed = song_select::apply_song_selection(state_, hit->song_index, chart_index);
+        if (song_changed) {
+            sync_selected_song_media();
         }
+        song_select::open_song_context_menu(
+            state_, hit->song_index,
+            song_select::layout::make_context_menu_rect(mouse, 4));
+        return true;
+    }
 
     song_select::close_context_menu(state_);
     const bool song_changed = song_select::apply_song_selection(
@@ -181,6 +186,14 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
         return;
     case song_select::context_menu_command::close_menu:
         song_select::close_context_menu(state_);
+        return;
+    case song_select::context_menu_command::new_song:
+        song_select::close_context_menu(state_);
+        manager_.change_scene(song_select::make_song_create_scene(manager_));
+        return;
+    case song_select::context_menu_command::import_song:
+        song_select::close_context_menu(state_);
+        apply_transfer_result(song_select::import_song_package(state_));
         return;
     case song_select::context_menu_command::edit_song:
         if (state_.context_menu.song_index >= 0 &&
@@ -324,22 +337,6 @@ void song_select_scene::update(float dt) {
         return;
     }
 
-    if (ui::is_clicked(song_select::layout::kSongListNewSongButtonRect, song_select::layout::kSceneLayer)) {
-        song_select::close_context_menu(state_);
-        manager_.change_scene(song_select::make_song_create_scene(manager_));
-        return;
-    }
-
-    if (ui::is_clicked(song_select::layout::kSongListImportSongButtonRect, song_select::layout::kSceneLayer)) {
-        song_select::close_context_menu(state_);
-        apply_transfer_result(song_select::import_song_package(state_));
-        return;
-    }
-
-    if (state_.songs.empty()) {
-        return;
-    }
-
     if (ui::is_clicked(song_select::layout::local_offset_double_left_rect(), song_select::layout::kSceneLayer)) {
         adjust_selected_song_local_offset(-5);
         return;
@@ -441,6 +438,10 @@ void song_select_scene::update(float dt) {
     }
 
     if (handle_song_list_pointer(mouse, IsMouseButtonPressed(MOUSE_BUTTON_LEFT), IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))) {
+        return;
+    }
+
+    if (state_.songs.empty()) {
         return;
     }
 }

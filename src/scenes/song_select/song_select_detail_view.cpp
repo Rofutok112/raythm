@@ -38,10 +38,6 @@ void draw_frame() {
     ui::draw_panel(layout::kLeftPanelRect);
     ui::draw_panel(layout::kSongListRect);
     ui::draw_text_in_rect("SONG SELECT", 30, layout::kSceneTitleRect, theme.text, ui::text_align::left);
-    ui::draw_button_colored(layout::kSongListImportSongButtonRect, "IMPORT SONG", 14,
-                            theme.row, theme.row_hover, theme.text);
-    ui::draw_button_colored(layout::kSongListNewSongButtonRect, "NEW SONG", 14,
-                            theme.row, theme.row_hover, theme.text);
     ui::draw_button_colored(layout::kSettingsButtonRect, "SETTINGS", 20,
                             theme.row, theme.row_hover, theme.text);
 }

@@ -18,6 +18,16 @@ context_menu_command draw_context_menu(const state& state) {
     std::vector<context_menu_item_entry> entries;
 
     switch (state.context_menu.target) {
+        case context_menu_target::list_background: {
+            const bool has_selected_song = state.selected_song_index >= 0 &&
+                                           state.selected_song_index < static_cast<int>(state.songs.size());
+            entries = {
+                {{"NEW SONG", true}, context_menu_command::new_song},
+                {{"IMPORT SONG", true}, context_menu_command::import_song},
+                {{"IMPORT CHART", has_selected_song}, context_menu_command::import_chart},
+            };
+            break;
+        }
         case context_menu_target::song: {
             // 参照可否 追加可否 編集可否 削除可否 : Official譜面は"譜面の追加"のみ可能
             const bool valid_song = state.context_menu.song_index >= 0 &&
@@ -30,7 +40,6 @@ context_menu_command draw_context_menu(const state& state) {
             entries = {
                 {{"EDIT META", can_edit_song}, context_menu_command::edit_song},
                 {{"NEW CHART", can_add_chart_to_song}, context_menu_command::new_chart},
-                {{"IMPORT CHART", valid_song}, context_menu_command::import_chart},
                 {{"EXPORT SONG", valid_song}, context_menu_command::export_song},
                 {{"DELETE SONG", can_delete_song}, context_menu_command::request_delete_song}
             };

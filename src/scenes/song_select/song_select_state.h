@@ -30,6 +30,7 @@ struct catalog_data {
 
 enum class context_menu_target {
     none,
+    list_background,
     song,
     chart,
 };
@@ -93,6 +94,7 @@ bool apply_song_selection(state& state, int song_index, int chart_index = 0);
 
 void open_song_context_menu(state& state, int song_index, Rectangle rect);
 void open_chart_context_menu(state& state, int song_index, int chart_index, Rectangle rect);
+void open_list_background_context_menu(state& state, Rectangle rect);
 void close_context_menu(state& state);
 void queue_status_message(state& state, std::string message, bool is_error);
 

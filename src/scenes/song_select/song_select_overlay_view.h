@@ -7,6 +7,8 @@ namespace song_select {
 
 enum class context_menu_command {
     none,
+    new_song,
+    import_song,
     edit_song,
     new_chart,
     import_chart,
