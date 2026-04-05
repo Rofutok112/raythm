@@ -48,7 +48,7 @@ struct chart_meta {
     std::string song_id;
     int key_count = 0;
     std::string difficulty;
-    int level = 0;
+    float level = 0.0f;
     std::string chart_author;
     int format_version = 0;
     int resolution = 0;

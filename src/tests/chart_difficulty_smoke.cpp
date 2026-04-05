@@ -63,8 +63,8 @@ int main() {
     const chart_data easy = make_easy_chart();
     const chart_data hard = make_hard_chart();
 
-    const int easy_level = chart_difficulty::calculate_level(easy);
-    const int hard_level = chart_difficulty::calculate_level(hard);
+    const float easy_level = chart_difficulty::calculate_level(easy);
+    const float hard_level = chart_difficulty::calculate_level(hard);
 
     if (easy_level <= 0) {
         std::cerr << "Expected easy chart to receive a positive auto level\n";

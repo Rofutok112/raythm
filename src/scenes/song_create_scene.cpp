@@ -306,8 +306,8 @@ void song_create_scene::draw_chart_metadata() {
         }
     }
 
-    ui::draw_text_input(make_row(row++), level_input_, "Level", "0",
-                        "0", kLayer, 16, 4, int_filter, 120.0f);
+    ui::draw_text_input(make_row(row++), level_input_, "Level", "0.0",
+                        "0.0", kLayer, 16, 4, numeric_filter, 120.0f);
 
     ui::draw_text_input(make_row(row++), chart_author_input_, "Author", "Your name",
                         nullptr, kLayer, 16, 64, wide_text_filter, 120.0f);
@@ -549,10 +549,10 @@ bool song_create_scene::create_chart_and_open_editor() {
         return false;
     }
 
-    int level = 0;
+    float level = 0.0f;
     if (!level_input_.value.empty()) {
         try {
-            level = std::stoi(level_input_.value);
+            level = std::stof(level_input_.value);
         } catch (...) {
             error_ = "Invalid level value.";
             return false;

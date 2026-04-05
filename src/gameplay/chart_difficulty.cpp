@@ -427,12 +427,13 @@ float calculate_rating(const chart_data& data) {
     return kScale * static_cast<float>(std::pow(weighted_sum / total_weight_ms, 1.0 / kPeakPower));
 }
 
-int calculate_level(const chart_data& data) {
+float calculate_level(const chart_data& data) {
     const float rating = calculate_rating(data);
     if (rating <= 0.0f) {
-        return 0;
+        return 0.0f;
     }
-    return std::clamp(static_cast<int>(std::lround(rating)), 1, 99);
+    const float rounded = std::round(rating * 10.0f) / 10.0f;
+    return std::clamp(rounded, 0.1f, 99.0f);
 }
 
 }  // namespace chart_difficulty

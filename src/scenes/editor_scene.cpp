@@ -429,7 +429,7 @@ chart_data editor_scene::make_chart_data_for_save() const {
     return data;
 }
 
-int editor_scene::computed_chart_level() const {
+float editor_scene::computed_chart_level() const {
     return chart_difficulty::calculate_level(make_chart_data_for_save());
 }
 
@@ -1176,7 +1176,7 @@ void editor_scene::draw_left_panel() {
                          "Notes", TextFormat("%d", static_cast<int>(state_->data().notes.size())), 16,
                          t.text_secondary, t.text, 92.0f);
     ui::draw_label_value({tools_box_expanded.x + 12.0f, tools_box_expanded.y + 100.0f, tools_box_expanded.width - 24.0f, 24.0f},
-                         "Level", TextFormat("%d", computed_chart_level()), 16,
+                         "Level", TextFormat("%.1f", computed_chart_level()), 16,
                          t.text_secondary, t.text, 92.0f);
 
     if (!load_errors_.empty()) {

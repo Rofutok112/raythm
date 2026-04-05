@@ -7,7 +7,7 @@
 
 namespace {
 
-song_select::chart_option make_chart(const char* chart_id, const char* difficulty, int level) {
+song_select::chart_option make_chart(const char* chart_id, const char* difficulty, float level) {
     song_select::chart_option chart;
     chart.path = chart_id;
     chart.meta.chart_id = chart_id;

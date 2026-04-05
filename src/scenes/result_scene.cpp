@@ -114,7 +114,7 @@ void result_scene::draw() {
         const float lx = kSongInfoRect.x + 16.0f;
         draw_marquee_text(song_.meta.title.c_str(), lx, sy, 32, t.text, song_info_max_w, now);
         draw_marquee_text(song_.meta.artist.c_str(), lx, sy + 38, 22, t.text_dim, song_info_max_w, now);
-        const char* chart_label = TextFormat("%s %s Lv.%d", key_mode_label(chart_.key_count),
+        const char* chart_label = TextFormat("%s %s Lv.%.1f", key_mode_label(chart_.key_count),
                                              chart_.difficulty.c_str(), chart_.level);
         const int chart_label_w = MeasureText(chart_label, 20);
         ui::draw_text_f(chart_label, lx, sy + 66.0f, 20, t.accent);
