@@ -101,7 +101,7 @@ void draw_song_details(const state& state, const preview_controller& preview_con
                     detail_x + content_offset_x, layout::kJacketRect.y + 126.0f, 18,
                     with_alpha(song->song.source == content_source::app_data ? theme.success : theme.text_hint, content_alpha));
     if (selected_chart != nullptr) {
-        ui::draw_text_f(TextFormat("%s %s Lv.%d", key_mode_label(selected_chart->meta.key_count).c_str(),
+        ui::draw_text_f(TextFormat("%s %s Lv.%.1f", key_mode_label(selected_chart->meta.key_count).c_str(),
                                    selected_chart->meta.difficulty.c_str(), selected_chart->meta.level),
                         detail_x + content_offset_x, layout::kJacketRect.y + 158.0f, 28,
                         with_alpha(theme.text, content_alpha));

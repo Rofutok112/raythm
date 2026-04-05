@@ -110,7 +110,6 @@ void song_create_scene::update(float dt) {
     switch (current_step_) {
         case step::song_metadata: update_song_metadata(); break;
         case step::song_saved: update_song_saved(); break;
-        case step::chart_metadata: update_chart_metadata(); break;
     }
 }
 
@@ -124,10 +123,6 @@ void song_create_scene::draw() {
         case step::song_saved:
             content_title = "Song Created";
             content_subtitle = "Choose the next action";
-            break;
-        case step::chart_metadata:
-            content_title = "New Chart";
-            content_subtitle = "Enter chart metadata";
             break;
     }
 
@@ -144,10 +139,6 @@ void song_create_scene::draw() {
         case step::song_saved:
             ui::draw_section(kDecisionCardRect);
             draw_song_saved();
-            break;
-        case step::chart_metadata:
-            ui::draw_section(kChartCardRect);
-            draw_chart_metadata();
             break;
     }
 
@@ -168,13 +159,6 @@ void song_create_scene::update_song_saved() {
     if (IsKeyPressed(KEY_ESCAPE)) {
         go_back_to_song_select(created_song_.meta.song_id);
         return;
-    }
-}
-
-void song_create_scene::update_chart_metadata() {
-    if (IsKeyPressed(KEY_ESCAPE)) {
-        current_step_ = step::song_saved;
-        error_.clear();
     }
 }
 
@@ -280,8 +264,8 @@ void song_create_scene::draw_song_saved() {
     const Rectangle add_later_rect = {start_x + kButtonWidth + kGap, kCenterY + 45, kButtonWidth, kButtonHeight};
 
     if (ui::draw_button(add_chart_rect, "ADD CHART", 16).clicked) {
-        current_step_ = step::chart_metadata;
-        error_.clear();
+        manager_.change_scene(std::make_unique<editor_scene>(manager_, created_song_, 4));
+        return;
     }
 
     if (ui::draw_button(add_later_rect, "ADD LATER", 16).clicked) {
@@ -289,57 +273,6 @@ void song_create_scene::draw_song_saved() {
     }
 }
 
-void song_create_scene::draw_chart_metadata() {
-    int row = 0;
-
-    ui::draw_text_input(make_row(row++), chart_name_input_, "Chart Name", "e.g. Normal",
-                        nullptr, kLayer, 16, 64, wide_text_filter, 120.0f);
-
-    ui::draw_text_input(make_row(row++), difficulty_input_, "Difficulty", "Normal",
-                        "Normal", kLayer, 16, 32, wide_text_filter, 120.0f);
-
-    {
-        const Rectangle key_row = make_row(row++);
-        const ui::selector_state sel = ui::draw_value_selector(
-            key_row, "Key Mode", key_count_label(chart_key_count_).c_str(),
-            16, 26.0f, 120.0f, 12.0f);
-
-        if (sel.left.clicked || sel.right.clicked) {
-            chart_key_count_ = (chart_key_count_ == 4) ? 6 : 4;
-        }
-    }
-
-    ui::draw_text_input(make_row(row++), level_input_, "Level", "0",
-                        "0", kLayer, 16, 4, int_filter, 120.0f);
-
-    ui::draw_text_input(make_row(row++), chart_author_input_, "Author", "Your name",
-                        nullptr, kLayer, 16, 64, wide_text_filter, 120.0f);
-
-    ui::draw_text_input(make_row(row++), chart_description_input_, "Description", "(optional)",
-                        nullptr, kLayer, 16, 256, wide_text_filter, 120.0f);
-
-    const float button_y = kFormStartY + static_cast<float>(row) * (kRowHeight + kRowGap) + 16.0f;
-    constexpr float kButtonWidth = 220.0f;
-    constexpr float kButtonHeight = 44.0f;
-    const Rectangle create_rect = {kFormX + kFormWidth - kButtonWidth, button_y, kButtonWidth, kButtonHeight};
-    const Rectangle back_rect = {kFormX + kFormWidth - kButtonWidth * 2.0f - 12.0f, button_y, kButtonWidth, kButtonHeight};
-
-    if (ui::draw_button(create_rect, "CREATE & OPEN EDITOR", 14).clicked) {
-        if (create_chart_and_open_editor()) {
-            return;
-        }
-    }
-
-    if (ui::draw_button(back_rect, "BACK", 16).clicked) {
-        current_step_ = step::song_saved;
-        error_.clear();
-    }
-
-    if (!error_.empty()) {
-        const Rectangle error_rect = {kFormX, button_y + kButtonHeight + 12.0f, kFormWidth, 24.0f};
-        ui::draw_text_in_rect(error_.c_str(), 14, error_rect, g_theme->error, ui::text_align::left);
-    }
-}
 
 bool song_create_scene::create_song() {
     if (title_input_.value.empty()) {
@@ -546,40 +479,6 @@ bool song_create_scene::save_song_edits() {
     created_song_ = *editing_song_;
     error_.clear();
     go_back_to_song_select(meta.song_id);
-    return true;
-}
-
-bool song_create_scene::create_chart_and_open_editor() {
-    if (difficulty_input_.value.empty()) {
-        error_ = "Difficulty is required.";
-        return false;
-    }
-
-    int level = 0;
-    if (!level_input_.value.empty()) {
-        try {
-            level = std::stoi(level_input_.value);
-        } catch (...) {
-            error_ = "Invalid level value.";
-            return false;
-        }
-    }
-
-    chart_meta meta;
-    meta.chart_id = generate_uuid();
-    meta.song_id = created_song_.meta.song_id;
-    meta.chart_name = chart_name_input_.value;
-    meta.key_count = chart_key_count_;
-    meta.difficulty = difficulty_input_.value;
-    meta.level = level;
-    meta.chart_author = chart_author_input_.value;
-    meta.is_public = false;
-    meta.description = chart_description_input_.value;
-    meta.format_version = 3;
-    meta.resolution = 1920;
-    meta.offset = 0;
-
-    manager_.change_scene(std::make_unique<editor_scene>(manager_, created_song_, meta));
     return true;
 }
 

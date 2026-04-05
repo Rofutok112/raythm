@@ -34,11 +34,11 @@ int main() {
     {
         metadata_panel_state metadata_panel;
         editor_timing_panel_state timing_panel;
-        metadata_panel.chart_name_input.active = true;
-        metadata_panel.description_input.active = true;
+        metadata_panel.difficulty_input.active = true;
+        metadata_panel.chart_author_input.active = true;
         const editor_metadata_panel_result result = editor_panel_controller::update_metadata_panel(
             metadata_panel, timing_panel, {false, true, false});
-        if (!result.request_apply_metadata || metadata_panel.chart_name_input.active || metadata_panel.description_input.active) {
+        if (!result.request_apply_metadata || metadata_panel.difficulty_input.active || metadata_panel.chart_author_input.active) {
             std::cerr << "metadata submit should deactivate inputs and request apply\n";
             return EXIT_FAILURE;
         }

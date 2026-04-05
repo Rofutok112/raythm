@@ -55,8 +55,6 @@ struct editor_navigation_request {
 struct metadata_panel_state {
     ui::text_input_state difficulty_input;
     ui::text_input_state chart_author_input;
-    ui::text_input_state chart_name_input;
-    ui::text_input_state description_input;
     int key_count = 4;
     std::string error;
     bool key_count_confirm_open = false;
@@ -197,6 +195,7 @@ struct editor_timeline_context {
 struct editor_timeline_result {
     std::optional<size_t> selected_note_index;
     editor_timeline_note_drag_state drag_state;
+    std::optional<size_t> note_to_delete_index;
     bool request_seek = false;
     int seek_tick = 0;
     bool scroll_seek_if_paused = false;

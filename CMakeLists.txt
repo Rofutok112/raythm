@@ -60,7 +60,7 @@ if(WIN32)
             "${RAYTHM_APP_ICON_RC}" @ONLY)
 endif()
 
-add_executable(raythm src/main.cpp
+add_executable(raythm WIN32 src/main.cpp
         src/audio/audio.cpp
         src/audio/audio.h
         src/audio/audio_manager.cpp
@@ -80,6 +80,8 @@ add_executable(raythm src/main.cpp
         src/platform/windows_input_source.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
         src/models/data_models.h
@@ -101,6 +103,8 @@ add_executable(raythm src/main.cpp
         src/core/app_paths.h
         src/core/file_dialog.cpp
         src/core/file_dialog.h
+        src/core/window_dialog_support.cpp
+        src/core/window_dialog_support.h
         src/core/scene.cpp
         src/core/scene.h
         src/core/scene_manager.cpp
@@ -114,6 +118,10 @@ add_executable(raythm src/main.cpp
         src/scenes/scene_common.h
         src/scenes/title_scene.cpp
         src/scenes/title_scene.h
+        src/scenes/title/title_bgm_controller.cpp
+        src/scenes/title/title_bgm_controller.h
+        src/scenes/title/title_spectrum_visualizer.cpp
+        src/scenes/title/title_spectrum_visualizer.h
         src/scenes/song_create_scene.cpp
         src/scenes/song_create_scene.h
         src/scenes/song_select/song_catalog_service.cpp
@@ -196,10 +204,20 @@ add_executable(chart_parser_smoke
 add_executable(chart_serializer_smoke
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
         src/tests/chart_serializer_smoke.cpp
         src/models/data_models.h)
+
+add_executable(chart_difficulty_smoke
+        src/models/data_models.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/tests/chart_difficulty_smoke.cpp)
 
 add_executable(editor_state_smoke
         src/scenes/editor/editor_command.h
@@ -393,6 +411,7 @@ set(RAYTHM_INCLUDE_DIRS
 target_include_directories(raythm PRIVATE ${RAYTHM_BASS_DIR} ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_parser_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_serializer_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(chart_difficulty_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(editor_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_loader_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_select_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
@@ -460,13 +479,13 @@ if(WIN32)
     set(CPACK_PACKAGE_INSTALL_DIRECTORY "raythm")
     set(CPACK_PACKAGE_VERSION "${RAYTHM_PACKAGE_VERSION}")
     set(CPACK_PACKAGE_FILE_NAME "${RAYTHM_PACKAGE_FILE_NAME}")
-    set(CPACK_PACKAGE_EXECUTABLES "raythm.exe" "raythm")
-    set(CPACK_CREATE_DESKTOP_LINKS "raythm.exe")
+    set(CPACK_PACKAGE_EXECUTABLES "raythm" "raythm")
+    set(CPACK_CREATE_DESKTOP_LINKS "raythm")
     set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
     set(CPACK_NSIS_DISPLAY_NAME "raythm")
     set(CPACK_NSIS_PACKAGE_NAME "raythm")
     set(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
-    set(CPACK_NSIS_MUI_FINISHPAGE_RUN "raythm.exe")
+    set(CPACK_NSIS_MUI_FINISHPAGE_RUN "raythm")
     set(CPACK_NSIS_MUI_ICON "${RAYTHM_APP_ICON_ICO}")
     set(CPACK_NSIS_MUI_UNIICON "${RAYTHM_APP_ICON_ICO}")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)

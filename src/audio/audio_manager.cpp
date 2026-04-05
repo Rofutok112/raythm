@@ -1,5 +1,6 @@
 #include "audio_manager.h"
 
+#include <array>
 #include <algorithm>
 #include <unordered_map>
 
@@ -126,6 +127,16 @@ double audio_manager::get_bgm_length_seconds() const {
 
 audio_clock_snapshot audio_manager::get_bgm_clock() const {
     return get_voice_clock(bgm_handle_);
+}
+
+bool audio_manager::get_bgm_fft256(std::array<float, 128>& spectrum) const {
+    spectrum.fill(0.0f);
+    if (!is_voice_loaded(bgm_handle_)) {
+        return false;
+    }
+
+    return BASS_ChannelGetData(bgm_handle_, spectrum.data(),
+                               BASS_DATA_FFT256 | BASS_DATA_FFT_REMOVEDC) != static_cast<DWORD>(-1);
 }
 
 double audio_manager::get_output_latency_seconds() const {

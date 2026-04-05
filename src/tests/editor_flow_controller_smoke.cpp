@@ -11,7 +11,6 @@ chart_data make_chart() {
     chart_data data;
     data.meta.chart_id = "editor-flow-smoke";
     data.meta.song_id = "song";
-    data.meta.chart_name = "Normal";
     data.meta.key_count = 4;
     data.meta.difficulty = "Normal";
     data.meta.level = 5;

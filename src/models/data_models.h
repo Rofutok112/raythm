@@ -46,16 +46,14 @@ struct song_load_result {
 struct chart_meta {
     std::string chart_id;
     std::string song_id;
-    std::string chart_name;
     int key_count = 0;
     std::string difficulty;
-    int level = 0;
+    float level = 0.0f;
     std::string chart_author;
     int format_version = 0;
     int resolution = 0;
     int offset = 0;
     bool is_public = false;
-    std::string description;
 };
 
 // タイミングイベントの種類。
@@ -128,7 +126,8 @@ struct note_state {
     note_data note_ref;
     double target_ms = 0.0;
     double end_target_ms = 0.0;
-    bool judged = false;
+    bool judged = false;     // Head timing has been judged.
+    bool completed = false;  // The note no longer needs any further processing.
     judge_result result = judge_result::miss;
     bool holding = false;
 };
@@ -138,6 +137,8 @@ struct judge_event {
     judge_result result = judge_result::miss;
     double offset_ms = 0.0;
     int lane = 0;
+    bool play_hitsound = true;
+    bool apply_gameplay_effects = true;
 };
 
 // 達成率に応じたランク種別。

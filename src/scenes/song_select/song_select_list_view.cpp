@@ -49,7 +49,7 @@ void draw_chart_rows(const song_select::state& state,
             const ui::row_state child_state = ui::draw_selectable_row(child_rect, child_selected, 0.0f);
             (void)child_state;
         }
-        ui::draw_text_f(TextFormat("%s %s Lv.%d", key_mode_label(chart.meta.key_count).c_str(), chart.meta.difficulty.c_str(),
+        ui::draw_text_f(TextFormat("%s %s Lv.%.1f", key_mode_label(chart.meta.key_count).c_str(), chart.meta.difficulty.c_str(),
                                    chart.meta.level),
                         child_text_x, child_y, 18, child_selected ? theme.text : theme.text_secondary);
         ui::draw_text_f(chart.meta.chart_author.c_str(), author_x, child_y + 1.0f, 14, theme.text_muted);

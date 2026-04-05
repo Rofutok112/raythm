@@ -17,6 +17,12 @@ std::string format_float(float value) {
     return stream.str();
 }
 
+std::string format_level(float value) {
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(1) << value;
+    return stream.str();
+}
+
 const char* timing_type_name(timing_event_type type) {
     switch (type) {
         case timing_event_type::bpm:
@@ -50,7 +56,7 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
     output << "chartId=" << data.meta.chart_id << '\n';
     output << "keyCount=" << data.meta.key_count << '\n';
     output << "difficulty=" << data.meta.difficulty << '\n';
-    output << "level=" << data.meta.level << '\n';
+    output << "level=" << format_level(data.meta.level) << '\n';
     output << "chartAuthor=" << data.meta.chart_author << '\n';
     output << "formatVersion=" << data.meta.format_version << '\n';
     output << "resolution=" << data.meta.resolution << '\n';
@@ -58,13 +64,7 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
     if (!data.meta.song_id.empty()) {
         output << "songId=" << data.meta.song_id << '\n';
     }
-    if (!data.meta.chart_name.empty()) {
-        output << "chartName=" << data.meta.chart_name << '\n';
-    }
     output << "isPublic=" << (data.meta.is_public ? "true" : "false") << '\n';
-    if (!data.meta.description.empty()) {
-        output << "description=" << data.meta.description << '\n';
-    }
     output << '\n';
 
     std::vector<timing_event> sorted_timing = data.timing_events;

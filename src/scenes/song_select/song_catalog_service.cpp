@@ -5,6 +5,7 @@
 #include <system_error>
 
 #include "app_paths.h"
+#include "chart_difficulty.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
 #include "song_loader.h"
@@ -71,21 +72,24 @@ catalog_data load_catalog() {
                 continue;
             }
 
+            chart_meta meta = parse_result.data->meta;
+            meta.level = chart_difficulty::calculate_level(*parse_result.data);
+
             const content_source chart_source = song_loader::classify_chart_path(chart_path);
             entry.charts.push_back({
                 chart_path,
-                parse_result.data->meta,
+                meta,
                 chart_source,
                 chart_source == content_source::app_data,
             });
         }
 
         std::sort(entry.charts.begin(), entry.charts.end(), [](const chart_option& left, const chart_option& right) {
-            if (left.meta.key_count != right.meta.key_count) {
-                return left.meta.key_count < right.meta.key_count;
-            }
             if (left.meta.level != right.meta.level) {
                 return left.meta.level < right.meta.level;
+            }
+            if (left.meta.key_count != right.meta.key_count) {
+                return left.meta.key_count < right.meta.key_count;
             }
             return left.meta.difficulty < right.meta.difficulty;
         });
