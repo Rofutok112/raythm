@@ -64,19 +64,12 @@ private:
     void add_timing_event(timing_event_type type);
     void delete_selected_timing_event();
     bool can_delete_selected_timing_event() const;
-    void draw_left_panel();
-    void draw_right_panel();
     void draw_timeline() const;
-    void draw_cursor_hud() const;
-    void draw_header_tools();
     bool has_active_metadata_input() const;
     bool apply_metadata_changes(bool clear_notes_for_key_count_change);
     bool apply_chart_offset(int offset_ms);
     std::string generated_chart_id(const std::string& difficulty) const;
     bool has_blocking_modal() const;
-    void draw_unsaved_changes_dialog() const;
-    void draw_save_dialog();
-    void draw_key_count_confirmation() const;
 
     song_data song_;
     std::optional<std::string> chart_path_;

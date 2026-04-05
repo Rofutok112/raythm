@@ -145,8 +145,18 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select_scene.h
         src/scenes/editor/editor_flow_controller.cpp
         src/scenes/editor/editor_flow_controller.h
+        src/scenes/editor/editor_cursor_hud_view.cpp
+        src/scenes/editor/editor_cursor_hud_view.h
+        src/scenes/editor/editor_header_view.cpp
+        src/scenes/editor/editor_header_view.h
+        src/scenes/editor/editor_left_panel_view.cpp
+        src/scenes/editor/editor_left_panel_view.h
+        src/scenes/editor/editor_modal_view.cpp
+        src/scenes/editor/editor_modal_view.h
         src/scenes/editor/editor_panel_controller.cpp
         src/scenes/editor/editor_panel_controller.h
+        src/scenes/editor/editor_right_panel_view.cpp
+        src/scenes/editor/editor_right_panel_view.h
         src/scenes/editor/editor_scene_sync.cpp
         src/scenes/editor/editor_scene_sync.h
         src/scenes/editor/editor_scene_types.h
@@ -437,6 +447,7 @@ target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
 target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_timeline_controller_smoke PRIVATE raylib)
+target_link_libraries(editor_panel_controller_smoke PRIVATE raylib)
 target_link_libraries(audio_manager_smoke PRIVATE ${RAYTHM_BASS_IMPORT_LIB})
 
 set(RAYTHM_RUNTIME_DLLS
