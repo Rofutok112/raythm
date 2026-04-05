@@ -44,17 +44,26 @@ jobs:
         shell: powershell
         run: |
           $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-          $packageVersion = Get-Date -Format "yyyy.MM.dd"
+          $major = Get-Date -Format "yyyy"
+          $minor = Get-Date -Format "MMdd"
+          $packageVersion = "$major.$minor.$env:GITHUB_RUN_NUMBER"
           $shortSha = "${env:GITHUB_SHA}".Substring(0, 7)
-          $assetName = "raythm-$packageVersion.$env:GITHUB_RUN_NUMBER-windows-x64"
-          $tag = "main-build-$timestamp-$shortSha"
+          $assetName = "raythm-$packageVersion-windows-x64"
+          $tag = "v$packageVersion"
           $releaseName = "raythm main build $timestamp ($shortSha)"
+          $installerPath = "dist/$assetName.exe"
+          $installRoot = "dist/$assetName"
+          $zipPath = "dist/game-win64.zip"
+          $checksumPath = "dist/SHA256SUMS.txt"
 
-          "package_version=$packageVersion.$env:GITHUB_RUN_NUMBER" >> $env:GITHUB_OUTPUT
+          "package_version=$packageVersion" >> $env:GITHUB_OUTPUT
           "asset_name=$assetName" >> $env:GITHUB_OUTPUT
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "release_name=$releaseName" >> $env:GITHUB_OUTPUT
-          "installer_path=dist/$assetName.exe" >> $env:GITHUB_OUTPUT
+          "installer_path=$installerPath" >> $env:GITHUB_OUTPUT
+          "install_root=$installRoot" >> $env:GITHUB_OUTPUT
+          "zip_path=$zipPath" >> $env:GITHUB_OUTPUT
+          "checksum_path=$checksumPath" >> $env:GITHUB_OUTPUT
 
       - name: Configure
         shell: msys2 {0}
@@ -66,17 +75,43 @@ jobs:
 
       - name: Build
         shell: msys2 {0}
-        run: cmake --build build --config Release --target raythm --parallel
+        run: cmake --build build --config Release --target raythm raythm_launcher raythm_updater --parallel
 
       - name: Package installer
         shell: msys2 {0}
         run: cpack --config build/CPackConfig.cmake -G NSIS -B dist
 
+      - name: Prepare portable update package
+        shell: powershell
+        run: |
+          $installRoot = "${{ steps.meta.outputs.install_root }}"
+          $zipPath = "${{ steps.meta.outputs.zip_path }}"
+          $checksumPath = "${{ steps.meta.outputs.checksum_path }}"
+
+          if (Test-Path $installRoot) {
+            Remove-Item -LiteralPath $installRoot -Recurse -Force
+          }
+          if (Test-Path $zipPath) {
+            Remove-Item -LiteralPath $zipPath -Force
+          }
+          if (Test-Path $checksumPath) {
+            Remove-Item -LiteralPath $checksumPath -Force
+          }
+
+          cmake --install build --prefix $installRoot
+          Compress-Archive -LiteralPath "$installRoot\\*" -DestinationPath $zipPath -CompressionLevel Optimal
+
+          $hash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *game-win64.zip" | Set-Content -LiteralPath $checksumPath -NoNewline
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.meta.outputs.asset_name }}
-          path: ${{ steps.meta.outputs.installer_path }}
+          path: |
+            ${{ steps.meta.outputs.installer_path }}
+            ${{ steps.meta.outputs.zip_path }}
+            ${{ steps.meta.outputs.checksum_path }}
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -84,5 +119,8 @@ jobs:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.release_name }}
           generate_release_notes: true
-          prerelease: true
-          files: ${{ steps.meta.outputs.installer_path }}
+          prerelease: false
+          files: |
+            ${{ steps.meta.outputs.installer_path }}
+            ${{ steps.meta.outputs.zip_path }}
+            ${{ steps.meta.outputs.checksum_path }}
