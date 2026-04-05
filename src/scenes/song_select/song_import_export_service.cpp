@@ -417,16 +417,34 @@ transfer_result export_song_package(const song_export_request& request) {
 }
 
 transfer_result import_song_package(const state& state) {
-    transfer_result result;
-    const std::string source_path = file_dialog::open_song_package_file();
-    if (source_path.empty()) {
+    const std::optional<song_import_request> request = prepare_song_import(state);
+    if (!request.has_value()) {
+        transfer_result result;
         result.cancelled = true;
         return result;
     }
 
+    return import_song_package(*request);
+}
+
+std::optional<song_import_request> prepare_song_import(const state& state) {
+    const std::string source_path = file_dialog::open_song_package_file();
+    if (source_path.empty()) {
+        return std::nullopt;
+    }
+
+    return song_import_request{
+        .catalog_state = state,
+        .source_path = source_path,
+    };
+}
+
+transfer_result import_song_package(const song_import_request& request) {
+    transfer_result result;
+
     scoped_temp_directory extract_root("song_import");
     if (!extract_root.valid() ||
-        !extract_archive_to_directory(path_utils::from_utf8(source_path), extract_root.path())) {
+        !extract_archive_to_directory(path_utils::from_utf8(request.source_path), extract_root.path())) {
         result.message = "Failed to extract the song package.";
         return result;
     }
@@ -446,7 +464,7 @@ transfer_result import_song_package(const state& state) {
     }
 
     const song_data& imported_song = loaded.songs.front();
-    const std::optional<song_entry> existing_song = find_song_by_id(state, imported_song.meta.song_id);
+    const std::optional<song_entry> existing_song = find_song_by_id(request.catalog_state, imported_song.meta.song_id);
     if (existing_song.has_value()) {
         if (existing_song->song.source == content_source::official) {
             result.message = "Cannot overwrite an official song package.";

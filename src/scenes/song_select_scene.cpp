@@ -105,6 +105,15 @@ void song_select_scene::start_song_export(song_select::song_export_request reque
     });
 }
 
+void song_select_scene::start_song_import(song_select::song_import_request request) {
+    background_transfer_active_ = true;
+    background_transfer_label_ = "Importing song package...";
+    song_select::queue_status_message(state_, "Importing song package...", false);
+    background_transfer_ = std::async(std::launch::async, [request = std::move(request)]() {
+        return song_select::import_song_package(request);
+    });
+}
+
 bool song_select_scene::adjust_selected_song_local_offset(int delta_ms) {
     if (state_.selected_song_index < 0 || state_.selected_song_index >= static_cast<int>(state_.songs.size())) {
         return false;
@@ -217,7 +226,9 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
         return;
     case song_select::context_menu_command::import_song:
         song_select::close_context_menu(state_);
-        apply_transfer_result(song_select::import_song_package(state_));
+        if (const auto request = song_select::prepare_song_import(state_); request.has_value()) {
+            start_song_import(*request);
+        }
         return;
     case song_select::context_menu_command::edit_song:
         if (state_.context_menu.song_index >= 0 &&
