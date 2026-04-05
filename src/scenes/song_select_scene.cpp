@@ -5,6 +5,7 @@
 #include <cmath>
 #include <utility>
 
+#include "file_dialog.h"
 #include "player_note_offsets.h"
 #include "raylib.h"
 #include "scene_manager.h"
@@ -86,6 +87,31 @@ void song_select_scene::apply_transfer_result(const song_select::transfer_result
     song_select::queue_status_message(state_, result.message, false);
 }
 
+void song_select_scene::poll_song_import_prepare() {
+    if (!background_song_import_prepare_active_) {
+        return;
+    }
+
+    if (background_song_import_prepare_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    background_song_import_prepare_active_ = false;
+    background_transfer_label_.clear();
+    song_select::song_import_prepare_result prepared = background_song_import_prepare_.get();
+    if (!prepared.request.has_value()) {
+        apply_transfer_result(prepared.transfer);
+        return;
+    }
+
+    if (prepared.request->overwrite_existing) {
+        open_overwrite_song_confirmation(*prepared.request);
+        return;
+    }
+
+    start_song_import(*prepared.request);
+}
+
 void song_select_scene::poll_background_transfer() {
     if (!background_transfer_active_) {
         return;
@@ -103,6 +129,18 @@ void song_select_scene::poll_background_transfer() {
         pending_song_import_request_.reset();
     }
     apply_transfer_result(result);
+}
+
+void song_select_scene::start_song_import_prepare(std::string source_path) {
+    background_song_import_prepare_active_ = true;
+    background_transfer_label_ = "Reading song package...";
+    song_select::queue_status_message(state_, "Reading song package...", false);
+    const song_select::state catalog_state = state_;
+    background_song_import_prepare_ = std::async(
+        std::launch::async,
+        [catalog_state, source_path = std::move(source_path)]() {
+            return song_select::prepare_song_import_from_path(catalog_state, source_path);
+        });
 }
 
 void song_select_scene::start_song_export(song_select::song_export_request request) {
@@ -259,15 +297,9 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
     case song_select::context_menu_command::import_song:
         song_select::close_context_menu(state_);
         {
-            song_select::transfer_result result;
-            if (const auto request = song_select::prepare_song_import(state_, result); request.has_value()) {
-                if (request->overwrite_existing) {
-                    open_overwrite_song_confirmation(*request);
-                } else {
-                    start_song_import(*request);
-                }
-            } else {
-                apply_transfer_result(result);
+            const std::string source_path = file_dialog::open_song_package_file();
+            if (!source_path.empty()) {
+                start_song_import_prepare(source_path);
             }
         }
         return;
@@ -399,6 +431,7 @@ void song_select_scene::update(float dt) {
 
     preview_controller_.update(dt, song_select::selected_song(state_));
     song_select::tick_animations(state_, dt);
+    poll_song_import_prepare();
     poll_background_transfer();
 
     if (state_.confirmation_dialog.open &&
@@ -407,7 +440,7 @@ void song_select_scene::update(float dt) {
         state_.confirmation_dialog.suppress_initial_pointer_cancel = false;
     }
 
-    if (background_transfer_active_) {
+    if (background_song_import_prepare_active_ || background_transfer_active_) {
         return;
     }
 
@@ -566,7 +599,7 @@ void song_select_scene::draw() {
     if (state_.songs.empty()) {
         song_select::draw_empty_state(state_);
         song_select::draw_status_message(state_);
-        if (background_transfer_active_) {
+        if (background_song_import_prepare_active_ || background_transfer_active_) {
             song_select::draw_busy_overlay(background_transfer_label_);
         }
         ui::flush_draw_queue();
@@ -578,7 +611,7 @@ void song_select_scene::draw() {
 
     song_select::draw_song_details(state_, preview_controller_);
     song_select::draw_status_message(state_);
-    if (background_transfer_active_) {
+    if (background_song_import_prepare_active_ || background_transfer_active_) {
         song_select::draw_busy_overlay(background_transfer_label_);
     }
     apply_context_menu_command(song_select::draw_context_menu(state_));

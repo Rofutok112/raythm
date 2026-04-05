@@ -437,57 +437,65 @@ std::optional<song_import_request> prepare_song_import(const state& state, trans
         return std::nullopt;
     }
 
+    song_import_prepare_result prepared = prepare_song_import_from_path(state, source_path);
+    result = prepared.transfer;
+    return prepared.request;
+}
+
+song_import_prepare_result prepare_song_import_from_path(const state& state, const std::string& source_path) {
+    song_import_prepare_result prepared;
     scoped_temp_directory extract_root("song_import_prepare");
     if (!extract_root.valid() ||
         !extract_archive_to_directory(path_utils::from_utf8(source_path), extract_root.path())) {
-        result.message = "Failed to extract the song package.";
-        return std::nullopt;
+        prepared.transfer.message = "Failed to extract the song package.";
+        return prepared;
     }
 
     const std::optional<fs::path> extracted_song_root = find_song_json_root(extract_root.path());
     if (!extracted_song_root.has_value()) {
-        result.message = "song.json was not found in the package.";
-        return std::nullopt;
+        prepared.transfer.message = "song.json was not found in the package.";
+        return prepared;
     }
 
     const song_load_result loaded = song_loader::load_directory(path_utils::to_utf8(*extracted_song_root),
                                                                 content_source::app_data);
     if (!loaded.errors.empty() || loaded.songs.empty()) {
-        result.message = loaded.errors.empty() ? "Failed to read the song package metadata."
-                                               : loaded.errors.front();
-        return std::nullopt;
+        prepared.transfer.message = loaded.errors.empty() ? "Failed to read the song package metadata."
+                                                          : loaded.errors.front();
+        return prepared;
     }
 
     song_data imported_song = loaded.songs.front();
     const std::optional<song_entry> existing_song = find_song_by_id(state, imported_song.meta.song_id);
     if (existing_song.has_value() && existing_song->song.source == content_source::official) {
-        result.message = "Cannot overwrite an official song package.";
-        return std::nullopt;
+        prepared.transfer.message = "Cannot overwrite an official song package.";
+        return prepared;
     }
 
     const fs::path persistent_extract_root = make_temp_directory("song_import_stage");
     if (persistent_extract_root.empty()) {
-        result.message = "Failed to prepare the import directory.";
-        return std::nullopt;
+        prepared.transfer.message = "Failed to prepare the import directory.";
+        return prepared;
     }
 
     std::error_code ec;
     fs::copy(extract_root.path(), persistent_extract_root,
              fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
     if (ec) {
-        result.message = "Failed to prepare the import directory.";
-        return std::nullopt;
+        prepared.transfer.message = "Failed to prepare the import directory.";
+        return prepared;
     }
     imported_song.directory = path_utils::to_utf8(
         persistent_extract_root / path_utils::from_utf8(imported_song.directory).filename());
 
-    return song_import_request{
+    prepared.request = song_import_request{
         .catalog_state = state,
         .source_path = source_path,
         .extracted_root = path_utils::to_utf8(persistent_extract_root),
         .imported_song = imported_song,
         .overwrite_existing = existing_song.has_value(),
     };
+    return prepared;
 }
 
 transfer_result import_song_package(const song_import_request& request) {
