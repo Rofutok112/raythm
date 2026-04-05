@@ -236,6 +236,8 @@ add_executable(raythm_launcher
         src/updater/update_release.h
         src/updater/update_paths.cpp
         src/updater/update_paths.h
+        src/updater/update_log.cpp
+        src/updater/update_log.h
         src/updater/update_version.cpp
         src/updater/update_version.h
         src/updater/update_workflow.cpp
@@ -259,6 +261,8 @@ add_executable(raythm_updater
         src/updater/update_release.h
         src/updater/update_paths.cpp
         src/updater/update_paths.h
+        src/updater/update_log.cpp
+        src/updater/update_log.h
         src/updater/update_version.cpp
         src/updater/update_version.h
         src/updater/update_verify.cpp
@@ -490,6 +494,8 @@ add_executable(update_version_smoke
         src/updater/update_download.h
         src/updater/update_extract.cpp
         src/updater/update_extract.h
+        src/updater/update_log.cpp
+        src/updater/update_log.h
         src/updater/update_process.cpp
         src/updater/update_process.h
         src/updater/update_release.cpp

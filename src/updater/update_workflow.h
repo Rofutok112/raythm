@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -12,6 +13,8 @@ namespace updater {
 struct update_launch_request {
     semantic_version current_version;
     latest_release_info target_release;
+    std::optional<std::filesystem::path> install_root;
+    bool run_from_temp_copy = false;
 };
 
 std::vector<std::string> build_updater_arguments(const update_launch_request& request);
