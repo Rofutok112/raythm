@@ -21,8 +21,8 @@ constexpr float kScrollWheelViewportRatio = 0.36f;
 constexpr float kNoteHeadHeight = 14.0f;
 constexpr float kTimelineLeadInTicks = 960.0f;
 constexpr float kPlaybackFollowViewportRatio = 0.35f;
-constexpr std::array<int, 6> kSnapDivisions = {1, 2, 4, 8, 16, 32};
-constexpr std::array<const char*, 6> kSnapLabels = {"1/1", "1/2", "1/4", "1/8", "1/16", "1/32"};
+constexpr std::array<int, 9> kSnapDivisions = {1, 2, 3, 4, 8, 16, 32, 64, 128};
+constexpr std::array<const char*, 9> kSnapLabels = {"1/1", "1/2", "1/3", "1/4", "1/8", "1/16", "1/32", "1/64", "1/128"};
 }
 
 editor_timeline_metrics editor_timeline_viewport::metrics(const editor_timeline_viewport_model& model) {
