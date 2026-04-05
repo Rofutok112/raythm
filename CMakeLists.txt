@@ -103,6 +103,8 @@ add_executable(raythm src/main.cpp
         src/core/app_paths.h
         src/core/file_dialog.cpp
         src/core/file_dialog.h
+        src/core/window_dialog_support.cpp
+        src/core/window_dialog_support.h
         src/core/scene.cpp
         src/core/scene.h
         src/core/scene_manager.cpp
