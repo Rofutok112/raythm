@@ -5,6 +5,17 @@
 #include <limits>
 
 namespace {
+int compare_positions(const editor_meter_map::bar_beat_position& left,
+                      const editor_meter_map::bar_beat_position& right) {
+    if (left.measure != right.measure) {
+        return left.measure < right.measure ? -1 : 1;
+    }
+    if (left.beat != right.beat) {
+        return left.beat < right.beat ? -1 : 1;
+    }
+    return 0;
+}
+
 std::vector<timing_event> sorted_meter_events(const chart_data& data) {
     std::vector<timing_event> meter_events;
     for (const timing_event& event : data.timing_events) {
@@ -27,7 +38,7 @@ void editor_meter_map::rebuild(const chart_data& data) {
 
     const std::vector<timing_event> events = sorted_meter_events(data);
     if (events.empty() || events.front().tick != 0) {
-        meter_segments_.push_back({0, 4, 4, 0, 0});
+        meter_segments_.push_back({0, 4, 4, 0, 1, 1});
     }
 
     for (const timing_event& event : events) {
@@ -44,15 +55,17 @@ void editor_meter_map::rebuild(const chart_data& data) {
 
         if (meter_segments_.empty()) {
             segment.beat_index_offset = 0;
-            segment.measure_index_offset = 0;
+            segment.start_measure = 1;
+            segment.start_beat = 1;
         } else {
             const meter_segment& previous = meter_segments_.back();
             const int beat_ticks = resolution_ * 4 / std::max(previous.denominator, 1);
-            const int measure_ticks = beat_ticks * std::max(previous.numerator, 1);
             const int beat_count = std::max(0, (segment.start_tick - previous.start_tick) / std::max(1, beat_ticks));
-            const int measure_count = std::max(0, (segment.start_tick - previous.start_tick) / std::max(1, measure_ticks));
             segment.beat_index_offset = previous.beat_index_offset + beat_count;
-            segment.measure_index_offset = previous.measure_index_offset + measure_count;
+            const int absolute_beat_index = (previous.start_beat - 1) + beat_count;
+            segment.start_measure = previous.start_measure +
+                absolute_beat_index / std::max(previous.numerator, 1);
+            segment.start_beat = absolute_beat_index % std::max(previous.numerator, 1) + 1;
         }
 
         meter_segments_.push_back(segment);
@@ -83,8 +96,9 @@ std::vector<editor_meter_map::grid_line> editor_meter_map::visible_grid_lines(in
         for (; tick <= end_tick; tick += beat_ticks) {
             const int relative_tick = tick - segment.start_tick;
             const int local_beat_index = relative_tick / beat_ticks;
-            const int beat = local_beat_index % std::max(segment.numerator, 1) + 1;
-            const int measure = segment.measure_index_offset + local_beat_index / std::max(segment.numerator, 1) + 1;
+            const int absolute_beat_index = (segment.start_beat - 1) + local_beat_index;
+            const int beat = absolute_beat_index % std::max(segment.numerator, 1) + 1;
+            const int measure = segment.start_measure + absolute_beat_index / std::max(segment.numerator, 1);
             lines.push_back({tick, beat == 1, measure, beat});
         }
     }
@@ -111,11 +125,11 @@ editor_meter_map::bar_beat_position editor_meter_map::bar_beat_at_tick(int tick)
 
     const int numerator = std::max(segment->numerator, 1);
     const int beat_ticks = std::max(1, resolution_ * 4 / std::max(segment->denominator, 1));
-    const int local_beat_index = std::max(0, static_cast<int>(std::llround(
-        static_cast<double>(tick - segment->start_tick) / static_cast<double>(beat_ticks))));
+    const int local_beat_index = std::max(0, (tick - segment->start_tick) / beat_ticks);
+    const int absolute_beat_index = (segment->start_beat - 1) + local_beat_index;
     return {
-        segment->measure_index_offset + local_beat_index / numerator + 1,
-        local_beat_index % numerator + 1
+        segment->start_measure + absolute_beat_index / numerator,
+        absolute_beat_index % numerator + 1
     };
 }
 
@@ -126,34 +140,43 @@ std::optional<int> editor_meter_map::tick_from_bar_beat(int measure, int beat) c
 
     for (size_t i = 0; i < meter_segments_.size(); ++i) {
         const meter_segment& segment = meter_segments_[i];
-        const int first_measure = segment.measure_index_offset + 1;
-        const int next_measure = i + 1 < meter_segments_.size()
-            ? meter_segments_[i + 1].measure_index_offset + 1
-            : std::numeric_limits<int>::max();
-        if (measure < first_measure || measure >= next_measure) {
+        const bar_beat_position requested = {measure, beat};
+        const bar_beat_position start = {segment.start_measure, segment.start_beat};
+        if (compare_positions(requested, start) < 0) {
             continue;
         }
 
         const int numerator = std::max(segment.numerator, 1);
-        if (beat > numerator) {
+        if (i + 1 < meter_segments_.size()) {
+            const bar_beat_position next = {meter_segments_[i + 1].start_measure, meter_segments_[i + 1].start_beat};
+            if (compare_positions(requested, next) >= 0) {
+                continue;
+            }
+        }
+        if (beat > numerator && measure == segment.start_measure) {
             return std::nullopt;
         }
 
+        const int absolute_beat_index = (measure - segment.start_measure) * numerator + (beat - segment.start_beat);
+        if (absolute_beat_index < 0) {
+            return std::nullopt;
+        }
         const int beat_ticks = std::max(1, resolution_ * 4 / std::max(segment.denominator, 1));
-        const int measure_ticks = beat_ticks * numerator;
-        return segment.start_tick + (measure - first_measure) * measure_ticks + (beat - 1) * beat_ticks;
+        return segment.start_tick + absolute_beat_index * beat_ticks;
     }
 
     const meter_segment& segment = meter_segments_.back();
-    const int first_measure = segment.measure_index_offset + 1;
     const int numerator = std::max(segment.numerator, 1);
-    if (measure < first_measure || beat > numerator) {
+    if (compare_positions({measure, beat}, {segment.start_measure, segment.start_beat}) < 0) {
+        return std::nullopt;
+    }
+    const int absolute_beat_index = (measure - segment.start_measure) * numerator + (beat - segment.start_beat);
+    if (absolute_beat_index < 0) {
         return std::nullopt;
     }
 
     const int beat_ticks = std::max(1, resolution_ * 4 / std::max(segment.denominator, 1));
-    const int measure_ticks = beat_ticks * numerator;
-    return segment.start_tick + (measure - first_measure) * measure_ticks + (beat - 1) * beat_ticks;
+    return segment.start_tick + absolute_beat_index * beat_ticks;
 }
 
 std::string editor_meter_map::bar_beat_label(int tick) const {

@@ -261,6 +261,12 @@ add_executable(editor_state_smoke
         src/gameplay/timing_engine.h
         src/tests/editor_state_smoke.cpp)
 
+add_executable(editor_meter_map_smoke
+        src/scenes/editor/editor_meter_map.cpp
+        src/scenes/editor/editor_meter_map.h
+        src/models/data_models.h
+        src/tests/editor_meter_map_smoke.cpp)
+
 add_executable(song_loader_smoke
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
@@ -444,6 +450,7 @@ target_include_directories(chart_parser_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_serializer_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_difficulty_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(editor_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(editor_meter_map_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_loader_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_select_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(settings_io_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
