@@ -8,6 +8,7 @@
 #include "scene.h"
 #include "song_select/song_import_export_service.h"
 #include "song_select/song_catalog_service.h"
+#include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_preview_controller.h"
 #include "song_select/song_select_overlay_view.h"
 #include "song_select/song_select_state.h"

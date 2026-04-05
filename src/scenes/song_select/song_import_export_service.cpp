@@ -6,6 +6,22 @@
 #include <optional>
 #include <system_error>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef NOGDI
+#define NOGDI
+#endif
+#ifndef NOUSER
+#define NOUSER
+#endif
+#include <windows.h>
+#endif
+
 #include "app_paths.h"
 #include "chart_parser.h"
 #include "chart_serializer.h"
@@ -126,8 +142,35 @@ std::wstring quote_powershell_argument(const fs::path& path) {
 
 bool run_powershell_command(const std::wstring& script) {
     std::wstring command_line =
-        L"powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command \"" + script + L"\"";
-    return _wsystem(command_line.c_str()) == 0;
+        L"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"" + script + L"\"";
+    STARTUPINFOW startup_info{};
+    startup_info.cb = sizeof(startup_info);
+    startup_info.dwFlags = STARTF_USESHOWWINDOW;
+    startup_info.wShowWindow = 0;
+
+    PROCESS_INFORMATION process_info{};
+    std::wstring mutable_command_line = command_line;
+    const BOOL created = CreateProcessW(
+        nullptr,
+        mutable_command_line.data(),
+        nullptr,
+        nullptr,
+        FALSE,
+        CREATE_NO_WINDOW,
+        nullptr,
+        nullptr,
+        &startup_info,
+        &process_info);
+    if (!created) {
+        return false;
+    }
+
+    WaitForSingleObject(process_info.hProcess, INFINITE);
+    DWORD exit_code = 1;
+    GetExitCodeProcess(process_info.hProcess, &exit_code);
+    CloseHandle(process_info.hThread);
+    CloseHandle(process_info.hProcess);
+    return exit_code == 0;
 }
 #endif
 

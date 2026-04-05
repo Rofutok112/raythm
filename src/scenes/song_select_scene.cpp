@@ -10,6 +10,7 @@
 #include "raylib.h"
 #include "scene_manager.h"
 #include "song_select/song_select_detail_view.h"
+#include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_layout.h"
 #include "song_select/song_select_list_view.h"
 #include "song_select/song_select_navigation.h"
@@ -164,24 +165,22 @@ void song_select_scene::start_song_import(song_select::song_import_request reque
 
 void song_select_scene::open_overwrite_song_confirmation(song_select::song_import_request request) {
     pending_song_import_request_ = std::move(request);
-    state_.confirmation_dialog.open = true;
-    state_.confirmation_dialog.action = song_select::pending_confirmation_action::overwrite_song_import;
-    state_.confirmation_dialog.suppress_initial_pointer_cancel = true;
-    state_.confirmation_dialog.title = "Overwrite Song";
-    state_.confirmation_dialog.message = "A user song with the same song ID already exists. Overwrite it?";
-    state_.confirmation_dialog.hint = "Official songs cannot be overwritten.";
-    state_.confirmation_dialog.confirm_label = "OVERWRITE";
+    song_select::open_confirmation_dialog(
+        state_, song_select::pending_confirmation_action::overwrite_song_import,
+        "Overwrite Song",
+        "A user song with the same song ID already exists. Overwrite it?",
+        "Official songs cannot be overwritten.",
+        "OVERWRITE");
 }
 
 void song_select_scene::open_overwrite_chart_confirmation(song_select::chart_import_request request) {
     pending_chart_import_request_ = std::move(request);
-    state_.confirmation_dialog.open = true;
-    state_.confirmation_dialog.action = song_select::pending_confirmation_action::overwrite_chart_import;
-    state_.confirmation_dialog.suppress_initial_pointer_cancel = true;
-    state_.confirmation_dialog.title = "Overwrite Chart";
-    state_.confirmation_dialog.message = "A user chart with the same chart ID already exists. Overwrite it?";
-    state_.confirmation_dialog.hint = "Official charts cannot be overwritten.";
-    state_.confirmation_dialog.confirm_label = "OVERWRITE";
+    song_select::open_confirmation_dialog(
+        state_, song_select::pending_confirmation_action::overwrite_chart_import,
+        "Overwrite Chart",
+        "A user chart with the same chart ID already exists. Overwrite it?",
+        "Official charts cannot be overwritten.",
+        "OVERWRITE");
 }
 
 bool song_select_scene::adjust_selected_song_local_offset(int delta_ms) {
@@ -345,11 +344,9 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
         return;
     }
     case song_select::context_menu_command::request_delete_song:
-        state_.confirmation_dialog.open = true;
-        state_.confirmation_dialog.action = song_select::pending_confirmation_action::delete_song;
-        state_.confirmation_dialog.song_index = state_.context_menu.song_index;
-        state_.confirmation_dialog.chart_index = -1;
-        state_.confirmation_dialog.suppress_initial_pointer_cancel = true;
+        song_select::open_confirmation_dialog(
+            state_, song_select::pending_confirmation_action::delete_song,
+            "", "", "", "DELETE", state_.context_menu.song_index, -1);
         song_select::close_context_menu(state_);
         return;
     case song_select::context_menu_command::edit_chart:
@@ -374,11 +371,10 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
         return;
     }
     case song_select::context_menu_command::request_delete_chart:
-        state_.confirmation_dialog.open = true;
-        state_.confirmation_dialog.action = song_select::pending_confirmation_action::delete_chart;
-        state_.confirmation_dialog.song_index = state_.context_menu.song_index;
-        state_.confirmation_dialog.chart_index = state_.context_menu.chart_index;
-        state_.confirmation_dialog.suppress_initial_pointer_cancel = true;
+        song_select::open_confirmation_dialog(
+            state_, song_select::pending_confirmation_action::delete_chart,
+            "", "", "", "DELETE",
+            state_.context_menu.song_index, state_.context_menu.chart_index);
         song_select::close_context_menu(state_);
         return;
     }

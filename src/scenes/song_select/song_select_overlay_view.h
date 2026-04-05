@@ -25,13 +25,6 @@ struct context_menu_item_entry {
     context_menu_command command_on_click;
 };
 
-enum class confirmation_command {
-    none,
-    confirm,
-    cancel,
-};
-
 context_menu_command draw_context_menu(const state& state);
-confirmation_command draw_confirmation_dialog(const state& state);
 
 }  // namespace song_select
