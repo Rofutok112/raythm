@@ -45,7 +45,7 @@ void reset_for_enter(state& state) {
     state.scroll_y = 0.0f;
     state.scroll_y_target = 0.0f;
     state.song_change_anim_t = 1.0f;
-    state.scene_fade_in_t = 1.0f;
+    state.scene_fade_in.restart(scene_fade::direction::in, 0.3f, 0.65f);
     state.scrollbar_dragging = false;
     state.scrollbar_drag_offset = 0.0f;
     state.context_menu = {};
@@ -57,7 +57,7 @@ void reset_for_enter(state& state) {
 
 void tick_animations(state& state, float dt) {
     state.song_change_anim_t = std::max(0.0f, state.song_change_anim_t - dt * 4.0f);
-    state.scene_fade_in_t = std::max(0.0f, state.scene_fade_in_t - dt / 0.3f);
+    state.scene_fade_in.update(dt);
 }
 
 void apply_catalog(state& state, catalog_data catalog,

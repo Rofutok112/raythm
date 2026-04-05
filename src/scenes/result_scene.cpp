@@ -86,7 +86,7 @@ void result_scene::return_to_song_select() const {
 }
 
 void result_scene::update(float dt) {
-    fade_in_timer_ = std::max(0.0f, fade_in_timer_ - dt);
+    fade_in_.update(dt);
 
     if (IsKeyPressed(KEY_ENTER)) {
         return_to_song_select();
@@ -209,10 +209,7 @@ void result_scene::draw() {
     }
 
     // フェードイン（暗い状態から明るくなる）
-    if (fade_in_timer_ > 0.0f) {
-        const unsigned char alpha = static_cast<unsigned char>(std::min(fade_in_timer_, 1.0f) * 0.65f * 255.0f);
-        DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {0, 0, 0, alpha});
-    }
+    fade_in_.draw();
 
     virtual_screen::end();
     ClearBackground(BLACK);

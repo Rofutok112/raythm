@@ -425,10 +425,7 @@ void song_select_scene::draw() {
     apply_confirmation_command(song_select::draw_confirmation_dialog(state_));
     ui::flush_draw_queue();
 
-    if (state_.scene_fade_in_t > 0.0f) {
-        DrawRectangle(0, 0, kScreenWidth, kScreenHeight,
-                      Color{0, 0, 0, static_cast<unsigned char>(state_.scene_fade_in_t * 0.65f * 255.0f)});
-    }
+    state_.scene_fade_in.draw();
 
     virtual_screen::end();
 

@@ -200,6 +200,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/play/play_session_types.h
         src/scenes/result_scene.cpp
         src/scenes/result_scene.h
+        src/scenes/shared/scene_fade.cpp
+        src/scenes/shared/scene_fade.h
         src/scenes/settings/settings_key_config_state.cpp
         src/scenes/settings/settings_key_config_state.h
         src/scenes/settings/settings_layout.h
