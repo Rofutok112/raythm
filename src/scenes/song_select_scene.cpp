@@ -1,6 +1,7 @@
 #include "song_select_scene.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <utility>
 
@@ -79,6 +80,29 @@ void song_select_scene::apply_transfer_result(const song_select::transfer_result
         reload_song_library(result.preferred_song_id, result.preferred_chart_id);
     }
     song_select::queue_status_message(state_, result.message, false);
+}
+
+void song_select_scene::poll_background_transfer() {
+    if (!background_transfer_active_) {
+        return;
+    }
+
+    if (background_transfer_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    background_transfer_active_ = false;
+    background_transfer_label_.clear();
+    apply_transfer_result(background_transfer_.get());
+}
+
+void song_select_scene::start_song_export(song_select::song_export_request request) {
+    background_transfer_active_ = true;
+    background_transfer_label_ = "Exporting song package...";
+    song_select::queue_status_message(state_, "Exporting song package...", false);
+    background_transfer_ = std::async(std::launch::async, [request = std::move(request)]() {
+        return song_select::export_song_package(request);
+    });
 }
 
 bool song_select_scene::adjust_selected_song_local_offset(int delta_ms) {
@@ -223,7 +247,9 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
     {
         const int song_index = state_.context_menu.song_index;
         song_select::close_context_menu(state_);
-        apply_transfer_result(song_select::export_song_package(state_, song_index));
+        if (const auto request = song_select::prepare_song_export(state_, song_index); request.has_value()) {
+            start_song_export(*request);
+        }
         return;
     }
     case song_select::context_menu_command::request_delete_song:
@@ -296,11 +322,16 @@ void song_select_scene::update(float dt) {
 
     preview_controller_.update(dt, song_select::selected_song(state_));
     song_select::tick_animations(state_, dt);
+    poll_background_transfer();
 
     if (state_.confirmation_dialog.open &&
         !IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
         !IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
         state_.confirmation_dialog.suppress_initial_pointer_cancel = false;
+    }
+
+    if (background_transfer_active_) {
+        return;
     }
 
     if (IsKeyPressed(KEY_ESCAPE)) {
@@ -467,6 +498,9 @@ void song_select_scene::draw() {
 
     song_select::draw_song_details(state_, preview_controller_);
     song_select::draw_status_message(state_);
+    if (background_transfer_active_) {
+        song_select::draw_busy_overlay(background_transfer_label_);
+    }
     apply_context_menu_command(song_select::draw_context_menu(state_));
     apply_confirmation_command(song_select::draw_confirmation_dialog(state_));
     ui::flush_draw_queue();

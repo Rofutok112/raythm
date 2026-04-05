@@ -1,5 +1,6 @@
 #pragma once
 
+#include <future>
 #include <optional>
 #include <string>
 
@@ -28,6 +29,8 @@ private:
     void sync_selected_song_media();
     void apply_delete_result(const song_select::delete_result& result);
     void apply_transfer_result(const song_select::transfer_result& result);
+    void poll_background_transfer();
+    void start_song_export(song_select::song_export_request request);
     bool adjust_selected_song_local_offset(int delta_ms);
     bool apply_recent_result_offset();
     bool handle_song_list_pointer(Vector2 mouse, bool left_pressed, bool right_pressed);
@@ -39,4 +42,7 @@ private:
     std::string preferred_song_id_;
     std::string preferred_chart_id_;
     std::optional<song_select::recent_result_offset> recent_result_offset_;
+    std::future<song_select::transfer_result> background_transfer_;
+    bool background_transfer_active_ = false;
+    std::string background_transfer_label_;
 };

@@ -348,18 +348,39 @@ transfer_result export_song_package(const state& state, int song_index) {
         return result;
     }
 
-    const song_entry& song = state.songs[static_cast<size_t>(song_index)];
-    const std::string default_name = sanitize_file_stem(song.song.meta.song_id, "song") + ".rpack";
-    const std::string save_path = file_dialog::save_song_package_file(default_name);
-    if (save_path.empty()) {
+    const std::optional<song_export_request> request = prepare_song_export(state, song_index);
+    if (!request.has_value()) {
         result.cancelled = true;
         return result;
     }
 
-    const fs::path song_directory = path_utils::from_utf8(song.song.directory);
-    const fs::path audio_source = song_directory / path_utils::from_utf8(song.song.meta.audio_file);
-    const fs::path jacket_source = song_directory / path_utils::from_utf8(song.song.meta.jacket_file);
-    const bool has_jacket = !song.song.meta.jacket_file.empty();
+    return export_song_package(*request);
+}
+
+std::optional<song_export_request> prepare_song_export(const state& state, int song_index) {
+    if (!is_valid_song_index(state, song_index)) {
+        return std::nullopt;
+    }
+
+    const song_entry& song = state.songs[static_cast<size_t>(song_index)];
+    const std::string default_name = sanitize_file_stem(song.song.meta.song_id, "song") + ".rpack";
+    const std::string save_path = file_dialog::save_song_package_file(default_name);
+    if (save_path.empty()) {
+        return std::nullopt;
+    }
+
+    return song_export_request{
+        .song = song,
+        .save_path = save_path,
+    };
+}
+
+transfer_result export_song_package(const song_export_request& request) {
+    transfer_result result;
+    const fs::path song_directory = path_utils::from_utf8(request.song.song.directory);
+    const fs::path audio_source = song_directory / path_utils::from_utf8(request.song.song.meta.audio_file);
+    const fs::path jacket_source = song_directory / path_utils::from_utf8(request.song.song.meta.jacket_file);
+    const bool has_jacket = !request.song.song.meta.jacket_file.empty();
     if (!fs::exists(audio_source) || !fs::is_regular_file(audio_source)) {
         result.message = "Song package export requires an existing audio file.";
         return result;
@@ -375,17 +396,17 @@ transfer_result export_song_package(const state& state, int song_index) {
         return result;
     }
 
-    if (!song_writer::write_song_json(song.song.meta, path_utils::to_utf8(staging.path())) ||
-        !copy_file_into_directory(audio_source, staging.path(), path_utils::from_utf8(song.song.meta.audio_file))) {
+    if (!song_writer::write_song_json(request.song.song.meta, path_utils::to_utf8(staging.path())) ||
+        !copy_file_into_directory(audio_source, staging.path(), path_utils::from_utf8(request.song.song.meta.audio_file))) {
         result.message = "Failed to export the song package.";
         return result;
     }
     if (has_jacket &&
-        !copy_file_into_directory(jacket_source, staging.path(), path_utils::from_utf8(song.song.meta.jacket_file))) {
+        !copy_file_into_directory(jacket_source, staging.path(), path_utils::from_utf8(request.song.song.meta.jacket_file))) {
         result.message = "Failed to export the song package.";
         return result;
     }
-    if (!create_archive_from_directory(staging.path(), path_utils::from_utf8(save_path))) {
+    if (!create_archive_from_directory(staging.path(), path_utils::from_utf8(request.save_path))) {
         result.message = "Failed to export the song package.";
         return result;
     }
