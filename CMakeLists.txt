@@ -60,7 +60,7 @@ if(WIN32)
             "${RAYTHM_APP_ICON_RC}" @ONLY)
 endif()
 
-add_executable(raythm src/main.cpp
+add_executable(raythm WIN32 src/main.cpp
         src/audio/audio.cpp
         src/audio/audio.h
         src/audio/audio_manager.cpp
