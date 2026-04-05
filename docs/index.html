@@ -399,32 +399,16 @@
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 512;
     analyser.smoothingTimeConstant = 0.82;
-    analyser.connect(audioCtx.destination);
 
-    await playIntroThenLoop();
-  }
+    const gainNode = audioCtx.createGain();
+    gainNode.gain.value = 0.05;
+    analyser.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
 
-  async function playIntroThenLoop() {
-    await playOnce('audio/title_intro.mp3');
-    playLoop('audio/title_loop.mp3');
-  }
-
-  function playOnce(url) {
-    return new Promise((resolve) => {
-      const audio = new Audio(url);
-      source = audioCtx.createMediaElementSource(audio);
-      source.connect(analyser);
-      audio.addEventListener('ended', resolve, { once: true });
-      audio.play();
-    });
-  }
-
-  function playLoop(url) {
-    const audio = new Audio(url);
+    const audio = new Audio('audio/main_theme.mp3');
     audio.loop = true;
-    // ループ用は新しい source に繋ぎ直す
-    const src = audioCtx.createMediaElementSource(audio);
-    src.connect(analyser);
+    source = audioCtx.createMediaElementSource(audio);
+    source.connect(analyser);
     audio.play();
   }
 
