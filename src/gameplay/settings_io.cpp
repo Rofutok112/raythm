@@ -11,6 +11,7 @@
 #include <system_error>
 
 #include "app_paths.h"
+#include "official_content_sync.h"
 
 namespace {
 namespace fs = std::filesystem;
@@ -159,6 +160,7 @@ void load_settings(game_settings& settings) {
 
 void initialize_settings_storage(const game_settings& defaults) {
     app_paths::ensure_directories();
+    official_content_sync::synchronize();
 
     std::error_code ec;
     if (fs::exists(settings_path(), ec) && !ec) {
