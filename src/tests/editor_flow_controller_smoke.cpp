@@ -81,7 +81,7 @@ int main() {
     }
 
     {
-        auto state = std::make_shared<editor_state>(chart, temp_root.string() + "\\charts\\saved.chart");
+        auto state = std::make_shared<editor_state>(chart, temp_root.string() + "\\charts\\saved.rchart");
         metadata_panel_state metadata_panel;
         save_dialog_state save_dialog;
         unsaved_changes_dialog_state unsaved_changes_dialog;
@@ -204,7 +204,7 @@ int main() {
             return EXIT_FAILURE;
         }
 
-        save_dialog.file_name_input.value = "flow-test.chart";
+        save_dialog.file_name_input.value = "flow-test.rchart";
         context.ctrl_s_pressed = false;
         context.save_dialog_submit = true;
         const editor_flow_result save_result = editor_flow_controller::update(context);
