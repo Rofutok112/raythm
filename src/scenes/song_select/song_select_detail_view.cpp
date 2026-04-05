@@ -93,12 +93,14 @@ void draw_song_details(const state& state, const preview_controller& preview_con
                       with_alpha(theme.text_secondary, content_alpha), detail_max_width, now);
     ui::draw_text_f(TextFormat("BPM %.0f", song->song.meta.base_bpm), detail_x + content_offset_x,
                     layout::kJacketRect.y + 100.0f, 24, with_alpha(theme.text_muted, content_alpha));
-    if (song->song.source == content_source::official) {
-        ui::draw_text_f("Official",
-                        detail_x + content_offset_x, layout::kJacketRect.y + 126.0f, 18,
-                        with_alpha(theme.success, content_alpha));
-    }
     if (selected_chart != nullptr) {
+        const char* chart_source_label =
+            selected_chart->source == content_source::official ? "Official" : "Unofficial";
+        const Color chart_source_color =
+            selected_chart->source == content_source::official ? theme.success : theme.text_muted;
+        ui::draw_text_f(chart_source_label,
+                        detail_x + content_offset_x, layout::kJacketRect.y + 126.0f, 18,
+                        with_alpha(chart_source_color, content_alpha));
         ui::draw_text_f(TextFormat("%s %s Lv.%.1f", key_mode_label(selected_chart->meta.key_count).c_str(),
                                    selected_chart->meta.difficulty.c_str(), selected_chart->meta.level),
                         detail_x + content_offset_x, layout::kJacketRect.y + 158.0f, 28,
