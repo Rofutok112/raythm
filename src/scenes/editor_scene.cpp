@@ -1,33 +1,29 @@
 #include "editor_scene.h"
 
-#include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdio>
-#include <filesystem>
-#include <iterator>
 #include <memory>
 
-#include "app_paths.h"
 #include "audio_manager.h"
 #include "editor/view/editor_cursor_hud_view.h"
 #include "editor/editor_flow_controller.h"
+#include "editor/service/editor_chart_identity_service.h"
 #include "editor/service/editor_metadata_service.h"
 #include "editor/service/editor_timing_edit_service.h"
+#include "editor/service/editor_timing_selection_service.h"
 #include "editor/view/editor_header_view.h"
 #include "editor/view/editor_layout.h"
 #include "editor/view/editor_left_panel_view.h"
 #include "editor/view/editor_modal_view.h"
 #include "editor/view/editor_right_panel_view.h"
+#include "editor/view/editor_timeline_presenter.h"
 #include "editor/viewport/editor_timeline_viewport.h"
 #include "editor/editor_session_loader.h"
-#include "path_utils.h"
 #include "play_scene.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select_scene.h"
 #include "theme.h"
-#include "uuid_util.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
@@ -39,30 +35,6 @@ constexpr float kPlaybackRestartEpsilonSeconds = 0.01f;
 
 Rectangle snap_dropdown_menu_rect() {
     return layout::snap_dropdown_menu_rect(static_cast<int>(editor_timeline_viewport::snap_labels().size()));
-}
-
-const char* key_count_label(int key_count) {
-    return key_count == 6 ? "6K" : "4K";
-}
-
-editor_timeline_note make_timeline_note(const note_data& note) {
-    return {
-        note.type == note_type::hold ? editor_timeline_note_type::hold : editor_timeline_note_type::tap,
-        note.tick,
-        note.lane,
-        note.end_tick
-    };
-}
-
-bool timing_event_sort_less(const timing_event& left, size_t left_index,
-                            const timing_event& right, size_t right_index) {
-    if (left.tick != right.tick) {
-        return left.tick < right.tick;
-    }
-    if (left.type != right.type) {
-        return left.type == timing_event_type::bpm;
-    }
-    return left_index < right_index;
 }
 
 std::string format_playback_time(double seconds) {
@@ -377,25 +349,7 @@ chart_data editor_scene::make_chart_data_for_save() const {
 }
 
 std::string editor_scene::generated_chart_id(const std::string& difficulty) const {
-    // For AppData-based songs, use UUID.
-    const bool is_appdata_song = song_.directory.find(path_utils::to_utf8(app_paths::app_data_root())) != std::string::npos;
-    if (is_appdata_song) {
-        return generate_uuid();
-    }
-
-    // Legacy: slug-based ID.
-    const std::string song_id = slugify(song_.meta.song_id);
-    const std::string difficulty_slug = slugify(difficulty);
-    if (!song_id.empty() && !difficulty_slug.empty()) {
-        return song_id + "-" + difficulty_slug;
-    }
-    if (!song_id.empty()) {
-        return song_id + "-chart";
-    }
-    if (!difficulty_slug.empty()) {
-        return "chart-" + difficulty_slug;
-    }
-    return "new-chart";
+    return editor_chart_identity_service::generated_chart_id(song_, difficulty);
 }
 
 editor_resume_state editor_scene::build_resume_state() const {
@@ -515,18 +469,7 @@ std::optional<note_data> editor_scene::dragged_note() const {
 }
 
 std::vector<size_t> editor_scene::sorted_timing_event_indices() const {
-    std::vector<size_t> indices(state_->data().timing_events.size());
-    for (size_t i = 0; i < indices.size(); ++i) {
-        indices[i] = i;
-    }
-
-    std::stable_sort(indices.begin(), indices.end(), [this](size_t left_index, size_t right_index) {
-        const timing_event& left = state_->data().timing_events[left_index];
-        const timing_event& right = state_->data().timing_events[right_index];
-        return timing_event_sort_less(right, right_index, left, left_index);
-    });
-
-    return indices;
+    return editor_timing_selection_service::sorted_indices(state_->data());
 }
 
 editor_timeline_viewport_model editor_scene::viewport_model() const {
@@ -687,29 +630,11 @@ void editor_scene::apply_scroll_and_zoom(float dt) {
 }
 
 void editor_scene::select_timing_event(std::optional<size_t> index, bool scroll_into_view) {
-    timing_panel_.selected_event_index = index;
-    timing_panel_.active_input_field = editor_timing_input_field::none;
-    timing_panel_.input_error.clear();
-    timing_panel_.bar_pick_mode = false;
-    editor_scene_sync::load_timing_event_inputs(make_sync_context());
-
     if (scroll_into_view && index.has_value() && *index < state_->data().timing_events.size()) {
         scroll_to_tick(state_->data().timing_events[*index].tick);
-        const auto timing_indices = sorted_timing_event_indices();
-        const auto it = std::find(timing_indices.begin(), timing_indices.end(), *index);
-        if (it != timing_indices.end()) {
-            constexpr float kTimingRowHeight = 30.0f;
-            constexpr float kTimingRowGap = 4.0f;
-            constexpr float kTimingListViewportHeight = 174.0f;
-            const float row_top = static_cast<float>(std::distance(timing_indices.begin(), it)) * (kTimingRowHeight + kTimingRowGap);
-            const float row_bottom = row_top + kTimingRowHeight;
-            if (row_top < timing_panel_.list_scroll_offset) {
-                timing_panel_.list_scroll_offset = row_top;
-            } else if (row_bottom > timing_panel_.list_scroll_offset + kTimingListViewportHeight) {
-                timing_panel_.list_scroll_offset = row_bottom - kTimingListViewportHeight;
-            }
-        }
     }
+    editor_scene_sync_context sync_context = make_sync_context();
+    editor_timing_selection_service::select_event(sync_context, index, scroll_into_view, timing_panel_.list_scroll_offset);
 }
 
 void editor_scene::scroll_to_tick(int tick) {
@@ -798,37 +723,17 @@ bool editor_scene::apply_chart_offset(int offset_ms) {
 }
 
 void editor_scene::draw_timeline() const {
-    const editor_timeline_viewport_model model = viewport_model();
-    const editor_timeline_metrics metrics = timeline_metrics();
-    const float visible_tick_span = editor_timeline_viewport::visible_tick_span(model);
-    const int min_tick = static_cast<int>(std::floor(viewport_.bottom_tick - visible_tick_span * 0.1f));
-    const int max_tick = static_cast<int>(std::ceil(viewport_.bottom_tick + visible_tick_span));
-    std::vector<editor_timeline_note> notes;
-    notes.reserve(state_->data().notes.size());
-    for (const note_data& note : state_->data().notes) {
-        notes.push_back(make_timeline_note(note));
-    }
-    std::optional<editor_timeline_note> preview_note;
-    bool preview_has_overlap = false;
-    if (const std::optional<note_data> preview_data = dragged_note(); preview_data.has_value()) {
-        preview_note = make_timeline_note(*preview_data);
-        preview_has_overlap = state_->has_note_overlap(*preview_data);
-    }
-
-    editor_timeline_view::draw({
-        metrics,
-        meter_map_.visible_grid_lines(min_tick, max_tick),
-        std::move(notes),
-        selected_note_index_,
-        audio_loaded_ ? std::optional<int>(playback_tick_) : std::nullopt,
+    const std::optional<note_data> preview_note = dragged_note();
+    editor_timeline_presenter::draw({
+        *state_,
+        meter_map_,
         &waveform_samples_,
         waveform_visible_,
+        audio_loaded_,
+        playback_tick_,
+        selected_note_index_,
         preview_note,
-        preview_has_overlap,
-        min_tick,
-        max_tick,
-        editor_timeline_viewport::snap_interval(model),
-        editor_timeline_viewport::content_height_pixels(model),
-        editor_timeline_viewport::scroll_offset_pixels(model)
+        preview_note.has_value() && state_->has_note_overlap(*preview_note),
+        viewport_model(),
     });
 }

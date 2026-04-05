@@ -163,14 +163,20 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/editor_scene_types.h
         src/scenes/editor/editor_session_loader.cpp
         src/scenes/editor/editor_session_loader.h
+        src/scenes/editor/service/editor_chart_identity_service.cpp
+        src/scenes/editor/service/editor_chart_identity_service.h
         src/scenes/editor/service/editor_metadata_service.cpp
         src/scenes/editor/service/editor_metadata_service.h
         src/scenes/editor/service/editor_timing_edit_service.cpp
         src/scenes/editor/service/editor_timing_edit_service.h
+        src/scenes/editor/service/editor_timing_selection_service.cpp
+        src/scenes/editor/service/editor_timing_selection_service.h
         src/scenes/editor/editor_timeline_controller.cpp
         src/scenes/editor/editor_timeline_controller.h
         src/scenes/editor/editor_transport_controller.cpp
         src/scenes/editor/editor_transport_controller.h
+        src/scenes/editor/view/editor_timeline_presenter.cpp
+        src/scenes/editor/view/editor_timeline_presenter.h
         src/scenes/editor/viewport/editor_timeline_viewport.cpp
         src/scenes/editor/viewport/editor_timeline_viewport.h
         src/scenes/editor_scene.cpp
