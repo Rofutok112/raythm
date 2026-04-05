@@ -39,6 +39,8 @@ enum class pending_confirmation_action {
     none,
     delete_song,
     delete_chart,
+    overwrite_song_import,
+    overwrite_chart_import,
 };
 
 struct context_menu_state {
@@ -55,6 +57,10 @@ struct confirmation_dialog_state {
     int song_index = -1;
     int chart_index = -1;
     bool suppress_initial_pointer_cancel = false;
+    std::string title;
+    std::string message;
+    std::string hint;
+    std::string confirm_label = "CONFIRM";
 };
 
 struct recent_result_offset {

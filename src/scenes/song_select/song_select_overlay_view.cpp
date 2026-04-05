@@ -32,15 +32,17 @@ context_menu_command draw_context_menu(const state& state) {
             // 参照可否 追加可否 編集可否 削除可否 : Official譜面は"譜面の追加"のみ可能
             const bool valid_song = state.context_menu.song_index >= 0 &&
                                     state.context_menu.song_index < state.songs.size();
-            const bool can_add_chart_to_song = valid_song; // && state.songs[static_cast<size_t>(state.context_menu.song_index)].song.source != content_source::official;
+            const bool can_add_chart_to_song = valid_song;
             const bool can_edit_song = valid_song &&
                                        state.songs[state.context_menu.song_index].song.can_edit;
+            const bool can_export_song = valid_song &&
+                                       state.songs[state.context_menu.song_index].song.source != content_source::official;
             const bool can_delete_song = valid_song &&
                                          state.songs[state.context_menu.song_index].song.can_delete;
             entries = {
                 {{"EDIT META", can_edit_song}, context_menu_command::edit_song},
                 {{"NEW CHART", can_add_chart_to_song}, context_menu_command::new_chart},
-                {{"EXPORT SONG", valid_song}, context_menu_command::export_song},
+                {{"EXPORT SONG", can_export_song}, context_menu_command::export_song},
                 {{"DELETE SONG", can_delete_song}, context_menu_command::request_delete_song}
             };
 
@@ -105,28 +107,41 @@ confirmation_command draw_confirmation_dialog(const state& state) {
     }
 
     const bool deleting_song = state.confirmation_dialog.action == pending_confirmation_action::delete_song;
-    const char* title = deleting_song ? "Delete Song" : "Delete Chart";
-    const char* message = deleting_song
-        ? "This will remove the song and linked AppData charts."
-        : "This will remove the selected AppData chart file.";
+    const bool deleting_chart = state.confirmation_dialog.action == pending_confirmation_action::delete_chart;
+    const std::string title = state.confirmation_dialog.title.empty()
+        ? (deleting_song ? "Delete Song" : "Delete Chart")
+        : state.confirmation_dialog.title;
+    const std::string message = state.confirmation_dialog.message.empty()
+        ? (deleting_song
+            ? "This will remove the song and linked AppData charts."
+            : "This will remove the selected AppData chart file.")
+        : state.confirmation_dialog.message;
+    const std::string hint = state.confirmation_dialog.hint.empty()
+        ? ((deleting_song || deleting_chart) ? "Official content cannot be deleted." : "")
+        : state.confirmation_dialog.hint;
+    const std::string confirm_label = state.confirmation_dialog.confirm_label.empty()
+        ? (deleting_song || deleting_chart ? "DELETE" : "CONFIRM")
+        : state.confirmation_dialog.confirm_label;
     constexpr Rectangle confirm_button = {layout::kConfirmDialogRect.x + 76.0f, layout::kConfirmDialogRect.y + 148.0f, 132.0f, 34.0f};
     constexpr Rectangle cancel_button = {layout::kConfirmDialogRect.x + 272.0f, layout::kConfirmDialogRect.y + 148.0f, 132.0f, 34.0f};
 
     ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
     ui::enqueue_panel(layout::kConfirmDialogRect, layout::kModalLayer);
-    ui::enqueue_text_in_rect(title, 28,
+    ui::enqueue_text_in_rect(title.c_str(), 28,
                              {layout::kConfirmDialogRect.x + 20.0f, layout::kConfirmDialogRect.y + 22.0f,
                               layout::kConfirmDialogRect.width - 40.0f, 30.0f},
                              g_theme->text, ui::text_align::center, layout::kModalLayer);
-    ui::enqueue_text_in_rect(message, 18,
+    ui::enqueue_text_in_rect(message.c_str(), 18,
                              {layout::kConfirmDialogRect.x + 28.0f, layout::kConfirmDialogRect.y + 76.0f,
                               layout::kConfirmDialogRect.width - 56.0f, 24.0f},
                              g_theme->text_secondary, ui::text_align::center, layout::kModalLayer);
-    ui::enqueue_text_in_rect("Official content cannot be deleted.", 16,
-                             {layout::kConfirmDialogRect.x + 28.0f, layout::kConfirmDialogRect.y + 104.0f,
-                              layout::kConfirmDialogRect.width - 56.0f, 22.0f},
-                             g_theme->text_hint, ui::text_align::center, layout::kModalLayer);
-    const ui::button_state confirm = ui::enqueue_button(confirm_button, "DELETE", 16, layout::kModalLayer, 1.5f);
+    if (!hint.empty()) {
+        ui::enqueue_text_in_rect(hint.c_str(), 16,
+                                 {layout::kConfirmDialogRect.x + 28.0f, layout::kConfirmDialogRect.y + 104.0f,
+                                  layout::kConfirmDialogRect.width - 56.0f, 22.0f},
+                                 g_theme->text_hint, ui::text_align::center, layout::kModalLayer);
+    }
+    const ui::button_state confirm = ui::enqueue_button(confirm_button, confirm_label.c_str(), 16, layout::kModalLayer, 1.5f);
     const ui::button_state cancel = ui::enqueue_button(cancel_button, "CANCEL", 16, layout::kModalLayer, 1.5f);
 
     if (confirm.clicked) {

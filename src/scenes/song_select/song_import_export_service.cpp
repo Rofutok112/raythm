@@ -287,48 +287,56 @@ transfer_result export_chart_package(const state& state, int song_index, int cha
 
 transfer_result import_chart_package(const state& state, int song_index) {
     transfer_result result;
+    const std::optional<chart_import_request> request = prepare_chart_import(state, song_index, result);
+    if (!request.has_value()) {
+        return result;
+    }
+    return import_chart_package(*request);
+}
+
+std::optional<chart_import_request> prepare_chart_import(const state& state, int song_index, transfer_result& result) {
     if (!is_valid_song_index(state, song_index)) {
         result.message = "Chart import target is invalid.";
-        return result;
+        return std::nullopt;
     }
 
     const song_entry& song = state.songs[static_cast<size_t>(song_index)];
     const std::string source_path = file_dialog::open_chart_package_file();
     if (source_path.empty()) {
         result.cancelled = true;
-        return result;
+        return std::nullopt;
     }
 
     const chart_parse_result parsed = chart_parser::parse(source_path);
     if (!parsed.success || !parsed.data.has_value()) {
         result.message = "Failed to import the chart package.";
-        return result;
+        return std::nullopt;
     }
 
     if (parsed.data->meta.song_id != song.song.meta.song_id) {
         result.message = "Chart song ID does not match the selected song.";
-        return result;
+        return std::nullopt;
     }
 
     const std::optional<chart_option> existing_chart = find_chart_by_id(state, parsed.data->meta.chart_id);
-    if (existing_chart.has_value()) {
-        if (existing_chart->source == content_source::official) {
-            result.message = "Cannot overwrite an official chart.";
-            return result;
-        }
-
-        const bool confirmed = file_dialog::confirm_yes_no(
-            "Overwrite Chart",
-            "A user chart with the same chart ID already exists. Overwrite it?");
-        if (!confirmed) {
-            result.cancelled = true;
-            return result;
-        }
+    if (existing_chart.has_value() && existing_chart->source == content_source::official) {
+        result.message = "Cannot overwrite an official chart.";
+        return std::nullopt;
     }
 
+    return chart_import_request{
+        .source_path = source_path,
+        .target_song_id = song.song.meta.song_id,
+        .chart = *parsed.data,
+        .overwrite_existing = existing_chart.has_value(),
+    };
+}
+
+transfer_result import_chart_package(const chart_import_request& request) {
+    transfer_result result;
     app_paths::ensure_directories();
-    const fs::path destination_path = app_paths::chart_path(parsed.data->meta.chart_id);
-    if (!chart_serializer::serialize(*parsed.data, path_utils::to_utf8(destination_path))) {
+    const fs::path destination_path = app_paths::chart_path(request.chart.meta.chart_id);
+    if (!chart_serializer::serialize(request.chart, path_utils::to_utf8(destination_path))) {
         result.message = "Failed to save the imported chart.";
         return result;
     }
@@ -336,8 +344,8 @@ transfer_result import_chart_package(const state& state, int song_index) {
     result.success = true;
     result.reload_catalog = true;
     result.message = "Chart imported.";
-    result.preferred_song_id = song.song.meta.song_id;
-    result.preferred_chart_id = parsed.data->meta.chart_id;
+    result.preferred_song_id = request.target_song_id;
+    result.preferred_chart_id = request.chart.meta.chart_id;
     return result;
 }
 
@@ -417,42 +425,33 @@ transfer_result export_song_package(const song_export_request& request) {
 }
 
 transfer_result import_song_package(const state& state) {
-    const std::optional<song_import_request> request = prepare_song_import(state);
+    transfer_result result;
+    const std::optional<song_import_request> request = prepare_song_import(state, result);
     if (!request.has_value()) {
-        transfer_result result;
-        result.cancelled = true;
         return result;
     }
 
     return import_song_package(*request);
 }
 
-std::optional<song_import_request> prepare_song_import(const state& state) {
+std::optional<song_import_request> prepare_song_import(const state& state, transfer_result& result) {
     const std::string source_path = file_dialog::open_song_package_file();
     if (source_path.empty()) {
+        result.cancelled = true;
         return std::nullopt;
     }
 
-    return song_import_request{
-        .catalog_state = state,
-        .source_path = source_path,
-    };
-}
-
-transfer_result import_song_package(const song_import_request& request) {
-    transfer_result result;
-
-    scoped_temp_directory extract_root("song_import");
+    scoped_temp_directory extract_root("song_import_prepare");
     if (!extract_root.valid() ||
-        !extract_archive_to_directory(path_utils::from_utf8(request.source_path), extract_root.path())) {
+        !extract_archive_to_directory(path_utils::from_utf8(source_path), extract_root.path())) {
         result.message = "Failed to extract the song package.";
-        return result;
+        return std::nullopt;
     }
 
     const std::optional<fs::path> extracted_song_root = find_song_json_root(extract_root.path());
     if (!extracted_song_root.has_value()) {
         result.message = "song.json was not found in the package.";
-        return result;
+        return std::nullopt;
     }
 
     const song_load_result loaded = song_loader::load_directory(path_utils::to_utf8(*extracted_song_root),
@@ -460,29 +459,47 @@ transfer_result import_song_package(const song_import_request& request) {
     if (!loaded.errors.empty() || loaded.songs.empty()) {
         result.message = loaded.errors.empty() ? "Failed to read the song package metadata."
                                                : loaded.errors.front();
-        return result;
+        return std::nullopt;
     }
 
-    const song_data& imported_song = loaded.songs.front();
-    const std::optional<song_entry> existing_song = find_song_by_id(request.catalog_state, imported_song.meta.song_id);
-    if (existing_song.has_value()) {
-        if (existing_song->song.source == content_source::official) {
-            result.message = "Cannot overwrite an official song package.";
-            return result;
-        }
-
-        const bool confirmed = file_dialog::confirm_yes_no(
-            "Overwrite Song",
-            "A user song with the same song ID already exists. Overwrite it?");
-        if (!confirmed) {
-            result.cancelled = true;
-            return result;
-        }
+    song_data imported_song = loaded.songs.front();
+    const std::optional<song_entry> existing_song = find_song_by_id(state, imported_song.meta.song_id);
+    if (existing_song.has_value() && existing_song->song.source == content_source::official) {
+        result.message = "Cannot overwrite an official song package.";
+        return std::nullopt;
     }
 
-    const fs::path audio_source = *extracted_song_root / path_utils::from_utf8(imported_song.meta.audio_file);
-    const fs::path jacket_source = *extracted_song_root / path_utils::from_utf8(imported_song.meta.jacket_file);
-    const bool has_jacket = !imported_song.meta.jacket_file.empty();
+    const fs::path persistent_extract_root = make_temp_directory("song_import_stage");
+    if (persistent_extract_root.empty()) {
+        result.message = "Failed to prepare the import directory.";
+        return std::nullopt;
+    }
+
+    std::error_code ec;
+    fs::copy(extract_root.path(), persistent_extract_root,
+             fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+    if (ec) {
+        result.message = "Failed to prepare the import directory.";
+        return std::nullopt;
+    }
+    imported_song.directory = path_utils::to_utf8(
+        persistent_extract_root / path_utils::from_utf8(imported_song.directory).filename());
+
+    return song_import_request{
+        .catalog_state = state,
+        .source_path = source_path,
+        .extracted_root = path_utils::to_utf8(persistent_extract_root),
+        .imported_song = imported_song,
+        .overwrite_existing = existing_song.has_value(),
+    };
+}
+
+transfer_result import_song_package(const song_import_request& request) {
+    transfer_result result;
+    const fs::path extracted_song_root = path_utils::from_utf8(request.imported_song.directory);
+    const fs::path audio_source = extracted_song_root / path_utils::from_utf8(request.imported_song.meta.audio_file);
+    const fs::path jacket_source = extracted_song_root / path_utils::from_utf8(request.imported_song.meta.jacket_file);
+    const bool has_jacket = !request.imported_song.meta.jacket_file.empty();
     if (!fs::exists(audio_source) || !fs::is_regular_file(audio_source)) {
         result.message = "The song package is missing its audio file.";
         return result;
@@ -493,7 +510,7 @@ transfer_result import_song_package(const song_import_request& request) {
     }
 
     app_paths::ensure_directories();
-    const fs::path destination_root = app_paths::song_dir(imported_song.meta.song_id);
+    const fs::path destination_root = app_paths::song_dir(request.imported_song.meta.song_id);
     std::error_code ec;
     fs::remove_all(destination_root, ec);
     ec.clear();
@@ -503,13 +520,13 @@ transfer_result import_song_package(const song_import_request& request) {
         return result;
     }
 
-    if (!song_writer::write_song_json(imported_song.meta, path_utils::to_utf8(destination_root)) ||
-        !copy_file_into_directory(audio_source, destination_root, path_utils::from_utf8(imported_song.meta.audio_file))) {
+    if (!song_writer::write_song_json(request.imported_song.meta, path_utils::to_utf8(destination_root)) ||
+        !copy_file_into_directory(audio_source, destination_root, path_utils::from_utf8(request.imported_song.meta.audio_file))) {
         result.message = "Failed to import the song package.";
         return result;
     }
     if (has_jacket &&
-        !copy_file_into_directory(jacket_source, destination_root, path_utils::from_utf8(imported_song.meta.jacket_file))) {
+        !copy_file_into_directory(jacket_source, destination_root, path_utils::from_utf8(request.imported_song.meta.jacket_file))) {
         result.message = "Failed to import the song package.";
         return result;
     }
@@ -517,8 +534,18 @@ transfer_result import_song_package(const song_import_request& request) {
     result.success = true;
     result.reload_catalog = true;
     result.message = "Song package imported.";
-    result.preferred_song_id = imported_song.meta.song_id;
+    result.preferred_song_id = request.imported_song.meta.song_id;
     return result;
+}
+
+void cleanup_song_import_request(song_import_request& request) {
+    if (request.extracted_root.empty()) {
+        return;
+    }
+
+    std::error_code ec;
+    fs::remove_all(path_utils::from_utf8(request.extracted_root), ec);
+    request.extracted_root.clear();
 }
 
 }  // namespace song_select

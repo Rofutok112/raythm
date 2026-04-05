@@ -42,6 +42,10 @@ void song_select_scene::on_enter() {
 void song_select_scene::on_exit() {
     song_select::close_context_menu(state_);
     state_.confirmation_dialog = {};
+    if (pending_song_import_request_.has_value()) {
+        song_select::cleanup_song_import_request(*pending_song_import_request_);
+        pending_song_import_request_.reset();
+    }
     preview_controller_.stop();
 }
 
@@ -93,7 +97,12 @@ void song_select_scene::poll_background_transfer() {
 
     background_transfer_active_ = false;
     background_transfer_label_.clear();
-    apply_transfer_result(background_transfer_.get());
+    song_select::transfer_result result = background_transfer_.get();
+    if (pending_song_import_request_.has_value()) {
+        song_select::cleanup_song_import_request(*pending_song_import_request_);
+        pending_song_import_request_.reset();
+    }
+    apply_transfer_result(result);
 }
 
 void song_select_scene::start_song_export(song_select::song_export_request request) {
@@ -109,9 +118,32 @@ void song_select_scene::start_song_import(song_select::song_import_request reque
     background_transfer_active_ = true;
     background_transfer_label_ = "Importing song package...";
     song_select::queue_status_message(state_, "Importing song package...", false);
+    pending_song_import_request_ = request;
     background_transfer_ = std::async(std::launch::async, [request = std::move(request)]() {
         return song_select::import_song_package(request);
     });
+}
+
+void song_select_scene::open_overwrite_song_confirmation(song_select::song_import_request request) {
+    pending_song_import_request_ = std::move(request);
+    state_.confirmation_dialog.open = true;
+    state_.confirmation_dialog.action = song_select::pending_confirmation_action::overwrite_song_import;
+    state_.confirmation_dialog.suppress_initial_pointer_cancel = true;
+    state_.confirmation_dialog.title = "Overwrite Song";
+    state_.confirmation_dialog.message = "A user song with the same song ID already exists. Overwrite it?";
+    state_.confirmation_dialog.hint = "Official songs cannot be overwritten.";
+    state_.confirmation_dialog.confirm_label = "OVERWRITE";
+}
+
+void song_select_scene::open_overwrite_chart_confirmation(song_select::chart_import_request request) {
+    pending_chart_import_request_ = std::move(request);
+    state_.confirmation_dialog.open = true;
+    state_.confirmation_dialog.action = song_select::pending_confirmation_action::overwrite_chart_import;
+    state_.confirmation_dialog.suppress_initial_pointer_cancel = true;
+    state_.confirmation_dialog.title = "Overwrite Chart";
+    state_.confirmation_dialog.message = "A user chart with the same chart ID already exists. Overwrite it?";
+    state_.confirmation_dialog.hint = "Official charts cannot be overwritten.";
+    state_.confirmation_dialog.confirm_label = "OVERWRITE";
 }
 
 bool song_select_scene::adjust_selected_song_local_offset(int delta_ms) {
@@ -226,8 +258,17 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
         return;
     case song_select::context_menu_command::import_song:
         song_select::close_context_menu(state_);
-        if (const auto request = song_select::prepare_song_import(state_); request.has_value()) {
-            start_song_import(*request);
+        {
+            song_select::transfer_result result;
+            if (const auto request = song_select::prepare_song_import(state_, result); request.has_value()) {
+                if (request->overwrite_existing) {
+                    open_overwrite_song_confirmation(*request);
+                } else {
+                    start_song_import(*request);
+                }
+            } else {
+                apply_transfer_result(result);
+            }
         }
         return;
     case song_select::context_menu_command::edit_song:
@@ -251,7 +292,16 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
     {
         const int song_index = state_.context_menu.song_index;
         song_select::close_context_menu(state_);
-        apply_transfer_result(song_select::import_chart_package(state_, song_index));
+        song_select::transfer_result result;
+        if (const auto request = song_select::prepare_chart_import(state_, song_index, result); request.has_value()) {
+            if (request->overwrite_existing) {
+                open_overwrite_chart_confirmation(*request);
+            } else {
+                apply_transfer_result(song_select::import_chart_package(*request));
+            }
+        } else {
+            apply_transfer_result(result);
+        }
         return;
     }
     case song_select::context_menu_command::export_song:
@@ -308,6 +358,11 @@ void song_select_scene::apply_confirmation_command(song_select::confirmation_com
     case song_select::confirmation_command::none:
         return;
     case song_select::confirmation_command::cancel:
+        if (pending_song_import_request_.has_value()) {
+            song_select::cleanup_song_import_request(*pending_song_import_request_);
+            pending_song_import_request_.reset();
+        }
+        pending_chart_import_request_.reset();
         state_.confirmation_dialog = {};
         return;
     case song_select::confirmation_command::confirm:
@@ -317,6 +372,18 @@ void song_select_scene::apply_confirmation_command(song_select::confirmation_com
         } else if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::delete_chart) {
             apply_delete_result(song_select::delete_chart(state_, state_.confirmation_dialog.song_index,
                                                           state_.confirmation_dialog.chart_index));
+        } else if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::overwrite_song_import) {
+            state_.confirmation_dialog = {};
+            if (pending_song_import_request_.has_value()) {
+                song_select::song_import_request request = *pending_song_import_request_;
+                start_song_import(request);
+            }
+        } else if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::overwrite_chart_import) {
+            state_.confirmation_dialog = {};
+            if (pending_chart_import_request_.has_value()) {
+                apply_transfer_result(song_select::import_chart_package(*pending_chart_import_request_));
+                pending_chart_import_request_.reset();
+            }
         }
         return;
     }
@@ -500,6 +567,9 @@ void song_select_scene::draw() {
     if (state_.songs.empty()) {
         song_select::draw_empty_state(state_);
         song_select::draw_status_message(state_);
+        if (background_transfer_active_) {
+            song_select::draw_busy_overlay(background_transfer_label_);
+        }
         ui::flush_draw_queue();
         virtual_screen::end();
         ClearBackground(BLACK);
