@@ -280,8 +280,8 @@ void song_create_scene::draw_song_saved() {
     const Rectangle add_later_rect = {start_x + kButtonWidth + kGap, kCenterY + 45, kButtonWidth, kButtonHeight};
 
     if (ui::draw_button(add_chart_rect, "ADD CHART", 16).clicked) {
-        current_step_ = step::chart_metadata;
-        error_.clear();
+        manager_.change_scene(std::make_unique<editor_scene>(manager_, created_song_, 4));
+        return;
     }
 
     if (ui::draw_button(add_later_rect, "ADD LATER", 16).clicked) {
