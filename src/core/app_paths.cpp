@@ -87,7 +87,7 @@ std::filesystem::path song_dir(const std::string& song_id) {
 }
 
 std::filesystem::path chart_path(const std::string& chart_id) {
-    return charts_root() / (chart_id + ".chart");
+    return charts_root() / (chart_id + ".rchart");
 }
 
 std::filesystem::path legacy_songs_root() {

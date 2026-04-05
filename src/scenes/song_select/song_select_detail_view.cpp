@@ -154,4 +154,15 @@ void draw_status_message(const state& state) {
                           ui::text_align::right);
 }
 
+void draw_busy_overlay(const std::string& message) {
+    const auto& theme = *g_theme;
+    ui::draw_fullscreen_overlay(Color{0, 0, 0, 120});
+    const Rectangle panel = ui::place(layout::kScreenRect, 420.0f, 96.0f,
+                                      ui::anchor::center, ui::anchor::center);
+    ui::draw_panel(panel);
+    ui::draw_text_in_rect(message.c_str(), 22,
+                          {panel.x + 24.0f, panel.y + 18.0f, panel.width - 48.0f, panel.height - 36.0f},
+                          theme.text, ui::text_align::center);
+}
+
 }  // namespace song_select

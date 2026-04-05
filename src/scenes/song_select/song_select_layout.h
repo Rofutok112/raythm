@@ -40,6 +40,9 @@ inline constexpr Rectangle kSongListTitleRect = ui::place(kSongListRect, 180.0f,
 inline constexpr Rectangle kSongListNewSongButtonRect = ui::place(kSongListRect, 124.0f, 30.0f,
                                                                   ui::anchor::top_right, ui::anchor::top_right,
                                                                   {-16.0f, 10.0f});
+inline constexpr Rectangle kSongListImportSongButtonRect = ui::place(kSongListNewSongButtonRect, 152.0f, 30.0f,
+                                                                     ui::anchor::top_left, ui::anchor::top_right,
+                                                                     {-10.0f, 0.0f});
 inline constexpr float kSongListHeaderHeight = 48.0f;
 inline constexpr float kSongListBottomPadding = 12.0f;
 inline constexpr Rectangle kSongListViewRect = ui::scroll_view(kSongListRect, kSongListHeaderHeight, kSongListBottomPadding);

@@ -128,6 +128,10 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_create_scene.h
         src/scenes/song_select/song_catalog_service.cpp
         src/scenes/song_select/song_catalog_service.h
+        src/scenes/song_select/song_select_confirmation_dialog.cpp
+        src/scenes/song_select/song_select_confirmation_dialog.h
+        src/scenes/song_select/song_import_export_service.cpp
+        src/scenes/song_select/song_import_export_service.h
         src/scenes/song_select/song_preview_controller.cpp
         src/scenes/song_select/song_preview_controller.h
         src/scenes/song_select/song_select_detail_view.cpp
@@ -226,6 +230,8 @@ add_executable(raythm_launcher
         src/launcher_main.cpp
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/updater/update_log.cpp
+        src/updater/update_log.h
         src/updater/update_release.cpp
         src/updater/update_release.h
         src/updater/update_paths.cpp
@@ -239,6 +245,8 @@ add_executable(raythm_updater
         src/updater_main.cpp
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/updater/update_log.cpp
+        src/updater/update_log.h
         src/updater/update_apply.cpp
         src/updater/update_apply.h
         src/updater/update_download.cpp

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "app_paths.h"
+#include "updater/update_log.h"
 #include "updater/update_release.h"
 #include "updater/update_paths.h"
 #include "updater/update_version.h"
@@ -79,8 +80,12 @@ bool launch_updater_process(const updater::update_launch_request&) {
 }  // namespace
 
 int main() {
+    updater::reset_update_log();
+    updater::append_update_log("launcher", "launcher started");
+
     const auto package_version = updater::parse_semantic_version(kCurrentPackageVersion);
     if (!package_version.has_value()) {
+        updater::append_update_log("launcher", "invalid launcher package version");
         std::cerr << "Invalid launcher package version.\n";
         return EXIT_FAILURE;
     }
@@ -90,9 +95,11 @@ int main() {
 
     const auto installed_version = updater::load_installed_version();
     if (!installed_version.has_value()) {
+        updater::append_update_log("launcher", "failed to load installed version");
         std::cerr << "Failed to load installed version.\n";
         return EXIT_FAILURE;
     }
+    updater::append_update_log("launcher", "installed version is " + updater::to_string(installed_version->version));
 
     std::cout << "Launcher initialized with installed version "
               << updater::to_string(installed_version->version) << '\n';
@@ -100,6 +107,9 @@ int main() {
     const auto latest_release = updater::fetch_latest_release_info();
     if (latest_release.has_value()) {
         const bool update_available = updater::is_newer_version(latest_release->version, installed_version->version);
+        updater::append_update_log("launcher",
+                                   "latest release " + latest_release->tag_name +
+                                       (update_available ? " requires update" : " is already installed"));
         std::cout << "Latest GitHub release: " << latest_release->tag_name
                   << (update_available ? " (update available)" : " (up to date)") << '\n';
         if (!latest_release->assets.package_url.empty()) {
@@ -111,20 +121,27 @@ int main() {
 
         if (update_available && !latest_release->assets.package_url.empty()) {
             const updater::update_launch_request request{installed_version->version, *latest_release};
+            updater::append_update_log("launcher", "launching updater process");
             if (!launch_updater_process(request)) {
+                updater::append_update_log("launcher", "failed to launch updater process");
                 std::cerr << "Failed to launch updater process.\n";
                 return EXIT_FAILURE;
             }
+            updater::append_update_log("launcher", "updater launched successfully");
             std::cout << "Updater launched for " << latest_release->tag_name << '\n';
             return EXIT_SUCCESS;
         }
     } else {
+        updater::append_update_log("launcher", "failed to fetch latest release");
         std::cout << "Latest GitHub release could not be fetched; continuing with installed version.\n";
     }
 
+    updater::append_update_log("launcher", "launching game directly");
     if (!launch_game_process()) {
+        updater::append_update_log("launcher", "failed to launch game directly");
         return EXIT_FAILURE;
     }
 
+    updater::append_update_log("launcher", "game launched directly");
     return EXIT_SUCCESS;
 }
