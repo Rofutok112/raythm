@@ -34,7 +34,8 @@ private:
         int numerator = 4;
         int denominator = 4;
         int beat_index_offset = 0;
-        int measure_index_offset = 0;
+        int start_measure = 1;
+        int start_beat = 1;
     };
 
     const meter_segment* segment_at_tick(int tick) const;
