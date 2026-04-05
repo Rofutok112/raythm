@@ -96,7 +96,6 @@ std::wstring append_argument(std::wstring arguments, const std::wstring& argumen
 int relaunch_self_elevated(int argc, char* argv[]) {
     SHELLEXECUTEINFOW execute_info{};
     execute_info.cbSize = sizeof(execute_info);
-    execute_info.fMask = SEE_MASK_NOCLOSEPROCESS;
     execute_info.lpVerb = L"runas";
     const std::filesystem::path executable_path = current_executable_path();
     execute_info.lpFile = executable_path.c_str();
@@ -108,33 +107,24 @@ int relaunch_self_elevated(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    WaitForSingleObject(execute_info.hProcess, INFINITE);
-    DWORD exit_code = EXIT_FAILURE;
-    GetExitCodeProcess(execute_info.hProcess, &exit_code);
-    CloseHandle(execute_info.hProcess);
-    return static_cast<int>(exit_code);
+    return EXIT_SUCCESS;
 }
 
-int launch_process_and_wait(const std::filesystem::path& executable_path,
-                            const std::wstring& parameters,
-                            const std::filesystem::path& working_directory) {
+bool launch_process_detached(const std::filesystem::path& executable_path,
+                             const std::wstring& parameters,
+                             const std::filesystem::path& working_directory) {
     SHELLEXECUTEINFOW execute_info{};
     execute_info.cbSize = sizeof(execute_info);
-    execute_info.fMask = SEE_MASK_NOCLOSEPROCESS;
     execute_info.lpFile = executable_path.c_str();
     execute_info.lpParameters = parameters.empty() ? nullptr : parameters.c_str();
     execute_info.lpDirectory = working_directory.c_str();
     execute_info.nShow = SW_SHOWNORMAL;
 
     if (ShellExecuteExW(&execute_info) == FALSE) {
-        return EXIT_FAILURE;
+        return false;
     }
 
-    WaitForSingleObject(execute_info.hProcess, INFINITE);
-    DWORD exit_code = EXIT_FAILURE;
-    GetExitCodeProcess(execute_info.hProcess, &exit_code);
-    CloseHandle(execute_info.hProcess);
-    return static_cast<int>(exit_code);
+    return true;
 }
 
 bool copy_runtime_file_if_present(const std::filesystem::path& install_root,
@@ -200,7 +190,10 @@ int relaunch_from_temp_copy(int argc, char* argv[], const std::filesystem::path&
     parameters = append_argument(parameters, L"--install-root=" + install_root.wstring());
     parameters = append_argument(parameters, L"--run-from-temp-copy");
     updater::append_update_log("updater", "relaunching temp updater copy");
-    return launch_process_and_wait(temp_executable, parameters, temp_root);
+    if (!launch_process_detached(temp_executable, parameters, temp_root)) {
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }
 
 bool launch_game_process(const std::filesystem::path& install_root) {
