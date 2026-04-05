@@ -139,13 +139,31 @@ bool create_archive_from_directory(const fs::path& source_directory, const fs::p
         return false;
     }
 
+    const fs::path zip_archive_path =
+        archive_path.extension() == ".zip" ? archive_path : archive_path.parent_path() / (archive_path.stem().wstring() + L".zip");
+    if (zip_archive_path != archive_path && fs::exists(zip_archive_path)) {
+        fs::remove(zip_archive_path, ec);
+        ec.clear();
+    }
+
     const std::wstring script =
         L"$ErrorActionPreference='Stop'; "
-        L"if (Test-Path -LiteralPath " + quote_powershell_argument(archive_path) + L") { "
-        L"Remove-Item -LiteralPath " + quote_powershell_argument(archive_path) + L" -Force; } "
+        L"if (Test-Path -LiteralPath " + quote_powershell_argument(zip_archive_path) + L") { "
+        L"Remove-Item -LiteralPath " + quote_powershell_argument(zip_archive_path) + L" -Force; } "
         L"Compress-Archive -Path (Join-Path " + quote_powershell_argument(source_directory) +
-        L" '*') -DestinationPath " + quote_powershell_argument(archive_path) + L" -CompressionLevel Optimal";
-    return run_powershell_command(script);
+        L" '*') -DestinationPath " + quote_powershell_argument(zip_archive_path) + L" -CompressionLevel Optimal";
+    if (!run_powershell_command(script)) {
+        return false;
+    }
+
+    if (zip_archive_path == archive_path) {
+        return true;
+    }
+
+    fs::remove(archive_path, ec);
+    ec.clear();
+    fs::rename(zip_archive_path, archive_path, ec);
+    return !ec;
 #else
     (void)source_directory;
     (void)archive_path;
@@ -163,10 +181,25 @@ bool extract_archive_to_directory(const fs::path& archive_path, const fs::path& 
         return false;
     }
 
+    const fs::path zip_archive_path =
+        archive_path.extension() == ".zip"
+            ? archive_path
+            : destination_directory / (archive_path.stem().wstring() + L".zip");
+    if (zip_archive_path != archive_path) {
+        fs::copy_file(archive_path, zip_archive_path, fs::copy_options::overwrite_existing, ec);
+        if (ec) {
+            return false;
+        }
+    }
+
     const std::wstring script =
-        L"$ErrorActionPreference='Stop'; Expand-Archive -LiteralPath " + quote_powershell_argument(archive_path) +
+        L"$ErrorActionPreference='Stop'; Expand-Archive -LiteralPath " + quote_powershell_argument(zip_archive_path) +
         L" -DestinationPath " + quote_powershell_argument(destination_directory) + L" -Force";
-    return run_powershell_command(script);
+    const bool extracted = run_powershell_command(script);
+    if (zip_archive_path != archive_path) {
+        fs::remove(zip_archive_path, ec);
+    }
+    return extracted;
 #else
     (void)archive_path;
     (void)destination_directory;
