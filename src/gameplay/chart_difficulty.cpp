@@ -48,6 +48,17 @@ constexpr float kScale = 12.0f;
 constexpr float kPeakPower = 2.2f;
 constexpr float kStaminaThreshold = 3.2f;
 
+// 各局所要素の寄与。大きいほど、その要素が最終難易度へ強く効く。
+// density: その瞬間の物量
+// stream: 連打が続く速さ
+// jump: レーン移動を伴う押しづらさ
+// hold: 同時に抱えるロングノーツ量
+// release: ロングノーツ終点まわりの処理負荷
+// overlap: hold 中に別ノーツを処理する複合負荷
+// pattern: ジャック・配置の崩れ・局所バーストなどの最大風速寄り要素
+// balance: 左右寄りの偏り
+// stamina: 数秒単位で高密度が続く持久力負荷
+// read: 見た目の詰まりや読みづらさ
 constexpr float kWeightDensity = 1.70f;
 constexpr float kWeightStream = 0.65f;
 constexpr float kWeightJump = 0.85f;
@@ -59,6 +70,7 @@ constexpr float kWeightBalance = 0.35f;
 constexpr float kWeightStamina = 0.80f;
 constexpr float kWeightRead = 0.55f;
 
+// 各要素の非線形補正。大きいほど、その要素の「高い値」を強調しやすい。
 constexpr float kGammaDensity = 1.18f;
 constexpr float kGammaStream = 0.72f;
 constexpr float kGammaLane = 1.10f;
@@ -76,6 +88,7 @@ constexpr float kGammaReadTail = 0.60f;
 constexpr float kHoldInterfere = 0.60f;
 constexpr float kCrossHand = 0.35f;
 
+// 要素どうしの掛け算ボーナス。複合配置のしんどさを少し増幅する。
 constexpr float kCouplingHoldDensity = 0.18f;
 constexpr float kCouplingHoldJump = 0.22f;
 constexpr float kCouplingOverlapJump = 0.16f;
