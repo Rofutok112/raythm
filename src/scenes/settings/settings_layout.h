@@ -66,6 +66,13 @@ inline const std::array<Rectangle, 8> kGeneralRows = {{
     ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 556.0f}),
     ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 616.0f}),
 }};
+inline const std::array<Rectangle, 5> kGameplayRows = {{
+    kGeneralRows[0],
+    kGeneralRows[1],
+    kGeneralRows[2],
+    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 296.0f}),
+    kGeneralRows[4],
+}};
 inline const Rectangle kKeyModeRect = ui::place(kContentRect, 890.0f, 64.0f,
                                                 ui::anchor::top_left, ui::anchor::top_left,
                                                 {30.0f, 126.0f});
