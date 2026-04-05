@@ -1,7 +1,7 @@
 #include "file_dialog.h"
 
-#include "raylib.h"
 #include "path_utils.h"
+#include "window_dialog_support.h"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -24,15 +24,15 @@ namespace {
 
 class fullscreen_dialog_guard {
 public:
-    fullscreen_dialog_guard() : was_fullscreen_(IsWindowFullscreen()) {
+    fullscreen_dialog_guard() : was_fullscreen_(window_dialog_support::is_fullscreen()) {
         if (was_fullscreen_) {
-            ToggleFullscreen();
+            window_dialog_support::toggle_fullscreen();
         }
     }
 
     ~fullscreen_dialog_guard() {
         if (was_fullscreen_) {
-            ToggleFullscreen();
+            window_dialog_support::toggle_fullscreen();
         }
     }
 
@@ -46,7 +46,7 @@ std::string open_file_dialog(const wchar_t* filter, const wchar_t* title) {
 
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = static_cast<HWND>(GetWindowHandle());
+    ofn.hwndOwner = static_cast<HWND>(window_dialog_support::native_window_handle());
     ofn.lpstrFilter = filter;
     ofn.lpstrFile = file_name;
     ofn.nMaxFile = MAX_PATH;
