@@ -229,7 +229,7 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
 
     const auto hit = song_select::hit_test_song_list(state_, mouse);
     if (!hit.has_value()) {
-        if (right_pressed && CheckCollisionPointRec(mouse, song_select::layout::kSongListViewRect)) {
+        if (right_pressed && CheckCollisionPointRec(mouse, song_select::layout::kSongListRect)) {
             song_select::open_list_background_context_menu(
                 state_, song_select::layout::make_context_menu_rect(mouse, 3));
             return true;
@@ -463,7 +463,7 @@ void song_select_scene::update(float dt) {
     if (state_.context_menu.open &&
         (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) &&
         !ui::is_hovered(state_.context_menu.rect, song_select::layout::kContextMenuLayer) &&
-        !CheckCollisionPointRec(mouse, song_select::layout::kSongListViewRect)) {
+        !CheckCollisionPointRec(mouse, song_select::layout::kSongListRect)) {
         song_select::close_context_menu(state_);
         return;
     }
