@@ -54,7 +54,7 @@ std::string suggested_chart_file_name(const chart_data& data) {
 }
 
 bool is_appdata_song(const song_data& song) {
-    return song.directory.find(path_utils::to_utf8(app_paths::songs_root())) != std::string::npos;
+    return song.directory.find(path_utils::to_utf8(app_paths::app_data_root())) != std::string::npos;
 }
 
 void open_save_dialog(save_dialog_state& save_dialog, editor_pending_action action_after_save, const chart_data& data) {

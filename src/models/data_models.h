@@ -6,7 +6,7 @@
 #include <vector>
 
 enum class content_source {
-    legacy_assets,
+    official,
     app_data,
 };
 
@@ -31,7 +31,7 @@ struct song_data {
     song_meta meta;
     std::vector<std::string> chart_paths;
     std::string directory;
-    content_source source = content_source::legacy_assets;
+    content_source source = content_source::official;
     bool can_edit = false;
     bool can_delete = false;
 };

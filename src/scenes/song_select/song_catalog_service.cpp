@@ -43,14 +43,15 @@ catalog_data load_catalog() {
     catalog_data catalog;
     const player_song_offset_map song_offsets = load_player_song_offsets();
 
-    const song_load_result legacy_result = song_loader::load_all(path_utils::to_utf8(app_paths::legacy_songs_root()),
-                                                                 content_source::legacy_assets);
+    const song_load_result legacy_result = song_loader::load_all(path_utils::to_utf8(app_paths::official_songs_root()),
+                                                                 content_source::official);
     const song_load_result appdata_result = song_loader::load_all(path_utils::to_utf8(app_paths::songs_root()),
                                                                   content_source::app_data);
     catalog.load_errors = legacy_result.errors;
     catalog.load_errors.insert(catalog.load_errors.end(), appdata_result.errors.begin(), appdata_result.errors.end());
 
     std::vector<song_data> all_songs = legacy_result.songs;
+    song_loader::attach_external_charts(path_utils::to_utf8(app_paths::official_charts_root()), all_songs);
     all_songs.insert(all_songs.end(), appdata_result.songs.begin(), appdata_result.songs.end());
     song_loader::attach_external_charts(path_utils::to_utf8(app_paths::charts_root()), all_songs);
 
@@ -109,13 +110,13 @@ delete_result delete_song(const state& state, int song_index) {
 
     const song_entry& entry = state.songs[static_cast<size_t>(song_index)];
     if (!entry.song.can_delete) {
-        result.message = "Only AppData songs can be deleted.";
+        result.message = "Only user-added songs can be deleted.";
         return result;
     }
 
     const std::filesystem::path song_dir = path_utils::from_utf8(entry.song.directory);
     if (!is_within_root(song_dir, app_paths::songs_root())) {
-        result.message = "Refused to delete a song outside AppData.";
+        result.message = "Refused to delete a song outside the user songs directory.";
         return result;
     }
 
@@ -174,13 +175,13 @@ delete_result delete_chart(const state& state, int song_index, int chart_index) 
 
     const chart_option& chart = charts[static_cast<size_t>(chart_index)];
     if (!chart.can_delete) {
-        result.message = "Only AppData charts can be deleted.";
+        result.message = "Only user-added charts can be deleted.";
         return result;
     }
 
     const std::filesystem::path chart_path = path_utils::from_utf8(chart.path);
     if (!is_within_root(chart_path, app_paths::app_data_root())) {
-        result.message = "Refused to delete a chart outside AppData.";
+        result.message = "Refused to delete a chart outside the user charts directory.";
         return result;
     }
 
