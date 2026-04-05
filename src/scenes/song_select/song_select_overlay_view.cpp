@@ -17,27 +17,31 @@ context_menu_command draw_context_menu(const state& state) {
     if (state.context_menu.target == context_menu_target::song) {
         const bool valid_song = state.context_menu.song_index >= 0 &&
                                 state.context_menu.song_index < static_cast<int>(state.songs.size());
+        const bool can_add_chart_to_song = valid_song &&
+                                           state.songs[static_cast<size_t>(state.context_menu.song_index)].song.source != content_source::official;
         const bool can_edit_song = valid_song &&
                                    state.songs[static_cast<size_t>(state.context_menu.song_index)].song.can_edit;
         const bool can_delete_song = valid_song &&
                                      state.songs[static_cast<size_t>(state.context_menu.song_index)].song.can_delete;
         items = {
             {"EDIT META", can_edit_song},
-            {"NEW CHART", valid_song},
+            {"NEW CHART", can_add_chart_to_song},
             {"DELETE SONG", can_delete_song},
         };
     } else {
+        bool can_edit_chart = false;
         bool can_delete_chart = false;
         if (state.context_menu.song_index >= 0 &&
             state.context_menu.song_index < static_cast<int>(state.songs.size())) {
             const auto& charts = state.songs[static_cast<size_t>(state.context_menu.song_index)].charts;
             if (state.context_menu.chart_index >= 0 &&
                 state.context_menu.chart_index < static_cast<int>(charts.size())) {
+                can_edit_chart = charts[static_cast<size_t>(state.context_menu.chart_index)].source != content_source::official;
                 can_delete_chart = charts[static_cast<size_t>(state.context_menu.chart_index)].can_delete;
             }
         }
         items = {
-            {"EDIT CHART", true},
+            {"EDIT CHART", can_edit_chart},
             {"DELETE CHART", can_delete_chart},
         };
     }
