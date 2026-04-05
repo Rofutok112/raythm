@@ -48,6 +48,11 @@ std::string trim(std::string_view value) {
     return std::string(value.substr(start, end - start));
 }
 
+bool is_chart_file_path(const fs::path& path) {
+    const fs::path extension = path.extension();
+    return extension == ".chart" || extension == ".rchart";
+}
+
 std::string read_file(const fs::path& path) {
     std::ifstream input(path);
     if (!input.is_open()) {
@@ -386,7 +391,7 @@ song_load_result song_loader::load_all(const std::string& songs_dir, content_sou
                     continue;
                 }
 
-                if (chart_entry.path().extension() == ".chart") {
+                if (is_chart_file_path(chart_entry.path())) {
                     song.chart_paths.push_back(path_utils::to_utf8(chart_entry.path()));
                 }
             }
@@ -438,7 +443,7 @@ song_load_result song_loader::load_directory(const std::string& song_dir_utf8, c
                 continue;
             }
 
-            if (chart_entry.path().extension() == ".chart") {
+            if (is_chart_file_path(chart_entry.path())) {
                 song.chart_paths.push_back(path_utils::to_utf8(chart_entry.path()));
             }
         }
@@ -472,7 +477,7 @@ void song_loader::attach_external_charts(const std::string& charts_dir, std::vec
     }
 
     for (const fs::directory_entry& entry : fs::directory_iterator(root)) {
-        if (!entry.is_regular_file() || entry.path().extension() != ".chart") {
+        if (!entry.is_regular_file() || !is_chart_file_path(entry.path())) {
             continue;
         }
 

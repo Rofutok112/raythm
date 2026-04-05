@@ -35,6 +35,11 @@ bool is_within_root(const std::filesystem::path& path, const std::filesystem::pa
     return true;
 }
 
+bool is_chart_file_path(const std::filesystem::path& path) {
+    const std::filesystem::path extension = path.extension();
+    return extension == ".chart" || extension == ".rchart";
+}
+
 }  // namespace
 
 namespace song_select {
@@ -124,7 +129,7 @@ delete_result delete_song(const state& state, int song_index) {
     const std::filesystem::path charts_root = app_paths::charts_root();
     if (std::filesystem::exists(charts_root) && std::filesystem::is_directory(charts_root)) {
         for (const auto& chart_entry : std::filesystem::directory_iterator(charts_root)) {
-            if (!chart_entry.is_regular_file() || chart_entry.path().extension() != ".chart") {
+            if (!chart_entry.is_regular_file() || !is_chart_file_path(chart_entry.path())) {
                 continue;
             }
 
