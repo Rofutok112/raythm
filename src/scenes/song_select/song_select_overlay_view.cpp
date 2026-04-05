@@ -19,12 +19,11 @@ context_menu_command draw_context_menu(const state& state) {
 
     switch (state.context_menu.target) {
         case context_menu_target::list_background: {
-            const bool has_selected_song = state.selected_song_index >= 0 &&
-                                           state.selected_song_index < static_cast<int>(state.songs.size());
+            const bool has_any_song = !state.songs.empty();
             entries = {
                 {{"NEW SONG", true}, context_menu_command::new_song},
                 {{"IMPORT SONG", true}, context_menu_command::import_song},
-                {{"IMPORT CHART", has_selected_song}, context_menu_command::import_chart},
+                {{"IMPORT CHART", has_any_song}, context_menu_command::import_chart},
             };
             break;
         }

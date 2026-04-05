@@ -287,20 +287,15 @@ transfer_result export_chart_package(const state& state, int song_index, int cha
 
 transfer_result import_chart_package(const state& state, int song_index) {
     transfer_result result;
-    const std::optional<chart_import_request> request = prepare_chart_import(state, song_index, result);
+    (void)song_index;
+    const std::optional<chart_import_request> request = prepare_chart_import(state, result);
     if (!request.has_value()) {
         return result;
     }
     return import_chart_package(*request);
 }
 
-std::optional<chart_import_request> prepare_chart_import(const state& state, int song_index, transfer_result& result) {
-    if (!is_valid_song_index(state, song_index)) {
-        result.message = "Chart import target is invalid.";
-        return std::nullopt;
-    }
-
-    const song_entry& song = state.songs[static_cast<size_t>(song_index)];
+std::optional<chart_import_request> prepare_chart_import(const state& state, transfer_result& result) {
     const std::string source_path = file_dialog::open_chart_package_file();
     if (source_path.empty()) {
         result.cancelled = true;
@@ -313,8 +308,9 @@ std::optional<chart_import_request> prepare_chart_import(const state& state, int
         return std::nullopt;
     }
 
-    if (parsed.data->meta.song_id != song.song.meta.song_id) {
-        result.message = "Chart song ID does not match the selected song.";
+    const std::optional<song_entry> target_song = find_song_by_id(state, parsed.data->meta.song_id);
+    if (!target_song.has_value()) {
+        result.message = "No song with a matching song ID was found.";
         return std::nullopt;
     }
 
@@ -326,7 +322,7 @@ std::optional<chart_import_request> prepare_chart_import(const state& state, int
 
     return chart_import_request{
         .source_path = source_path,
-        .target_song_id = song.song.meta.song_id,
+        .target_song_id = target_song->song.meta.song_id,
         .chart = *parsed.data,
         .overwrite_existing = existing_chart.has_value(),
     };

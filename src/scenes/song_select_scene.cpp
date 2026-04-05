@@ -290,10 +290,9 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
         return;
     case song_select::context_menu_command::import_chart:
     {
-        const int song_index = state_.context_menu.song_index;
         song_select::close_context_menu(state_);
         song_select::transfer_result result;
-        if (const auto request = song_select::prepare_chart_import(state_, song_index, result); request.has_value()) {
+        if (const auto request = song_select::prepare_chart_import(state_, result); request.has_value()) {
             if (request->overwrite_existing) {
                 open_overwrite_chart_confirmation(*request);
             } else {
