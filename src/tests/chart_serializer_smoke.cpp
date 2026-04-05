@@ -93,7 +93,7 @@ bool expect_contains_in_order(const std::string& content, const std::string& fir
 
 int main() {
     const std::filesystem::path output_path =
-        std::filesystem::temp_directory_path() / "raythm_chart_serializer_smoke.chart";
+        std::filesystem::temp_directory_path() / "raythm_chart_serializer_smoke.rchart";
 
     chart_data source;
     source.meta.chart_id = "serializer-smoke";

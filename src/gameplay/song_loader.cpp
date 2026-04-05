@@ -50,11 +50,6 @@ std::string trim(std::string_view value) {
 }
 
 bool is_chart_file_path(const fs::path& path) {
-    const fs::path extension = path.extension();
-    return extension == ".chart" || extension == ".rchart";
-}
-
-bool is_rchart_file_path(const fs::path& path) {
     return path.extension() == ".rchart";
 }
 
@@ -71,7 +66,7 @@ std::vector<fs::path> collect_chart_files_in_directory(const fs::path& directory
 
         const std::string stem = path_utils::to_utf8(chart_entry.path().stem());
         const auto existing = by_stem.find(stem);
-        if (existing == by_stem.end() || is_rchart_file_path(chart_entry.path())) {
+        if (existing == by_stem.end()) {
             by_stem[stem] = chart_entry.path();
         }
     }
@@ -86,9 +81,6 @@ std::vector<fs::path> collect_chart_files_in_directory(const fs::path& directory
     std::sort(result.begin(), result.end(), [](const fs::path& left, const fs::path& right) {
         if (left.stem() != right.stem()) {
             return left.stem().wstring() < right.stem().wstring();
-        }
-        if (is_rchart_file_path(left) != is_rchart_file_path(right)) {
-            return is_rchart_file_path(left);
         }
         return left.wstring() < right.wstring();
     });
