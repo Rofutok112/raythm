@@ -103,6 +103,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/core/app_paths.h
         src/core/file_dialog.cpp
         src/core/file_dialog.h
+        src/core/official_content_sync.cpp
+        src/core/official_content_sync.h
         src/core/window_dialog_support.cpp
         src/core/window_dialog_support.h
         src/core/scene.cpp

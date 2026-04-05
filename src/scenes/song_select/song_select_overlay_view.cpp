@@ -90,7 +90,7 @@ confirmation_command draw_confirmation_dialog(const state& state) {
                              {layout::kConfirmDialogRect.x + 28.0f, layout::kConfirmDialogRect.y + 76.0f,
                               layout::kConfirmDialogRect.width - 56.0f, 24.0f},
                              g_theme->text_secondary, ui::text_align::center, layout::kModalLayer);
-    ui::enqueue_text_in_rect("Legacy assets are not delete targets.", 16,
+    ui::enqueue_text_in_rect("Official content cannot be deleted.", 16,
                              {layout::kConfirmDialogRect.x + 28.0f, layout::kConfirmDialogRect.y + 104.0f,
                               layout::kConfirmDialogRect.width - 56.0f, 22.0f},
                              g_theme->text_hint, ui::text_align::center, layout::kModalLayer);
