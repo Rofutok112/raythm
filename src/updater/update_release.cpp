@@ -70,15 +70,17 @@ std::optional<std::string> find_asset_download_url(const std::string& content, s
 
         const std::optional<std::string> current_name = extract_json_string_at(content, name_key_pos + asset_token.size());
         if (current_name.has_value() && *current_name == asset_name) {
-            const size_t object_end = content.find('}', name_key_pos);
-            if (object_end == std::string::npos) {
+            const size_t download_key_pos = content.find("\"browser_download_url\"", name_key_pos);
+            if (download_key_pos == std::string::npos) {
                 return std::nullopt;
             }
 
-            const size_t download_key_pos = content.find("\"browser_download_url\"", name_key_pos);
-            if (download_key_pos == std::string::npos || download_key_pos > object_end) {
-                return std::nullopt;
+            const size_t next_name_key_pos = content.find(asset_token, name_key_pos + asset_token.size());
+            if (next_name_key_pos != std::string::npos && download_key_pos > next_name_key_pos) {
+                search_pos = next_name_key_pos;
+                continue;
             }
+
             return extract_json_string_at(content, download_key_pos + std::string("\"browser_download_url\"").size());
         }
 
