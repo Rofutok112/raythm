@@ -46,16 +46,14 @@ struct song_load_result {
 struct chart_meta {
     std::string chart_id;
     std::string song_id;
-    std::string chart_name;
     int key_count = 0;
     std::string difficulty;
-    int level = 0;
+    float level = 0.0f;
     std::string chart_author;
     int format_version = 0;
     int resolution = 0;
     int offset = 0;
     bool is_public = false;
-    std::string description;
 };
 
 // タイミングイベントの種類。

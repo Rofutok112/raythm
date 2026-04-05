@@ -55,8 +55,6 @@ struct editor_navigation_request {
 struct metadata_panel_state {
     ui::text_input_state difficulty_input;
     ui::text_input_state chart_author_input;
-    ui::text_input_state chart_name_input;
-    ui::text_input_state description_input;
     int key_count = 4;
     std::string error;
     bool key_count_confirm_open = false;

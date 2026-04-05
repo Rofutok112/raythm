@@ -7,8 +7,6 @@ namespace editor_scene_sync {
 void sync_metadata_inputs(editor_scene_sync_context context) {
     context.metadata_panel.difficulty_input.value = context.state.data().meta.difficulty;
     context.metadata_panel.chart_author_input.value = context.state.data().meta.chart_author;
-    context.metadata_panel.chart_name_input.value = context.state.data().meta.chart_name;
-    context.metadata_panel.description_input.value = context.state.data().meta.description;
     context.metadata_panel.key_count = context.state.data().meta.key_count;
     context.metadata_panel.error.clear();
 }

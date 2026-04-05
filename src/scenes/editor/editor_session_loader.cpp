@@ -65,7 +65,7 @@ chart_data make_new_chart_data(const editor_start_request& request) {
         data.meta.difficulty = "New";
         data.meta.chart_id = generated_chart_id(request.song, data.meta.difficulty);
         data.meta.key_count = request.new_chart_key_count;
-        data.meta.level = 1;
+        data.meta.level = 1.0f;
         data.meta.chart_author = "Unknown";
         data.meta.format_version = 1;
         data.meta.resolution = 480;

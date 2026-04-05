@@ -9,7 +9,6 @@ chart_data make_chart() {
     chart_data chart;
     chart.meta.chart_id = "play-chart-filter-smoke";
     chart.meta.song_id = "song";
-    chart.meta.chart_name = "Test";
     chart.meta.key_count = 4;
     chart.meta.difficulty = "Normal";
     chart.meta.chart_author = "Codex";
