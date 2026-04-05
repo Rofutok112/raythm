@@ -97,7 +97,6 @@ std::optional<list_hit> hit_test_song_list(const state& state, Vector2 mouse) {
 void draw_song_list(const state& state) {
     const auto& theme = *g_theme;
     ui::draw_text_in_rect("Songs", 28, layout::kSongListTitleRect, theme.text, ui::text_align::left);
-    ui::draw_button_colored(layout::kSongListNewSongButtonRect, "NEW SONG", 14, theme.row, theme.row_hover, theme.text);
 
     ui::scoped_clip_rect clip_scope(layout::kSongListViewRect);
 

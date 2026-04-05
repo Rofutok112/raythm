@@ -33,7 +33,7 @@ chart_data make_chart() {
 }
 
 int main() {
-    editor_state state(make_chart(), "assets/charts/editor_state.chart");
+    editor_state state(make_chart(), "assets/charts/editor_state.rchart");
 
     if (state.is_dirty()) {
         std::cerr << "freshly loaded state should not be dirty\n";
@@ -149,8 +149,8 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    state.mark_saved("assets/charts/editor_state_saved.chart");
-    if (state.is_dirty() || state.file_path() != "assets/charts/editor_state_saved.chart") {
+    state.mark_saved("assets/charts/editor_state_saved.rchart");
+    if (state.is_dirty() || state.file_path() != "assets/charts/editor_state_saved.rchart") {
         std::cerr << "mark_saved did not update save state\n";
         return EXIT_FAILURE;
     }

@@ -58,7 +58,7 @@ editor_modal_view_result editor_modal_view::draw_save_dialog(save_dialog_state& 
 
     const ui::text_input_result file_name_result = ui::draw_text_input(
         {layout::kSaveDialogRect.x + 20.0f, layout::kSaveDialogRect.y + 88.0f, layout::kSaveDialogRect.width - 40.0f, 38.0f},
-        state.file_name_input, "File", "normal.chart", "new-chart.chart",
+        state.file_name_input, "File", "normal.rchart", "new-chart.rchart",
         ui::draw_layer::modal, 16, 48, accepts_chart_file_character, 64.0f);
     result.save_dialog_submit_requested = file_name_result.submitted;
 

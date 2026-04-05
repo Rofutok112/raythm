@@ -50,9 +50,9 @@ bool expect_failure(const std::string& path, const std::string& expected_fragmen
 int main() {
     bool ok = true;
 
-    ok = expect_success(chart_path("parser_valid.chart")) && ok;
-    ok = expect_failure(chart_path("parser_invalid_overlap.chart"), "overlapping notes") && ok;
-    ok = expect_failure(chart_path("parser_invalid_metadata.chart"), "keyCount must be 4 or 6") && ok;
+    ok = expect_success(chart_path("parser_valid.rchart")) && ok;
+    ok = expect_failure(chart_path("parser_invalid_overlap.rchart"), "overlapping notes") && ok;
+    ok = expect_failure(chart_path("parser_invalid_metadata.rchart"), "keyCount must be 4 or 6") && ok;
 
     if (!ok) {
         return EXIT_FAILURE;

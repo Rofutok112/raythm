@@ -50,7 +50,7 @@ std::string suggested_chart_file_name(const chart_data& data) {
     if (stem.empty()) {
         stem = "new-chart";
     }
-    return stem + ".chart";
+    return stem + ".rchart";
 }
 
 bool is_appdata_song(const song_data& song) {
@@ -149,8 +149,8 @@ bool save_chart_from_dialog(const editor_flow_context& context, editor_flow_resu
     }
 
     std::filesystem::path chart_path = path_utils::from_utf8(context.song->directory) / "charts" / file_name;
-    if (chart_path.extension() != ".chart") {
-        chart_path += ".chart";
+    if (chart_path.extension() != ".rchart") {
+        chart_path += ".rchart";
     }
 
     if (!save_to_path(context, path_utils::to_utf8(chart_path), result)) {

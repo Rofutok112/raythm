@@ -30,6 +30,7 @@ struct catalog_data {
 
 enum class context_menu_target {
     none,
+    list_background,
     song,
     chart,
 };
@@ -38,6 +39,8 @@ enum class pending_confirmation_action {
     none,
     delete_song,
     delete_chart,
+    overwrite_song_import,
+    overwrite_chart_import,
 };
 
 struct context_menu_state {
@@ -54,6 +57,10 @@ struct confirmation_dialog_state {
     int song_index = -1;
     int chart_index = -1;
     bool suppress_initial_pointer_cancel = false;
+    std::string title;
+    std::string message;
+    std::string hint;
+    std::string confirm_label = "CONFIRM";
 };
 
 struct recent_result_offset {
@@ -93,6 +100,7 @@ bool apply_song_selection(state& state, int song_index, int chart_index = 0);
 
 void open_song_context_menu(state& state, int song_index, Rectangle rect);
 void open_chart_context_menu(state& state, int song_index, int chart_index, Rectangle rect);
+void open_list_background_context_menu(state& state, Rectangle rect);
 void close_context_menu(state& state);
 void queue_status_message(state& state, std::string message, bool is_error);
 

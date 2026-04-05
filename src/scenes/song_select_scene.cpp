@@ -1,13 +1,16 @@
 #include "song_select_scene.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <utility>
 
+#include "file_dialog.h"
 #include "player_note_offsets.h"
 #include "raylib.h"
 #include "scene_manager.h"
 #include "song_select/song_select_detail_view.h"
+#include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_layout.h"
 #include "song_select/song_select_list_view.h"
 #include "song_select/song_select_navigation.h"
@@ -41,6 +44,10 @@ void song_select_scene::on_enter() {
 void song_select_scene::on_exit() {
     song_select::close_context_menu(state_);
     state_.confirmation_dialog = {};
+    if (pending_song_import_request_.has_value()) {
+        song_select::cleanup_song_import_request(*pending_song_import_request_);
+        pending_song_import_request_.reset();
+    }
     preview_controller_.stop();
 }
 
@@ -63,6 +70,117 @@ void song_select_scene::apply_delete_result(const song_select::delete_result& re
 
     reload_song_library(result.preferred_song_id, result.preferred_chart_id);
     song_select::queue_status_message(state_, result.message, false);
+}
+
+void song_select_scene::apply_transfer_result(const song_select::transfer_result& result) {
+    if (result.cancelled) {
+        return;
+    }
+
+    if (!result.success) {
+        song_select::queue_status_message(state_, result.message, true);
+        return;
+    }
+
+    if (result.reload_catalog) {
+        reload_song_library(result.preferred_song_id, result.preferred_chart_id);
+    }
+    song_select::queue_status_message(state_, result.message, false);
+}
+
+void song_select_scene::poll_song_import_prepare() {
+    if (!background_song_import_prepare_active_) {
+        return;
+    }
+
+    if (background_song_import_prepare_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    background_song_import_prepare_active_ = false;
+    background_transfer_label_.clear();
+    song_select::song_import_prepare_result prepared = background_song_import_prepare_.get();
+    if (!prepared.request.has_value()) {
+        apply_transfer_result(prepared.transfer);
+        return;
+    }
+
+    if (prepared.request->overwrite_existing) {
+        open_overwrite_song_confirmation(*prepared.request);
+        return;
+    }
+
+    start_song_import(*prepared.request);
+}
+
+void song_select_scene::poll_background_transfer() {
+    if (!background_transfer_active_) {
+        return;
+    }
+
+    if (background_transfer_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    background_transfer_active_ = false;
+    background_transfer_label_.clear();
+    song_select::transfer_result result = background_transfer_.get();
+    if (pending_song_import_request_.has_value()) {
+        song_select::cleanup_song_import_request(*pending_song_import_request_);
+        pending_song_import_request_.reset();
+    }
+    apply_transfer_result(result);
+}
+
+void song_select_scene::start_song_import_prepare(std::string source_path) {
+    background_song_import_prepare_active_ = true;
+    background_transfer_label_ = "Reading song package...";
+    song_select::queue_status_message(state_, "Reading song package...", false);
+    const song_select::state catalog_state = state_;
+    background_song_import_prepare_ = std::async(
+        std::launch::async,
+        [catalog_state, source_path = std::move(source_path)]() {
+            return song_select::prepare_song_import_from_path(catalog_state, source_path);
+        });
+}
+
+void song_select_scene::start_song_export(song_select::song_export_request request) {
+    background_transfer_active_ = true;
+    background_transfer_label_ = "Exporting song package...";
+    song_select::queue_status_message(state_, "Exporting song package...", false);
+    background_transfer_ = std::async(std::launch::async, [request = std::move(request)]() {
+        return song_select::export_song_package(request);
+    });
+}
+
+void song_select_scene::start_song_import(song_select::song_import_request request) {
+    background_transfer_active_ = true;
+    background_transfer_label_ = "Importing song package...";
+    song_select::queue_status_message(state_, "Importing song package...", false);
+    pending_song_import_request_ = request;
+    background_transfer_ = std::async(std::launch::async, [request = std::move(request)]() {
+        return song_select::import_song_package(request);
+    });
+}
+
+void song_select_scene::open_overwrite_song_confirmation(song_select::song_import_request request) {
+    pending_song_import_request_ = std::move(request);
+    song_select::open_confirmation_dialog(
+        state_, song_select::pending_confirmation_action::overwrite_song_import,
+        "Overwrite Song",
+        "A user song with the same song ID already exists. Overwrite it?",
+        "Official songs cannot be overwritten.",
+        "OVERWRITE");
+}
+
+void song_select_scene::open_overwrite_chart_confirmation(song_select::chart_import_request request) {
+    pending_chart_import_request_ = std::move(request);
+    song_select::open_confirmation_dialog(
+        state_, song_select::pending_confirmation_action::overwrite_chart_import,
+        "Overwrite Chart",
+        "A user chart with the same chart ID already exists. Overwrite it?",
+        "Official charts cannot be overwritten.",
+        "OVERWRITE");
 }
 
 bool song_select_scene::adjust_selected_song_local_offset(int delta_ms) {
@@ -111,6 +229,11 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
 
     const auto hit = song_select::hit_test_song_list(state_, mouse);
     if (!hit.has_value()) {
+        if (right_pressed && CheckCollisionPointRec(mouse, song_select::layout::kSongListRect)) {
+            song_select::open_list_background_context_menu(
+                state_, song_select::layout::make_context_menu_rect(mouse, 3));
+            return true;
+        }
         return false;
     }
 
@@ -120,7 +243,7 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
             song_select::apply_song_selection(state_, hit->song_index, chart_index);
             song_select::open_chart_context_menu(
                 state_, hit->song_index, chart_index,
-                song_select::layout::make_context_menu_rect(mouse, 2));
+                song_select::layout::make_context_menu_rect(mouse, 3));
             return true;
         }
 
@@ -146,7 +269,7 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
         }
         song_select::open_song_context_menu(
             state_, hit->song_index,
-            song_select::layout::make_context_menu_rect(mouse, 3));
+            song_select::layout::make_context_menu_rect(mouse, 4));
         return true;
     }
 
@@ -166,6 +289,19 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
     case song_select::context_menu_command::close_menu:
         song_select::close_context_menu(state_);
         return;
+    case song_select::context_menu_command::new_song:
+        song_select::close_context_menu(state_);
+        manager_.change_scene(song_select::make_song_create_scene(manager_));
+        return;
+    case song_select::context_menu_command::import_song:
+        song_select::close_context_menu(state_);
+        {
+            const std::string source_path = file_dialog::open_song_package_file();
+            if (!source_path.empty()) {
+                start_song_import_prepare(source_path);
+            }
+        }
+        return;
     case song_select::context_menu_command::edit_song:
         if (state_.context_menu.song_index >= 0 &&
             state_.context_menu.song_index < static_cast<int>(state_.songs.size()) &&
@@ -183,12 +319,34 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
             manager_.change_scene(song_select::make_new_chart_scene(manager_, song, state_.difficulty_index));
         }
         return;
+    case song_select::context_menu_command::import_chart:
+    {
+        song_select::close_context_menu(state_);
+        song_select::transfer_result result;
+        if (const auto request = song_select::prepare_chart_import(state_, result); request.has_value()) {
+            if (request->overwrite_existing) {
+                open_overwrite_chart_confirmation(*request);
+            } else {
+                apply_transfer_result(song_select::import_chart_package(*request));
+            }
+        } else {
+            apply_transfer_result(result);
+        }
+        return;
+    }
+    case song_select::context_menu_command::export_song:
+    {
+        const int song_index = state_.context_menu.song_index;
+        song_select::close_context_menu(state_);
+        if (const auto request = song_select::prepare_song_export(state_, song_index); request.has_value()) {
+            start_song_export(*request);
+        }
+        return;
+    }
     case song_select::context_menu_command::request_delete_song:
-        state_.confirmation_dialog.open = true;
-        state_.confirmation_dialog.action = song_select::pending_confirmation_action::delete_song;
-        state_.confirmation_dialog.song_index = state_.context_menu.song_index;
-        state_.confirmation_dialog.chart_index = -1;
-        state_.confirmation_dialog.suppress_initial_pointer_cancel = true;
+        song_select::open_confirmation_dialog(
+            state_, song_select::pending_confirmation_action::delete_song,
+            "", "", "", "DELETE", state_.context_menu.song_index, -1);
         song_select::close_context_menu(state_);
         return;
     case song_select::context_menu_command::edit_chart:
@@ -203,12 +361,20 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
             }
         }
         return;
+    case song_select::context_menu_command::export_chart:
+    {
+        const int song_index = state_.context_menu.song_index;
+        const int chart_index = state_.context_menu.chart_index;
+        song_select::close_context_menu(state_);
+        apply_transfer_result(song_select::export_chart_package(
+            state_, song_index, chart_index));
+        return;
+    }
     case song_select::context_menu_command::request_delete_chart:
-        state_.confirmation_dialog.open = true;
-        state_.confirmation_dialog.action = song_select::pending_confirmation_action::delete_chart;
-        state_.confirmation_dialog.song_index = state_.context_menu.song_index;
-        state_.confirmation_dialog.chart_index = state_.context_menu.chart_index;
-        state_.confirmation_dialog.suppress_initial_pointer_cancel = true;
+        song_select::open_confirmation_dialog(
+            state_, song_select::pending_confirmation_action::delete_chart,
+            "", "", "", "DELETE",
+            state_.context_menu.song_index, state_.context_menu.chart_index);
         song_select::close_context_menu(state_);
         return;
     }
@@ -219,6 +385,11 @@ void song_select_scene::apply_confirmation_command(song_select::confirmation_com
     case song_select::confirmation_command::none:
         return;
     case song_select::confirmation_command::cancel:
+        if (pending_song_import_request_.has_value()) {
+            song_select::cleanup_song_import_request(*pending_song_import_request_);
+            pending_song_import_request_.reset();
+        }
+        pending_chart_import_request_.reset();
         state_.confirmation_dialog = {};
         return;
     case song_select::confirmation_command::confirm:
@@ -228,6 +399,18 @@ void song_select_scene::apply_confirmation_command(song_select::confirmation_com
         } else if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::delete_chart) {
             apply_delete_result(song_select::delete_chart(state_, state_.confirmation_dialog.song_index,
                                                           state_.confirmation_dialog.chart_index));
+        } else if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::overwrite_song_import) {
+            state_.confirmation_dialog = {};
+            if (pending_song_import_request_.has_value()) {
+                song_select::song_import_request request = *pending_song_import_request_;
+                start_song_import(request);
+            }
+        } else if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::overwrite_chart_import) {
+            state_.confirmation_dialog = {};
+            if (pending_chart_import_request_.has_value()) {
+                apply_transfer_result(song_select::import_chart_package(*pending_chart_import_request_));
+                pending_chart_import_request_.reset();
+            }
         }
         return;
     }
@@ -244,11 +427,17 @@ void song_select_scene::update(float dt) {
 
     preview_controller_.update(dt, song_select::selected_song(state_));
     song_select::tick_animations(state_, dt);
+    poll_song_import_prepare();
+    poll_background_transfer();
 
     if (state_.confirmation_dialog.open &&
         !IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
         !IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
         state_.confirmation_dialog.suppress_initial_pointer_cancel = false;
+    }
+
+    if (background_song_import_prepare_active_ || background_transfer_active_) {
+        return;
     }
 
     if (IsKeyPressed(KEY_ESCAPE)) {
@@ -274,7 +463,7 @@ void song_select_scene::update(float dt) {
     if (state_.context_menu.open &&
         (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) &&
         !ui::is_hovered(state_.context_menu.rect, song_select::layout::kContextMenuLayer) &&
-        !CheckCollisionPointRec(mouse, song_select::layout::kSongListViewRect)) {
+        !CheckCollisionPointRec(mouse, song_select::layout::kSongListRect)) {
         song_select::close_context_menu(state_);
         return;
     }
@@ -282,16 +471,6 @@ void song_select_scene::update(float dt) {
     if (IsKeyPressed(KEY_F1) || ui::is_clicked(song_select::layout::kSettingsButtonRect, song_select::layout::kSceneLayer)) {
         song_select::close_context_menu(state_);
         manager_.change_scene(song_select::make_settings_scene(manager_));
-        return;
-    }
-
-    if (ui::is_clicked(song_select::layout::kSongListNewSongButtonRect, song_select::layout::kSceneLayer)) {
-        song_select::close_context_menu(state_);
-        manager_.change_scene(song_select::make_song_create_scene(manager_));
-        return;
-    }
-
-    if (state_.songs.empty()) {
         return;
     }
 
@@ -398,6 +577,10 @@ void song_select_scene::update(float dt) {
     if (handle_song_list_pointer(mouse, IsMouseButtonPressed(MOUSE_BUTTON_LEFT), IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))) {
         return;
     }
+
+    if (state_.songs.empty()) {
+        return;
+    }
 }
 
 void song_select_scene::draw() {
@@ -412,6 +595,9 @@ void song_select_scene::draw() {
     if (state_.songs.empty()) {
         song_select::draw_empty_state(state_);
         song_select::draw_status_message(state_);
+        if (background_song_import_prepare_active_ || background_transfer_active_) {
+            song_select::draw_busy_overlay(background_transfer_label_);
+        }
         ui::flush_draw_queue();
         virtual_screen::end();
         ClearBackground(BLACK);
@@ -421,6 +607,9 @@ void song_select_scene::draw() {
 
     song_select::draw_song_details(state_, preview_controller_);
     song_select::draw_status_message(state_);
+    if (background_song_import_prepare_active_ || background_transfer_active_) {
+        song_select::draw_busy_overlay(background_transfer_label_);
+    }
     apply_context_menu_command(song_select::draw_context_menu(state_));
     apply_confirmation_command(song_select::draw_confirmation_dialog(state_));
     ui::flush_draw_queue();

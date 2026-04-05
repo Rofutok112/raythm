@@ -35,7 +35,7 @@ std::filesystem::path official_charts_root();
 // AppData/Local/raythm/songs/{song_id}/
 std::filesystem::path song_dir(const std::string& song_id);
 
-// AppData/Local/raythm/charts/{chart_id}.chart
+// AppData/Local/raythm/charts/{chart_id}.rchart
 std::filesystem::path chart_path(const std::string& chart_id);
 
 // Legacy: repo_root/assets/songs/
