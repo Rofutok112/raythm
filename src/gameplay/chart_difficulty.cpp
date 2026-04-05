@@ -47,7 +47,6 @@ constexpr double kTimeEpsilonSeconds = 0.015;
 constexpr float kScale = 12.0f;
 constexpr float kPeakPower = 2.2f;
 constexpr float kStaminaThreshold = 3.2f;
-constexpr float kLevelCompressionScale = 12.0f;
 
 constexpr float kWeightDensity = 1.00f;
 constexpr float kWeightStream = 0.65f;
@@ -433,7 +432,7 @@ float calculate_level(const chart_data& data) {
     if (raw_rating <= 0.0f) {
         return 0.0f;
     }
-    const float normalized = kLevelCompressionScale * std::log10(1.0f + raw_rating);
+    const float normalized = std::log10(1.0f + raw_rating);
     return std::max(0.1f, std::round(normalized * 10.0f) / 10.0f);
 }
 
