@@ -479,14 +479,14 @@ song_import_prepare_result prepare_song_import_from_path(const state& state, con
     }
 
     std::error_code ec;
-    fs::copy(extract_root.path(), persistent_extract_root,
+    const fs::path persistent_song_root = persistent_extract_root / extracted_song_root->filename();
+    fs::copy(*extracted_song_root, persistent_song_root,
              fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
     if (ec) {
         prepared.transfer.message = "Failed to prepare the import directory.";
         return prepared;
     }
-    imported_song.directory = path_utils::to_utf8(
-        persistent_extract_root / path_utils::from_utf8(imported_song.directory).filename());
+    imported_song.directory = path_utils::to_utf8(persistent_song_root);
 
     prepared.request = song_import_request{
         .catalog_state = state,
