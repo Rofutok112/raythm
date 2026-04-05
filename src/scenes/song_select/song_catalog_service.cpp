@@ -5,6 +5,7 @@
 #include <system_error>
 
 #include "app_paths.h"
+#include "chart_difficulty.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
 #include "song_loader.h"
@@ -71,10 +72,13 @@ catalog_data load_catalog() {
                 continue;
             }
 
+            chart_meta meta = parse_result.data->meta;
+            meta.level = chart_difficulty::calculate_level(*parse_result.data);
+
             const content_source chart_source = song_loader::classify_chart_path(chart_path);
             entry.charts.push_back({
                 chart_path,
-                parse_result.data->meta,
+                meta,
                 chart_source,
                 chart_source == content_source::app_data,
             });

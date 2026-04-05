@@ -10,7 +10,6 @@
 
 #include "app_paths.h"
 #include "audio_manager.h"
-#include "chart_difficulty.h"
 #include "editor/editor_flow_controller.h"
 #include "editor/editor_session_loader.h"
 #include "path_utils.h"
@@ -425,12 +424,7 @@ chart_data editor_scene::make_chart_data_for_save() const {
         data.meta.chart_id = generated_chart_id(data.meta.difficulty);
     }
     data.meta.song_id = song_.meta.song_id;
-    data.meta.level = chart_difficulty::calculate_level(data);
     return data;
-}
-
-float editor_scene::computed_chart_level() const {
-    return chart_difficulty::calculate_level(make_chart_data_for_save());
 }
 
 std::string editor_scene::generated_chart_id(const std::string& difficulty) const {
@@ -1164,7 +1158,7 @@ void editor_scene::draw_left_panel() {
                               t.error, ui::text_align::left);
     }
 
-    const Rectangle tools_box_expanded = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 142.0f};
+    const Rectangle tools_box_expanded = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 114.0f};
     ui::draw_section(tools_box_expanded);
     ui::draw_label_value({tools_box_expanded.x + 12.0f, tools_box_expanded.y + 16.0f, tools_box_expanded.width - 24.0f, 24.0f},
                          "Mode", key_count_label(state_->data().meta.key_count), 16,
@@ -1174,9 +1168,6 @@ void editor_scene::draw_left_panel() {
                          t.text_secondary, t.text, 92.0f);
     ui::draw_label_value({tools_box_expanded.x + 12.0f, tools_box_expanded.y + 72.0f, tools_box_expanded.width - 24.0f, 24.0f},
                          "Notes", TextFormat("%d", static_cast<int>(state_->data().notes.size())), 16,
-                         t.text_secondary, t.text, 92.0f);
-    ui::draw_label_value({tools_box_expanded.x + 12.0f, tools_box_expanded.y + 100.0f, tools_box_expanded.width - 24.0f, 24.0f},
-                         "Level", TextFormat("%.1f", computed_chart_level()), 16,
                          t.text_secondary, t.text, 92.0f);
 
     if (!load_errors_.empty()) {
