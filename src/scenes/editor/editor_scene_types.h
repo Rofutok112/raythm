@@ -160,6 +160,16 @@ struct editor_transport_context {
     std::optional<int> space_playback_start_tick;
 };
 
+struct editor_transport_state {
+    bool audio_loaded = false;
+    bool audio_playing = false;
+    double audio_time_seconds = 0.0;
+    int playback_tick = 0;
+    int previous_playback_tick = 0;
+    bool previous_audio_playing = false;
+    int audio_length_tick = 0;
+};
+
 struct editor_transport_result {
     bool audio_loaded = false;
     bool audio_playing = false;

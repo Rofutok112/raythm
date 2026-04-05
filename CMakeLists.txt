@@ -143,19 +143,46 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_select_state.h
         src/scenes/song_select_scene.cpp
         src/scenes/song_select_scene.h
+        src/scenes/editor/controller/editor_runtime_controller.cpp
+        src/scenes/editor/controller/editor_runtime_controller.h
         src/scenes/editor/editor_flow_controller.cpp
         src/scenes/editor/editor_flow_controller.h
+        src/scenes/editor/view/editor_cursor_hud_view.cpp
+        src/scenes/editor/view/editor_cursor_hud_view.h
+        src/scenes/editor/view/editor_header_view.cpp
+        src/scenes/editor/view/editor_header_view.h
+        src/scenes/editor/view/editor_layout.h
+        src/scenes/editor/view/editor_left_panel_view.cpp
+        src/scenes/editor/view/editor_left_panel_view.h
+        src/scenes/editor/view/editor_modal_view.cpp
+        src/scenes/editor/view/editor_modal_view.h
         src/scenes/editor/editor_panel_controller.cpp
         src/scenes/editor/editor_panel_controller.h
+        src/scenes/editor/view/editor_right_panel_view.cpp
+        src/scenes/editor/view/editor_right_panel_view.h
         src/scenes/editor/editor_scene_sync.cpp
         src/scenes/editor/editor_scene_sync.h
         src/scenes/editor/editor_scene_types.h
         src/scenes/editor/editor_session_loader.cpp
         src/scenes/editor/editor_session_loader.h
+        src/scenes/editor/service/editor_chart_identity_service.cpp
+        src/scenes/editor/service/editor_chart_identity_service.h
+        src/scenes/editor/service/editor_metadata_service.cpp
+        src/scenes/editor/service/editor_metadata_service.h
+        src/scenes/editor/service/editor_transport_service.cpp
+        src/scenes/editor/service/editor_transport_service.h
+        src/scenes/editor/service/editor_timing_edit_service.cpp
+        src/scenes/editor/service/editor_timing_edit_service.h
+        src/scenes/editor/service/editor_timing_selection_service.cpp
+        src/scenes/editor/service/editor_timing_selection_service.h
         src/scenes/editor/editor_timeline_controller.cpp
         src/scenes/editor/editor_timeline_controller.h
         src/scenes/editor/editor_transport_controller.cpp
         src/scenes/editor/editor_transport_controller.h
+        src/scenes/editor/view/editor_timeline_presenter.cpp
+        src/scenes/editor/view/editor_timeline_presenter.h
+        src/scenes/editor/viewport/editor_timeline_viewport.cpp
+        src/scenes/editor/viewport/editor_timeline_viewport.h
         src/scenes/editor_scene.cpp
         src/scenes/editor_scene.h
         src/scenes/play/play_flow_controller.cpp
@@ -437,6 +464,7 @@ target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
 target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_timeline_controller_smoke PRIVATE raylib)
+target_link_libraries(editor_panel_controller_smoke PRIVATE raylib)
 target_link_libraries(audio_manager_smoke PRIVATE ${RAYTHM_BASS_IMPORT_LIB})
 
 set(RAYTHM_RUNTIME_DLLS
