@@ -1,6 +1,6 @@
 #pragma once
 
-#include "editor_scene_types.h"
+#include "editor/editor_scene_types.h"
 
 struct editor_modal_view_result {
     bool save_dialog_submit_requested = false;

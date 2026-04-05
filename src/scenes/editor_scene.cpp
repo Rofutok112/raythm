@@ -10,13 +10,14 @@
 
 #include "app_paths.h"
 #include "audio_manager.h"
-#include "editor/editor_cursor_hud_view.h"
+#include "editor/view/editor_cursor_hud_view.h"
 #include "editor/editor_flow_controller.h"
-#include "editor/editor_header_view.h"
-#include "editor/editor_layout.h"
-#include "editor/editor_left_panel_view.h"
-#include "editor/editor_modal_view.h"
-#include "editor/editor_right_panel_view.h"
+#include "editor/view/editor_header_view.h"
+#include "editor/view/editor_layout.h"
+#include "editor/view/editor_left_panel_view.h"
+#include "editor/view/editor_modal_view.h"
+#include "editor/view/editor_right_panel_view.h"
+#include "editor/viewport/editor_timeline_viewport.h"
 #include "editor/editor_session_loader.h"
 #include "path_utils.h"
 #include "play_scene.h"
@@ -32,24 +33,10 @@
 namespace {
 namespace layout = editor::layout;
 
-constexpr float kTimelinePadding = 18.0f;
-constexpr float kLaneGap = 6.0f;
-constexpr float kScrollbarWidth = 10.0f;
-constexpr float kScrollbarGap = 10.0f;
-constexpr float kMinTicksPerPixel = 0.9f;
-constexpr float kMaxTicksPerPixel = 28.0f;
-constexpr float kMinVisibleTicks = 1920.0f;
-constexpr float kScrollLerpSpeed = 12.0f;
-constexpr float kScrollWheelViewportRatio = 0.36f;
-constexpr float kNoteHeadHeight = 14.0f;
-constexpr float kTimelineLeadInTicks = 960.0f;
-constexpr int kSnapDivisions[] = {1, 2, 4, 8, 16, 32};
-constexpr const char* kSnapLabels[] = {"1/1", "1/2", "1/4", "1/8", "1/16", "1/32"};
-constexpr float kPlaybackFollowViewportRatio = 0.35f;
 constexpr float kPlaybackRestartEpsilonSeconds = 0.01f;
 
 Rectangle snap_dropdown_menu_rect() {
-    return layout::snap_dropdown_menu_rect(static_cast<int>(std::size(kSnapLabels)));
+    return layout::snap_dropdown_menu_rect(static_cast<int>(editor_timeline_viewport::snap_labels().size()));
 }
 
 const char* key_count_label(int key_count) {
@@ -224,10 +211,12 @@ void editor_scene::on_enter() {
     waveform_offset_ms_ = load_result.waveform_offset_ms;
     waveform_summary_ = load_result.waveform_summary;
     waveform_samples_ = load_result.waveform_samples;
-    bottom_tick_ = resume_state_.has_value() ? load_result.bottom_tick : min_bottom_tick();
-    bottom_tick_target_ = resume_state_.has_value() ? load_result.bottom_tick_target : bottom_tick_;
-    ticks_per_pixel_ = load_result.ticks_per_pixel;
-    snap_index_ = load_result.snap_index;
+    viewport_.bottom_tick = resume_state_.has_value() ? load_result.bottom_tick : editor_timeline_viewport::min_bottom_tick();
+    viewport_.bottom_tick_target = resume_state_.has_value() ? load_result.bottom_tick_target : viewport_.bottom_tick;
+    viewport_.ticks_per_pixel = load_result.ticks_per_pixel;
+    viewport_.snap_index = load_result.snap_index;
+    viewport_.scrollbar_dragging = false;
+    viewport_.scrollbar_drag_offset = 0.0f;
     snap_dropdown_open_ = false;
     selected_note_index_ = load_result.selected_note_index;
     timeline_drag_ = {};
@@ -384,8 +373,8 @@ void editor_scene::draw() {
         audio_loaded_,
         offset_label.c_str(),
         waveform_visible_,
-        std::span<const char* const>(kSnapLabels, std::size(kSnapLabels)),
-        snap_index_,
+        editor_timeline_viewport::snap_labels(),
+        viewport_.snap_index,
         snap_dropdown_open_,
     }, snap_dropdown_menu_rect());
     if (header_result.offset_left_clicked) {
@@ -400,7 +389,7 @@ void editor_scene::draw() {
         snap_dropdown_open_ = !snap_dropdown_open_;
     }
     if (header_result.snap_index_clicked >= 0) {
-        snap_index_ = header_result.snap_index_clicked;
+        viewport_.snap_index = header_result.snap_index_clicked;
         snap_dropdown_open_ = false;
     } else if (header_result.snap_dropdown_close_requested) {
         snap_dropdown_open_ = false;
@@ -413,7 +402,7 @@ void editor_scene::draw() {
         const editor_meter_map::bar_beat_position position = meter_map_.bar_beat_at_tick(tick);
         editor_cursor_hud_view::draw({
             true,
-            snap_tick(tick),
+            editor_timeline_viewport::snap_tick(viewport_model(), tick),
             meter_map_.beat_number_at_tick(tick),
             position.measure,
             position.beat,
@@ -472,10 +461,10 @@ editor_resume_state editor_scene::build_resume_state() const {
     return {
         state_,
         playback_tick_,
-        bottom_tick_,
-        bottom_tick_target_,
-        ticks_per_pixel_,
-        snap_index_,
+        viewport_.bottom_tick,
+        viewport_.bottom_tick_target,
+        viewport_.ticks_per_pixel,
+        viewport_.snap_index,
         waveform_visible_,
         selected_note_index_
     };
@@ -576,7 +565,7 @@ std::optional<note_data> editor_scene::dragged_note() const {
     note.lane = timeline_drag_.lane;
     note.tick = std::min(timeline_drag_.start_tick, timeline_drag_.current_tick);
     note.end_tick = std::max(timeline_drag_.start_tick, timeline_drag_.current_tick);
-    note.type = (note.end_tick - note.tick) >= snap_interval() ? note_type::hold : note_type::tap;
+    note.type = (note.end_tick - note.tick) >= editor_timeline_viewport::snap_interval(viewport_model()) ? note_type::hold : note_type::tap;
     if (note.type == note_type::tap) {
         note.end_tick = note.tick;
     }
@@ -599,71 +588,16 @@ std::vector<size_t> editor_scene::sorted_timing_event_indices() const {
     return indices;
 }
 
+editor_timeline_viewport_model editor_scene::viewport_model() const {
+    return {state_.get(), audio_length_tick_, viewport_};
+}
+
 editor_timeline_metrics editor_scene::timeline_metrics() const {
-    return {
-        layout::kTimelineRect,
-        kTimelinePadding,
-        kScrollbarGap,
-        kScrollbarWidth,
-        kLaneGap,
-        kNoteHeadHeight,
-        bottom_tick_,
-        ticks_per_pixel_,
-        state_->data().meta.key_count
-    };
-}
-
-float editor_scene::visible_tick_span() const {
-    return timeline_metrics().visible_tick_span();
-}
-
-float editor_scene::content_tick_span() const {
-    int max_tick = state_->data().meta.resolution * 8;
-    for (const note_data& note : state_->data().notes) {
-        max_tick = std::max(max_tick, note.type == note_type::hold ? note.end_tick : note.tick);
-    }
-    for (const timing_event& event : state_->data().timing_events) {
-        max_tick = std::max(max_tick, event.tick);
-    }
-    max_tick = std::max(max_tick, audio_length_tick_);
-
-    return std::max(visible_tick_span(), static_cast<float>(max_tick) + state_->data().meta.resolution * 4.0f);
-}
-
-float editor_scene::content_height_pixels() const {
-    return (content_tick_span() - min_bottom_tick()) / ticks_per_pixel_;
-}
-
-float editor_scene::scroll_offset_pixels() const {
-    return (max_bottom_tick() - bottom_tick_) / ticks_per_pixel_;
-}
-
-float editor_scene::min_bottom_tick() const {
-    return -kTimelineLeadInTicks;
-}
-
-float editor_scene::max_bottom_tick() const {
-    return std::max(min_bottom_tick(), content_tick_span() - visible_tick_span());
-}
-
-int editor_scene::snap_division() const {
-    return kSnapDivisions[std::clamp(snap_index_, 0, static_cast<int>(std::size(kSnapDivisions)) - 1)];
-}
-
-int editor_scene::snap_interval() const {
-    return std::max(1, state_->data().meta.resolution * 4 / snap_division());
-}
-
-int editor_scene::snap_tick(int raw_tick) const {
-    return std::max(0, state_->snap_tick(std::max(0, raw_tick), snap_division()));
+    return editor_timeline_viewport::metrics(viewport_model());
 }
 
 int editor_scene::default_timing_event_tick() const {
-    if (timing_panel_.selected_event_index.has_value() &&
-        *timing_panel_.selected_event_index < state_->data().timing_events.size()) {
-        return snap_tick(state_->data().timing_events[*timing_panel_.selected_event_index].tick + snap_interval());
-    }
-    return std::max(snap_interval(), snap_tick(static_cast<int>(bottom_tick_ + visible_tick_span() * 0.5f)));
+    return editor_timeline_viewport::default_timing_event_tick(viewport_model(), timing_panel_.selected_event_index);
 }
 
 std::string editor_scene::playback_status_text() const {
@@ -764,7 +698,7 @@ void editor_scene::handle_timeline_interaction() {
         IsMouseButtonPressed(MOUSE_BUTTON_RIGHT),
         IsKeyPressed(KEY_ESCAPE),
         IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT),
-        snap_division(),
+        editor_timeline_viewport::snap_division(viewport_),
         selected_note_index_,
         timeline_drag_,
     });
@@ -801,43 +735,14 @@ void editor_scene::handle_timeline_interaction() {
 }
 
 void editor_scene::apply_scroll_and_zoom(float dt) {
-    const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const float wheel = GetMouseWheelMove();
-    const editor_timeline_metrics metrics = timeline_metrics();
-    const Rectangle content = metrics.content_rect();
-    const Rectangle track = metrics.scrollbar_track_rect();
-    const ui::scrollbar_interaction scrollbar = ui::update_vertical_scrollbar(
-        track, content_height_pixels(), scroll_offset_pixels(), scrollbar_dragging_, scrollbar_drag_offset_, 40.0f);
-    bottom_tick_target_ = max_bottom_tick() - scrollbar.scroll_offset * ticks_per_pixel_;
-    if (scrollbar.changed || scrollbar.dragging) {
-        bottom_tick_ = bottom_tick_target_;
-    }
-
-    if (wheel != 0.0f && CheckCollisionPointRec(mouse, content) &&
-        (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) {
-        const int anchor_tick = metrics.y_to_tick(mouse.y);
-        const float zoom_scale = wheel > 0.0f ? 0.85f : 1.15f;
-        ticks_per_pixel_ = std::clamp(ticks_per_pixel_ * zoom_scale, kMinTicksPerPixel, kMaxTicksPerPixel);
-        bottom_tick_target_ = static_cast<float>(anchor_tick) -
-                              (content.y + content.height - mouse.y) * ticks_per_pixel_;
-        bottom_tick_target_ = std::clamp(bottom_tick_target_, min_bottom_tick(), max_bottom_tick());
-    } else if (!audio_playing_ && wheel != 0.0f && CheckCollisionPointRec(mouse, content)) {
-        bottom_tick_target_ = std::clamp(bottom_tick_target_ + wheel * visible_tick_span() * kScrollWheelViewportRatio,
-                                         min_bottom_tick(), max_bottom_tick());
-    } else if (audio_playing_) {
-        bottom_tick_target_ = std::clamp(static_cast<float>(playback_tick_) - visible_tick_span() * kPlaybackFollowViewportRatio,
-                                         min_bottom_tick(), max_bottom_tick());
-    }
-
-    bottom_tick_target_ = std::clamp(bottom_tick_target_, min_bottom_tick(), max_bottom_tick());
-    if (bottom_tick_target_ <= min_bottom_tick() || bottom_tick_target_ >= max_bottom_tick()) {
-        bottom_tick_ = bottom_tick_target_;
-        return;
-    }
-    bottom_tick_ += (bottom_tick_target_ - bottom_tick_) * std::min(1.0f, kScrollLerpSpeed * dt);
-    if (std::fabs(bottom_tick_ - bottom_tick_target_) < 0.5f) {
-        bottom_tick_ = bottom_tick_target_;
-    }
+    viewport_ = editor_timeline_viewport::apply_scroll_and_zoom(viewport_model(), {
+        virtual_screen::get_virtual_mouse(),
+        GetMouseWheelMove(),
+        IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
+        audio_playing_,
+        playback_tick_,
+        dt,
+    });
 }
 
 void editor_scene::select_timing_event(std::optional<size_t> index, bool scroll_into_view) {
@@ -867,10 +772,7 @@ void editor_scene::select_timing_event(std::optional<size_t> index, bool scroll_
 }
 
 void editor_scene::scroll_to_tick(int tick) {
-    const float target = std::clamp(static_cast<float>(tick) - visible_tick_span() * 0.5f,
-                                    min_bottom_tick(), max_bottom_tick());
-    bottom_tick_target_ = target;
-    bottom_tick_ = target;
+    viewport_ = editor_timeline_viewport::scroll_to_tick(viewport_model(), tick);
 }
 
 bool editor_scene::apply_selected_timing_event() {
@@ -1045,9 +947,11 @@ bool editor_scene::apply_chart_offset(int offset_ms) {
 }
 
 void editor_scene::draw_timeline() const {
+    const editor_timeline_viewport_model model = viewport_model();
     const editor_timeline_metrics metrics = timeline_metrics();
-    const int min_tick = static_cast<int>(std::floor(bottom_tick_ - kMinVisibleTicks * 0.1f));
-    const int max_tick = static_cast<int>(std::ceil(bottom_tick_ + visible_tick_span()));
+    const float visible_tick_span = editor_timeline_viewport::visible_tick_span(model);
+    const int min_tick = static_cast<int>(std::floor(viewport_.bottom_tick - visible_tick_span * 0.1f));
+    const int max_tick = static_cast<int>(std::ceil(viewport_.bottom_tick + visible_tick_span));
     std::vector<editor_timeline_note> notes;
     notes.reserve(state_->data().notes.size());
     for (const note_data& note : state_->data().notes) {
@@ -1072,8 +976,8 @@ void editor_scene::draw_timeline() const {
         preview_has_overlap,
         min_tick,
         max_tick,
-        snap_interval(),
-        content_height_pixels(),
-        scroll_offset_pixels()
+        editor_timeline_viewport::snap_interval(model),
+        editor_timeline_viewport::content_height_pixels(model),
+        editor_timeline_viewport::scroll_offset_pixels(model)
     });
 }

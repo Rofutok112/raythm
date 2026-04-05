@@ -3,8 +3,8 @@
 #include <optional>
 #include <vector>
 
-#include "editor_meter_map.h"
-#include "editor_timing_panel.h"
+#include "editor/editor_meter_map.h"
+#include "editor/editor_timing_panel.h"
 
 struct editor_right_panel_view_model {
     const std::vector<timing_event>* timing_events = nullptr;

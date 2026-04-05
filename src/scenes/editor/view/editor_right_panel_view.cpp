@@ -1,8 +1,8 @@
-#include "editor_right_panel_view.h"
+#include "editor/view/editor_right_panel_view.h"
 
 #include <string>
 
-#include "editor_layout.h"
+#include "editor/view/editor_layout.h"
 #include "ui_layout.h"
 
 namespace {

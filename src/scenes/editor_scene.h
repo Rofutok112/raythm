@@ -15,6 +15,7 @@
 #include "editor/editor_scene_types.h"
 #include "editor/editor_timeline_controller.h"
 #include "editor/editor_transport_controller.h"
+#include "editor/viewport/editor_timeline_viewport.h"
 #include "raylib.h"
 #include "scene.h"
 #include "song_loader.h"
@@ -35,18 +36,10 @@ private:
     chart_data make_chart_data_for_save() const;
     editor_resume_state build_resume_state() const;
     editor_scene_sync_context make_sync_context();
+    editor_timeline_viewport_model viewport_model() const;
     std::optional<note_data> dragged_note() const;
     std::vector<size_t> sorted_timing_event_indices() const;
     editor_timeline_metrics timeline_metrics() const;
-    float visible_tick_span() const;
-    float content_tick_span() const;
-    float content_height_pixels() const;
-    float scroll_offset_pixels() const;
-    float min_bottom_tick() const;
-    float max_bottom_tick() const;
-    int snap_division() const;
-    int snap_interval() const;
-    int snap_tick(int raw_tick) const;
     int default_timing_event_tick() const;
     void apply_flow_result(const editor_flow_result& result);
     void apply_transport_result(const editor_transport_result& result);
@@ -93,16 +86,11 @@ private:
     int waveform_offset_ms_ = 0;
     audio_waveform_summary waveform_summary_;
     std::vector<editor_timeline_waveform_sample> waveform_samples_;
-    float bottom_tick_ = 0.0f;
-    float bottom_tick_target_ = 0.0f;
-    float ticks_per_pixel_ = 2.0f;
-    int snap_index_ = 4;
+    editor_timeline_viewport_state viewport_;
     bool snap_dropdown_open_ = false;
     std::optional<size_t> selected_note_index_;
     editor_timeline_note_drag_state timeline_drag_;
     metadata_panel_state metadata_panel_;
     save_dialog_state save_dialog_;
     unsaved_changes_dialog_state unsaved_changes_dialog_;
-    bool scrollbar_dragging_ = false;
-    float scrollbar_drag_offset_ = 0.0f;
 };

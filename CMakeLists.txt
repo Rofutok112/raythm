@@ -145,18 +145,19 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select_scene.h
         src/scenes/editor/editor_flow_controller.cpp
         src/scenes/editor/editor_flow_controller.h
-        src/scenes/editor/editor_cursor_hud_view.cpp
-        src/scenes/editor/editor_cursor_hud_view.h
-        src/scenes/editor/editor_header_view.cpp
-        src/scenes/editor/editor_header_view.h
-        src/scenes/editor/editor_left_panel_view.cpp
-        src/scenes/editor/editor_left_panel_view.h
-        src/scenes/editor/editor_modal_view.cpp
-        src/scenes/editor/editor_modal_view.h
+        src/scenes/editor/view/editor_cursor_hud_view.cpp
+        src/scenes/editor/view/editor_cursor_hud_view.h
+        src/scenes/editor/view/editor_header_view.cpp
+        src/scenes/editor/view/editor_header_view.h
+        src/scenes/editor/view/editor_layout.h
+        src/scenes/editor/view/editor_left_panel_view.cpp
+        src/scenes/editor/view/editor_left_panel_view.h
+        src/scenes/editor/view/editor_modal_view.cpp
+        src/scenes/editor/view/editor_modal_view.h
         src/scenes/editor/editor_panel_controller.cpp
         src/scenes/editor/editor_panel_controller.h
-        src/scenes/editor/editor_right_panel_view.cpp
-        src/scenes/editor/editor_right_panel_view.h
+        src/scenes/editor/view/editor_right_panel_view.cpp
+        src/scenes/editor/view/editor_right_panel_view.h
         src/scenes/editor/editor_scene_sync.cpp
         src/scenes/editor/editor_scene_sync.h
         src/scenes/editor/editor_scene_types.h
@@ -166,6 +167,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/editor_timeline_controller.h
         src/scenes/editor/editor_transport_controller.cpp
         src/scenes/editor/editor_transport_controller.h
+        src/scenes/editor/viewport/editor_timeline_viewport.cpp
+        src/scenes/editor/viewport/editor_timeline_viewport.h
         src/scenes/editor_scene.cpp
         src/scenes/editor_scene.h
         src/scenes/play/play_flow_controller.cpp

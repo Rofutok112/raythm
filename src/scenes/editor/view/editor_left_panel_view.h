@@ -3,7 +3,7 @@
 #include <optional>
 #include <string>
 
-#include "editor_scene_types.h"
+#include "editor/editor_scene_types.h"
 #include "ui_text_input.h"
 
 struct editor_left_panel_view_model {

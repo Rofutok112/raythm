@@ -1,6 +1,6 @@
-#include "editor_left_panel_view.h"
+#include "editor/view/editor_left_panel_view.h"
 
-#include "editor_layout.h"
+#include "editor/view/editor_layout.h"
 #include "theme.h"
 #include "ui_draw.h"
 #include "ui_layout.h"
