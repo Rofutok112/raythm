@@ -1,5 +1,6 @@
 #include "file_dialog.h"
 
+#include "raylib.h"
 #include "path_utils.h"
 
 #ifdef _WIN32
@@ -21,17 +22,40 @@ namespace file_dialog {
 
 namespace {
 
+class fullscreen_dialog_guard {
+public:
+    fullscreen_dialog_guard() : was_fullscreen_(IsWindowFullscreen()) {
+        if (was_fullscreen_) {
+            ToggleFullscreen();
+        }
+    }
+
+    ~fullscreen_dialog_guard() {
+        if (was_fullscreen_) {
+            ToggleFullscreen();
+        }
+    }
+
+private:
+    bool was_fullscreen_ = false;
+};
+
 std::string open_file_dialog(const wchar_t* filter, const wchar_t* title) {
+    fullscreen_dialog_guard fullscreen_guard;
     wchar_t file_name[MAX_PATH] = {0};
 
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = nullptr;
+    ofn.hwndOwner = static_cast<HWND>(GetWindowHandle());
     ofn.lpstrFilter = filter;
     ofn.lpstrFile = file_name;
     ofn.nMaxFile = MAX_PATH;
     ofn.lpstrTitle = title;
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+    if (ofn.hwndOwner != nullptr) {
+        SetForegroundWindow(ofn.hwndOwner);
+    }
 
     if (GetOpenFileNameW(&ofn) != 0) {
         return path_utils::to_utf8(std::filesystem::path(file_name));
