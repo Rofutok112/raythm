@@ -87,9 +87,13 @@ jobs:
           $installRoot = "${{ steps.meta.outputs.install_root }}"
           $zipPath = "${{ steps.meta.outputs.zip_path }}"
           $checksumPath = "${{ steps.meta.outputs.checksum_path }}"
+          $distDir = Split-Path -Parent $zipPath
 
           if (Test-Path $installRoot) {
             Remove-Item -LiteralPath $installRoot -Recurse -Force
+          }
+          if (!(Test-Path $distDir)) {
+            New-Item -ItemType Directory -Path $distDir | Out-Null
           }
           if (Test-Path $zipPath) {
             Remove-Item -LiteralPath $zipPath -Force
@@ -99,7 +103,7 @@ jobs:
           }
 
           cmake --install build --prefix $installRoot
-          Compress-Archive -LiteralPath "$installRoot\\*" -DestinationPath $zipPath -CompressionLevel Optimal
+          Compress-Archive -Path (Join-Path $installRoot '*') -DestinationPath $zipPath -CompressionLevel Optimal
 
           $hash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash *game-win64.zip" | Set-Content -LiteralPath $checksumPath -NoNewline
