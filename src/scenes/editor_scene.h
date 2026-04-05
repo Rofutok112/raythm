@@ -13,8 +13,6 @@
 #include "editor/editor_panel_controller.h"
 #include "editor/editor_scene_sync.h"
 #include "editor/editor_scene_types.h"
-#include "editor/editor_timeline_controller.h"
-#include "editor/editor_transport_controller.h"
 #include "editor/viewport/editor_timeline_viewport.h"
 #include "raylib.h"
 #include "scene.h"
@@ -42,14 +40,7 @@ private:
     editor_timeline_metrics timeline_metrics() const;
     int default_timing_event_tick() const;
     void apply_flow_result(const editor_flow_result& result);
-    void apply_transport_result(const editor_transport_result& result);
-    void sync_transport_state(bool suppress_hitsounds = false);
-    void seek_audio_to_tick(int tick);
-    std::string playback_status_text() const;
     void rebuild_hit_regions() const;
-    void handle_shortcuts();
-    void handle_text_input();
-    void handle_timeline_interaction();
     void apply_scroll_and_zoom(float dt);
     void select_timing_event(std::optional<size_t> index, bool scroll_into_view);
     void scroll_to_tick(int tick);
@@ -73,13 +64,7 @@ private:
     editor_meter_map meter_map_;
     editor_timing_panel_state timing_panel_;
     std::vector<std::string> load_errors_;
-    int audio_length_tick_ = 0;
-    bool audio_loaded_ = false;
-    bool audio_playing_ = false;
-    double audio_time_seconds_ = 0.0;
-    int playback_tick_ = 0;
-    int previous_playback_tick_ = 0;
-    bool previous_audio_playing_ = false;
+    editor_transport_state transport_;
     std::optional<int> space_playback_start_tick_;
     std::string hitsound_path_;
     bool waveform_visible_ = true;

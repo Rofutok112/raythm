@@ -143,6 +143,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_select_state.h
         src/scenes/song_select_scene.cpp
         src/scenes/song_select_scene.h
+        src/scenes/editor/controller/editor_runtime_controller.cpp
+        src/scenes/editor/controller/editor_runtime_controller.h
         src/scenes/editor/editor_flow_controller.cpp
         src/scenes/editor/editor_flow_controller.h
         src/scenes/editor/view/editor_cursor_hud_view.cpp
@@ -167,6 +169,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/service/editor_chart_identity_service.h
         src/scenes/editor/service/editor_metadata_service.cpp
         src/scenes/editor/service/editor_metadata_service.h
+        src/scenes/editor/service/editor_transport_service.cpp
+        src/scenes/editor/service/editor_transport_service.h
         src/scenes/editor/service/editor_timing_edit_service.cpp
         src/scenes/editor/service/editor_timing_edit_service.h
         src/scenes/editor/service/editor_timing_selection_service.cpp
