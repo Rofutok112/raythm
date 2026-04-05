@@ -429,7 +429,7 @@ chart_data editor_scene::make_chart_data_for_save() const {
 
 std::string editor_scene::generated_chart_id(const std::string& difficulty) const {
     // For AppData-based songs, use UUID.
-    const bool is_appdata_song = song_.directory.find(path_utils::to_utf8(app_paths::songs_root())) != std::string::npos;
+    const bool is_appdata_song = song_.directory.find(path_utils::to_utf8(app_paths::app_data_root())) != std::string::npos;
     if (is_appdata_song) {
         return generate_uuid();
     }
