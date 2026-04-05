@@ -12,6 +12,8 @@
 #include "audio_manager.h"
 #include "editor/view/editor_cursor_hud_view.h"
 #include "editor/editor_flow_controller.h"
+#include "editor/service/editor_metadata_service.h"
+#include "editor/service/editor_timing_edit_service.h"
 #include "editor/view/editor_header_view.h"
 #include "editor/view/editor_layout.h"
 #include "editor/view/editor_left_panel_view.h"
@@ -61,67 +63,6 @@ bool timing_event_sort_less(const timing_event& left, size_t left_index,
         return left.type == timing_event_type::bpm;
     }
     return left_index < right_index;
-}
-
-bool try_parse_int(const std::string& text, int& out_value) {
-    if (text.empty()) {
-        return false;
-    }
-    try {
-        size_t consumed = 0;
-        const int value = std::stoi(text, &consumed);
-        if (consumed != text.size()) {
-            return false;
-        }
-        out_value = value;
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
-bool try_parse_float(const std::string& text, float& out_value) {
-    if (text.empty()) {
-        return false;
-    }
-    try {
-        size_t consumed = 0;
-        const float value = std::stof(text, &consumed);
-        if (consumed != text.size()) {
-            return false;
-        }
-        out_value = value;
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
-bool try_parse_bar_beat(const std::string& text, editor_meter_map::bar_beat_position& out_value) {
-    if (text.empty()) {
-        return false;
-    }
-
-    const size_t colon = text.find(':');
-    int measure = 0;
-    int beat = 1;
-    if (colon == std::string::npos) {
-        if (!try_parse_int(text, measure)) {
-            return false;
-        }
-    } else {
-        if (!try_parse_int(text.substr(0, colon), measure) ||
-            !try_parse_int(text.substr(colon + 1), beat)) {
-            return false;
-        }
-    }
-
-    if (measure <= 0 || beat <= 0) {
-        return false;
-    }
-
-    out_value = {measure, beat};
-    return true;
 }
 
 std::string format_playback_time(double seconds) {
@@ -777,129 +718,54 @@ void editor_scene::scroll_to_tick(int tick) {
 
 bool editor_scene::apply_selected_timing_event() {
     editor_scene_sync::sync_timing_event_selection(make_sync_context());
-    if (!timing_panel_.selected_event_index.has_value()) {
-        timing_panel_.input_error = "Select a timing event first.";
+    const editor_timing_edit_result result = editor_timing_edit_service::apply_selected({
+        *state_,
+        meter_map_,
+        timing_panel_,
+        default_timing_event_tick(),
+    });
+    if (!result.success) {
         return false;
     }
-
-    const size_t index = *timing_panel_.selected_event_index;
-    if (index >= state_->data().timing_events.size()) {
-        timing_panel_.input_error = "Selected timing event is out of range.";
-        return false;
-    }
-
-    timing_event updated = state_->data().timing_events[index];
-    if (updated.type == timing_event_type::bpm) {
-        editor_meter_map::bar_beat_position position;
-        float bpm = 0.0f;
-        if (!try_parse_bar_beat(timing_panel_.inputs.bpm_bar.value, position)) {
-            timing_panel_.input_error = "Bar must be in M:B format.";
-            return false;
-        }
-        if (!try_parse_float(timing_panel_.inputs.bpm_value.value, bpm) || bpm <= 0.0f) {
-            timing_panel_.input_error = "BPM must be greater than zero.";
-            return false;
-        }
-        const std::optional<int> tick = meter_map_.tick_from_bar_beat(position.measure, position.beat);
-        if (!tick.has_value()) {
-            timing_panel_.input_error = "Bar is outside the current meter layout.";
-            return false;
-        }
-        updated.tick = *tick;
-        updated.bpm = bpm;
-    } else {
-        editor_meter_map::bar_beat_position position;
-        int numerator = 0;
-        int denominator = 0;
-        if (!try_parse_bar_beat(timing_panel_.inputs.meter_bar.value, position)) {
-            timing_panel_.input_error = "Bar must be in M:B format.";
-            return false;
-        }
-        if (!try_parse_int(timing_panel_.inputs.meter_numerator.value, numerator) || numerator <= 0) {
-            timing_panel_.input_error = "Numerator must be 1 or greater.";
-            return false;
-        }
-        if (!try_parse_int(timing_panel_.inputs.meter_denominator.value, denominator) || denominator <= 0) {
-            timing_panel_.input_error = "Denominator must be 1 or greater.";
-            return false;
-        }
-        const std::optional<int> tick = meter_map_.tick_from_bar_beat(position.measure, position.beat);
-        if (!tick.has_value()) {
-            timing_panel_.input_error = "Bar is outside the current meter layout.";
-            return false;
-        }
-        updated.tick = *tick;
-        updated.numerator = numerator;
-        updated.denominator = denominator;
-    }
-
-    if (updated.type == timing_event_type::bpm && state_->data().timing_events[index].tick == 0 && updated.tick != 0) {
-        timing_panel_.input_error = "The BPM event at tick 0 must stay at tick 0.";
-        return false;
-    }
-
-    if (!state_->modify_timing_event(index, updated)) {
-        timing_panel_.input_error = "Failed to update the timing event.";
-        return false;
-    }
-
     editor_scene_sync::sync_after_timing_change(make_sync_context());
     sync_transport_state(true);
-    scroll_to_tick(updated.tick);
+    if (result.scroll_to_tick.has_value()) {
+        scroll_to_tick(*result.scroll_to_tick);
+    }
     return true;
 }
 
 void editor_scene::add_timing_event(timing_event_type type) {
-    timing_event event;
-    event.type = type;
-    event.tick = default_timing_event_tick();
-    if (type == timing_event_type::bpm) {
-        event.bpm = state_->engine().get_bpm_at(event.tick);
-        event.numerator = 4;
-        event.denominator = 4;
-    } else {
-        const editor_meter_map::bar_beat_position position = meter_map_.bar_beat_at_tick(event.tick);
-        const std::optional<int> snapped_tick = meter_map_.tick_from_bar_beat(position.measure, 1);
-        event.tick = snapped_tick.value_or(event.tick);
-        event.bpm = 0.0f;
-        event.numerator = 4;
-        event.denominator = 4;
-    }
-
-    state_->add_timing_event(event);
+    const editor_timing_edit_result result = editor_timing_edit_service::add_event({
+        *state_,
+        meter_map_,
+        timing_panel_,
+        default_timing_event_tick(),
+    }, type);
     editor_scene_sync::sync_after_timing_change(make_sync_context());
     sync_transport_state(true);
-    select_timing_event(state_->data().timing_events.size() - 1, true);
+    if (result.selected_event_index.has_value()) {
+        select_timing_event(result.selected_event_index, true);
+    }
 }
 
 void editor_scene::delete_selected_timing_event() {
     editor_scene_sync::sync_timing_event_selection(make_sync_context());
-    if (!timing_panel_.selected_event_index.has_value()) {
-        timing_panel_.input_error = "Select a timing event first.";
+    const editor_timing_edit_result result = editor_timing_edit_service::delete_selected({
+        *state_,
+        meter_map_,
+        timing_panel_,
+        default_timing_event_tick(),
+    });
+    if (!result.success) {
         return;
     }
-    if (!can_delete_selected_timing_event()) {
-        timing_panel_.input_error = "The BPM event at tick 0 cannot be deleted.";
-        return;
-    }
-
-    const size_t index = *timing_panel_.selected_event_index;
-    if (!state_->remove_timing_event(index)) {
-        timing_panel_.input_error = "Failed to delete the timing event.";
-        return;
-    }
-
     editor_scene_sync::sync_after_timing_change(make_sync_context());
     sync_transport_state(true);
 }
 
 bool editor_scene::can_delete_selected_timing_event() const {
-    if (!timing_panel_.selected_event_index.has_value() ||
-        *timing_panel_.selected_event_index >= state_->data().timing_events.size()) {
-        return false;
-    }
-    const timing_event& event = state_->data().timing_events[*timing_panel_.selected_event_index];
-    return !(event.type == timing_event_type::bpm && event.tick == 0);
+    return editor_timing_edit_service::can_delete_selected({*state_, timing_panel_});
 }
 
 bool editor_scene::has_active_metadata_input() const {
@@ -907,37 +773,22 @@ bool editor_scene::has_active_metadata_input() const {
 }
 
 bool editor_scene::apply_metadata_changes(bool clear_notes_for_key_count_change) {
-    chart_meta updated = state_->data().meta;
-    updated.difficulty = metadata_panel_.difficulty_input.value;
-    updated.chart_author = metadata_panel_.chart_author_input.value;
-    updated.key_count = metadata_panel_.key_count;
-    if (state_->file_path().empty()) {
-        updated.chart_id = generated_chart_id(updated.difficulty);
-    }
-
-    const bool key_count_changed = updated.key_count != state_->data().meta.key_count;
-    if (key_count_changed && !clear_notes_for_key_count_change && !state_->data().notes.empty()) {
-        metadata_panel_.pending_key_count = updated.key_count;
-        metadata_panel_.key_count_confirm_open = true;
-        metadata_panel_.error = "Changing mode will clear all notes.";
+    const editor_metadata_apply_result result = editor_metadata_service::apply_changes({
+        *state_,
+        metadata_panel_,
+        clear_notes_for_key_count_change,
+        generated_chart_id(metadata_panel_.difficulty_input.value),
+    });
+    if (!result.success) {
         return false;
     }
-
-    if (!state_->modify_metadata(updated, clear_notes_for_key_count_change)) {
-        metadata_panel_.error = "Failed to update chart metadata.";
-        metadata_panel_.key_count = state_->data().meta.key_count;
-        return false;
-    }
-
-    editor_scene_sync::sync_after_metadata_change(make_sync_context(), key_count_changed);
+    editor_scene_sync::sync_after_metadata_change(make_sync_context(), result.key_count_changed);
     sync_transport_state(true);
     return true;
 }
 
 bool editor_scene::apply_chart_offset(int offset_ms) {
-    chart_meta updated = state_->data().meta;
-    updated.offset = offset_ms;
-    if (!state_->modify_metadata(updated)) {
+    if (!editor_metadata_service::apply_chart_offset(*state_, offset_ms)) {
         return false;
     }
 
