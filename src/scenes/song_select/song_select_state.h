@@ -12,7 +12,7 @@ namespace song_select {
 struct chart_option {
     std::string path;
     chart_meta meta;
-    content_source source = content_source::legacy_assets;
+    content_source source = content_source::official;
     bool can_delete = false;
 };
 

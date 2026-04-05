@@ -14,7 +14,7 @@
 namespace {
 
 std::optional<song_data> load_sample_song() {
-    song_load_result result = song_loader::load_all(path_utils::to_utf8(app_paths::legacy_songs_root()));
+    song_load_result result = song_loader::load_all(path_utils::to_utf8(app_paths::official_songs_root()));
     if (result.songs.empty()) {
         return std::nullopt;
     }

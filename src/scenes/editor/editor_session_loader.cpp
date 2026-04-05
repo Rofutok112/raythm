@@ -38,7 +38,7 @@ std::string slugify(std::string text) {
 }
 
 std::string generated_chart_id(const song_data& song, const std::string& difficulty) {
-    const bool is_appdata_song = song.directory.find(path_utils::to_utf8(app_paths::songs_root())) != std::string::npos;
+    const bool is_appdata_song = song.directory.find(path_utils::to_utf8(app_paths::app_data_root())) != std::string::npos;
     if (is_appdata_song) {
         return generate_uuid();
     }

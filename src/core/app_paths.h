@@ -23,6 +23,15 @@ std::filesystem::path songs_root();
 // AppData/Local/raythm/charts/
 std::filesystem::path charts_root();
 
+// AppData/Local/raythm/official/
+std::filesystem::path official_root();
+
+// AppData/Local/raythm/official/songs/
+std::filesystem::path official_songs_root();
+
+// AppData/Local/raythm/official/charts/
+std::filesystem::path official_charts_root();
+
 // AppData/Local/raythm/songs/{song_id}/
 std::filesystem::path song_dir(const std::string& song_id);
 
