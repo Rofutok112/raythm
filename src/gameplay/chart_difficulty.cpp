@@ -48,13 +48,13 @@ constexpr float kScale = 12.0f;
 constexpr float kPeakPower = 2.2f;
 constexpr float kStaminaThreshold = 3.2f;
 
-constexpr float kWeightDensity = 1.35f;
+constexpr float kWeightDensity = 1.70f;
 constexpr float kWeightStream = 0.65f;
 constexpr float kWeightJump = 0.85f;
 constexpr float kWeightHold = 1.15f;
 constexpr float kWeightRelease = 0.70f;
 constexpr float kWeightOverlap = 1.40f;
-constexpr float kWeightPattern = 1.10f;
+constexpr float kWeightPattern = 1.40f;
 constexpr float kWeightBalance = 0.35f;
 constexpr float kWeightStamina = 0.80f;
 constexpr float kWeightRead = 0.55f;
