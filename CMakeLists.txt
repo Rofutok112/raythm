@@ -263,6 +263,8 @@ set_target_properties(raythm_updater PROPERTIES OUTPUT_NAME "Updater")
 
 if(WIN32)
     target_sources(raythm PRIVATE "${RAYTHM_APP_ICON_RC}")
+    target_sources(raythm_launcher PRIVATE "${RAYTHM_APP_ICON_RC}")
+    target_sources(raythm_updater PRIVATE "${RAYTHM_APP_ICON_RC}")
 endif()
 
 add_executable(chart_parser_smoke
