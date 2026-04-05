@@ -432,7 +432,7 @@ float calculate_level(const chart_data& data) {
     if (raw_rating <= 0.0f) {
         return 0.0f;
     }
-    const float normalized = std::log10(1.0f + raw_rating);
+    const float normalized = 0.5f * std::log10(1.0f + raw_rating);
     return std::max(0.1f, std::round(normalized * 10.0f) / 10.0f);
 }
 
