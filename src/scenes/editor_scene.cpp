@@ -11,6 +11,7 @@
 #include "app_paths.h"
 #include "audio_manager.h"
 #include "editor/editor_flow_controller.h"
+#include "editor/editor_layout.h"
 #include "editor/editor_session_loader.h"
 #include "path_utils.h"
 #include "play_scene.h"
@@ -24,22 +25,8 @@
 #include "virtual_screen.h"
 
 namespace {
-constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
-constexpr Rectangle kHeaderRect = ui::place(kScreenRect, 1220.0f, 48.0f,
-                                            ui::anchor::top_center, ui::anchor::top_center,
-                                            {0.0f, 12.0f});
-constexpr Rectangle kLeftPanelRect = ui::place(kScreenRect, 248.0f, 620.0f,
-                                               ui::anchor::top_left, ui::anchor::top_left,
-                                               {20.0f, 72.0f});
-constexpr Rectangle kTimelineRect = ui::place(kScreenRect, 724.0f, 620.0f,
-                                              ui::anchor::top_center, ui::anchor::top_center,
-                                              {0.0f, 72.0f});
-constexpr Rectangle kRightPanelRect = ui::place(kScreenRect, 248.0f, 620.0f,
-                                                ui::anchor::top_right, ui::anchor::top_right,
-                                                {-20.0f, 72.0f});
-constexpr Rectangle kBackButtonRect = ui::place(kHeaderRect, 120.0f, 34.0f,
-                                                ui::anchor::center_left, ui::anchor::center_left,
-                                                {16.0f, 0.0f});
+namespace layout = editor::layout;
+
 constexpr float kTimelinePadding = 18.0f;
 constexpr float kLaneGap = 6.0f;
 constexpr float kScrollbarWidth = 10.0f;
@@ -53,63 +40,11 @@ constexpr float kNoteHeadHeight = 14.0f;
 constexpr float kTimelineLeadInTicks = 960.0f;
 constexpr int kSnapDivisions[] = {1, 2, 4, 8, 16, 32};
 constexpr const char* kSnapLabels[] = {"1/1", "1/2", "1/4", "1/8", "1/16", "1/32"};
-constexpr Rectangle kHeaderToolsRect = ui::place(kHeaderRect, 168.0f, 34.0f,
-                                                 ui::anchor::center_right, ui::anchor::center_right,
-                                                 {-18.0f, 0.0f});
-constexpr Rectangle kChartOffsetRect = ui::place(kHeaderRect, 188.0f, 34.0f,
-                                                 ui::anchor::center_right, ui::anchor::center_right,
-                                                 {-338.0f, 0.0f});
-constexpr Rectangle kWaveformToggleRect = ui::place(kHeaderRect, 132.0f, 34.0f,
-                                                    ui::anchor::center_right, ui::anchor::center_right,
-                                                    {-198.0f, 0.0f});
-constexpr Rectangle kPlaybackRect = ui::place(kTimelineRect, 232.0f, 34.0f,
-                                              ui::anchor::bottom_left, ui::anchor::bottom_left,
-                                              {12.0f, -54.0f});
-constexpr float kDropdownItemHeight = 30.0f;
-constexpr float kDropdownItemSpacing = 4.0f;
-constexpr Rectangle kMetadataConfirmRect = ui::place(kScreenRect, 420.0f, 196.0f,
-                                                     ui::anchor::center, ui::anchor::center);
-constexpr Rectangle kUnsavedChangesRect = ui::place(kScreenRect, 456.0f, 210.0f,
-                                                    ui::anchor::center, ui::anchor::center);
-constexpr Rectangle kSaveDialogRect = ui::place(kScreenRect, 520.0f, 224.0f,
-                                                ui::anchor::center, ui::anchor::center);
-constexpr Rectangle kSnapDropdownRect = kHeaderToolsRect;
-constexpr Rectangle kSnapDropdownMenuRect = {
-    kSnapDropdownRect.x,
-    kSnapDropdownRect.y + kSnapDropdownRect.height + 4.0f,
-    kSnapDropdownRect.width,
-    12.0f + static_cast<float>(std::size(kSnapLabels)) * kDropdownItemHeight +
-        static_cast<float>(std::size(kSnapLabels) - 1) * kDropdownItemSpacing
-};
 constexpr float kPlaybackFollowViewportRatio = 0.35f;
 constexpr float kPlaybackRestartEpsilonSeconds = 0.01f;
 
-Rectangle key_count_confirm_button_rect() {
-    return {kMetadataConfirmRect.x + 94.0f, kMetadataConfirmRect.y + 142.0f, 104.0f, 30.0f};
-}
-
-Rectangle key_count_cancel_button_rect() {
-    return {kMetadataConfirmRect.x + 222.0f, kMetadataConfirmRect.y + 142.0f, 104.0f, 30.0f};
-}
-
-Rectangle unsaved_save_button_rect() {
-    return {kUnsavedChangesRect.x + 32.0f, kUnsavedChangesRect.y + 154.0f, 112.0f, 32.0f};
-}
-
-Rectangle unsaved_discard_button_rect() {
-    return {kUnsavedChangesRect.x + 172.0f, kUnsavedChangesRect.y + 154.0f, 112.0f, 32.0f};
-}
-
-Rectangle unsaved_cancel_button_rect() {
-    return {kUnsavedChangesRect.x + 312.0f, kUnsavedChangesRect.y + 154.0f, 112.0f, 32.0f};
-}
-
-Rectangle save_submit_button_rect() {
-    return {kSaveDialogRect.x + 136.0f, kSaveDialogRect.y + 172.0f, 108.0f, 32.0f};
-}
-
-Rectangle save_cancel_button_rect() {
-    return {kSaveDialogRect.x + 276.0f, kSaveDialogRect.y + 172.0f, 108.0f, 32.0f};
+Rectangle snap_dropdown_menu_rect() {
+    return layout::snap_dropdown_menu_rect(static_cast<int>(std::size(kSnapLabels)));
 }
 
 const char* key_count_label(int key_count) {
@@ -322,7 +257,7 @@ void editor_scene::update(float dt) {
 
     const chart_data chart_for_save = make_chart_data_for_save();
     const bool save_dialog_submit = save_dialog_.submit_requested ||
-        (save_dialog_.open && ui::is_clicked(save_submit_button_rect(), ui::draw_layer::modal));
+        (save_dialog_.open && ui::is_clicked(layout::save_submit_button_rect(), ui::draw_layer::modal));
     save_dialog_.submit_requested = false;
 
     const editor_flow_result flow_result = editor_flow_controller::update({
@@ -333,7 +268,7 @@ void editor_scene::update(float dt) {
         &save_dialog_,
         &unsaved_changes_dialog_,
         IsKeyPressed(KEY_ESCAPE),
-        ui::is_clicked(kBackButtonRect),
+        ui::is_clicked(layout::kBackButtonRect),
         (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_S),
         IsKeyPressed(KEY_F5),
         IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
@@ -342,12 +277,12 @@ void editor_scene::update(float dt) {
         timing_panel_.bar_pick_mode,
         timeline_drag_.active,
         save_dialog_submit,
-        save_dialog_.open && ui::is_clicked(save_cancel_button_rect(), ui::draw_layer::modal),
-        unsaved_changes_dialog_.open && ui::is_clicked(unsaved_save_button_rect(), ui::draw_layer::modal),
-        unsaved_changes_dialog_.open && ui::is_clicked(unsaved_discard_button_rect(), ui::draw_layer::modal),
-        unsaved_changes_dialog_.open && ui::is_clicked(unsaved_cancel_button_rect(), ui::draw_layer::modal),
-        metadata_panel_.key_count_confirm_open && ui::is_clicked(key_count_confirm_button_rect(), ui::draw_layer::modal),
-        metadata_panel_.key_count_confirm_open && ui::is_clicked(key_count_cancel_button_rect(), ui::draw_layer::modal),
+        save_dialog_.open && ui::is_clicked(layout::save_cancel_button_rect(), ui::draw_layer::modal),
+        unsaved_changes_dialog_.open && ui::is_clicked(layout::unsaved_save_button_rect(), ui::draw_layer::modal),
+        unsaved_changes_dialog_.open && ui::is_clicked(layout::unsaved_discard_button_rect(), ui::draw_layer::modal),
+        unsaved_changes_dialog_.open && ui::is_clicked(layout::unsaved_cancel_button_rect(), ui::draw_layer::modal),
+        metadata_panel_.key_count_confirm_open && ui::is_clicked(layout::key_count_confirm_button_rect(), ui::draw_layer::modal),
+        metadata_panel_.key_count_confirm_open && ui::is_clicked(layout::key_count_cancel_button_rect(), ui::draw_layer::modal),
         playback_tick_,
     });
     apply_flow_result(flow_result);
@@ -365,19 +300,19 @@ void editor_scene::update(float dt) {
 void editor_scene::rebuild_hit_regions() const {
     ui::begin_hit_regions();
     if (snap_dropdown_open_) {
-        ui::register_hit_region(kSnapDropdownMenuRect, ui::draw_layer::overlay);
+        ui::register_hit_region(snap_dropdown_menu_rect(), ui::draw_layer::overlay);
     }
     if (save_dialog_.open) {
-        ui::register_hit_region(kScreenRect, ui::draw_layer::overlay);
-        ui::register_hit_region(kSaveDialogRect, ui::draw_layer::modal);
+        ui::register_hit_region(layout::kScreenRect, ui::draw_layer::overlay);
+        ui::register_hit_region(layout::kSaveDialogRect, ui::draw_layer::modal);
     }
     if (unsaved_changes_dialog_.open) {
-        ui::register_hit_region(kScreenRect, ui::draw_layer::overlay);
-        ui::register_hit_region(kUnsavedChangesRect, ui::draw_layer::modal);
+        ui::register_hit_region(layout::kScreenRect, ui::draw_layer::overlay);
+        ui::register_hit_region(layout::kUnsavedChangesRect, ui::draw_layer::modal);
     }
     if (metadata_panel_.key_count_confirm_open) {
-        ui::register_hit_region(kScreenRect, ui::draw_layer::overlay);
-        ui::register_hit_region(kMetadataConfirmRect, ui::draw_layer::modal);
+        ui::register_hit_region(layout::kScreenRect, ui::draw_layer::overlay);
+        ui::register_hit_region(layout::kMetadataConfirmRect, ui::draw_layer::modal);
     }
 }
 
@@ -390,12 +325,12 @@ void editor_scene::draw() {
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
 
-    ui::draw_panel(kLeftPanelRect);
-    ui::draw_panel(kTimelineRect);
-    ui::draw_panel(kRightPanelRect);
-    ui::draw_panel(kHeaderRect);
+    ui::draw_panel(layout::kLeftPanelRect);
+    ui::draw_panel(layout::kTimelineRect);
+    ui::draw_panel(layout::kRightPanelRect);
+    ui::draw_panel(layout::kHeaderRect);
 
-    ui::draw_button_colored(kBackButtonRect, "BACK", 20, t.row, t.row_hover, t.text);
+    ui::draw_button_colored(layout::kBackButtonRect, "BACK", 20, t.row, t.row_hover, t.text);
 
     draw_left_panel();
     draw_timeline();
@@ -582,7 +517,7 @@ std::vector<size_t> editor_scene::sorted_timing_event_indices() const {
 
 editor_timeline_metrics editor_scene::timeline_metrics() const {
     return {
-        kTimelineRect,
+        layout::kTimelineRect,
         kTimelinePadding,
         kScrollbarGap,
         kScrollbarWidth,
@@ -1027,23 +962,23 @@ bool editor_scene::apply_chart_offset(int offset_ms) {
 
 void editor_scene::draw_unsaved_changes_dialog() const {
     ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
-    ui::enqueue_panel(kUnsavedChangesRect, ui::draw_layer::modal);
+    ui::enqueue_panel(layout::kUnsavedChangesRect, ui::draw_layer::modal);
     ui::enqueue_text_in_rect("Unsaved Changes", 28,
-                             {kUnsavedChangesRect.x + 20.0f, kUnsavedChangesRect.y + 20.0f,
-                              kUnsavedChangesRect.width - 40.0f, 30.0f},
+                             {layout::kUnsavedChangesRect.x + 20.0f, layout::kUnsavedChangesRect.y + 20.0f,
+                              layout::kUnsavedChangesRect.width - 40.0f, 30.0f},
                              g_theme->text, ui::text_align::center, ui::draw_layer::modal);
     ui::enqueue_text_in_rect("There are unsaved changes.", 18,
-                             {kUnsavedChangesRect.x + 28.0f, kUnsavedChangesRect.y + 78.0f,
-                              kUnsavedChangesRect.width - 56.0f, 24.0f},
+                             {layout::kUnsavedChangesRect.x + 28.0f, layout::kUnsavedChangesRect.y + 78.0f,
+                              layout::kUnsavedChangesRect.width - 56.0f, 24.0f},
                              g_theme->text_secondary, ui::text_align::center, ui::draw_layer::modal);
     ui::enqueue_text_in_rect("Save before leaving the editor?", 18,
-                             {kUnsavedChangesRect.x + 28.0f, kUnsavedChangesRect.y + 104.0f,
-                              kUnsavedChangesRect.width - 56.0f, 24.0f},
+                             {layout::kUnsavedChangesRect.x + 28.0f, layout::kUnsavedChangesRect.y + 104.0f,
+                              layout::kUnsavedChangesRect.width - 56.0f, 24.0f},
                              g_theme->text, ui::text_align::center, ui::draw_layer::modal);
 
-    const Rectangle save_button = unsaved_save_button_rect();
-    const Rectangle discard_button = unsaved_discard_button_rect();
-    const Rectangle cancel_button = unsaved_cancel_button_rect();
+    const Rectangle save_button = layout::unsaved_save_button_rect();
+    const Rectangle discard_button = layout::unsaved_discard_button_rect();
+    const Rectangle cancel_button = layout::unsaved_cancel_button_rect();
     ui::enqueue_button(save_button, "SAVE", 16, ui::draw_layer::modal, 1.5f);
     ui::enqueue_button(discard_button, "DISCARD", 16, ui::draw_layer::modal, 1.5f);
     ui::enqueue_button(cancel_button, "CANCEL", 16, ui::draw_layer::modal, 1.5f);
@@ -1051,18 +986,18 @@ void editor_scene::draw_unsaved_changes_dialog() const {
 
 void editor_scene::draw_save_dialog() {
     ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
-    ui::enqueue_panel(kSaveDialogRect, ui::draw_layer::modal);
+    ui::enqueue_panel(layout::kSaveDialogRect, ui::draw_layer::modal);
     ui::enqueue_text_in_rect("Save Chart", 28,
-                             {kSaveDialogRect.x + 20.0f, kSaveDialogRect.y + 18.0f,
-                              kSaveDialogRect.width - 40.0f, 30.0f},
+                             {layout::kSaveDialogRect.x + 20.0f, layout::kSaveDialogRect.y + 18.0f,
+                              layout::kSaveDialogRect.width - 40.0f, 30.0f},
                              g_theme->text, ui::text_align::center, ui::draw_layer::modal);
     ui::enqueue_text_in_rect("Save into this song's charts directory.", 18,
-                             {kSaveDialogRect.x + 24.0f, kSaveDialogRect.y + 52.0f,
-                              kSaveDialogRect.width - 48.0f, 22.0f},
+                             {layout::kSaveDialogRect.x + 24.0f, layout::kSaveDialogRect.y + 52.0f,
+                              layout::kSaveDialogRect.width - 48.0f, 22.0f},
                              g_theme->text_secondary, ui::text_align::center, ui::draw_layer::modal);
 
     const ui::text_input_result file_name_result = ui::draw_text_input(
-        {kSaveDialogRect.x + 20.0f, kSaveDialogRect.y + 88.0f, kSaveDialogRect.width - 40.0f, 38.0f},
+        {layout::kSaveDialogRect.x + 20.0f, layout::kSaveDialogRect.y + 88.0f, layout::kSaveDialogRect.width - 40.0f, 38.0f},
         save_dialog_.file_name_input, "File", "normal.chart", "new-chart.chart",
         ui::draw_layer::modal, 16, 48, accepts_chart_file_character, 64.0f);
     if (file_name_result.submitted) {
@@ -1071,35 +1006,35 @@ void editor_scene::draw_save_dialog() {
 
     if (!save_dialog_.error.empty()) {
         ui::draw_text_in_rect(save_dialog_.error.c_str(), 16,
-                              {kSaveDialogRect.x + 24.0f, kSaveDialogRect.y + 136.0f,
-                               kSaveDialogRect.width - 48.0f, 22.0f},
+                              {layout::kSaveDialogRect.x + 24.0f, layout::kSaveDialogRect.y + 136.0f,
+                               layout::kSaveDialogRect.width - 48.0f, 22.0f},
                               g_theme->error, ui::text_align::left);
     }
 
-    const Rectangle save_button = save_submit_button_rect();
-    const Rectangle cancel_button = save_cancel_button_rect();
+    const Rectangle save_button = layout::save_submit_button_rect();
+    const Rectangle cancel_button = layout::save_cancel_button_rect();
     ui::enqueue_button(save_button, "SAVE", 16, ui::draw_layer::modal, 1.5f);
     ui::enqueue_button(cancel_button, "CANCEL", 16, ui::draw_layer::modal, 1.5f);
 }
 
 void editor_scene::draw_key_count_confirmation() const {
     ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
-    ui::enqueue_panel(kMetadataConfirmRect, ui::draw_layer::modal);
+    ui::enqueue_panel(layout::kMetadataConfirmRect, ui::draw_layer::modal);
     ui::enqueue_text_in_rect("Change Key Mode", 28,
-                             {kMetadataConfirmRect.x + 20.0f, kMetadataConfirmRect.y + 18.0f,
-                              kMetadataConfirmRect.width - 40.0f, 30.0f},
+                             {layout::kMetadataConfirmRect.x + 20.0f, layout::kMetadataConfirmRect.y + 18.0f,
+                              layout::kMetadataConfirmRect.width - 40.0f, 30.0f},
                              g_theme->text, ui::text_align::center, ui::draw_layer::modal);
     ui::enqueue_text_in_rect("All placed notes will be cleared.", 18,
-                             {kMetadataConfirmRect.x + 28.0f, kMetadataConfirmRect.y + 70.0f,
-                              kMetadataConfirmRect.width - 56.0f, 24.0f},
+                             {layout::kMetadataConfirmRect.x + 28.0f, layout::kMetadataConfirmRect.y + 70.0f,
+                              layout::kMetadataConfirmRect.width - 56.0f, 24.0f},
                              g_theme->text_secondary, ui::text_align::center, ui::draw_layer::modal);
     ui::enqueue_text_in_rect(TextFormat("Switch to %s?", key_count_label(metadata_panel_.pending_key_count)), 18,
-                             {kMetadataConfirmRect.x + 28.0f, kMetadataConfirmRect.y + 98.0f,
-                              kMetadataConfirmRect.width - 56.0f, 24.0f},
+                             {layout::kMetadataConfirmRect.x + 28.0f, layout::kMetadataConfirmRect.y + 98.0f,
+                              layout::kMetadataConfirmRect.width - 56.0f, 24.0f},
                              g_theme->text, ui::text_align::center, ui::draw_layer::modal);
 
-    const Rectangle confirm_button = key_count_confirm_button_rect();
-    const Rectangle cancel_button = key_count_cancel_button_rect();
+    const Rectangle confirm_button = layout::key_count_confirm_button_rect();
+    const Rectangle cancel_button = layout::key_count_cancel_button_rect();
     ui::enqueue_button(confirm_button, "CONFIRM", 16, ui::draw_layer::modal, 1.5f);
     ui::enqueue_button(cancel_button, "CANCEL", 16, ui::draw_layer::modal, 1.5f);
 }
@@ -1107,7 +1042,7 @@ void editor_scene::draw_key_count_confirmation() const {
 void editor_scene::draw_left_panel() {
     const auto& t = *g_theme;
     const double now = GetTime();
-    const Rectangle content = ui::inset(kLeftPanelRect, ui::edge_insets::uniform(16.0f));
+    const Rectangle content = ui::inset(layout::kLeftPanelRect, ui::edge_insets::uniform(16.0f));
     const bool has_file = !state_->file_path().empty();
     const char* status_label = state_->is_dirty() ? "Modified" : (has_file ? "Saved" : "Unsaved");
 
@@ -1179,7 +1114,7 @@ void editor_scene::draw_left_panel() {
 
 void editor_scene::draw_right_panel() {
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const Rectangle content = ui::inset(kRightPanelRect, ui::edge_insets::uniform(16.0f));
+    const Rectangle content = ui::inset(layout::kRightPanelRect, ui::edge_insets::uniform(16.0f));
     editor_scene_sync::sync_timing_event_selection(make_sync_context());
     const auto timing_indices = sorted_timing_event_indices();
     std::vector<editor_timing_panel_item> items;
@@ -1264,7 +1199,7 @@ void editor_scene::draw_timeline() const {
 void editor_scene::draw_cursor_hud() const {
     const auto& t = *g_theme;
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    if (!CheckCollisionPointRec(mouse, kTimelineRect)) {
+    if (!CheckCollisionPointRec(mouse, layout::kTimelineRect)) {
         return;
     }
 
@@ -1272,9 +1207,7 @@ void editor_scene::draw_cursor_hud() const {
     const int snapped_tick = snap_tick(tick);
     const double beat = meter_map_.beat_number_at_tick(tick);
     const editor_meter_map::bar_beat_position position = meter_map_.bar_beat_at_tick(tick);
-    const Rectangle hud_rect = ui::place(kTimelineRect, 340.0f, 34.0f,
-                                         ui::anchor::bottom_left, ui::anchor::bottom_left,
-                                         {12.0f, -12.0f});
+    const Rectangle hud_rect = layout::cursor_hud_rect();
     DrawRectangleRec(hud_rect, with_alpha(t.panel, 240));
     DrawRectangleLinesEx(hud_rect, 1.5f, t.border);
     ui::draw_text_f(TextFormat("bar %d:%d   beat %.2f   snap %d", position.measure, position.beat, beat, snapped_tick),
@@ -1283,16 +1216,16 @@ void editor_scene::draw_cursor_hud() const {
 
 void editor_scene::draw_header_tools() {
     const auto& t = *g_theme;
-    ui::draw_section(kPlaybackRect);
+    ui::draw_section(layout::kPlaybackRect);
     const std::string playback_status = playback_status_text();
-    ui::draw_label_value(ui::inset(kPlaybackRect, ui::edge_insets::symmetric(0.0f, 12.0f)),
+    ui::draw_label_value(ui::inset(layout::kPlaybackRect, ui::edge_insets::symmetric(0.0f, 12.0f)),
                          "Audio", playback_status.c_str(), 16,
                          t.text, audio_loaded_ ? t.text_secondary : t.text_muted, 56.0f);
 
     const std::string offset_label =
         (state_->data().meta.offset > 0 ? "+" : "") + std::to_string(state_->data().meta.offset) + " ms";
     const ui::selector_state chart_offset = ui::draw_value_selector(
-        kChartOffsetRect, "Offset", offset_label.c_str(),
+        layout::kChartOffsetRect, "Offset", offset_label.c_str(),
         16, 24.0f, 68.0f, 10.0f);
     if (chart_offset.left.clicked) {
         apply_chart_offset(std::max(-10000, state_->data().meta.offset - 5));
@@ -1301,7 +1234,7 @@ void editor_scene::draw_header_tools() {
     }
 
     const ui::button_state waveform_toggle = ui::draw_button_colored(
-        kWaveformToggleRect, waveform_visible_ ? "WAVE ON" : "WAVE OFF", 16,
+        layout::kWaveformToggleRect, waveform_visible_ ? "WAVE ON" : "WAVE OFF", 16,
         waveform_visible_ ? t.row_selected : t.row,
         waveform_visible_ ? t.row_active : t.row_hover,
         waveform_visible_ ? t.text : t.text_secondary);
@@ -1312,7 +1245,7 @@ void editor_scene::draw_header_tools() {
     // 描画は queue に寄せるが、ヒットテストはまだ即時計算のままにしている。
     // 次段で layer と hit test 優先順位を統合すると、modal / pause 系も同じ仕組みに載せられる。
     const ui::dropdown_state dropdown = ui::enqueue_dropdown(
-        kSnapDropdownRect, kSnapDropdownMenuRect,
+        layout::kSnapDropdownRect, snap_dropdown_menu_rect(),
         "Snap", kSnapLabels[snap_index_],
         std::span<const char* const>(kSnapLabels, std::size(kSnapLabels)),
         snap_index_, snap_dropdown_open_,
@@ -1325,8 +1258,8 @@ void editor_scene::draw_header_tools() {
         snap_index_ = dropdown.clicked_index;
         snap_dropdown_open_ = false;
     } else if (snap_dropdown_open_ && IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
-               !ui::is_hovered(kSnapDropdownRect, ui::draw_layer::base) &&
-               !ui::is_hovered(kSnapDropdownMenuRect, ui::draw_layer::overlay)) {
+               !ui::is_hovered(layout::kSnapDropdownRect, ui::draw_layer::base) &&
+               !ui::is_hovered(snap_dropdown_menu_rect(), ui::draw_layer::overlay)) {
         snap_dropdown_open_ = false;
     }
 }
