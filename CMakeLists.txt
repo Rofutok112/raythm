@@ -78,6 +78,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/editor_timing_panel.h
         src/platform/windows_input_source.cpp
         src/platform/windows_input_source.h
+        src/platform/windows_app_icon.cpp
+        src/platform/windows_app_icon.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
         src/gameplay/chart_difficulty.cpp

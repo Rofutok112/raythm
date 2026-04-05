@@ -7,6 +7,7 @@
 #include "settings_io.h"
 #include "theme.h"
 #include "virtual_screen.h"
+#include "platform/windows_app_icon.h"
 #include "platform/windows_input_source.h"
 
 int main() {
@@ -27,6 +28,7 @@ int main() {
         ToggleFullscreen();
     }
 
+    apply_windows_app_icon(GetWindowHandle());
     windows_input_source::instance().initialize(GetWindowHandle());
     virtual_screen::init();
 
