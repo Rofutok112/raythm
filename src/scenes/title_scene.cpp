@@ -50,16 +50,16 @@ void title_scene::update(float dt) {
     spectrum_visualizer_.update();
 
     if (transitioning_to_song_select_) {
-        transition_fade_t_ = std::min(1.0f, transition_fade_t_ + dt / 0.3f);
-        if (transition_fade_t_ >= 1.0f) {
+        transition_fade_.update(dt);
+        if (transition_fade_.complete()) {
             manager_.change_scene(std::make_unique<song_select_scene>(manager_));
         }
         return;
     }
 
     if (quitting_) {
-        quit_fade_t_ = std::min(1.0f, quit_fade_t_ + dt / 1.5f);
-        if (quit_fade_t_ >= 1.0f) {
+        quit_fade_.update(dt);
+        if (quit_fade_.complete()) {
             CloseWindow();
         }
         return;
@@ -67,7 +67,7 @@ void title_scene::update(float dt) {
 
     if (IsKeyPressed(KEY_ENTER)) {
         transitioning_to_song_select_ = true;
-        transition_fade_t_ = 0.0f;
+        transition_fade_.restart(scene_fade::direction::out, 0.3f, 0.65f);
         return;
     }
 
@@ -76,7 +76,7 @@ void title_scene::update(float dt) {
         if (esc_hold_t_ >= 0.3f) {
             esc_hold_t_ = 0.0f;
             quitting_ = true;
-            quit_fade_t_ = 0.0f;
+            quit_fade_.restart(scene_fade::direction::out, 1.5f, 1.0f);
         }
     } else {
         esc_hold_t_ = 0.0f;
@@ -98,12 +98,10 @@ void title_scene::draw() {
     ui::draw_text_in_rect("ENTER: Song Select", 22, hint_rows[0], t.text_muted, ui::text_align::left);
     ui::draw_text_in_rect("ESC: Quit", 22, hint_rows[1], t.text_muted, ui::text_align::left);
     if (transitioning_to_song_select_) {
-        ui::draw_fullscreen_overlay(
-            Color{0, 0, 0, static_cast<unsigned char>(std::min(0.65f, transition_fade_t_ * 0.65f) * 255.0f)});
+        transition_fade_.draw();
     }
     if (quitting_) {
-        ui::draw_fullscreen_overlay(
-            Color{0, 0, 0, static_cast<unsigned char>(std::min(1.0f, quit_fade_t_) * 255.0f)});
+        quit_fade_.draw();
     }
     virtual_screen::end();
 
