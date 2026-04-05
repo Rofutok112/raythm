@@ -403,6 +403,52 @@ song_load_result song_loader::load_all(const std::string& songs_dir, content_sou
     return result;
 }
 
+song_load_result song_loader::load_directory(const std::string& song_dir_utf8, content_source source) {
+    song_load_result result;
+    const fs::path song_dir = path_utils::from_utf8(song_dir_utf8);
+    if (!fs::exists(song_dir) || !fs::is_directory(song_dir)) {
+        result.errors.push_back("Song directory does not exist: " + path_utils::to_utf8(song_dir));
+        return result;
+    }
+
+    const fs::path song_json_path = song_dir / "song.json";
+    if (!fs::exists(song_json_path)) {
+        result.errors.push_back("Skipping " + path_utils::to_utf8(song_dir) + ": missing song.json");
+        return result;
+    }
+
+    std::vector<std::string> song_errors;
+    const std::optional<song_meta> meta = parse_song_meta(song_json_path, song_errors);
+    if (!meta.has_value()) {
+        result.errors = std::move(song_errors);
+        return result;
+    }
+
+    song_data song;
+    song.meta = *meta;
+    song.directory = path_utils::to_utf8(song_dir);
+    song.source = source;
+    song.can_edit = source == content_source::app_data;
+    song.can_delete = source == content_source::app_data;
+
+    const fs::path charts_dir = song_dir / "charts";
+    if (fs::exists(charts_dir) && fs::is_directory(charts_dir)) {
+        for (const fs::directory_entry& chart_entry : fs::directory_iterator(charts_dir)) {
+            if (!chart_entry.is_regular_file()) {
+                continue;
+            }
+
+            if (chart_entry.path().extension() == ".chart") {
+                song.chart_paths.push_back(path_utils::to_utf8(chart_entry.path()));
+            }
+        }
+        std::sort(song.chart_paths.begin(), song.chart_paths.end());
+    }
+
+    result.songs.push_back(std::move(song));
+    return result;
+}
+
 chart_parse_result song_loader::load_chart(const std::string& path) {
     return chart_parser::parse(path);
 }

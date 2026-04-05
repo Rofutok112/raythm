@@ -5,6 +5,7 @@
 
 #include "raylib.h"
 #include "scene.h"
+#include "song_select/song_import_export_service.h"
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_preview_controller.h"
 #include "song_select/song_select_overlay_view.h"
@@ -26,6 +27,7 @@ private:
                              const std::string& preferred_chart_id = "");
     void sync_selected_song_media();
     void apply_delete_result(const song_select::delete_result& result);
+    void apply_transfer_result(const song_select::transfer_result& result);
     bool adjust_selected_song_local_offset(int delta_ms);
     bool apply_recent_result_offset();
     bool handle_song_list_pointer(Vector2 mouse, bool left_pressed, bool right_pressed);

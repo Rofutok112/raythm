@@ -65,6 +65,22 @@ void song_select_scene::apply_delete_result(const song_select::delete_result& re
     song_select::queue_status_message(state_, result.message, false);
 }
 
+void song_select_scene::apply_transfer_result(const song_select::transfer_result& result) {
+    if (result.cancelled) {
+        return;
+    }
+
+    if (!result.success) {
+        song_select::queue_status_message(state_, result.message, true);
+        return;
+    }
+
+    if (result.reload_catalog) {
+        reload_song_library(result.preferred_song_id, result.preferred_chart_id);
+    }
+    song_select::queue_status_message(state_, result.message, false);
+}
+
 bool song_select_scene::adjust_selected_song_local_offset(int delta_ms) {
     if (state_.selected_song_index < 0 || state_.selected_song_index >= static_cast<int>(state_.songs.size())) {
         return false;
@@ -120,7 +136,7 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
             song_select::apply_song_selection(state_, hit->song_index, chart_index);
             song_select::open_chart_context_menu(
                 state_, hit->song_index, chart_index,
-                song_select::layout::make_context_menu_rect(mouse, 2));
+                song_select::layout::make_context_menu_rect(mouse, 3));
             return true;
         }
 
@@ -138,17 +154,17 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
         return true;
     }
 
-    if (right_pressed) {
-        const int chart_index = hit->song_index == state_.selected_song_index ? state_.difficulty_index : 0;
-        const bool song_changed = song_select::apply_song_selection(state_, hit->song_index, chart_index);
-        if (song_changed) {
-            sync_selected_song_media();
+        if (right_pressed) {
+            const int chart_index = hit->song_index == state_.selected_song_index ? state_.difficulty_index : 0;
+            const bool song_changed = song_select::apply_song_selection(state_, hit->song_index, chart_index);
+            if (song_changed) {
+                sync_selected_song_media();
+            }
+            song_select::open_song_context_menu(
+                state_, hit->song_index,
+                song_select::layout::make_context_menu_rect(mouse, 5));
+            return true;
         }
-        song_select::open_song_context_menu(
-            state_, hit->song_index,
-            song_select::layout::make_context_menu_rect(mouse, 3));
-        return true;
-    }
 
     song_select::close_context_menu(state_);
     const bool song_changed = song_select::apply_song_selection(
@@ -183,6 +199,20 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
             manager_.change_scene(song_select::make_new_chart_scene(manager_, song, state_.difficulty_index));
         }
         return;
+    case song_select::context_menu_command::import_chart:
+    {
+        const int song_index = state_.context_menu.song_index;
+        song_select::close_context_menu(state_);
+        apply_transfer_result(song_select::import_chart_package(state_, song_index));
+        return;
+    }
+    case song_select::context_menu_command::export_song:
+    {
+        const int song_index = state_.context_menu.song_index;
+        song_select::close_context_menu(state_);
+        apply_transfer_result(song_select::export_song_package(state_, song_index));
+        return;
+    }
     case song_select::context_menu_command::request_delete_song:
         state_.confirmation_dialog.open = true;
         state_.confirmation_dialog.action = song_select::pending_confirmation_action::delete_song;
@@ -203,6 +233,15 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
             }
         }
         return;
+    case song_select::context_menu_command::export_chart:
+    {
+        const int song_index = state_.context_menu.song_index;
+        const int chart_index = state_.context_menu.chart_index;
+        song_select::close_context_menu(state_);
+        apply_transfer_result(song_select::export_chart_package(
+            state_, song_index, chart_index));
+        return;
+    }
     case song_select::context_menu_command::request_delete_chart:
         state_.confirmation_dialog.open = true;
         state_.confirmation_dialog.action = song_select::pending_confirmation_action::delete_chart;
@@ -288,6 +327,12 @@ void song_select_scene::update(float dt) {
     if (ui::is_clicked(song_select::layout::kSongListNewSongButtonRect, song_select::layout::kSceneLayer)) {
         song_select::close_context_menu(state_);
         manager_.change_scene(song_select::make_song_create_scene(manager_));
+        return;
+    }
+
+    if (ui::is_clicked(song_select::layout::kSongListImportSongButtonRect, song_select::layout::kSceneLayer)) {
+        song_select::close_context_menu(state_);
+        apply_transfer_result(song_select::import_song_package(state_));
         return;
     }
 

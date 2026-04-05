@@ -9,8 +9,11 @@ enum class context_menu_command {
     none,
     edit_song,
     new_chart,
+    import_chart,
+    export_song,
     request_delete_song,
     edit_chart,
+    export_chart,
     request_delete_chart,
     close_menu,
 };

@@ -30,6 +30,8 @@ context_menu_command draw_context_menu(const state& state) {
             entries = {
                 {{"EDIT META", can_edit_song}, context_menu_command::edit_song},
                 {{"NEW CHART", can_add_chart_to_song}, context_menu_command::new_chart},
+                {{"IMPORT CHART", valid_song}, context_menu_command::import_chart},
+                {{"EXPORT SONG", valid_song}, context_menu_command::export_song},
                 {{"DELETE SONG", can_delete_song}, context_menu_command::request_delete_song}
             };
 
@@ -41,11 +43,12 @@ context_menu_command draw_context_menu(const state& state) {
                 state.context_menu.song_index < state.songs.size();
             bool can_edit_chart = false;
             bool can_delete_chart = false;
+            bool valid_chart = false;
 
             // 「譜面」参照可否
             if (valid_song) {
                 const auto& charts = state.songs[state.context_menu.song_index].charts;
-                const bool valid_chart = state.context_menu.chart_index >= 0 &&
+                valid_chart = state.context_menu.chart_index >= 0 &&
                     state.context_menu.chart_index < static_cast<int>(charts.size());
                 if (valid_chart) {
                     can_edit_chart = charts[state.context_menu.chart_index].source != content_source::official;
@@ -54,6 +57,7 @@ context_menu_command draw_context_menu(const state& state) {
             }
             entries = {
                 {{"EDIT CHART", can_edit_chart}, context_menu_command::edit_chart},
+                {{"EXPORT CHART", valid_song && valid_chart}, context_menu_command::export_chart},
                 {{"DELETE CHART", can_delete_chart}, context_menu_command::request_delete_chart}
             };
 

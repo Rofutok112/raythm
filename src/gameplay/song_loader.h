@@ -9,6 +9,8 @@ class song_loader {
 public:
     static song_load_result load_all(const std::string& songs_dir,
                                      content_source source = content_source::official);
+    static song_load_result load_directory(const std::string& song_dir,
+                                           content_source source = content_source::official);
     static chart_parse_result load_chart(const std::string& path);
     static content_source classify_chart_path(const std::string& path);
 
