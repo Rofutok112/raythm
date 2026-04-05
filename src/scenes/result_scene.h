@@ -5,6 +5,7 @@
 #include "data_models.h"
 #include "scene.h"
 #include "score_system.h"
+#include "shared/scene_fade.h"
 
 // リザルト画面。プレイ終了後のスコア・ランク・判定内訳を表示する。
 class result_scene final : public scene {
@@ -24,5 +25,5 @@ private:
     std::string chart_path_;
     chart_meta chart_;
     int key_count_ = 4;
-    float fade_in_timer_ = 1.0f;
+    scene_fade fade_in_{scene_fade::direction::in, 1.0f, 0.65f};
 };

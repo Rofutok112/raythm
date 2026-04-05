@@ -143,19 +143,46 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_select_state.h
         src/scenes/song_select_scene.cpp
         src/scenes/song_select_scene.h
+        src/scenes/editor/controller/editor_runtime_controller.cpp
+        src/scenes/editor/controller/editor_runtime_controller.h
         src/scenes/editor/editor_flow_controller.cpp
         src/scenes/editor/editor_flow_controller.h
+        src/scenes/editor/view/editor_cursor_hud_view.cpp
+        src/scenes/editor/view/editor_cursor_hud_view.h
+        src/scenes/editor/view/editor_header_view.cpp
+        src/scenes/editor/view/editor_header_view.h
+        src/scenes/editor/view/editor_layout.h
+        src/scenes/editor/view/editor_left_panel_view.cpp
+        src/scenes/editor/view/editor_left_panel_view.h
+        src/scenes/editor/view/editor_modal_view.cpp
+        src/scenes/editor/view/editor_modal_view.h
         src/scenes/editor/editor_panel_controller.cpp
         src/scenes/editor/editor_panel_controller.h
+        src/scenes/editor/view/editor_right_panel_view.cpp
+        src/scenes/editor/view/editor_right_panel_view.h
         src/scenes/editor/editor_scene_sync.cpp
         src/scenes/editor/editor_scene_sync.h
         src/scenes/editor/editor_scene_types.h
         src/scenes/editor/editor_session_loader.cpp
         src/scenes/editor/editor_session_loader.h
+        src/scenes/editor/service/editor_chart_identity_service.cpp
+        src/scenes/editor/service/editor_chart_identity_service.h
+        src/scenes/editor/service/editor_metadata_service.cpp
+        src/scenes/editor/service/editor_metadata_service.h
+        src/scenes/editor/service/editor_transport_service.cpp
+        src/scenes/editor/service/editor_transport_service.h
+        src/scenes/editor/service/editor_timing_edit_service.cpp
+        src/scenes/editor/service/editor_timing_edit_service.h
+        src/scenes/editor/service/editor_timing_selection_service.cpp
+        src/scenes/editor/service/editor_timing_selection_service.h
         src/scenes/editor/editor_timeline_controller.cpp
         src/scenes/editor/editor_timeline_controller.h
         src/scenes/editor/editor_transport_controller.cpp
         src/scenes/editor/editor_transport_controller.h
+        src/scenes/editor/view/editor_timeline_presenter.cpp
+        src/scenes/editor/view/editor_timeline_presenter.h
+        src/scenes/editor/viewport/editor_timeline_viewport.cpp
+        src/scenes/editor/viewport/editor_timeline_viewport.h
         src/scenes/editor_scene.cpp
         src/scenes/editor_scene.h
         src/scenes/play/play_flow_controller.cpp
@@ -173,6 +200,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/play/play_session_types.h
         src/scenes/result_scene.cpp
         src/scenes/result_scene.h
+        src/scenes/shared/scene_fade.cpp
+        src/scenes/shared/scene_fade.h
         src/scenes/settings/settings_key_config_state.cpp
         src/scenes/settings/settings_key_config_state.h
         src/scenes/settings/settings_layout.h
@@ -193,8 +222,49 @@ add_executable(raythm WIN32 src/main.cpp
         src/ui/ui_clip.cpp
         src/ui/ui_clip.h)
 
+add_executable(raythm_launcher
+        src/launcher_main.cpp
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/updater/update_release.cpp
+        src/updater/update_release.h
+        src/updater/update_paths.cpp
+        src/updater/update_paths.h
+        src/updater/update_version.cpp
+        src/updater/update_version.h
+        src/updater/update_workflow.cpp
+        src/updater/update_workflow.h)
+
+add_executable(raythm_updater
+        src/updater_main.cpp
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/updater/update_apply.cpp
+        src/updater/update_apply.h
+        src/updater/update_download.cpp
+        src/updater/update_download.h
+        src/updater/update_extract.cpp
+        src/updater/update_extract.h
+        src/updater/update_process.cpp
+        src/updater/update_process.h
+        src/updater/update_release.cpp
+        src/updater/update_release.h
+        src/updater/update_paths.cpp
+        src/updater/update_paths.h
+        src/updater/update_version.cpp
+        src/updater/update_version.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
+        src/updater/update_workflow.cpp
+        src/updater/update_workflow.h)
+
+set_target_properties(raythm_launcher PROPERTIES OUTPUT_NAME "Launcher")
+set_target_properties(raythm_updater PROPERTIES OUTPUT_NAME "Updater")
+
 if(WIN32)
     target_sources(raythm PRIVATE "${RAYTHM_APP_ICON_RC}")
+    target_sources(raythm_launcher PRIVATE "${RAYTHM_APP_ICON_RC}")
+    target_sources(raythm_updater PRIVATE "${RAYTHM_APP_ICON_RC}")
 endif()
 
 add_executable(chart_parser_smoke
@@ -231,6 +301,12 @@ add_executable(editor_state_smoke
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/tests/editor_state_smoke.cpp)
+
+add_executable(editor_meter_map_smoke
+        src/scenes/editor/editor_meter_map.cpp
+        src/scenes/editor/editor_meter_map.h
+        src/models/data_models.h
+        src/tests/editor_meter_map_smoke.cpp)
 
 add_executable(song_loader_smoke
         src/gameplay/chart_parser.cpp
@@ -397,6 +473,29 @@ add_executable(audio_manager_smoke
         src/audio/audio_manager.h
         src/tests/audio_manager_smoke.cpp)
 
+add_executable(update_version_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/updater/update_apply.cpp
+        src/updater/update_apply.h
+        src/updater/update_download.cpp
+        src/updater/update_download.h
+        src/updater/update_extract.cpp
+        src/updater/update_extract.h
+        src/updater/update_process.cpp
+        src/updater/update_process.h
+        src/updater/update_release.cpp
+        src/updater/update_release.h
+        src/updater/update_paths.cpp
+        src/updater/update_paths.h
+        src/updater/update_version.cpp
+        src/updater/update_version.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
+        src/updater/update_workflow.cpp
+        src/updater/update_workflow.h
+        src/tests/update_version_smoke.cpp)
+
 set(RAYTHM_INCLUDE_DIRS
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/src/audio
@@ -411,10 +510,13 @@ set(RAYTHM_INCLUDE_DIRS
 
 # BASSライブラリ
 target_include_directories(raythm PRIVATE ${RAYTHM_BASS_DIR} ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(raythm_launcher PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(raythm_updater PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_parser_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_serializer_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(chart_difficulty_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(editor_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(editor_meter_map_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_loader_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_select_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(settings_io_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
@@ -430,14 +532,20 @@ target_include_directories(editor_flow_controller_smoke PRIVATE ${RAYTHM_INCLUDE
 target_include_directories(editor_timeline_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(editor_panel_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(audio_manager_smoke PRIVATE ${RAYTHM_BASS_DIR} ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(update_version_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_link_libraries(raythm PRIVATE raylib ${RAYTHM_BASS_IMPORT_LIB} comdlg32)
+target_link_libraries(raythm_launcher PRIVATE winhttp)
+target_link_libraries(raythm_updater PRIVATE winhttp)
+target_link_libraries(update_version_smoke PRIVATE winhttp)
 target_link_libraries(song_select_state_smoke PRIVATE raylib)
 target_link_libraries(settings_io_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
 target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_timeline_controller_smoke PRIVATE raylib)
+target_link_libraries(editor_panel_controller_smoke PRIVATE raylib)
 target_link_libraries(audio_manager_smoke PRIVATE ${RAYTHM_BASS_IMPORT_LIB})
+target_compile_definitions(raythm_launcher PRIVATE RAYTHM_PACKAGE_VERSION_STRING="${RAYTHM_PACKAGE_VERSION}")
 
 set(RAYTHM_RUNTIME_DLLS
         ${RAYTHM_BASS_RUNTIME_DLL}
@@ -470,7 +578,7 @@ add_custom_command(TARGET audio_manager_smoke POST_BUILD
         $<TARGET_FILE_DIR:audio_manager_smoke>/bass.dll
 )
 
-install(TARGETS raythm RUNTIME DESTINATION .)
+install(TARGETS raythm raythm_launcher raythm_updater RUNTIME DESTINATION .)
 install(FILES ${RAYTHM_RUNTIME_DLLS} DESTINATION .)
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets DESTINATION .)
 
@@ -481,7 +589,7 @@ if(WIN32)
     set(CPACK_PACKAGE_INSTALL_DIRECTORY "raythm")
     set(CPACK_PACKAGE_VERSION "${RAYTHM_PACKAGE_VERSION}")
     set(CPACK_PACKAGE_FILE_NAME "${RAYTHM_PACKAGE_FILE_NAME}")
-    set(CPACK_PACKAGE_EXECUTABLES "raythm" "raythm")
+    set(CPACK_PACKAGE_EXECUTABLES "Launcher" "raythm")
     set(CPACK_CREATE_DESKTOP_LINKS "raythm")
     set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
     set(CPACK_NSIS_DISPLAY_NAME "raythm")

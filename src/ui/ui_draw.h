@@ -483,6 +483,7 @@ inline dropdown_state enqueue_dropdown(Rectangle trigger_rect, Rectangle menu_re
     return {trigger, clicked_index};
 }
 
+// コンテキストメニュー（ドロップダウンメニュー）の描画追加と、クリックされた項目の位置を返す
 inline context_menu_state enqueue_context_menu(Rectangle menu_rect,
                                                std::span<const context_menu_item> items,
                                                draw_layer layer = draw_layer::overlay,

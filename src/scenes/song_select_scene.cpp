@@ -407,9 +407,11 @@ void song_select_scene::draw() {
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, theme.bg, theme.bg_alt);
     ui::begin_draw_queue();
     song_select::draw_frame();
+    song_select::draw_song_list(state_);
 
     if (state_.songs.empty()) {
         song_select::draw_empty_state(state_);
+        song_select::draw_status_message(state_);
         ui::flush_draw_queue();
         virtual_screen::end();
         ClearBackground(BLACK);
@@ -418,16 +420,12 @@ void song_select_scene::draw() {
     }
 
     song_select::draw_song_details(state_, preview_controller_);
-    song_select::draw_song_list(state_);
     song_select::draw_status_message(state_);
     apply_context_menu_command(song_select::draw_context_menu(state_));
     apply_confirmation_command(song_select::draw_confirmation_dialog(state_));
     ui::flush_draw_queue();
 
-    if (state_.scene_fade_in_t > 0.0f) {
-        DrawRectangle(0, 0, kScreenWidth, kScreenHeight,
-                      Color{0, 0, 0, static_cast<unsigned char>(state_.scene_fade_in_t * 0.65f * 255.0f)});
-    }
+    state_.scene_fade_in.draw();
 
     virtual_screen::end();
 

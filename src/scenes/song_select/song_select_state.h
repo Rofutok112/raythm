@@ -6,6 +6,7 @@
 
 #include "data_models.h"
 #include "raylib.h"
+#include "shared/scene_fade.h"
 
 namespace song_select {
 
@@ -69,7 +70,7 @@ struct state {
     float scroll_y = 0.0f;
     float scroll_y_target = 0.0f;
     float song_change_anim_t = 0.0f;
-    float scene_fade_in_t = 1.0f;
+    scene_fade scene_fade_in{scene_fade::direction::in, 0.3f, 0.65f};
     bool scrollbar_dragging = false;
     float scrollbar_drag_offset = 0.0f;
     context_menu_state context_menu;

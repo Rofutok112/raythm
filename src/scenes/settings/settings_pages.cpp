@@ -37,40 +37,40 @@ void settings_gameplay_page::update() {
     }
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (ui::is_hovered(settings::kGeneralRows[0], settings::kLayer)) {
+        if (ui::is_hovered(settings::kGameplayRows[0], settings::kLayer)) {
             active_slider_ = slider::note_speed;
-        } else if (ui::is_hovered(settings::kGeneralRows[1], settings::kLayer)) {
+        } else if (ui::is_hovered(settings::kGameplayRows[1], settings::kLayer)) {
             active_slider_ = slider::camera_angle;
-        } else if (ui::is_hovered(settings::kGeneralRows[2], settings::kLayer)) {
+        } else if (ui::is_hovered(settings::kGameplayRows[2], settings::kLayer)) {
             active_slider_ = slider::lane_width;
-        } else if (ui::is_hovered(settings::kGeneralRows[3], settings::kLayer)) {
+        } else if (ui::is_hovered(settings::kGameplayRows[3], settings::kLayer)) {
             active_slider_ = slider::note_height;
         }
     }
 
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
         if (active_slider_ == slider::note_speed) {
-            const float ratio = settings::slider_ratio_from_mouse(settings::kGeneralRows[0]);
+            const float ratio = settings::slider_ratio_from_mouse(settings::kGameplayRows[0]);
             settings_.note_speed = kMinNoteSpeed + ratio * (kMaxNoteSpeed - kMinNoteSpeed);
         } else if (active_slider_ == slider::camera_angle) {
-            const float ratio = settings::slider_ratio_from_mouse(settings::kGeneralRows[1]);
+            const float ratio = settings::slider_ratio_from_mouse(settings::kGameplayRows[1]);
             settings_.camera_angle_degrees = 5.0f + ratio * (90.0f - 5.0f);
         } else if (active_slider_ == slider::lane_width) {
-            const float ratio = settings::slider_ratio_from_mouse(settings::kGeneralRows[2]);
+            const float ratio = settings::slider_ratio_from_mouse(settings::kGameplayRows[2]);
             settings_.lane_width = 0.6f + ratio * (10.0f - 0.6f);
         } else if (active_slider_ == slider::note_height) {
-            const float ratio = settings::slider_ratio_from_mouse(settings::kGeneralRows[3]);
+            const float ratio = settings::slider_ratio_from_mouse(settings::kGameplayRows[3]);
             settings_.note_height = kMinNoteHeight + ratio * (kMaxNoteHeight - kMinNoteHeight);
         }
     }
 
-    if (ui::is_clicked(settings::double_arrow_left_rect(settings::kGeneralRows[4]), settings::kLayer)) {
+    if (ui::is_clicked(settings::double_arrow_left_rect(settings::kGameplayRows[4]), settings::kLayer)) {
         settings_.global_note_offset_ms = std::max(-10000, settings_.global_note_offset_ms - 5);
-    } else if (ui::is_clicked(settings::single_arrow_left_rect(settings::kGeneralRows[4]), settings::kLayer)) {
+    } else if (ui::is_clicked(settings::single_arrow_left_rect(settings::kGameplayRows[4]), settings::kLayer)) {
         settings_.global_note_offset_ms = std::max(-10000, settings_.global_note_offset_ms - 1);
-    } else if (ui::is_clicked(settings::single_arrow_right_rect(settings::kGeneralRows[4]), settings::kLayer)) {
+    } else if (ui::is_clicked(settings::single_arrow_right_rect(settings::kGameplayRows[4]), settings::kLayer)) {
         settings_.global_note_offset_ms = std::min(10000, settings_.global_note_offset_ms + 1);
-    } else if (ui::is_clicked(settings::double_arrow_right_rect(settings::kGeneralRows[4]), settings::kLayer)) {
+    } else if (ui::is_clicked(settings::double_arrow_right_rect(settings::kGameplayRows[4]), settings::kLayer)) {
         settings_.global_note_offset_ms = std::min(10000, settings_.global_note_offset_ms + 5);
     }
 }
@@ -95,13 +95,13 @@ void settings_gameplay_page::draw() const {
         } else {
             ratio = (settings_.note_height - kMinNoteHeight) / (kMaxNoteHeight - kMinNoteHeight);
         }
-        ui::draw_slider_relative(settings::kGeneralRows[static_cast<std::size_t>(i)], labels[i], values[i].c_str(),
+        ui::draw_slider_relative(settings::kGameplayRows[static_cast<std::size_t>(i)], labels[i], values[i].c_str(),
                                  settings::clamp01(ratio), settings::kSliderLeftInset, settings::kSliderRightInset,
                                  settings::kLayer, 22, settings::kSliderTopOffset);
     }
 
     const std::string global_offset_label = format_offset_label(settings_.global_note_offset_ms);
-    const ui::row_state offset_row = ui::draw_row(settings::kGeneralRows[4], g_theme->row, g_theme->row_hover, g_theme->border);
+    const ui::row_state offset_row = ui::draw_row(settings::kGameplayRows[4], g_theme->row, g_theme->row_hover, g_theme->border);
     const Rectangle content = ui::inset(offset_row.visual, ui::edge_insets::symmetric(0.0f, 18.0f));
     const ui::rect_pair columns = ui::split_columns(content, 200.0f);
     const Rectangle button_group = ui::place(columns.second, settings::kArrowButtonSize * 4.0f + 30.0f,
@@ -116,10 +116,10 @@ void settings_gameplay_page::draw() const {
 
     ui::draw_text_in_rect("Global Offset", 22, columns.first, g_theme->text, ui::text_align::left);
     ui::draw_text_in_rect(global_offset_label.c_str(), 22, value_rect, g_theme->text_dim, ui::text_align::right);
-    ui::draw_button(settings::double_arrow_left_rect(settings::kGeneralRows[4]), "<<", 22);
-    ui::draw_button(settings::single_arrow_left_rect(settings::kGeneralRows[4]), "<", 22);
-    ui::draw_button(settings::single_arrow_right_rect(settings::kGeneralRows[4]), ">", 22);
-    ui::draw_button(settings::double_arrow_right_rect(settings::kGeneralRows[4]), ">>", 22);
+    ui::draw_button(settings::double_arrow_left_rect(settings::kGameplayRows[4]), "<<", 22);
+    ui::draw_button(settings::single_arrow_left_rect(settings::kGameplayRows[4]), "<", 22);
+    ui::draw_button(settings::single_arrow_right_rect(settings::kGameplayRows[4]), ">", 22);
+    ui::draw_button(settings::double_arrow_right_rect(settings::kGameplayRows[4]), ">>", 22);
 }
 
 settings_audio_page::settings_audio_page(game_settings& settings, const settings_runtime_applier& runtime_applier)
