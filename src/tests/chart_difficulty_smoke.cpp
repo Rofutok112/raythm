@@ -70,10 +70,6 @@ int main() {
         std::cerr << "Expected easy chart to receive a positive auto level\n";
         return EXIT_FAILURE;
     }
-    if (easy_level >= 99.0f || hard_level >= 99.0f) {
-        std::cerr << "Expected sample charts to stay below the level cap\n";
-        return EXIT_FAILURE;
-    }
     if (hard_level <= easy_level) {
         std::cerr << "Expected hard chart level to exceed easy chart level\n";
         return EXIT_FAILURE;

@@ -434,8 +434,7 @@ float calculate_level(const chart_data& data) {
         return 0.0f;
     }
     const float normalized = kLevelCompressionScale * std::log10(1.0f + raw_rating);
-    const float rounded = std::round(normalized * 10.0f) / 10.0f;
-    return std::clamp(rounded, 0.1f, 99.0f);
+    return std::max(0.1f, std::round(normalized * 10.0f) / 10.0f);
 }
 
 }  // namespace chart_difficulty
