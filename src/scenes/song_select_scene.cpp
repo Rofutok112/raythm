@@ -184,18 +184,26 @@ void song_select_scene::open_overwrite_chart_confirmation(song_select::chart_imp
 }
 
 bool song_select_scene::adjust_selected_song_local_offset(int delta_ms) {
-    if (state_.selected_song_index < 0 || state_.selected_song_index >= static_cast<int>(state_.songs.size())) {
+    const song_select::song_entry* selected_song = song_select::selected_song(state_);
+    if (selected_song == nullptr) {
         return false;
     }
 
-    auto& song = state_.songs[static_cast<size_t>(state_.selected_song_index)];
-    const int next_offset = std::clamp(song.local_note_offset_ms + delta_ms, -1000, 1000);
-    if (!save_player_song_offset(song.song.meta.song_id, next_offset)) {
+    const auto filtered = song_select::filtered_charts_for_selected_song(state_);
+    const song_select::chart_option* selected_chart = song_select::selected_chart_for(state_, filtered);
+    if (selected_chart == nullptr) {
+        return false;
+    }
+
+    auto& chart = state_.songs[static_cast<size_t>(state_.selected_song_index)]
+                      .charts[static_cast<size_t>(selected_chart - &selected_song->charts.front())];
+    const int next_offset = std::clamp(chart.local_note_offset_ms + delta_ms, -1000, 1000);
+    if (!save_player_chart_offset(chart.meta.chart_id, next_offset)) {
         song_select::queue_status_message(state_, "Failed to save local offset.", true);
         return false;
     }
 
-    song.local_note_offset_ms = next_offset;
+    chart.local_note_offset_ms = next_offset;
     return true;
 }
 
@@ -206,6 +214,12 @@ bool song_select_scene::apply_recent_result_offset() {
 
     const song_select::song_entry* selected = song_select::selected_song(state_);
     if (selected == nullptr || selected->song.meta.song_id != state_.recent_result_offset->song_id) {
+        return false;
+    }
+
+    const auto filtered = song_select::filtered_charts_for_selected_song(state_);
+    const song_select::chart_option* chart = song_select::selected_chart_for(state_, filtered);
+    if (chart == nullptr || chart->meta.chart_id != state_.recent_result_offset->chart_id) {
         return false;
     }
 

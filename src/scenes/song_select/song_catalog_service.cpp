@@ -45,7 +45,7 @@ namespace song_select {
 
 catalog_data load_catalog() {
     catalog_data catalog;
-    const player_song_offset_map song_offsets = load_player_song_offsets();
+    const player_chart_offset_map chart_offsets = load_player_chart_offsets();
 
     const song_load_result legacy_result = song_loader::load_all(path_utils::to_utf8(app_paths::official_songs_root()),
                                                                  content_source::official);
@@ -67,10 +67,6 @@ catalog_data load_catalog() {
     for (const song_data& song : all_songs) {
         song_entry entry;
         entry.song = song;
-        if (const auto it = song_offsets.find(song.meta.song_id); it != song_offsets.end()) {
-            entry.local_note_offset_ms = it->second;
-        }
-
         for (const std::string& chart_path : song.chart_paths) {
             const chart_parse_result parse_result = song_loader::load_chart(chart_path);
             if (!parse_result.success || !parse_result.data.has_value()) {
@@ -86,6 +82,7 @@ catalog_data load_catalog() {
                 meta,
                 chart_source,
                 chart_source == content_source::app_data,
+                chart_offsets.contains(meta.chart_id) ? chart_offsets.at(meta.chart_id) : 0,
             });
         }
 

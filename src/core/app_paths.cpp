@@ -98,8 +98,8 @@ std::filesystem::path settings_path() {
     return app_data_root() / "settings.json";
 }
 
-std::filesystem::path song_offsets_path() {
-    return app_data_root() / "song_offsets.txt";
+std::filesystem::path chart_offsets_path() {
+    return app_data_root() / "chart_offsets.txt";
 }
 
 void ensure_directories() {

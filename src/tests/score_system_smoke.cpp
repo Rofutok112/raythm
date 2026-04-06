@@ -65,6 +65,29 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    score_system fc_s_rank;
+    fc_s_rank.init(20);
+    for (int i = 0; i < 19; ++i) {
+        fc_s_rank.on_judge({judge_result::perfect, 0.0, 0});
+    }
+    fc_s_rank.on_judge({judge_result::great, 0.0, 0});
+    if (fc_s_rank.get_result_data().clear_rank != rank::s) {
+        std::cerr << "Full combo 95%+ should be rank S\n";
+        return EXIT_FAILURE;
+    }
+
+    score_system non_fc_high_accuracy;
+    non_fc_high_accuracy.init(100);
+    for (int i = 0; i < 99; ++i) {
+        non_fc_high_accuracy.on_judge({judge_result::perfect, 0.0, 0});
+    }
+    non_fc_high_accuracy.on_judge({judge_result::miss, 0.0, 0});
+    const result_data non_fc_result = non_fc_high_accuracy.get_result_data();
+    if (non_fc_result.accuracy < 99.0f || non_fc_result.is_full_combo || non_fc_result.clear_rank != rank::a) {
+        std::cerr << "99% without full combo should be rank A\n";
+        return EXIT_FAILURE;
+    }
+
     std::cout << "score_system smoke test passed\n";
     return EXIT_SUCCESS;
 }

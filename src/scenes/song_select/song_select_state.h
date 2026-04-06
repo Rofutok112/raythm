@@ -15,12 +15,12 @@ struct chart_option {
     chart_meta meta;
     content_source source = content_source::official;
     bool can_delete = false;
+    int local_note_offset_ms = 0;
 };
 
 struct song_entry {
     song_data song;
     std::vector<chart_option> charts;
-    int local_note_offset_ms = 0;
 };
 
 struct catalog_data {

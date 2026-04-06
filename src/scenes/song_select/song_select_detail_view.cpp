@@ -69,9 +69,11 @@ void draw_song_details(const state& state, const preview_controller& preview_con
     const float content_anim = 1.0f - state.song_change_anim_t;
     const float content_offset_x = 18.0f * state.song_change_anim_t;
     const unsigned char content_alpha = static_cast<unsigned char>(145.0f + 110.0f * content_anim);
-    const int local_offset_ms = song->local_note_offset_ms;
+    const int local_offset_ms = selected_chart != nullptr ? selected_chart->local_note_offset_ms : 0;
     const bool has_recent_result = state.recent_result_offset.has_value() &&
-                                   state.recent_result_offset->song_id == song->song.meta.song_id;
+                                   state.recent_result_offset->song_id == song->song.meta.song_id &&
+                                   selected_chart != nullptr &&
+                                   state.recent_result_offset->chart_id == selected_chart->meta.chart_id;
 
     ui::draw_section(layout::kJacketRect);
     if (preview_controller.jacket_loaded()) {
