@@ -43,11 +43,32 @@ int base_score(judge_result result) {
 
     return 0;
 }
+
+double combo_score_multiplier(int combo, int total_notes) {
+    if (total_notes <= 0) {
+        return 1.0;
+    }
+
+    const double progress = std::clamp(static_cast<double>(combo) / static_cast<double>(total_notes), 0.0, 1.0);
+    return progress * progress;
+}
+
+double max_raw_score_for_total_notes(int total_notes) {
+    if (total_notes <= 0) {
+        return 0.0;
+    }
+
+    double max_score = 0.0;
+    for (int combo = 1; combo <= total_notes; ++combo) {
+        max_score += static_cast<double>(kPerfectBase) * combo_score_multiplier(combo, total_notes);
+    }
+    return max_score;
+}
 }
 
 void score_system::init(int total_notes) {
     total_notes_ = std::max(total_notes, 0);
-    score_ = 0;
+    raw_score_ = 0.0;
     combo_ = 0;
     max_combo_ = 0;
     judge_counts_.fill(0);
@@ -76,12 +97,11 @@ void score_system::on_judge(const judge_event& event) {
     }
 
     const int raw = base_score(event.result);
-    const double combo_bonus = 1.0 + std::min(combo_, 100) * 0.002;
-    score_ += static_cast<int>(raw * combo_bonus);
+    raw_score_ += static_cast<double>(raw) * combo_score_multiplier(combo_, total_notes_);
 }
 
 int score_system::get_score() const {
-    return score_;
+    return normalized_score();
 }
 
 int score_system::get_combo() const {
@@ -104,7 +124,7 @@ float score_system::get_live_accuracy() const {
 
 result_data score_system::get_result_data() const {
     result_data result;
-    result.score = score_;
+    result.score = normalized_score();
     result.judge_counts = judge_counts_;
     result.max_combo = max_combo_;
     result.avg_offset = judged_notes_ > 0 ? static_cast<float>(offset_sum_ / static_cast<double>(judged_notes_)) : 0.0f;
@@ -130,13 +150,17 @@ result_data score_system::get_result_data() const {
         result.clear_rank = rank::f;
     }
 
-    if (total_notes_ > 0) {
-        const double normalized = static_cast<double>(score_) /
-                                  static_cast<double>(total_notes_ * static_cast<int>(kPerfectBase * 1.2));
-        result.score = static_cast<int>(std::clamp(normalized, 0.0, 1.0) * kMaxScore);
+    return result;
+}
+
+int score_system::normalized_score() const {
+    const double max_raw_score = max_raw_score_for_total_notes(total_notes_);
+    if (max_raw_score <= 0.0) {
+        return 0;
     }
 
-    return result;
+    const double normalized = raw_score_ / max_raw_score;
+    return static_cast<int>(std::clamp(normalized, 0.0, 1.0) * kMaxScore);
 }
 
 void gauge::on_judge(judge_result result) {
