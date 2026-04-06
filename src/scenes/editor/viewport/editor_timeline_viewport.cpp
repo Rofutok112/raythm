@@ -17,12 +17,12 @@ constexpr float kScrollbarGap = 10.0f;
 constexpr float kMinTicksPerPixel = 0.9f;
 constexpr float kMaxTicksPerPixel = 28.0f;
 constexpr float kScrollLerpSpeed = 12.0f;
-constexpr float kScrollWheelViewportRatio = 0.36f;
+constexpr float kScrollWheelViewportRatio = 0.55f;
 constexpr float kNoteHeadHeight = 14.0f;
 constexpr float kTimelineLeadInTicks = 960.0f;
 constexpr float kPlaybackFollowViewportRatio = 0.35f;
-constexpr std::array<int, 9> kSnapDivisions = {1, 2, 3, 4, 8, 16, 32, 64, 128};
-constexpr std::array<const char*, 9> kSnapLabels = {"1/1", "1/2", "1/3", "1/4", "1/8", "1/16", "1/32", "1/64", "1/128"};
+constexpr std::array<int, 11> kSnapDivisions = {1, 2, 3, 4, 8, 12, 16, 24, 32, 64, 128};
+constexpr std::array<const char*, 11> kSnapLabels = {"1/1", "1/2", "1/3", "1/4", "1/8", "1/12", "1/16", "1/12", "1/32", "1/64", "1/128"};
 }
 
 editor_timeline_metrics editor_timeline_viewport::metrics(const editor_timeline_viewport_model& model) {
@@ -41,7 +41,7 @@ editor_timeline_metrics editor_timeline_viewport::metrics(const editor_timeline_
 
 float editor_timeline_viewport::visible_tick_span(const editor_timeline_viewport_model& model) {
     return metrics(model).visible_tick_span();
-}
+} 
 
 float editor_timeline_viewport::content_tick_span(const editor_timeline_viewport_model& model) {
     int max_tick = model.state->data().meta.resolution * 8;
