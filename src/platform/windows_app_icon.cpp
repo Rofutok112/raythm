@@ -23,14 +23,25 @@ void apply_windows_app_icon(void* native_window_handle) {
     const int large_icon_size = GetSystemMetrics(SM_CXICON);
 
     HICON large_icon = static_cast<HICON>(LoadImageW(
-        instance, L"IDI_APP_ICON", IMAGE_ICON, large_icon_size, large_icon_size, 0));
+        instance, L"GLFW_ICON", IMAGE_ICON, large_icon_size, large_icon_size, 0));
+    if (large_icon == nullptr) {
+        large_icon = static_cast<HICON>(LoadImageW(
+            instance, L"IDI_APP_ICON", IMAGE_ICON, large_icon_size, large_icon_size, 0));
+    }
+
     HICON small_icon = static_cast<HICON>(LoadImageW(
-        instance, L"IDI_APP_ICON", IMAGE_ICON, small_icon_size, small_icon_size, 0));
+        instance, L"GLFW_ICON", IMAGE_ICON, small_icon_size, small_icon_size, 0));
+    if (small_icon == nullptr) {
+        small_icon = static_cast<HICON>(LoadImageW(
+            instance, L"IDI_APP_ICON", IMAGE_ICON, small_icon_size, small_icon_size, 0));
+    }
 
     if (large_icon != nullptr) {
+        SetClassLongPtrW(window, GCLP_HICON, reinterpret_cast<LONG_PTR>(large_icon));
         SendMessageW(window, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(large_icon));
     }
     if (small_icon != nullptr) {
+        SetClassLongPtrW(window, GCLP_HICONSM, reinterpret_cast<LONG_PTR>(small_icon));
         SendMessageW(window, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(small_icon));
     }
 #else

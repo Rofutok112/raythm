@@ -93,6 +93,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/judge_system.h
         src/gameplay/player_note_offsets.cpp
         src/gameplay/player_note_offsets.h
+        src/gameplay/ranking_service.cpp
+        src/gameplay/ranking_service.h
         src/gameplay/score_system.cpp
         src/gameplay/score_system.h
         src/gameplay/song_loader.cpp
@@ -134,6 +136,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_select_confirmation_dialog.h
         src/scenes/song_select/song_import_export_service.cpp
         src/scenes/song_select/song_import_export_service.h
+        src/scenes/song_select/song_select_last_played.cpp
+        src/scenes/song_select/song_select_last_played.h
         src/scenes/song_select/song_preview_controller.cpp
         src/scenes/song_select/song_preview_controller.h
         src/scenes/song_select/song_select_detail_view.cpp
@@ -145,6 +149,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_select_navigation.h
         src/scenes/song_select/song_select_overlay_view.cpp
         src/scenes/song_select/song_select_overlay_view.h
+        src/scenes/song_select/song_select_ranking_view.cpp
+        src/scenes/song_select/song_select_ranking_view.h
         src/scenes/song_select/song_select_state.cpp
         src/scenes/song_select/song_select_state.h
         src/scenes/song_select_scene.cpp
@@ -337,6 +343,8 @@ add_executable(song_loader_smoke
 add_executable(song_select_state_smoke
         src/models/data_models.h
         src/scenes/song_select/song_select_layout.h
+        src/scenes/shared/scene_fade.cpp
+        src/scenes/shared/scene_fade.h
         src/scenes/song_select/song_select_state.cpp
         src/scenes/song_select/song_select_state.h
         src/tests/song_select_state_smoke.cpp)
@@ -378,6 +386,14 @@ add_executable(score_system_smoke
         src/gameplay/score_system.cpp
         src/gameplay/score_system.h
         src/tests/score_system_smoke.cpp)
+
+add_executable(ranking_service_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/models/data_models.h
+        src/gameplay/ranking_service.cpp
+        src/gameplay/ranking_service.h
+        src/tests/ranking_service_smoke.cpp)
 
 add_executable(play_note_draw_queue_smoke
         src/models/data_models.h
@@ -544,6 +560,7 @@ target_include_directories(input_handler_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(timing_engine_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(judge_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(score_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(ranking_service_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(play_note_draw_queue_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(play_chart_filter_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(play_flow_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
@@ -553,7 +570,7 @@ target_include_directories(editor_timeline_controller_smoke PRIVATE ${RAYTHM_INC
 target_include_directories(editor_panel_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(audio_manager_smoke PRIVATE ${RAYTHM_BASS_DIR} ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(update_version_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_link_libraries(raythm PRIVATE raylib ${RAYTHM_BASS_IMPORT_LIB} comdlg32)
+target_link_libraries(raythm PRIVATE raylib ${RAYTHM_BASS_IMPORT_LIB} comdlg32 crypt32)
 target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)
 target_link_libraries(update_version_smoke PRIVATE winhttp)
@@ -561,6 +578,7 @@ target_link_libraries(song_select_state_smoke PRIVATE raylib)
 target_link_libraries(settings_io_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
+target_link_libraries(ranking_service_smoke PRIVATE crypt32)
 target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_timeline_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_panel_controller_smoke PRIVATE raylib)

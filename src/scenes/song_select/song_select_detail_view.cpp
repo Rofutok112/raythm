@@ -14,6 +14,36 @@ std::string key_mode_label(int key_count) {
     return key_count == 6 ? "6K" : "4K";
 }
 
+Color key_mode_color(int key_count) {
+    const auto& theme = *g_theme;
+    return key_count == 6 ? theme.rank_c : theme.rank_b;
+}
+
+const char* rank_label(rank value) {
+    switch (value) {
+        case rank::ss: return "SS";
+        case rank::s: return "S";
+        case rank::a: return "A";
+        case rank::b: return "B";
+        case rank::c: return "C";
+        case rank::f: return "F";
+    }
+    return "?";
+}
+
+Color rank_color(rank value) {
+    const auto& theme = *g_theme;
+    switch (value) {
+        case rank::ss: return theme.rank_ss;
+        case rank::s: return theme.rank_s;
+        case rank::a: return theme.rank_a;
+        case rank::b: return theme.rank_b;
+        case rank::c: return theme.rank_c;
+        case rank::f: return theme.rank_f;
+    }
+    return theme.text_secondary;
+}
+
 std::string format_offset_label(int offset_ms) {
     return (offset_ms > 0 ? "+" : "") + std::to_string(offset_ms) + "ms";
 }
@@ -69,6 +99,9 @@ void draw_song_details(const state& state, const preview_controller& preview_con
     const float content_anim = 1.0f - state.song_change_anim_t;
     const float content_offset_x = 18.0f * state.song_change_anim_t;
     const unsigned char content_alpha = static_cast<unsigned char>(145.0f + 110.0f * content_anim);
+    const float chart_anim = 1.0f - state.chart_change_anim_t;
+    const float chart_offset_x = 14.0f * state.chart_change_anim_t;
+    const unsigned char chart_alpha = static_cast<unsigned char>(120.0f + 135.0f * chart_anim);
     const int local_offset_ms = selected_chart != nullptr ? selected_chart->local_note_offset_ms : 0;
     const bool has_recent_result = state.recent_result_offset.has_value() &&
                                    state.recent_result_offset->song_id == song->song.meta.song_id &&
@@ -101,45 +134,65 @@ void draw_song_details(const state& state, const preview_controller& preview_con
         const Color chart_source_color =
             selected_chart->source == content_source::official ? theme.success : theme.text_muted;
         ui::draw_text_f(chart_source_label,
-                        detail_x + content_offset_x, layout::kJacketRect.y + 126.0f, 18,
-                        with_alpha(chart_source_color, content_alpha));
-        ui::draw_text_f(TextFormat("%s %s Lv.%.1f", key_mode_label(selected_chart->meta.key_count).c_str(),
-                                   selected_chart->meta.difficulty.c_str(), selected_chart->meta.level),
-                        detail_x + content_offset_x, layout::kJacketRect.y + 158.0f, 28,
-                        with_alpha(theme.text, content_alpha));
-        ui::draw_text_f(selected_chart->meta.chart_author.c_str(), detail_x + content_offset_x,
-                        layout::kJacketRect.y + 194.0f, 20, with_alpha(theme.text_muted, content_alpha));
+                        detail_x + content_offset_x + chart_offset_x, layout::kJacketRect.y + 126.0f, 18,
+                        with_alpha(chart_source_color, chart_alpha));
+        const float key_x = detail_x + content_offset_x + chart_offset_x;
+        const float key_y = layout::kJacketRect.y + 158.0f;
+        const float difficulty_x = key_x + 54.0f;
+        const float difficulty_width = detail_max_width - 54.0f;
+        const std::string difficulty_label =
+            selected_chart->meta.difficulty + "  Lv." + TextFormat("%.1f", selected_chart->meta.level);
+        ui::draw_text_f(key_mode_label(selected_chart->meta.key_count).c_str(), key_x, key_y, 28,
+                        with_alpha(key_mode_color(selected_chart->meta.key_count), chart_alpha));
+        draw_marquee_text(difficulty_label.c_str(), difficulty_x, key_y, 28,
+                          with_alpha(theme.text, chart_alpha), difficulty_width, now);
+        draw_marquee_text(selected_chart->meta.chart_author.c_str(), key_x, layout::kJacketRect.y + 194.0f, 20,
+                          with_alpha(theme.text_muted, chart_alpha), detail_max_width - 94.0f, now);
+        if (selected_chart->best_local_rank.has_value()) {
+            const Rectangle rank_rect = {
+                detail_x + detail_max_width - 74.0f + content_offset_x + chart_offset_x,
+                layout::kJacketRect.y + 188.0f,
+                64.0f,
+                28.0f
+            };
+            DrawRectangleRec(rank_rect, with_alpha(theme.section, chart_alpha));
+            DrawRectangleLinesEx(rank_rect, 1.5f, with_alpha(theme.border_light, chart_alpha));
+            ui::draw_text_in_rect(rank_label(*selected_chart->best_local_rank), 18, rank_rect,
+                                  with_alpha(rank_color(*selected_chart->best_local_rank), chart_alpha), ui::text_align::center);
+        }
     }
 
     const std::string local_label = format_offset_label(local_offset_ms);
     ui::draw_text_in_rect("Local Offset", 20, layout::kLocalOffsetLabelRect,
-                          with_alpha(theme.text, content_alpha), ui::text_align::left);
+                          with_alpha(theme.text, chart_alpha), ui::text_align::left);
 
     const Rectangle controls = layout::kLocalOffsetControlsRect;
-    const Rectangle value_rect = {controls.x, controls.y, 120.0f, controls.height};
-    ui::draw_text_in_rect(local_label.c_str(), 26, value_rect, with_alpha(theme.accent, content_alpha), ui::text_align::left);
+    const Rectangle value_rect = {
+        controls.x + chart_offset_x,
+        controls.y,
+        120.0f,
+        controls.height
+    };
+    ui::draw_text_in_rect(local_label.c_str(), 26, value_rect,
+                          with_alpha(theme.accent, chart_alpha), ui::text_align::left);
 
     ui::draw_button_colored(layout::local_offset_double_left_rect(), "<<", 18,
-                            with_alpha(theme.row, content_alpha), with_alpha(theme.row_hover, content_alpha),
-                            with_alpha(theme.text, content_alpha));
+                            theme.row, theme.row_hover, theme.text);
     ui::draw_button_colored(layout::local_offset_left_rect(), "<", 18,
-                            with_alpha(theme.row, content_alpha), with_alpha(theme.row_hover, content_alpha),
-                            with_alpha(theme.text, content_alpha));
+                            theme.row, theme.row_hover, theme.text);
     ui::draw_button_colored(layout::local_offset_right_rect(), ">", 18,
-                            with_alpha(theme.row, content_alpha), with_alpha(theme.row_hover, content_alpha),
-                            with_alpha(theme.text, content_alpha));
+                            theme.row, theme.row_hover, theme.text);
     ui::draw_button_colored(layout::local_offset_double_right_rect(), ">>", 18,
-                            with_alpha(theme.row, content_alpha), with_alpha(theme.row_hover, content_alpha),
-                            with_alpha(theme.text, content_alpha));
+                            theme.row, theme.row_hover, theme.text);
 
     const std::string auto_apply_label = has_recent_result
         ? format_recent_offset_label(state.recent_result_offset->avg_offset_ms)
         : "-";
     ui::draw_button_colored(
         layout::auto_apply_button_rect(), auto_apply_label.c_str(), 18,
-        has_recent_result ? with_alpha(theme.row, content_alpha) : with_alpha(theme.row, 170),
-        has_recent_result ? with_alpha(theme.row_hover, content_alpha) : with_alpha(theme.row, 170),
-        has_recent_result ? with_alpha(theme.text, content_alpha) : with_alpha(theme.text_muted, 210));
+        has_recent_result ? with_alpha(theme.row, chart_alpha) : with_alpha(theme.row, 170),
+        has_recent_result ? with_alpha(theme.row_hover, chart_alpha) : with_alpha(theme.row, 170),
+        has_recent_result ? with_alpha(theme.text, chart_alpha) : with_alpha(theme.text_muted, 210));
 }
 
 void draw_status_message(const state& state) {

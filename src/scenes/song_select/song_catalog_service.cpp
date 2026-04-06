@@ -8,6 +8,7 @@
 #include "chart_difficulty.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
+#include "ranking_service.h"
 #include "song_loader.h"
 
 namespace {
@@ -37,6 +38,19 @@ bool is_within_root(const std::filesystem::path& path, const std::filesystem::pa
 
 bool is_chart_file_path(const std::filesystem::path& path) {
     return path.extension() == ".rchart";
+}
+
+std::optional<rank> load_best_local_rank(const std::string& chart_id) {
+    if (chart_id.empty()) {
+        return std::nullopt;
+    }
+
+    const ranking_service::listing listing =
+        ranking_service::load_chart_ranking(chart_id, ranking_service::source::local, 1);
+    if (listing.entries.empty()) {
+        return std::nullopt;
+    }
+    return listing.entries.front().clear_rank;
 }
 
 }  // namespace
@@ -83,6 +97,7 @@ catalog_data load_catalog() {
                 chart_source,
                 chart_source == content_source::app_data,
                 chart_offsets.contains(meta.chart_id) ? chart_offsets.at(meta.chart_id) : 0,
+                load_best_local_rank(meta.chart_id),
             });
         }
 

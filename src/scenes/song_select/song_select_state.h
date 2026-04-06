@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "data_models.h"
+#include "ranking_service.h"
 #include "raylib.h"
 #include "shared/scene_fade.h"
 
@@ -16,6 +17,7 @@ struct chart_option {
     content_source source = content_source::official;
     bool can_delete = false;
     int local_note_offset_ms = 0;
+    std::optional<rank> best_local_rank;
 };
 
 struct song_entry {
@@ -69,6 +71,16 @@ struct recent_result_offset {
     float avg_offset_ms = 0.0f;
 };
 
+struct ranking_panel_state {
+    ranking_service::source selected_source = ranking_service::source::local;
+    ranking_service::listing listing;
+    bool source_dropdown_open = false;
+    float scroll_y = 0.0f;
+    float scroll_y_target = 0.0f;
+    bool scrollbar_dragging = false;
+    float scrollbar_drag_offset = 0.0f;
+};
+
 struct state {
     std::vector<song_entry> songs;
     std::vector<std::string> load_errors;
@@ -77,6 +89,7 @@ struct state {
     float scroll_y = 0.0f;
     float scroll_y_target = 0.0f;
     float song_change_anim_t = 0.0f;
+    float chart_change_anim_t = 0.0f;
     scene_fade scene_fade_in{scene_fade::direction::in, 0.3f, 0.65f};
     bool scrollbar_dragging = false;
     float scrollbar_drag_offset = 0.0f;
@@ -85,6 +98,7 @@ struct state {
     std::string status_message;
     bool status_message_is_error = false;
     std::optional<recent_result_offset> recent_result_offset;
+    ranking_panel_state ranking_panel;
 };
 
 const song_entry* selected_song(const state& state);

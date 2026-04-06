@@ -1,0 +1,175 @@
+#include "song_select/song_select_ranking_view.h"
+
+#include <string>
+
+#include "song_select/song_select_layout.h"
+#include "theme.h"
+#include "ui_clip.h"
+#include "ui_draw.h"
+
+namespace {
+
+constexpr const char* kRankingSourceOptions[] = {
+    "LOCAL",
+    "ONLINE",
+};
+
+const char* rank_label(rank value) {
+    switch (value) {
+        case rank::ss: return "SS";
+        case rank::s: return "S";
+        case rank::a: return "A";
+        case rank::b: return "B";
+        case rank::c: return "C";
+        case rank::f: return "F";
+    }
+    return "?";
+}
+
+Color rank_color(rank value) {
+    switch (value) {
+        case rank::ss: return g_theme->rank_ss;
+        case rank::s: return g_theme->rank_s;
+        case rank::a: return g_theme->rank_a;
+        case rank::b: return g_theme->rank_b;
+        case rank::c: return g_theme->rank_c;
+        case rank::f: return g_theme->rank_f;
+    }
+    return g_theme->text_secondary;
+}
+
+const char* source_label(ranking_service::source source) {
+    return source == ranking_service::source::local ? "LOCAL" : "ONLINE";
+}
+
+int source_index(ranking_service::source source) {
+    return source == ranking_service::source::local ? 0 : 1;
+}
+
+std::string format_score(int value) {
+    std::string digits = std::to_string(std::max(0, value));
+    for (int insert_at = static_cast<int>(digits.size()) - 3; insert_at > 0; insert_at -= 3) {
+        digits.insert(static_cast<size_t>(insert_at), ",");
+    }
+    return digits;
+}
+
+void draw_score_text(const std::string& text, Rectangle rect, Color color) {
+    const Font font = GetFontDefault();
+    constexpr float font_size = 19.0f;
+    constexpr float spacing = 5.0f;
+    const Vector2 size = MeasureTextEx(font, text.c_str(), font_size, spacing);
+    const Vector2 pos = {
+        rect.x + rect.width - size.x,
+        rect.y + (rect.height - size.y) * 0.5f
+    };
+    DrawTextEx(font, text.c_str(), pos, font_size, spacing, color);
+}
+
+void draw_ranking_row(const ranking_service::entry& entry, float y, float offset_x, unsigned char alpha) {
+    const auto& theme = *g_theme;
+    const Rectangle row_rect = {
+        song_select::layout::kRankingPanelRect.x + 16.0f + offset_x,
+        y + 3.0f,
+        song_select::layout::kRankingPanelRect.width - 40.0f,
+        song_select::layout::kRankingRowHeight - 8.0f
+    };
+    const ui::row_state row_state = ui::draw_row(row_rect, with_alpha(theme.row, alpha),
+                                                 with_alpha(theme.row_hover, alpha),
+                                                 with_alpha(theme.border, alpha), 1.0f);
+    const Rectangle content = ui::inset(row_state.visual, ui::edge_insets::symmetric(4.0f, 10.0f));
+
+    const Rectangle placement_rect = {content.x, content.y, 36.0f, content.height};
+    const Rectangle rank_rect = {content.x + 52.0f, content.y, 48.0f, content.height};
+    const Rectangle accuracy_rect = {content.x + 124.0f, content.y, 108.0f, content.height};
+    const Rectangle combo_rect = {content.x + 254.0f, content.y, 104.0f, content.height};
+    const Rectangle score_rect = {content.x + 382.0f, content.y, content.width - 382.0f, content.height};
+
+    DrawRectangleRec(rank_rect, with_alpha(theme.section, alpha));
+    DrawRectangleLinesEx(rank_rect, 1.5f, with_alpha(theme.border_light, alpha));
+
+    ui::draw_text_in_rect(TextFormat("%02d", entry.placement), 18, placement_rect, with_alpha(theme.text, alpha), ui::text_align::center);
+    ui::draw_text_in_rect(rank_label(entry.clear_rank), 17, rank_rect, with_alpha(rank_color(entry.clear_rank), alpha), ui::text_align::center);
+    ui::draw_text_in_rect(TextFormat("%.2f%%", entry.accuracy), 17, accuracy_rect, with_alpha(theme.text_secondary, alpha), ui::text_align::left);
+    ui::draw_text_in_rect(TextFormat("Max Combo %d", entry.max_combo), 14, combo_rect, with_alpha(theme.text_muted, alpha), ui::text_align::left);
+    const std::string score_label = format_score(entry.score);
+    draw_score_text(score_label, score_rect, with_alpha(theme.text, alpha));
+}
+
+}  // namespace
+
+namespace song_select {
+
+float ranking_content_height(const state& state) {
+    const size_t entry_count = state.ranking_panel.listing.entries.empty()
+        ? 1
+        : state.ranking_panel.listing.entries.size();
+    return static_cast<float>(entry_count) * layout::kRankingRowHeight + 8.0f;
+}
+
+ranking_panel_result draw_ranking_panel(const state& state) {
+    const auto& theme = *g_theme;
+    ranking_panel_result result;
+    const float chart_anim = 1.0f - state.chart_change_anim_t;
+    const float content_offset_x = 14.0f * state.chart_change_anim_t;
+    const unsigned char content_alpha = static_cast<unsigned char>(120.0f + 135.0f * chart_anim);
+
+    ui::draw_section(layout::kRankingPanelRect);
+    ui::draw_text_in_rect("RANKING", 24, layout::kRankingTitleRect, theme.text, ui::text_align::left);
+
+    const ui::dropdown_state source_dropdown = ui::enqueue_dropdown(
+        layout::kRankingSourceDropdownRect,
+        layout::ranking_source_dropdown_menu_rect(),
+        "",
+        source_label(state.ranking_panel.selected_source),
+        kRankingSourceOptions,
+        source_index(state.ranking_panel.selected_source),
+        state.ranking_panel.source_dropdown_open,
+        ui::draw_layer::base,
+        ui::draw_layer::overlay,
+        18,
+        0.0f);
+    result.source_dropdown_toggled = source_dropdown.trigger.clicked;
+    result.source_clicked_index = source_dropdown.clicked_index;
+    result.source_dropdown_close_requested =
+        state.ranking_panel.source_dropdown_open &&
+        IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
+        !ui::is_hovered(layout::kRankingSourceDropdownRect, ui::draw_layer::base) &&
+        !ui::is_hovered(layout::ranking_source_dropdown_menu_rect(), ui::draw_layer::overlay);
+
+    ui::scoped_clip_rect clip_scope(layout::kRankingListRect);
+    const float base_y = layout::kRankingListRect.y - state.ranking_panel.scroll_y;
+
+    if (!state.ranking_panel.listing.available || state.ranking_panel.listing.entries.empty()) {
+        const std::string message = state.ranking_panel.listing.message.empty()
+            ? std::string("No ") + source_label(state.ranking_panel.selected_source) + " ranking entries."
+            : state.ranking_panel.listing.message;
+        ui::draw_text_in_rect(message.c_str(), 20,
+                              {layout::kRankingListRect.x + 16.0f + content_offset_x, base_y + 22.0f,
+                               layout::kRankingListRect.width - 40.0f, 40.0f},
+                              with_alpha(theme.text_muted, content_alpha), ui::text_align::left);
+    } else {
+        float row_y = base_y;
+        for (const ranking_service::entry& entry : state.ranking_panel.listing.entries) {
+            if (row_y + layout::kRankingRowHeight < layout::kRankingListRect.y) {
+                row_y += layout::kRankingRowHeight;
+                continue;
+            }
+            if (row_y > layout::kRankingListRect.y + layout::kRankingListRect.height) {
+                break;
+            }
+            draw_ranking_row(entry, row_y, content_offset_x, content_alpha);
+            row_y += layout::kRankingRowHeight;
+        }
+    }
+
+    ui::draw_scrollbar(layout::kRankingScrollbarTrackRect,
+                       ranking_content_height(state),
+                       state.ranking_panel.scroll_y,
+                       theme.scrollbar_track,
+                       theme.scrollbar_thumb);
+
+    return result;
+}
+
+}  // namespace song_select
