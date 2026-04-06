@@ -96,15 +96,6 @@ const char* judge_text(judge_result result) {
     return "";
 }
 
-const char* input_source_text(input_update_source source) {
-    switch (source) {
-        case input_update_source::simulated: return "simulated";
-        case input_update_source::native_windows: return "native_windows";
-        case input_update_source::polling: return "polling";
-    }
-    return "unknown";
-}
-
 void draw_hud(const play_session_state& state) {
     const result_data result = state.score_system.get_result_data();
     const float live_accuracy = state.score_system.get_live_accuracy();
@@ -115,9 +106,6 @@ void draw_hud(const play_session_state& state) {
                              kFpsRect, g_theme->hud_fps, ui::text_align::right);
     ui::enqueue_text_in_rect(TextFormat("%.2f%%", live_accuracy), 30,
                              kTimeRect, g_theme->hud_time);
-    ui::enqueue_text_in_rect(TextFormat("INPUT %s (%d)", input_source_text(state.input_handler.last_update_source()),
-                                        state.input_handler.last_update_event_count()),
-                             20, {48.0f, 92.0f, 360.0f, 24.0f}, g_theme->hud_fps, ui::text_align::left);
 
     ui::enqueue_text_in_rect("HEALTH", 24, kHealthLabelRect,
                              g_theme->hud_health_label, ui::text_align::right);

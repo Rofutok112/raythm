@@ -12,6 +12,36 @@ std::string key_mode_label(int key_count) {
     return key_count == 6 ? "6K" : "4K";
 }
 
+Color key_mode_color(int key_count) {
+    const auto& theme = *g_theme;
+    return key_count == 6 ? theme.rank_c : theme.rank_b;
+}
+
+const char* rank_label(rank value) {
+    switch (value) {
+        case rank::ss: return "SS";
+        case rank::s: return "S";
+        case rank::a: return "A";
+        case rank::b: return "B";
+        case rank::c: return "C";
+        case rank::f: return "F";
+    }
+    return "?";
+}
+
+Color rank_color(rank value) {
+    const auto& theme = *g_theme;
+    switch (value) {
+        case rank::ss: return theme.rank_ss;
+        case rank::s: return theme.rank_s;
+        case rank::a: return theme.rank_a;
+        case rank::b: return theme.rank_b;
+        case rank::c: return theme.rank_c;
+        case rank::f: return theme.rank_f;
+    }
+    return theme.text_secondary;
+}
+
 void draw_song_row(const song_select::song_entry& song, float item_y, bool is_selected, double now) {
     const auto& theme = *g_theme;
     const Rectangle row_rect = {song_select::layout::kSongListRect.x + 14.0f, item_y - 8.0f,
@@ -36,10 +66,10 @@ void draw_chart_rows(const song_select::state& state,
                      const std::vector<const song_select::chart_option*>& filtered,
                      float item_y) {
     const auto& theme = *g_theme;
+    const double now = GetTime();
     const float child_x = song_select::layout::kSongListRect.x + 46.0f;
-    const float child_w = song_select::layout::kSongListRect.width - 92.0f;
+    const float child_w = song_select::layout::kSongListRect.width - 72.0f;
     const float child_text_x = song_select::layout::kSongListRect.x + 58.0f;
-    const float author_x = song_select::layout::kSongListRect.x + song_select::layout::kSongListRect.width - 120.0f;
     float child_y = item_y + 46.0f;
     for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
         const song_select::chart_option& chart = *filtered[static_cast<size_t>(chart_index)];
@@ -49,10 +79,27 @@ void draw_chart_rows(const song_select::state& state,
             const ui::row_state child_state = ui::draw_selectable_row(child_rect, child_selected, 0.0f);
             (void)child_state;
         }
-        ui::draw_text_f(TextFormat("%s %s Lv.%.1f", key_mode_label(chart.meta.key_count).c_str(), chart.meta.difficulty.c_str(),
-                                   chart.meta.level),
-                        child_text_x, child_y, 18, child_selected ? theme.text : theme.text_secondary);
-        ui::draw_text_f(chart.meta.chart_author.c_str(), author_x, child_y + 1.0f, 14, theme.text_muted);
+        const float key_x = child_text_x;
+        const float baseline_y = child_y;
+        const Rectangle difficulty_rect = {key_x + 34.0f, baseline_y, 120.0f, 18.0f};
+        const Rectangle level_rect = {difficulty_rect.x + difficulty_rect.width + 4.0f, baseline_y, 56.0f, 18.0f};
+        const Rectangle author_rect = {level_rect.x + level_rect.width + 14.0f, baseline_y + 1.0f, 92.0f, 16.0f};
+        const Rectangle rank_rect = {author_rect.x + author_rect.width + 10.0f, baseline_y - 1.0f, 34.0f, 20.0f};
+        ui::draw_text_f(key_mode_label(chart.meta.key_count).c_str(), key_x, child_y, 18,
+                        key_mode_color(chart.meta.key_count));
+        draw_marquee_text(chart.meta.difficulty.c_str(), difficulty_rect, 18,
+                          child_selected ? theme.text : theme.text_secondary, now);
+        ui::draw_text_in_rect(TextFormat("Lv.%.1f", chart.meta.level), 17, level_rect,
+                              child_selected ? theme.text_secondary : theme.text_muted, ui::text_align::left);
+        draw_marquee_text(chart.meta.chart_author.c_str(), author_rect, 14, theme.text_muted, now);
+        if (chart.best_local_rank.has_value()) {
+            DrawRectangleRec(rank_rect, theme.section);
+            DrawRectangleLinesEx(rank_rect, 1.5f, theme.border_light);
+            ui::draw_text_in_rect(rank_label(*chart.best_local_rank), 14, rank_rect,
+                                  rank_color(*chart.best_local_rank), ui::text_align::center);
+        } else {
+            ui::draw_text_in_rect("-", 16, rank_rect, theme.text_muted, ui::text_align::center);
+        }
         child_y += 30.0f;
     }
 }
@@ -74,7 +121,7 @@ std::optional<list_hit> hit_test_song_list(const state& state, Vector2 mouse) {
             float child_y = item_y + 46.0f;
             for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
                 const Rectangle child_rect = {layout::kSongListRect.x + 46.0f, child_y - 6.0f,
-                                              layout::kSongListRect.width - 92.0f, 28.0f};
+                                              layout::kSongListRect.width - 72.0f, 28.0f};
                 if (CheckCollisionPointRec(mouse, child_rect)) {
                     return list_hit{.song_index = i, .chart_index = chart_index};
                 }

@@ -39,6 +39,7 @@ private:
     void open_overwrite_chart_confirmation(song_select::chart_import_request request);
     bool adjust_selected_song_local_offset(int delta_ms);
     bool apply_recent_result_offset();
+    void reload_selected_chart_ranking();
     bool handle_song_list_pointer(Vector2 mouse, bool left_pressed, bool right_pressed);
     void apply_context_menu_command(song_select::context_menu_command command);
     void apply_confirmation_command(song_select::confirmation_command command);

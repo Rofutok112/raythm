@@ -13,6 +13,7 @@ public:
     result_scene(scene_manager& manager, result_data result, bool ranking_enabled,
                  song_data song, std::string chart_path, chart_meta chart, int key_count);
 
+    void on_enter() override;
     void update(float dt) override;
     void draw() override;
 

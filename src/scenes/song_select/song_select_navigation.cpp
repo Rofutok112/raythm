@@ -7,6 +7,7 @@
 #include "play_scene.h"
 #include "settings_scene.h"
 #include "song_create_scene.h"
+#include "song_select/song_select_last_played.h"
 #include "title_scene.h"
 
 namespace song_select {
@@ -39,6 +40,7 @@ std::unique_ptr<scene> make_edit_chart_scene(scene_manager& manager, const song_
 }
 
 std::unique_ptr<scene> make_play_scene(scene_manager& manager, const song_entry& song, const chart_option& chart) {
+    save_last_played_selection(song.song.meta.song_id, chart.meta.chart_id);
     return std::make_unique<play_scene>(manager, song.song, chart.path, chart.meta.key_count);
 }
 
