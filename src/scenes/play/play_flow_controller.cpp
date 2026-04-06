@@ -132,8 +132,10 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         if (!state.hitsound_path.empty() && event.play_hitsound && event.result != judge_result::miss) {
             ++result.hitsound_count;
         }
-        state.display_judge = event;
-        state.judge_feedback_timer = 1.0f;
+        if (event.show_feedback) {
+            state.display_judge = event;
+            state.judge_feedback_timer = 1.0f;
+        }
     }
     state.combo_display = state.score_system.get_combo();
 
@@ -156,7 +158,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
     const std::vector<note_state>& note_states = state.judge_system.note_states();
     const bool chart_finished = !note_states.empty() &&
         std::all_of(note_states.begin(), note_states.end(), [](const note_state& note_state) {
-            return note_state.completed;
+            return note_state.is_completed();
         });
 
     if (chart_finished) {

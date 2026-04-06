@@ -238,7 +238,7 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
                 if (note_state.note_ref.type == note_type::hold) {
                     const double tail_target_ms = state.timing_engine.tick_to_ms(note_state.note_ref.end_tick);
                     const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_ms));
-                    const float visual_head_z = note_state.holding ? judgement_z : head_z;
+                    const float visual_head_z = note_state.is_holding() ? judgement_z : head_z;
                     const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);
                     const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);
                     const float hold_height = kHoldNoteBaseHeight * g_settings.note_height;

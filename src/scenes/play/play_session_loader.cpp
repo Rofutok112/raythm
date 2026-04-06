@@ -41,6 +41,14 @@ double calculate_song_end_ms(const chart_data& chart, const timing_engine& engin
     return std::max(engine.tick_to_ms(last_tick) + 2000.0, audio.get_bgm_length_seconds() * 1000.0);
 }
 
+int calculate_total_judge_points(const chart_data& chart) {
+    int total = 0;
+    for (const note_data& note : chart.notes) {
+        total += note.type == note_type::hold ? 2 : 1;
+    }
+    return total;
+}
+
 }  // namespace
 
 namespace play_session_loader {
@@ -104,7 +112,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.timing_engine.init(state.chart_data->timing_events, state.chart_data->meta.resolution, effective_offset_ms);
     state.start_ms = std::max(0.0, state.timing_engine.tick_to_ms(state.start_tick));
     state.judge_system.init(state.chart_data->notes, state.timing_engine);
-    state.score_system.init(static_cast<int>(state.chart_data->notes.size()));
+    state.score_system.init(calculate_total_judge_points(*state.chart_data));
     state.gauge = gauge{};
 
     audio_manager& audio = audio_manager::instance();

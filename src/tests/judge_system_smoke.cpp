@@ -55,7 +55,8 @@ int main() {
         std::cerr << "Last simultaneous judge failed\n";
         return EXIT_FAILURE;
     }
-    if (!judge.note_states()[1].judged || judge.note_states()[1].completed || !judge.note_states()[1].holding) {
+    if (!judge.note_states()[1].is_judged() || judge.note_states()[1].is_completed() ||
+        !judge.note_states()[1].is_holding()) {
         std::cerr << "Hold head judge should keep the note active until completion\n";
         return EXIT_FAILURE;
     }
@@ -72,7 +73,7 @@ int main() {
         std::cerr << "Hold release miss failed\n";
         return EXIT_FAILURE;
     }
-    if (!judge.note_states()[1].completed || judge.note_states()[1].holding) {
+    if (!judge.note_states()[1].is_completed() || judge.note_states()[1].is_holding()) {
         std::cerr << "Released hold should be marked completed\n";
         return EXIT_FAILURE;
     }
@@ -126,15 +127,16 @@ int main() {
         std::cerr << "Holding through the end should emit a perfect display judge\n";
         return EXIT_FAILURE;
     }
-    if (hold_release_success->play_hitsound || hold_release_success->apply_gameplay_effects) {
-        std::cerr << "Hold completion display judge should be presentation-only\n";
+    if (hold_release_success->play_hitsound || !hold_release_success->apply_gameplay_effects ||
+        !hold_release_success->show_feedback) {
+        std::cerr << "Hold completion judge should score without replaying hitsounds\n";
         return EXIT_FAILURE;
     }
-    if (!hold_release_success_judge.note_states().front().completed) {
+    if (!hold_release_success_judge.note_states().front().is_completed()) {
         std::cerr << "Successful hold should be marked completed at the end\n";
         return EXIT_FAILURE;
     }
-    if (hold_release_success_judge.note_states().front().holding) {
+    if (hold_release_success_judge.note_states().front().is_holding()) {
         std::cerr << "Hold state should finish once the end timing has passed\n";
         return EXIT_FAILURE;
     }
@@ -147,13 +149,15 @@ int main() {
     hold_release_after_end_judge.update(1000.0, input);
     input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1510.0);
     hold_release_after_end_judge.update(1510.0, input);
-    if (!hold_release_after_end_judge.note_states().front().completed ||
-        hold_release_after_end_judge.note_states().front().holding) {
+    if (!hold_release_after_end_judge.note_states().front().is_completed() ||
+        hold_release_after_end_judge.note_states().front().is_holding()) {
         std::cerr << "Releasing after hold end should still complete the note\n";
         return EXIT_FAILURE;
     }
-    if (hold_release_after_end_judge.get_last_judge().has_value()) {
-        std::cerr << "Releasing after hold end should not emit an extra judge\n";
+    const std::optional<judge_event> hold_release_after_end = hold_release_after_end_judge.get_last_judge();
+    if (!hold_release_after_end.has_value() || hold_release_after_end->play_hitsound ||
+        !hold_release_after_end->apply_gameplay_effects || hold_release_after_end->show_feedback) {
+        std::cerr << "Releasing after hold end should still award the tail without extra feedback\n";
         return EXIT_FAILURE;
     }
 
@@ -184,9 +188,9 @@ int main() {
     input.set_key_count(4);
     input.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 1000.0);
     lane_progression_judge.update(1000.0, input);
-    const std::vector<judge_event>& lane_progression_events = lane_progression_judge.get_judge_events();
-    if (lane_progression_events.size() != 1 || lane_progression_events.front().lane != 0 ||
-        lane_progression_events.front().result != judge_result::perfect) {
+    const std::vector<note_state>& lane_progression_states = lane_progression_judge.note_states();
+    if (!lane_progression_states[1].is_completed() ||
+        lane_progression_states[1].result != judge_result::perfect) {
         std::cerr << "Lane-based candidate search should still reach the next in-window note\n";
         return EXIT_FAILURE;
     }
@@ -201,15 +205,14 @@ int main() {
     adjacent_hold_judge.update(1460.0, input);
     input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1520.0);
     adjacent_hold_judge.update(1520.0, input);
-    if (!adjacent_hold_judge.note_states()[0].completed || !adjacent_hold_judge.note_states()[1].holding ||
-        adjacent_hold_judge.note_states()[1].completed) {
+    if (!adjacent_hold_judge.note_states()[0].is_completed() || !adjacent_hold_judge.note_states()[1].is_holding() ||
+        adjacent_hold_judge.note_states()[1].is_completed()) {
         std::cerr << "Next same-lane hold should stay active after previous hold ends\n";
         return EXIT_FAILURE;
     }
-    const std::optional<judge_event> adjacent_hold_judge_event = adjacent_hold_judge.get_last_judge();
-    if (!adjacent_hold_judge_event.has_value() || adjacent_hold_judge_event->result != judge_result::good ||
-        adjacent_hold_judge_event->lane != 1) {
-        std::cerr << "Next same-lane hold should still receive its graded head judge\n";
+    if (adjacent_hold_judge.note_states()[1].result != judge_result::perfect) {
+        std::cerr << "Next same-lane hold should still receive its graded head judge: actual="
+                  << static_cast<int>(adjacent_hold_judge.note_states()[1].result) << "\n";
         return EXIT_FAILURE;
     }
 
