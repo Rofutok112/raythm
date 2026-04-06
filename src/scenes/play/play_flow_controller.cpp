@@ -114,9 +114,12 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         return result;
     }
 
-    state.current_ms = context.bgm_audio_time_ms.has_value()
-                           ? *context.bgm_audio_time_ms
-                           : state.current_ms + static_cast<double>(context.dt) * 1000.0;
+    const double advanced_ms = state.current_ms + static_cast<double>(context.dt) * 1000.0;
+    if (context.bgm_audio_time_ms.has_value()) {
+        state.current_ms = std::max(advanced_ms, *context.bgm_audio_time_ms);
+    } else {
+        state.current_ms = advanced_ms;
+    }
     state.input_handler.update(state.current_ms);
     state.judge_system.update(state.current_ms, state.input_handler);
     const std::vector<judge_event>& judge_events = state.judge_system.get_judge_events();
@@ -156,7 +159,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
             return note_state.completed;
         });
 
-    if (chart_finished && (context.enter_pressed || context.left_click_pressed)) {
+    if (chart_finished) {
         state.final_result = state.score_system.get_result_data();
         state.result_transition_playing = true;
         state.result_transition_timer = 0.0f;

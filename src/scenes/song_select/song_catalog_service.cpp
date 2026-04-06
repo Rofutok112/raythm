@@ -90,11 +90,11 @@ catalog_data load_catalog() {
         }
 
         std::sort(entry.charts.begin(), entry.charts.end(), [](const chart_option& left, const chart_option& right) {
-            if (left.meta.level != right.meta.level) {
-                return left.meta.level < right.meta.level;
-            }
             if (left.meta.key_count != right.meta.key_count) {
                 return left.meta.key_count < right.meta.key_count;
+            }
+            if (left.meta.level != right.meta.level) {
+                return left.meta.level < right.meta.level;
             }
             return left.meta.difficulty < right.meta.difficulty;
         });
