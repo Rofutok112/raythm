@@ -7,8 +7,8 @@
 #include "bass.h"
 
 namespace {
-constexpr unsigned long kLowLatencyUpdatePeriodMs = 10;
-constexpr unsigned long kLowLatencyDeviceBufferMs = 20;
+constexpr unsigned long kLowLatencyUpdatePeriodMs = 5;
+constexpr unsigned long kLowLatencyDeviceBufferMs = 10;
 constexpr unsigned long kSeSampleMaxVoices = 16;
 
 struct se_sample_entry {

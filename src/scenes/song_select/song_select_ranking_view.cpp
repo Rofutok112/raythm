@@ -1,5 +1,9 @@
 #include "song_select/song_select_ranking_view.h"
 
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 #include <string>
 
 #include "song_select/song_select_layout.h"
@@ -46,6 +50,70 @@ int source_index(ranking_service::source source) {
     return source == ranking_service::source::local ? 0 : 1;
 }
 
+std::optional<std::chrono::system_clock::time_point> parse_recorded_at_utc(const std::string& value) {
+    if (value.empty()) {
+        return std::nullopt;
+    }
+
+    std::tm utc_tm{};
+    std::istringstream input(value);
+    input >> std::get_time(&utc_tm, "%Y-%m-%dT%H:%M:%SZ");
+    if (input.fail()) {
+        return std::nullopt;
+    }
+
+#ifdef _WIN32
+    const std::time_t raw_time = _mkgmtime(&utc_tm);
+#else
+    const std::time_t raw_time = timegm(&utc_tm);
+#endif
+    if (raw_time == static_cast<std::time_t>(-1)) {
+        return std::nullopt;
+    }
+
+    return std::chrono::system_clock::from_time_t(raw_time);
+}
+
+std::string format_relative_recorded_at(const std::string& recorded_at) {
+    const auto parsed_time = parse_recorded_at_utc(recorded_at);
+    if (!parsed_time.has_value()) {
+        return "-";
+    }
+
+    const auto now = std::chrono::system_clock::now();
+    auto delta_sec = std::chrono::duration_cast<std::chrono::seconds>(now - *parsed_time).count();
+    if (delta_sec < 0) {
+        delta_sec = 0;
+    }
+
+    if (delta_sec < 60) {
+        return std::to_string(delta_sec) + "s ago";
+    }
+
+    auto delta = delta_sec / 60;
+
+    if (delta < 60) {
+        return std::to_string(delta) + "m ago";
+    }
+
+    const long long hours = delta / 60;
+    if (hours < 24) {
+        return std::to_string(hours) + "h ago";
+    }
+
+    const long long days = hours / 24;
+    if (days < 30) {
+        return std::to_string(days) + "d ago";
+    }
+
+    const long long months = days / 30;
+    if (months < 12) {
+        return std::to_string(months) + "mo ago";
+    }
+
+    return std::to_string(months / 12) + "y ago";
+}
+
 std::string format_score(int value) {
     std::string digits = std::to_string(std::max(0, value));
     for (int insert_at = static_cast<int>(digits.size()) - 3; insert_at > 0; insert_at -= 3) {
@@ -83,7 +151,8 @@ void draw_ranking_row(const ranking_service::entry& entry, float y, float offset
     const Rectangle rank_rect = {content.x + 52.0f, content.y, 48.0f, content.height};
     const Rectangle accuracy_rect = {content.x + 124.0f, content.y, 108.0f, content.height};
     const Rectangle combo_rect = {content.x + 254.0f, content.y, 104.0f, content.height};
-    const Rectangle score_rect = {content.x + 382.0f, content.y, content.width - 382.0f, content.height};
+    const Rectangle recorded_at_rect = {content.x + 378.0f, content.y, 90.0f, content.height};
+    const Rectangle score_rect = {content.x + 476.0f, content.y, content.width - 476.0f, content.height};
 
     DrawRectangleRec(rank_rect, with_alpha(theme.section, alpha));
     DrawRectangleLinesEx(rank_rect, 1.5f, with_alpha(theme.border_light, alpha));
@@ -91,7 +160,9 @@ void draw_ranking_row(const ranking_service::entry& entry, float y, float offset
     ui::draw_text_in_rect(TextFormat("%02d", entry.placement), 18, placement_rect, with_alpha(theme.text, alpha), ui::text_align::center);
     ui::draw_text_in_rect(rank_label(entry.clear_rank), 17, rank_rect, with_alpha(rank_color(entry.clear_rank), alpha), ui::text_align::center);
     ui::draw_text_in_rect(TextFormat("%.2f%%", entry.accuracy), 17, accuracy_rect, with_alpha(theme.text_secondary, alpha), ui::text_align::left);
-    ui::draw_text_in_rect(TextFormat("Max Combo %d", entry.max_combo), 14, combo_rect, with_alpha(theme.text_muted, alpha), ui::text_align::left);
+    ui::draw_text_in_rect(TextFormat("%d Combo", entry.max_combo), 14, combo_rect, with_alpha(theme.text_muted, alpha), ui::text_align::left);
+    ui::draw_text_in_rect(format_relative_recorded_at(entry.recorded_at).c_str(), 14, recorded_at_rect,
+                          with_alpha(theme.text_muted, alpha), ui::text_align::left);
     const std::string score_label = format_score(entry.score);
     draw_score_text(score_label, score_rect, with_alpha(theme.text, alpha));
 }

@@ -234,11 +234,15 @@ int main() {
         const fs::path install_dir = temp_local_app_data / "install";
         const fs::path staged_dir = temp_local_app_data / "staged";
         const fs::path backup_dir = temp_local_app_data / "backup";
-        fs::create_directories(install_dir, ec);
-        fs::create_directories(staged_dir, ec);
+        fs::create_directories(install_dir / "assets" / "charts", ec);
+        fs::create_directories(staged_dir / "assets" / "charts", ec);
         {
             std::ofstream output(install_dir / "raythm.exe");
             output << "old";
+        }
+        {
+            std::ofstream output(install_dir / "assets" / "charts" / "legacy-only.rchart");
+            output << "legacy";
         }
         {
             std::ofstream output(staged_dir / "raythm.exe");
@@ -247,6 +251,10 @@ int main() {
         {
             std::ofstream output(staged_dir / "Updater.exe");
             output << "skip";
+        }
+        {
+            std::ofstream output(staged_dir / "assets" / "charts" / "new-only.rchart");
+            output << "new-chart";
         }
         expect(updater::apply_staged_update(install_dir, staged_dir, backup_dir),
                "Expected staged update helper to copy staged files into the install root.",
@@ -259,6 +267,12 @@ int main() {
                ok);
         expect(!fs::exists(install_dir / "Updater.exe"),
                "Expected staged update helper to avoid overwriting the running updater executable.",
+               ok);
+        expect(!fs::exists(install_dir / "assets" / "charts" / "legacy-only.rchart"),
+               "Expected staged update helper to fully replace bundled assets contents.",
+               ok);
+        expect(fs::is_regular_file(install_dir / "assets" / "charts" / "new-only.rchart"),
+               "Expected staged update helper to copy new bundled assets files.",
                ok);
         expect(updater::ensure_process_stopped("definitely-not-running.exe", std::chrono::milliseconds(1)),
                "Expected process stop helper to succeed immediately when the target process is absent.",
