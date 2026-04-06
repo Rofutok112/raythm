@@ -68,10 +68,13 @@ void play_note_draw_queue::update_visible_window(const std::vector<note_state>& 
         std::vector<size_t>& active = active_draw_notes_by_lane_[static_cast<size_t>(lane)];
         std::erase_if(active, [&](size_t idx) {
             const note_state& state = note_states[idx];
-            if (state.completed && !state.holding) {
+            if (state.note_ref.type == note_type::hold) {
+                return state.is_completed();
+            }
+            if (state.is_completed() && !state.is_holding()) {
                 return true;
             }
-            if (state.holding) {
+            if (state.is_holding()) {
                 return false;
             }
             const float head_z = static_cast<float>(judgement_z + lane_speed * (note_target_ms_[idx] - visual_ms));

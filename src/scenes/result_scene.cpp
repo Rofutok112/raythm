@@ -5,6 +5,7 @@
 
 #include "play_scene.h"
 #include "raylib.h"
+#include "ranking_service.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select_scene.h"
@@ -75,6 +76,12 @@ result_scene::result_scene(scene_manager& manager, result_data result, bool rank
                            song_data song, std::string chart_path, chart_meta chart, int key_count)
     : scene(manager), result_(result), ranking_enabled_(ranking_enabled),
       song_(std::move(song)), chart_path_(std::move(chart_path)), chart_(std::move(chart)), key_count_(key_count) {
+}
+
+void result_scene::on_enter() {
+    if (ranking_enabled_) {
+        ranking_service::submit_local_result(chart_, result_);
+    }
 }
 
 void result_scene::return_to_song_select() const {
@@ -196,14 +203,12 @@ void result_scene::draw() {
     ui::draw_section(kStatsRect);
 
     {
-        Rectangle stat_rows[5];
+        Rectangle stat_rows[4];
         ui::vstack(kStatsRowsRect, 40.0f, 0.0f, stat_rows);
         ui::draw_label_value(stat_rows[0], "Max Combo", TextFormat("%d", result_.max_combo), 24, t.text_dim, t.text);
         ui::draw_label_value(stat_rows[1], "Avg Offset", TextFormat("%.1f ms", result_.avg_offset), 24, t.text_dim, t.text);
         ui::draw_label_value(stat_rows[2], "Fast", TextFormat("%d", result_.fast_count), 24, t.text_dim, t.fast);
         ui::draw_label_value(stat_rows[3], "Slow", TextFormat("%d", result_.slow_count), 24, t.text_dim, t.slow);
-        ui::draw_label_value(stat_rows[4], "Ranking", ranking_enabled_ ? "Eligible" : "Disabled",
-                             24, t.text_dim, ranking_enabled_ ? t.success : t.error);
         ui::draw_text_in_rect("ENTER: Song Select    R: Retry    Use AUTO APPLY there", 20,
                               kStatsHintRect, t.text_hint, ui::text_align::left);
     }

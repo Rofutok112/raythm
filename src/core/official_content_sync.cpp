@@ -46,6 +46,13 @@ namespace official_content_sync {
 
 void synchronize() {
     app_paths::ensure_directories();
+    std::error_code ec;
+    fs::remove_all(app_paths::official_root(), ec);
+    ec.clear();
+    fs::create_directories(app_paths::official_songs_root(), ec);
+    ec.clear();
+    fs::create_directories(app_paths::official_charts_root(), ec);
+    ec.clear();
     mirror_directory(app_paths::legacy_songs_root(), app_paths::official_songs_root());
     mirror_directory(app_paths::assets_root() / "charts", app_paths::official_charts_root());
 }

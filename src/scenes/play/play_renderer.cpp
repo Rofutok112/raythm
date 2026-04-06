@@ -96,32 +96,16 @@ const char* judge_text(judge_result result) {
     return "";
 }
 
-const char* input_source_text(input_update_source source) {
-    switch (source) {
-        case input_update_source::simulated: return "simulated";
-        case input_update_source::native_windows: return "native_windows";
-        case input_update_source::polling: return "polling";
-    }
-    return "unknown";
-}
-
 void draw_hud(const play_session_state& state) {
     const result_data result = state.score_system.get_result_data();
     const float live_accuracy = state.score_system.get_live_accuracy();
-    Rectangle score_rows[2];
-    ui::vstack(kScoreRect, 30.0f, 0.0f, score_rows);
     ui::enqueue_text_in_rect(TextFormat("SCORE %07d", result.score), 30,
-                             score_rows[0], g_theme->hud_score, ui::text_align::left);
-    ui::enqueue_text_in_rect(TextFormat("Accuracy %.2f %%", live_accuracy), 22,
-                             score_rows[1], g_theme->hud_score, ui::text_align::left);
+                             kScoreRect, g_theme->hud_score, ui::text_align::left);
 
     ui::enqueue_text_in_rect(TextFormat("FPS: %d", GetFPS()), 20,
                              kFpsRect, g_theme->hud_fps, ui::text_align::right);
-    ui::enqueue_text_in_rect(TextFormat("%.2f", state.current_ms / 1000.0), 30,
+    ui::enqueue_text_in_rect(TextFormat("%.2f%%", live_accuracy), 30,
                              kTimeRect, g_theme->hud_time);
-    ui::enqueue_text_in_rect(TextFormat("INPUT %s (%d)", input_source_text(state.input_handler.last_update_source()),
-                                        state.input_handler.last_update_event_count()),
-                             20, {48.0f, 92.0f, 360.0f, 24.0f}, g_theme->hud_fps, ui::text_align::left);
 
     ui::enqueue_text_in_rect("HEALTH", 24, kHealthLabelRect,
                              g_theme->hud_health_label, ui::text_align::right);
@@ -242,7 +226,7 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
                 if (note_state.note_ref.type == note_type::hold) {
                     const double tail_target_ms = state.timing_engine.tick_to_ms(note_state.note_ref.end_tick);
                     const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_ms));
-                    const float visual_head_z = note_state.holding ? judgement_z : head_z;
+                    const float visual_head_z = note_state.is_holding() ? judgement_z : head_z;
                     const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);
                     const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);
                     const float hold_height = kHoldNoteBaseHeight * g_settings.note_height;

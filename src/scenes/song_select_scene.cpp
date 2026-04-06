@@ -12,8 +12,10 @@
 #include "song_select/song_select_detail_view.h"
 #include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_layout.h"
+#include "song_select/song_select_last_played.h"
 #include "song_select/song_select_list_view.h"
 #include "song_select/song_select_navigation.h"
+#include "song_select/song_select_ranking_view.h"
 #include "theme.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
@@ -36,6 +38,11 @@ song_select_scene::song_select_scene(scene_manager& manager, std::string preferr
 }
 
 void song_select_scene::on_enter() {
+    if (preferred_song_id_.empty() && preferred_chart_id_.empty()) {
+        const song_select::last_played_selection last_played = song_select::load_last_played_selection();
+        preferred_song_id_ = last_played.song_id;
+        preferred_chart_id_ = last_played.chart_id;
+    }
     song_select::reset_for_enter(state_);
     state_.recent_result_offset = recent_result_offset_;
     reload_song_library(preferred_song_id_, preferred_chart_id_);
@@ -59,6 +66,20 @@ void song_select_scene::reload_song_library(const std::string& preferred_song_id
 
 void song_select_scene::sync_selected_song_media() {
     preview_controller_.select_song(song_select::selected_song(state_));
+    reload_selected_chart_ranking();
+}
+
+void song_select_scene::reload_selected_chart_ranking() {
+    const auto filtered = song_select::filtered_charts_for_selected_song(state_);
+    const song_select::chart_option* chart = song_select::selected_chart_for(state_, filtered);
+    const std::string chart_id = chart != nullptr ? chart->meta.chart_id : "";
+    state_.ranking_panel.listing =
+        ranking_service::load_chart_ranking(chart_id, state_.ranking_panel.selected_source, 50);
+    state_.ranking_panel.source_dropdown_open = false;
+    state_.ranking_panel.scroll_y = 0.0f;
+    state_.ranking_panel.scroll_y_target = 0.0f;
+    state_.ranking_panel.scrollbar_dragging = false;
+    state_.ranking_panel.scrollbar_drag_offset = 0.0f;
 }
 
 void song_select_scene::apply_delete_result(const song_select::delete_result& result) {
@@ -184,18 +205,33 @@ void song_select_scene::open_overwrite_chart_confirmation(song_select::chart_imp
 }
 
 bool song_select_scene::adjust_selected_song_local_offset(int delta_ms) {
-    if (state_.selected_song_index < 0 || state_.selected_song_index >= static_cast<int>(state_.songs.size())) {
+    const song_select::song_entry* selected_song = song_select::selected_song(state_);
+    if (selected_song == nullptr) {
         return false;
     }
 
-    auto& song = state_.songs[static_cast<size_t>(state_.selected_song_index)];
-    const int next_offset = std::clamp(song.local_note_offset_ms + delta_ms, -1000, 1000);
-    if (!save_player_song_offset(song.song.meta.song_id, next_offset)) {
+    const auto filtered = song_select::filtered_charts_for_selected_song(state_);
+    const song_select::chart_option* selected_chart = song_select::selected_chart_for(state_, filtered);
+    if (selected_chart == nullptr) {
+        return false;
+    }
+
+    auto& charts = state_.songs[static_cast<size_t>(state_.selected_song_index)].charts;
+    auto chart_it = std::find_if(charts.begin(), charts.end(), [&](const song_select::chart_option& candidate) {
+        return candidate.meta.chart_id == selected_chart->meta.chart_id;
+    });
+    if (chart_it == charts.end()) {
+        return false;
+    }
+
+    auto& chart = *chart_it;
+    const int next_offset = std::clamp(chart.local_note_offset_ms + delta_ms, -1000, 1000);
+    if (!save_player_chart_offset(chart.meta.chart_id, next_offset)) {
         song_select::queue_status_message(state_, "Failed to save local offset.", true);
         return false;
     }
 
-    song.local_note_offset_ms = next_offset;
+    chart.local_note_offset_ms = next_offset;
     return true;
 }
 
@@ -206,6 +242,12 @@ bool song_select_scene::apply_recent_result_offset() {
 
     const song_select::song_entry* selected = song_select::selected_song(state_);
     if (selected == nullptr || selected->song.meta.song_id != state_.recent_result_offset->song_id) {
+        return false;
+    }
+
+    const auto filtered = song_select::filtered_charts_for_selected_song(state_);
+    const song_select::chart_option* chart = song_select::selected_chart_for(state_, filtered);
+    if (chart == nullptr || chart->meta.chart_id != state_.recent_result_offset->chart_id) {
         return false;
     }
 
@@ -257,6 +299,7 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
             }
         } else {
             song_select::apply_song_selection(state_, hit->song_index, chart_index);
+            reload_selected_chart_ranking();
         }
         return true;
     }
@@ -278,6 +321,8 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
         state_, hit->song_index, hit->song_index == state_.selected_song_index ? state_.difficulty_index : 0);
     if (song_changed) {
         sync_selected_song_media();
+    } else {
+        reload_selected_chart_ranking();
     }
     return true;
 }
@@ -421,6 +466,9 @@ void song_select_scene::update(float dt) {
     if (state_.context_menu.open) {
         ui::register_hit_region(state_.context_menu.rect, song_select::layout::kContextMenuLayer);
     }
+    if (state_.ranking_panel.source_dropdown_open) {
+        ui::register_hit_region(song_select::layout::ranking_source_dropdown_menu_rect(), ui::draw_layer::overlay);
+    }
     if (state_.confirmation_dialog.open) {
         ui::register_hit_region(song_select::layout::kConfirmDialogRect, song_select::layout::kModalLayer);
     }
@@ -468,6 +516,14 @@ void song_select_scene::update(float dt) {
         return;
     }
 
+    if (state_.ranking_panel.source_dropdown_open &&
+        IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+        !CheckCollisionPointRec(mouse, song_select::layout::kRankingSourceDropdownRect) &&
+        !CheckCollisionPointRec(mouse, song_select::layout::ranking_source_dropdown_menu_rect())) {
+        state_.ranking_panel.source_dropdown_open = false;
+        return;
+    }
+
     if (IsKeyPressed(KEY_F1) || ui::is_clicked(song_select::layout::kSettingsButtonRect, song_select::layout::kSceneLayer)) {
         song_select::close_context_menu(state_);
         manager_.change_scene(song_select::make_settings_scene(manager_));
@@ -500,6 +556,7 @@ void song_select_scene::update(float dt) {
     }
 
     const bool song_list_hovered = ui::is_hovered(song_select::layout::kSongListViewRect, song_select::layout::kSceneLayer);
+    const bool ranking_list_hovered = ui::is_hovered(song_select::layout::kRankingListRect, song_select::layout::kSceneLayer);
 
     if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
         song_select::close_context_menu(state_);
@@ -540,15 +597,45 @@ void song_select_scene::update(float dt) {
         state_.scroll_y = state_.scroll_y_target;
     }
 
+    const ui::scrollbar_interaction ranking_scrollbar = ui::update_vertical_scrollbar(
+        song_select::layout::kRankingScrollbarTrackRect,
+        song_select::ranking_content_height(state_),
+        state_.ranking_panel.scroll_y_target,
+        state_.ranking_panel.scrollbar_dragging,
+        state_.ranking_panel.scrollbar_drag_offset,
+        song_select::layout::kSceneLayer);
+    state_.ranking_panel.scroll_y_target = ranking_scrollbar.scroll_offset;
+    if (ranking_scrollbar.changed || ranking_scrollbar.dragging) {
+        state_.ranking_panel.scroll_y = state_.ranking_panel.scroll_y_target;
+    }
+
+    if (!ranking_scrollbar.dragging && ranking_list_hovered && wheel != 0.0f) {
+        state_.ranking_panel.scroll_y_target -= wheel * song_select::layout::kScrollWheelStep;
+    }
+
+    const float max_ranking_scroll = ui::vertical_scroll_metrics(song_select::layout::kRankingScrollbarTrackRect,
+                                                                 song_select::ranking_content_height(state_),
+                                                                 state_.ranking_panel.scroll_y_target).max_scroll;
+    state_.ranking_panel.scroll_y_target = std::clamp(state_.ranking_panel.scroll_y_target, 0.0f, max_ranking_scroll);
+    state_.ranking_panel.scroll_y += (state_.ranking_panel.scroll_y_target - state_.ranking_panel.scroll_y) *
+                                     std::min(1.0f, song_select::layout::kScrollLerpSpeed * dt);
+    if (std::fabs(state_.ranking_panel.scroll_y - state_.ranking_panel.scroll_y_target) < 0.5f) {
+        state_.ranking_panel.scroll_y = state_.ranking_panel.scroll_y_target;
+    }
+
     const auto filtered = song_select::filtered_charts_for_selected_song(state_);
     if (!filtered.empty()) {
         state_.difficulty_index = std::clamp(state_.difficulty_index, 0, static_cast<int>(filtered.size()) - 1);
         if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) {
             song_select::close_context_menu(state_);
             state_.difficulty_index = std::max(0, state_.difficulty_index - 1);
+            state_.chart_change_anim_t = 1.0f;
+            reload_selected_chart_ranking();
         } else if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) {
             song_select::close_context_menu(state_);
             state_.difficulty_index = std::min(static_cast<int>(filtered.size()) - 1, state_.difficulty_index + 1);
+            state_.chart_change_anim_t = 1.0f;
+            reload_selected_chart_ranking();
         }
 
         const song_select::song_entry* song = song_select::selected_song(state_);
@@ -606,12 +693,27 @@ void song_select_scene::draw() {
     }
 
     song_select::draw_song_details(state_, preview_controller_);
+    const song_select::ranking_panel_result ranking_result = song_select::draw_ranking_panel(state_);
     song_select::draw_status_message(state_);
     if (background_song_import_prepare_active_ || background_transfer_active_) {
         song_select::draw_busy_overlay(background_transfer_label_);
     }
     apply_context_menu_command(song_select::draw_context_menu(state_));
     apply_confirmation_command(song_select::draw_confirmation_dialog(state_));
+    if (ranking_result.source_dropdown_toggled) {
+        state_.ranking_panel.source_dropdown_open = !state_.ranking_panel.source_dropdown_open;
+    }
+    if (ranking_result.source_clicked_index >= 0) {
+        const ranking_service::source next_source =
+            ranking_result.source_clicked_index == 0 ? ranking_service::source::local : ranking_service::source::online;
+        state_.ranking_panel.source_dropdown_open = false;
+        if (state_.ranking_panel.selected_source != next_source) {
+            state_.ranking_panel.selected_source = next_source;
+            reload_selected_chart_ranking();
+        }
+    } else if (ranking_result.source_dropdown_close_requested) {
+        state_.ranking_panel.source_dropdown_open = false;
+    }
     ui::flush_draw_queue();
 
     state_.scene_fade_in.draw();

@@ -8,6 +8,7 @@
 #include "chart_difficulty.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
+#include "ranking_service.h"
 #include "song_loader.h"
 
 namespace {
@@ -39,13 +40,26 @@ bool is_chart_file_path(const std::filesystem::path& path) {
     return path.extension() == ".rchart";
 }
 
+std::optional<rank> load_best_local_rank(const std::string& chart_id) {
+    if (chart_id.empty()) {
+        return std::nullopt;
+    }
+
+    const ranking_service::listing listing =
+        ranking_service::load_chart_ranking(chart_id, ranking_service::source::local, 1);
+    if (listing.entries.empty()) {
+        return std::nullopt;
+    }
+    return listing.entries.front().clear_rank;
+}
+
 }  // namespace
 
 namespace song_select {
 
 catalog_data load_catalog() {
     catalog_data catalog;
-    const player_song_offset_map song_offsets = load_player_song_offsets();
+    const player_chart_offset_map chart_offsets = load_player_chart_offsets();
 
     const song_load_result legacy_result = song_loader::load_all(path_utils::to_utf8(app_paths::official_songs_root()),
                                                                  content_source::official);
@@ -67,10 +81,6 @@ catalog_data load_catalog() {
     for (const song_data& song : all_songs) {
         song_entry entry;
         entry.song = song;
-        if (const auto it = song_offsets.find(song.meta.song_id); it != song_offsets.end()) {
-            entry.local_note_offset_ms = it->second;
-        }
-
         for (const std::string& chart_path : song.chart_paths) {
             const chart_parse_result parse_result = song_loader::load_chart(chart_path);
             if (!parse_result.success || !parse_result.data.has_value()) {
@@ -86,15 +96,17 @@ catalog_data load_catalog() {
                 meta,
                 chart_source,
                 chart_source == content_source::app_data,
+                chart_offsets.contains(meta.chart_id) ? chart_offsets.at(meta.chart_id) : 0,
+                load_best_local_rank(meta.chart_id),
             });
         }
 
         std::sort(entry.charts.begin(), entry.charts.end(), [](const chart_option& left, const chart_option& right) {
-            if (left.meta.level != right.meta.level) {
-                return left.meta.level < right.meta.level;
-            }
             if (left.meta.key_count != right.meta.key_count) {
                 return left.meta.key_count < right.meta.key_count;
+            }
+            if (left.meta.level != right.meta.level) {
+                return left.meta.level < right.meta.level;
             }
             return left.meta.difficulty < right.meta.difficulty;
         });

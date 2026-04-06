@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cmath>
+#include <string>
 #include <vector>
 
 #include "song_select/song_select_layout.h"
@@ -58,6 +59,20 @@ int main() {
     assert(song_select::expanded_row_height(state, 1) == song_select::layout::kRowHeight);
     assert(song_select::fallback_song_id_after_song_delete(state, 0) == "song-b");
     assert(song_select::fallback_chart_id_after_chart_delete(state, 0, 0) == "chart-a-2");
+
+    song_select::catalog_data large_catalog;
+    for (int i = 0; i < 16; ++i) {
+        const std::string song_id = "song-" + std::to_string(i);
+        const std::string chart_id = "chart-" + std::to_string(i);
+        large_catalog.songs.push_back(make_song(song_id.c_str(), song_id.c_str(),
+                                                {make_chart(chart_id.c_str(), "Normal", 5)}));
+    }
+
+    song_select::state scrolled_state;
+    song_select::apply_catalog(scrolled_state, std::move(large_catalog), "song-15", "chart-15");
+    assert(scrolled_state.selected_song_index == 15);
+    assert(scrolled_state.scroll_y > 0.0f);
+    assert(std::fabs(scrolled_state.scroll_y - scrolled_state.scroll_y_target) < 0.01f);
 
     return 0;
 }

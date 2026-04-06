@@ -114,9 +114,12 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         return result;
     }
 
-    state.current_ms = context.bgm_audio_time_ms.has_value()
-                           ? *context.bgm_audio_time_ms
-                           : state.current_ms + static_cast<double>(context.dt) * 1000.0;
+    const double advanced_ms = state.current_ms + static_cast<double>(context.dt) * 1000.0;
+    if (context.bgm_audio_time_ms.has_value()) {
+        state.current_ms = std::max(advanced_ms, *context.bgm_audio_time_ms);
+    } else {
+        state.current_ms = advanced_ms;
+    }
     state.input_handler.update(state.current_ms);
     state.judge_system.update(state.current_ms, state.input_handler);
     const std::vector<judge_event>& judge_events = state.judge_system.get_judge_events();
@@ -129,8 +132,10 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         if (!state.hitsound_path.empty() && event.play_hitsound && event.result != judge_result::miss) {
             ++result.hitsound_count;
         }
-        state.display_judge = event;
-        state.judge_feedback_timer = 1.0f;
+        if (event.show_feedback) {
+            state.display_judge = event;
+            state.judge_feedback_timer = 1.0f;
+        }
     }
     state.combo_display = state.score_system.get_combo();
 
@@ -153,10 +158,10 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
     const std::vector<note_state>& note_states = state.judge_system.note_states();
     const bool chart_finished = !note_states.empty() &&
         std::all_of(note_states.begin(), note_states.end(), [](const note_state& note_state) {
-            return note_state.completed;
+            return note_state.is_completed();
         });
 
-    if (chart_finished && (context.enter_pressed || context.left_click_pressed)) {
+    if (chart_finished) {
         state.final_result = state.score_system.get_result_data();
         state.result_transition_playing = true;
         state.result_transition_timer = 0.0f;

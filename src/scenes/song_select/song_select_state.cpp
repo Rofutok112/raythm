@@ -7,6 +7,8 @@
 
 namespace song_select {
 
+float scroll_offset_for_selected_song(const state& state);
+
 const song_entry* selected_song(const state& state) {
     if (state.songs.empty() || state.selected_song_index < 0 ||
         state.selected_song_index >= static_cast<int>(state.songs.size())) {
@@ -45,6 +47,7 @@ void reset_for_enter(state& state) {
     state.scroll_y = 0.0f;
     state.scroll_y_target = 0.0f;
     state.song_change_anim_t = 1.0f;
+    state.chart_change_anim_t = 1.0f;
     state.scene_fade_in.restart(scene_fade::direction::in, 0.3f, 0.65f);
     state.scrollbar_dragging = false;
     state.scrollbar_drag_offset = 0.0f;
@@ -53,10 +56,12 @@ void reset_for_enter(state& state) {
     state.status_message.clear();
     state.status_message_is_error = false;
     state.recent_result_offset.reset();
+    state.ranking_panel = {};
 }
 
 void tick_animations(state& state, float dt) {
     state.song_change_anim_t = std::max(0.0f, state.song_change_anim_t - dt * 4.0f);
+    state.chart_change_anim_t = std::max(0.0f, state.chart_change_anim_t - dt * 5.0f);
     state.scene_fade_in.update(dt);
 }
 
@@ -73,6 +78,11 @@ void apply_catalog(state& state, catalog_data catalog,
     state.scrollbar_drag_offset = 0.0f;
     state.context_menu = {};
     state.confirmation_dialog = {};
+    state.ranking_panel.scroll_y = 0.0f;
+    state.ranking_panel.scroll_y_target = 0.0f;
+    state.ranking_panel.source_dropdown_open = false;
+    state.ranking_panel.scrollbar_dragging = false;
+    state.ranking_panel.scrollbar_drag_offset = 0.0f;
 
     if (!preferred_song_id.empty()) {
         for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
@@ -95,6 +105,10 @@ void apply_catalog(state& state, catalog_data catalog,
 
     if (!state.songs.empty()) {
         state.song_change_anim_t = 1.0f;
+        state.chart_change_anim_t = 1.0f;
+        const float restored_scroll = scroll_offset_for_selected_song(state);
+        state.scroll_y = restored_scroll;
+        state.scroll_y_target = restored_scroll;
     }
 }
 
@@ -105,6 +119,7 @@ bool apply_song_selection(state& state, int song_index, int chart_index) {
 
     const int clamped_song_index = std::clamp(song_index, 0, static_cast<int>(state.songs.size()) - 1);
     const bool song_changed = clamped_song_index != state.selected_song_index;
+    const int previous_chart_index = state.difficulty_index;
     state.selected_song_index = clamped_song_index;
 
     const auto filtered = filtered_charts_for_selected_song(state);
@@ -116,6 +131,9 @@ bool apply_song_selection(state& state, int song_index, int chart_index) {
 
     if (song_changed) {
         state.song_change_anim_t = 1.0f;
+    }
+    if (song_changed || previous_chart_index != state.difficulty_index) {
+        state.chart_change_anim_t = 1.0f;
     }
     return song_changed;
 }
@@ -167,6 +185,28 @@ float content_height(const state& state) {
         total += expanded_row_height(state, i);
     }
     return total;
+}
+
+float scroll_offset_for_selected_song(const state& state) {
+    if (state.songs.empty() || state.selected_song_index < 0 ||
+        state.selected_song_index >= static_cast<int>(state.songs.size())) {
+        return 0.0f;
+    }
+
+    float row_top = 0.0f;
+    for (int i = 0; i < state.selected_song_index; ++i) {
+        row_top += expanded_row_height(state, i);
+    }
+
+    const float row_bottom = row_top + expanded_row_height(state, state.selected_song_index);
+    const float view_height = layout::kSongListViewRect.height;
+    const float max_scroll = std::max(0.0f, content_height(state) - view_height);
+
+    float scroll = std::clamp(row_top - 12.0f, 0.0f, max_scroll);
+    if (row_bottom + 12.0f > scroll + view_height) {
+        scroll = std::clamp(row_bottom + 12.0f - view_height, 0.0f, max_scroll);
+    }
+    return scroll;
 }
 
 std::string fallback_song_id_after_song_delete(const state& state, int song_index) {

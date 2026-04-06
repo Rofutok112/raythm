@@ -38,10 +38,10 @@ int main() {
     play_note_draw_queue draw_queue;
 
     std::vector<note_state> note_states = {
-        {note_data{note_type::tap, 0, 0, 0}, 1000.0, 1000.0, false, false, judge_result::miss, false},
-        {note_data{note_type::tap, 0, 0, 0}, 1200.0, 1200.0, false, false, judge_result::miss, false},
-        {note_data{note_type::hold, 0, 1, 480}, 1300.0, 1500.0, false, false, judge_result::miss, false},
-        {note_data{note_type::tap, 0, 1, 0}, 900.0, 900.0, false, false, judge_result::miss, false},
+        {note_data{note_type::tap, 0, 0, 0}, 1000.0, 1000.0, note_progress_state::pending, judge_result::miss},
+        {note_data{note_type::tap, 0, 0, 0}, 1200.0, 1200.0, note_progress_state::pending, judge_result::miss},
+        {note_data{note_type::hold, 0, 1, 480}, 1300.0, 1500.0, note_progress_state::pending, judge_result::miss},
+        {note_data{note_type::tap, 0, 1, 0}, 900.0, 900.0, note_progress_state::pending, judge_result::miss},
     };
 
     draw_queue.init_from_note_states(4, note_states);
@@ -64,23 +64,28 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    note_states[2].judged = true;
-    note_states[2].holding = true;
+    note_states[2].progress = note_progress_state::holding;
     draw_queue.update_visible_window(note_states, 0.1f, 10.0f, 15.0f, 40.0f, 2000.0);
     if (draw_queue.active_indices_for_lane(1).size() != 1) {
         std::cerr << "Holding note should remain active\n";
         return EXIT_FAILURE;
     }
 
-    note_states[2].holding = false;
+    note_states[2].progress = note_progress_state::pending;
+    draw_queue.update_visible_window(note_states, 0.1f, 10.0f, 15.0f, 40.0f, 2000.0);
+    if (draw_queue.active_indices_for_lane(1).size() != 1) {
+        std::cerr << "Unfinished hold should remain active after passing the judge line\n";
+        return EXIT_FAILURE;
+    }
+
+    note_states[2].progress = note_progress_state::holding;
     draw_queue.update_visible_window(note_states, 0.1f, 10.0f, 15.0f, 40.0f, 2000.0);
     if (draw_queue.active_indices_for_lane(1).size() != 1) {
         std::cerr << "Head-judged hold should remain active until completion\n";
         return EXIT_FAILURE;
     }
 
-    note_states[2].completed = true;
-    note_states[2].holding = false;
+    note_states[2].progress = note_progress_state::completed;
     draw_queue.update_visible_window(note_states, 0.1f, 10.0f, 15.0f, 40.0f, 2000.0);
     if (!draw_queue.active_indices_for_lane(1).empty()) {
         std::cerr << "Finished hold note should be removed\n";

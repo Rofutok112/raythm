@@ -14,7 +14,9 @@ public:
     result_data get_result_data() const;
 
 private:
-    int score_ = 0;
+    int normalized_score() const;
+
+    double raw_score_ = 0.0;
     int combo_ = 0;
     int max_combo_ = 0;
     std::array<int, 5> judge_counts_ = {};

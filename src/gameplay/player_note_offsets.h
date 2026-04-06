@@ -3,8 +3,8 @@
 #include <string>
 #include <unordered_map>
 
-using player_song_offset_map = std::unordered_map<std::string, int>;
+using player_chart_offset_map = std::unordered_map<std::string, int>;
 
-player_song_offset_map load_player_song_offsets();
-int load_player_song_offset(const std::string& song_id);
-bool save_player_song_offset(const std::string& song_id, int offset_ms);
+player_chart_offset_map load_player_chart_offsets();
+int load_player_chart_offset(const std::string& chart_id);
+bool save_player_chart_offset(const std::string& chart_id, int offset_ms);

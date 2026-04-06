@@ -1,5 +1,6 @@
 #include "updater/update_workflow.h"
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -74,6 +75,16 @@ std::optional<update_launch_request> parse_updater_arguments(int argc, char* arg
 
         if (const auto value = parse_prefixed_argument(argument, "--checksum-url=")) {
             request.target_release.assets.checksum_url = *value;
+            continue;
+        }
+
+        if (const auto value = parse_prefixed_argument(argument, "--install-root=")) {
+            request.install_root = std::filesystem::path(*value);
+            continue;
+        }
+
+        if (argument == "--run-from-temp-copy") {
+            request.run_from_temp_copy = true;
             continue;
         }
     }

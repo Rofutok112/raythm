@@ -121,15 +121,31 @@ enum class judge_result {
     miss
 };
 
+enum class note_progress_state {
+    pending,
+    holding,
+    completed
+};
+
 // 判定処理用に保持する各ノートの状態。
 struct note_state {
     note_data note_ref;
     double target_ms = 0.0;
     double end_target_ms = 0.0;
-    bool judged = false;     // Head timing has been judged.
-    bool completed = false;  // The note no longer needs any further processing.
+    note_progress_state progress = note_progress_state::pending;
     judge_result result = judge_result::miss;
-    bool holding = false;
+
+    [[nodiscard]] bool is_judged() const {
+        return progress != note_progress_state::pending;
+    }
+
+    [[nodiscard]] bool is_completed() const {
+        return progress == note_progress_state::completed;
+    }
+
+    [[nodiscard]] bool is_holding() const {
+        return progress == note_progress_state::holding;
+    }
 };
 
 // 1 件の判定イベント。
@@ -139,6 +155,7 @@ struct judge_event {
     int lane = 0;
     bool play_hitsound = true;
     bool apply_gameplay_effects = true;
+    bool show_feedback = true;
 };
 
 // 達成率に応じたランク種別。

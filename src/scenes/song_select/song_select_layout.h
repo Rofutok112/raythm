@@ -27,6 +27,22 @@ inline constexpr Rectangle kLeftPanelRect = ui::place(kScreenRect, 750.0f, 660.0
 inline constexpr Rectangle kJacketRect = ui::place(kLeftPanelRect, 320.0f, 320.0f,
                                                    ui::anchor::top_left, ui::anchor::top_left,
                                                    {20.0f, 24.0f});
+inline constexpr Rectangle kRankingPanelRect = ui::place(kLeftPanelRect, kLeftPanelRect.width - 40.0f, 272.0f,
+                                                          ui::anchor::bottom_center, ui::anchor::bottom_center,
+                                                          {0.0f, -18.0f});
+inline constexpr Rectangle kRankingTitleRect = ui::place(kRankingPanelRect, 220.0f, 28.0f,
+                                                         ui::anchor::top_left, ui::anchor::top_left,
+                                                         {20.0f, 10.0f});
+inline constexpr Rectangle kRankingSourceDropdownRect = ui::place(kRankingPanelRect, 116.0f, 28.0f,
+                                                                  ui::anchor::top_right, ui::anchor::top_right,
+                                                                  {-16.0f, 10.0f});
+inline constexpr float kRankingHeaderHeight = 48.0f;
+inline constexpr float kRankingBottomPadding = 12.0f;
+inline constexpr Rectangle kRankingListRect = ui::scroll_view(kRankingPanelRect, kRankingHeaderHeight, kRankingBottomPadding);
+inline constexpr Rectangle kRankingScrollbarTrackRect = ui::place(kRankingListRect, 6.0f, kRankingListRect.height,
+                                                                  ui::anchor::top_right, ui::anchor::top_right,
+                                                                  {-8.0f, 0.0f});
+inline constexpr float kRankingRowHeight = 42.0f;
 inline constexpr float kDetailColumnX = kJacketRect.x + kJacketRect.width + 20.0f;
 inline constexpr float kDetailColumnWidth = kLeftPanelRect.x + kLeftPanelRect.width - kDetailColumnX - 16.0f;
 inline constexpr Rectangle kLocalOffsetLabelRect = {kDetailColumnX, kJacketRect.y + 236.0f, kDetailColumnWidth, 22.0f};
@@ -64,6 +80,15 @@ inline Rectangle make_context_menu_rect(Vector2 anchor, int item_count) {
     rect.x = std::clamp(rect.x, 12.0f, kScreenRect.width - rect.width - 12.0f);
     rect.y = std::clamp(rect.y, 12.0f, kScreenRect.height - rect.height - 12.0f);
     return rect;
+}
+
+inline Rectangle ranking_source_dropdown_menu_rect() {
+    return {
+        kRankingSourceDropdownRect.x,
+        kRankingSourceDropdownRect.y + kRankingSourceDropdownRect.height + 6.0f,
+        kRankingSourceDropdownRect.width,
+        76.0f
+    };
 }
 
 inline Rectangle local_offset_double_left_rect() {

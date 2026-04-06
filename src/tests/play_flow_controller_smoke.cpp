@@ -173,7 +173,7 @@ int main() {
             return EXIT_FAILURE;
         }
         if (result.hitsound_count != 0 || state.score_system.get_combo() != 1) {
-            std::cerr << "Hold completion feedback should not add hitsound or extra score effects\n";
+            std::cerr << "Hold completion should add score effects without replaying hitsounds\n";
             return EXIT_FAILURE;
         }
     }
