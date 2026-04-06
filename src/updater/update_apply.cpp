@@ -41,6 +41,33 @@ bool copy_file_with_retries(const std::filesystem::path& source_path,
     return false;
 }
 
+bool replace_directory_contents_if_present(const std::filesystem::path& source_root,
+                                           const std::filesystem::path& destination_root,
+                                           const std::string& label) {
+    if (!std::filesystem::exists(source_root) || !std::filesystem::is_directory(source_root)) {
+        return true;
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(destination_root, ec);
+    if (ec) {
+        updater::append_update_log(
+            "updater",
+            "failed to reset " + label + " directory " + utf8_path(destination_root) + ": " + ec.message());
+        return false;
+    }
+
+    std::filesystem::create_directories(destination_root, ec);
+    if (ec) {
+        updater::append_update_log(
+            "updater",
+            "failed to recreate " + label + " directory " + utf8_path(destination_root) + ": " + ec.message());
+        return false;
+    }
+
+    return true;
+}
+
 }  // namespace
 
 namespace updater {
@@ -119,8 +146,16 @@ bool apply_staged_update(const std::filesystem::path& install_root,
         return false;
     }
 
+    if (!replace_directory_contents_if_present(staged_root / "assets", install_root / "assets", "assets")) {
+        return false;
+    }
+
     if (copy_directory_contents(staged_root, install_root, true)) {
         return true;
+    }
+
+    if (!replace_directory_contents_if_present(backup_root / "assets", install_root / "assets", "assets")) {
+        return false;
     }
 
     return copy_directory_contents(backup_root, install_root);
