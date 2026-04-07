@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string>
 
 #include "editor/editor_scene_types.h"
@@ -7,6 +8,8 @@
 #include "play/play_session_types.h"
 #include "raylib.h"
 #include "scene.h"
+
+namespace mv { class mv_runtime; }
 
 // プレイ画面。譜面を読み込み、ノートの描画・入力判定・スコア計算を行うメインのゲームシーン。
 class play_scene final : public scene {
@@ -31,4 +34,5 @@ private:
     play_start_request request_;
     play_session_state state_;
     play_note_draw_queue draw_queue_;
+    std::unique_ptr<mv::mv_runtime> mv_runtime_;
 };

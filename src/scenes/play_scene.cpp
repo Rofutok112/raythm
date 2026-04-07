@@ -2,11 +2,16 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <memory>
 #include <optional>
 
 #include "audio_manager.h"
+#include "core/app_paths.h"
 #include "editor_scene.h"
+#include "mv/api/mv_context.h"
+#include "mv/mv_runtime.h"
+#include "mv/render/mv_renderer.h"
 #include "play/play_flow_controller.h"
 #include "play/play_renderer.h"
 #include "play/play_session_loader.h"
@@ -74,6 +79,17 @@ play_scene::play_scene(scene_manager& manager, song_data song, chart_data chart,
 
 void play_scene::on_enter() {
     state_ = play_session_loader::load(request_, draw_queue_);
+
+    // Try to load MV script for this song
+    if (state_.song_data.has_value()) {
+        auto script_file = app_paths::script_path(state_.song_data->meta.song_id);
+        if (std::filesystem::exists(script_file)) {
+            mv_runtime_ = std::make_unique<mv::mv_runtime>();
+            if (!mv_runtime_->load_file(script_file.string())) {
+                mv_runtime_.reset(); // failed to compile, ignore
+            }
+        }
+    }
 }
 
 void play_scene::on_exit() {
@@ -206,6 +222,40 @@ void play_scene::draw() {
     }
 
     play_renderer::draw_world_background();
+
+    // MV script layer (2D, behind notes)
+    if (mv_runtime_ && mv_runtime_->is_loaded()) {
+        mv::context_input mv_input;
+        mv_input.current_ms = get_visual_ms();
+        mv_input.song_length_ms = state_.song_end_ms;
+
+        int current_tick = state_.timing_engine.ms_to_tick(state_.current_ms);
+        mv_input.bpm = state_.timing_engine.get_bpm_at(current_tick);
+
+        double beat_duration_ms = 60000.0 / mv_input.bpm;
+        if (beat_duration_ms > 0) {
+            double ms_in_beat = std::fmod(state_.current_ms, beat_duration_ms);
+            if (ms_in_beat < 0) ms_in_beat += beat_duration_ms;
+            mv_input.beat_phase = static_cast<float>(ms_in_beat / beat_duration_ms);
+            mv_input.beat_number = static_cast<int>(state_.current_ms / beat_duration_ms);
+        }
+
+        mv_input.combo = state_.combo_display;
+        mv_input.key_count = state_.key_count;
+        if (state_.chart_data.has_value()) {
+            mv_input.total_notes = static_cast<int>(state_.chart_data->notes.size());
+        }
+        mv_input.screen_w = static_cast<float>(kScreenWidth);
+        mv_input.screen_h = static_cast<float>(kScreenHeight);
+
+        auto scene_opt = mv_runtime_->tick(mv_input);
+        if (scene_opt.has_value()) {
+            virtual_screen::begin();
+            mv::render_scene(*scene_opt);
+            virtual_screen::end();
+            virtual_screen::draw_to_screen(true);
+        }
+    }
 
     const Camera3D camera = make_play_camera();
     float lane_start_z = 0.0f;

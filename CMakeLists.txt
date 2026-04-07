@@ -77,6 +77,17 @@ add_executable(raythm WIN32 src/main.cpp
         src/mv/lang/mv_vm.h
         src/mv/lang/mv_sandbox.cpp
         src/mv/lang/mv_sandbox.h
+        src/mv/api/mv_scene.h
+        src/mv/api/mv_context.cpp
+        src/mv/api/mv_context.h
+        src/mv/api/mv_builtins.cpp
+        src/mv/api/mv_builtins.h
+        src/mv/render/mv_renderer.cpp
+        src/mv/render/mv_renderer.h
+        src/mv/render/mv_validator.cpp
+        src/mv/render/mv_validator.h
+        src/mv/mv_runtime.cpp
+        src/mv/mv_runtime.h
         src/audio/audio_waveform.cpp
         src/audio/audio_waveform.h
         src/scenes/editor/editor_command.h
@@ -559,6 +570,30 @@ add_executable(mv_lang_smoke
         src/mv/lang/mv_sandbox.h
         src/tests/mv_lang_smoke.cpp)
 
+add_executable(mv_api_smoke
+        src/mv/lang/mv_lexer.cpp
+        src/mv/lang/mv_lexer.h
+        src/mv/lang/mv_ast.h
+        src/mv/lang/mv_parser.cpp
+        src/mv/lang/mv_parser.h
+        src/mv/lang/mv_bytecode.h
+        src/mv/lang/mv_compiler.cpp
+        src/mv/lang/mv_compiler.h
+        src/mv/lang/mv_vm.cpp
+        src/mv/lang/mv_vm.h
+        src/mv/lang/mv_sandbox.cpp
+        src/mv/lang/mv_sandbox.h
+        src/mv/api/mv_scene.h
+        src/mv/api/mv_context.cpp
+        src/mv/api/mv_context.h
+        src/mv/api/mv_builtins.cpp
+        src/mv/api/mv_builtins.h
+        src/mv/render/mv_validator.cpp
+        src/mv/render/mv_validator.h
+        src/mv/mv_runtime.cpp
+        src/mv/mv_runtime.h
+        src/tests/mv_api_smoke.cpp)
+
 set(RAYTHM_INCLUDE_DIRS
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/src/audio
@@ -598,6 +633,7 @@ target_include_directories(editor_panel_controller_smoke PRIVATE ${RAYTHM_INCLUD
 target_include_directories(audio_manager_smoke PRIVATE ${RAYTHM_BASS_DIR} ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(update_version_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(mv_lang_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(mv_api_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_link_libraries(raythm PRIVATE raylib ${RAYTHM_BASS_IMPORT_LIB} comdlg32 crypt32)
 target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)

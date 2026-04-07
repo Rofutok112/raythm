@@ -265,6 +265,21 @@ std::optional<vm_error> vm::run_instruction(call_frame& frame) {
                 break;
             }
         }
+        if (auto* la = std::get_if<std::shared_ptr<mv_list>>(&a)) {
+            if (auto* lb = std::get_if<std::shared_ptr<mv_list>>(&b)) {
+                auto result = std::make_shared<mv_list>();
+                if (*la) result->elements = (*la)->elements;
+                if (*lb) {
+                    result->elements.insert(result->elements.end(),
+                                            (*lb)->elements.begin(), (*lb)->elements.end());
+                }
+                if (static_cast<int>(result->elements.size()) > limits_.max_list_size) {
+                    return vm_error{"list size exceeds limit", line};
+                }
+                push(mv_value{result});
+                break;
+            }
+        }
         return vm_error{"cannot add " + value_type_name(a) + " and " + value_type_name(b), line};
     }
 
