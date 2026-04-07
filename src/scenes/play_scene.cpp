@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <array>
 
 #include "audio_manager.h"
 #include "core/app_paths.h"
@@ -31,6 +32,21 @@ constexpr float kCameraHeight = 42.0f;
 constexpr float kCameraFovY = 42.0f;
 constexpr float kJudgeLineWorldZ = 12.0f;
 constexpr float kMaxGroundDistance = 1000.0f;
+
+std::vector<float> build_mv_spectrum() {
+    std::array<float, 128> fft = {};
+    if (!audio_manager::instance().get_bgm_fft256(fft)) {
+        return {};
+    }
+
+    std::vector<float> spectrum;
+    spectrum.reserve(fft.size());
+    for (float sample : fft) {
+        const float shaped = std::sqrt(std::max(0.0f, sample)) * 8.0f;
+        spectrum.push_back(std::clamp(shaped, 0.0f, 1.0f));
+    }
+    return spectrum;
+}
 
 Vector3 build_camera_forward(float camera_angle_degrees) {
     const float angle_rad = std::clamp(camera_angle_degrees, 5.0f, 90.0f) * DEG2RAD;
@@ -85,12 +101,23 @@ void play_scene::on_enter() {
     // Try to load MV script for this song
     if (state_.song_data.has_value()) {
         auto script_file = app_paths::script_path(state_.song_data->meta.song_id);
+        TraceLog(LOG_INFO, "MV: looking for script at %s", script_file.string().c_str());
         if (std::filesystem::exists(script_file)) {
             mv_runtime_ = std::make_unique<mv::mv_runtime>();
             if (!mv_runtime_->load_file(script_file.string())) {
-                mv_runtime_.reset(); // failed to compile, ignore
+                TraceLog(LOG_WARNING, "MV: compile failed");
+                for (const auto& e : mv_runtime_->last_errors()) {
+                    TraceLog(LOG_WARNING, "MV:   L%d: %s (%s)", e.line, e.message.c_str(), e.phase.c_str());
+                }
+                mv_runtime_.reset();
+            } else {
+                TraceLog(LOG_INFO, "MV: script loaded OK");
             }
+        } else {
+            TraceLog(LOG_INFO, "MV: script file not found");
         }
+    } else {
+        TraceLog(LOG_INFO, "MV: no song_data, skipping script load");
     }
 }
 
@@ -244,6 +271,7 @@ void play_scene::draw() {
 
         mv_input.combo = state_.combo_display;
         mv_input.key_count = state_.key_count;
+        mv_input.spectrum = build_mv_spectrum();
         if (state_.chart_data.has_value()) {
             mv_input.total_notes = static_cast<int>(state_.chart_data->notes.size());
         }
@@ -252,10 +280,24 @@ void play_scene::draw() {
 
         auto scene_opt = mv_runtime_->tick(mv_input);
         if (scene_opt.has_value()) {
+            static int mv_log_count = 0;
+            if (mv_log_count < 3) {
+                TraceLog(LOG_INFO, "MV: tick OK, %d nodes", static_cast<int>(scene_opt->nodes.size()));
+                mv_log_count++;
+            }
             virtual_screen::begin();
             mv::render_scene(*scene_opt);
             virtual_screen::end();
             virtual_screen::draw_to_screen(true);
+        } else {
+            static int mv_fail_count = 0;
+            if (mv_fail_count < 3) {
+                TraceLog(LOG_WARNING, "MV: tick returned nullopt");
+                for (const auto& e : mv_runtime_->last_errors()) {
+                    TraceLog(LOG_WARNING, "MV:   L%d: %s (%s)", e.line, e.message.c_str(), e.phase.c_str());
+                }
+                mv_fail_count++;
+            }
         }
     }
 

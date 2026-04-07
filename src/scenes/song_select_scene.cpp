@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <utility>
 
+#include "core/app_paths.h"
 #include "file_dialog.h"
 #include "player_note_offsets.h"
 #include "raylib.h"
@@ -312,7 +314,7 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
         }
         song_select::open_song_context_menu(
             state_, hit->song_index,
-            song_select::layout::make_context_menu_rect(mouse, 4));
+            song_select::layout::make_context_menu_rect(mouse, 8));
         return true;
     }
 
@@ -422,6 +424,45 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
             state_.context_menu.song_index, state_.context_menu.chart_index);
         song_select::close_context_menu(state_);
         return;
+    case song_select::context_menu_command::new_mv:
+    case song_select::context_menu_command::edit_mv:
+        if (state_.context_menu.song_index >= 0 &&
+            state_.context_menu.song_index < static_cast<int>(state_.songs.size())) {
+            const auto& song = state_.songs[static_cast<size_t>(state_.context_menu.song_index)];
+            song_select::close_context_menu(state_);
+            manager_.change_scene(song_select::make_mv_editor_scene(manager_, song));
+        }
+        return;
+    case song_select::context_menu_command::delete_mv:
+        song_select::open_confirmation_dialog(
+            state_, song_select::pending_confirmation_action::delete_mv,
+            "Delete MV Script",
+            "Are you sure you want to delete this MV script?",
+            "This action cannot be undone.",
+            "DELETE",
+            state_.context_menu.song_index);
+        song_select::close_context_menu(state_);
+        return;
+    case song_select::context_menu_command::export_mv:
+        if (state_.context_menu.song_index >= 0 &&
+            state_.context_menu.song_index < static_cast<int>(state_.songs.size())) {
+            const auto& song = state_.songs[static_cast<size_t>(state_.context_menu.song_index)];
+            song_select::close_context_menu(state_);
+            const auto src = app_paths::script_path(song.song.meta.song_id);
+            if (std::filesystem::exists(src)) {
+                const std::string dest = file_dialog::save_mv_script_file(song.song.meta.song_id + ".rmv");
+                if (!dest.empty()) {
+                    std::error_code ec;
+                    std::filesystem::copy_file(src, dest, std::filesystem::copy_options::overwrite_existing, ec);
+                    if (ec) {
+                        song_select::queue_status_message(state_, "Failed to export MV script.", true);
+                    } else {
+                        song_select::queue_status_message(state_, "MV script exported.", false);
+                    }
+                }
+            }
+        }
+        return;
     }
 }
 
@@ -438,6 +479,21 @@ void song_select_scene::apply_confirmation_command(song_select::confirmation_com
         state_.confirmation_dialog = {};
         return;
     case song_select::confirmation_command::confirm:
+        if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::delete_mv) {
+            const int si = state_.confirmation_dialog.song_index;
+            state_.confirmation_dialog = {};
+            if (si >= 0 && si < static_cast<int>(state_.songs.size())) {
+                const auto& song_id = state_.songs[static_cast<size_t>(si)].song.meta.song_id;
+                std::error_code ec;
+                std::filesystem::remove(app_paths::script_path(song_id), ec);
+                if (ec) {
+                    song_select::queue_status_message(state_, "Failed to delete MV script.", true);
+                } else {
+                    song_select::queue_status_message(state_, "MV script deleted.", false);
+                }
+            }
+            return;
+        }
         if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::delete_song) {
             preview_controller_.stop();
             apply_delete_result(song_select::delete_song(state_, state_.confirmation_dialog.song_index));

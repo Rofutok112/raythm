@@ -22,6 +22,9 @@ std::string save_chart_package_file(const std::string& default_file_name);
 // Open a save file dialog for saving an .rpack file. Returns empty string if cancelled.
 std::string save_song_package_file(const std::string& default_file_name);
 
+// Open a save file dialog for saving an .rmv file. Returns empty string if cancelled.
+std::string save_mv_script_file(const std::string& default_file_name);
+
 // Show a yes/no confirmation dialog. Returns true when the user accepts.
 bool confirm_yes_no(const std::string& title, const std::string& message);
 

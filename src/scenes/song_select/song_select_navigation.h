@@ -16,5 +16,6 @@ std::unique_ptr<scene> make_edit_song_scene(scene_manager& manager, const song_e
 std::unique_ptr<scene> make_new_chart_scene(scene_manager& manager, const song_entry& song, int difficulty_index);
 std::unique_ptr<scene> make_edit_chart_scene(scene_manager& manager, const song_entry& song, const chart_option& chart);
 std::unique_ptr<scene> make_play_scene(scene_manager& manager, const song_entry& song, const chart_option& chart);
+std::unique_ptr<scene> make_mv_editor_scene(scene_manager& manager, const song_entry& song);
 
 }  // namespace song_select

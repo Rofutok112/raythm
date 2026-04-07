@@ -17,6 +17,10 @@ enum class context_menu_command {
     edit_chart,
     export_chart,
     request_delete_chart,
+    new_mv,
+    edit_mv,
+    delete_mv,
+    export_mv,
     close_menu,
 };
 

@@ -34,7 +34,6 @@ struct editor_timeline_note_drag_state {
 
 enum class editor_right_panel_tab {
     timing,
-    mv_script,
 };
 
 enum class editor_pending_action {

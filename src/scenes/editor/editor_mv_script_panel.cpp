@@ -26,7 +26,7 @@ editor_mv_script_panel_result editor_mv_script_panel::draw(
     Rectangle error_rect = {c.x, button_row.y + kButtonRowHeight + kSpacing, c.width, kErrorAreaHeight};
 
     // Text editor
-    ui::draw_text_editor(editor_rect, state.editor, 14, 500);
+    ui::draw_text_editor(editor_rect, state.editor, 20, 500);
 
     // Buttons
     float btn_w = (button_row.width - 4.0f) * 0.5f;

@@ -1,7 +1,9 @@
 #include "song_select/song_select_overlay_view.h"
 
+#include <filesystem>
 #include <vector>
 
+#include "core/app_paths.h"
 #include "song_select/song_select_layout.h"
 #include "theme.h"
 #include "ui_draw.h"
@@ -38,11 +40,20 @@ context_menu_command draw_context_menu(const state& state) {
                                        state.songs[state.context_menu.song_index].song.source != content_source::official;
             const bool can_delete_song = valid_song &&
                                          state.songs[state.context_menu.song_index].song.can_delete;
+
+            const bool has_mv = valid_song &&
+                std::filesystem::exists(app_paths::script_path(
+                    state.songs[state.context_menu.song_index].song.meta.song_id));
+
             entries = {
                 {{"EDIT META", can_edit_song}, context_menu_command::edit_song},
                 {{"NEW CHART", can_add_chart_to_song}, context_menu_command::new_chart},
                 {{"EXPORT SONG", can_export_song}, context_menu_command::export_song},
-                {{"DELETE SONG", can_delete_song}, context_menu_command::request_delete_song}
+                {{"DELETE SONG", can_delete_song}, context_menu_command::request_delete_song},
+                {{"NEW MV", valid_song && !has_mv}, context_menu_command::new_mv},
+                {{"EDIT MV", has_mv}, context_menu_command::edit_mv},
+                {{"EXPORT MV", has_mv}, context_menu_command::export_mv},
+                {{"DELETE MV", has_mv}, context_menu_command::delete_mv},
             };
 
             break;

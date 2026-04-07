@@ -151,6 +151,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_bgm_controller.h
         src/scenes/title/title_spectrum_visualizer.cpp
         src/scenes/title/title_spectrum_visualizer.h
+        src/scenes/mv_editor_scene.cpp
+        src/scenes/mv_editor_scene.h
         src/scenes/song_create_scene.cpp
         src/scenes/song_create_scene.h
         src/scenes/song_select/song_catalog_service.cpp
@@ -651,6 +653,8 @@ target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_timeline_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_panel_controller_smoke PRIVATE raylib)
 target_link_libraries(audio_manager_smoke PRIVATE ${RAYTHM_BASS_IMPORT_LIB})
+target_link_libraries(mv_lang_smoke PRIVATE raylib)
+target_link_libraries(mv_api_smoke PRIVATE raylib)
 target_compile_definitions(raythm_launcher PRIVATE RAYTHM_PACKAGE_VERSION_STRING="${RAYTHM_PACKAGE_VERSION}")
 
 set(RAYTHM_RUNTIME_DLLS

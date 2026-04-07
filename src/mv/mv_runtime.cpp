@@ -7,6 +7,8 @@
 #include <fstream>
 #include <sstream>
 
+#include "raylib.h"
+
 namespace mv {
 
 bool mv_runtime::load_file(const std::string& path) {
@@ -36,10 +38,31 @@ std::optional<scene> mv_runtime::tick(const context_input& input) {
     auto ctx = build_context(input);
     auto result = sandbox_.call("draw", {mv_value{ctx}});
 
-    if (!result.success) return std::nullopt;
+    if (!result.success) {
+        static int log_count_a = 0;
+        if (log_count_a < 5) {
+            TraceLog(LOG_WARNING, "MV tick: call('draw') failed");
+            for (const auto& e : result.errors) {
+                TraceLog(LOG_WARNING, "MV tick:   L%d [%s] %s", e.line, e.phase.c_str(), e.message.c_str());
+            }
+            log_count_a++;
+        }
+        return std::nullopt;
+    }
 
     auto sc = extract_scene(result.value);
-    if (!sc.has_value()) return std::nullopt;
+    if (!sc.has_value()) {
+        static int log_count_b = 0;
+        if (log_count_b < 5) {
+            TraceLog(LOG_WARNING, "MV tick: extract_scene failed (return value is not a Scene)");
+            TraceLog(LOG_WARNING, "MV tick:   value type index = %d", static_cast<int>(result.value.index()));
+            if (auto obj = std::get_if<std::shared_ptr<mv_object>>(&result.value)) {
+                TraceLog(LOG_WARNING, "MV tick:   object type_name = '%s'", (*obj)->type_name.c_str());
+            }
+            log_count_b++;
+        }
+        return std::nullopt;
+    }
 
     // Inject spectrum data into SpectrumBar nodes
     for (auto& node : sc->nodes) {

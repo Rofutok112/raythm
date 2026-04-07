@@ -1,5 +1,7 @@
 #include "mv_sandbox.h"
 
+#include "raylib.h"
+
 namespace mv {
 
 void sandbox::set_limits(const sandbox_limits& limits) {
@@ -46,8 +48,34 @@ bool sandbox::compile(const std::string& source) {
 }
 
 script_result sandbox::call(const std::string& func_name, const std::vector<mv_value>& args) {
+    static int call_count = 0;
+    if (call_count < 3) {
+        TraceLog(LOG_INFO, "MV SANDBOX: call('%s') compiled=%d funcs=%d consts=%d",
+                 func_name.c_str(), compiled_ ? 1 : 0,
+                 static_cast<int>(compiled_prog_.functions.size()),
+                 static_cast<int>(compiled_prog_.constants.size()));
+        auto fit = compiled_prog_.function_map.find(func_name);
+        if (fit != compiled_prog_.function_map.end()) {
+            const auto& func = compiled_prog_.functions[fit->second];
+            TraceLog(LOG_INFO, "MV SANDBOX: func '%s' locals=%d params=%d instrs=%d",
+                     func.name.c_str(), func.local_count, func.param_count,
+                     static_cast<int>(func.code.size()));
+            int limit = static_cast<int>(func.code.size());
+            if (limit > 60) limit = 60;
+            for (int i = 0; i < limit; i++) {
+                const auto& ins = func.code[i];
+                int op_int = static_cast<int>(ins.op);
+                TraceLog(LOG_INFO, "MV SANDBOX:   [%03d] L%d op=%d arg=%u", i, ins.source_line, op_int, ins.arg);
+            }
+        } else {
+            TraceLog(LOG_WARNING, "MV SANDBOX: func '%s' NOT FOUND in map", func_name.c_str());
+        }
+        call_count++;
+    }
+
     if (!compiled_) {
-        return {std::monostate{}, {{"runtime", "no compiled script", 0, 0}}, false};
+        errors_ = {{"runtime", "no compiled script", 0, 0}};
+        return {std::monostate{}, errors_, false};
     }
 
     vm v(compiled_prog_);
@@ -65,9 +93,11 @@ script_result sandbox::call(const std::string& func_name, const std::vector<mv_v
 
     auto result = v.call_function(func_name, args);
     if (!result.success) {
-        return {std::monostate{}, {{"runtime", result.error->message, result.error->line, 0}}, false};
+        errors_ = {{"runtime", result.error->message, result.error->line, 0}};
+        return {std::monostate{}, errors_, false};
     }
 
+    errors_.clear();
     return {std::move(result.value), {}, true};
 }
 

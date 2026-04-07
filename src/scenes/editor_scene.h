@@ -12,7 +12,6 @@
 #include "editor/editor_timing_panel.h"
 #include "editor/editor_panel_controller.h"
 #include "editor/editor_scene_sync.h"
-#include "editor/editor_mv_script_panel.h"
 #include "editor/editor_scene_types.h"
 #include "editor/viewport/editor_timeline_viewport.h"
 #include "raylib.h"
@@ -80,5 +79,4 @@ private:
     save_dialog_state save_dialog_;
     unsaved_changes_dialog_state unsaved_changes_dialog_;
     editor_right_panel_tab right_panel_tab_ = editor_right_panel_tab::timing;
-    editor_mv_script_panel_state mv_script_panel_;
 };

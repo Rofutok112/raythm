@@ -1,6 +1,8 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -196,6 +198,49 @@ def draw(ctx):
     ASSERT(std::abs(rect->y - 75.0f) < 0.01f);
 }
 
+TEST(test_beat_grid_and_spectrum_bar_scene) {
+    const char* src = R"(
+def draw(ctx):
+    bg = Background(fill="#0b0f18")
+    spec = SpectrumBar(x=140, y=520, w=1000, h=180, bar_count=48, fill="#64c8ff", opacity=0.7)
+    grid = BeatGrid(stroke="#ffffff1e", thickness=1.0, beat_phase=ctx.time.beat_phase, opacity=0.4)
+    return Scene([bg, grid, spec])
+)";
+
+    const std::filesystem::path temp_path =
+        std::filesystem::temp_directory_path() / "raythm_mv_api_beat_grid_test.rmv";
+    {
+        std::ofstream ofs(temp_path);
+        ofs << src;
+    }
+
+    mv::mv_runtime rt;
+    ASSERT(rt.load_file(temp_path.string()));
+
+    mv::context_input input;
+    input.beat_phase = 0.25f;
+    input.spectrum = {0.1f, 0.3f, 0.6f};
+
+    auto scene = rt.tick(input);
+    ASSERT(scene.has_value());
+    ASSERT(scene->nodes.size() == 3);
+    ASSERT(std::holds_alternative<mv::background_node>(scene->nodes[0]));
+    ASSERT(std::holds_alternative<mv::beat_grid_node>(scene->nodes[1]));
+    ASSERT(std::holds_alternative<mv::spectrum_bar_node>(scene->nodes[2]));
+
+    auto* grid = std::get_if<mv::beat_grid_node>(&scene->nodes[1]);
+    ASSERT(grid != nullptr);
+    ASSERT(std::abs(grid->beat_phase - 0.25f) < 0.01f);
+
+    auto* spec = std::get_if<mv::spectrum_bar_node>(&scene->nodes[2]);
+    ASSERT(spec != nullptr);
+    ASSERT(spec->spectrum.size() == 3);
+    ASSERT(std::abs(spec->spectrum[1] - 0.3f) < 0.01f);
+
+    std::error_code ec;
+    std::filesystem::remove(temp_path, ec);
+}
+
 // ---- Validator ----
 
 TEST(test_validator_truncates_nodes) {
@@ -290,6 +335,7 @@ int main() {
     RUN(test_builtins_rgb_color);
     RUN(test_builtins_multiple_node_types);
     RUN(test_ctx_access_in_draw);
+    RUN(test_beat_grid_and_spectrum_bar_scene);
     RUN(test_validator_truncates_nodes);
     RUN(test_validator_sanitizes_nan);
     RUN(test_scene_clear_color);
