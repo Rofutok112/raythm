@@ -32,6 +32,11 @@ struct editor_timeline_note_drag_state {
     int current_tick = 0;
 };
 
+enum class editor_right_panel_tab {
+    timing,
+    mv_script,
+};
+
 enum class editor_pending_action {
     none,
     exit_to_song_select,

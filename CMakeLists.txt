@@ -255,7 +255,11 @@ add_executable(raythm WIN32 src/main.cpp
         src/ui/ui_hit.h
         src/ui/ui_draw.h
         src/ui/ui_clip.cpp
-        src/ui/ui_clip.h)
+        src/ui/ui_clip.h
+        src/ui/ui_text_editor.cpp
+        src/ui/ui_text_editor.h
+        src/scenes/editor/editor_mv_script_panel.cpp
+        src/scenes/editor/editor_mv_script_panel.h)
 
 add_executable(raythm_launcher
         src/launcher_main.cpp

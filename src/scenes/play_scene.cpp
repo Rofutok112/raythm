@@ -77,6 +77,8 @@ play_scene::play_scene(scene_manager& manager, song_data song, chart_data chart,
     request_.start_tick = std::max(0, start_tick);
 }
 
+play_scene::~play_scene() = default;
+
 void play_scene::on_enter() {
     state_ = play_session_loader::load(request_, draw_queue_);
 

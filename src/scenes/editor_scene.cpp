@@ -1,8 +1,12 @@
 #include "editor_scene.h"
 
+#include <filesystem>
+#include <fstream>
 #include <memory>
 
 #include "audio_manager.h"
+#include "core/app_paths.h"
+#include "mv/api/mv_builtins.h"
 #include "editor/controller/editor_runtime_controller.h"
 #include "editor/view/editor_cursor_hud_view.h"
 #include "editor/editor_flow_controller.h"
@@ -100,6 +104,17 @@ void editor_scene::on_enter() {
     selected_note_index_ = load_result.selected_note_index;
     timeline_drag_ = {};
     resume_state_.reset();
+
+    // Load MV script if exists
+    auto script_file = app_paths::script_path(song_.meta.song_id);
+    if (std::filesystem::exists(script_file)) {
+        std::ifstream ifs(script_file);
+        std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+        ui::text_editor_set_text(mv_script_panel_.editor, content);
+    } else {
+        ui::text_editor_set_text(mv_script_panel_.editor,
+            "def draw(ctx):\n  return Scene([])\n");
+    }
 }
 
 void editor_scene::on_exit() {
@@ -129,7 +144,7 @@ void editor_scene::update(float dt) {
         IsKeyPressed(KEY_F5),
         IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
         has_active_metadata_input(),
-        timing_panel_.active_input_field != editor_timing_input_field::none,
+        timing_panel_.active_input_field != editor_timing_input_field::none || mv_script_panel_.editor.active,
         timing_panel_.bar_pick_mode,
         timeline_drag_.active,
         save_dialog_submit,
@@ -157,6 +172,7 @@ void editor_scene::update(float dt) {
         space_playback_start_tick_,
         hitsound_path_,
         has_blocking_modal(),
+        mv_script_panel_.editor.active,
         IsKeyPressed(KEY_SPACE),
         IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
         IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
@@ -264,12 +280,33 @@ void editor_scene::draw() {
 
     editor_scene_sync::sync_timing_event_selection(make_sync_context());
     const editor_right_panel_view_result right_panel = editor_right_panel_view::draw({
+        right_panel_tab_,
         &state_->data().timing_events,
         &meter_map_,
         timing_panel_.selected_event_index,
         can_delete_selected_timing_event(),
         virtual_screen::get_virtual_mouse(),
-    }, timing_panel_);
+    }, timing_panel_, mv_script_panel_);
+
+    // Tab switching
+    if (right_panel.timing_tab_clicked) right_panel_tab_ = editor_right_panel_tab::timing;
+    if (right_panel.mv_script_tab_clicked) right_panel_tab_ = editor_right_panel_tab::mv_script;
+
+    // MV Script panel actions
+    if (right_panel.mv_script_result.compile_clicked) {
+        mv::sandbox sandbox;
+        mv::register_builtins_to_sandbox(sandbox);
+        std::string source = ui::text_editor_get_text(mv_script_panel_.editor);
+        mv_script_panel_.compile_success = sandbox.compile(source);
+        mv_script_panel_.errors = sandbox.last_errors();
+        mv_script_panel_.show_compile_result = true;
+    }
+    if (right_panel.mv_script_result.save_clicked) {
+        auto path = app_paths::script_path(song_.meta.song_id);
+        std::filesystem::create_directories(path.parent_path());
+        std::ofstream ofs(path);
+        ofs << ui::text_editor_get_text(mv_script_panel_.editor);
+    }
     const editor_timing_panel_update_result update_result = editor_panel_controller::update_timing_panel(
         metadata_panel_,
         timing_panel_,
