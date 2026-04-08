@@ -33,6 +33,14 @@ constexpr const char* kTitleLoopPath = "assets/audio/title_loop.mp3";
 title_scene::title_scene(scene_manager& manager) : scene(manager) {
 }
 
+void title_scene::start_song_select_transition() {
+    if (transitioning_to_song_select_) {
+        return;
+    }
+    transitioning_to_song_select_ = true;
+    transition_fade_.restart(scene_fade::direction::out, 0.3f, 0.65f);
+}
+
 void title_scene::on_enter() {
     bgm_controller_.configure(kTitleIntroPath, kTitleLoopPath);
     spectrum_visualizer_.reset();
@@ -46,6 +54,7 @@ void title_scene::on_exit() {
 
 // ENTER で曲選択、S で設定画面へ遷移する。
 void title_scene::update(float dt) {
+    ui::begin_hit_regions();
     bgm_controller_.update();
     spectrum_visualizer_.update();
 
@@ -65,9 +74,8 @@ void title_scene::update(float dt) {
         return;
     }
 
-    if (IsKeyPressed(KEY_ENTER)) {
-        transitioning_to_song_select_ = true;
-        transition_fade_.restart(scene_fade::direction::out, 0.3f, 0.65f);
+    if (IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        start_song_select_transition();
         return;
     }
 
@@ -95,7 +103,7 @@ void title_scene::draw() {
 
     Rectangle hint_rows[2];
     ui::vstack(kHintAreaRect, 22.0f, 8.0f, hint_rows);
-    ui::draw_text_in_rect("ENTER: Song Select", 22, hint_rows[0], t.text_muted, ui::text_align::left);
+    ui::draw_text_in_rect("ENTER / LEFT CLICK: Song Select", 22, hint_rows[0], t.text_muted, ui::text_align::left);
     ui::draw_text_in_rect("ESC: Quit", 22, hint_rows[1], t.text_muted, ui::text_align::left);
     if (transitioning_to_song_select_) {
         transition_fade_.draw();

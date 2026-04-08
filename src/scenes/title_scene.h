@@ -16,6 +16,8 @@ public:
     void draw() override;
 
 private:
+    void start_song_select_transition();
+
     bool quitting_ = false;
     scene_fade quit_fade_{scene_fade::direction::out, 1.5f, 1.0f};
     float esc_hold_t_ = 0.0f;
