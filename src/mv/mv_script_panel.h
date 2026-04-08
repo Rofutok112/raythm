@@ -10,8 +10,6 @@
 struct mv_script_panel_state {
     ui::text_editor_state editor;
     std::vector<mv::script_error> errors;
-    bool compile_success = false;
-    bool show_compile_result = false;
 };
 
 struct mv_script_panel_model {
@@ -20,8 +18,7 @@ struct mv_script_panel_model {
 };
 
 struct mv_script_panel_result {
-    bool compile_clicked = false;
-    bool save_clicked = false;
+    bool text_changed = false;
 };
 
 class mv_script_panel {

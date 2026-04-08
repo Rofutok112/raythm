@@ -35,7 +35,7 @@ bool mv_runtime::load_source(const std::string& source) {
 std::optional<scene> mv_runtime::tick(const context_input& input) {
     if (!loaded_) return std::nullopt;
 
-    auto ctx = build_context(input);
+    auto ctx = context_builder_.build(input);
     auto result = sandbox_.call("draw", {mv_value{ctx}});
 
     if (!result.success) {

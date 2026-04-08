@@ -34,6 +34,17 @@ constexpr float kJudgeLineWorldZ = 12.0f;
 constexpr float kMaxGroundDistance = 1000.0f;
 constexpr float kMvSpectrumClampMax = 2.0f;
 
+int sample_mv_waveform_index(const std::vector<float>& waveform, double current_ms, double song_length_ms) {
+    if (waveform.empty() || song_length_ms <= 0.0) {
+        return 0;
+    }
+
+    const double progress = std::clamp(current_ms / song_length_ms, 0.0, 1.0);
+    const std::size_t last = waveform.size() - 1;
+    return static_cast<int>(std::clamp<std::size_t>(
+        static_cast<std::size_t>(progress * static_cast<double>(last)), 0, last));
+}
+
 std::vector<float> build_mv_spectrum() {
     std::array<float, 128> fft = {};
     if (!audio_manager::instance().get_bgm_fft256(fft)) {
@@ -47,6 +58,15 @@ std::vector<float> build_mv_spectrum() {
         spectrum.push_back(std::clamp(shaped, 0.0f, kMvSpectrumClampMax));
     }
     return spectrum;
+}
+
+std::vector<float> build_mv_oscilloscope() {
+    std::array<float, 256> pcm = {};
+    if (!audio_manager::instance().get_bgm_oscilloscope256(pcm)) {
+        return {};
+    }
+
+    return {pcm.begin(), pcm.end()};
 }
 
 Vector3 build_camera_forward(float camera_angle_degrees) {
@@ -273,6 +293,14 @@ void play_scene::draw() {
         mv_input.combo = state_.combo_display;
         mv_input.key_count = state_.key_count;
         mv_input.spectrum = build_mv_spectrum();
+        std::vector<float> oscilloscope = build_mv_oscilloscope();
+        mv_input.oscilloscope = &oscilloscope;
+        mv_input.waveform = &state_.mv_waveform;
+        mv_input.waveform_index =
+            sample_mv_waveform_index(state_.mv_waveform, mv_input.current_ms, mv_input.song_length_ms);
+        if (!state_.mv_waveform.empty()) {
+            mv_input.level = state_.mv_waveform[static_cast<std::size_t>(mv_input.waveform_index)];
+        }
         if (state_.chart_data.has_value()) {
             mv_input.total_notes = static_cast<int>(state_.chart_data->notes.size());
         }

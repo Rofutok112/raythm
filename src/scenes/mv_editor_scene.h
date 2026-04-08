@@ -23,4 +23,6 @@ private:
     song_data song_;
     mv_script_panel_state panel_state_;
     bool dirty_ = false;
+    double last_change_time_ = 0.0;
+    bool pending_compile_ = false;
 };

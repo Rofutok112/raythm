@@ -239,6 +239,7 @@ struct parser_state {
         bool seen_kwarg = false;
 
         while (!check(token_type::rparen) && !at_end()) {
+            int prev_pos = pos;
             // Check for keyword argument: ident = expr
             if (check(token_type::ident) && pos + 1 < static_cast<int>(tokens.size()) &&
                 tokens[pos + 1].type == token_type::assign) {
@@ -255,10 +256,16 @@ struct parser_state {
             }
 
             if (!check(token_type::rparen)) {
-                expect(token_type::comma, "expected ',' or ')'");
+                if (!check(token_type::comma)) {
+                    error("expected ',' or ')'");
+                    break;
+                }
+                advance(); // consume ','
             }
+            // Safety: prevent infinite loop
+            if (pos == prev_pos) break;
         }
-        expect(token_type::rparen, "expected ')'");
+        if (check(token_type::rparen)) advance();
 
         auto e = std::make_unique<expr>();
         e->loc = l;
@@ -305,12 +312,18 @@ struct parser_state {
             advance();
             std::vector<expr_ptr> elements;
             while (!check(token_type::rbracket) && !at_end()) {
+                int prev_pos = pos;
                 elements.push_back(parse_expr());
                 if (!check(token_type::rbracket)) {
-                    expect(token_type::comma, "expected ',' or ']'");
+                    if (!check(token_type::comma)) {
+                        error("expected ',' or ']'");
+                        break;
+                    }
+                    advance(); // consume ','
                 }
+                if (pos == prev_pos) break;
             }
-            expect(token_type::rbracket, "expected ']'");
+            if (check(token_type::rbracket)) advance();
             return make_expr<list_expr>(l, std::move(elements));
         }
 
@@ -322,16 +335,35 @@ struct parser_state {
     // ---- Statement parsing ----
 
     std::vector<stmt_ptr> parse_block() {
-        expect(token_type::colon, "expected ':'");
-        expect(token_type::newline, "expected newline after ':'");
-        expect(token_type::indent, "expected indented block");
+        if (!check(token_type::colon)) {
+            error("expected ':'");
+            synchronize();
+            return {};
+        }
+        advance(); // consume ':'
+        if (!check(token_type::newline)) {
+            error("expected newline after ':'");
+            synchronize();
+            return {};
+        }
+        advance(); // consume newline
+        if (!check(token_type::indent)) {
+            error("expected indented block");
+            return {};
+        }
+        advance(); // consume indent
 
         std::vector<stmt_ptr> body;
         while (!check(token_type::dedent) && !at_end()) {
             skip_newlines();
             if (check(token_type::dedent) || at_end()) break;
+            int prev_pos = pos;
             auto s = parse_stmt();
             if (s) body.push_back(std::move(s));
+            // Safety: if no progress was made, advance to prevent infinite loop
+            if (pos == prev_pos) {
+                advance();
+            }
         }
 
         if (check(token_type::dedent)) advance();
@@ -341,19 +373,43 @@ struct parser_state {
     stmt_ptr parse_func_def() {
         auto l = loc();
         advance(); // consume 'def'
-        const token& name_tok = expect(token_type::ident, "expected function name");
-        std::string name = name_tok.text;
+        if (!check(token_type::ident)) {
+            error("expected function name");
+            synchronize();
+            auto s = std::make_unique<stmt>();
+            s->loc = l;
+            s->kind = func_def{"", {}, {}};
+            return s;
+        }
+        std::string name = advance().text;
 
-        expect(token_type::lparen, "expected '('");
+        if (!check(token_type::lparen)) {
+            error("expected '('");
+            synchronize();
+            auto s = std::make_unique<stmt>();
+            s->loc = l;
+            s->kind = func_def{std::move(name), {}, {}};
+            return s;
+        }
+        advance(); // consume '('
+
         std::vector<std::string> params;
         while (!check(token_type::rparen) && !at_end()) {
-            const token& param_tok = expect(token_type::ident, "expected parameter name");
-            params.push_back(param_tok.text);
+            if (!check(token_type::ident)) {
+                error("expected parameter name");
+                synchronize();
+                break;
+            }
+            params.push_back(advance().text);
             if (!check(token_type::rparen)) {
-                expect(token_type::comma, "expected ',' or ')'");
+                if (!check(token_type::comma)) {
+                    error("expected ',' or ')'");
+                    break;
+                }
+                advance(); // consume ','
             }
         }
-        expect(token_type::rparen, "expected ')'");
+        if (check(token_type::rparen)) advance();
 
         auto body = parse_block();
 
@@ -397,9 +453,24 @@ struct parser_state {
     stmt_ptr parse_for_stmt() {
         auto l = loc();
         advance(); // consume 'for'
-        const token& var_tok = expect(token_type::ident, "expected loop variable");
-        std::string var_name = var_tok.text;
-        expect(token_type::kw_in, "expected 'in'");
+        if (!check(token_type::ident)) {
+            error("expected loop variable");
+            synchronize();
+            auto s = std::make_unique<stmt>();
+            s->loc = l;
+            s->kind = for_stmt{"", make_expr<none_literal>(l), {}};
+            return s;
+        }
+        std::string var_name = advance().text;
+        if (!check(token_type::kw_in)) {
+            error("expected 'in'");
+            synchronize();
+            auto s = std::make_unique<stmt>();
+            s->loc = l;
+            s->kind = for_stmt{std::move(var_name), make_expr<none_literal>(l), {}};
+            return s;
+        }
+        advance(); // consume 'in'
         auto iterable = parse_expr();
         auto body = parse_block();
 
@@ -515,9 +586,14 @@ struct parser_state {
         skip_newlines();
         while (!at_end()) {
             if (had_error && errors.size() > 20) break;
+            int prev_pos = pos;
             auto s = parse_stmt();
             if (s) prog.statements.push_back(std::move(s));
             skip_newlines();
+            // Safety: if no progress was made, advance to prevent infinite loop
+            if (pos == prev_pos) {
+                advance();
+            }
         }
         return prog;
     }

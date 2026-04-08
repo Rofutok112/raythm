@@ -5,6 +5,96 @@
 
 namespace mv {
 
+namespace {
+
+std::optional<vec2> cached_point_from_value(const mv_value& value) {
+    if (auto* obj = std::get_if<std::shared_ptr<mv_object>>(&value)) {
+        if (*obj && (*obj)->cached_point.has_value()) {
+            return (*obj)->cached_point;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<scene_node> cached_scene_node_from_value(const mv_value& value) {
+    if (auto* obj = std::get_if<std::shared_ptr<mv_object>>(&value)) {
+        if (*obj && (*obj)->cached_scene_node.has_value()) {
+            return (*obj)->cached_scene_node;
+        }
+    }
+    return std::nullopt;
+}
+
+void try_build_list_render_caches(mv_list& list) {
+    if (list.elements.empty()) {
+        list.cached_points = std::vector<vec2>{};
+        list.cached_scene_nodes = std::vector<scene_node>{};
+        return;
+    }
+
+    bool all_points = true;
+    bool all_scene_nodes = true;
+    std::vector<vec2> points;
+    std::vector<scene_node> scene_nodes;
+    points.reserve(list.elements.size());
+    scene_nodes.reserve(list.elements.size());
+
+    for (const auto& element : list.elements) {
+        if (all_points) {
+            if (auto point = cached_point_from_value(element)) {
+                points.push_back(*point);
+            } else {
+                all_points = false;
+                points.clear();
+            }
+        }
+        if (all_scene_nodes) {
+            if (auto node = cached_scene_node_from_value(element)) {
+                scene_nodes.push_back(*node);
+            } else {
+                all_scene_nodes = false;
+                scene_nodes.clear();
+            }
+        }
+        if (!all_points && !all_scene_nodes) {
+            break;
+        }
+    }
+
+    list.cached_points = all_points ? std::optional<std::vector<vec2>>(std::move(points)) : std::nullopt;
+    list.cached_scene_nodes = all_scene_nodes
+        ? std::optional<std::vector<scene_node>>(std::move(scene_nodes))
+        : std::nullopt;
+}
+
+void update_list_caches_for_append(mv_list& list, const mv_value& appended) {
+    if (list.cached_points.has_value()) {
+        if (auto point = cached_point_from_value(appended)) {
+            list.cached_points->push_back(*point);
+        } else {
+            list.cached_points.reset();
+        }
+    } else if (list.elements.size() == 1) {
+        if (auto point = cached_point_from_value(appended)) {
+            list.cached_points = std::vector<vec2>{*point};
+        }
+    }
+
+    if (list.cached_scene_nodes.has_value()) {
+        if (auto node = cached_scene_node_from_value(appended)) {
+            list.cached_scene_nodes->push_back(*node);
+        } else {
+            list.cached_scene_nodes.reset();
+        }
+    } else if (list.elements.size() == 1) {
+        if (auto node = cached_scene_node_from_value(appended)) {
+            list.cached_scene_nodes = std::vector<scene_node>{*node};
+        }
+    }
+}
+
+} // namespace
+
 // ---- Helpers ----
 
 bool is_truthy(const mv_value& val) {
@@ -15,6 +105,8 @@ bool is_truthy(const mv_value& val) {
         else if constexpr (std::is_same_v<T, std::string>) return !v.empty();
         else if constexpr (std::is_same_v<T, std::shared_ptr<mv_list>>) return v && !v->elements.empty();
         else if constexpr (std::is_same_v<T, std::shared_ptr<mv_object>>) return v != nullptr;
+        else if constexpr (std::is_same_v<T, native_ref>) return v.index >= 0;
+        else if constexpr (std::is_same_v<T, function_ref>) return v.index >= 0;
         else if constexpr (std::is_same_v<T, std::monostate>) return false;
         else return false;
     }, val);
@@ -28,6 +120,8 @@ std::string value_type_name(const mv_value& val) {
         else if constexpr (std::is_same_v<T, std::string>) return "string";
         else if constexpr (std::is_same_v<T, std::shared_ptr<mv_list>>) return "list";
         else if constexpr (std::is_same_v<T, std::shared_ptr<mv_object>>) return v ? v->type_name : "object";
+        else if constexpr (std::is_same_v<T, native_ref>) return "native_function";
+        else if constexpr (std::is_same_v<T, function_ref>) return "function";
         else if constexpr (std::is_same_v<T, std::monostate>) return "None";
         else return "unknown";
     }, val);
@@ -56,6 +150,8 @@ std::string value_to_string(const mv_value& val) {
         else if constexpr (std::is_same_v<T, std::shared_ptr<mv_object>>) {
             return v ? "<" + v->type_name + ">" : "<null>";
         }
+        else if constexpr (std::is_same_v<T, native_ref>) return "<native>";
+        else if constexpr (std::is_same_v<T, function_ref>) return "<function>";
         else if constexpr (std::is_same_v<T, std::monostate>) return "None";
         else return "?";
     }, val);
@@ -73,13 +169,31 @@ void vm::set_global(const std::string& name, mv_value value) {
 }
 
 void vm::register_native(const std::string& name, native_function fn) {
-    natives_[name] = std::move(fn);
-    globals_[name] = std::string("__native__:" + name);
+    int index = 0;
+    auto it = native_index_by_name_.find(name);
+    if (it == native_index_by_name_.end()) {
+        index = static_cast<int>(native_table_.size());
+        native_index_by_name_[name] = index;
+        native_table_.push_back(std::move(fn));
+    } else {
+        index = it->second;
+        native_table_[static_cast<size_t>(index)] = std::move(fn);
+    }
+    globals_[name] = native_ref{index, false};
 }
 
 void vm::register_native_kwargs(const std::string& name, native_kwargs_function fn) {
-    natives_kwargs_[name] = std::move(fn);
-    globals_[name] = std::string("__native_kwargs__:" + name);
+    int index = 0;
+    auto it = native_kwargs_index_by_name_.find(name);
+    if (it == native_kwargs_index_by_name_.end()) {
+        index = static_cast<int>(native_kwargs_table_.size());
+        native_kwargs_index_by_name_[name] = index;
+        native_kwargs_table_.push_back(std::move(fn));
+    } else {
+        index = it->second;
+        native_kwargs_table_[static_cast<size_t>(index)] = std::move(fn);
+    }
+    globals_[name] = native_ref{index, true};
 }
 
 void vm::set_limits(const sandbox_limits& limits) {
@@ -120,7 +234,7 @@ vm_result vm::run_top_level() {
     // Register all script function names as globals so call opcode can resolve them
     for (auto& [fname, fidx] : program_.function_map) {
         if (fname != "__main__") {
-            globals_[fname] = std::string("__func__:" + fname);
+            globals_[fname] = function_ref{fidx};
         }
     }
 
@@ -415,49 +529,33 @@ std::optional<vm_error> vm::run_instruction(call_frame& frame) {
         int arg_count = static_cast<int>(instr.arg);
         mv_value callee = stack_[stack_.size() - 1 - arg_count];
 
-        // Check for native function
-        if (auto* s = std::get_if<std::string>(&callee)) {
-            if (s->substr(0, 10) == "__native__") {
-                std::string native_name = s->substr(11);
-                auto it = natives_.find(native_name);
-                if (it != natives_.end()) {
-                    std::vector<mv_value> args(arg_count);
-                    for (int i = arg_count - 1; i >= 0; i--) args[i] = pop();
-                    pop(); // callee
-                    push(it->second(args));
-                    break;
-                }
-            }
-            if (s->substr(0, 17) == "__native_kwargs__") {
-                std::string native_name = s->substr(18);
-                auto it = natives_kwargs_.find(native_name);
-                if (it != natives_kwargs_.end()) {
-                    std::vector<mv_value> args(arg_count);
-                    for (int i = arg_count - 1; i >= 0; i--) args[i] = pop();
-                    pop(); // callee
+        if (auto* native = std::get_if<native_ref>(&callee)) {
+            std::vector<mv_value> args(arg_count);
+            for (int i = arg_count - 1; i >= 0; i--) args[i] = pop();
+            pop(); // callee
+            if (native->kwargs) {
+                if (native->index >= 0 && native->index < static_cast<int>(native_kwargs_table_.size())) {
                     std::vector<std::pair<std::string, mv_value>> empty_kwargs;
-                    push(it->second(args, empty_kwargs));
+                    push(native_kwargs_table_[static_cast<size_t>(native->index)](args, empty_kwargs));
                     break;
                 }
+            } else if (native->index >= 0 && native->index < static_cast<int>(native_table_.size())) {
+                push(native_table_[static_cast<size_t>(native->index)](args));
+                break;
             }
         }
 
-        // Script function - resolve __func__:name marker to function_map
-        std::string func_name;
-        if (auto* s = std::get_if<std::string>(&callee)) {
-            if (s->size() > 8 && s->substr(0, 8) == "__func__") {
-                func_name = s->substr(9);
-            } else {
-                func_name = *s;
+        int func_index = -1;
+        if (auto* fn = std::get_if<function_ref>(&callee)) {
+            func_index = fn->index;
+        } else if (auto* s = std::get_if<std::string>(&callee)) {
+            auto func_it = program_.function_map.find(*s);
+            if (func_it != program_.function_map.end()) {
+                func_index = func_it->second;
             }
         }
 
-        auto func_it = program_.function_map.end();
-        if (!func_name.empty()) {
-            func_it = program_.function_map.find(func_name);
-        }
-
-        if (func_it == program_.function_map.end()) {
+        if (func_index < 0 || func_index >= static_cast<int>(program_.functions.size())) {
             return vm_error{"'" + value_to_string(callee) + "' is not callable", line};
         }
 
@@ -465,7 +563,7 @@ std::optional<vm_error> vm::run_instruction(call_frame& frame) {
             return vm_error{"call depth limit exceeded (" + std::to_string(limits_.max_call_depth) + ")", line};
         }
 
-        const function_chunk& func = program_.functions[func_it->second];
+        const function_chunk& func = program_.functions[static_cast<size_t>(func_index)];
         if (arg_count != func.param_count) {
             return vm_error{
                 "function '" + func.name + "' expects " + std::to_string(func.param_count) +
@@ -513,23 +611,26 @@ std::optional<vm_error> vm::run_instruction(call_frame& frame) {
         mv_value callee = pop();
 
         // Check for native kwargs function
-        if (auto* s = std::get_if<std::string>(&callee)) {
-            if (s->substr(0, 17) == "__native_kwargs__") {
-                std::string native_name = s->substr(18);
-                auto it = natives_kwargs_.find(native_name);
-                if (it != natives_kwargs_.end()) {
-                    push(it->second(pos_args, kwargs));
+        if (auto* native = std::get_if<native_ref>(&callee)) {
+            if (native->kwargs) {
+                if (native->index >= 0 && native->index < static_cast<int>(native_kwargs_table_.size())) {
+                    push(native_kwargs_table_[static_cast<size_t>(native->index)](pos_args, kwargs));
                     break;
                 }
+            } else if (native->index >= 0 && native->index < static_cast<int>(native_table_.size())) {
+                push(native_table_[static_cast<size_t>(native->index)](pos_args));
+                break;
             }
-            // Also allow regular natives (kwargs discarded)
-            if (s->substr(0, 10) == "__native__") {
-                std::string native_name = s->substr(11);
-                auto it = natives_.find(native_name);
-                if (it != natives_.end()) {
-                    push(it->second(pos_args));
-                    break;
-                }
+        } else if (auto* s = std::get_if<std::string>(&callee)) {
+            auto native_kwargs_it = native_kwargs_index_by_name_.find(*s);
+            if (native_kwargs_it != native_kwargs_index_by_name_.end()) {
+                push(native_kwargs_table_[static_cast<size_t>(native_kwargs_it->second)](pos_args, kwargs));
+                break;
+            }
+            auto native_it = native_index_by_name_.find(*s);
+            if (native_it != native_index_by_name_.end()) {
+                push(native_table_[static_cast<size_t>(native_it->second)](pos_args));
+                break;
             }
         }
 
@@ -587,6 +688,7 @@ std::optional<vm_error> vm::run_instruction(call_frame& frame) {
         for (int i = count - 1; i >= 0; i--) {
             list->elements[i] = pop();
         }
+        try_build_list_render_caches(*list);
         push(std::move(list));
         break;
     }
@@ -600,6 +702,7 @@ std::optional<vm_error> vm::run_instruction(call_frame& frame) {
                     return vm_error{"list size exceeds limit", line};
                 }
                 (*list)->elements.push_back(std::move(value));
+                update_list_caches_for_append(**list, (*list)->elements.back());
                 push(std::monostate{});
                 break;
             }
@@ -634,6 +737,7 @@ std::optional<vm_error> vm::run_instruction(call_frame& frame) {
                 int i = static_cast<int>(*idx);
                 if (*list && i >= 0 && i < static_cast<int>((*list)->elements.size())) {
                     (*list)->elements[i] = std::move(val);
+                    (*list)->clear_cached_render_data();
                     break;
                 }
                 return vm_error{"list index out of range", line};

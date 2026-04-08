@@ -15,7 +15,10 @@
 #     ctx.time.ms, ctx.time.sec, ctx.time.length_ms,
 #     ctx.time.bpm, ctx.time.beat, ctx.time.beat_phase,
 #     ctx.time.progress
-#     ctx.audio.spectrum, ctx.audio.spectrum_size
+#     ctx.audio.spectrum, ctx.audio.spectrum_size,
+#     ctx.audio.waveform, ctx.audio.waveform_size,
+#     ctx.audio.waveform_index, ctx.audio.level,
+#     ctx.audio.oscilloscope, ctx.audio.oscilloscope_size
 #     ctx.chart.total_notes, ctx.chart.combo,
 #     ctx.chart.accuracy, ctx.chart.key_count
 #     ctx.screen.w, ctx.screen.h
@@ -220,3 +223,80 @@ def draw(ctx):
   filled = bar_w * ctx.time.progress
   Rect(x=140, y=700, w=bar_w, h=4, fill="#222222")
   Rect(x=140, y=700, w=filled, h=4, fill="#44ddff")
+
+
+# --------------------------------------------------
+# Sample 11: Syzygy Drift
+#   Slow-evolving orbit lines with a restrained spectrum crown.
+# --------------------------------------------------
+def draw(ctx):
+  t = ctx.time.sec
+  phase = ctx.time.beat_phase
+
+  cx = ctx.screen.w * 0.5
+  cy = ctx.screen.h * 0.5
+
+  Background(fill="#060913")
+
+  glow = 0.05 + 0.03 * sin(t * 0.22)
+  Rect(x=0, y=0, w=ctx.screen.w, h=ctx.screen.h, fill="#d8f6ff", rotation=0, opacity=glow)
+
+  outer = []
+  inner = []
+  core = []
+
+  segments = 56
+  for i in range(segments + 1):
+    p = i / segments
+    a = p * 2 * pi()
+
+    outer_r = 250 + 18 * sin(a * 3 + t * 0.34) + 10 * sin(a * 7 - t * 0.18)
+    outer_x = cx + cos(a + t * 0.09) * outer_r
+    outer_y = cy + sin(a + t * 0.09) * outer_r
+    outer.append(Point(x=outer_x, y=outer_y))
+
+    inner_r = 156 + 12 * sin(a * 4 - t * 0.41) + 8 * sin(a * 9 + t * 0.15)
+    inner_x = cx + cos(a - t * 0.12) * inner_r
+    inner_y = cy + sin(a - t * 0.12) * inner_r
+    inner.append(Point(x=inner_x, y=inner_y))
+
+    core_r = 86 + 8 * sin(a * 5 + t * 0.8 + phase * 2 * pi())
+    core_x = cx + cos(a + t * 0.16) * core_r
+    core_y = cy + sin(a + t * 0.16) * core_r
+    core.append(Point(x=core_x, y=core_y))
+
+  Polyline(points=outer, stroke="#c8f4ff", thickness=2.0, opacity=0.34)
+  Polyline(points=inner, stroke="#8ddfff", thickness=1.6, opacity=0.46)
+  Polyline(points=core, stroke="#ffffff", thickness=1.0, opacity=0.28)
+
+  bridge_count = 10
+  for i in range(bridge_count):
+    a = (i / bridge_count) * 2 * pi() + t * 0.11
+    r1 = 110 + 8 * sin(t * 0.7 + i)
+    r2 = 235 + 14 * sin(t * 0.23 + i * 0.6)
+    x1 = cx + cos(a) * r1
+    y1 = cy + sin(a) * r1
+    x2 = cx + cos(a + 0.55 * sin(t * 0.17 + i)) * r2
+    y2 = cy + sin(a + 0.55 * sin(t * 0.17 + i)) * r2
+    Line(x1=x1, y1=y1, x2=x2, y2=y2, stroke="#ffffff", thickness=1.0, opacity=0.14)
+
+  count = min(ctx.audio.spectrum_size, 36)
+  if count > 0:
+    for i in range(count):
+      amp = ctx.audio.spectrum[i]
+      band = amp * amp
+      a = (i / count) * 2 * pi() - t * 0.18
+      base_r = 185 + 10 * sin(t * 0.33 + i * 0.15)
+      h = 90 * band * (0.72 + 0.28 * sin(t * 0.9 + i * 0.12))
+      x1 = cx + cos(a) * base_r
+      y1 = cy + sin(a) * base_r
+      x2 = cx + cos(a) * (base_r + h)
+      y2 = cy + sin(a) * (base_r + h)
+      thick = 1.0 + 1.8 * band
+      Line(x1=x1, y1=y1, x2=x2, y2=y2, stroke="#b4efff", thickness=thick, opacity=0.52)
+
+  beat_ring = 100 + 22 * (1 - phase)
+  Circle(cx=cx, cy=cy, radius=beat_ring, fill="#ffffff", opacity=0.05)
+  Circle(cx=cx, cy=cy, radius=52 + 6 * sin(t * 0.8), fill="#0b1320", opacity=0.96)
+
+  Text(text="SYZYGY DRIFT", x=cx - 118, y=cy + 242, font_size=22, fill="#f4fbff", opacity=0.44)

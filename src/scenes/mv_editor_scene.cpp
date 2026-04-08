@@ -39,11 +39,14 @@ void mv_editor_scene::on_enter() {
         ui::text_editor_set_text(panel_state_.editor,
             "def draw(ctx):\n  return Scene([])\n");
     }
-    panel_state_.show_compile_result = false;
     dirty_ = false;
+    compile_script();
 }
 
 void mv_editor_scene::on_exit() {
+    if (dirty_) {
+        save_script();
+    }
 }
 
 void mv_editor_scene::update(float dt) {
@@ -101,11 +104,15 @@ void mv_editor_scene::draw() {
 
     auto result = mv_script_panel::draw({content, virtual_screen::get_virtual_mouse()}, panel_state_);
 
-    if (result.compile_clicked) {
-        compile_script();
+    if (result.text_changed) {
+        dirty_ = true;
+        last_change_time_ = GetTime();
+        pending_compile_ = true;
     }
-    if (result.save_clicked) {
-        save_script();
+    // Debounced auto-compile: 0.3s after last change
+    if (pending_compile_ && (GetTime() - last_change_time_) >= 0.3) {
+        compile_script();
+        pending_compile_ = false;
     }
 
     ui::flush_draw_queue();
@@ -116,12 +123,29 @@ void mv_editor_scene::draw() {
 }
 
 void mv_editor_scene::compile_script() {
-    mv::sandbox sandbox;
-    mv::register_builtins_to_sandbox(sandbox);
-    std::string source = ui::text_editor_get_text(panel_state_.editor);
-    panel_state_.compile_success = sandbox.compile(source);
-    panel_state_.errors = sandbox.last_errors();
-    panel_state_.show_compile_result = true;
+    try {
+        mv::sandbox sandbox;
+        mv::register_builtins_to_sandbox(sandbox);
+        std::string source = ui::text_editor_get_text(panel_state_.editor);
+        sandbox.compile(source);
+        panel_state_.errors = sandbox.last_errors();
+
+        // Populate inline error markers for squiggly underlines
+        panel_state_.editor.error_markers.clear();
+        for (const auto& err : panel_state_.errors) {
+            if (err.line > 0) {
+                panel_state_.editor.error_markers.push_back({
+                    err.line, std::max(err.column - 1, 0), std::max(err.column, 0), err.message
+                });
+            }
+        }
+    } catch (const std::exception& e) {
+        panel_state_.errors = {{"internal", e.what(), 0, 0}};
+        panel_state_.editor.error_markers.clear();
+    } catch (...) {
+        panel_state_.errors = {{"internal", "unexpected error during compile", 0, 0}};
+        panel_state_.editor.error_markers.clear();
+    }
 }
 
 void mv_editor_scene::save_script() {

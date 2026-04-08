@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mv_bytecode.h"
+#include "../api/mv_scene.h"
 
 #include <functional>
 #include <memory>
@@ -16,22 +17,44 @@ namespace mv {
 struct mv_list;
 struct mv_object;
 
+struct native_ref {
+    int index = -1;
+    bool kwargs = false;
+    bool operator==(const native_ref&) const = default;
+};
+
+struct function_ref {
+    int index = -1;
+    bool operator==(const function_ref&) const = default;
+};
+
 using mv_value = std::variant<
     double,                         // number
     bool,                           // bool
     std::string,                    // string
     std::shared_ptr<mv_list>,       // list
     std::shared_ptr<mv_object>,     // object (for ctx, Scene, Node, etc.)
+    native_ref,                     // native callable
+    function_ref,                   // script callable
     std::monostate                  // None
 >;
 
 struct mv_list {
     std::vector<mv_value> elements;
+    std::optional<std::vector<vec2>> cached_points;
+    std::optional<std::vector<scene_node>> cached_scene_nodes;
+
+    void clear_cached_render_data() {
+        cached_points.reset();
+        cached_scene_nodes.reset();
+    }
 };
 
 struct mv_object {
     std::string type_name;
     std::unordered_map<std::string, mv_value> attrs;
+    std::optional<scene_node> cached_scene_node;
+    std::optional<vec2> cached_point;
 
     mv_value get_attr(const std::string& name) const {
         auto it = attrs.find(name);
@@ -39,8 +62,31 @@ struct mv_object {
         return std::monostate{};
     }
 
+    const mv_value* find_attr(const std::string& name) const {
+        auto it = attrs.find(name);
+        return it != attrs.end() ? &it->second : nullptr;
+    }
+
+    void reserve_attrs(std::size_t capacity) {
+        attrs.reserve(capacity);
+    }
+
+    void clear_cached_render_data() {
+        cached_scene_node.reset();
+        cached_point.reset();
+    }
+
     void set_attr(const std::string& name, mv_value val) {
         attrs[name] = std::move(val);
+        clear_cached_render_data();
+    }
+
+    void set_cached_scene_node(scene_node node) {
+        cached_scene_node = std::move(node);
+    }
+
+    void set_cached_point(vec2 point) {
+        cached_point = point;
     }
 };
 
@@ -93,8 +139,10 @@ private:
     std::vector<mv_value> stack_;
     std::vector<call_frame> frames_;
     std::unordered_map<std::string, mv_value> globals_;
-    std::unordered_map<std::string, native_function> natives_;
-    std::unordered_map<std::string, native_kwargs_function> natives_kwargs_;
+    std::vector<native_function> native_table_;
+    std::vector<native_kwargs_function> native_kwargs_table_;
+    std::unordered_map<std::string, int> native_index_by_name_;
+    std::unordered_map<std::string, int> native_kwargs_index_by_name_;
     sandbox_limits limits_;
     int step_count_ = 0;
 

@@ -5,6 +5,7 @@
 #include "mv_vm.h"
 
 #include <string>
+#include <memory>
 #include <vector>
 
 namespace mv {
@@ -47,6 +48,7 @@ private:
     // Compiled state
     bool compiled_ = false;
     compiled_program compiled_prog_;
+    std::unique_ptr<vm> runtime_vm_;
 
     // Pre-registered globals and natives
     std::vector<std::pair<std::string, mv_value>> globals_;

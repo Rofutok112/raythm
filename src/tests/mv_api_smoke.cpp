@@ -59,6 +59,12 @@ TEST(test_build_context) {
     input.key_count = 7;
     input.total_notes = 500;
     input.spectrum = {0.1f, 0.5f, 0.9f};
+    const std::vector<float> waveform = {0.2f, 0.4f, 0.8f, 0.3f};
+    const std::vector<float> oscilloscope = {-0.5f, 0.0f, 0.5f};
+    input.waveform = &waveform;
+    input.oscilloscope = &oscilloscope;
+    input.level = 0.8f;
+    input.waveform_index = 2;
 
     auto ctx = mv::build_context(input);
     ASSERT(ctx != nullptr);
@@ -83,6 +89,18 @@ TEST(test_build_context) {
     auto spec_val = audio->get_attr("spectrum");
     auto spec = std::get<std::shared_ptr<mv::mv_list>>(spec_val);
     ASSERT(spec->elements.size() == 3);
+
+    auto waveform_val = audio->get_attr("waveform");
+    auto waveform_list = std::get<std::shared_ptr<mv::mv_list>>(waveform_val);
+    ASSERT(waveform_list->elements.size() == 4);
+    ASSERT(std::get<double>(audio->get_attr("waveform_size")) == 4.0);
+    ASSERT(std::abs(std::get<double>(audio->get_attr("level")) - 0.8) < 0.0001);
+    ASSERT(std::get<double>(audio->get_attr("waveform_index")) == 2.0);
+
+    auto osc_val = audio->get_attr("oscilloscope");
+    auto osc = std::get<std::shared_ptr<mv::mv_list>>(osc_val);
+    ASSERT(osc->elements.size() == 3);
+    ASSERT(std::get<double>(audio->get_attr("oscilloscope_size")) == 3.0);
 }
 
 // ---- Builtins in sandbox ----
@@ -241,6 +259,56 @@ def draw(ctx):
     ASSERT(std::abs(rect->y - 75.0f) < 0.01f);
 }
 
+TEST(test_ctx_audio_waveform_access_in_draw) {
+    const char* src = R"(
+def draw(ctx):
+    x = ctx.audio.level * 100
+    y = ctx.audio.waveform[ctx.audio.waveform_index] * 100
+    Rect(x=x, y=y, w=20, h=20, fill="#ffffff")
+)";
+    mv::mv_runtime rt;
+    ASSERT(rt.load_source(src));
+
+    const std::vector<float> waveform = {0.1f, 0.25f, 0.75f};
+    mv::context_input input;
+    input.waveform = &waveform;
+    input.level = 0.75f;
+    input.waveform_index = 2;
+
+    auto scene = rt.tick(input);
+    ASSERT(scene.has_value());
+    ASSERT(scene->nodes.size() == 1);
+    auto* rect = std::get_if<mv::rect_node>(&scene->nodes[0]);
+    ASSERT(rect != nullptr);
+    ASSERT(std::abs(rect->x - 75.0f) < 0.01f);
+    ASSERT(std::abs(rect->y - 75.0f) < 0.01f);
+}
+
+TEST(test_ctx_audio_oscilloscope_access_in_draw) {
+    const char* src = R"(
+def draw(ctx):
+    x = (ctx.audio.oscilloscope[0] + 1) * 50
+    y = (ctx.audio.oscilloscope[2] + 1) * 50
+    w = ctx.audio.oscilloscope_size * 10
+    Rect(x=x, y=y, w=w, h=20, fill="#ffffff")
+)";
+    mv::mv_runtime rt;
+    ASSERT(rt.load_source(src));
+
+    const std::vector<float> oscilloscope = {-0.5f, 0.0f, 0.25f};
+    mv::context_input input;
+    input.oscilloscope = &oscilloscope;
+
+    auto scene = rt.tick(input);
+    ASSERT(scene.has_value());
+    ASSERT(scene->nodes.size() == 1);
+    auto* rect = std::get_if<mv::rect_node>(&scene->nodes[0]);
+    ASSERT(rect != nullptr);
+    ASSERT(std::abs(rect->x - 25.0f) < 0.01f);
+    ASSERT(std::abs(rect->y - 62.5f) < 0.01f);
+    ASSERT(std::abs(rect->w - 30.0f) < 0.01f);
+}
+
 TEST(test_imperative_draw_without_return) {
     const char* src = R"(
 def draw(ctx):
@@ -266,6 +334,15 @@ TEST(test_unknown_function_fails_compile) {
     const char* src = R"(
 def draw(ctx):
     totally_not_real(123)
+)";
+    mv::mv_runtime rt;
+    ASSERT(!rt.load_source(src));
+}
+
+TEST(test_unknown_variable_fails_compile) {
+    const char* src = R"(
+def draw(ctx):
+    a.get()
 )";
     mv::mv_runtime rt;
     ASSERT(!rt.load_source(src));
@@ -479,8 +556,11 @@ int main() {
     RUN(test_polyline_node_construction);
     RUN(test_list_append_method_builds_polyline_points);
     RUN(test_ctx_access_in_draw);
+    RUN(test_ctx_audio_waveform_access_in_draw);
+    RUN(test_ctx_audio_oscilloscope_access_in_draw);
     RUN(test_imperative_draw_without_return);
     RUN(test_unknown_function_fails_compile);
+    RUN(test_unknown_variable_fails_compile);
     RUN(test_imperative_progress_bar_draw);
     RUN(test_legacy_beat_grid_and_spectrum_bar_scene);
     RUN(test_manual_spectrum_scene_from_primitives);

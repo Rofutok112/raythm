@@ -35,6 +35,7 @@ public:
 
 private:
     sandbox sandbox_;
+    context_builder context_builder_;
     bool loaded_ = false;
     validation_limits validation_limits_;
 };
