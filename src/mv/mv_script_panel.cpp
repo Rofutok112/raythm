@@ -1,5 +1,6 @@
-#include "editor_mv_script_panel.h"
+#include "mv_script_panel.h"
 
+#include "mv/mv_script_editor_style.h"
 #include "theme.h"
 #include "ui_draw.h"
 #include "ui_layout.h"
@@ -12,11 +13,11 @@ constexpr float kSpacing = 8.0f;
 
 } // anonymous namespace
 
-editor_mv_script_panel_result editor_mv_script_panel::draw(
-    const editor_mv_script_panel_model& model,
-    editor_mv_script_panel_state& state) {
+mv_script_panel_result mv_script_panel::draw(
+    const mv_script_panel_model& model,
+    mv_script_panel_state& state) {
 
-    editor_mv_script_panel_result result;
+    mv_script_panel_result result;
     const Rectangle& c = model.content_rect;
 
     // Layout: editor | spacing | buttons | spacing | errors
@@ -26,7 +27,8 @@ editor_mv_script_panel_result editor_mv_script_panel::draw(
     Rectangle error_rect = {c.x, button_row.y + kButtonRowHeight + kSpacing, c.width, kErrorAreaHeight};
 
     // Text editor
-    ui::draw_text_editor(editor_rect, state.editor, 20, 500);
+    ui::draw_text_editor(editor_rect, state.editor, 500,
+                         mv::mv_script_editor_style(), mv::highlight_mv_script_line);
 
     // Buttons
     float btn_w = (button_row.width - 4.0f) * 0.5f;

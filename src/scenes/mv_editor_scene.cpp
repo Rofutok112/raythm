@@ -99,7 +99,7 @@ void mv_editor_scene::draw() {
         static_cast<float>(kScreenHeight) - kHeaderHeight - kPadding * 2.0f
     };
 
-    auto result = editor_mv_script_panel::draw({content, virtual_screen::get_virtual_mouse()}, panel_state_);
+    auto result = mv_script_panel::draw({content, virtual_screen::get_virtual_mouse()}, panel_state_);
 
     if (result.compile_clicked) {
         compile_script();

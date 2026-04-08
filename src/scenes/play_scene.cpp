@@ -32,6 +32,7 @@ constexpr float kCameraHeight = 42.0f;
 constexpr float kCameraFovY = 42.0f;
 constexpr float kJudgeLineWorldZ = 12.0f;
 constexpr float kMaxGroundDistance = 1000.0f;
+constexpr float kMvSpectrumClampMax = 2.0f;
 
 std::vector<float> build_mv_spectrum() {
     std::array<float, 128> fft = {};
@@ -43,7 +44,7 @@ std::vector<float> build_mv_spectrum() {
     spectrum.reserve(fft.size());
     for (float sample : fft) {
         const float shaped = std::sqrt(std::max(0.0f, sample)) * 8.0f;
-        spectrum.push_back(std::clamp(shaped, 0.0f, 1.0f));
+        spectrum.push_back(std::clamp(shaped, 0.0f, kMvSpectrumClampMax));
     }
     return spectrum;
 }

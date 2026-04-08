@@ -8,6 +8,19 @@
 
 namespace ui {
 
+struct text_editor_style {
+    int font_size = 14;
+    float line_spacing = 4.0f;
+    float letter_spacing = 0.0f;
+};
+
+struct text_editor_span {
+    std::string text;
+    Color color;
+};
+
+using text_editor_highlighter = std::vector<text_editor_span>(*)(const std::string&);
+
 struct text_editor_state {
     std::vector<std::string> lines = {""};
     int cursor_line = 0;
@@ -29,6 +42,8 @@ std::string text_editor_get_text(const text_editor_state& state);
 void text_editor_set_text(text_editor_state& state, const std::string& text);
 
 text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
-                                    int font_size = 14, int max_lines = 500);
+                                    int max_lines = 500,
+                                    const text_editor_style& style = {},
+                                    text_editor_highlighter highlighter = nullptr);
 
 }  // namespace ui

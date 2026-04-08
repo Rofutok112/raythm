@@ -1,6 +1,7 @@
 #include "mv_compiler.h"
 
 #include <algorithm>
+#include <array>
 #include <sstream>
 
 namespace mv {
@@ -16,6 +17,8 @@ struct compiler_state {
     int current_func_idx = -1;
     std::vector<std::pair<std::string, int>> locals; // name -> slot
     int scope_depth = 0;
+    std::string current_func_name;
+    int draw_nodes_slot = -1;
 
     function_chunk& current_chunk() { return output.functions[current_func_idx]; }
 
@@ -70,6 +73,64 @@ struct compiler_state {
             current_chunk().local_count = slot + 1;
         }
         return slot;
+    }
+
+    bool in_draw_function() const {
+        return current_func_name == "draw" && draw_nodes_slot >= 0;
+    }
+
+    bool is_named_identifier(const expr& e, const std::string& name) const {
+        if (auto* id = std::get_if<identifier>(&e.kind)) {
+            return id->name == name;
+        }
+        return false;
+    }
+
+    bool is_named_call(const expr& e, const std::vector<std::string>& names) const {
+        return std::visit([&](const auto& node) -> bool {
+            using T = std::decay_t<decltype(node)>;
+            if constexpr (std::is_same_v<T, call_expr>) {
+                return std::any_of(names.begin(), names.end(), [&](const std::string& name) {
+                    return is_named_identifier(*node.callee, name);
+                });
+            }
+            else if constexpr (std::is_same_v<T, call_with_kwargs_expr>) {
+                return std::any_of(names.begin(), names.end(), [&](const std::string& name) {
+                    return is_named_identifier(*node.callee, name);
+                });
+            }
+            return false;
+        }, e.kind);
+    }
+
+    bool is_draw_node_expr(const expr& e) const {
+        static const std::vector<std::string> kNodeNames = {
+            "Background", "Rect", "Circle", "Line", "Text", "Polyline",
+            "SpectrumBar", "BeatGrid", "PulseRing"
+        };
+        return is_named_call(e, kNodeNames);
+    }
+
+    void compile_draw_node_append(const expr& e, int line) {
+        emit(opcode::load_local, draw_nodes_slot, line);
+        compile_expr(e);
+        emit(opcode::append_list, line);
+    }
+
+    bool is_append_call(const call_expr& node) const {
+        if (node.args.size() != 1) {
+            return false;
+        }
+        const auto* attr = std::get_if<attr_expr>(&node.callee->kind);
+        return attr != nullptr && attr->attr == "append";
+    }
+
+    void compile_append_call_expr(const call_expr& node, int line) {
+        const auto* attr = std::get_if<attr_expr>(&node.callee->kind);
+        compile_expr(*attr->object);
+        compile_expr(*node.args[0]);
+        emit(opcode::append_list, line);
+        emit(opcode::load_none, line);
     }
 
     // ---- Compile expressions ----
@@ -149,11 +210,15 @@ struct compiler_state {
                 }
             }
             else if constexpr (std::is_same_v<T, call_expr>) {
-                compile_expr(*node.callee);
-                for (auto& arg : node.args) {
-                    compile_expr(*arg);
+                if (is_append_call(node)) {
+                    compile_append_call_expr(node, line);
+                } else {
+                    compile_expr(*node.callee);
+                    for (auto& arg : node.args) {
+                        compile_expr(*arg);
+                    }
+                    emit(opcode::call, static_cast<uint32_t>(node.args.size()), line);
                 }
-                emit(opcode::call, static_cast<uint32_t>(node.args.size()), line);
             }
             else if constexpr (std::is_same_v<T, call_with_kwargs_expr>) {
                 compile_expr(*node.callee);
@@ -196,8 +261,12 @@ struct compiler_state {
             using T = std::decay_t<decltype(node)>;
 
             if constexpr (std::is_same_v<T, expr_stmt>) {
-                compile_expr(*node.expression);
-                emit(opcode::pop, line);
+                if (in_draw_function() && is_draw_node_expr(*node.expression)) {
+                    compile_draw_node_append(*node.expression, line);
+                } else {
+                    compile_expr(*node.expression);
+                    emit(opcode::pop, line);
+                }
             }
             else if constexpr (std::is_same_v<T, assign_stmt>) {
                 compile_expr(*node.value);
@@ -322,6 +391,8 @@ struct compiler_state {
                 int prev_func_idx = current_func_idx;
                 auto prev_locals = std::move(locals);
                 auto prev_depth = scope_depth;
+                auto prev_func_name = current_func_name;
+                int prev_draw_nodes_slot = draw_nodes_slot;
 
                 // Create new function chunk
                 int func_idx = static_cast<int>(output.functions.size());
@@ -335,10 +406,18 @@ struct compiler_state {
                 current_func_idx = func_idx;
                 locals.clear();
                 scope_depth = 0;
+                current_func_name = node.name;
+                draw_nodes_slot = -1;
 
                 // Declare params as locals
                 for (auto& param : node.params) {
                     declare_local(param);
+                }
+
+                if (current_func_name == "draw") {
+                    draw_nodes_slot = declare_local("__draw_nodes__");
+                    emit(opcode::build_list, 0, line);
+                    emit(opcode::store_local, draw_nodes_slot, line);
                 }
 
                 // Compile body
@@ -346,14 +425,23 @@ struct compiler_state {
                     compile_stmt(*stmt);
                 }
 
-                // Implicit return None
-                emit(opcode::load_none, line);
+                // Implicit return Scene(collected_nodes) for draw(), otherwise None
+                if (current_func_name == "draw") {
+                    int scene_name_idx = add_string_constant("Scene");
+                    emit(opcode::load_global, scene_name_idx, line);
+                    emit(opcode::load_local, draw_nodes_slot, line);
+                    emit(opcode::call, 1, line);
+                } else {
+                    emit(opcode::load_none, line);
+                }
                 emit(opcode::return_op, line);
 
                 // Restore state
                 current_func_idx = prev_func_idx;
                 locals = std::move(prev_locals);
                 scope_depth = prev_depth;
+                current_func_name = std::move(prev_func_name);
+                draw_nodes_slot = prev_draw_nodes_slot;
             }
             else if constexpr (std::is_same_v<T, augmented_assign_stmt>) {
                 int slot = resolve_local(node.name);

@@ -88,6 +88,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/mv/render/mv_validator.h
         src/mv/mv_runtime.cpp
         src/mv/mv_runtime.h
+        src/mv/mv_script_editor_style.cpp
+        src/mv/mv_script_editor_style.h
         src/audio/audio_waveform.cpp
         src/audio/audio_waveform.h
         src/scenes/editor/editor_command.h
@@ -260,8 +262,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/ui/ui_clip.h
         src/ui/ui_text_editor.cpp
         src/ui/ui_text_editor.h
-        src/scenes/editor/editor_mv_script_panel.cpp
-        src/scenes/editor/editor_mv_script_panel.h)
+        src/mv/mv_script_panel.cpp
+        src/mv/mv_script_panel.h)
 
 add_executable(raythm_launcher
         src/launcher_main.cpp

@@ -14,8 +14,47 @@ namespace {
 
 constexpr float kGutterPadding = 6.0f;
 constexpr float kScrollbarWidth = 8.0f;
-constexpr float kLineSpacing = 4.0f;
 constexpr float kTextPadLeft = 4.0f;
+
+float measure_text_width(const std::string& text, const text_editor_style& style) {
+    if (text.empty()) {
+        return 0.0f;
+    }
+    return MeasureTextEx(GetFontDefault(), text.c_str(),
+                         static_cast<float>(style.font_size), style.letter_spacing).x;
+}
+
+float measure_line_prefix_width(const std::string& line, int prefix_len,
+                                const text_editor_style& style, text_editor_highlighter highlighter) {
+    const int clamped_prefix_len = std::clamp(prefix_len, 0, static_cast<int>(line.size()));
+    if (clamped_prefix_len == 0) {
+        return 0.0f;
+    }
+    return measure_text_width(line.substr(0, static_cast<size_t>(clamped_prefix_len)), style);
+}
+
+void draw_line_text(const std::string& line, float x, float y,
+                    const text_editor_style& style, text_editor_highlighter highlighter) {
+    if (line.empty()) {
+        return;
+    }
+    if (highlighter == nullptr) {
+        DrawTextEx(GetFontDefault(), line.c_str(), {x, y},
+                   static_cast<float>(style.font_size), style.letter_spacing, g_theme->text);
+        return;
+    }
+
+    const std::vector<text_editor_span> spans = highlighter(line);
+    int consumed = 0;
+    for (const auto& span : spans) {
+        if (!span.text.empty()) {
+            const float cursor_x = x + measure_line_prefix_width(line, consumed, style, nullptr);
+            DrawTextEx(GetFontDefault(), span.text.c_str(), {cursor_x, y},
+                       static_cast<float>(style.font_size), style.letter_spacing, span.color);
+            consumed += static_cast<int>(span.text.size());
+        }
+    }
+}
 
 void clamp_cursor(text_editor_state& state) {
     state.cursor_line = std::clamp(state.cursor_line, 0,
@@ -38,6 +77,68 @@ void ensure_cursor_visible(text_editor_state& state, float line_height, float vi
 
 bool key_action(int key) {
     return IsKeyPressed(key) || IsKeyPressedRepeat(key);
+}
+
+bool insert_text_at_cursor(text_editor_state& state, const std::string& text, int max_lines) {
+    if (text.empty()) {
+        return false;
+    }
+
+    std::string normalized;
+    normalized.reserve(text.size());
+    for (size_t i = 0; i < text.size(); ++i) {
+        if (text[i] == '\r') {
+            if (i + 1 < text.size() && text[i + 1] == '\n') {
+                continue;
+            }
+            normalized += '\n';
+        } else {
+            normalized += text[i];
+        }
+    }
+
+    if (normalized.empty()) {
+        return false;
+    }
+
+    std::vector<std::string> chunks;
+    std::istringstream stream(normalized);
+    std::string part;
+    while (std::getline(stream, part)) {
+        chunks.push_back(part);
+    }
+    if (!normalized.empty() && normalized.back() == '\n') {
+        chunks.push_back("");
+    }
+    if (chunks.empty()) {
+        chunks.push_back("");
+    }
+
+    auto& line = state.lines[state.cursor_line];
+    const std::string before = line.substr(0, state.cursor_col);
+    const std::string after = line.substr(state.cursor_col);
+
+    if (chunks.size() == 1) {
+        line = before + chunks[0] + after;
+        state.cursor_col += static_cast<int>(chunks[0].size());
+        return true;
+    }
+
+    const int available_new_lines = std::max(0, max_lines - static_cast<int>(state.lines.size()));
+    const int allowed_extra_lines = std::min(static_cast<int>(chunks.size()) - 1, available_new_lines);
+
+    line = before + chunks[0];
+    int insert_at = state.cursor_line + 1;
+    for (int i = 1; i <= allowed_extra_lines; ++i) {
+        state.lines.insert(state.lines.begin() + insert_at, chunks[static_cast<size_t>(i)]);
+        ++insert_at;
+    }
+
+    const int last_chunk_index = allowed_extra_lines;
+    state.lines[state.cursor_line + allowed_extra_lines] += after;
+    state.cursor_line += allowed_extra_lines;
+    state.cursor_col = static_cast<int>(chunks[static_cast<size_t>(last_chunk_index)].size());
+    return true;
 }
 
 } // anonymous namespace
@@ -67,10 +168,12 @@ void text_editor_set_text(text_editor_state& state, const std::string& text) {
 }
 
 text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
-                                    int font_size, int max_lines) {
+                                    int max_lines,
+                                    const text_editor_style& style,
+                                    text_editor_highlighter highlighter) {
     text_editor_result result;
-    const float line_height = font_size + kLineSpacing;
-    const float gutter_width = static_cast<float>(MeasureText("000", font_size)) + kGutterPadding * 2;
+    const float line_height = static_cast<float>(style.font_size) + style.line_spacing;
+    const float gutter_width = measure_text_width("000", style) + kGutterPadding * 2;
 
     const Rectangle scrollbar_rect = {
         rect.x + rect.width - kScrollbarWidth, rect.y, kScrollbarWidth, rect.height
@@ -106,15 +209,15 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
         // Approximate column from x position
         float rel_x = mouse.x - text_rect.x - kTextPadLeft;
         if (rel_x <= 0) {
-            state.cursor_col = 0;
-        } else {
-            const std::string& line = state.lines[clicked_line];
-            int col = 0;
-            for (int c = 0; c <= static_cast<int>(line.size()); c++) {
-                float w = static_cast<float>(MeasureText(line.substr(0, c).c_str(), font_size));
-                if (w > rel_x) break;
-                col = c;
-            }
+                state.cursor_col = 0;
+            } else {
+                const std::string& line = state.lines[clicked_line];
+                int col = 0;
+                for (int c = 0; c <= static_cast<int>(line.size()); c++) {
+                    float w = measure_line_prefix_width(line, c, style, highlighter);
+                    if (w > rel_x) break;
+                    col = c;
+                }
             state.cursor_col = col;
         }
         state.last_input_time = GetTime();
@@ -133,6 +236,26 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
                 state.last_input_time = GetTime();
             }
             codepoint = GetCharPressed();
+        }
+
+        // Paste
+        if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_V)) {
+            const char* clipboard = GetClipboardText();
+            if (clipboard != nullptr && clipboard[0] != '\0') {
+                if (insert_text_at_cursor(state, clipboard, max_lines)) {
+                    result.changed = true;
+                    state.last_input_time = GetTime();
+                }
+            }
+        }
+        if (IsKeyPressed(KEY_INSERT) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))) {
+            const char* clipboard = GetClipboardText();
+            if (clipboard != nullptr && clipboard[0] != '\0') {
+                if (insert_text_at_cursor(state, clipboard, max_lines)) {
+                    result.changed = true;
+                    state.last_input_time = GetTime();
+                }
+            }
         }
 
         // Tab → 2 spaces
@@ -280,17 +403,17 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
 
         // Line number (right-aligned in gutter)
         const char* line_num_text = TextFormat("%3d", i + 1);
-        float num_width = static_cast<float>(MeasureText(line_num_text, font_size));
+        float num_width = measure_text_width(line_num_text, style);
         float num_x = rect.x + gutter_width - kGutterPadding - num_width;
-        DrawText(line_num_text, static_cast<int>(num_x), static_cast<int>(y + kLineSpacing * 0.5f),
-                 font_size, g_theme->text_dim);
+        DrawText(line_num_text, static_cast<int>(num_x), static_cast<int>(y + style.line_spacing * 0.5f),
+                 style.font_size, g_theme->text_dim);
 
         // Line text
         if (!state.lines[i].empty()) {
-            DrawText(state.lines[i].c_str(),
-                     static_cast<int>(text_rect.x + kTextPadLeft),
-                     static_cast<int>(y + kLineSpacing * 0.5f),
-                     font_size, g_theme->text);
+            draw_line_text(state.lines[i],
+                           text_rect.x + kTextPadLeft,
+                           y + style.line_spacing * 0.5f,
+                           style, highlighter);
         }
     }
 
@@ -300,9 +423,8 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
         bool show_cursor = (std::fmod(blink, 1.0) < 0.6) || blink < 0.4;
         if (show_cursor) {
             const std::string& cur_line = state.lines[state.cursor_line];
-            std::string before_cursor = cur_line.substr(0, state.cursor_col);
             float cursor_x = text_rect.x + kTextPadLeft +
-                            static_cast<float>(MeasureText(before_cursor.c_str(), font_size));
+                            measure_line_prefix_width(cur_line, state.cursor_col, style, highlighter);
             float cursor_y = rect.y + state.cursor_line * line_height - state.scroll_offset;
             DrawRectangle(static_cast<int>(cursor_x), static_cast<int>(cursor_y + 1),
                           2, static_cast<int>(line_height - 2), g_theme->text);

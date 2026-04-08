@@ -38,7 +38,7 @@ double calculate_song_end_ms(const chart_data& chart, const timing_engine& engin
         last_tick = std::max(last_tick, note.type == note_type::hold ? note.end_tick : note.tick);
     }
 
-    return std::max(engine.tick_to_ms(last_tick) + 2000.0, audio.get_bgm_length_seconds() * 1000.0);
+    return std::max(engine.tick_to_ms(last_tick) + 5000.0, audio.get_bgm_length_seconds() * 1000.0);
 }
 
 int calculate_total_judge_points(const chart_data& chart) {

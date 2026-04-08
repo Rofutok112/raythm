@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <sstream>
+#include <unordered_set>
+
+#include "raylib.h"
 
 namespace mv {
 
@@ -168,6 +171,41 @@ circle_node extract_circle(const std::shared_ptr<mv_object>& obj) {
     return n;
 }
 
+polyline_node extract_polyline(const std::shared_ptr<mv_object>& obj) {
+    polyline_node n;
+    n.thickness = static_cast<float>(as_number(obj->get_attr("thickness"), 2));
+    n.opacity = static_cast<float>(as_number(obj->get_attr("opacity"), 1.0));
+    auto stroke_val = obj->get_attr("stroke");
+    if (auto* s = std::get_if<std::string>(&stroke_val)) n.stroke = parse_color(*s);
+    else if (auto so = as_object(stroke_val)) {
+        if (so->type_name == "Color") {
+            n.stroke = {
+                static_cast<uint8_t>(as_number(so->get_attr("r"), 255)),
+                static_cast<uint8_t>(as_number(so->get_attr("g"), 255)),
+                static_cast<uint8_t>(as_number(so->get_attr("b"), 255)),
+                static_cast<uint8_t>(as_number(so->get_attr("a"), 255))
+            };
+        }
+    }
+
+    auto points_val = obj->get_attr("points");
+    if (auto points = as_list(points_val)) {
+        n.points.reserve(points->elements.size());
+        for (const auto& point_val : points->elements) {
+            auto point_obj = as_object(point_val);
+            if (!point_obj || point_obj->type_name != "Point") {
+                continue;
+            }
+            n.points.push_back({
+                static_cast<float>(as_number(point_obj->get_attr("x"))),
+                static_cast<float>(as_number(point_obj->get_attr("y")))
+            });
+        }
+    }
+
+    return n;
+}
+
 spectrum_bar_node extract_spectrum_bar(const std::shared_ptr<mv_object>& obj) {
     spectrum_bar_node n;
     n.x = static_cast<float>(as_number(obj->get_attr("x")));
@@ -267,6 +305,7 @@ std::optional<scene_node> convert_node(const mv_value& val) {
     if (type == "Line")         return extract_line(obj);
     if (type == "Text")         return extract_text(obj);
     if (type == "Circle")       return extract_circle(obj);
+    if (type == "Polyline")     return extract_polyline(obj);
     if (type == "SpectrumBar")  return extract_spectrum_bar(obj);
     if (type == "BeatGrid")     return extract_beat_grid(obj);
     if (type == "PulseRing")    return extract_pulse_ring(obj);
@@ -458,14 +497,23 @@ void register_builtins_impl(Host& host) {
     auto make_node_ctor = [](const std::string& type_name) -> native_kwargs_function {
         return [type_name](const std::vector<mv_value>& args,
                           const std::vector<std::pair<std::string, mv_value>>& kwargs) -> mv_value {
+            static std::unordered_set<std::string> warned_types;
+            if ((type_name == "SpectrumBar" || type_name == "BeatGrid" || type_name == "PulseRing") &&
+                warned_types.insert(type_name).second) {
+                TraceLog(LOG_WARNING,
+                         "MV: %s is deprecated; prefer composing effects from Rect/Line/Circle/Text/Polyline",
+                         type_name.c_str());
+            }
             return make_node_kwargs(type_name, args, kwargs);
         };
     };
 
+    host.register_native_kwargs("Point", make_node_ctor("Point"));
     host.register_native_kwargs("Rect", make_node_ctor("Rect"));
     host.register_native_kwargs("Line", make_node_ctor("Line"));
     host.register_native_kwargs("Text", make_node_ctor("Text"));
     host.register_native_kwargs("Circle", make_node_ctor("Circle"));
+    host.register_native_kwargs("Polyline", make_node_ctor("Polyline"));
     host.register_native_kwargs("SpectrumBar", make_node_ctor("SpectrumBar"));
     host.register_native_kwargs("BeatGrid", make_node_ctor("BeatGrid"));
     host.register_native_kwargs("PulseRing", make_node_ctor("PulseRing"));

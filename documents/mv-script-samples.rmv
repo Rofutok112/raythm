@@ -5,7 +5,12 @@
 # MV Script Reference
 # --------------------
 # - draw(ctx) function is called every frame.
-# - Must return a Scene([...]) containing node objects.
+# - You can write in two styles:
+#     1. Imperative: just place node constructors in draw(ctx)
+#     2. Explicit: return Scene([...])
+# - In imperative style, node calls are collected automatically.
+# - SpectrumBar / BeatGrid / PulseRing are deprecated compatibility helpers.
+#   They still work, but new scripts should prefer composing effects from primitives.
 # - ctx fields:
 #     ctx.time.ms, ctx.time.sec, ctx.time.length_ms,
 #     ctx.time.bpm, ctx.time.beat, ctx.time.beat_phase,
@@ -16,14 +21,13 @@
 #     ctx.screen.w, ctx.screen.h
 #
 # - Node types:
+#     Point(x, y)
 #     Background(fill, opacity)
 #     Rect(x, y, w, h, fill, rotation, opacity)
 #     Circle(cx, cy, radius, fill, opacity)
 #     Line(x1, y1, x2, y2, stroke, thickness, opacity)
+#     Polyline(points, stroke, thickness, opacity)
 #     Text(text, x, y, font_size, fill, opacity)
-#     SpectrumBar(x, y, w, h, bar_count, fill, opacity)
-#     BeatGrid(x, y, w, h, stroke, thickness, beat_phase, opacity)
-#     PulseRing(cx, cy, radius, stroke, thickness, beat_phase, opacity)
 #
 # - Built-in functions:
 #     sin, cos, abs, floor, ceil, sqrt, min, max,
@@ -47,19 +51,30 @@ def draw(ctx):
   p = ctx.time.beat_phase
   r = lerp(120.0, 60.0, p)
   a = lerp(0.9, 0.2, p)
-  circle = Circle(cx=640, cy=360, radius=r, fill="#00ccff", opacity=a)
-  return Scene([Background(fill="#0a0a1a"), circle])
+  Background(fill="#0a0a1a")
+  Circle(cx=640, cy=360, radius=r, fill="#00ccff", opacity=a)
 
 
 # --------------------------------------------------
-# Sample 3: Spectrum + Beat Grid
-#   Audio-reactive bars with a subtle beat grid.
+# Sample 3: Spectrum + Grid
+#   Audio-reactive bars built from Rect + Line.
 # --------------------------------------------------
 def draw(ctx):
-  bg = Background(fill="#0b0f18")
-  spec = SpectrumBar(x=140, y=520, w=1000, h=180, bar_count=48, fill="#64c8ff", opacity=0.7)
-  grid = BeatGrid(stroke="#ffffff1e", thickness=1.0, beat_phase=ctx.time.beat_phase, opacity=0.4)
-  return Scene([bg, grid, spec])
+  Background(fill="#0b0f18")
+
+  spacing = 40
+  offset = ctx.time.beat_phase * spacing
+  for i in range(19):
+    y = i * spacing - offset
+    Line(x1=0, y1=y, x2=1280, y2=y, stroke="#ffffff1e", thickness=1.0, opacity=0.4)
+
+  count = min(len(ctx.audio.spectrum), 48)
+  if count > 0:
+    bar_w = 1000 / count
+    for i in range(count):
+      amp = ctx.audio.spectrum[i]
+      h = 180 * amp
+      Rect(x=140 + i * bar_w, y=700 - h, w=bar_w - 2, h=h, fill="#64c8ff", opacity=0.7)
 
 
 # --------------------------------------------------
@@ -67,7 +82,7 @@ def draw(ctx):
 #   Circles that fan out when combo is high.
 # --------------------------------------------------
 def draw(ctx):
-  nodes = [Background(fill="#111111")]
+  Background(fill="#111111")
 
   combo = ctx.chart.combo
   count = min(int(combo / 10), 12)
@@ -78,11 +93,9 @@ def draw(ctx):
     cx = 640 + cos(angle) * dist
     cy = 360 + sin(angle) * dist
     r = 10.0 + sin(ctx.time.ms * 0.005 + i) * 6.0
-    nodes = nodes + [Circle(cx=cx, cy=cy, radius=r, fill="#ff6644", opacity=0.8)]
+    Circle(cx=cx, cy=cy, radius=r, fill="#ff6644", opacity=0.8)
 
-  label = Text(text=str(int(combo)), x=600, y=330, font_size=48, fill="#ffffff")
-  nodes = nodes + [label]
-  return Scene(nodes)
+  Text(text=str(int(combo)), x=600, y=330, font_size=48, fill="#ffffff")
 
 
 # --------------------------------------------------
@@ -90,17 +103,13 @@ def draw(ctx):
 #   A simple HUD overlay.
 # --------------------------------------------------
 def draw(ctx):
-  nodes = []
-
   bar_w = ctx.screen.w - 100
   filled = bar_w * ctx.time.progress
-  nodes = nodes + [Rect(x=50, y=680, w=bar_w, h=6, fill="#333333")]
-  nodes = nodes + [Rect(x=50, y=680, w=filled, h=6, fill="#00ff88")]
+  Rect(x=50, y=680, w=bar_w, h=6, fill="#333333")
+  Rect(x=50, y=680, w=filled, h=6, fill="#00ff88")
 
   pct = str(int(ctx.time.progress * 100)) + "%"
-  nodes = nodes + [Text(text=pct, x=50, y=656, font_size=16, fill="#aaaaaa")]
-
-  return Scene(nodes)
+  Text(text=pct, x=50, y=656, font_size=16, fill="#aaaaaa")
 
 
 # --------------------------------------------------
@@ -108,7 +117,7 @@ def draw(ctx):
 #   Four squares rotating around the center.
 # --------------------------------------------------
 def draw(ctx):
-  nodes = [Background(fill="#1a0a2e")]
+  Background(fill="#1a0a2e")
 
   t = ctx.time.sec
   for i in range(4):
@@ -119,27 +128,30 @@ def draw(ctx):
     color = "#ff44cc"
     if i % 2 == 0:
       color = "#44ccff"
-    nodes = nodes + [Rect(x=cx - 40, y=cy - 40, w=80, h=80, fill=color, rotation=rot, opacity=0.75)]
-
-  return Scene(nodes)
+    Rect(x=cx - 40, y=cy - 40, w=80, h=80, fill=color, rotation=rot, opacity=0.75)
 
 
 # --------------------------------------------------
-# Sample 7: Pulse Rings + Spectrum
-#   Layered rings that expand on beat with spectrum.
+# Sample 7: Manual Pulse Rings + Spectrum
+#   Rings and bars composed from Circle + Rect.
 # --------------------------------------------------
 def draw(ctx):
-  nodes = [Background(fill="#050510")]
+  Background(fill="#050510")
   bp = ctx.time.beat_phase
 
   for i in range(3):
     r = 100 + i * 80
     a = lerp(0.6, 0.1, bp) - i * 0.15
     a = max(a, 0.0)
-    nodes = nodes + [PulseRing(cx=640, cy=360, radius=r, stroke="#8866ff", thickness=2.0, beat_phase=bp, opacity=a)]
+    Circle(cx=640, cy=360, radius=r + bp * 30, fill="#8866ff", opacity=a * 0.15)
 
-  nodes = nodes + [SpectrumBar(x=340, y=560, w=600, h=120, bar_count=32, fill="#8866ff", opacity=0.5)]
-  return Scene(nodes)
+  count = min(len(ctx.audio.spectrum), 32)
+  if count > 0:
+    bar_w = 600 / count
+    for i in range(count):
+      amp = ctx.audio.spectrum[i]
+      h = 120 * amp
+      Rect(x=340 + i * bar_w, y=680 - h, w=bar_w - 2, h=h, fill="#8866ff", opacity=0.5)
 
 
 # --------------------------------------------------
@@ -156,51 +168,55 @@ def draw(ctx):
   elif acc > 0.70:
     color = "#ff8833"
 
-  bar = Rect(x=0, y=0, w=ctx.screen.w, h=8, fill=color, opacity=0.9)
-  label = Text(text=str(int(acc * 100)) + "%", x=20, y=16, font_size=20, fill=color, opacity=0.7)
-  return Scene([bar, label])
+  Rect(x=0, y=0, w=ctx.screen.w, h=8, fill=color, opacity=0.9)
+  Text(text=str(int(acc * 100)) + "%", x=20, y=16, font_size=20, fill=color, opacity=0.7)
 
 
 # --------------------------------------------------
-# Sample 9: Waveform Lines
-#   Animated wave using sin() across the screen.
+# Sample 9: Waveform Polyline
+#   Animated wave using Point + Polyline.
 # --------------------------------------------------
 def draw(ctx):
-  nodes = [Background(fill="#0d0d1a")]
+  Background(fill="#0d0d1a")
   t = ctx.time.ms * 0.002
+  points = []
 
-  for i in range(40):
+  for i in range(41):
     x = i * 32.0
-    y1 = 360 + sin(t + i * 0.3) * 100
-    y2 = 360 + sin(t + (i + 1) * 0.3) * 100
-    x2 = (i + 1) * 32.0
-    a = 0.3 + sin(t + i * 0.5) * 0.2
-    nodes = nodes + [Line(x1=x, y1=y1, x2=x2, y2=y2, stroke="#22ddaa", thickness=2.0, opacity=a)]
+    y = 360 + sin(t + i * 0.3) * 100
+    points = points + [Point(x=x, y=y)]
 
-  return Scene(nodes)
+  Polyline(points=points, stroke="#22ddaa", thickness=2.0, opacity=0.5)
 
 
 # --------------------------------------------------
 # Sample 10: Full Production MV
-#   Combines beat grid, spectrum, pulse, combo, progress.
+#   Combines primitive-built grid, pulse glow, combo, progress.
 # --------------------------------------------------
 def draw(ctx):
-  nodes = [Background(fill="#080812")]
+  Background(fill="#080812")
   bp = ctx.time.beat_phase
 
-  nodes = nodes + [BeatGrid(stroke="#ffffff10", thickness=1.0, beat_phase=bp, opacity=0.3)]
-  nodes = nodes + [PulseRing(cx=640, cy=340, radius=160, stroke="#ff66aa", thickness=2.5, beat_phase=bp, opacity=0.5)]
-  nodes = nodes + [SpectrumBar(x=90, y=540, w=1100, h=160, bar_count=64, fill="#4488ff", opacity=0.45)]
+  for i in range(19):
+    y = i * 40 - bp * 40
+    Line(x1=0, y1=y, x2=1280, y2=y, stroke="#ffffff10", thickness=1.0, opacity=0.3)
+
+  Circle(cx=640, cy=340, radius=160 + bp * 24, fill="#ff66aa", opacity=0.08)
+
+  count = min(len(ctx.audio.spectrum), 64)
+  if count > 0:
+    bar_w = 1100 / count
+    for i in range(count):
+      amp = ctx.audio.spectrum[i]
+      h = 160 * amp
+      Rect(x=90 + i * bar_w, y=700 - h, w=bar_w - 2, h=h, fill="#4488ff", opacity=0.45)
 
   combo = ctx.chart.combo
   if combo >= 10:
     scale = min(combo * 0.5, 40.0)
-    glow = Circle(cx=640, cy=340, radius=60 + scale, fill="#ff66aa", opacity=lerp(0.3, 0.05, bp))
-    nodes = nodes + [glow]
+    Circle(cx=640, cy=340, radius=60 + scale, fill="#ff66aa", opacity=lerp(0.3, 0.05, bp))
 
   bar_w = 1000
   filled = bar_w * ctx.time.progress
-  nodes = nodes + [Rect(x=140, y=700, w=bar_w, h=4, fill="#222222")]
-  nodes = nodes + [Rect(x=140, y=700, w=filled, h=4, fill="#44ddff")]
-
-  return Scene(nodes)
+  Rect(x=140, y=700, w=bar_w, h=4, fill="#222222")
+  Rect(x=140, y=700, w=filled, h=4, fill="#44ddff")

@@ -57,6 +57,7 @@ enum class opcode : uint8_t {
 
     // Lists
     build_list,       // arg: element count
+    append_list,      // pops list and value, appends value in place, pushes None
     load_index,
     store_index,
 

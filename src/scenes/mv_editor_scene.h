@@ -3,7 +3,7 @@
 #include <string>
 
 #include "data_models.h"
-#include "editor/editor_mv_script_panel.h"
+#include "mv/mv_script_panel.h"
 #include "scene.h"
 
 // MV(.rmv)スクリプトの編集画面。曲選択画面から遷移する。
@@ -21,6 +21,6 @@ private:
     void save_script();
 
     song_data song_;
-    editor_mv_script_panel_state panel_state_;
+    mv_script_panel_state panel_state_;
     bool dirty_ = false;
 };

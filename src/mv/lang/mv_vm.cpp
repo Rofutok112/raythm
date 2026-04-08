@@ -591,6 +591,22 @@ std::optional<vm_error> vm::run_instruction(call_frame& frame) {
         break;
     }
 
+    case opcode::append_list: {
+        auto value = pop();
+        auto list_val = pop();
+        if (auto* list = std::get_if<std::shared_ptr<mv_list>>(&list_val)) {
+            if (*list) {
+                if (static_cast<int>((*list)->elements.size()) >= limits_.max_list_size) {
+                    return vm_error{"list size exceeds limit", line};
+                }
+                (*list)->elements.push_back(std::move(value));
+                push(std::monostate{});
+                break;
+            }
+        }
+        return vm_error{"cannot append to " + value_type_name(list_val), line};
+    }
+
     case opcode::load_index: {
         auto idx_val = pop();
         auto obj_val = pop();

@@ -174,6 +174,49 @@ def draw(ctx):
     ASSERT(txt->font_size == 24);
 }
 
+TEST(test_polyline_node_construction) {
+    const char* src = R"(
+def draw(ctx):
+    pts = [Point(x=0, y=0), Point(x=50, y=25), Point(x=100, y=0)]
+    Polyline(points=pts, stroke="#22ddaa", thickness=3.0, opacity=0.5)
+)";
+    mv::mv_runtime rt;
+    ASSERT(rt.load_source(src));
+
+    mv::context_input input;
+    auto scene = rt.tick(input);
+    ASSERT(scene.has_value());
+    ASSERT(scene->nodes.size() == 1);
+    auto* poly = std::get_if<mv::polyline_node>(&scene->nodes[0]);
+    ASSERT(poly != nullptr);
+    ASSERT(poly->points.size() == 3);
+    ASSERT(std::abs(poly->points[1].y - 25.0f) < 0.01f);
+    ASSERT(std::abs(poly->thickness - 3.0f) < 0.01f);
+}
+
+TEST(test_list_append_method_builds_polyline_points) {
+    const char* src = R"(
+def draw(ctx):
+    pts = []
+    pts.append(Point(x=0, y=0))
+    pts.append(Point(x=25, y=50))
+    pts.append(Point(x=50, y=0))
+    Polyline(points=pts, stroke="#22ddaa", thickness=2.0, opacity=0.5)
+)";
+    mv::mv_runtime rt;
+    ASSERT(rt.load_source(src));
+
+    mv::context_input input;
+    auto scene = rt.tick(input);
+    ASSERT(scene.has_value());
+    ASSERT(scene->nodes.size() == 1);
+    auto* poly = std::get_if<mv::polyline_node>(&scene->nodes[0]);
+    ASSERT(poly != nullptr);
+    ASSERT(poly->points.size() == 3);
+    ASSERT(std::abs(poly->points[1].x - 25.0f) < 0.01f);
+    ASSERT(std::abs(poly->points[1].y - 50.0f) < 0.01f);
+}
+
 TEST(test_ctx_access_in_draw) {
     const char* src = R"(
 def draw(ctx):
@@ -198,7 +241,74 @@ def draw(ctx):
     ASSERT(std::abs(rect->y - 75.0f) < 0.01f);
 }
 
-TEST(test_beat_grid_and_spectrum_bar_scene) {
+TEST(test_imperative_draw_without_return) {
+    const char* src = R"(
+def draw(ctx):
+    Background(fill="#0a0a1a")
+    Circle(cx=640, cy=360, radius=80, fill="#00ccff", opacity=0.8)
+)";
+    mv::mv_runtime rt;
+    ASSERT(rt.load_source(src));
+
+    mv::context_input input;
+    auto scene = rt.tick(input);
+    ASSERT(scene.has_value());
+    ASSERT(scene->nodes.size() == 2);
+    ASSERT(std::holds_alternative<mv::background_node>(scene->nodes[0]));
+    ASSERT(std::holds_alternative<mv::circle_node>(scene->nodes[1]));
+
+    auto* circle = std::get_if<mv::circle_node>(&scene->nodes[1]);
+    ASSERT(circle != nullptr);
+    ASSERT(std::abs(circle->radius - 80.0f) < 0.01f);
+}
+
+TEST(test_unknown_function_fails_compile) {
+    const char* src = R"(
+def draw(ctx):
+    totally_not_real(123)
+)";
+    mv::mv_runtime rt;
+    ASSERT(!rt.load_source(src));
+}
+
+TEST(test_imperative_progress_bar_draw) {
+    const char* src = R"(
+def draw(ctx):
+    bar_w = ctx.screen.w - 100
+    filled = bar_w * ctx.time.progress
+
+    Rect(x=50, y=680, w=bar_w, h=6, fill="#333333")
+    Rect(x=50, y=680, w=filled, h=6, fill="#00ff88")
+
+    pct = str(int(ctx.time.progress * 100)) + "%"
+    Text(text=pct, x=50, y=656, font_size=16, fill="#aaaaaa")
+)";
+    mv::mv_runtime rt;
+    ASSERT(rt.load_source(src));
+
+    mv::context_input input;
+    input.current_ms = 60000.0;
+    input.song_length_ms = 120000.0;
+    input.screen_w = 1280.0f;
+    auto scene = rt.tick(input);
+    ASSERT(scene.has_value());
+    ASSERT(scene->nodes.size() == 3);
+    ASSERT(std::holds_alternative<mv::rect_node>(scene->nodes[0]));
+    ASSERT(std::holds_alternative<mv::rect_node>(scene->nodes[1]));
+    ASSERT(std::holds_alternative<mv::text_node>(scene->nodes[2]));
+
+    auto* bg_bar = std::get_if<mv::rect_node>(&scene->nodes[0]);
+    auto* fill_bar = std::get_if<mv::rect_node>(&scene->nodes[1]);
+    auto* pct = std::get_if<mv::text_node>(&scene->nodes[2]);
+    ASSERT(bg_bar != nullptr);
+    ASSERT(fill_bar != nullptr);
+    ASSERT(pct != nullptr);
+    ASSERT(std::abs(bg_bar->w - 1180.0f) < 0.01f);
+    ASSERT(std::abs(fill_bar->w - 590.0f) < 0.01f);
+    ASSERT(pct->text == "50%");
+}
+
+TEST(test_legacy_beat_grid_and_spectrum_bar_scene) {
     const char* src = R"(
 def draw(ctx):
     bg = Background(fill="#0b0f18")
@@ -239,6 +349,38 @@ def draw(ctx):
 
     std::error_code ec;
     std::filesystem::remove(temp_path, ec);
+}
+
+TEST(test_manual_spectrum_scene_from_primitives) {
+    const char* src = R"(
+def draw(ctx):
+    Background(fill="#0b0f18")
+
+    count = min(len(ctx.audio.spectrum), 4)
+    if count > 0:
+        bar_w = 200 / count
+        for i in range(count):
+            amp = ctx.audio.spectrum[i]
+            h = 100 * amp
+            Rect(x=100 + i * bar_w, y=200 - h, w=bar_w - 2, h=h, fill="#64c8ff", opacity=0.7)
+)";
+    mv::mv_runtime rt;
+    ASSERT(rt.load_source(src));
+
+    mv::context_input input;
+    input.spectrum = {0.1f, 0.3f, 0.6f, 0.9f, 1.0f};
+
+    auto scene = rt.tick(input);
+    ASSERT(scene.has_value());
+    ASSERT(scene->nodes.size() == 5);
+    ASSERT(std::holds_alternative<mv::background_node>(scene->nodes[0]));
+
+    auto* bar0 = std::get_if<mv::rect_node>(&scene->nodes[1]);
+    auto* bar3 = std::get_if<mv::rect_node>(&scene->nodes[4]);
+    ASSERT(bar0 != nullptr);
+    ASSERT(bar3 != nullptr);
+    ASSERT(std::abs(bar0->h - 10.0f) < 0.01f);
+    ASSERT(std::abs(bar3->h - 90.0f) < 0.01f);
 }
 
 // ---- Validator ----
@@ -334,8 +476,14 @@ int main() {
     RUN(test_builtins_scene_construction);
     RUN(test_builtins_rgb_color);
     RUN(test_builtins_multiple_node_types);
+    RUN(test_polyline_node_construction);
+    RUN(test_list_append_method_builds_polyline_points);
     RUN(test_ctx_access_in_draw);
-    RUN(test_beat_grid_and_spectrum_bar_scene);
+    RUN(test_imperative_draw_without_return);
+    RUN(test_unknown_function_fails_compile);
+    RUN(test_imperative_progress_bar_draw);
+    RUN(test_legacy_beat_grid_and_spectrum_bar_scene);
+    RUN(test_manual_spectrum_scene_from_primitives);
     RUN(test_validator_truncates_nodes);
     RUN(test_validator_sanitizes_nan);
     RUN(test_scene_clear_color);

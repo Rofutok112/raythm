@@ -7,26 +7,26 @@
 #include "raylib.h"
 #include "ui_text_editor.h"
 
-struct editor_mv_script_panel_state {
+struct mv_script_panel_state {
     ui::text_editor_state editor;
     std::vector<mv::script_error> errors;
     bool compile_success = false;
     bool show_compile_result = false;
 };
 
-struct editor_mv_script_panel_model {
+struct mv_script_panel_model {
     Rectangle content_rect = {};
     Vector2 mouse = {};
 };
 
-struct editor_mv_script_panel_result {
+struct mv_script_panel_result {
     bool compile_clicked = false;
     bool save_clicked = false;
 };
 
-class editor_mv_script_panel {
+class mv_script_panel {
 public:
-    static editor_mv_script_panel_result draw(
-        const editor_mv_script_panel_model& model,
-        editor_mv_script_panel_state& state);
+    static mv_script_panel_result draw(
+        const mv_script_panel_model& model,
+        mv_script_panel_state& state);
 };
