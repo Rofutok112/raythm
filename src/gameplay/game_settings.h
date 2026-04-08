@@ -15,6 +15,8 @@ inline constexpr resolution_preset kResolutionPresets[] = {
     {2560, 1440, "2560x1440"},
 };
 inline constexpr int kResolutionPresetCount = 3;
+inline constexpr float kMinLaneWidth = 0.6f;
+inline constexpr float kMaxLaneWidth = 10.0f;
 
 // シーン間で共有されるゲーム設定。
 // settings_scene で変更され、play_scene / song_select_scene で参照される。

@@ -132,7 +132,7 @@ void load_settings(game_settings& settings) {
     if (auto v = extract_number_token(content, "cameraAngle"))
         settings.camera_angle_degrees = std::clamp(std::stof(*v), 5.0f, 90.0f);
     if (auto v = extract_number_token(content, "laneWidth"))
-        settings.lane_width = std::clamp(std::stof(*v), 0.6f, 5.0f);
+        settings.lane_width = std::clamp(std::stof(*v), kMinLaneWidth, kMaxLaneWidth);
     if (auto v = extract_number_token(content, "noteSpeed"))
         settings.note_speed = std::clamp(std::stof(*v), kMinNoteSpeed, kMaxNoteSpeed);
     if (auto v = extract_number_token(content, "noteHeight"))
