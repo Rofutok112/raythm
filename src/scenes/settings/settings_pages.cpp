@@ -57,7 +57,7 @@ void settings_gameplay_page::update() {
             settings_.camera_angle_degrees = 5.0f + ratio * (90.0f - 5.0f);
         } else if (active_slider_ == slider::lane_width) {
             const float ratio = settings::slider_ratio_from_mouse(settings::kGameplayRows[2]);
-            settings_.lane_width = 0.6f + ratio * (10.0f - 0.6f);
+            settings_.lane_width = kMinLaneWidth + ratio * (kMaxLaneWidth - kMinLaneWidth);
         } else if (active_slider_ == slider::note_height) {
             const float ratio = settings::slider_ratio_from_mouse(settings::kGameplayRows[3]);
             settings_.note_height = kMinNoteHeight + ratio * (kMaxNoteHeight - kMinNoteHeight);
@@ -91,7 +91,7 @@ void settings_gameplay_page::draw() const {
         } else if (i == 1) {
             ratio = (settings_.camera_angle_degrees - 5.0f) / (90.0f - 5.0f);
         } else if (i == 2) {
-            ratio = (settings_.lane_width - 0.6f) / (10.0f - 0.6f);
+            ratio = (settings_.lane_width - kMinLaneWidth) / (kMaxLaneWidth - kMinLaneWidth);
         } else {
             ratio = (settings_.note_height - kMinNoteHeight) / (kMaxNoteHeight - kMinNoteHeight);
         }
