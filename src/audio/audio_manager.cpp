@@ -3,6 +3,7 @@
 #include <array>
 #include <algorithm>
 #include <unordered_map>
+#include <vector>
 
 #include "bass.h"
 
@@ -137,6 +138,43 @@ bool audio_manager::get_bgm_fft256(std::array<float, 128>& spectrum) const {
 
     return BASS_ChannelGetData(bgm_handle_, spectrum.data(),
                                BASS_DATA_FFT256 | BASS_DATA_FFT_REMOVEDC) != static_cast<DWORD>(-1);
+}
+
+bool audio_manager::get_bgm_oscilloscope256(std::array<float, 256>& samples) const {
+    samples.fill(0.0f);
+    if (!is_voice_loaded(bgm_handle_)) {
+        return false;
+    }
+
+    BASS_CHANNELINFO info = {};
+    if (BASS_ChannelGetInfo(bgm_handle_, &info) == FALSE || info.chans <= 0) {
+        return false;
+    }
+
+    const std::size_t channels = static_cast<std::size_t>(info.chans);
+    std::vector<float> interleaved(samples.size() * channels, 0.0f);
+    const DWORD requested_bytes =
+        static_cast<DWORD>(interleaved.size() * sizeof(float)) | BASS_DATA_FLOAT;
+    const DWORD bytes_read = BASS_ChannelGetData(bgm_handle_, interleaved.data(), requested_bytes);
+    if (bytes_read == static_cast<DWORD>(-1) || bytes_read == 0) {
+        return false;
+    }
+
+    const std::size_t samples_read = bytes_read / sizeof(float);
+    const std::size_t frames_read = std::min(samples.size(), samples_read / channels);
+    if (frames_read == 0) {
+        return false;
+    }
+
+    for (std::size_t frame = 0; frame < frames_read; ++frame) {
+        float mono = 0.0f;
+        const std::size_t base = frame * channels;
+        for (std::size_t channel = 0; channel < channels; ++channel) {
+            mono += interleaved[base + channel];
+        }
+        samples[frame] = std::clamp(mono / static_cast<float>(channels), -1.0f, 1.0f);
+    }
+    return true;
 }
 
 double audio_manager::get_output_latency_seconds() const {

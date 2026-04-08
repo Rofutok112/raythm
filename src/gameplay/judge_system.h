@@ -11,10 +11,10 @@
 class judge_system {
 public:
     static constexpr int kMaxLanes = 6;
-    static constexpr double kPerfectWindowMs = 25.0;
-    static constexpr double kGreatWindowMs = 50.0;
-    static constexpr double kGoodWindowMs = 90.0;
-    static constexpr double kBadWindowMs = 130.0;
+    static constexpr double kPerfectWindowMs = 40.0;
+    static constexpr double kGreatWindowMs = 80.0;
+    static constexpr double kGoodWindowMs = 120.0;
+    static constexpr double kBadWindowMs = 160.0;
 
     void init(const std::vector<note_data>& notes, const timing_engine& engine);
     void update(double current_ms, const input_handler& input);

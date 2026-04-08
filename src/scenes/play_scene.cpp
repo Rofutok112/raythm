@@ -2,11 +2,17 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <memory>
 #include <optional>
+#include <array>
 
 #include "audio_manager.h"
+#include "core/app_paths.h"
 #include "editor_scene.h"
+#include "mv/api/mv_context.h"
+#include "mv/mv_runtime.h"
+#include "mv/render/mv_renderer.h"
 #include "play/play_flow_controller.h"
 #include "play/play_renderer.h"
 #include "play/play_session_loader.h"
@@ -26,6 +32,42 @@ constexpr float kCameraHeight = 42.0f;
 constexpr float kCameraFovY = 42.0f;
 constexpr float kJudgeLineWorldZ = 12.0f;
 constexpr float kMaxGroundDistance = 1000.0f;
+constexpr float kMvSpectrumClampMax = 2.0f;
+
+int sample_mv_waveform_index(const std::vector<float>& waveform, double current_ms, double song_length_ms) {
+    if (waveform.empty() || song_length_ms <= 0.0) {
+        return 0;
+    }
+
+    const double progress = std::clamp(current_ms / song_length_ms, 0.0, 1.0);
+    const std::size_t last = waveform.size() - 1;
+    return static_cast<int>(std::clamp<std::size_t>(
+        static_cast<std::size_t>(progress * static_cast<double>(last)), 0, last));
+}
+
+std::vector<float> build_mv_spectrum() {
+    std::array<float, 128> fft = {};
+    if (!audio_manager::instance().get_bgm_fft256(fft)) {
+        return {};
+    }
+
+    std::vector<float> spectrum;
+    spectrum.reserve(fft.size());
+    for (float sample : fft) {
+        const float shaped = std::sqrt(std::max(0.0f, sample)) * 8.0f;
+        spectrum.push_back(std::clamp(shaped, 0.0f, kMvSpectrumClampMax));
+    }
+    return spectrum;
+}
+
+std::vector<float> build_mv_oscilloscope() {
+    std::array<float, 256> pcm = {};
+    if (!audio_manager::instance().get_bgm_oscilloscope256(pcm)) {
+        return {};
+    }
+
+    return {pcm.begin(), pcm.end()};
+}
 
 Vector3 build_camera_forward(float camera_angle_degrees) {
     const float angle_rad = std::clamp(camera_angle_degrees, 5.0f, 90.0f) * DEG2RAD;
@@ -72,8 +114,32 @@ play_scene::play_scene(scene_manager& manager, song_data song, chart_data chart,
     request_.start_tick = std::max(0, start_tick);
 }
 
+play_scene::~play_scene() = default;
+
 void play_scene::on_enter() {
     state_ = play_session_loader::load(request_, draw_queue_);
+
+    // Try to load MV script for this song
+    if (state_.song_data.has_value()) {
+        auto script_file = app_paths::script_path(state_.song_data->meta.song_id);
+        TraceLog(LOG_INFO, "MV: looking for script at %s", script_file.string().c_str());
+        if (std::filesystem::exists(script_file)) {
+            mv_runtime_ = std::make_unique<mv::mv_runtime>();
+            if (!mv_runtime_->load_file(script_file.string())) {
+                TraceLog(LOG_WARNING, "MV: compile failed");
+                for (const auto& e : mv_runtime_->last_errors()) {
+                    TraceLog(LOG_WARNING, "MV:   L%d: %s (%s)", e.line, e.message.c_str(), e.phase.c_str());
+                }
+                mv_runtime_.reset();
+            } else {
+                TraceLog(LOG_INFO, "MV: script loaded OK");
+            }
+        } else {
+            TraceLog(LOG_INFO, "MV: script file not found");
+        }
+    } else {
+        TraceLog(LOG_INFO, "MV: no song_data, skipping script load");
+    }
 }
 
 void play_scene::on_exit() {
@@ -206,6 +272,63 @@ void play_scene::draw() {
     }
 
     play_renderer::draw_world_background();
+
+    // MV script layer (2D, behind notes)
+    if (mv_runtime_ && mv_runtime_->is_loaded()) {
+        mv::context_input mv_input;
+        mv_input.current_ms = get_visual_ms();
+        mv_input.song_length_ms = state_.song_end_ms;
+
+        int current_tick = state_.timing_engine.ms_to_tick(state_.current_ms);
+        mv_input.bpm = state_.timing_engine.get_bpm_at(current_tick);
+
+        double beat_duration_ms = 60000.0 / mv_input.bpm;
+        if (beat_duration_ms > 0) {
+            double ms_in_beat = std::fmod(state_.current_ms, beat_duration_ms);
+            if (ms_in_beat < 0) ms_in_beat += beat_duration_ms;
+            mv_input.beat_phase = static_cast<float>(ms_in_beat / beat_duration_ms);
+            mv_input.beat_number = static_cast<int>(state_.current_ms / beat_duration_ms);
+        }
+
+        mv_input.combo = state_.combo_display;
+        mv_input.key_count = state_.key_count;
+        mv_input.spectrum = build_mv_spectrum();
+        std::vector<float> oscilloscope = build_mv_oscilloscope();
+        mv_input.oscilloscope = &oscilloscope;
+        mv_input.waveform = &state_.mv_waveform;
+        mv_input.waveform_index =
+            sample_mv_waveform_index(state_.mv_waveform, mv_input.current_ms, mv_input.song_length_ms);
+        if (!state_.mv_waveform.empty()) {
+            mv_input.level = state_.mv_waveform[static_cast<std::size_t>(mv_input.waveform_index)];
+        }
+        if (state_.chart_data.has_value()) {
+            mv_input.total_notes = static_cast<int>(state_.chart_data->notes.size());
+        }
+        mv_input.screen_w = static_cast<float>(kScreenWidth);
+        mv_input.screen_h = static_cast<float>(kScreenHeight);
+
+        auto scene_opt = mv_runtime_->tick(mv_input);
+        if (scene_opt.has_value()) {
+            static int mv_log_count = 0;
+            if (mv_log_count < 3) {
+                TraceLog(LOG_INFO, "MV: tick OK, %d nodes", static_cast<int>(scene_opt->nodes.size()));
+                mv_log_count++;
+            }
+            virtual_screen::begin();
+            mv::render_scene(*scene_opt);
+            virtual_screen::end();
+            virtual_screen::draw_to_screen(true);
+        } else {
+            static int mv_fail_count = 0;
+            if (mv_fail_count < 3) {
+                TraceLog(LOG_WARNING, "MV: tick returned nullopt");
+                for (const auto& e : mv_runtime_->last_errors()) {
+                    TraceLog(LOG_WARNING, "MV:   L%d: %s (%s)", e.line, e.message.c_str(), e.phase.c_str());
+                }
+                mv_fail_count++;
+            }
+        }
+    }
 
     const Camera3D camera = make_play_camera();
     float lane_start_z = 0.0f;

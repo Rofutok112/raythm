@@ -141,6 +141,14 @@ std::string save_song_package_file(const std::string& default_file_name) {
         default_file_name);
 }
 
+std::string save_mv_script_file(const std::string& default_file_name) {
+    return save_file_dialog(
+        L"raythm MV Script (*.rmv)\0*.rmv\0All Files (*.*)\0*.*\0",
+        L"Export MV Script",
+        L"rmv",
+        default_file_name);
+}
+
 bool confirm_yes_no(const std::string& title, const std::string& message) {
     fullscreen_dialog_guard fullscreen_guard;
     const int result = MessageBoxW(static_cast<HWND>(window_dialog_support::native_window_handle()),
@@ -158,6 +166,7 @@ std::string open_chart_package_file() { return {}; }
 std::string open_song_package_file() { return {}; }
 std::string save_chart_package_file(const std::string&) { return {}; }
 std::string save_song_package_file(const std::string&) { return {}; }
+std::string save_mv_script_file(const std::string&) { return {}; }
 bool confirm_yes_no(const std::string&, const std::string&) { return false; }
 
 #endif

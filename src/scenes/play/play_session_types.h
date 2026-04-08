@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "editor/editor_scene_types.h"
 #include "input_handler.h"
@@ -86,6 +87,7 @@ struct play_session_state {
     bool result_transition_playing = false;
     float result_transition_timer = 0.0f;
     std::string hitsound_path;
+    std::vector<float> mv_waveform;
     int start_tick = 0;
     double start_ms = 0.0;
 };

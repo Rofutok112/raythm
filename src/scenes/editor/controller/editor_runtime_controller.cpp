@@ -22,6 +22,7 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
 
     if (!metadata_input_active &&
         !timing_input_active &&
+        !context.mv_script_editor_active &&
         !context.timing_panel.bar_pick_mode &&
         !context.timeline_drag.active &&
         context.space_pressed) {
@@ -32,7 +33,7 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
             context.hitsound_path);
     }
 
-    if (context.ctrl_down && context.z_pressed) {
+    if (context.ctrl_down && context.z_pressed && !context.mv_script_editor_active) {
         if (context.shift_down) {
             context.state.redo();
         } else {
@@ -42,7 +43,7 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
         editor_transport_service::sync(context.transport, &context.state, context.hitsound_path, true);
     }
 
-    if (context.ctrl_down && context.y_pressed) {
+    if (context.ctrl_down && context.y_pressed && !context.mv_script_editor_active) {
         context.state.redo();
         editor_scene_sync::sync_after_history_change(context.sync_context);
         editor_transport_service::sync(context.transport, &context.state, context.hitsound_path, true);
@@ -50,6 +51,7 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
 
     if (!metadata_input_active &&
         !timing_input_active &&
+        !context.mv_script_editor_active &&
         context.delete_pressed &&
         context.selected_note_index.has_value()) {
         const size_t selected_index = *context.selected_note_index;

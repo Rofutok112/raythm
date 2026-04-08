@@ -38,6 +38,7 @@ public:
     double get_bgm_length_seconds() const;
     audio_clock_snapshot get_bgm_clock() const;
     bool get_bgm_fft256(std::array<float, 128>& spectrum) const;
+    bool get_bgm_oscilloscope256(std::array<float, 256>& samples) const;
     double get_output_latency_seconds() const;
     double get_output_buffer_seconds() const;
 

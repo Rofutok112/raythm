@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "editor/editor_meter_map.h"
+#include "editor/editor_scene_types.h"
 #include "editor/editor_timing_panel.h"
 
 struct editor_right_panel_view_model {
@@ -22,5 +23,5 @@ struct editor_right_panel_view_result {
 class editor_right_panel_view final {
 public:
     static editor_right_panel_view_result draw(const editor_right_panel_view_model& model,
-                                               editor_timing_panel_state& state);
+                                               editor_timing_panel_state& timing_state);
 };

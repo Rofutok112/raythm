@@ -53,6 +53,12 @@ std::filesystem::path settings_path();
 // AppData/Local/raythm/chart_offsets.txt
 std::filesystem::path chart_offsets_path();
 
+// AppData/Local/raythm/scripts/
+std::filesystem::path scripts_root();
+
+// AppData/Local/raythm/scripts/{song_id}.rmv
+std::filesystem::path script_path(const std::string& song_id);
+
 // Create songs/ and charts/ directories if they don't exist.
 void ensure_directories();
 

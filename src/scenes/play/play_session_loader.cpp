@@ -5,6 +5,7 @@
 
 #include "app_paths.h"
 #include "audio_manager.h"
+#include "audio_waveform.h"
 #include "game_settings.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
@@ -38,7 +39,7 @@ double calculate_song_end_ms(const chart_data& chart, const timing_engine& engin
         last_tick = std::max(last_tick, note.type == note_type::hold ? note.end_tick : note.tick);
     }
 
-    return std::max(engine.tick_to_ms(last_tick) + 2000.0, audio.get_bgm_length_seconds() * 1000.0);
+    return std::max(engine.tick_to_ms(last_tick) + 5000.0, audio.get_bgm_length_seconds() * 1000.0);
 }
 
 int calculate_total_judge_points(const chart_data& chart) {
@@ -47,6 +48,18 @@ int calculate_total_judge_points(const chart_data& chart) {
         total += note.type == note_type::hold ? 2 : 1;
     }
     return total;
+}
+
+std::vector<float> build_mv_waveform(const std::filesystem::path& audio_path) {
+    constexpr std::size_t kMvWaveformSegmentCount = 512;
+
+    const audio_waveform_summary summary = audio_waveform::build(path_utils::to_utf8(audio_path), kMvWaveformSegmentCount);
+    std::vector<float> waveform;
+    waveform.reserve(summary.peaks.size());
+    for (const audio_waveform_peak& peak : summary.peaks) {
+        waveform.push_back(peak.amplitude);
+    }
+    return waveform;
 }
 
 }  // namespace
@@ -118,6 +131,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     const std::filesystem::path audio_path =
         path_utils::join_utf8(state.song_data->directory, state.song_data->meta.audio_file);
     audio.load_bgm(path_utils::to_utf8(audio_path));
+    state.mv_waveform = build_mv_waveform(audio_path);
     if (state.start_ms > 0.0) {
         audio.seek_bgm(state.start_ms / 1000.0);
     }

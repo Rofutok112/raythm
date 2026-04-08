@@ -41,6 +41,7 @@ enum class pending_confirmation_action {
     none,
     delete_song,
     delete_chart,
+    delete_mv,
     overwrite_song_import,
     overwrite_chart_import,
 };
