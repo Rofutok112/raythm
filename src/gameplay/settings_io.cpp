@@ -146,6 +146,10 @@ void load_settings(game_settings& settings) {
         settings.target_fps = std::stoi(*v);
     if (auto v = extract_number_token(content, "resolutionIndex"))
         settings.resolution_index = std::clamp(std::stoi(*v), 0, kResolutionPresetCount - 1);
+    if (auto v = extract_number_token(content, "windowedWidth"))
+        settings.windowed_width = std::clamp(std::stoi(*v), 640, 7680);
+    if (auto v = extract_number_token(content, "windowedHeight"))
+        settings.windowed_height = std::clamp(std::stoi(*v), 360, 4320);
     if (auto v = extract_bool(content, "fullscreen"))
         settings.fullscreen = *v;
     if (auto v = extract_bool(content, "darkMode"))
@@ -183,6 +187,8 @@ void save_settings(const game_settings& settings) {
     out << "  \"seVolume\": " << settings.se_volume << ",\n";
     out << "  \"targetFps\": " << settings.target_fps << ",\n";
     out << "  \"resolutionIndex\": " << settings.resolution_index << ",\n";
+    out << "  \"windowedWidth\": " << settings.windowed_width << ",\n";
+    out << "  \"windowedHeight\": " << settings.windowed_height << ",\n";
     out << "  \"fullscreen\": " << (settings.fullscreen ? "true" : "false") << ",\n";
     out << "  \"darkMode\": " << (settings.dark_mode ? "true" : "false") << ",\n";
     out << "  \"keys4\": \"" << keys_to_csv(settings.keys.keys_4) << "\",\n";

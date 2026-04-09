@@ -18,9 +18,8 @@ int main() {
     audio_manager::instance().set_bgm_volume(g_settings.bgm_volume);
     audio_manager::instance().set_se_volume(g_settings.se_volume);
 
-    const resolution_preset& preset = kResolutionPresets[g_settings.resolution_index];
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(preset.width, preset.height, "raythm");
+    InitWindow(g_settings.windowed_width, g_settings.windowed_height, "raythm");
     SetTraceLogLevel(LOG_WARNING);
     SetTargetFPS(g_settings.target_fps);
     SetExitKey(KEY_NULL);
@@ -28,25 +27,38 @@ int main() {
 
     apply_windows_app_icon(GetWindowHandle());
     windows_input_source::instance().initialize(GetWindowHandle());
-    window_dialog_support::set_fullscreen(g_settings.fullscreen, preset.width, preset.height);
+    window_dialog_support::set_fullscreen(g_settings.fullscreen,
+                                          window_dialog_support::current_monitor_width(),
+                                          window_dialog_support::current_monitor_height());
     virtual_screen::init();
     ui::initialize_text_font();
 
     scene_manager manager;
     manager.set_initial_scene(std::unique_ptr<scene>(new title_scene(manager)));
     int applied_target_fps = g_settings.target_fps;
+    bool was_window_focused = IsWindowFocused();
 
     while (!WindowShouldClose()) {
-        const resolution_preset& current_preset = kResolutionPresets[g_settings.resolution_index];
         if (applied_target_fps != g_settings.target_fps) {
             SetTargetFPS(g_settings.target_fps);
             applied_target_fps = g_settings.target_fps;
         }
+        if (!window_dialog_support::is_fullscreen() && IsWindowResized()) {
+            g_settings.windowed_width = GetScreenWidth();
+            g_settings.windowed_height = GetScreenHeight();
+        }
         if (IsKeyPressed(KEY_F11)) {
             g_settings.fullscreen = !g_settings.fullscreen;
-            window_dialog_support::set_fullscreen(g_settings.fullscreen, current_preset.width, current_preset.height);
+            window_dialog_support::set_fullscreen(g_settings.fullscreen,
+                                                  window_dialog_support::current_monitor_width(),
+                                                  window_dialog_support::current_monitor_height());
             save_settings(g_settings);
         }
+        const bool window_focused = IsWindowFocused();
+        if (window_dialog_support::is_fullscreen() && was_window_focused && !window_focused) {
+            window_dialog_support::minimize_window();
+        }
+        was_window_focused = window_focused;
         const float dt = GetFrameTime();
         audio_manager::instance().update();
         manager.update(dt);
@@ -56,6 +68,7 @@ int main() {
         EndDrawing();
     }
 
+    save_settings(g_settings);
     virtual_screen::cleanup();
     ui::shutdown_text_font();
     windows_input_source::instance().shutdown();

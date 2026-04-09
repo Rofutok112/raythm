@@ -16,6 +16,7 @@ extern "C" {
 void* GetWindowHandle(void);
 bool IsWindowFullscreen(void);
 void ToggleFullscreen(void);
+void SetWindowSize(int width, int height);
 int GetMonitorWidth(int monitor);
 int GetMonitorHeight(int monitor);
 int GetCurrentMonitor(void);
@@ -38,6 +39,23 @@ bool is_fullscreen() {
 
 void toggle_fullscreen() {
     ToggleFullscreen();
+}
+
+void minimize_window() {
+#ifdef _WIN32
+    HWND hwnd = static_cast<HWND>(GetWindowHandle());
+    if (hwnd != nullptr) {
+        ShowWindow(hwnd, SW_MINIMIZE);
+    }
+#endif
+}
+
+int current_monitor_width() {
+    return GetMonitorWidth(GetCurrentMonitor());
+}
+
+int current_monitor_height() {
+    return GetMonitorHeight(GetCurrentMonitor());
 }
 
 void* native_window_handle() {
@@ -101,8 +119,13 @@ void apply_windowed_layout(int client_width, int client_height) {
 }
 
 void set_fullscreen(bool fullscreen, int windowed_client_width, int windowed_client_height) {
+    const int safe_width = std::max(1, windowed_client_width);
+    const int safe_height = std::max(1, windowed_client_height);
+
     if (fullscreen == IsWindowFullscreen()) {
-        if (!fullscreen) {
+        if (fullscreen) {
+            SetWindowSize(safe_width, safe_height);
+        } else {
             apply_windowed_layout(g_last_windowed_width, g_last_windowed_height);
         }
         return;
@@ -118,15 +141,18 @@ void set_fullscreen(bool fullscreen, int windowed_client_width, int windowed_cli
 
     ToggleFullscreen();
 
-    if (!fullscreen) {
-#ifdef _WIN32
-        HWND hwnd = static_cast<HWND>(GetWindowHandle());
-        if (hwnd != nullptr) {
-            ShowWindow(hwnd, SW_RESTORE);
-        }
-#endif
-        apply_windowed_layout(g_last_windowed_width, g_last_windowed_height);
+    if (fullscreen) {
+        SetWindowSize(safe_width, safe_height);
+        return;
     }
+
+#ifdef _WIN32
+    HWND hwnd = static_cast<HWND>(GetWindowHandle());
+    if (hwnd != nullptr) {
+        ShowWindow(hwnd, SW_RESTORE);
+    }
+#endif
+    apply_windowed_layout(g_last_windowed_width, g_last_windowed_height);
 }
 
 }  // namespace window_dialog_support

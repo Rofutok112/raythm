@@ -32,6 +32,8 @@ struct game_settings {
     int target_fps = 144;
     key_config keys;
     int resolution_index = 1;  // デフォルト 1920x1080
+    int windowed_width = 1280;
+    int windowed_height = 720;
     bool fullscreen = false;
     bool dark_mode = false;
 };

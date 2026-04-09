@@ -182,8 +182,16 @@ float expanded_row_height(const state& state, int song_index) {
     return layout::kRowHeight;
 }
 
+float song_list_content_top() {
+    return layout::kSongListTopPadding;
+}
+
+float song_list_first_item_y(const state& state) {
+    return layout::kSongListViewRect.y + song_list_content_top() - state.scroll_y;
+}
+
 float content_height(const state& state) {
-    float total = 0.0f;
+    float total = song_list_content_top();
     for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
         total += expanded_row_height(state, i);
     }
@@ -196,7 +204,7 @@ float scroll_offset_for_selected_song(const state& state) {
         return 0.0f;
     }
 
-    float row_top = 0.0f;
+    float row_top = song_list_content_top();
     for (int i = 0; i < state.selected_song_index; ++i) {
         row_top += expanded_row_height(state, i);
     }
