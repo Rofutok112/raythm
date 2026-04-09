@@ -126,6 +126,8 @@ void close_context_menu(state& state);
 void queue_status_message(state& state, std::string message, bool is_error);
 
 float expanded_row_height(const state& state, int song_index);
+float song_list_content_top();
+float song_list_first_item_y(const state& state);
 float content_height(const state& state);
 std::string fallback_song_id_after_song_delete(const state& state, int song_index);
 std::string fallback_chart_id_after_chart_delete(const state& state, int song_index, int chart_index);

@@ -114,7 +114,7 @@ std::optional<list_hit> hit_test_song_list(const state& state, Vector2 mouse) {
     }
 
     const std::vector<const chart_option*> filtered = filtered_charts_for_selected_song(state);
-    float item_y = layout::kSongListViewRect.y - state.scroll_y;
+    float item_y = song_list_first_item_y(state);
     for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
         const float row_h = expanded_row_height(state, i);
         if (i == state.selected_song_index) {
@@ -149,7 +149,7 @@ void draw_song_list(const state& state) {
 
     const std::vector<const chart_option*> filtered = filtered_charts_for_selected_song(state);
     const double now = GetTime();
-    float item_y = layout::kSongListViewRect.y - state.scroll_y;
+    float item_y = song_list_first_item_y(state);
     for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
         const bool is_selected = i == state.selected_song_index;
         const float row_h = expanded_row_height(state, i);

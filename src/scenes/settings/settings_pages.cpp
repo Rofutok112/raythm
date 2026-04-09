@@ -193,28 +193,14 @@ void settings_video_page::update() {
             kFrameRateOptions[static_cast<std::size_t>(std::clamp(index, 0, static_cast<int>(kFrameRateOptions.size()) - 1))];
     }
 
-    bool resolution_changed = false;
-
-    if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[1]), settings::kLayer)) {
-        settings_.resolution_index = std::max(0, settings_.resolution_index - 1);
-        resolution_changed = true;
-    } else if (ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[1]), settings::kLayer)) {
-        settings_.resolution_index = std::min(kResolutionPresetCount - 1, settings_.resolution_index + 1);
-        resolution_changed = true;
-    }
-
-    if (resolution_changed) {
-        runtime_applier_.apply_resolution(settings_.resolution_index);
+    if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[1]), settings::kLayer) ||
+        ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[1]), settings::kLayer)) {
+        settings_.fullscreen = !settings_.fullscreen;
+        runtime_applier_.apply_fullscreen(settings_.fullscreen);
     }
 
     if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[2]), settings::kLayer) ||
         ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[2]), settings::kLayer)) {
-        settings_.fullscreen = !settings_.fullscreen;
-        runtime_applier_.toggle_fullscreen();
-    }
-
-    if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[3]), settings::kLayer) ||
-        ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[3]), settings::kLayer)) {
         settings_.dark_mode = !settings_.dark_mode;
         runtime_applier_.apply_theme(settings_.dark_mode);
     }
@@ -226,9 +212,8 @@ void settings_video_page::draw() const {
                              static_cast<float>(settings::fps_option_index(settings_.target_fps)) / 3.0f,
                              settings::kSliderLeftInset, settings::kSliderRightInset,
                              settings::kLayer, 22, settings::kSliderTopOffset);
-    ui::draw_value_selector(settings::kGeneralRows[1], "Resolution", kResolutionPresets[settings_.resolution_index].label, settings::kLayer);
-    ui::draw_value_selector(settings::kGeneralRows[2], "Display", settings_.fullscreen ? "Fullscreen" : "Windowed", settings::kLayer);
-    ui::draw_value_selector(settings::kGeneralRows[3], "Theme", settings_.dark_mode ? "Dark" : "Light", settings::kLayer);
+    ui::draw_value_selector(settings::kGeneralRows[1], "Display", settings_.fullscreen ? "Fullscreen" : "Windowed", settings::kLayer);
+    ui::draw_value_selector(settings::kGeneralRows[2], "Theme", settings_.dark_mode ? "Dark" : "Light", settings::kLayer);
 }
 
 settings_key_config_page::settings_key_config_page(game_settings& settings) : settings_(settings) {

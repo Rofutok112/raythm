@@ -61,6 +61,7 @@ inline constexpr Rectangle kSongListImportSongButtonRect = ui::place(kSongListNe
                                                                      {-10.0f, 0.0f});
 inline constexpr float kSongListHeaderHeight = 48.0f;
 inline constexpr float kSongListBottomPadding = 12.0f;
+inline constexpr float kSongListTopPadding = 10.0f;
 inline constexpr Rectangle kSongListViewRect = ui::scroll_view(kSongListRect, kSongListHeaderHeight, kSongListBottomPadding);
 inline constexpr Rectangle kSongListScrollbarTrackRect = ui::place(kSongListViewRect, 6.0f, kSongListViewRect.height,
                                                                    ui::anchor::top_right, ui::anchor::top_right,
