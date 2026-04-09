@@ -148,8 +148,6 @@ void mv_editor_scene::draw() {
 
         const Rectangle name_rect = {body.x, body.y, body.width, 42.0f};
         const Rectangle author_rect = {body.x, body.y + 56.0f, body.width, 42.0f};
-        const Rectangle mv_id_rect = {body.x, body.y + 128.0f, body.width, 42.0f};
-        const Rectangle song_id_rect = {body.x, body.y + 180.0f, body.width, 42.0f};
 
         const auto name_result = ui::draw_text_input(name_rect, name_input_, "MV Name", "Untitled MV",
                                                      nullptr, ui::draw_layer::base, 16, 128,
@@ -160,11 +158,6 @@ void mv_editor_scene::draw() {
         if (name_result.changed || author_result.changed) {
             dirty_ = true;
         }
-
-        ui::draw_label_value(mv_id_rect, "MV ID", package_.meta.mv_id.c_str(), 18,
-                             g_theme->text_secondary, g_theme->text);
-        ui::draw_label_value(song_id_rect, "Song ID", song_.meta.song_id.c_str(), 18,
-                             g_theme->text_secondary, g_theme->text);
     }
 
     if (pending_compile_ && (GetTime() - last_change_time_) >= 0.3) {
