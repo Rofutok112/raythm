@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "core/app_paths.h"
+#include "mv/mv_storage.h"
 #include "song_select/song_select_layout.h"
 #include "theme.h"
 #include "ui_draw.h"
@@ -46,12 +47,9 @@ std::vector<context_menu_item_entry> build_context_menu_entries(const state& sta
             const bool valid_song = state.context_menu.song_index >= 0 &&
                                     state.context_menu.song_index < static_cast<int>(state.songs.size());
 
-            const bool can_edit_song = valid_song &&
-                                       state.songs[static_cast<size_t>(state.context_menu.song_index)].song.can_edit;
-            const bool can_export_song = valid_song &&
-                state.songs[static_cast<size_t>(state.context_menu.song_index)].song.source != content_source::official;
-            const bool can_delete_song = valid_song &&
-                                         state.songs[static_cast<size_t>(state.context_menu.song_index)].song.can_delete;
+            const bool can_edit_song = valid_song;
+            const bool can_export_song = valid_song;
+            const bool can_delete_song = valid_song;
             const bool can_add_chart_to_song = valid_song;
 
             bool valid_chart = false;
@@ -62,14 +60,14 @@ std::vector<context_menu_item_entry> build_context_menu_entries(const state& sta
                 valid_chart = state.context_menu.chart_index >= 0 &&
                               state.context_menu.chart_index < static_cast<int>(charts.size());
                 if (valid_chart) {
-                    can_edit_chart = charts[static_cast<size_t>(state.context_menu.chart_index)].source != content_source::official;
-                    can_delete_chart = charts[static_cast<size_t>(state.context_menu.chart_index)].can_delete;
+                    can_edit_chart = true;
+                    can_delete_chart = true;
                 }
             }
 
             const bool has_mv = valid_song &&
-                std::filesystem::exists(app_paths::script_path(
-                    state.songs[static_cast<size_t>(state.context_menu.song_index)].song.meta.song_id));
+                mv::find_first_package_for_song(
+                    state.songs[static_cast<size_t>(state.context_menu.song_index)].song.meta.song_id).has_value();
 
             if (state.context_menu.target == context_menu_target::song) {
                 if (state.context_menu.section == context_menu_section::root) {

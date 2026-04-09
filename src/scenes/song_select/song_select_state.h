@@ -14,8 +14,6 @@ namespace song_select {
 struct chart_option {
     std::string path;
     chart_meta meta;
-    content_source source = content_source::official;
-    bool can_delete = false;
     int local_note_offset_ms = 0;
     std::optional<rank> best_local_rank;
 };

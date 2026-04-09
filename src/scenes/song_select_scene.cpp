@@ -8,6 +8,8 @@
 
 #include "core/app_paths.h"
 #include "file_dialog.h"
+#include "mv/mv_storage.h"
+#include "path_utils.h"
 #include "player_note_offsets.h"
 #include "raylib.h"
 #include "scene_manager.h"
@@ -192,7 +194,7 @@ void song_select_scene::open_overwrite_song_confirmation(song_select::song_impor
         state_, song_select::pending_confirmation_action::overwrite_song_import,
         "Overwrite Song",
         "A user song with the same song ID already exists. Overwrite it?",
-        "Official songs cannot be overwritten.",
+        "",
         "OVERWRITE");
 }
 
@@ -202,7 +204,7 @@ void song_select_scene::open_overwrite_chart_confirmation(song_select::chart_imp
         state_, song_select::pending_confirmation_action::overwrite_chart_import,
         "Overwrite Chart",
         "A user chart with the same chart ID already exists. Overwrite it?",
-        "Official charts cannot be overwritten.",
+        "",
         "OVERWRITE");
 }
 
@@ -398,8 +400,7 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
         return;
     case song_select::context_menu_command::edit_song:
         if (state_.context_menu.song_index >= 0 &&
-            state_.context_menu.song_index < static_cast<int>(state_.songs.size()) &&
-            state_.songs[static_cast<size_t>(state_.context_menu.song_index)].song.can_edit) {
+            state_.context_menu.song_index < static_cast<int>(state_.songs.size())) {
             const song_select::song_entry& song = state_.songs[static_cast<size_t>(state_.context_menu.song_index)];
             song_select::close_context_menu(state_);
             manager_.change_scene(song_select::make_edit_song_scene(manager_, song));
@@ -497,13 +498,22 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
             song_select::close_context_menu(state_);
             const std::string src = file_dialog::open_mv_script_file();
             if (!src.empty()) {
+                mv::mv_package package = mv::find_first_package_for_song(song.song.meta.song_id)
+                    .value_or(mv::make_default_package_for_song(song.song.meta));
+                package.meta.song_id = song.song.meta.song_id;
+                package.meta.script_file = "script.rmv";
+                package.directory = path_utils::to_utf8(app_paths::mv_dir(package.meta.mv_id));
                 std::error_code ec;
-                std::filesystem::copy_file(src, app_paths::script_path(song.song.meta.song_id),
-                                           std::filesystem::copy_options::overwrite_existing, ec);
-                if (ec) {
-                    song_select::queue_status_message(state_, "Failed to import MV script.", true);
+                if (!mv::write_mv_json(package.meta, package.directory)) {
+                    song_select::queue_status_message(state_, "Failed to prepare MV package.", true);
                 } else {
-                    song_select::queue_status_message(state_, "MV script imported.", false);
+                    std::filesystem::copy_file(src, mv::script_path(package),
+                                               std::filesystem::copy_options::overwrite_existing, ec);
+                    if (ec) {
+                        song_select::queue_status_message(state_, "Failed to import MV script.", true);
+                    } else {
+                        song_select::queue_status_message(state_, "MV script imported.", false);
+                    }
                 }
             }
         }
@@ -513,17 +523,21 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
             state_.context_menu.song_index < static_cast<int>(state_.songs.size())) {
             const auto& song = state_.songs[static_cast<size_t>(state_.context_menu.song_index)];
             song_select::close_context_menu(state_);
-            const auto src = app_paths::script_path(song.song.meta.song_id);
-            if (std::filesystem::exists(src)) {
-                const std::string dest = file_dialog::save_mv_script_file(song.song.meta.song_id + ".rmv");
-                if (!dest.empty()) {
-                    std::error_code ec;
-                    std::filesystem::copy_file(src, dest, std::filesystem::copy_options::overwrite_existing, ec);
-                    if (ec) {
-                        song_select::queue_status_message(state_, "Failed to export MV script.", true);
-                    } else {
-                        song_select::queue_status_message(state_, "MV script exported.", false);
+            if (const auto package = mv::find_first_package_for_song(song.song.meta.song_id); package.has_value()) {
+                const auto src = mv::script_path(*package);
+                if (std::filesystem::exists(src)) {
+                    const std::string dest = file_dialog::save_mv_script_file(package->meta.mv_id + ".rmv");
+                    if (!dest.empty()) {
+                        std::error_code ec;
+                        std::filesystem::copy_file(src, dest, std::filesystem::copy_options::overwrite_existing, ec);
+                        if (ec) {
+                            song_select::queue_status_message(state_, "Failed to export MV script.", true);
+                        } else {
+                            song_select::queue_status_message(state_, "MV script exported.", false);
+                        }
                     }
+                } else {
+                    song_select::queue_status_message(state_, "Failed to export MV script.", true);
                 }
             }
         }
@@ -549,12 +563,16 @@ void song_select_scene::apply_confirmation_command(song_select::confirmation_com
             state_.confirmation_dialog = {};
             if (si >= 0 && si < static_cast<int>(state_.songs.size())) {
                 const auto& song_id = state_.songs[static_cast<size_t>(si)].song.meta.song_id;
-                std::error_code ec;
-                std::filesystem::remove(app_paths::script_path(song_id), ec);
-                if (ec) {
-                    song_select::queue_status_message(state_, "Failed to delete MV script.", true);
+                if (const auto package = mv::find_first_package_for_song(song_id); package.has_value()) {
+                    std::error_code ec;
+                    std::filesystem::remove_all(path_utils::from_utf8(package->directory), ec);
+                    if (ec) {
+                        song_select::queue_status_message(state_, "Failed to delete MV script.", true);
+                    } else {
+                        song_select::queue_status_message(state_, "MV script deleted.", false);
+                    }
                 } else {
-                    song_select::queue_status_message(state_, "MV script deleted.", false);
+                    song_select::queue_status_message(state_, "MV script not found.", true);
                 }
             }
             return;

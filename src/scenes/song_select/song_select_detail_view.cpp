@@ -129,15 +129,8 @@ void draw_song_details(const state& state, const preview_controller& preview_con
     ui::draw_text_f(TextFormat("BPM %.0f", song->song.meta.base_bpm), detail_x + content_offset_x,
                     layout::kJacketRect.y + 100.0f, 24, with_alpha(theme.text_muted, content_alpha));
     if (selected_chart != nullptr) {
-        const char* chart_source_label =
-            selected_chart->source == content_source::official ? "Official" : "Unofficial";
-        const Color chart_source_color =
-            selected_chart->source == content_source::official ? theme.success : theme.text_muted;
-        ui::draw_text_f(chart_source_label,
-                        detail_x + content_offset_x + chart_offset_x, layout::kJacketRect.y + 126.0f, 18,
-                        with_alpha(chart_source_color, chart_alpha));
         const float key_x = detail_x + content_offset_x + chart_offset_x;
-        const float key_y = layout::kJacketRect.y + 158.0f;
+        const float key_y = layout::kJacketRect.y + 126.0f;
         const float difficulty_x = key_x + 54.0f;
         const float difficulty_width = detail_max_width - 54.0f;
         const std::string difficulty_label =
@@ -146,12 +139,12 @@ void draw_song_details(const state& state, const preview_controller& preview_con
                         with_alpha(key_mode_color(selected_chart->meta.key_count), chart_alpha));
         draw_marquee_text(difficulty_label.c_str(), difficulty_x, key_y, 28,
                           with_alpha(theme.text, chart_alpha), difficulty_width, now);
-        draw_marquee_text(selected_chart->meta.chart_author.c_str(), key_x, layout::kJacketRect.y + 194.0f, 20,
+        draw_marquee_text(selected_chart->meta.chart_author.c_str(), key_x, layout::kJacketRect.y + 162.0f, 20,
                           with_alpha(theme.text_muted, chart_alpha), detail_max_width - 94.0f, now);
         if (selected_chart->best_local_rank.has_value()) {
             const Rectangle rank_rect = {
                 detail_x + detail_max_width - 74.0f + content_offset_x + chart_offset_x,
-                layout::kJacketRect.y + 188.0f,
+                layout::kJacketRect.y + 156.0f,
                 64.0f,
                 28.0f
             };

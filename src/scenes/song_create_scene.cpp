@@ -363,9 +363,6 @@ bool song_create_scene::create_song() {
     created_song_.meta = meta;
     created_song_.directory = path_utils::to_utf8(song_dir);
     created_song_.chart_paths.clear();
-    created_song_.source = content_source::app_data;
-    created_song_.can_edit = true;
-    created_song_.can_delete = true;
 
     return true;
 }
