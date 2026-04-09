@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "raylib.h"
+#include "ui_font.h"
 
 // 描画境界の座標変換ヘルパー。
 // float → int の static_cast を一元管理し、呼び出し側の記述を簡潔にする。
@@ -32,7 +33,10 @@ inline ipoint to_point(Vector2 v) {
 
 // float 座標で DrawText を呼び出す。
 inline void draw_text_f(const char* text, float x, float y, int font_size, Color color) {
-    DrawText(text, to_i(x), to_i(y), font_size, color);
+    if (text == nullptr || *text == '\0') {
+        return;
+    }
+    draw_text_auto(text, {x, y}, static_cast<float>(font_size), 0.0f, color);
 }
 
 // float 座標で DrawLine を呼び出す。

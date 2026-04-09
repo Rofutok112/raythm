@@ -4,6 +4,7 @@
 #include <cmath>
 #include <string>
 
+#include "raylib.h"
 #include "ui_draw.h"
 
 namespace ui {
@@ -25,7 +26,39 @@ struct text_input_result {
 };
 
 inline bool default_text_input_filter(int codepoint, const std::string&) {
-    return codepoint >= 32 && codepoint <= 126;
+    return codepoint >= 32 && codepoint != 127;
+}
+
+inline void append_codepoint_utf8(std::string& value, int codepoint) {
+    int codepoint_size = 0;
+    const char* encoded = CodepointToUTF8(codepoint, &codepoint_size);
+    if (encoded == nullptr || codepoint_size <= 0) {
+        return;
+    }
+    value.append(encoded, static_cast<size_t>(codepoint_size));
+}
+
+inline size_t utf8_codepoint_count(const std::string& value) {
+    size_t count = 0;
+    for (unsigned char c : value) {
+        if ((c & 0xC0u) != 0x80u) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+inline void pop_last_utf8_codepoint(std::string& value) {
+    if (value.empty()) {
+        return;
+    }
+
+    size_t next_size = value.size() - 1;
+    while (next_size > 0 &&
+           (static_cast<unsigned char>(value[next_size]) & 0xC0u) == 0x80u) {
+        --next_size;
+    }
+    value.resize(next_size);
 }
 
 inline text_input_result draw_text_input(Rectangle rect, text_input_state& state,
@@ -70,16 +103,16 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
     if (state.active) {
         int codepoint = GetCharPressed();
         while (codepoint > 0) {
-            if (state.value.size() < max_length &&
+            if (utf8_codepoint_count(state.value) < max_length &&
                 (filter == nullptr || filter(codepoint, state.value))) {
-                state.value.push_back(static_cast<char>(codepoint));
+                append_codepoint_utf8(state.value, codepoint);
                 result.changed = true;
             }
             codepoint = GetCharPressed();
         }
 
         if (IsKeyPressed(KEY_BACKSPACE) && !state.value.empty()) {
-            state.value.pop_back();
+            pop_last_utf8_codepoint(state.value);
             result.changed = true;
         }
 

@@ -11,6 +11,7 @@
 #include "song_select_scene.h"
 #include "theme.h"
 #include "ui_draw.h"
+#include "ui/ui_font.h"
 #include "virtual_screen.h"
 
 namespace {
@@ -123,9 +124,9 @@ void result_scene::draw() {
         draw_marquee_text(song_.meta.artist.c_str(), lx, sy + 38, 22, t.text_dim, song_info_max_w, now);
         const char* chart_label = TextFormat("%s %s Lv.%.1f", key_mode_label(chart_.key_count),
                                              chart_.difficulty.c_str(), chart_.level);
-        const int chart_label_w = MeasureText(chart_label, 20);
+        const float chart_label_w = ui::measure_text_size(chart_label, 20.0f, 0.0f).x;
         ui::draw_text_f(chart_label, lx, sy + 66.0f, 20, t.accent);
-        ui::draw_text_f(chart_.chart_author.c_str(), lx + static_cast<float>(chart_label_w) + 16.0f,
+        ui::draw_text_f(chart_.chart_author.c_str(), lx + chart_label_w + 16.0f,
                         sy + 66.0f, 20, t.text_muted);
     }
 

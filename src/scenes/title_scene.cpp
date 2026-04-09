@@ -103,7 +103,7 @@ void title_scene::draw() {
 
     Rectangle hint_rows[2];
     ui::vstack(kHintAreaRect, 22.0f, 8.0f, hint_rows);
-    ui::draw_text_in_rect("ENTER / LEFT CLICK: Song Select", 22, hint_rows[0], t.text_muted, ui::text_align::left);
+    ui::draw_text_in_rect("LEFT CLICK: Song Select", 22, hint_rows[0], t.text_muted, ui::text_align::left);
     ui::draw_text_in_rect("ESC: Quit", 22, hint_rows[1], t.text_muted, ui::text_align::left);
     if (transitioning_to_song_select_) {
         transition_fade_.draw();
