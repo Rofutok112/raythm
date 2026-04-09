@@ -275,7 +275,12 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
     if (!hit.has_value()) {
         if (right_pressed && CheckCollisionPointRec(mouse, song_select::layout::kSongListRect)) {
             song_select::open_list_background_context_menu(
-                state_, song_select::layout::make_context_menu_rect(mouse, 3));
+                state_, song_select::layout::make_context_menu_rect(
+                            mouse,
+                            song_select::context_menu_item_count(
+                                state_, song_select::context_menu_target::list_background,
+                                song_select::context_menu_section::root,
+                                state_.selected_song_index, state_.difficulty_index)));
             return true;
         }
         return false;
@@ -287,7 +292,12 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
             song_select::apply_song_selection(state_, hit->song_index, chart_index);
             song_select::open_chart_context_menu(
                 state_, hit->song_index, chart_index,
-                song_select::layout::make_context_menu_rect(mouse, 3));
+                song_select::layout::make_context_menu_rect(
+                    mouse,
+                    song_select::context_menu_item_count(
+                        state_, song_select::context_menu_target::chart,
+                        song_select::context_menu_section::root,
+                        hit->song_index, chart_index)));
             return true;
         }
 
@@ -314,7 +324,12 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
         }
         song_select::open_song_context_menu(
             state_, hit->song_index,
-            song_select::layout::make_context_menu_rect(mouse, 8));
+            song_select::layout::make_context_menu_rect(
+                mouse,
+                song_select::context_menu_item_count(
+                    state_, song_select::context_menu_target::song,
+                    song_select::context_menu_section::root,
+                    hit->song_index, chart_index)));
         return true;
     }
 
@@ -332,6 +347,38 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
 void song_select_scene::apply_context_menu_command(song_select::context_menu_command command) {
     switch (command) {
     case song_select::context_menu_command::none:
+        return;
+    case song_select::context_menu_command::open_song_section:
+        state_.context_menu.section = song_select::context_menu_section::song;
+        state_.context_menu.rect = song_select::layout::make_context_menu_rect(
+            {state_.context_menu.rect.x, state_.context_menu.rect.y},
+            song_select::context_menu_item_count(
+                state_, state_.context_menu.target, state_.context_menu.section,
+                state_.context_menu.song_index, state_.context_menu.chart_index));
+        return;
+    case song_select::context_menu_command::open_chart_section:
+        state_.context_menu.section = song_select::context_menu_section::chart;
+        state_.context_menu.rect = song_select::layout::make_context_menu_rect(
+            {state_.context_menu.rect.x, state_.context_menu.rect.y},
+            song_select::context_menu_item_count(
+                state_, state_.context_menu.target, state_.context_menu.section,
+                state_.context_menu.song_index, state_.context_menu.chart_index));
+        return;
+    case song_select::context_menu_command::open_mv_section:
+        state_.context_menu.section = song_select::context_menu_section::mv;
+        state_.context_menu.rect = song_select::layout::make_context_menu_rect(
+            {state_.context_menu.rect.x, state_.context_menu.rect.y},
+            song_select::context_menu_item_count(
+                state_, state_.context_menu.target, state_.context_menu.section,
+                state_.context_menu.song_index, state_.context_menu.chart_index));
+        return;
+    case song_select::context_menu_command::back_to_root:
+        state_.context_menu.section = song_select::context_menu_section::root;
+        state_.context_menu.rect = song_select::layout::make_context_menu_rect(
+            {state_.context_menu.rect.x, state_.context_menu.rect.y},
+            song_select::context_menu_item_count(
+                state_, state_.context_menu.target, state_.context_menu.section,
+                state_.context_menu.song_index, state_.context_menu.chart_index));
         return;
     case song_select::context_menu_command::close_menu:
         song_select::close_context_menu(state_);
@@ -442,6 +489,24 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
             "DELETE",
             state_.context_menu.song_index);
         song_select::close_context_menu(state_);
+        return;
+    case song_select::context_menu_command::import_mv:
+        if (state_.context_menu.song_index >= 0 &&
+            state_.context_menu.song_index < static_cast<int>(state_.songs.size())) {
+            const auto& song = state_.songs[static_cast<size_t>(state_.context_menu.song_index)];
+            song_select::close_context_menu(state_);
+            const std::string src = file_dialog::open_mv_script_file();
+            if (!src.empty()) {
+                std::error_code ec;
+                std::filesystem::copy_file(src, app_paths::script_path(song.song.meta.song_id),
+                                           std::filesystem::copy_options::overwrite_existing, ec);
+                if (ec) {
+                    song_select::queue_status_message(state_, "Failed to import MV script.", true);
+                } else {
+                    song_select::queue_status_message(state_, "MV script imported.", false);
+                }
+            }
+        }
         return;
     case song_select::context_menu_command::export_mv:
         if (state_.context_menu.song_index >= 0 &&

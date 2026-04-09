@@ -117,6 +117,11 @@ struct dropdown_state {
 struct context_menu_item {
     const char* label;
     bool enabled;
+    enum class kind {
+        action,
+        header,
+        separator,
+    } item_kind = kind::action;
 };
 
 struct context_menu_state {
@@ -496,13 +501,16 @@ inline context_menu_state enqueue_context_menu(Rectangle menu_rect,
     Rectangle item_rect = {menu_rect.x + 6.0f, menu_rect.y + 6.0f, menu_rect.width - 12.0f, item_height};
     std::vector<std::string> item_labels;
     std::vector<bool> item_enabled;
+    std::vector<context_menu_item::kind> item_kinds;
     std::vector<row_state> item_states;
     item_labels.reserve(items.size());
     item_enabled.reserve(items.size());
+    item_kinds.reserve(items.size());
     item_states.reserve(items.size());
 
     for (int i = 0; i < static_cast<int>(items.size()); ++i) {
-        const bool enabled = items[static_cast<size_t>(i)].enabled;
+        const context_menu_item::kind kind = items[static_cast<size_t>(i)].item_kind;
+        const bool enabled = items[static_cast<size_t>(i)].enabled && kind == context_menu_item::kind::action;
         const bool pressed = enabled && is_mouse_button_down(item_rect, MOUSE_BUTTON_LEFT, layer);
         const row_state state = {
             enabled && is_hovered(item_rect, layer),
@@ -512,6 +520,7 @@ inline context_menu_state enqueue_context_menu(Rectangle menu_rect,
         };
         item_labels.emplace_back(items[static_cast<size_t>(i)].label != nullptr ? items[static_cast<size_t>(i)].label : "");
         item_enabled.push_back(enabled);
+        item_kinds.push_back(kind);
         item_states.push_back(state);
         if (state.clicked) {
             clicked_index = i;
@@ -522,20 +531,35 @@ inline context_menu_state enqueue_context_menu(Rectangle menu_rect,
     enqueue_draw_command(layer, [menu_rect, item_height, item_spacing, font_size,
                                  item_labels = std::move(item_labels),
                                  item_enabled = std::move(item_enabled),
+                                 item_kinds = std::move(item_kinds),
                                  item_states = std::move(item_states)]() {
         draw_section(menu_rect);
         Rectangle draw_item_rect = {menu_rect.x + 6.0f, menu_rect.y + 6.0f, menu_rect.width - 12.0f, item_height};
         for (int i = 0; i < static_cast<int>(item_labels.size()); ++i) {
             const bool enabled = item_enabled[static_cast<size_t>(i)];
+            const context_menu_item::kind kind = item_kinds[static_cast<size_t>(i)];
             const row_state& state = item_states[static_cast<size_t>(i)];
-            detail::draw_row_visual(draw_item_rect, state.hovered, state.pressed,
-                                    enabled ? g_theme->row : with_alpha(g_theme->row, 180),
-                                    enabled ? g_theme->row_hover : with_alpha(g_theme->row, 180),
-                                    enabled ? g_theme->border : g_theme->border_light,
-                                    1.5f);
-            draw_text_in_rect(item_labels[static_cast<size_t>(i)].c_str(), font_size,
-                              inset(state.visual, edge_insets::symmetric(0.0f, 12.0f)),
-                              enabled ? g_theme->text : g_theme->text_muted, text_align::left);
+            if (kind == context_menu_item::kind::header) {
+                const Rectangle text_rect = inset(draw_item_rect, edge_insets::symmetric(0.0f, 12.0f));
+                draw_text_in_rect(item_labels[static_cast<size_t>(i)].c_str(), std::max(12, font_size - 2),
+                                  text_rect, g_theme->text_muted, text_align::left);
+                DrawLineEx({draw_item_rect.x + 10.0f, draw_item_rect.y + draw_item_rect.height - 3.0f},
+                           {draw_item_rect.x + draw_item_rect.width - 10.0f, draw_item_rect.y + draw_item_rect.height - 3.0f},
+                           1.0f, g_theme->border_light);
+            } else if (kind == context_menu_item::kind::separator) {
+                DrawLineEx({draw_item_rect.x + 8.0f, draw_item_rect.y + draw_item_rect.height * 0.5f},
+                           {draw_item_rect.x + draw_item_rect.width - 8.0f, draw_item_rect.y + draw_item_rect.height * 0.5f},
+                           1.0f, g_theme->border_light);
+            } else {
+                detail::draw_row_visual(draw_item_rect, state.hovered, state.pressed,
+                                        enabled ? g_theme->row : with_alpha(g_theme->row, 180),
+                                        enabled ? g_theme->row_hover : with_alpha(g_theme->row, 180),
+                                        enabled ? g_theme->border : g_theme->border_light,
+                                        1.5f);
+                draw_text_in_rect(item_labels[static_cast<size_t>(i)].c_str(), font_size,
+                                  inset(state.visual, edge_insets::symmetric(0.0f, 12.0f)),
+                                  enabled ? g_theme->text : g_theme->text_muted, text_align::left);
+            }
             draw_item_rect.y += item_height + item_spacing;
         }
     });

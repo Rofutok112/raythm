@@ -125,6 +125,12 @@ std::string open_song_package_file() {
         L"Import Song Package");
 }
 
+std::string open_mv_script_file() {
+    return open_file_dialog(
+        L"raythm MV Script (*.rmv)\0*.rmv\0All Files (*.*)\0*.*\0",
+        L"Import MV Script");
+}
+
 std::string save_chart_package_file(const std::string& default_file_name) {
     return save_file_dialog(
         L"raythm Chart Package (*.rchart)\0*.rchart\0All Files (*.*)\0*.*\0",
@@ -164,6 +170,7 @@ std::string open_audio_file() { return {}; }
 std::string open_image_file() { return {}; }
 std::string open_chart_package_file() { return {}; }
 std::string open_song_package_file() { return {}; }
+std::string open_mv_script_file() { return {}; }
 std::string save_chart_package_file(const std::string&) { return {}; }
 std::string save_song_package_file(const std::string&) { return {}; }
 std::string save_mv_script_file(const std::string&) { return {}; }

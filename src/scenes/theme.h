@@ -99,7 +99,7 @@ struct ui_theme {
 // ライトテーマ
 inline constexpr ui_theme kLightTheme = {
     // bg
-    .bg = {250, 253, 255, 255},
+    .bg = {255, 255, 255, 255},
     .bg_alt = {241, 243, 246, 255},
     // panel
     .panel = {248, 249, 251, 255},
@@ -139,12 +139,12 @@ inline constexpr ui_theme kLightTheme = {
     .hud_combo_label = {230, 234, 242, 255},
     .hud_failure_text = {244, 246, 250, 255},
     // game elements
-    .lane = {190, 195, 200, 255},
-    .lane_pressed = {166, 170, 185, 255},
-    .lane_wire = {120, 130, 148, 180},
+    .lane = {226, 231, 238, 255},
+    .lane_pressed = {212, 217, 224, 255},
+    .lane_wire = {108, 118, 138, 210},
     .judge_line = {124, 58, 237, 120},
     .judge_line_glow = {196, 181, 253, 210},
-    .note_color = {240, 242, 255, 255},
+    .note_color = {250, 251, 253, 255},
     .note_outline = {120, 128, 138, 0},
     .pause_overlay = {3, 6, 10, 150},
     .pause_panel = {248, 249, 251, 245},
