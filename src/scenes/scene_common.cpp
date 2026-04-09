@@ -6,6 +6,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_coord.h"
+#include "ui/ui_font.h"
 
 namespace {
 
@@ -13,11 +14,7 @@ float measure_text_width(const char* text, int font_size) {
     if (text == nullptr || *text == '\0') {
         return 0.0f;
     }
-
-    const Font font = GetFontDefault();
-    const float font_size_f = static_cast<float>(font_size);
-    const float spacing = font_size_f / static_cast<float>(font.baseSize);
-    return MeasureTextEx(font, text, font_size_f, spacing).x;
+    return ui::measure_text_size(text, static_cast<float>(font_size), 0.0f).x;
 }
 
 void draw_text_clipped(const char* text, float x, float y, int font_size, Color color, Rectangle clip_rect) {
@@ -25,12 +22,8 @@ void draw_text_clipped(const char* text, float x, float y, int font_size, Color 
         return;
     }
 
-    const Font font = GetFontDefault();
-    const float font_size_f = static_cast<float>(font_size);
-    const float spacing = font_size_f / static_cast<float>(font.baseSize);
-
     ui::scoped_clip_rect clip_scope(clip_rect);
-    DrawTextEx(font, text, {x, y}, font_size_f, spacing, color);
+    ui::draw_text_auto(text, {x, y}, static_cast<float>(font_size), 0.0f, color);
 }
 
 }  // namespace
