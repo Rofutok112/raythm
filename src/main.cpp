@@ -1,4 +1,5 @@
 #include "audio_manager.h"
+#include "core/window_dialog_support.h"
 #include "game_scenes.h"
 #include "game_settings.h"
 #include "raylib.h"
@@ -17,17 +18,16 @@ int main() {
     audio_manager::instance().set_se_volume(g_settings.se_volume);
 
     const resolution_preset& preset = kResolutionPresets[g_settings.resolution_index];
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(preset.width, preset.height, "raythm");
     SetTraceLogLevel(LOG_WARNING);
     SetTargetFPS(g_settings.target_fps);
     SetExitKey(KEY_NULL);
-
-    if (g_settings.fullscreen) {
-        ToggleFullscreen();
-    }
+    SetWindowMinSize(640, 360);
 
     apply_windows_app_icon(GetWindowHandle());
     windows_input_source::instance().initialize(GetWindowHandle());
+    window_dialog_support::set_fullscreen(g_settings.fullscreen, preset.width, preset.height);
     virtual_screen::init();
 
     scene_manager manager;
@@ -35,9 +35,15 @@ int main() {
     int applied_target_fps = g_settings.target_fps;
 
     while (!WindowShouldClose()) {
+        const resolution_preset& current_preset = kResolutionPresets[g_settings.resolution_index];
         if (applied_target_fps != g_settings.target_fps) {
             SetTargetFPS(g_settings.target_fps);
             applied_target_fps = g_settings.target_fps;
+        }
+        if (IsKeyPressed(KEY_F11)) {
+            g_settings.fullscreen = !g_settings.fullscreen;
+            window_dialog_support::set_fullscreen(g_settings.fullscreen, current_preset.width, current_preset.height);
+            save_settings(g_settings);
         }
         const float dt = GetFrameTime();
         audio_manager::instance().update();

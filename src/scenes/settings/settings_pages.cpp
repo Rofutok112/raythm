@@ -210,7 +210,7 @@ void settings_video_page::update() {
     if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[2]), settings::kLayer) ||
         ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[2]), settings::kLayer)) {
         settings_.fullscreen = !settings_.fullscreen;
-        runtime_applier_.toggle_fullscreen();
+        runtime_applier_.apply_fullscreen(settings_.fullscreen, settings_.resolution_index);
     }
 
     if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[3]), settings::kLayer) ||
