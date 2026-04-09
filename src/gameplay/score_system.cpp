@@ -136,15 +136,15 @@ result_data score_system::get_result_data() const {
                             judge_counts_[judge_index(judge_result::perfect)] == judged_notes_;
     result.accuracy = get_live_accuracy();
 
-    if (result.is_full_combo && result.accuracy >= 99.0f) {
+    if (result.is_full_combo && result.accuracy >= 100.0f) {
         result.clear_rank = rank::ss;
     } else if (result.is_full_combo && result.accuracy >= 95.0f) {
         result.clear_rank = rank::s;
-    } else if (result.accuracy >= 85.0f) {
+    } else if (result.accuracy >= 90.0f) {
         result.clear_rank = rank::a;
-    } else if (result.accuracy >= 70.0f) {
+    } else if (result.accuracy >= 80.0f) {
         result.clear_rank = rank::b;
-    } else if (result.accuracy >= 50.0f) {
+    } else if (result.accuracy >= 70.0f) {
         result.clear_rank = rank::c;
     } else {
         result.clear_rank = rank::f;
