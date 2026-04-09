@@ -6,6 +6,7 @@
 
 #include "app_paths.h"
 #include "chart_difficulty.h"
+#include "mv/mv_storage.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
 #include "ranking_service.h"
@@ -146,6 +147,18 @@ delete_result delete_song(const state& state, int song_index) {
         std::filesystem::remove(chart_path, ec);
         if (ec) {
             result.message = "Failed to delete a linked chart file.";
+            return result;
+        }
+    }
+
+    for (const auto& package : mv::load_all_packages()) {
+        if (package.meta.song_id != entry.song.meta.song_id) {
+            continue;
+        }
+
+        std::filesystem::remove_all(path_utils::from_utf8(package.directory), ec);
+        if (ec) {
+            result.message = "Failed to delete a linked MV package.";
             return result;
         }
     }

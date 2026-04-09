@@ -11,6 +11,7 @@
 #include "core/app_paths.h"
 #include "editor_scene.h"
 #include "mv/api/mv_context.h"
+#include "mv/mv_storage.h"
 #include "mv/mv_runtime.h"
 #include "mv/render/mv_renderer.h"
 #include "play/play_flow_controller.h"
@@ -121,9 +122,9 @@ void play_scene::on_enter() {
 
     // Try to load MV script for this song
     if (state_.song_data.has_value()) {
-        auto script_file = app_paths::script_path(state_.song_data->meta.song_id);
-        TraceLog(LOG_INFO, "MV: looking for script at %s", script_file.string().c_str());
-        if (std::filesystem::exists(script_file)) {
+        if (const auto package = mv::find_first_package_for_song(state_.song_data->meta.song_id); package.has_value()) {
+            const auto script_file = mv::script_path(*package);
+            TraceLog(LOG_INFO, "MV: looking for script at %s", script_file.string().c_str());
             mv_runtime_ = std::make_unique<mv::mv_runtime>();
             if (!mv_runtime_->load_file(script_file.string())) {
                 TraceLog(LOG_WARNING, "MV: compile failed");

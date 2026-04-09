@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "core/app_paths.h"
+#include "mv/mv_storage.h"
 #include "song_select/song_select_layout.h"
 #include "theme.h"
 #include "ui_draw.h"
@@ -65,8 +66,8 @@ std::vector<context_menu_item_entry> build_context_menu_entries(const state& sta
             }
 
             const bool has_mv = valid_song &&
-                std::filesystem::exists(app_paths::script_path(
-                    state.songs[static_cast<size_t>(state.context_menu.song_index)].song.meta.song_id));
+                mv::find_first_package_for_song(
+                    state.songs[static_cast<size_t>(state.context_menu.song_index)].song.meta.song_id).has_value();
 
             if (state.context_menu.target == context_menu_target::song) {
                 if (state.context_menu.section == context_menu_section::root) {
