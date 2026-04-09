@@ -10,6 +10,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui/ui_font.h"
 
 namespace {
 
@@ -123,15 +124,14 @@ std::string format_score(int value) {
 }
 
 void draw_score_text(const std::string& text, Rectangle rect, Color color) {
-    const Font font = GetFontDefault();
     constexpr float font_size = 19.0f;
     constexpr float spacing = 5.0f;
-    const Vector2 size = MeasureTextEx(font, text.c_str(), font_size, spacing);
+    const Vector2 size = ui::measure_text_size(text.c_str(), font_size, spacing);
     const Vector2 pos = {
         rect.x + rect.width - size.x,
         rect.y + (rect.height - size.y) * 0.5f
     };
-    DrawTextEx(font, text.c_str(), pos, font_size, spacing, color);
+    ui::draw_text_auto(text.c_str(), pos, font_size, spacing, color);
 }
 
 void draw_ranking_row(const ranking_service::entry& entry, float y, float offset_x, unsigned char alpha) {

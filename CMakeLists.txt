@@ -255,6 +255,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/virtual_screen.h
         src/game_scenes.h
         src/ui/ui_layout.h
+        src/ui/ui_font.cpp
+        src/ui/ui_font.h
         src/ui/ui_text.h
         src/ui/ui_hit.h
         src/ui/ui_draw.h

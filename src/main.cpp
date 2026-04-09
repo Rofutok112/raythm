@@ -6,6 +6,7 @@
 #include "scene_manager.h"
 #include "settings_io.h"
 #include "theme.h"
+#include "ui/ui_font.h"
 #include "virtual_screen.h"
 #include "platform/windows_app_icon.h"
 #include "platform/windows_input_source.h"
@@ -29,6 +30,7 @@ int main() {
     windows_input_source::instance().initialize(GetWindowHandle());
     window_dialog_support::set_fullscreen(g_settings.fullscreen, preset.width, preset.height);
     virtual_screen::init();
+    ui::initialize_text_font();
 
     scene_manager manager;
     manager.set_initial_scene(std::unique_ptr<scene>(new title_scene(manager)));
@@ -55,6 +57,7 @@ int main() {
     }
 
     virtual_screen::cleanup();
+    ui::shutdown_text_font();
     windows_input_source::instance().shutdown();
     audio_manager::instance().shutdown();
     CloseWindow();

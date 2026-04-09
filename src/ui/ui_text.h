@@ -2,6 +2,7 @@
 
 #include "raylib.h"
 #include "ui_coord.h"
+#include "ui_font.h"
 #include "ui_layout.h"
 
 // テキスト配置ユーティリティ。
@@ -12,17 +13,17 @@ namespace ui {
 // 水平方向は align に従い、垂直方向は中央揃え。
 inline Vector2 text_position(const char* text, int font_size, Rectangle rect,
                              text_align align = text_align::center) {
-    const int text_width = MeasureText(text, font_size);
+    const float text_width = measure_text_size(text, static_cast<float>(font_size), 0.0f).x;
     float x;
     switch (align) {
         case text_align::left:
             x = rect.x;
             break;
         case text_align::center:
-            x = rect.x + (rect.width - static_cast<float>(text_width)) * 0.5f;
+            x = rect.x + (rect.width - text_width) * 0.5f;
             break;
         case text_align::right:
-            x = rect.x + rect.width - static_cast<float>(text_width);
+            x = rect.x + rect.width - text_width;
             break;
     }
     const float y = rect.y + (rect.height - static_cast<float>(font_size)) * 0.5f;

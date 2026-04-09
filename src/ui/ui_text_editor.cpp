@@ -4,6 +4,7 @@
 #include <cmath>
 #include <sstream>
 
+#include "ui_font.h"
 #include "ui_coord.h"
 #include "ui_layout.h"
 #include "virtual_screen.h"
@@ -20,8 +21,7 @@ float measure_text_width(const std::string& text, const text_editor_style& style
     if (text.empty()) {
         return 0.0f;
     }
-    return MeasureTextEx(GetFontDefault(), text.c_str(),
-                         static_cast<float>(style.font_size), style.letter_spacing).x;
+    return measure_text_size(text, static_cast<float>(style.font_size), style.letter_spacing).x;
 }
 
 float measure_line_prefix_width(const std::string& line, int prefix_len,
@@ -39,8 +39,8 @@ void draw_line_text(const std::string& line, float x, float y,
         return;
     }
     if (highlighter == nullptr) {
-        DrawTextEx(GetFontDefault(), line.c_str(), {x, y},
-                   static_cast<float>(style.font_size), style.letter_spacing, g_theme->text);
+        draw_text_auto(line.c_str(), {x, y}, static_cast<float>(style.font_size),
+                       style.letter_spacing, g_theme->text);
         return;
     }
 
@@ -49,8 +49,8 @@ void draw_line_text(const std::string& line, float x, float y,
     for (const auto& span : spans) {
         if (!span.text.empty()) {
             const float cursor_x = x + measure_line_prefix_width(line, consumed, style, nullptr);
-            DrawTextEx(GetFontDefault(), span.text.c_str(), {cursor_x, y},
-                       static_cast<float>(style.font_size), style.letter_spacing, span.color);
+            draw_text_auto(span.text.c_str(), {cursor_x, y}, static_cast<float>(style.font_size),
+                           style.letter_spacing, span.color);
             consumed += static_cast<int>(span.text.size());
         }
     }
@@ -660,8 +660,8 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
         const char* line_num_text = TextFormat("%3d", i + 1);
         float num_width = measure_text_width(line_num_text, style);
         float num_x = rect.x + gutter_width - kGutterPadding - num_width;
-        DrawText(line_num_text, static_cast<int>(num_x), static_cast<int>(y + style.line_spacing * 0.5f),
-                 style.font_size, g_theme->text_dim);
+        draw_text_auto(line_num_text, {num_x, y + style.line_spacing * 0.5f},
+                       static_cast<float>(style.font_size), style.letter_spacing, g_theme->text_dim);
 
         // Line text
         if (!state.lines[i].empty()) {
@@ -706,8 +706,8 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
             constexpr float kTooltipPad = 6.0f;
             constexpr float kTooltipFontSize = 12.0f;
             constexpr float kTooltipLetterSpacing = 0.0f;
-            const Vector2 tooltip_size = MeasureTextEx(GetFontDefault(), marker.message.c_str(),
-                                                       kTooltipFontSize, kTooltipLetterSpacing);
+            const Vector2 tooltip_size = measure_text_size(marker.message.c_str(),
+                                                           kTooltipFontSize, kTooltipLetterSpacing);
             float tw = tooltip_size.x + kTooltipPad * 2.0f;
             float th = tooltip_size.y + kTooltipPad * 2.0f;
             float tx = std::min(mouse.x, rect.x + rect.width - tw - 4.0f);
@@ -715,9 +715,8 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
             float ty = underline_y + 4.0f;
             DrawRectangleRounded({tx, ty, tw, th}, 0.2f, 4, Color{40, 40, 40, 230});
             DrawRectangleRoundedLinesEx({tx, ty, tw, th}, 0.2f, 4, 1.0f, Color{255, 80, 80, 180});
-            DrawTextEx(GetFontDefault(), marker.message.c_str(),
-                       {tx + kTooltipPad, ty + kTooltipPad},
-                       kTooltipFontSize, kTooltipLetterSpacing, Color{255, 200, 200, 255});
+            draw_text_auto(marker.message.c_str(), {tx + kTooltipPad, ty + kTooltipPad},
+                           kTooltipFontSize, kTooltipLetterSpacing, Color{255, 200, 200, 255});
         }
     }
 
@@ -751,9 +750,8 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
         float menu_width = kCompletionMinWidth;
         for (int i = 0; i < visible_items; ++i) {
             menu_width = std::max(menu_width,
-                                  MeasureTextEx(GetFontDefault(),
-                                                completion.items[static_cast<size_t>(i)].label.c_str(),
-                                                completion_font_size, completion_letter_spacing).x +
+                                  measure_text_size(completion.items[static_cast<size_t>(i)].label.c_str(),
+                                                    completion_font_size, completion_letter_spacing).x +
                                   kCompletionPadX * 2.0f);
         }
         Rectangle menu_rect = {
@@ -782,11 +780,10 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
             DrawRectangleRec(item_rect,
                              selected_item ? g_theme->row_selected :
                              (hovered_item ? g_theme->row_hover : BLANK));
-            DrawTextEx(GetFontDefault(),
-                       completion.items[static_cast<size_t>(i)].label.c_str(),
-                       {item_rect.x + kCompletionPadX, item_rect.y + 4.0f},
-                       completion_font_size, completion_letter_spacing,
-                       selected_item ? g_theme->text : g_theme->text_secondary);
+            draw_text_auto(completion.items[static_cast<size_t>(i)].label.c_str(),
+                           {item_rect.x + kCompletionPadX, item_rect.y + 4.0f},
+                           completion_font_size, completion_letter_spacing,
+                           selected_item ? g_theme->text : g_theme->text_secondary);
 
             if (hovered_item && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 state.completion_index = i;
