@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <set>
 #include <string>
@@ -22,6 +23,14 @@ std::string g_font_path;
 Font g_font = {};
 bool g_font_loaded = false;
 std::set<int> g_loaded_codepoints;
+
+float snap_custom_font_size(float font_size) {
+    return std::max(1.0f, std::round(font_size));
+}
+
+float snap_custom_coordinate(float value) {
+    return std::round(value);
+}
 
 bool contains_non_ascii_bytes(const char* text) {
     if (text == nullptr || *text == '\0') {
@@ -78,7 +87,7 @@ void rebuild_font() {
         return;
     }
 
-    SetTextureFilter(next_font.texture, TEXTURE_FILTER_BILINEAR);
+    SetTextureFilter(next_font.texture, TEXTURE_FILTER_POINT);
     if (g_font_loaded) {
         UnloadFont(g_font);
     }
@@ -134,7 +143,7 @@ Font text_font_for_text(const char* text) {
 
 float text_font_size_for_text(const char* text, float font_size) {
     if (g_font_loaded && contains_non_ascii_bytes(text)) {
-        return font_size * kCustomFontSizeScale;
+        return snap_custom_font_size(font_size * kCustomFontSizeScale);
     }
     return font_size;
 }
@@ -198,7 +207,11 @@ void draw_text_auto(const char* text, Vector2 position, float font_size, float s
 
     ensure_text_glyphs(text);
     const float adjusted_font_size = text_font_size_for_text(text, font_size);
-    DrawTextEx(text_font_for_text(text), text, position, adjusted_font_size,
+    const bool uses_custom_font = g_font_loaded && contains_non_ascii_bytes(text);
+    const Vector2 draw_position = uses_custom_font
+                                      ? Vector2{snap_custom_coordinate(position.x), snap_custom_coordinate(position.y)}
+                                      : position;
+    DrawTextEx(text_font_for_text(text), text, draw_position, adjusted_font_size,
                text_spacing_for_text(text, adjusted_font_size, spacing), color);
 }
 
