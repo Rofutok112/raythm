@@ -33,11 +33,11 @@ confirmation_command draw_confirmation_dialog(const state& state) {
         : state.confirmation_dialog.title;
     const std::string message = state.confirmation_dialog.message.empty()
         ? (deleting_song
-            ? "This will remove the song and linked AppData charts."
-            : "This will remove the selected AppData chart file.")
+            ? "This will remove the song and linked local charts."
+            : "This will remove the selected local chart file.")
         : state.confirmation_dialog.message;
     const std::string hint = state.confirmation_dialog.hint.empty()
-        ? ((deleting_song || deleting_chart) ? "Official content cannot be deleted." : "")
+        ? ""
         : state.confirmation_dialog.hint;
     const std::string confirm_label = state.confirmation_dialog.confirm_label.empty()
         ? (deleting_song || deleting_chart ? "DELETE" : "CONFIRM")

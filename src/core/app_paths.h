@@ -26,15 +26,6 @@ std::filesystem::path charts_root();
 // AppData/Local/raythm/rankings/
 std::filesystem::path rankings_root();
 
-// AppData/Local/raythm/official/
-std::filesystem::path official_root();
-
-// AppData/Local/raythm/official/songs/
-std::filesystem::path official_songs_root();
-
-// AppData/Local/raythm/official/charts/
-std::filesystem::path official_charts_root();
-
 // AppData/Local/raythm/songs/{song_id}/
 std::filesystem::path song_dir(const std::string& song_id);
 
@@ -43,9 +34,6 @@ std::filesystem::path chart_path(const std::string& chart_id);
 
 // AppData/Local/raythm/rankings/{chart_id}.bin
 std::filesystem::path local_ranking_path(const std::string& chart_id);
-
-// Legacy: repo_root/assets/songs/
-std::filesystem::path legacy_songs_root();
 
 // AppData/Local/raythm/settings.json
 std::filesystem::path settings_path();

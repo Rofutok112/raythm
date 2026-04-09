@@ -132,8 +132,6 @@ add_executable(raythm WIN32 src/main.cpp
         src/core/app_paths.h
         src/core/file_dialog.cpp
         src/core/file_dialog.h
-        src/core/official_content_sync.cpp
-        src/core/official_content_sync.h
         src/core/window_dialog_support.cpp
         src/core/window_dialog_support.h
         src/core/scene.cpp
@@ -383,8 +381,6 @@ add_executable(song_select_state_smoke
 add_executable(settings_io_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
-        src/core/official_content_sync.cpp
-        src/core/official_content_sync.h
         src/gameplay/settings_io.cpp
         src/gameplay/settings_io.h
         src/tests/settings_io_smoke.cpp)

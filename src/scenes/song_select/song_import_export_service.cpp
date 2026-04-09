@@ -358,10 +358,6 @@ std::optional<chart_import_request> prepare_chart_import(const state& state, tra
     }
 
     const std::optional<chart_option> existing_chart = find_chart_by_id(state, parsed.data->meta.chart_id);
-    if (existing_chart.has_value() && existing_chart->source == content_source::official) {
-        result.message = "Cannot overwrite an official chart.";
-        return std::nullopt;
-    }
 
     return chart_import_request{
         .source_path = source_path,
@@ -500,8 +496,7 @@ song_import_prepare_result prepare_song_import_from_path(const state& state, con
         return prepared;
     }
 
-    const song_load_result loaded = song_loader::load_directory(path_utils::to_utf8(*extracted_song_root),
-                                                                content_source::app_data);
+    const song_load_result loaded = song_loader::load_directory(path_utils::to_utf8(*extracted_song_root));
     if (!loaded.errors.empty() || loaded.songs.empty()) {
         prepared.transfer.message = loaded.errors.empty() ? "Failed to read the song package metadata."
                                                           : loaded.errors.front();
@@ -510,10 +505,6 @@ song_import_prepare_result prepare_song_import_from_path(const state& state, con
 
     song_data imported_song = loaded.songs.front();
     const std::optional<song_entry> existing_song = find_song_by_id(state, imported_song.meta.song_id);
-    if (existing_song.has_value() && existing_song->song.source == content_source::official) {
-        prepared.transfer.message = "Cannot overwrite an official song package.";
-        return prepared;
-    }
 
     const fs::path persistent_extract_root = make_temp_directory("song_import_stage");
     if (persistent_extract_root.empty()) {

@@ -192,7 +192,7 @@ void song_select_scene::open_overwrite_song_confirmation(song_select::song_impor
         state_, song_select::pending_confirmation_action::overwrite_song_import,
         "Overwrite Song",
         "A user song with the same song ID already exists. Overwrite it?",
-        "Official songs cannot be overwritten.",
+        "",
         "OVERWRITE");
 }
 
@@ -202,7 +202,7 @@ void song_select_scene::open_overwrite_chart_confirmation(song_select::chart_imp
         state_, song_select::pending_confirmation_action::overwrite_chart_import,
         "Overwrite Chart",
         "A user chart with the same chart ID already exists. Overwrite it?",
-        "Official charts cannot be overwritten.",
+        "",
         "OVERWRITE");
 }
 
@@ -398,8 +398,7 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
         return;
     case song_select::context_menu_command::edit_song:
         if (state_.context_menu.song_index >= 0 &&
-            state_.context_menu.song_index < static_cast<int>(state_.songs.size()) &&
-            state_.songs[static_cast<size_t>(state_.context_menu.song_index)].song.can_edit) {
+            state_.context_menu.song_index < static_cast<int>(state_.songs.size())) {
             const song_select::song_entry& song = state_.songs[static_cast<size_t>(state_.context_menu.song_index)];
             song_select::close_context_menu(state_);
             manager_.change_scene(song_select::make_edit_song_scene(manager_, song));

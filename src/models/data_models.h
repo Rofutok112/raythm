@@ -5,11 +5,6 @@
 #include <string>
 #include <vector>
 
-enum class content_source {
-    official,
-    app_data,
-};
-
 // 曲一覧で扱う楽曲メタデータ。
 struct song_meta {
     std::string song_id;
@@ -31,9 +26,6 @@ struct song_data {
     song_meta meta;
     std::vector<std::string> chart_paths;
     std::string directory;
-    content_source source = content_source::official;
-    bool can_edit = false;
-    bool can_delete = false;
 };
 
 // 楽曲ローダーの結果。

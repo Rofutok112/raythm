@@ -61,16 +61,10 @@ catalog_data load_catalog() {
     catalog_data catalog;
     const player_chart_offset_map chart_offsets = load_player_chart_offsets();
 
-    const song_load_result legacy_result = song_loader::load_all(path_utils::to_utf8(app_paths::official_songs_root()),
-                                                                 content_source::official);
-    const song_load_result appdata_result = song_loader::load_all(path_utils::to_utf8(app_paths::songs_root()),
-                                                                  content_source::app_data);
-    catalog.load_errors = legacy_result.errors;
-    catalog.load_errors.insert(catalog.load_errors.end(), appdata_result.errors.begin(), appdata_result.errors.end());
+    const song_load_result load_result = song_loader::load_all(path_utils::to_utf8(app_paths::songs_root()));
+    catalog.load_errors = load_result.errors;
 
-    std::vector<song_data> all_songs = legacy_result.songs;
-    song_loader::attach_external_charts(path_utils::to_utf8(app_paths::official_charts_root()), all_songs);
-    all_songs.insert(all_songs.end(), appdata_result.songs.begin(), appdata_result.songs.end());
+    std::vector<song_data> all_songs = load_result.songs;
     song_loader::attach_external_charts(path_utils::to_utf8(app_paths::charts_root()), all_songs);
 
     std::sort(all_songs.begin(), all_songs.end(), [](const song_data& left, const song_data& right) {
@@ -90,12 +84,9 @@ catalog_data load_catalog() {
             chart_meta meta = parse_result.data->meta;
             meta.level = chart_difficulty::calculate_level(*parse_result.data);
 
-            const content_source chart_source = song_loader::classify_chart_path(chart_path);
             entry.charts.push_back({
                 chart_path,
                 meta,
-                chart_source,
-                chart_source == content_source::app_data,
                 chart_offsets.contains(meta.chart_id) ? chart_offsets.at(meta.chart_id) : 0,
                 load_best_local_rank(meta.chart_id),
             });
@@ -125,11 +116,6 @@ delete_result delete_song(const state& state, int song_index) {
     }
 
     const song_entry& entry = state.songs[static_cast<size_t>(song_index)];
-    if (!entry.song.can_delete) {
-        result.message = "Only user-added songs can be deleted.";
-        return result;
-    }
-
     const std::filesystem::path song_dir = path_utils::from_utf8(entry.song.directory);
     if (!is_within_root(song_dir, app_paths::songs_root())) {
         result.message = "Refused to delete a song outside the user songs directory.";
@@ -189,13 +175,7 @@ delete_result delete_chart(const state& state, int song_index, int chart_index) 
         return result;
     }
 
-    const chart_option& chart = charts[static_cast<size_t>(chart_index)];
-    if (!chart.can_delete) {
-        result.message = "Only user-added charts can be deleted.";
-        return result;
-    }
-
-    const std::filesystem::path chart_path = path_utils::from_utf8(chart.path);
+    const std::filesystem::path chart_path = path_utils::from_utf8(charts[static_cast<size_t>(chart_index)].path);
     if (!is_within_root(chart_path, app_paths::app_data_root())) {
         result.message = "Refused to delete a chart outside the user charts directory.";
         return result;
