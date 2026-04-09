@@ -65,6 +65,31 @@ add_executable(raythm WIN32 src/main.cpp
         src/audio/audio.h
         src/audio/audio_manager.cpp
         src/audio/audio_manager.h
+        src/mv/lang/mv_lexer.cpp
+        src/mv/lang/mv_lexer.h
+        src/mv/lang/mv_ast.h
+        src/mv/lang/mv_parser.cpp
+        src/mv/lang/mv_parser.h
+        src/mv/lang/mv_bytecode.h
+        src/mv/lang/mv_compiler.cpp
+        src/mv/lang/mv_compiler.h
+        src/mv/lang/mv_vm.cpp
+        src/mv/lang/mv_vm.h
+        src/mv/lang/mv_sandbox.cpp
+        src/mv/lang/mv_sandbox.h
+        src/mv/api/mv_scene.h
+        src/mv/api/mv_context.cpp
+        src/mv/api/mv_context.h
+        src/mv/api/mv_builtins.cpp
+        src/mv/api/mv_builtins.h
+        src/mv/render/mv_renderer.cpp
+        src/mv/render/mv_renderer.h
+        src/mv/render/mv_validator.cpp
+        src/mv/render/mv_validator.h
+        src/mv/mv_runtime.cpp
+        src/mv/mv_runtime.h
+        src/mv/mv_script_editor_style.cpp
+        src/mv/mv_script_editor_style.h
         src/audio/audio_waveform.cpp
         src/audio/audio_waveform.h
         src/scenes/editor/editor_command.h
@@ -128,6 +153,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_bgm_controller.h
         src/scenes/title/title_spectrum_visualizer.cpp
         src/scenes/title/title_spectrum_visualizer.h
+        src/scenes/mv_editor_scene.cpp
+        src/scenes/mv_editor_scene.h
         src/scenes/song_create_scene.cpp
         src/scenes/song_create_scene.h
         src/scenes/song_select/song_catalog_service.cpp
@@ -232,7 +259,11 @@ add_executable(raythm WIN32 src/main.cpp
         src/ui/ui_hit.h
         src/ui/ui_draw.h
         src/ui/ui_clip.cpp
-        src/ui/ui_clip.h)
+        src/ui/ui_clip.h
+        src/ui/ui_text_editor.cpp
+        src/ui/ui_text_editor.h
+        src/mv/mv_script_panel.cpp
+        src/mv/mv_script_panel.h)
 
 add_executable(raythm_launcher
         src/launcher_main.cpp
@@ -352,6 +383,8 @@ add_executable(song_select_state_smoke
 add_executable(settings_io_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/official_content_sync.cpp
+        src/core/official_content_sync.h
         src/gameplay/settings_io.cpp
         src/gameplay/settings_io.h
         src/tests/settings_io_smoke.cpp)
@@ -532,6 +565,45 @@ add_executable(update_version_smoke
         src/updater/update_workflow.h
         src/tests/update_version_smoke.cpp)
 
+add_executable(mv_lang_smoke
+        src/mv/lang/mv_lexer.cpp
+        src/mv/lang/mv_lexer.h
+        src/mv/lang/mv_ast.h
+        src/mv/lang/mv_parser.cpp
+        src/mv/lang/mv_parser.h
+        src/mv/lang/mv_bytecode.h
+        src/mv/lang/mv_compiler.cpp
+        src/mv/lang/mv_compiler.h
+        src/mv/lang/mv_vm.cpp
+        src/mv/lang/mv_vm.h
+        src/mv/lang/mv_sandbox.cpp
+        src/mv/lang/mv_sandbox.h
+        src/tests/mv_lang_smoke.cpp)
+
+add_executable(mv_api_smoke
+        src/mv/lang/mv_lexer.cpp
+        src/mv/lang/mv_lexer.h
+        src/mv/lang/mv_ast.h
+        src/mv/lang/mv_parser.cpp
+        src/mv/lang/mv_parser.h
+        src/mv/lang/mv_bytecode.h
+        src/mv/lang/mv_compiler.cpp
+        src/mv/lang/mv_compiler.h
+        src/mv/lang/mv_vm.cpp
+        src/mv/lang/mv_vm.h
+        src/mv/lang/mv_sandbox.cpp
+        src/mv/lang/mv_sandbox.h
+        src/mv/api/mv_scene.h
+        src/mv/api/mv_context.cpp
+        src/mv/api/mv_context.h
+        src/mv/api/mv_builtins.cpp
+        src/mv/api/mv_builtins.h
+        src/mv/render/mv_validator.cpp
+        src/mv/render/mv_validator.h
+        src/mv/mv_runtime.cpp
+        src/mv/mv_runtime.h
+        src/tests/mv_api_smoke.cpp)
+
 set(RAYTHM_INCLUDE_DIRS
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/src/audio
@@ -570,6 +642,8 @@ target_include_directories(editor_timeline_controller_smoke PRIVATE ${RAYTHM_INC
 target_include_directories(editor_panel_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(audio_manager_smoke PRIVATE ${RAYTHM_BASS_DIR} ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(update_version_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(mv_lang_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(mv_api_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_link_libraries(raythm PRIVATE raylib ${RAYTHM_BASS_IMPORT_LIB} comdlg32 crypt32)
 target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)
@@ -583,6 +657,8 @@ target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_timeline_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_panel_controller_smoke PRIVATE raylib)
 target_link_libraries(audio_manager_smoke PRIVATE ${RAYTHM_BASS_IMPORT_LIB})
+target_link_libraries(mv_lang_smoke PRIVATE raylib)
+target_link_libraries(mv_api_smoke PRIVATE raylib)
 target_compile_definitions(raythm_launcher PRIVATE RAYTHM_PACKAGE_VERSION_STRING="${RAYTHM_PACKAGE_VERSION}")
 
 set(RAYTHM_RUNTIME_DLLS

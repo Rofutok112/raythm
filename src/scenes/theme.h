@@ -56,6 +56,7 @@ struct ui_theme {
 
     // --- プレイ画面 ゲーム要素 ---
     Color lane;
+    Color lane_pressed;
     Color lane_wire;
     Color judge_line;
     Color judge_line_glow;
@@ -129,21 +130,22 @@ inline constexpr ui_theme kLightTheme = {
     .scrollbar_thumb = {172, 178, 188, 255},
     // hud
     .hud_score = {230, 232, 238, 255},
-    .hud_time = {214, 218, 228, 255},
+    .hud_time = {236, 239, 246, 255},
     .hud_fps = {160, 166, 178, 255},
     .hud_health_label = {230, 232, 238, 255},
     .hud_health_bg = {235, 238, 242, 255},
     .hud_health_border = {230, 232, 238, 255},
-    .hud_combo = {214, 218, 228, 255},
-    .hud_combo_label = {209, 214, 224, 255},
+    .hud_combo = {236, 239, 246, 255},
+    .hud_combo_label = {230, 234, 242, 255},
     .hud_failure_text = {244, 246, 250, 255},
     // game elements
-    .lane = {164, 168, 176, 255},
-    .lane_wire = {120, 130, 148, 180},
+    .lane = {226, 231, 238, 255},
+    .lane_pressed = {212, 217, 224, 255},
+    .lane_wire = {108, 118, 138, 210},
     .judge_line = {124, 58, 237, 120},
     .judge_line_glow = {196, 181, 253, 210},
-    .note_color = {233, 238, 244, 255},
-    .note_outline = {120, 128, 138, 255},
+    .note_color = {250, 251, 253, 255},
+    .note_outline = {120, 128, 138, 0},
     .pause_overlay = {3, 6, 10, 150},
     .pause_panel = {248, 249, 251, 245},
     .editor_grid_snap = {216, 220, 228, 42},
@@ -219,11 +221,12 @@ inline constexpr ui_theme kDarkTheme = {
     .hud_failure_text = {220, 222, 228, 255},
     // game elements
     .lane = {60, 64, 72, 255},
+    .lane_pressed = {42, 44, 52, 255},
     .lane_wire = {80, 90, 108, 180},
     .judge_line = {158, 100, 255, 135},
     .judge_line_glow = {210, 190, 255, 210},
     .note_color = {200, 208, 220, 255},
-    .note_outline = {160, 168, 178, 255},
+    .note_outline = {160, 168, 178, 0},
     .pause_overlay = {0, 0, 0, 180},
     .pause_panel = {32, 34, 38, 245},
     .editor_grid_snap = {52, 56, 64, 80},

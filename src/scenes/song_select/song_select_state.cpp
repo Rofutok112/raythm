@@ -141,6 +141,7 @@ bool apply_song_selection(state& state, int song_index, int chart_index) {
 void open_song_context_menu(state& state, int song_index, Rectangle rect) {
     state.context_menu.open = true;
     state.context_menu.target = context_menu_target::song;
+    state.context_menu.section = context_menu_section::root;
     state.context_menu.song_index = song_index;
     state.context_menu.chart_index = -1;
     state.context_menu.rect = rect;
@@ -149,6 +150,7 @@ void open_song_context_menu(state& state, int song_index, Rectangle rect) {
 void open_chart_context_menu(state& state, int song_index, int chart_index, Rectangle rect) {
     state.context_menu.open = true;
     state.context_menu.target = context_menu_target::chart;
+    state.context_menu.section = context_menu_section::root;
     state.context_menu.song_index = song_index;
     state.context_menu.chart_index = chart_index;
     state.context_menu.rect = rect;
@@ -157,6 +159,7 @@ void open_chart_context_menu(state& state, int song_index, int chart_index, Rect
 void open_list_background_context_menu(state& state, Rectangle rect) {
     state.context_menu.open = true;
     state.context_menu.target = context_menu_target::list_background;
+    state.context_menu.section = context_menu_section::root;
     state.context_menu.song_index = state.selected_song_index;
     state.context_menu.chart_index = state.difficulty_index;
     state.context_menu.rect = rect;

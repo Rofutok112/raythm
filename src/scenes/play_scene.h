@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string>
 
 #include "editor/editor_scene_types.h"
@@ -8,6 +9,8 @@
 #include "raylib.h"
 #include "scene.h"
 
+namespace mv { class mv_runtime; }
+
 // プレイ画面。譜面を読み込み、ノートの描画・入力判定・スコア計算を行うメインのゲームシーン。
 class play_scene final : public scene {
 public:
@@ -15,6 +18,7 @@ public:
     play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count);
     play_scene(scene_manager& manager, song_data song, chart_data chart, int start_tick,
                editor_resume_state editor_resume);
+    ~play_scene() override;
 
     void on_enter() override;
     void on_exit() override;
@@ -31,4 +35,5 @@ private:
     play_start_request request_;
     play_session_state state_;
     play_note_draw_queue draw_queue_;
+    std::unique_ptr<mv::mv_runtime> mv_runtime_;
 };

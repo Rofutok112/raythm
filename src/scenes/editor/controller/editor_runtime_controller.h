@@ -16,6 +16,7 @@ struct editor_shortcut_context {
     std::optional<int>& space_playback_start_tick;
     const std::string& hitsound_path;
     bool blocking_modal = false;
+    bool mv_script_editor_active = false;
     bool space_pressed = false;
     bool ctrl_down = false;
     bool shift_down = false;

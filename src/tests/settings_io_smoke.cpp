@@ -76,6 +76,7 @@ int main() {
 
         game_settings defaults;
         defaults.camera_angle_degrees = 30.0f;
+        defaults.lane_width = 8.4f;
         defaults.note_height = 1.4f;
         defaults.target_fps = 240;
         defaults.fullscreen = true;
@@ -92,6 +93,9 @@ int main() {
         load_settings(loaded);
         expect(std::fabs(loaded.camera_angle_degrees - defaults.camera_angle_degrees) < 0.001f,
                "Expected default camera angle to be written to settings.json.",
+               ok);
+        expect(std::fabs(loaded.lane_width - defaults.lane_width) < 0.001f,
+               "Expected lane width above 5.0 to round-trip through settings.json.",
                ok);
         expect(std::fabs(loaded.note_height - defaults.note_height) < 0.001f,
                "Expected default note height to be written to settings.json.",

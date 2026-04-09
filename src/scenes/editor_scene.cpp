@@ -157,6 +157,7 @@ void editor_scene::update(float dt) {
         space_playback_start_tick_,
         hitsound_path_,
         has_blocking_modal(),
+        false,
         IsKeyPressed(KEY_SPACE),
         IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
         IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
