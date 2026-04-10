@@ -14,12 +14,14 @@ enum class source {
 
 struct entry {
     int placement = 0;
-    rank clear_rank = rank::f;
     float accuracy = 0.0f;
+    bool is_full_combo = false;
     int max_combo = 0;
     int score = 0;
     std::string recorded_at;
     bool verified = false;
+
+    rank clear_rank() const { return compute_rank(accuracy, is_full_combo); }
 };
 
 struct listing {

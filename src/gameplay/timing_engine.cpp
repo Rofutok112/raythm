@@ -18,11 +18,15 @@ void timing_engine::init(std::vector<timing_event> events, int resolution, int o
     resolution_ = resolution;
     offset_ms_ = offset_ms;
     bpm_segments_.clear();
+    meter_segments_.clear();
 
     std::vector<timing_event> bpm_events;
+    std::vector<timing_event> meter_events;
     for (const timing_event& event : events) {
         if (event.type == timing_event_type::bpm) {
             bpm_events.push_back(event);
+        } else if (event.type == timing_event_type::meter) {
+            meter_events.push_back(event);
         }
     }
 
@@ -65,6 +69,38 @@ void timing_engine::init(std::vector<timing_event> events, int resolution, int o
     if (bpm_segments_.empty()) {
         bpm_segments_.push_back({0, 0.0, 120.0f});
     }
+
+    std::sort(meter_events.begin(), meter_events.end(), [](const timing_event& left, const timing_event& right) {
+        if (left.tick != right.tick) {
+            return left.tick < right.tick;
+        }
+        if (left.numerator != right.numerator) {
+            return left.numerator < right.numerator;
+        }
+        return left.denominator < right.denominator;
+    });
+
+    if (meter_events.empty() || meter_events.front().tick != 0) {
+        meter_segments_.push_back({0, 4, 4});
+    }
+
+    for (const timing_event& event : meter_events) {
+        if (event.numerator <= 0 || event.denominator <= 0) {
+            throw std::invalid_argument("meter values must be greater than zero");
+        }
+
+        if (!meter_segments_.empty() && meter_segments_.back().start_tick == event.tick) {
+            meter_segments_.back().numerator = event.numerator;
+            meter_segments_.back().denominator = event.denominator;
+            continue;
+        }
+
+        meter_segments_.push_back({event.tick, event.numerator, event.denominator});
+    }
+
+    if (meter_segments_.empty()) {
+        meter_segments_.push_back({0, 4, 4});
+    }
 }
 
 double timing_engine::tick_to_ms(int tick) const {
@@ -104,4 +140,28 @@ float timing_engine::get_bpm_at(int tick) const {
         [](int target_tick, const bpm_segment& segment) { return target_tick < segment.start_tick; });
     const bpm_segment& segment = upper == bpm_segments_.begin() ? bpm_segments_.front() : *std::prev(upper);
     return segment.bpm;
+}
+
+int timing_engine::get_meter_numerator_at(int tick) const {
+    if (tick < 0) {
+        throw std::invalid_argument("tick must be zero or greater");
+    }
+
+    const auto upper = std::upper_bound(
+        meter_segments_.begin(), meter_segments_.end(), tick,
+        [](int target_tick, const meter_segment& segment) { return target_tick < segment.start_tick; });
+    const meter_segment& segment = upper == meter_segments_.begin() ? meter_segments_.front() : *std::prev(upper);
+    return segment.numerator;
+}
+
+int timing_engine::get_meter_denominator_at(int tick) const {
+    if (tick < 0) {
+        throw std::invalid_argument("tick must be zero or greater");
+    }
+
+    const auto upper = std::upper_bound(
+        meter_segments_.begin(), meter_segments_.end(), tick,
+        [](int target_tick, const meter_segment& segment) { return target_tick < segment.start_tick; });
+    const meter_segment& segment = upper == meter_segments_.begin() ? meter_segments_.front() : *std::prev(upper);
+    return segment.denominator;
 }

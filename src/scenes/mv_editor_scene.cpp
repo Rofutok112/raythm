@@ -25,7 +25,7 @@ bool wide_text_filter(int codepoint, const std::string&) {
 }
 
 std::string default_script_source() {
-    return "def draw(ctx):\n  return Scene([])\n";
+    return "def draw(ctx):\n  DrawBackground(fill=\"#0a0a1a\")\n";
 }
 
 Rectangle tab_button_rect(int index) {

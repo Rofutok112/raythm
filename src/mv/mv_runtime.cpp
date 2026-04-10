@@ -64,17 +64,6 @@ std::optional<scene> mv_runtime::tick(const context_input& input) {
         return std::nullopt;
     }
 
-    // Inject audio spectrum into legacy SpectrumBar nodes for compatibility.
-    for (auto& node : sc->nodes) {
-        if (auto* sb = std::get_if<spectrum_bar_node>(&node)) {
-            sb->spectrum.clear();
-            sb->spectrum.reserve(input.spectrum.size());
-            for (float v : input.spectrum) {
-                sb->spectrum.push_back(v);
-            }
-        }
-    }
-
     validate_scene(*sc, validation_limits_);
     return sc;
 }

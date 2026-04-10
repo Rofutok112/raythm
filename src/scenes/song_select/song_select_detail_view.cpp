@@ -23,6 +23,7 @@ const char* rank_label(rank value) {
     switch (value) {
         case rank::ss: return "SS";
         case rank::s: return "S";
+        case rank::aa: return "AA";
         case rank::a: return "A";
         case rank::b: return "B";
         case rank::c: return "C";
@@ -36,6 +37,7 @@ Color rank_color(rank value) {
     switch (value) {
         case rank::ss: return theme.rank_ss;
         case rank::s: return theme.rank_s;
+        case rank::aa: return theme.rank_aa;
         case rank::a: return theme.rank_a;
         case rank::b: return theme.rank_b;
         case rank::c: return theme.rank_c;

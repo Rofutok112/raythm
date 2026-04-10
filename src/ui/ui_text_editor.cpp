@@ -1,7 +1,9 @@
 #include "ui_text_editor.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <sstream>
 
 #include "ui_font.h"
@@ -16,6 +18,125 @@ namespace {
 constexpr float kGutterPadding = 6.0f;
 constexpr float kScrollbarWidth = 8.0f;
 constexpr float kTextPadLeft = 4.0f;
+constexpr size_t kMaxUndoSnapshots = 100;
+constexpr float kColorSwatchSize = 16.0f;
+constexpr float kColorSwatchGap = 6.0f;
+constexpr float kColorPickerWidth = 248.0f;
+constexpr float kColorPickerPreviewHeight = 30.0f;
+constexpr float kColorPickerRowHeight = 28.0f;
+constexpr float kColorPickerPadding = 10.0f;
+
+struct color_literal_marker {
+    int col_start = 0;
+    int col_end = 0;
+    char quote = '"';
+    bool has_alpha = false;
+    Color color = WHITE;
+};
+
+struct color_swatch_hit {
+    Rectangle rect = {};
+    color_literal_marker marker = {};
+};
+
+bool replace_range_on_line(text_editor_state& state, int line_index, int col_start, int col_end,
+                           const std::string& text);
+void push_undo_snapshot(text_editor_state& state);
+
+constexpr float color_swatch_inline_width() {
+    return kColorSwatchGap + kColorSwatchSize + kColorSwatchGap;
+}
+
+int hex_nibble(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+bool parse_hex_byte(char hi, char lo, unsigned char& out) {
+    const int hi_value = hex_nibble(hi);
+    const int lo_value = hex_nibble(lo);
+    if (hi_value < 0 || lo_value < 0) {
+        return false;
+    }
+    out = static_cast<unsigned char>((hi_value << 4) | lo_value);
+    return true;
+}
+
+bool try_parse_color_literal_token(const std::string& token, Color& color) {
+    if (token.size() < 9) {
+        return false;
+    }
+
+    const char quote = token.front();
+    if ((quote != '"' && quote != '\'') || token.back() != quote) {
+        return false;
+    }
+
+    const std::string_view value(token.c_str() + 1, token.size() - 2);
+    if ((value.size() != 7 && value.size() != 9) || value.front() != '#') {
+        return false;
+    }
+
+    unsigned char r = 0;
+    unsigned char g = 0;
+    unsigned char b = 0;
+    unsigned char a = 255;
+    if (!parse_hex_byte(value[1], value[2], r) ||
+        !parse_hex_byte(value[3], value[4], g) ||
+        !parse_hex_byte(value[5], value[6], b)) {
+        return false;
+    }
+    if (value.size() == 9 && !parse_hex_byte(value[7], value[8], a)) {
+        return false;
+    }
+
+    color = {r, g, b, a};
+    return true;
+}
+
+std::vector<color_literal_marker> find_color_literal_markers(const std::string& line,
+                                                             text_editor_highlighter highlighter) {
+    std::vector<color_literal_marker> markers;
+    const std::vector<text_editor_span> spans =
+        highlighter != nullptr ? highlighter(line) : std::vector<text_editor_span>{{line, WHITE}};
+
+    int consumed = 0;
+    for (const auto& span : spans) {
+        if (span.text.empty()) {
+            continue;
+        }
+
+        Color color = WHITE;
+        if (try_parse_color_literal_token(span.text, color)) {
+            const char quote = span.text.front();
+            const int value_len = static_cast<int>(span.text.size()) - 2;
+            markers.push_back({
+                .col_start = consumed,
+                .col_end = consumed + static_cast<int>(span.text.size()),
+                .quote = quote,
+                .has_alpha = value_len == 9,
+                .color = color,
+            });
+        }
+        consumed += static_cast<int>(span.text.size());
+    }
+
+    return markers;
+}
+
+std::string format_color_literal_token(Color color, char quote, bool has_alpha) {
+    char buffer[16] = {};
+    if (has_alpha) {
+        std::snprintf(buffer, sizeof(buffer), "%c#%02X%02X%02X%02X%c",
+                      quote, color.r, color.g, color.b, color.a, quote);
+    } else {
+        std::snprintf(buffer, sizeof(buffer), "%c#%02X%02X%02X%c",
+                      quote, color.r, color.g, color.b, quote);
+    }
+    return buffer;
+}
 
 float measure_text_width(const std::string& text, const text_editor_style& style) {
     if (text.empty()) {
@@ -30,7 +151,61 @@ float measure_line_prefix_width(const std::string& line, int prefix_len,
     if (clamped_prefix_len == 0) {
         return 0.0f;
     }
-    return measure_text_width(line.substr(0, static_cast<size_t>(clamped_prefix_len)), style);
+    float width = measure_text_width(line.substr(0, static_cast<size_t>(clamped_prefix_len)), style);
+    if (highlighter != nullptr) {
+        const auto markers = find_color_literal_markers(line, highlighter);
+        for (const auto& marker : markers) {
+            if (marker.col_end <= clamped_prefix_len) {
+                width += color_swatch_inline_width();
+            }
+        }
+    }
+    return width;
+}
+
+float color_swatch_y(float line_y, const text_editor_style& style) {
+    return line_y + std::max(1.0f, (static_cast<float>(style.font_size) - kColorSwatchSize) * 0.5f);
+}
+
+Rectangle color_swatch_rect(const std::string& line, const color_literal_marker& marker,
+                            Rectangle text_rect, float line_y,
+                            const text_editor_style& style, text_editor_highlighter highlighter) {
+    return {
+        text_rect.x + kTextPadLeft +
+            measure_line_prefix_width(line, marker.col_end, style, highlighter) -
+            (kColorSwatchGap + kColorSwatchSize),
+        color_swatch_y(line_y, style),
+        kColorSwatchSize,
+        kColorSwatchSize
+    };
+}
+
+std::vector<color_swatch_hit> collect_visible_color_swatches(const text_editor_state& state,
+                                                             Rectangle rect, Rectangle text_rect,
+                                                             float line_height,
+                                                             const text_editor_style& style,
+                                                             text_editor_highlighter highlighter) {
+    std::vector<color_swatch_hit> hits;
+    if (highlighter == nullptr) {
+        return hits;
+    }
+
+    const int first_visible_line = std::max(0, static_cast<int>(state.scroll_offset / line_height));
+    const int last_visible_line = std::min(static_cast<int>(state.lines.size()) - 1,
+                                           static_cast<int>((state.scroll_offset + rect.height) / line_height));
+
+    for (int i = first_visible_line; i <= last_visible_line; ++i) {
+        const std::vector<color_literal_marker> markers = find_color_literal_markers(state.lines[i], highlighter);
+        const float line_y = rect.y + i * line_height - state.scroll_offset;
+        for (const auto& marker : markers) {
+            hits.push_back({
+                color_swatch_rect(state.lines[i], marker, text_rect, line_y, style, highlighter),
+                marker
+            });
+        }
+    }
+
+    return hits;
 }
 
 void draw_line_text(const std::string& line, float x, float y,
@@ -48,12 +223,220 @@ void draw_line_text(const std::string& line, float x, float y,
     int consumed = 0;
     for (const auto& span : spans) {
         if (!span.text.empty()) {
-            const float cursor_x = x + measure_line_prefix_width(line, consumed, style, nullptr);
+            const float cursor_x = x + measure_line_prefix_width(line, consumed, style, highlighter);
             draw_text_auto(span.text.c_str(), {cursor_x, y}, static_cast<float>(style.font_size),
                            style.letter_spacing, span.color);
+            const float token_width = measure_text_width(span.text, style);
+            Color swatch_color{};
+            if (try_parse_color_literal_token(span.text, swatch_color)) {
+                const Rectangle swatch_rect = {
+                    cursor_x + token_width + kColorSwatchGap,
+                    y + std::max(1.0f, (static_cast<float>(style.font_size) - kColorSwatchSize) * 0.5f),
+                    kColorSwatchSize,
+                    kColorSwatchSize
+                };
+                DrawRectangleRounded(swatch_rect, 0.22f, 4, swatch_color);
+                DrawRectangleRoundedLinesEx(swatch_rect, 0.22f, 4, 1.0f, with_alpha(g_theme->border_light, 220));
+            }
             consumed += static_cast<int>(span.text.size());
         }
     }
+}
+
+float popup_height_for_picker(const text_editor_color_picker_state& picker) {
+    return kColorPickerPadding * 2.0f + kColorPickerPreviewHeight +
+           (picker.has_alpha ? 4.0f : 0.0f) +
+           (picker.has_alpha ? 4.0f : 3.0f) * kColorPickerRowHeight;
+}
+
+Rectangle color_picker_rect(const Rectangle& editor_rect, Rectangle anchor_rect,
+                            const text_editor_color_picker_state& picker) {
+    const float height = popup_height_for_picker(picker);
+    Rectangle rect = {
+        std::clamp(anchor_rect.x,
+                   editor_rect.x + 10.0f,
+                   editor_rect.x + editor_rect.width - kColorPickerWidth - 10.0f),
+        std::clamp(anchor_rect.y - 8.0f,
+                   editor_rect.y + 10.0f,
+                   editor_rect.y + editor_rect.height - height - 10.0f),
+        kColorPickerWidth,
+        height
+    };
+    return rect;
+}
+
+bool apply_color_picker_change(text_editor_state& state) {
+    if (state.color_picker.line < 0 || state.color_picker.line >= static_cast<int>(state.lines.size())) {
+        return false;
+    }
+    const std::string token = format_color_literal_token(state.color_picker.color,
+                                                         state.color_picker.quote,
+                                                         state.color_picker.has_alpha);
+    if (replace_range_on_line(state,
+                              state.color_picker.line,
+                              state.color_picker.col_start,
+                              state.color_picker.col_end,
+                              token)) {
+        state.color_picker.col_end = state.color_picker.col_start + static_cast<int>(token.size());
+        return true;
+    }
+    return false;
+}
+
+void open_color_picker(text_editor_state& state, const color_swatch_hit& hit,
+                       Rectangle anchor_rect, float line_height, Rectangle editor_rect) {
+    state.color_picker.open = true;
+    state.color_picker.line = static_cast<int>((hit.rect.y - editor_rect.y + state.scroll_offset) / line_height);
+    state.color_picker.col_start = hit.marker.col_start;
+    state.color_picker.col_end = hit.marker.col_end;
+    state.color_picker.quote = hit.marker.quote;
+    state.color_picker.has_alpha = hit.marker.has_alpha;
+    state.color_picker.color = hit.marker.color;
+    state.color_picker.edit_started = false;
+    state.color_picker.active_channel = -1;
+    state.color_picker.anchor_rect = anchor_rect;
+    state.color_picker.has_anchor = true;
+    state.active = true;
+    state.mouse_selecting = false;
+    state.has_selection = false;
+}
+
+void close_color_picker(text_editor_state& state) {
+    state.color_picker.open = false;
+    state.color_picker.active_channel = -1;
+    state.color_picker.has_anchor = false;
+}
+
+bool ensure_color_picker_anchor(text_editor_state& state, Rectangle rect, Rectangle text_rect,
+                                float line_height, const text_editor_style& style,
+                                text_editor_highlighter highlighter, Rectangle& picker_rect) {
+    if (!state.color_picker.open ||
+        state.color_picker.line < 0 ||
+        state.color_picker.line >= static_cast<int>(state.lines.size())) {
+        if (state.color_picker.open) {
+            close_color_picker(state);
+        }
+        picker_rect = {};
+        return false;
+    }
+
+    if (!state.color_picker.has_anchor) {
+        const color_literal_marker marker{
+            .col_start = state.color_picker.col_start,
+            .col_end = state.color_picker.col_end,
+            .quote = state.color_picker.quote,
+            .has_alpha = state.color_picker.has_alpha,
+            .color = state.color_picker.color,
+        };
+        const float line_y = rect.y + state.color_picker.line * line_height - state.scroll_offset;
+        state.color_picker.anchor_rect =
+            color_swatch_rect(state.lines[state.color_picker.line], marker, text_rect, line_y, style, highlighter);
+        state.color_picker.has_anchor = true;
+    }
+
+    picker_rect = color_picker_rect(rect, state.color_picker.anchor_rect, state.color_picker);
+    return true;
+}
+
+bool draw_color_picker(Rectangle picker_rect, text_editor_state& state, text_editor_result& result,
+                       Vector2 mouse) {
+    if (!state.color_picker.open || picker_rect.width <= 0.0f || picker_rect.height <= 0.0f) {
+        return false;
+    }
+
+    const float pad = kColorPickerPadding;
+    DrawRectangleRounded(picker_rect, 0.12f, 6, with_alpha(g_theme->panel, 248));
+    DrawRectangleRoundedLinesEx(picker_rect, 0.12f, 6, 1.0f, g_theme->border_active);
+
+    const Rectangle preview_rect = {
+        picker_rect.x + pad,
+        picker_rect.y + pad,
+        34.0f,
+        kColorPickerPreviewHeight
+    };
+    DrawRectangleRounded(preview_rect, 0.18f, 4, state.color_picker.color);
+    DrawRectangleRoundedLinesEx(preview_rect, 0.18f, 4, 1.0f, with_alpha(g_theme->border_light, 220));
+
+    const std::string hex_label = format_color_literal_token(state.color_picker.color,
+                                                             state.color_picker.quote,
+                                                             state.color_picker.has_alpha);
+    draw_text_auto(hex_label.c_str(),
+                   {preview_rect.x + preview_rect.width + 10.0f, preview_rect.y + 5.0f},
+                   13.0f, 0.5f, g_theme->text);
+
+    const char channel_labels[4] = {'R', 'G', 'B', 'A'};
+    unsigned char* channel_ptrs[4] = {
+        &state.color_picker.color.r,
+        &state.color_picker.color.g,
+        &state.color_picker.color.b,
+        &state.color_picker.color.a,
+    };
+    const Color channel_colors[4] = {
+        Color{255, 90, 90, 255},
+        Color{90, 220, 120, 255},
+        Color{100, 170, 255, 255},
+        Color{220, 220, 220, 255},
+    };
+    const int channel_count = state.color_picker.has_alpha ? 4 : 3;
+    bool picker_changed = false;
+
+    if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        state.color_picker.active_channel = -1;
+    }
+
+    for (int channel = 0; channel < channel_count; ++channel) {
+        const float row_y = preview_rect.y + preview_rect.height + 10.0f +
+                            channel * kColorPickerRowHeight;
+        const Rectangle track_rect = {
+            picker_rect.x + pad + 22.0f,
+            row_y + 9.0f,
+            picker_rect.width - pad * 2.0f - 58.0f,
+            10.0f
+        };
+        const Rectangle row_rect = {
+            picker_rect.x + pad,
+            row_y,
+            picker_rect.width - pad * 2.0f,
+            kColorPickerRowHeight
+        };
+
+        draw_text_auto(TextFormat("%c", channel_labels[channel]),
+                       {row_rect.x, row_rect.y + 4.0f}, 13.0f, 0.5f, g_theme->text_secondary);
+
+        DrawRectangleRec(track_rect, g_theme->slider_track);
+        const float ratio = static_cast<float>(*channel_ptrs[channel]) / 255.0f;
+        draw_rect_f(track_rect.x, track_rect.y, track_rect.width * ratio, track_rect.height, channel_colors[channel]);
+        const float knob_x = track_rect.x + track_rect.width * ratio;
+        draw_rect_f(knob_x - 5.0f, track_rect.y - 6.0f, 10.0f, 22.0f,
+                    state.color_picker.active_channel == channel ? g_theme->border_active : g_theme->slider_knob);
+
+        draw_text_auto(TextFormat("%3d", static_cast<int>(*channel_ptrs[channel])),
+                       {track_rect.x + track_rect.width + 8.0f, row_rect.y + 4.0f},
+                       13.0f, 0.5f, g_theme->text_secondary);
+
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse, row_rect)) {
+            state.color_picker.active_channel = channel;
+        }
+
+        if (state.color_picker.active_channel == channel && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            const float next_ratio = std::clamp((mouse.x - track_rect.x) / track_rect.width, 0.0f, 1.0f);
+            const unsigned char next_value = static_cast<unsigned char>(std::lround(next_ratio * 255.0f));
+            if (*channel_ptrs[channel] != next_value) {
+                if (!state.color_picker.edit_started) {
+                    push_undo_snapshot(state);
+                    state.color_picker.edit_started = true;
+                }
+                *channel_ptrs[channel] = next_value;
+                if (apply_color_picker_change(state)) {
+                    result.changed = true;
+                    state.last_input_time = GetTime();
+                    picker_changed = true;
+                }
+            }
+        }
+    }
+
+    return picker_changed;
 }
 
 void draw_squiggly_line(float x0, float x1, float y, Color color) {
@@ -222,6 +605,52 @@ void start_selection_if_shift(text_editor_state& state, bool shift) {
     }
 }
 
+text_editor_undo_snapshot make_undo_snapshot(const text_editor_state& state) {
+    return {
+        .lines = state.lines,
+        .cursor_line = state.cursor_line,
+        .cursor_col = state.cursor_col,
+        .scroll_offset = state.scroll_offset,
+        .has_selection = state.has_selection,
+        .sel_anchor = state.sel_anchor,
+    };
+}
+
+void push_undo_snapshot(text_editor_state& state) {
+    if (!state.undo_stack.empty()) {
+        const auto& last = state.undo_stack.back();
+        if (last.lines == state.lines &&
+            last.cursor_line == state.cursor_line &&
+            last.cursor_col == state.cursor_col &&
+            last.scroll_offset == state.scroll_offset &&
+            last.has_selection == state.has_selection &&
+            last.sel_anchor == state.sel_anchor) {
+            return;
+        }
+    }
+    state.undo_stack.push_back(make_undo_snapshot(state));
+    if (state.undo_stack.size() > kMaxUndoSnapshots) {
+        state.undo_stack.erase(state.undo_stack.begin());
+    }
+}
+
+bool pop_undo_snapshot(text_editor_state& state) {
+    if (state.undo_stack.empty()) {
+        return false;
+    }
+    const text_editor_undo_snapshot snapshot = std::move(state.undo_stack.back());
+    state.undo_stack.pop_back();
+    state.lines = snapshot.lines.empty() ? std::vector<std::string>{""} : snapshot.lines;
+    state.cursor_line = snapshot.cursor_line;
+    state.cursor_col = snapshot.cursor_col;
+    state.scroll_offset = snapshot.scroll_offset;
+    state.has_selection = snapshot.has_selection;
+    state.sel_anchor = snapshot.sel_anchor;
+    state.mouse_selecting = false;
+    clamp_cursor(state);
+    return true;
+}
+
 } // anonymous namespace
 
 std::string text_editor_get_text(const text_editor_state& state) {
@@ -246,6 +675,10 @@ void text_editor_set_text(text_editor_state& state, const std::string& text) {
     state.cursor_line = 0;
     state.cursor_col = 0;
     state.scroll_offset = 0.0f;
+    state.has_selection = false;
+    state.mouse_selecting = false;
+    state.undo_stack.clear();
+    state.color_picker = {};
 }
 
 text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
@@ -275,7 +708,23 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
     };
 
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const bool hovered = CheckCollisionPointRec(mouse, rect);
+    const std::vector<color_swatch_hit> swatch_hits =
+        collect_visible_color_swatches(state, rect, text_rect, line_height, style, highlighter);
+    int hovered_swatch_index = -1;
+    for (int i = 0; i < static_cast<int>(swatch_hits.size()); ++i) {
+        if (CheckCollisionPointRec(mouse, swatch_hits[static_cast<size_t>(i)].rect)) {
+            hovered_swatch_index = i;
+            break;
+        }
+    }
+
+    Rectangle picker_rect = {};
+    const bool has_picker_rect =
+        ensure_color_picker_anchor(state, rect, text_rect, line_height, style, highlighter, picker_rect);
+
+    const bool pointer_on_swatch = hovered_swatch_index >= 0;
+    const bool pointer_on_picker = has_picker_rect && CheckCollisionPointRec(mouse, picker_rect);
+    const bool hovered = CheckCollisionPointRec(mouse, rect) || pointer_on_picker;
     text_editor_completion_result completion;
     if (completer != nullptr && state.active && !state.mouse_selecting) {
         completion = completer(state.lines, state.cursor_line, state.cursor_col);
@@ -323,7 +772,10 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
     };
 
     // Click to set cursor position + start mouse selection
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse, text_rect)) {
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+        CheckCollisionPointRec(mouse, text_rect) &&
+        !pointer_on_swatch &&
+        !pointer_on_picker) {
         auto pos = mouse_to_cursor(mouse);
         state.cursor_line = pos.line;
         state.cursor_col = pos.col;
@@ -335,7 +787,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
     }
 
     // Drag to extend selection
-    if (state.mouse_selecting && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+    if (state.mouse_selecting && IsMouseButtonDown(MOUSE_BUTTON_LEFT) && !pointer_on_picker) {
         auto pos = mouse_to_cursor(mouse);
         state.cursor_line = pos.line;
         state.cursor_col = pos.col;
@@ -357,12 +809,21 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
         const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
         const bool has_completion = !completion.items.empty();
         bool completion_navigation_handled = false;
+        bool edit_snapshot_recorded = false;
+
+        auto record_edit_snapshot = [&]() {
+            if (!edit_snapshot_recorded) {
+                push_undo_snapshot(state);
+                edit_snapshot_recorded = true;
+            }
+        };
 
         auto accept_completion = [&]() -> bool {
             if (!has_completion || state.completion_index < 0 ||
                 state.completion_index >= static_cast<int>(completion.items.size())) {
                 return false;
             }
+            record_edit_snapshot();
             if (replace_range_on_line(state, state.cursor_line,
                                       completion.replace_start, completion.replace_end,
                                       completion.items[static_cast<size_t>(state.completion_index)].insert_text)) {
@@ -392,9 +853,18 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
         // Cut: Ctrl+X
         if (ctrl && IsKeyPressed(KEY_X) && state.has_selection) {
             SetClipboardText(get_selection_text(state).c_str());
+            record_edit_snapshot();
             delete_selection(state);
             result.changed = true;
             state.last_input_time = GetTime();
+        }
+
+        if (ctrl && !shift && IsKeyPressed(KEY_Z)) {
+            if (pop_undo_snapshot(state)) {
+                result.changed = true;
+                state.last_input_time = GetTime();
+                should_ensure_cursor_visible = true;
+            }
         }
 
         if (has_completion && IsKeyPressed(KEY_UP)) {
@@ -420,6 +890,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
             int codepoint = GetCharPressed();
             while (codepoint > 0) {
                 if (codepoint >= 32 && codepoint <= 126) {
+                    record_edit_snapshot();
                     if (state.has_selection) {
                         delete_selection(state);
                     }
@@ -437,6 +908,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
             if (ctrl && IsKeyPressed(KEY_V)) {
                 const char* clipboard = GetClipboardText();
                 if (clipboard != nullptr && clipboard[0] != '\0') {
+                    record_edit_snapshot();
                     if (state.has_selection) {
                         delete_selection(state);
                     }
@@ -450,6 +922,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
 
             // Tab → 2 spaces (replace selection if active)
             if (IsKeyPressed(KEY_TAB)) {
+                record_edit_snapshot();
                 if (state.has_selection) {
                     delete_selection(state);
                 }
@@ -463,6 +936,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
 
             // Enter → new line (replace selection if active)
             if (IsKeyPressed(KEY_ENTER) && static_cast<int>(state.lines.size()) < max_lines) {
+                record_edit_snapshot();
                 if (state.has_selection) {
                     delete_selection(state);
                 }
@@ -481,14 +955,17 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
         // Backspace (delete selection or single char)
         if (key_action(KEY_BACKSPACE)) {
             if (state.has_selection) {
+                record_edit_snapshot();
                 delete_selection(state);
                 result.changed = true;
             } else if (state.cursor_col > 0) {
+                record_edit_snapshot();
                 auto& line = state.lines[state.cursor_line];
                 line.erase(state.cursor_col - 1, 1);
                 state.cursor_col--;
                 result.changed = true;
             } else if (state.cursor_line > 0) {
+                record_edit_snapshot();
                 int prev_len = static_cast<int>(state.lines[state.cursor_line - 1].size());
                 state.lines[state.cursor_line - 1] += state.lines[state.cursor_line];
                 state.lines.erase(state.lines.begin() + state.cursor_line);
@@ -503,14 +980,17 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
         // Delete (delete selection or single char)
         if (key_action(KEY_DELETE)) {
             if (state.has_selection) {
+                record_edit_snapshot();
                 delete_selection(state);
                 result.changed = true;
             } else {
                 auto& line = state.lines[state.cursor_line];
                 if (state.cursor_col < static_cast<int>(line.size())) {
+                    record_edit_snapshot();
                     line.erase(state.cursor_col, 1);
                     result.changed = true;
                 } else if (state.cursor_line + 1 < static_cast<int>(state.lines.size())) {
+                    record_edit_snapshot();
                     line += state.lines[state.cursor_line + 1];
                     state.lines.erase(state.lines.begin() + state.cursor_line + 1);
                     result.changed = true;
@@ -608,6 +1088,24 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
                                         state.scrollbar_dragging, state.scrollbar_drag_offset);
     if (sb.changed) {
         state.scroll_offset = sb.scroll_offset;
+    }
+
+    int clicked_swatch_index = -1;
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        clicked_swatch_index = hovered_swatch_index;
+    }
+
+    if (clicked_swatch_index >= 0) {
+        const auto& hit = swatch_hits[static_cast<size_t>(clicked_swatch_index)];
+        open_color_picker(state, hit, hit.rect, line_height, rect);
+    }
+
+    if (state.color_picker.open) {
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+            clicked_swatch_index < 0 &&
+            !CheckCollisionPointRec(mouse, picker_rect)) {
+            close_color_picker(state);
+        }
     }
 
     // ---- Rendering ----
@@ -795,6 +1293,10 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
                 }
             }
         }
+    }
+
+    if (draw_color_picker(picker_rect, state, result, mouse)) {
+        should_ensure_cursor_visible = true;
     }
 
     return result;

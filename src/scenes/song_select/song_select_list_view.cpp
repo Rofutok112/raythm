@@ -21,6 +21,7 @@ const char* rank_label(rank value) {
     switch (value) {
         case rank::ss: return "SS";
         case rank::s: return "S";
+        case rank::aa: return "AA";
         case rank::a: return "A";
         case rank::b: return "B";
         case rank::c: return "C";
@@ -34,6 +35,7 @@ Color rank_color(rank value) {
     switch (value) {
         case rank::ss: return theme.rank_ss;
         case rank::s: return theme.rank_s;
+        case rank::aa: return theme.rank_aa;
         case rank::a: return theme.rank_a;
         case rank::b: return theme.rank_b;
         case rank::c: return theme.rank_c;
@@ -48,8 +50,8 @@ void draw_song_row(const song_select::song_entry& song, float item_y, bool is_se
                                 song_select::layout::kSongListRect.width - 28.0f, 44.0f};
     const float text_x = song_select::layout::kSongListRect.x + 30.0f;
     const float list_text_max_w = song_select::layout::kSongListRect.width - 70.0f;
-    const Rectangle title_clip_rect = {text_x, item_y, list_text_max_w, 24.0f};
-    const Rectangle artist_clip_rect = {text_x, item_y + 22.0f, list_text_max_w, 16.0f};
+    const Rectangle title_clip_rect = {text_x, item_y - 3.0f, list_text_max_w, 24.0f};
+    const Rectangle artist_clip_rect = {text_x, item_y + 19.0f, list_text_max_w, 16.0f};
 
     if (ui::is_hovered(row_rect, song_select::layout::kSceneLayer) || is_selected) {
         const ui::row_state row_state = ui::draw_selectable_row(row_rect, is_selected, 0.0f);

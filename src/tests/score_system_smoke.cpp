@@ -88,8 +88,8 @@ int main() {
         non_fc_high_accuracy.on_judge({judge_result::perfect, 0.0, 0});
     }
     const result_data non_fc_result = non_fc_high_accuracy.get_result_data();
-    if (non_fc_result.accuracy < 99.0f || non_fc_result.is_full_combo || non_fc_result.clear_rank != rank::a) {
-        std::cerr << "99% without full combo should be rank A\n";
+    if (non_fc_result.accuracy < 99.0f || non_fc_result.is_full_combo || non_fc_result.clear_rank != rank::aa) {
+        std::cerr << "99% without full combo should be rank AA\n";
         return EXIT_FAILURE;
     }
 

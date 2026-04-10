@@ -253,6 +253,7 @@ void append_matches(std::vector<ui::text_editor_completion_item>& items,
                     std::unordered_set<std::string>& seen_labels) {
     for (const auto& item : source) {
         if ((prefix.empty() || item.label.rfind(prefix, 0) == 0) &&
+            !(item.label == prefix && item.insert_text == prefix) &&
             seen_labels.insert(item.label).second) {
             items.push_back(item);
         }
@@ -264,12 +265,9 @@ Color identifier_color(const std::string& ident) {
                            "True", "False", "None"})) {
         return keyword_color();
     }
-    if (is_in_list(ident, {"Scene", "Point", "Background", "Rect", "Circle", "Line", "Text",
-                           "Polyline"})) {
+    if (is_in_list(ident, {"Scene", "Point", "DrawBackground", "DrawRect", "DrawCircle", "DrawLine", "DrawText",
+                           "DrawPolyline"})) {
         return node_color();
-    }
-    if (is_in_list(ident, {"SpectrumBar", "BeatGrid", "PulseRing"})) {
-        return g_theme->text_hint;
     }
     if (is_in_list(ident, {"sin", "cos", "abs", "floor", "ceil", "sqrt", "min", "max",
                            "clamp", "lerp", "smoothstep", "rgb", "len", "range",
@@ -394,12 +392,12 @@ ui::text_editor_completion_result complete_mv_script_line(const std::vector<std:
         {"not", "not"},
         {"Scene", "Scene("},
         {"Point", "Point("},
-        {"Background", "Background("},
-        {"Rect", "Rect("},
-        {"Circle", "Circle("},
-        {"Line", "Line("},
-        {"Text", "Text("},
-        {"Polyline", "Polyline("},
+        {"DrawBackground", "DrawBackground("},
+        {"DrawRect", "DrawRect("},
+        {"DrawCircle", "DrawCircle("},
+        {"DrawLine", "DrawLine("},
+        {"DrawText", "DrawText("},
+        {"DrawPolyline", "DrawPolyline("},
         {"sin", "sin("},
         {"cos", "cos("},
         {"abs", "abs("},
@@ -424,6 +422,7 @@ ui::text_editor_completion_result complete_mv_script_line(const std::vector<std:
     static const std::vector<ui::text_editor_completion_item> kCtxItems = {
         {"ctx.time", "ctx.time"},
         {"ctx.audio", "ctx.audio"},
+        {"ctx.song", "ctx.song"},
         {"ctx.chart", "ctx.chart"},
         {"ctx.screen", "ctx.screen"},
     };
@@ -435,21 +434,54 @@ ui::text_editor_completion_result complete_mv_script_line(const std::vector<std:
         {"ctx.time.bpm", "ctx.time.bpm"},
         {"ctx.time.beat", "ctx.time.beat"},
         {"ctx.time.beat_phase", "ctx.time.beat_phase"},
+        {"ctx.time.meter_numerator", "ctx.time.meter_numerator"},
+        {"ctx.time.meter_denominator", "ctx.time.meter_denominator"},
         {"ctx.time.progress", "ctx.time.progress"},
     };
 
     static const std::vector<ui::text_editor_completion_item> kAudioItems = {
-        {"ctx.audio.spectrum", "ctx.audio.spectrum"},
-        {"ctx.audio.spectrum_size", "ctx.audio.spectrum_size"},
-        {"ctx.audio.waveform", "ctx.audio.waveform"},
-        {"ctx.audio.waveform_size", "ctx.audio.waveform_size"},
-        {"ctx.audio.waveform_index", "ctx.audio.waveform_index"},
-        {"ctx.audio.oscilloscope", "ctx.audio.oscilloscope"},
-        {"ctx.audio.oscilloscope_size", "ctx.audio.oscilloscope_size"},
-        {"ctx.audio.level", "ctx.audio.level"},
+        {"ctx.audio.analysis", "ctx.audio.analysis"},
+        {"ctx.audio.bands", "ctx.audio.bands"},
+        {"ctx.audio.buffers", "ctx.audio.buffers"},
+    };
+
+    static const std::vector<ui::text_editor_completion_item> kAudioAnalysisItems = {
+        {"ctx.audio.analysis.level", "ctx.audio.analysis.level"},
+        {"ctx.audio.analysis.rms", "ctx.audio.analysis.rms"},
+        {"ctx.audio.analysis.peak", "ctx.audio.analysis.peak"},
+    };
+
+    static const std::vector<ui::text_editor_completion_item> kAudioBandsItems = {
+        {"ctx.audio.bands.low", "ctx.audio.bands.low"},
+        {"ctx.audio.bands.mid", "ctx.audio.bands.mid"},
+        {"ctx.audio.bands.high", "ctx.audio.bands.high"},
+    };
+
+    static const std::vector<ui::text_editor_completion_item> kAudioBufferItems = {
+        {"ctx.audio.buffers.spectrum", "ctx.audio.buffers.spectrum"},
+        {"ctx.audio.buffers.spectrum_size", "ctx.audio.buffers.spectrum_size"},
+        {"ctx.audio.buffers.oscilloscope", "ctx.audio.buffers.oscilloscope"},
+        {"ctx.audio.buffers.oscilloscope_size", "ctx.audio.buffers.oscilloscope_size"},
+        {"ctx.audio.buffers.waveform", "ctx.audio.buffers.waveform"},
+        {"ctx.audio.buffers.waveform_size", "ctx.audio.buffers.waveform_size"},
+        {"ctx.audio.buffers.waveform_index", "ctx.audio.buffers.waveform_index"},
+    };
+
+    static const std::vector<ui::text_editor_completion_item> kSongItems = {
+        {"ctx.song.song_id", "ctx.song.song_id"},
+        {"ctx.song.title", "ctx.song.title"},
+        {"ctx.song.artist", "ctx.song.artist"},
+        {"ctx.song.base_bpm", "ctx.song.base_bpm"},
     };
 
     static const std::vector<ui::text_editor_completion_item> kChartItems = {
+        {"ctx.chart.chart_id", "ctx.chart.chart_id"},
+        {"ctx.chart.song_id", "ctx.chart.song_id"},
+        {"ctx.chart.difficulty", "ctx.chart.difficulty"},
+        {"ctx.chart.level", "ctx.chart.level"},
+        {"ctx.chart.chart_author", "ctx.chart.chart_author"},
+        {"ctx.chart.resolution", "ctx.chart.resolution"},
+        {"ctx.chart.offset", "ctx.chart.offset"},
         {"ctx.chart.total_notes", "ctx.chart.total_notes"},
         {"ctx.chart.combo", "ctx.chart.combo"},
         {"ctx.chart.accuracy", "ctx.chart.accuracy"},
@@ -470,8 +502,16 @@ ui::text_editor_completion_result complete_mv_script_line(const std::vector<std:
     std::unordered_set<std::string> seen_labels;
     if (token.rfind("ctx.time.", 0) == 0) {
         append_matches(matches, kTimeItems, token, seen_labels);
+    } else if (token.rfind("ctx.audio.analysis.", 0) == 0) {
+        append_matches(matches, kAudioAnalysisItems, token, seen_labels);
+    } else if (token.rfind("ctx.audio.bands.", 0) == 0) {
+        append_matches(matches, kAudioBandsItems, token, seen_labels);
+    } else if (token.rfind("ctx.audio.buffers.", 0) == 0) {
+        append_matches(matches, kAudioBufferItems, token, seen_labels);
     } else if (token.rfind("ctx.audio.", 0) == 0) {
         append_matches(matches, kAudioItems, token, seen_labels);
+    } else if (token.rfind("ctx.song.", 0) == 0) {
+        append_matches(matches, kSongItems, token, seen_labels);
     } else if (token.rfind("ctx.chart.", 0) == 0) {
         append_matches(matches, kChartItems, token, seen_labels);
     } else if (token.rfind("ctx.screen.", 0) == 0) {
@@ -490,7 +530,7 @@ ui::text_editor_completion_result complete_mv_script_line(const std::vector<std:
         }
     } else {
         for (const auto& name : symbols.visible_names) {
-            if (token.empty() || name.rfind(token, 0) == 0) {
+            if ((token.empty() || name.rfind(token, 0) == 0) && name != token) {
                 if (seen_labels.insert(name).second) {
                     matches.push_back({name, name});
                 }

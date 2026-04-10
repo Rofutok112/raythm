@@ -5,32 +5,30 @@
 # MV Script Reference
 # --------------------
 # - draw(ctx) function is called every frame.
-# - You can write in two styles:
-#     1. Imperative: just place node constructors in draw(ctx)
-#     2. Explicit: return Scene([...])
-# - In imperative style, node calls are collected automatically.
-# - SpectrumBar / BeatGrid / PulseRing are deprecated compatibility helpers.
-#   They still work, but new scripts should prefer composing effects from primitives.
+# - Write draw(ctx) in imperative style:
+#     just place node constructors in draw(ctx)
+# - Node calls are collected automatically.
 # - ctx fields:
 #     ctx.time.ms, ctx.time.sec, ctx.time.length_ms,
 #     ctx.time.bpm, ctx.time.beat, ctx.time.beat_phase,
 #     ctx.time.progress
-#     ctx.audio.spectrum, ctx.audio.spectrum_size,
-#     ctx.audio.waveform, ctx.audio.waveform_size,
-#     ctx.audio.waveform_index, ctx.audio.level,
-#     ctx.audio.oscilloscope, ctx.audio.oscilloscope_size
+#     ctx.audio.analysis.level,
+#     ctx.audio.buffers.spectrum, ctx.audio.buffers.spectrum_size,
+#     ctx.audio.buffers.waveform, ctx.audio.buffers.waveform_size,
+#     ctx.audio.buffers.waveform_index,
+#     ctx.audio.buffers.oscilloscope, ctx.audio.buffers.oscilloscope_size
 #     ctx.chart.total_notes, ctx.chart.combo,
 #     ctx.chart.accuracy, ctx.chart.key_count
 #     ctx.screen.w, ctx.screen.h
 #
 # - Node types:
 #     Point(x, y)
-#     Background(fill, opacity)
-#     Rect(x, y, w, h, fill, rotation, opacity)
-#     Circle(cx, cy, radius, fill, opacity)
-#     Line(x1, y1, x2, y2, stroke, thickness, opacity)
-#     Polyline(points, stroke, thickness, opacity)
-#     Text(text, x, y, font_size, fill, opacity)
+#     DrawBackground(fill, opacity)
+#     DrawRect(x, y, w, h, fill, rotation, opacity)
+#     DrawCircle(cx, cy, radius, fill, opacity)
+#     DrawLine(x1, y1, x2, y2, stroke, thickness, opacity)
+#     DrawPolyline(points, stroke, thickness, opacity)
+#     DrawText(text, x, y, font_size, fill, opacity)
 #
 # - Built-in functions:
 #     sin, cos, abs, floor, ceil, sqrt, min, max,
@@ -43,7 +41,7 @@
 # Sample 1: Minimal (what "New MV" generates)
 # --------------------------------------------------
 def draw(ctx):
-  return Scene([])
+  DrawBackground(fill="#0a0a1a")
 
 
 # --------------------------------------------------
@@ -54,30 +52,30 @@ def draw(ctx):
   p = ctx.time.beat_phase
   r = lerp(120.0, 60.0, p)
   a = lerp(0.9, 0.2, p)
-  Background(fill="#0a0a1a")
-  Circle(cx=640, cy=360, radius=r, fill="#00ccff", opacity=a)
+  DrawBackground(fill="#0a0a1a")
+  DrawCircle(cx=640, cy=360, radius=r, fill="#00ccff", opacity=a)
 
 
 # --------------------------------------------------
 # Sample 3: Spectrum + Grid
-#   Audio-reactive bars built from Rect + Line.
+#   Audio-reactive bars built from DrawRect + DrawLine.
 # --------------------------------------------------
 def draw(ctx):
-  Background(fill="#0b0f18")
+  DrawBackground(fill="#0b0f18")
 
   spacing = 40
   offset = ctx.time.beat_phase * spacing
   for i in range(19):
     y = i * spacing - offset
-    Line(x1=0, y1=y, x2=1280, y2=y, stroke="#ffffff1e", thickness=1.0, opacity=0.4)
+    DrawLine(x1=0, y1=y, x2=1280, y2=y, stroke="#ffffff1e", thickness=1.0, opacity=0.4)
 
-  count = min(len(ctx.audio.spectrum), 48)
+  count = min(len(ctx.audio.buffers.spectrum), 48)
   if count > 0:
     bar_w = 1000 / count
     for i in range(count):
-      amp = ctx.audio.spectrum[i]
+      amp = ctx.audio.buffers.spectrum[i]
       h = 180 * amp
-      Rect(x=140 + i * bar_w, y=700 - h, w=bar_w - 2, h=h, fill="#64c8ff", opacity=0.7)
+      DrawRect(x=140 + i * bar_w, y=700 - h, w=bar_w - 2, h=h, fill="#64c8ff", opacity=0.7)
 
 
 # --------------------------------------------------
@@ -85,7 +83,7 @@ def draw(ctx):
 #   Circles that fan out when combo is high.
 # --------------------------------------------------
 def draw(ctx):
-  Background(fill="#111111")
+  DrawBackground(fill="#111111")
 
   combo = ctx.chart.combo
   count = min(int(combo / 10), 12)
@@ -96,9 +94,9 @@ def draw(ctx):
     cx = 640 + cos(angle) * dist
     cy = 360 + sin(angle) * dist
     r = 10.0 + sin(ctx.time.ms * 0.005 + i) * 6.0
-    Circle(cx=cx, cy=cy, radius=r, fill="#ff6644", opacity=0.8)
+    DrawCircle(cx=cx, cy=cy, radius=r, fill="#ff6644", opacity=0.8)
 
-  Text(text=str(int(combo)), x=600, y=330, font_size=48, fill="#ffffff")
+  DrawText(text=str(int(combo)), x=600, y=330, font_size=48, fill="#ffffff")
 
 
 # --------------------------------------------------
@@ -108,11 +106,11 @@ def draw(ctx):
 def draw(ctx):
   bar_w = ctx.screen.w - 100
   filled = bar_w * ctx.time.progress
-  Rect(x=50, y=680, w=bar_w, h=6, fill="#333333")
-  Rect(x=50, y=680, w=filled, h=6, fill="#00ff88")
+  DrawRect(x=50, y=680, w=bar_w, h=6, fill="#333333")
+  DrawRect(x=50, y=680, w=filled, h=6, fill="#00ff88")
 
   pct = str(int(ctx.time.progress * 100)) + "%"
-  Text(text=pct, x=50, y=656, font_size=16, fill="#aaaaaa")
+  DrawText(text=pct, x=50, y=656, font_size=16, fill="#aaaaaa")
 
 
 # --------------------------------------------------
@@ -120,7 +118,7 @@ def draw(ctx):
 #   Four squares rotating around the center.
 # --------------------------------------------------
 def draw(ctx):
-  Background(fill="#1a0a2e")
+  DrawBackground(fill="#1a0a2e")
 
   t = ctx.time.sec
   for i in range(4):
@@ -131,30 +129,30 @@ def draw(ctx):
     color = "#ff44cc"
     if i % 2 == 0:
       color = "#44ccff"
-    Rect(x=cx - 40, y=cy - 40, w=80, h=80, fill=color, rotation=rot, opacity=0.75)
+    DrawRect(x=cx - 40, y=cy - 40, w=80, h=80, fill=color, rotation=rot, opacity=0.75)
 
 
 # --------------------------------------------------
 # Sample 7: Manual Pulse Rings + Spectrum
-#   Rings and bars composed from Circle + Rect.
+#   Rings and bars composed from DrawCircle + DrawRect.
 # --------------------------------------------------
 def draw(ctx):
-  Background(fill="#050510")
+  DrawBackground(fill="#050510")
   bp = ctx.time.beat_phase
 
   for i in range(3):
     r = 100 + i * 80
     a = lerp(0.6, 0.1, bp) - i * 0.15
     a = max(a, 0.0)
-    Circle(cx=640, cy=360, radius=r + bp * 30, fill="#8866ff", opacity=a * 0.15)
+    DrawCircle(cx=640, cy=360, radius=r + bp * 30, fill="#8866ff", opacity=a * 0.15)
 
-  count = min(len(ctx.audio.spectrum), 32)
+  count = min(len(ctx.audio.buffers.spectrum), 32)
   if count > 0:
     bar_w = 600 / count
     for i in range(count):
-      amp = ctx.audio.spectrum[i]
+      amp = ctx.audio.buffers.spectrum[i]
       h = 120 * amp
-      Rect(x=340 + i * bar_w, y=680 - h, w=bar_w - 2, h=h, fill="#8866ff", opacity=0.5)
+      DrawRect(x=340 + i * bar_w, y=680 - h, w=bar_w - 2, h=h, fill="#8866ff", opacity=0.5)
 
 
 # --------------------------------------------------
@@ -171,16 +169,16 @@ def draw(ctx):
   elif acc > 0.70:
     color = "#ff8833"
 
-  Rect(x=0, y=0, w=ctx.screen.w, h=8, fill=color, opacity=0.9)
-  Text(text=str(int(acc * 100)) + "%", x=20, y=16, font_size=20, fill=color, opacity=0.7)
+  DrawRect(x=0, y=0, w=ctx.screen.w, h=8, fill=color, opacity=0.9)
+  DrawText(text=str(int(acc * 100)) + "%", x=20, y=16, font_size=20, fill=color, opacity=0.7)
 
 
 # --------------------------------------------------
 # Sample 9: Waveform Polyline
-#   Animated wave using Point + Polyline.
+#   Animated wave using Point + DrawPolyline.
 # --------------------------------------------------
 def draw(ctx):
-  Background(fill="#0d0d1a")
+  DrawBackground(fill="#0d0d1a")
   t = ctx.time.ms * 0.002
   points = []
 
@@ -189,7 +187,7 @@ def draw(ctx):
     y = 360 + sin(t + i * 0.3) * 100
     points = points + [Point(x=x, y=y)]
 
-  Polyline(points=points, stroke="#22ddaa", thickness=2.0, opacity=0.5)
+  DrawPolyline(points=points, stroke="#22ddaa", thickness=2.0, opacity=0.5)
 
 
 # --------------------------------------------------
@@ -197,32 +195,32 @@ def draw(ctx):
 #   Combines primitive-built grid, pulse glow, combo, progress.
 # --------------------------------------------------
 def draw(ctx):
-  Background(fill="#080812")
+  DrawBackground(fill="#080812")
   bp = ctx.time.beat_phase
 
   for i in range(19):
     y = i * 40 - bp * 40
-    Line(x1=0, y1=y, x2=1280, y2=y, stroke="#ffffff10", thickness=1.0, opacity=0.3)
+    DrawLine(x1=0, y1=y, x2=1280, y2=y, stroke="#ffffff10", thickness=1.0, opacity=0.3)
 
-  Circle(cx=640, cy=340, radius=160 + bp * 24, fill="#ff66aa", opacity=0.08)
+  DrawCircle(cx=640, cy=340, radius=160 + bp * 24, fill="#ff66aa", opacity=0.08)
 
-  count = min(len(ctx.audio.spectrum), 64)
+  count = min(len(ctx.audio.buffers.spectrum), 64)
   if count > 0:
     bar_w = 1100 / count
     for i in range(count):
-      amp = ctx.audio.spectrum[i]
+      amp = ctx.audio.buffers.spectrum[i]
       h = 160 * amp
-      Rect(x=90 + i * bar_w, y=700 - h, w=bar_w - 2, h=h, fill="#4488ff", opacity=0.45)
+      DrawRect(x=90 + i * bar_w, y=700 - h, w=bar_w - 2, h=h, fill="#4488ff", opacity=0.45)
 
   combo = ctx.chart.combo
   if combo >= 10:
     scale = min(combo * 0.5, 40.0)
-    Circle(cx=640, cy=340, radius=60 + scale, fill="#ff66aa", opacity=lerp(0.3, 0.05, bp))
+    DrawCircle(cx=640, cy=340, radius=60 + scale, fill="#ff66aa", opacity=lerp(0.3, 0.05, bp))
 
   bar_w = 1000
   filled = bar_w * ctx.time.progress
-  Rect(x=140, y=700, w=bar_w, h=4, fill="#222222")
-  Rect(x=140, y=700, w=filled, h=4, fill="#44ddff")
+  DrawRect(x=140, y=700, w=bar_w, h=4, fill="#222222")
+  DrawRect(x=140, y=700, w=filled, h=4, fill="#44ddff")
 
 
 # --------------------------------------------------
@@ -236,10 +234,10 @@ def draw(ctx):
   cx = ctx.screen.w * 0.5
   cy = ctx.screen.h * 0.5
 
-  Background(fill="#060913")
+  DrawBackground(fill="#060913")
 
   glow = 0.05 + 0.03 * sin(t * 0.22)
-  Rect(x=0, y=0, w=ctx.screen.w, h=ctx.screen.h, fill="#d8f6ff", rotation=0, opacity=glow)
+  DrawRect(x=0, y=0, w=ctx.screen.w, h=ctx.screen.h, fill="#d8f6ff", rotation=0, opacity=glow)
 
   outer = []
   inner = []
@@ -265,9 +263,9 @@ def draw(ctx):
     core_y = cy + sin(a + t * 0.16) * core_r
     core.append(Point(x=core_x, y=core_y))
 
-  Polyline(points=outer, stroke="#c8f4ff", thickness=2.0, opacity=0.34)
-  Polyline(points=inner, stroke="#8ddfff", thickness=1.6, opacity=0.46)
-  Polyline(points=core, stroke="#ffffff", thickness=1.0, opacity=0.28)
+  DrawPolyline(points=outer, stroke="#c8f4ff", thickness=2.0, opacity=0.34)
+  DrawPolyline(points=inner, stroke="#8ddfff", thickness=1.6, opacity=0.46)
+  DrawPolyline(points=core, stroke="#ffffff", thickness=1.0, opacity=0.28)
 
   bridge_count = 10
   for i in range(bridge_count):
@@ -278,12 +276,12 @@ def draw(ctx):
     y1 = cy + sin(a) * r1
     x2 = cx + cos(a + 0.55 * sin(t * 0.17 + i)) * r2
     y2 = cy + sin(a + 0.55 * sin(t * 0.17 + i)) * r2
-    Line(x1=x1, y1=y1, x2=x2, y2=y2, stroke="#ffffff", thickness=1.0, opacity=0.14)
+    DrawLine(x1=x1, y1=y1, x2=x2, y2=y2, stroke="#ffffff", thickness=1.0, opacity=0.14)
 
-  count = min(ctx.audio.spectrum_size, 36)
+  count = min(ctx.audio.buffers.spectrum_size, 36)
   if count > 0:
     for i in range(count):
-      amp = ctx.audio.spectrum[i]
+      amp = ctx.audio.buffers.spectrum[i]
       band = amp * amp
       a = (i / count) * 2 * pi() - t * 0.18
       base_r = 185 + 10 * sin(t * 0.33 + i * 0.15)
@@ -293,10 +291,11 @@ def draw(ctx):
       x2 = cx + cos(a) * (base_r + h)
       y2 = cy + sin(a) * (base_r + h)
       thick = 1.0 + 1.8 * band
-      Line(x1=x1, y1=y1, x2=x2, y2=y2, stroke="#b4efff", thickness=thick, opacity=0.52)
+      DrawLine(x1=x1, y1=y1, x2=x2, y2=y2, stroke="#b4efff", thickness=thick, opacity=0.52)
 
   beat_ring = 100 + 22 * (1 - phase)
-  Circle(cx=cx, cy=cy, radius=beat_ring, fill="#ffffff", opacity=0.05)
-  Circle(cx=cx, cy=cy, radius=52 + 6 * sin(t * 0.8), fill="#0b1320", opacity=0.96)
+  DrawCircle(cx=cx, cy=cy, radius=beat_ring, fill="#ffffff", opacity=0.05)
+  DrawCircle(cx=cx, cy=cy, radius=52 + 6 * sin(t * 0.8), fill="#0b1320", opacity=0.96)
 
-  Text(text="SYZYGY DRIFT", x=cx - 118, y=cy + 242, font_size=22, fill="#f4fbff", opacity=0.44)
+  DrawText(text="SYZYGY DRIFT", x=cx - 118, y=cy + 242, font_size=22, fill="#f4fbff", opacity=0.44)
+

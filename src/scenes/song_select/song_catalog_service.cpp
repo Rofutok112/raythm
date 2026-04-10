@@ -51,7 +51,7 @@ std::optional<rank> load_best_local_rank(const std::string& chart_id) {
     if (listing.entries.empty()) {
         return std::nullopt;
     }
-    return listing.entries.front().clear_rank;
+    return listing.entries.front().clear_rank();
 }
 
 }  // namespace
