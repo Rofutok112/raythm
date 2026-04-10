@@ -824,6 +824,7 @@ void song_select_scene::draw() {
         if (background_song_import_prepare_active_ || background_transfer_active_) {
             song_select::draw_busy_overlay(background_transfer_label_);
         }
+        apply_context_menu_command(song_select::draw_context_menu(state_));
         ui::flush_draw_queue();
         virtual_screen::end();
         ClearBackground(BLACK);
