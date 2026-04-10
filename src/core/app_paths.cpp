@@ -74,18 +74,6 @@ std::filesystem::path rankings_root() {
     return app_data_root() / "rankings";
 }
 
-std::filesystem::path official_root() {
-    return app_data_root() / "official";
-}
-
-std::filesystem::path official_songs_root() {
-    return official_root() / "songs";
-}
-
-std::filesystem::path official_charts_root() {
-    return official_root() / "charts";
-}
-
 std::filesystem::path song_dir(const std::string& song_id) {
     return songs_root() / song_id;
 }
@@ -98,10 +86,6 @@ std::filesystem::path local_ranking_path(const std::string& chart_id) {
     return rankings_root() / (chart_id + ".bin");
 }
 
-std::filesystem::path legacy_songs_root() {
-    return assets_root() / "songs";
-}
-
 std::filesystem::path settings_path() {
     return app_data_root() / "settings.json";
 }
@@ -110,12 +94,12 @@ std::filesystem::path chart_offsets_path() {
     return app_data_root() / "chart_offsets.txt";
 }
 
-std::filesystem::path scripts_root() {
-    return app_data_root() / "scripts";
+std::filesystem::path mvs_root() {
+    return app_data_root() / "mvs";
 }
 
-std::filesystem::path script_path(const std::string& song_id) {
-    return scripts_root() / (song_id + ".rmv");
+std::filesystem::path mv_dir(const std::string& mv_id) {
+    return mvs_root() / mv_id;
 }
 
 void ensure_directories() {
@@ -124,10 +108,7 @@ void ensure_directories() {
     std::filesystem::create_directories(songs_root(), ec);
     std::filesystem::create_directories(charts_root(), ec);
     std::filesystem::create_directories(rankings_root(), ec);
-    std::filesystem::create_directories(official_root(), ec);
-    std::filesystem::create_directories(official_songs_root(), ec);
-    std::filesystem::create_directories(official_charts_root(), ec);
-    std::filesystem::create_directories(scripts_root(), ec);
+    std::filesystem::create_directories(mvs_root(), ec);
 }
 
 }

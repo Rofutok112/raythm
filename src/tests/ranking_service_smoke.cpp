@@ -27,12 +27,14 @@ int main() {
     result_data lower_result;
     lower_result.clear_rank = rank::a;
     lower_result.accuracy = 92.5f;
+    lower_result.is_full_combo = false;
     lower_result.max_combo = 321;
     lower_result.score = 654321;
 
     result_data higher_result;
     higher_result.clear_rank = rank::s;
     higher_result.accuracy = 97.25f;
+    higher_result.is_full_combo = true;
     higher_result.max_combo = 654;
     higher_result.score = 765432;
 

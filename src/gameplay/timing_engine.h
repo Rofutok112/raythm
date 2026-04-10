@@ -10,6 +10,8 @@ public:
     double tick_to_ms(int tick) const;
     int ms_to_tick(double ms) const;
     float get_bpm_at(int tick) const;
+    int get_meter_numerator_at(int tick) const;
+    int get_meter_denominator_at(int tick) const;
 
 private:
     struct bpm_segment {
@@ -18,7 +20,14 @@ private:
         float bpm = 120.0f;
     };
 
+    struct meter_segment {
+        int start_tick = 0;
+        int numerator = 4;
+        int denominator = 4;
+    };
+
     std::vector<bpm_segment> bpm_segments_;
+    std::vector<meter_segment> meter_segments_;
     int resolution_ = 480;
     int offset_ms_ = 0;
 };

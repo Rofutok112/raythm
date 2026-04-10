@@ -90,6 +90,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/mv/mv_runtime.h
         src/mv/mv_script_editor_style.cpp
         src/mv/mv_script_editor_style.h
+        src/mv/mv_storage.cpp
+        src/mv/mv_storage.h
         src/audio/audio_waveform.cpp
         src/audio/audio_waveform.h
         src/scenes/editor/editor_command.h
@@ -132,8 +134,6 @@ add_executable(raythm WIN32 src/main.cpp
         src/core/app_paths.h
         src/core/file_dialog.cpp
         src/core/file_dialog.h
-        src/core/official_content_sync.cpp
-        src/core/official_content_sync.h
         src/core/window_dialog_support.cpp
         src/core/window_dialog_support.h
         src/core/scene.cpp
@@ -255,6 +255,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/virtual_screen.h
         src/game_scenes.h
         src/ui/ui_layout.h
+        src/ui/ui_font.cpp
+        src/ui/ui_font.h
         src/ui/ui_text.h
         src/ui/ui_hit.h
         src/ui/ui_draw.h
@@ -383,11 +385,17 @@ add_executable(song_select_state_smoke
 add_executable(settings_io_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
-        src/core/official_content_sync.cpp
-        src/core/official_content_sync.h
         src/gameplay/settings_io.cpp
         src/gameplay/settings_io.h
         src/tests/settings_io_smoke.cpp)
+
+add_executable(mv_storage_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/models/data_models.h
+        src/mv/mv_storage.cpp
+        src/mv/mv_storage.h
+        src/tests/mv_storage_smoke.cpp)
 
 add_executable(input_handler_smoke
         src/platform/windows_input_source.cpp
@@ -644,6 +652,7 @@ target_include_directories(audio_manager_smoke PRIVATE ${RAYTHM_BASS_DIR} ${RAYT
 target_include_directories(update_version_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(mv_lang_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(mv_api_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(mv_storage_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_link_libraries(raythm PRIVATE raylib ${RAYTHM_BASS_IMPORT_LIB} comdlg32 crypt32)
 target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)

@@ -49,6 +49,29 @@ struct text_editor_error_marker {
     std::string message;
 };
 
+struct text_editor_undo_snapshot {
+    std::vector<std::string> lines = {""};
+    int cursor_line = 0;
+    int cursor_col = 0;
+    float scroll_offset = 0.0f;
+    bool has_selection = false;
+    text_editor_cursor sel_anchor = {};
+};
+
+struct text_editor_color_picker_state {
+    bool open = false;
+    int line = 0;
+    int col_start = 0;
+    int col_end = 0;
+    char quote = '"';
+    bool has_alpha = false;
+    Color color = WHITE;
+    bool edit_started = false;
+    int active_channel = -1;
+    bool has_anchor = false;
+    Rectangle anchor_rect = {};
+};
+
 struct text_editor_state {
     std::vector<std::string> lines = {""};
     int cursor_line = 0;
@@ -65,6 +88,8 @@ struct text_editor_state {
     // Inline error markers (set externally)
     std::vector<text_editor_error_marker> error_markers;
     int completion_index = 0;
+    std::vector<text_editor_undo_snapshot> undo_stack;
+    text_editor_color_picker_state color_picker;
 };
 
 struct text_editor_result {

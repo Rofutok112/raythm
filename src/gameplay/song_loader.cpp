@@ -9,31 +9,10 @@
 #include <sstream>
 #include <string_view>
 
-#include "app_paths.h"
 #include "path_utils.h"
 
 namespace {
 namespace fs = std::filesystem;
-
-uint64_t fnv1a_file_hash(const fs::path& path) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input.is_open()) {
-        return 0;
-    }
-
-    constexpr uint64_t kOffsetBasis = 14695981039346656037ull;
-    constexpr uint64_t kPrime = 1099511628211ull;
-    uint64_t hash = kOffsetBasis;
-    char buffer[4096];
-    while (input.read(buffer, sizeof(buffer)) || input.gcount() > 0) {
-        const std::streamsize count = input.gcount();
-        for (std::streamsize i = 0; i < count; ++i) {
-            hash ^= static_cast<unsigned char>(buffer[i]);
-            hash *= kPrime;
-        }
-    }
-    return hash;
-}
 
 std::string trim(std::string_view value) {
     size_t start = 0;
@@ -304,78 +283,9 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path, std::ve
     return meta;
 }
 
-bool is_within_root(const fs::path& path, const fs::path& root) {
-    std::error_code ec;
-    const fs::path normalized_path = fs::weakly_canonical(path, ec);
-    if (ec) {
-        return false;
-    }
-
-    const fs::path normalized_root = fs::weakly_canonical(root, ec);
-    if (ec) {
-        return false;
-    }
-
-    auto path_it = normalized_path.begin();
-    auto root_it = normalized_root.begin();
-    for (; root_it != normalized_root.end(); ++root_it, ++path_it) {
-        if (path_it == normalized_path.end() || *path_it != *root_it) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
-bool directory_matches_source(const fs::path& candidate, const fs::path& source) {
-    std::error_code ec;
-    if (!fs::exists(candidate) || !fs::is_directory(candidate) ||
-        !fs::exists(source) || !fs::is_directory(source)) {
-        return false;
-    }
-
-    for (const fs::directory_entry& entry : fs::recursive_directory_iterator(source)) {
-        const fs::path relative = fs::relative(entry.path(), source, ec);
-        if (ec) {
-            ec.clear();
-            return false;
-        }
-
-        const fs::path candidate_path = candidate / relative;
-        if (entry.is_directory()) {
-            if (!fs::exists(candidate_path) || !fs::is_directory(candidate_path)) {
-                return false;
-            }
-            continue;
-        }
-
-        if (!entry.is_regular_file()) {
-            continue;
-        }
-
-        if (!fs::exists(candidate_path) || !fs::is_regular_file(candidate_path) ||
-            fnv1a_file_hash(entry.path()) != fnv1a_file_hash(candidate_path)) {
-            return false;
-        }
-    }
-
-    for (const fs::directory_entry& entry : fs::recursive_directory_iterator(candidate)) {
-        const fs::path relative = fs::relative(entry.path(), candidate, ec);
-        if (ec) {
-            ec.clear();
-            return false;
-        }
-
-        if (entry.is_regular_file() && !fs::exists(source / relative)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-}
-
-song_load_result song_loader::load_all(const std::string& songs_dir, content_source source) {
+song_load_result song_loader::load_all(const std::string& songs_dir) {
     song_load_result result;
     const fs::path root = path_utils::from_utf8(songs_dir);
 
@@ -396,14 +306,6 @@ song_load_result song_loader::load_all(const std::string& songs_dir, content_sou
             continue;
         }
 
-        if (source == content_source::official) {
-            std::error_code ec;
-            const fs::path relative = fs::relative(song_dir, app_paths::official_songs_root(), ec);
-            if (ec || !directory_matches_source(song_dir, app_paths::legacy_songs_root() / relative)) {
-                continue;
-            }
-        }
-
         std::vector<std::string> song_errors;
         const std::optional<song_meta> meta = parse_song_meta(song_json_path, song_errors);
         if (!meta.has_value()) {
@@ -414,9 +316,6 @@ song_load_result song_loader::load_all(const std::string& songs_dir, content_sou
         song_data song;
         song.meta = *meta;
         song.directory = path_utils::to_utf8(song_dir);
-        song.source = source;
-        song.can_edit = source == content_source::app_data;
-        song.can_delete = source == content_source::app_data;
 
         const fs::path charts_dir = song_dir / "charts";
         if (fs::exists(charts_dir) && fs::is_directory(charts_dir)) {
@@ -436,7 +335,7 @@ song_load_result song_loader::load_all(const std::string& songs_dir, content_sou
     return result;
 }
 
-song_load_result song_loader::load_directory(const std::string& song_dir_utf8, content_source source) {
+song_load_result song_loader::load_directory(const std::string& song_dir_utf8) {
     song_load_result result;
     const fs::path song_dir = path_utils::from_utf8(song_dir_utf8);
     if (!fs::exists(song_dir) || !fs::is_directory(song_dir)) {
@@ -460,9 +359,6 @@ song_load_result song_loader::load_directory(const std::string& song_dir_utf8, c
     song_data song;
     song.meta = *meta;
     song.directory = path_utils::to_utf8(song_dir);
-    song.source = source;
-    song.can_edit = source == content_source::app_data;
-    song.can_delete = source == content_source::app_data;
 
     const fs::path charts_dir = song_dir / "charts";
     if (fs::exists(charts_dir) && fs::is_directory(charts_dir)) {
@@ -480,18 +376,6 @@ chart_parse_result song_loader::load_chart(const std::string& path) {
     return chart_parser::parse(path);
 }
 
-content_source song_loader::classify_chart_path(const std::string& path) {
-    const fs::path chart_path = path_utils::from_utf8(path);
-    if (is_within_root(chart_path, app_paths::official_root())) {
-        return content_source::official;
-    }
-    if (is_within_root(chart_path, app_paths::app_data_root())) {
-        return content_source::app_data;
-    }
-
-    return content_source::official;
-}
-
 void song_loader::attach_external_charts(const std::string& charts_dir, std::vector<song_data>& songs) {
     const fs::path root = path_utils::from_utf8(charts_dir);
     if (!fs::exists(root) || !fs::is_directory(root)) {
@@ -500,21 +384,6 @@ void song_loader::attach_external_charts(const std::string& charts_dir, std::vec
 
     for (const fs::path& chart_path : collect_chart_files_in_directory(root)) {
         const fs::directory_entry entry(chart_path);
-
-        if (is_within_root(entry.path(), app_paths::official_charts_root())) {
-            std::error_code ec;
-            const fs::path relative = fs::relative(entry.path(), app_paths::official_charts_root(), ec);
-            if (ec) {
-                ec.clear();
-                continue;
-            }
-
-            const fs::path source_path = app_paths::assets_root() / "charts" / relative;
-            if (!fs::exists(source_path) || fnv1a_file_hash(entry.path()) != fnv1a_file_hash(source_path)) {
-                continue;
-            }
-        }
-
         const chart_parse_result parse_result = chart_parser::parse(path_utils::to_utf8(entry.path()));
         if (!parse_result.success || !parse_result.data.has_value()) {
             continue;

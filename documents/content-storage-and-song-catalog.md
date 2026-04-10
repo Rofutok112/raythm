@@ -1,10 +1,11 @@
 # Content Storage And Song Catalog
 
-`raythm` では、楽曲と譜面を次の 3 系統で扱います。
+`raythm` では、楽曲・譜面・MV を次のローカル保存領域で扱います。
 
 - 配布物として同梱される `assets/`
-- 起動時に `assets/` から再生成される `AppData/Local/raythm/official/`
-- ユーザー追加コンテンツを置く `AppData/Local/raythm/songs/` と `AppData/Local/raythm/charts/`
+- ローカル楽曲を置く `AppData/Local/raythm/songs/`
+- ローカル譜面を置く `AppData/Local/raythm/charts/`
+- ローカル MV を置く `AppData/Local/raythm/mvs/`
 
 このドキュメントは、どこに何が保存され、song select がどこを参照しているかを整理したものです。
 
@@ -21,38 +22,26 @@
   - `AppData/Local/raythm/songs/`
 - `charts_root()`
   - `AppData/Local/raythm/charts/`
-- `official_root()`
-  - `AppData/Local/raythm/official/`
-- `official_songs_root()`
-  - `AppData/Local/raythm/official/songs/`
-- `official_charts_root()`
-  - `AppData/Local/raythm/official/charts/`
+- `mvs_root()`
+  - `AppData/Local/raythm/mvs/`
+- `mv_dir(mv_id)`
+  - `AppData/Local/raythm/mvs/{mv_id}/`
 
-## Official Content Flow
+## Bundled Asset Flow
 
-公式楽曲の原本は `assets/` にあります。
+同梱アセットの原本は `assets/` にあります。
 
 - 楽曲メタデータと音声:
   - `assets/songs/{song_id}/song.json`
   - `assets/songs/{song_id}/...audio...`
-- 公式譜面:
+- 同梱譜面:
   - `assets/songs/{song_id}/charts/*.rchart`
 
-起動時に [main.cpp](C:/Users/rento/CLionProjects/raythm/src/main.cpp) から [official_content_sync.cpp](C:/Users/rento/CLionProjects/raythm/src/core/official_content_sync.cpp) の `official_content_sync::synchronize()` を呼びます。
-
-この同期では:
-
-- `AppData/Local/raythm/official/` をいったん削除
-- `assets/songs/` を `official/songs/` へコピー
-- `assets/charts/` を `official/charts/` へコピー
-
-を行います。
-
-`official/` はキャッシュ扱いです。ユーザーデータではないので、起動時に再生成されます。
+これらは開発中や配布物として直接参照する同梱データであり、`AppData/Local/raythm/official/` のような mirror キャッシュは現在は使いません。
 
 ## User Content Flow
 
-ユーザーが追加した楽曲と譜面は `AppData` 側に保存されます。
+ユーザーが追加した楽曲・譜面・MV は `AppData` 側に保存されます。
 
 - 楽曲:
   - `AppData/Local/raythm/songs/{song_id}/song.json`
@@ -60,6 +49,9 @@
   - 必要なら jacket
 - 外部譜面:
   - `AppData/Local/raythm/charts/{chart_id}.rchart`
+- MV:
+  - `AppData/Local/raythm/mvs/{mv_id}/mv.json`
+  - `AppData/Local/raythm/mvs/{mv_id}/script.rmv`
 
 新規作成と import/export まわりは主に [song_import_export_service.cpp](C:/Users/rento/CLionProjects/raythm/src/scenes/song_select/song_import_export_service.cpp) と editor 保存処理から入ります。
 
@@ -69,6 +61,7 @@
 - 楽曲パッケージ拡張子は `.rpack`
 - imported song は `songs_root()`
 - imported chart は `charts_root()`
+- MV は `mvs_root()`
 
 ## Song Catalog Build
 
@@ -76,10 +69,8 @@ song select の一覧は [song_catalog_service.cpp](C:/Users/rento/CLionProjects
 
 読み込み順は次です。
 
-1. `official_songs_root()` から公式楽曲を読む
-2. `songs_root()` からユーザー楽曲を読む
-3. `official_charts_root()` の外部譜面を song_id で公式楽曲へ紐付ける
-4. `charts_root()` の外部譜面を song_id でユーザー楽曲/公式楽曲へ紐付ける
+1. `songs_root()` からローカル楽曲を読む
+2. `charts_root()` の外部譜面を `song_id` でローカル楽曲へ紐付ける
 
 その後:
 
@@ -99,17 +90,18 @@ song select の一覧は [song_catalog_service.cpp](C:/Users/rento/CLionProjects
 - `song.json` には `songId`, `title`, `artist`, `audioFile`, `jacketFile`, `baseBpm`, `chorusStartSeconds`, `songVersion` が必要
 - 外部譜面は `chart.meta.song_id` が一致した楽曲にだけ紐付きます
 
-## Why Official Songs Can Disappear
+## MV Package Layout
 
-公式楽曲は `AppData/Local/raythm/official/` をそのまま読むのではなく、`assets/` と一致している前提で扱っています。
+MV は曲から独立したパッケージとして保存されます。
 
-そのため、以前は次のような状態で song list から公式曲が消えることがありました。
-
-- `assets/` は `.rchart` に移行済み
-- `AppData/Local/raythm/official/` に古い `.chart` が残っていた
-- loader の一致判定で「assets と違う」と判断され、公式曲が読み飛ばされた
-
-現在は official キャッシュを起動時に作り直すので、この不整合は起きにくくなっています。
+- `mv.json`
+  - `mvId`
+  - `songId`
+  - `name`
+  - `author`
+  - `scriptFile`
+- `script.rmv`
+  - MV script 本体
 
 ## Import And Export Summary
 
@@ -129,14 +121,15 @@ song select の一覧は [song_catalog_service.cpp](C:/Users/rento/CLionProjects
 
 ## Files To Check When Something Looks Wrong
 
-- 公式曲が出ない
-  - `assets/songs/`
-  - `AppData/Local/raythm/official/songs/`
 - imported song が出ない
   - `AppData/Local/raythm/songs/`
   - 対象の `song.json`
 - imported chart が出ない
   - `AppData/Local/raythm/charts/`
   - `chart.meta.song_id`
+- MV が出ない / 読まれない
+  - `AppData/Local/raythm/mvs/`
+  - 対象の `mv.json`
+  - 対象の `script.rmv`
 - アップデート後に様子がおかしい
   - `AppData/Local/raythm/updater/update.log`

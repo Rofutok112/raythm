@@ -5,11 +5,6 @@
 #include <string>
 #include <vector>
 
-enum class content_source {
-    official,
-    app_data,
-};
-
 // 曲一覧で扱う楽曲メタデータ。
 struct song_meta {
     std::string song_id;
@@ -31,9 +26,6 @@ struct song_data {
     song_meta meta;
     std::vector<std::string> chart_paths;
     std::string directory;
-    content_source source = content_source::official;
-    bool can_edit = false;
-    bool can_delete = false;
 };
 
 // 楽曲ローダーの結果。
@@ -162,11 +154,23 @@ struct judge_event {
 enum class rank {
     ss,
     s,
+    aa,
     a,
     b,
     c,
     f
 };
+
+// accuracy と full combo 情報からランクを算出する。
+inline rank compute_rank(float accuracy, bool is_full_combo) {
+    if (is_full_combo && accuracy >= 100.0f) return rank::ss;
+    if (is_full_combo && accuracy >= 95.0f) return rank::s;
+    if (accuracy >= 95.0f) return rank::aa;
+    if (accuracy >= 90.0f) return rank::a;
+    if (accuracy >= 80.0f) return rank::b;
+    if (accuracy >= 70.0f) return rank::c;
+    return rank::f;
+}
 
 // リザルト画面で表示する集計結果。
 struct result_data {

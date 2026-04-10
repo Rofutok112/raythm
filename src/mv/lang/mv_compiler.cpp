@@ -105,8 +105,7 @@ struct compiler_state {
 
     bool is_draw_node_expr(const expr& e) const {
         static const std::vector<std::string> kNodeNames = {
-            "Background", "Rect", "Circle", "Line", "Text", "Polyline",
-            "SpectrumBar", "BeatGrid", "PulseRing"
+            "DrawBackground", "DrawRect", "DrawCircle", "DrawLine", "DrawText", "DrawPolyline"
         };
         return is_named_call(e, kNodeNames);
     }

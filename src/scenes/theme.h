@@ -90,6 +90,7 @@ struct ui_theme {
     // --- ランク色 ---
     Color rank_ss;
     Color rank_s;
+    Color rank_aa;
     Color rank_a;
     Color rank_b;
     Color rank_c;
@@ -99,7 +100,7 @@ struct ui_theme {
 // ライトテーマ
 inline constexpr ui_theme kLightTheme = {
     // bg
-    .bg = {255, 255, 255, 255},
+    .bg = {248, 251, 254, 255},
     .bg_alt = {241, 243, 246, 255},
     // panel
     .panel = {248, 249, 251, 255},
@@ -139,12 +140,12 @@ inline constexpr ui_theme kLightTheme = {
     .hud_combo_label = {230, 234, 242, 255},
     .hud_failure_text = {244, 246, 250, 255},
     // game elements
-    .lane = {226, 231, 238, 255},
-    .lane_pressed = {212, 217, 224, 255},
-    .lane_wire = {108, 118, 138, 210},
+    .lane = {180, 185, 187, 255},
+    .lane_pressed = {165, 168, 170, 255},
+    .lane_wire = {92, 102, 122, 220},
     .judge_line = {124, 58, 237, 120},
     .judge_line_glow = {196, 181, 253, 210},
-    .note_color = {250, 251, 253, 255},
+    .note_color = {245, 245, 248, 255},
     .note_outline = {120, 128, 138, 0},
     .pause_overlay = {3, 6, 10, 150},
     .pause_panel = {248, 249, 251, 245},
@@ -171,7 +172,8 @@ inline constexpr ui_theme kLightTheme = {
     // rank
     .rank_ss = {200, 50, 200, 255},
     .rank_s = {200, 50, 200, 255},
-    .rank_a = {220, 50, 50, 255},
+    .rank_aa = {220, 50, 50, 255},
+    .rank_a = {240, 120, 50, 255},
     .rank_b = {50, 100, 220, 255},
     .rank_c = {210, 180, 30, 255},
     .rank_f = {120, 120, 120, 255},
@@ -252,7 +254,8 @@ inline constexpr ui_theme kDarkTheme = {
     // rank
     .rank_ss = {220, 80, 220, 255},
     .rank_s = {220, 80, 220, 255},
-    .rank_a = {240, 70, 70, 255},
+    .rank_aa = {240, 70, 70, 255},
+    .rank_a = {255, 140, 70, 255},
     .rank_b = {80, 130, 240, 255},
     .rank_c = {230, 200, 50, 255},
     .rank_f = {140, 140, 140, 255},
