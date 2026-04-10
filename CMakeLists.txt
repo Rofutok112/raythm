@@ -690,8 +690,11 @@ add_custom_command(TARGET raythm POST_BUILD
         ${RAYTHM_RUNTIME_DLLS}
         $<TARGET_FILE_DIR:raythm>
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/assets
-        $<TARGET_FILE_DIR:raythm>/assets
+        ${CMAKE_SOURCE_DIR}/assets/audio
+        $<TARGET_FILE_DIR:raythm>/assets/audio
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets/fonts
+        $<TARGET_FILE_DIR:raythm>/assets/fonts
         COMMAND_EXPAND_LISTS
 )
 
@@ -703,7 +706,8 @@ add_custom_command(TARGET audio_manager_smoke POST_BUILD
 
 install(TARGETS raythm raythm_launcher raythm_updater RUNTIME DESTINATION .)
 install(FILES ${RAYTHM_RUNTIME_DLLS} DESTINATION .)
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets DESTINATION .)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets/audio DESTINATION assets)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets/fonts DESTINATION assets)
 
 if(WIN32)
     set(CPACK_PACKAGE_NAME "raythm")
