@@ -83,24 +83,29 @@ TEST(test_build_context) {
     ASSERT(std::get<double>(chart->get_attr("combo")) == 42.0);
     ASSERT(std::get<double>(chart->get_attr("key_count")) == 7.0);
 
-    // Check ctx.audio.spectrum
+    // Check ctx.audio.buffers / analysis
     auto audio_val = ctx->get_attr("audio");
     auto audio = std::get<std::shared_ptr<mv::mv_object>>(audio_val);
-    auto spec_val = audio->get_attr("spectrum");
+    auto buffers_val = audio->get_attr("buffers");
+    auto buffers = std::get<std::shared_ptr<mv::mv_object>>(buffers_val);
+    auto spec_val = buffers->get_attr("spectrum");
     auto spec = std::get<std::shared_ptr<mv::mv_list>>(spec_val);
     ASSERT(spec->elements.size() == 3);
 
-    auto waveform_val = audio->get_attr("waveform");
+    auto waveform_val = buffers->get_attr("waveform");
     auto waveform_list = std::get<std::shared_ptr<mv::mv_list>>(waveform_val);
     ASSERT(waveform_list->elements.size() == 4);
-    ASSERT(std::get<double>(audio->get_attr("waveform_size")) == 4.0);
-    ASSERT(std::abs(std::get<double>(audio->get_attr("level")) - 0.8) < 0.0001);
-    ASSERT(std::get<double>(audio->get_attr("waveform_index")) == 2.0);
+    ASSERT(std::get<double>(buffers->get_attr("waveform_size")) == 4.0);
+    ASSERT(std::get<double>(buffers->get_attr("waveform_index")) == 2.0);
 
-    auto osc_val = audio->get_attr("oscilloscope");
+    auto analysis_val = audio->get_attr("analysis");
+    auto analysis = std::get<std::shared_ptr<mv::mv_object>>(analysis_val);
+    ASSERT(std::abs(std::get<double>(analysis->get_attr("level")) - 0.8) < 0.0001);
+
+    auto osc_val = buffers->get_attr("oscilloscope");
     auto osc = std::get<std::shared_ptr<mv::mv_list>>(osc_val);
     ASSERT(osc->elements.size() == 3);
-    ASSERT(std::get<double>(audio->get_attr("oscilloscope_size")) == 3.0);
+    ASSERT(std::get<double>(buffers->get_attr("oscilloscope_size")) == 3.0);
 }
 
 // ---- Builtins in sandbox ----
@@ -124,7 +129,7 @@ def draw(ctx):
 TEST(test_builtins_scene_construction) {
     const char* src = R"(
 def draw(ctx):
-    r = Rect(x=10, y=20, w=100, h=50, fill="#ff0000")
+    r = DrawRect(x=10, y=20, w=100, h=50, fill="#ff0000")
     nodes = [r]
     return Scene(nodes)
 )";
@@ -148,7 +153,7 @@ TEST(test_builtins_rgb_color) {
     const char* src = R"(
 def draw(ctx):
     c = rgb(100, 200, 50)
-    r = Rect(x=0, y=0, w=10, h=10, fill=c)
+    r = DrawRect(x=0, y=0, w=10, h=10, fill=c)
     return Scene([r])
 )";
     mv::mv_runtime rt;
@@ -168,10 +173,10 @@ def draw(ctx):
 TEST(test_builtins_multiple_node_types) {
     const char* src = R"(
 def draw(ctx):
-    bg = Background(fill="#111111")
-    line = Line(x1=0, y1=0, x2=100, y2=100, thickness=3)
-    txt = Text(text="hello", x=50, y=50, font_size=24)
-    circ = Circle(cx=200, cy=200, radius=30)
+    bg = DrawBackground(fill="#111111")
+    line = DrawLine(x1=0, y1=0, x2=100, y2=100, thickness=3)
+    txt = DrawText(text="hello", x=50, y=50, font_size=24)
+    circ = DrawCircle(cx=200, cy=200, radius=30)
     return Scene([bg, line, txt, circ])
 )";
     mv::mv_runtime rt;
@@ -196,7 +201,7 @@ TEST(test_polyline_node_construction) {
     const char* src = R"(
 def draw(ctx):
     pts = [Point(x=0, y=0), Point(x=50, y=25), Point(x=100, y=0)]
-    Polyline(points=pts, stroke="#22ddaa", thickness=3.0, opacity=0.5)
+    DrawPolyline(points=pts, stroke="#22ddaa", thickness=3.0, opacity=0.5)
 )";
     mv::mv_runtime rt;
     ASSERT(rt.load_source(src));
@@ -219,7 +224,7 @@ def draw(ctx):
     pts.append(Point(x=0, y=0))
     pts.append(Point(x=25, y=50))
     pts.append(Point(x=50, y=0))
-    Polyline(points=pts, stroke="#22ddaa", thickness=2.0, opacity=0.5)
+    DrawPolyline(points=pts, stroke="#22ddaa", thickness=2.0, opacity=0.5)
 )";
     mv::mv_runtime rt;
     ASSERT(rt.load_source(src));
@@ -240,7 +245,7 @@ TEST(test_ctx_access_in_draw) {
 def draw(ctx):
     bpm = ctx.time.bpm
     beat = ctx.time.beat_phase
-    r = Rect(x=bpm, y=beat * 100, w=50, h=50)
+    r = DrawRect(x=bpm, y=beat * 100, w=50, h=50)
     return Scene([r])
 )";
     mv::mv_runtime rt;
@@ -262,9 +267,9 @@ def draw(ctx):
 TEST(test_ctx_audio_waveform_access_in_draw) {
     const char* src = R"(
 def draw(ctx):
-    x = ctx.audio.level * 100
-    y = ctx.audio.waveform[ctx.audio.waveform_index] * 100
-    Rect(x=x, y=y, w=20, h=20, fill="#ffffff")
+    x = ctx.audio.analysis.level * 100
+    y = ctx.audio.buffers.waveform[ctx.audio.buffers.waveform_index] * 100
+    DrawRect(x=x, y=y, w=20, h=20, fill="#ffffff")
 )";
     mv::mv_runtime rt;
     ASSERT(rt.load_source(src));
@@ -287,10 +292,10 @@ def draw(ctx):
 TEST(test_ctx_audio_oscilloscope_access_in_draw) {
     const char* src = R"(
 def draw(ctx):
-    x = (ctx.audio.oscilloscope[0] + 1) * 50
-    y = (ctx.audio.oscilloscope[2] + 1) * 50
-    w = ctx.audio.oscilloscope_size * 10
-    Rect(x=x, y=y, w=w, h=20, fill="#ffffff")
+    x = (ctx.audio.buffers.oscilloscope[0] + 1) * 50
+    y = (ctx.audio.buffers.oscilloscope[2] + 1) * 50
+    w = ctx.audio.buffers.oscilloscope_size * 10
+    DrawRect(x=x, y=y, w=w, h=20, fill="#ffffff")
 )";
     mv::mv_runtime rt;
     ASSERT(rt.load_source(src));
@@ -312,8 +317,8 @@ def draw(ctx):
 TEST(test_imperative_draw_without_return) {
     const char* src = R"(
 def draw(ctx):
-    Background(fill="#0a0a1a")
-    Circle(cx=640, cy=360, radius=80, fill="#00ccff", opacity=0.8)
+    DrawBackground(fill="#0a0a1a")
+    DrawCircle(cx=640, cy=360, radius=80, fill="#00ccff", opacity=0.8)
 )";
     mv::mv_runtime rt;
     ASSERT(rt.load_source(src));
@@ -354,11 +359,11 @@ def draw(ctx):
     bar_w = ctx.screen.w - 100
     filled = bar_w * ctx.time.progress
 
-    Rect(x=50, y=680, w=bar_w, h=6, fill="#333333")
-    Rect(x=50, y=680, w=filled, h=6, fill="#00ff88")
+    DrawRect(x=50, y=680, w=bar_w, h=6, fill="#333333")
+    DrawRect(x=50, y=680, w=filled, h=6, fill="#00ff88")
 
     pct = str(int(ctx.time.progress * 100)) + "%"
-    Text(text=pct, x=50, y=656, font_size=16, fill="#aaaaaa")
+    DrawText(text=pct, x=50, y=656, font_size=16, fill="#aaaaaa")
 )";
     mv::mv_runtime rt;
     ASSERT(rt.load_source(src));
@@ -385,61 +390,18 @@ def draw(ctx):
     ASSERT(pct->text == "50%");
 }
 
-TEST(test_legacy_beat_grid_and_spectrum_bar_scene) {
-    const char* src = R"(
-def draw(ctx):
-    bg = Background(fill="#0b0f18")
-    spec = SpectrumBar(x=140, y=520, w=1000, h=180, bar_count=48, fill="#64c8ff", opacity=0.7)
-    grid = BeatGrid(stroke="#ffffff1e", thickness=1.0, beat_phase=ctx.time.beat_phase, opacity=0.4)
-    return Scene([bg, grid, spec])
-)";
-
-    const std::filesystem::path temp_path =
-        std::filesystem::temp_directory_path() / "raythm_mv_api_beat_grid_test.rmv";
-    {
-        std::ofstream ofs(temp_path);
-        ofs << src;
-    }
-
-    mv::mv_runtime rt;
-    ASSERT(rt.load_file(temp_path.string()));
-
-    mv::context_input input;
-    input.beat_phase = 0.25f;
-    input.spectrum = {0.1f, 0.3f, 0.6f};
-
-    auto scene = rt.tick(input);
-    ASSERT(scene.has_value());
-    ASSERT(scene->nodes.size() == 3);
-    ASSERT(std::holds_alternative<mv::background_node>(scene->nodes[0]));
-    ASSERT(std::holds_alternative<mv::beat_grid_node>(scene->nodes[1]));
-    ASSERT(std::holds_alternative<mv::spectrum_bar_node>(scene->nodes[2]));
-
-    auto* grid = std::get_if<mv::beat_grid_node>(&scene->nodes[1]);
-    ASSERT(grid != nullptr);
-    ASSERT(std::abs(grid->beat_phase - 0.25f) < 0.01f);
-
-    auto* spec = std::get_if<mv::spectrum_bar_node>(&scene->nodes[2]);
-    ASSERT(spec != nullptr);
-    ASSERT(spec->spectrum.size() == 3);
-    ASSERT(std::abs(spec->spectrum[1] - 0.3f) < 0.01f);
-
-    std::error_code ec;
-    std::filesystem::remove(temp_path, ec);
-}
-
 TEST(test_manual_spectrum_scene_from_primitives) {
     const char* src = R"(
 def draw(ctx):
-    Background(fill="#0b0f18")
+    DrawBackground(fill="#0b0f18")
 
-    count = min(len(ctx.audio.spectrum), 4)
+    count = min(len(ctx.audio.buffers.spectrum), 4)
     if count > 0:
         bar_w = 200 / count
         for i in range(count):
-            amp = ctx.audio.spectrum[i]
+            amp = ctx.audio.buffers.spectrum[i]
             h = 100 * amp
-            Rect(x=100 + i * bar_w, y=200 - h, w=bar_w - 2, h=h, fill="#64c8ff", opacity=0.7)
+            DrawRect(x=100 + i * bar_w, y=200 - h, w=bar_w - 2, h=h, fill="#64c8ff", opacity=0.7)
 )";
     mv::mv_runtime rt;
     ASSERT(rt.load_source(src));
@@ -526,7 +488,7 @@ TEST(test_for_loop_builds_nodes) {
 def draw(ctx):
     nodes = []
     for i in range(5):
-        nodes = nodes + [Rect(x=i * 10, y=0, w=10, h=10)]
+        nodes = nodes + [DrawRect(x=i * 10, y=0, w=10, h=10)]
     return Scene(nodes)
 )";
     mv::mv_runtime rt;
@@ -562,7 +524,6 @@ int main() {
     RUN(test_unknown_function_fails_compile);
     RUN(test_unknown_variable_fails_compile);
     RUN(test_imperative_progress_bar_draw);
-    RUN(test_legacy_beat_grid_and_spectrum_bar_scene);
     RUN(test_manual_spectrum_scene_from_primitives);
     RUN(test_validator_truncates_nodes);
     RUN(test_validator_sanitizes_nan);
@@ -573,3 +534,4 @@ int main() {
     std::printf("\n%d passed, %d failed\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }
+

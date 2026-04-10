@@ -104,7 +104,7 @@ std::optional<vec2> build_cached_point_from_kwargs(
 std::optional<scene_node> build_cached_scene_node_from_kwargs(
     const std::string& type_name,
     const std::vector<std::pair<std::string, mv_value>>& kwargs) {
-    if (type_name == "Rect") {
+    if (type_name == "DrawRect") {
         rect_node n;
         n.x = static_cast<float>(kwarg_number(kwargs, "x", 0.0));
         n.y = static_cast<float>(kwarg_number(kwargs, "y", 0.0));
@@ -115,7 +115,7 @@ std::optional<scene_node> build_cached_scene_node_from_kwargs(
         n.fill = color_from_kwarg(kwargs, "fill", n.fill);
         return scene_node{n};
     }
-    if (type_name == "Line") {
+    if (type_name == "DrawLine") {
         line_node n;
         n.x1 = static_cast<float>(kwarg_number(kwargs, "x1", 0.0));
         n.y1 = static_cast<float>(kwarg_number(kwargs, "y1", 0.0));
@@ -126,7 +126,7 @@ std::optional<scene_node> build_cached_scene_node_from_kwargs(
         n.stroke = color_from_kwarg(kwargs, "stroke", n.stroke);
         return scene_node{n};
     }
-    if (type_name == "Text") {
+    if (type_name == "DrawText") {
         text_node n;
         n.text = kwarg_string(kwargs, "text", "");
         n.x = static_cast<float>(kwarg_number(kwargs, "x", 0.0));
@@ -136,7 +136,7 @@ std::optional<scene_node> build_cached_scene_node_from_kwargs(
         n.fill = color_from_kwarg(kwargs, "fill", n.fill);
         return scene_node{n};
     }
-    if (type_name == "Circle") {
+    if (type_name == "DrawCircle") {
         circle_node n;
         n.cx = static_cast<float>(kwarg_number(kwargs, "cx", 0.0));
         n.cy = static_cast<float>(kwarg_number(kwargs, "cy", 0.0));
@@ -145,7 +145,7 @@ std::optional<scene_node> build_cached_scene_node_from_kwargs(
         n.fill = color_from_kwarg(kwargs, "fill", n.fill);
         return scene_node{n};
     }
-    if (type_name == "Polyline") {
+    if (type_name == "DrawPolyline") {
         polyline_node n;
         n.thickness = static_cast<float>(kwarg_number(kwargs, "thickness", 2.0));
         n.opacity = static_cast<float>(kwarg_number(kwargs, "opacity", 1.0));
@@ -171,41 +171,7 @@ std::optional<scene_node> build_cached_scene_node_from_kwargs(
         }
         return scene_node{n};
     }
-    if (type_name == "SpectrumBar") {
-        spectrum_bar_node n;
-        n.x = static_cast<float>(kwarg_number(kwargs, "x", 0.0));
-        n.y = static_cast<float>(kwarg_number(kwargs, "y", 0.0));
-        n.w = static_cast<float>(kwarg_number(kwargs, "w", 400.0));
-        n.h = static_cast<float>(kwarg_number(kwargs, "h", 200.0));
-        n.bar_count = static_cast<int>(kwarg_number(kwargs, "bar_count", 32.0));
-        n.opacity = static_cast<float>(kwarg_number(kwargs, "opacity", 1.0));
-        n.fill = color_from_kwarg(kwargs, "fill", n.fill);
-        return scene_node{n};
-    }
-    if (type_name == "BeatGrid") {
-        beat_grid_node n;
-        n.x = static_cast<float>(kwarg_number(kwargs, "x", 0.0));
-        n.y = static_cast<float>(kwarg_number(kwargs, "y", 0.0));
-        n.w = static_cast<float>(kwarg_number(kwargs, "w", 1280.0));
-        n.h = static_cast<float>(kwarg_number(kwargs, "h", 720.0));
-        n.thickness = static_cast<float>(kwarg_number(kwargs, "thickness", 1.0));
-        n.beat_phase = static_cast<float>(kwarg_number(kwargs, "beat_phase", 0.0));
-        n.opacity = static_cast<float>(kwarg_number(kwargs, "opacity", 1.0));
-        n.stroke = color_from_kwarg(kwargs, "stroke", n.stroke);
-        return scene_node{n};
-    }
-    if (type_name == "PulseRing") {
-        pulse_ring_node n;
-        n.cx = static_cast<float>(kwarg_number(kwargs, "cx", 640.0));
-        n.cy = static_cast<float>(kwarg_number(kwargs, "cy", 360.0));
-        n.radius = static_cast<float>(kwarg_number(kwargs, "radius", 100.0));
-        n.thickness = static_cast<float>(kwarg_number(kwargs, "thickness", 3.0));
-        n.beat_phase = static_cast<float>(kwarg_number(kwargs, "beat_phase", 0.0));
-        n.opacity = static_cast<float>(kwarg_number(kwargs, "opacity", 1.0));
-        n.stroke = color_from_kwarg(kwargs, "stroke", n.stroke);
-        return scene_node{n};
-    }
-    if (type_name == "Background") {
+    if (type_name == "DrawBackground") {
         background_node n;
         n.opacity = static_cast<float>(kwarg_number(kwargs, "opacity", 1.0));
         n.fill = color_from_kwarg(kwargs, "fill", n.fill);
@@ -447,15 +413,12 @@ std::optional<scene_node> convert_node(const mv_value& val) {
     }
 
     const auto& type = obj->type_name;
-    if (type == "Rect")         return extract_rect(obj);
-    if (type == "Line")         return extract_line(obj);
-    if (type == "Text")         return extract_text(obj);
-    if (type == "Circle")       return extract_circle(obj);
-    if (type == "Polyline")     return extract_polyline(obj);
-    if (type == "SpectrumBar")  return extract_spectrum_bar(obj);
-    if (type == "BeatGrid")     return extract_beat_grid(obj);
-    if (type == "PulseRing")    return extract_pulse_ring(obj);
-    if (type == "Background")   return extract_background(obj);
+    if (type == "DrawRect")     return extract_rect(obj);
+    if (type == "DrawLine")     return extract_line(obj);
+    if (type == "DrawText")     return extract_text(obj);
+    if (type == "DrawCircle")   return extract_circle(obj);
+    if (type == "DrawPolyline") return extract_polyline(obj);
+    if (type == "DrawBackground") return extract_background(obj);
     return std::nullopt;
 }
 
@@ -651,27 +614,17 @@ void register_builtins_impl(Host& host) {
     auto make_node_ctor = [](const std::string& type_name) -> native_kwargs_function {
         return [type_name](const std::vector<mv_value>& args,
                           const std::vector<std::pair<std::string, mv_value>>& kwargs) -> mv_value {
-            static std::unordered_set<std::string> warned_types;
-            if ((type_name == "SpectrumBar" || type_name == "BeatGrid" || type_name == "PulseRing") &&
-                warned_types.insert(type_name).second) {
-                TraceLog(LOG_WARNING,
-                         "MV: %s is deprecated; prefer composing effects from Rect/Line/Circle/Text/Polyline",
-                         type_name.c_str());
-            }
             return make_node_kwargs(type_name, args, kwargs);
         };
     };
 
     host.register_native_kwargs("Point", make_node_ctor("Point"));
-    host.register_native_kwargs("Rect", make_node_ctor("Rect"));
-    host.register_native_kwargs("Line", make_node_ctor("Line"));
-    host.register_native_kwargs("Text", make_node_ctor("Text"));
-    host.register_native_kwargs("Circle", make_node_ctor("Circle"));
-    host.register_native_kwargs("Polyline", make_node_ctor("Polyline"));
-    host.register_native_kwargs("SpectrumBar", make_node_ctor("SpectrumBar"));
-    host.register_native_kwargs("BeatGrid", make_node_ctor("BeatGrid"));
-    host.register_native_kwargs("PulseRing", make_node_ctor("PulseRing"));
-    host.register_native_kwargs("Background", make_node_ctor("Background"));
+    host.register_native_kwargs("DrawRect", make_node_ctor("DrawRect"));
+    host.register_native_kwargs("DrawLine", make_node_ctor("DrawLine"));
+    host.register_native_kwargs("DrawText", make_node_ctor("DrawText"));
+    host.register_native_kwargs("DrawCircle", make_node_ctor("DrawCircle"));
+    host.register_native_kwargs("DrawPolyline", make_node_ctor("DrawPolyline"));
+    host.register_native_kwargs("DrawBackground", make_node_ctor("DrawBackground"));
 }
 
 void register_builtins(vm& v) { register_builtins_impl(v); }

@@ -70,6 +70,39 @@ std::vector<float> build_mv_oscilloscope() {
     return {pcm.begin(), pcm.end()};
 }
 
+float compute_oscilloscope_rms(const std::vector<float>& oscilloscope) {
+    if (oscilloscope.empty()) {
+        return 0.0f;
+    }
+
+    double sum = 0.0;
+    for (float sample : oscilloscope) {
+        sum += static_cast<double>(sample) * static_cast<double>(sample);
+    }
+    return static_cast<float>(std::sqrt(sum / static_cast<double>(oscilloscope.size())));
+}
+
+float compute_oscilloscope_peak(const std::vector<float>& oscilloscope) {
+    float peak = 0.0f;
+    for (float sample : oscilloscope) {
+        peak = std::max(peak, std::fabs(sample));
+    }
+    return peak;
+}
+
+float compute_spectrum_band_average(const std::vector<float>& spectrum, std::size_t start, std::size_t end) {
+    if (start >= end || start >= spectrum.size()) {
+        return 0.0f;
+    }
+
+    const std::size_t clamped_end = std::min(end, spectrum.size());
+    double sum = 0.0;
+    for (std::size_t i = start; i < clamped_end; ++i) {
+        sum += spectrum[i];
+    }
+    return static_cast<float>(sum / static_cast<double>(clamped_end - start));
+}
+
 Vector3 build_camera_forward(float camera_angle_degrees) {
     const float angle_rad = std::clamp(camera_angle_degrees, 5.0f, 90.0f) * DEG2RAD;
     return Vector3{0.0f, -std::sin(angle_rad), std::cos(angle_rad)};
@@ -282,6 +315,8 @@ void play_scene::draw() {
 
         int current_tick = state_.timing_engine.ms_to_tick(state_.current_ms);
         mv_input.bpm = state_.timing_engine.get_bpm_at(current_tick);
+        mv_input.meter_numerator = state_.timing_engine.get_meter_numerator_at(current_tick);
+        mv_input.meter_denominator = state_.timing_engine.get_meter_denominator_at(current_tick);
 
         double beat_duration_ms = 60000.0 / mv_input.bpm;
         if (beat_duration_ms > 0) {
@@ -296,13 +331,34 @@ void play_scene::draw() {
         mv_input.spectrum = build_mv_spectrum();
         std::vector<float> oscilloscope = build_mv_oscilloscope();
         mv_input.oscilloscope = &oscilloscope;
+        mv_input.rms = compute_oscilloscope_rms(oscilloscope);
+        mv_input.peak = compute_oscilloscope_peak(oscilloscope);
+        const std::size_t spectrum_size = mv_input.spectrum.size();
+        const std::size_t first_split = spectrum_size / 3;
+        const std::size_t second_split = (spectrum_size * 2) / 3;
+        mv_input.low = compute_spectrum_band_average(mv_input.spectrum, 0, first_split);
+        mv_input.mid = compute_spectrum_band_average(mv_input.spectrum, first_split, second_split);
+        mv_input.high = compute_spectrum_band_average(mv_input.spectrum, second_split, spectrum_size);
         mv_input.waveform = &state_.mv_waveform;
         mv_input.waveform_index =
             sample_mv_waveform_index(state_.mv_waveform, mv_input.current_ms, mv_input.song_length_ms);
         if (!state_.mv_waveform.empty()) {
             mv_input.level = state_.mv_waveform[static_cast<std::size_t>(mv_input.waveform_index)];
         }
+        if (state_.song_data.has_value()) {
+            mv_input.song_id = state_.song_data->meta.song_id;
+            mv_input.song_title = state_.song_data->meta.title;
+            mv_input.song_artist = state_.song_data->meta.artist;
+            mv_input.song_base_bpm = state_.song_data->meta.base_bpm;
+        }
         if (state_.chart_data.has_value()) {
+            mv_input.chart_id = state_.chart_data->meta.chart_id;
+            mv_input.chart_song_id = state_.chart_data->meta.song_id;
+            mv_input.chart_difficulty = state_.chart_data->meta.difficulty;
+            mv_input.chart_level = state_.chart_data->meta.level;
+            mv_input.chart_author = state_.chart_data->meta.chart_author;
+            mv_input.chart_resolution = state_.chart_data->meta.resolution;
+            mv_input.chart_offset = state_.chart_data->meta.offset;
             mv_input.total_notes = static_cast<int>(state_.chart_data->notes.size());
         }
         mv_input.screen_w = static_cast<float>(kScreenWidth);
