@@ -76,6 +76,9 @@ inline constexpr float kContextMenuItemHeight = 30.0f;
 inline constexpr float kContextMenuItemSpacing = 4.0f;
 inline constexpr Rectangle kConfirmDialogRect = ui::place(kScreenRect, 480.0f, 208.0f,
                                                           ui::anchor::center, ui::anchor::center);
+inline constexpr Rectangle kLoginDialogRect = ui::place(kScreenRect, 760.0f, 560.0f,
+                                                        ui::anchor::center, ui::anchor::center,
+                                                        {0.0f, 12.0f});
 
 inline Rectangle make_context_menu_rect(Vector2 anchor, int item_count) {
     const float height = 12.0f + static_cast<float>(item_count) * kContextMenuItemHeight +

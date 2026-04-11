@@ -53,15 +53,21 @@ void reset_for_enter(state& state) {
     state.scrollbar_drag_offset = 0.0f;
     state.context_menu = {};
     state.confirmation_dialog = {};
-    state.status_message.clear();
-    state.status_message_is_error = false;
+    ui::clear_notices(state.notices);
     state.recent_result_offset.reset();
     state.ranking_panel = {};
+    state.login_dialog = {};
 }
 
 void tick_animations(state& state, float dt) {
     state.song_change_anim_t = std::max(0.0f, state.song_change_anim_t - dt * 4.0f);
     state.chart_change_anim_t = std::max(0.0f, state.chart_change_anim_t - dt * 5.0f);
+    if (state.login_dialog.open) {
+        state.login_dialog.open_anim = std::min(1.0f, state.login_dialog.open_anim + dt * 8.0f);
+    } else {
+        state.login_dialog.open_anim = 0.0f;
+    }
+    ui::tick_notices(state.notices, dt);
     state.scene_fade_in.update(dt);
 }
 
@@ -170,8 +176,8 @@ void close_context_menu(state& state) {
 }
 
 void queue_status_message(state& state, std::string message, bool is_error) {
-    state.status_message = std::move(message);
-    state.status_message_is_error = is_error;
+    ui::push_notice(state.notices, std::move(message),
+                    is_error ? ui::notice_tone::error : ui::notice_tone::success);
 }
 
 float expanded_row_height(const state& state, int song_index) {

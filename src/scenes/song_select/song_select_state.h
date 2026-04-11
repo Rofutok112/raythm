@@ -8,6 +8,8 @@
 #include "ranking_service.h"
 #include "raylib.h"
 #include "shared/scene_fade.h"
+#include "ui_notice.h"
+#include "ui_text_input.h"
 
 namespace song_select {
 
@@ -88,6 +90,21 @@ struct ranking_panel_state {
     float scrollbar_drag_offset = 0.0f;
 };
 
+struct auth_state {
+    bool logged_in = false;
+    std::string email;
+    std::string display_name;
+};
+
+struct login_dialog_state {
+    bool open = false;
+    float open_anim = 0.0f;
+    std::string status_message;
+    bool status_message_is_error = false;
+    ui::text_input_state email_input;
+    ui::text_input_state password_input;
+};
+
 struct state {
     std::vector<song_entry> songs;
     std::vector<std::string> load_errors;
@@ -102,10 +119,11 @@ struct state {
     float scrollbar_drag_offset = 0.0f;
     context_menu_state context_menu;
     confirmation_dialog_state confirmation_dialog;
-    std::string status_message;
-    bool status_message_is_error = false;
+    ui::notice_queue notices;
     std::optional<recent_result_offset> recent_result_offset;
     ranking_panel_state ranking_panel;
+    auth_state auth;
+    login_dialog_state login_dialog;
 };
 
 const song_entry* selected_song(const state& state);
