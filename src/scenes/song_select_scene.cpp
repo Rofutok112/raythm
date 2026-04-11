@@ -669,6 +669,12 @@ void song_select_scene::update(float dt) {
         return;
     }
 
+    if (ui::is_clicked(song_select::layout::kLoginButtonRect, song_select::layout::kSceneLayer)) {
+        song_select::close_context_menu(state_);
+        song_select::queue_status_message(state_, "Login is not available yet.", false);
+        return;
+    }
+
     if (ui::is_clicked(song_select::layout::local_offset_double_left_rect(), song_select::layout::kSceneLayer)) {
         adjust_selected_song_local_offset(-5);
         return;

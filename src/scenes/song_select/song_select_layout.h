@@ -18,6 +18,9 @@ inline constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreen
 inline constexpr Rectangle kSettingsButtonRect = ui::place(kScreenRect, 162.0f, 30.0f,
                                                            ui::anchor::top_right, ui::anchor::top_right,
                                                            {-24.0f, 4.0f});
+inline constexpr Rectangle kLoginButtonRect = ui::place(kSettingsButtonRect, 120.0f, 30.0f,
+                                                        ui::anchor::top_left, ui::anchor::top_right,
+                                                        {-10.0f, 0.0f});
 inline constexpr Rectangle kSongListRect = ui::place(kScreenRect, 466.0f, 660.0f,
                                                      ui::anchor::top_right, ui::anchor::top_right,
                                                      {-24.0f, 44.0f});
