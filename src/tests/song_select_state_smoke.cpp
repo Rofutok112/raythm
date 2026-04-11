@@ -53,6 +53,17 @@ int main() {
                                   song_select::layout::kRowHeight;
     assert(std::fabs(song_select::content_height(state) - expected_height) < 0.01f);
 
+    song_select::queue_status_message(state, "First notice", true);
+    song_select::queue_status_message(state, "Second notice", false);
+    assert(state.notices.items.size() == 2);
+    assert(state.notices.items.front().message == "First notice");
+    assert(state.notices.items.back().message == "Second notice");
+
+    song_select::tick_animations(state, 1.0f);
+    assert(state.notices.items.size() == 2);
+    song_select::tick_animations(state, 1.0f);
+    assert(state.notices.items.empty());
+
     const bool changed = song_select::apply_song_selection(state, 1, 3);
     assert(changed);
     assert(state.selected_song_index == 1);

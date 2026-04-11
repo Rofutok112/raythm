@@ -41,6 +41,9 @@ std::filesystem::path settings_path();
 // AppData/Local/raythm/chart_offsets.txt
 std::filesystem::path chart_offsets_path();
 
+// AppData/Local/raythm/auth_session.json
+std::filesystem::path auth_session_path();
+
 // AppData/Local/raythm/mvs/
 std::filesystem::path mvs_root();
 

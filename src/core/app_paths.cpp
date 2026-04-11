@@ -94,6 +94,10 @@ std::filesystem::path chart_offsets_path() {
     return app_data_root() / "chart_offsets.txt";
 }
 
+std::filesystem::path auth_session_path() {
+    return app_data_root() / "auth_session.json";
+}
+
 std::filesystem::path mvs_root() {
     return app_data_root() / "mvs";
 }
