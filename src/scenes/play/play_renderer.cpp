@@ -56,8 +56,8 @@ constexpr Rectangle kFailureTextRect = ui::place(kScreenRect, 360.0f, 44.0f,
 constexpr float kTapNoteBaseLength = 0.78f;
 constexpr float kJudgeLineY = 0.40f;
 constexpr float kJudgeLineGlowY = 0.46f;
-constexpr float kTapNoteY = 0.00f;
-constexpr float kHoldNoteY = 0.00f;
+constexpr float kTapNoteY = 0.15f;
+constexpr float kHoldNoteY = 0.15f;
 
 float lane_center_x(int lane, int key_count) {
     const float total_width = key_count * g_settings.lane_width + (key_count - 1) * kLaneGap;
