@@ -19,11 +19,6 @@ public:
     void draw() override;
 
 private:
-    enum class tab {
-        script,
-        metadata,
-    };
-
     void compile_script();
     void save_mv();
 
@@ -32,7 +27,8 @@ private:
     mv_script_panel_state panel_state_;
     ui::text_input_state name_input_;
     ui::text_input_state author_input_;
-    tab active_tab_ = tab::script;
+    bool metadata_modal_open_ = false;
+    float metadata_modal_open_anim_ = 0.0f;
     bool dirty_ = false;
     double last_change_time_ = 0.0;
     bool pending_compile_ = false;

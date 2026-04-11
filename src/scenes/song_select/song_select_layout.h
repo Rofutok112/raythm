@@ -18,6 +18,9 @@ inline constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreen
 inline constexpr Rectangle kSettingsButtonRect = ui::place(kScreenRect, 162.0f, 30.0f,
                                                            ui::anchor::top_right, ui::anchor::top_right,
                                                            {-24.0f, 4.0f});
+inline constexpr Rectangle kLoginButtonRect = ui::place(kSettingsButtonRect, 120.0f, 30.0f,
+                                                        ui::anchor::top_left, ui::anchor::top_right,
+                                                        {-10.0f, 0.0f});
 inline constexpr Rectangle kSongListRect = ui::place(kScreenRect, 466.0f, 660.0f,
                                                      ui::anchor::top_right, ui::anchor::top_right,
                                                      {-24.0f, 44.0f});
@@ -73,6 +76,9 @@ inline constexpr float kContextMenuItemHeight = 30.0f;
 inline constexpr float kContextMenuItemSpacing = 4.0f;
 inline constexpr Rectangle kConfirmDialogRect = ui::place(kScreenRect, 480.0f, 208.0f,
                                                           ui::anchor::center, ui::anchor::center);
+inline constexpr Rectangle kLoginDialogRect = ui::place(kScreenRect, 760.0f, 560.0f,
+                                                        ui::anchor::center, ui::anchor::center,
+                                                        {0.0f, 12.0f});
 
 inline Rectangle make_context_menu_rect(Vector2 anchor, int item_count) {
     const float height = 12.0f + static_cast<float>(item_count) * kContextMenuItemHeight +

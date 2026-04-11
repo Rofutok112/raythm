@@ -53,6 +53,23 @@ int source_index(ranking_service::source source) {
     return source == ranking_service::source::local ? 0 : 1;
 }
 
+void draw_static_source_dropdown(ranking_service::source source) {
+    const auto& theme = *g_theme;
+    const ui::row_state row = ui::draw_row(song_select::layout::kRankingSourceDropdownRect,
+                                           theme.row, theme.row_hover, theme.border);
+    const Rectangle content = ui::inset(row.visual, ui::edge_insets::symmetric(0.0f, 12.0f));
+    const Rectangle arrow_rect = ui::place(content, 18.0f, content.height,
+                                           ui::anchor::center_right, ui::anchor::center_right);
+    const Rectangle value_rect = {
+        content.x,
+        content.y,
+        std::max(0.0f, arrow_rect.x - content.x - 8.0f),
+        content.height
+    };
+    ui::draw_text_in_rect(source_label(source), 18, value_rect, theme.text_dim, ui::text_align::right);
+    ui::draw_text_in_rect("v", 18, arrow_rect, theme.text_dim);
+}
+
 std::optional<std::chrono::system_clock::time_point> parse_recorded_at_utc(const std::string& value) {
     if (value.empty()) {
         return std::nullopt;
@@ -180,7 +197,7 @@ float ranking_content_height(const state& state) {
     return static_cast<float>(entry_count) * layout::kRankingRowHeight + 8.0f;
 }
 
-ranking_panel_result draw_ranking_panel(const state& state) {
+ranking_panel_result draw_ranking_panel(const state& state, bool source_dropdown_interactive) {
     const auto& theme = *g_theme;
     ranking_panel_result result;
     const float chart_anim = 1.0f - state.chart_change_anim_t;
@@ -190,25 +207,29 @@ ranking_panel_result draw_ranking_panel(const state& state) {
     ui::draw_section(layout::kRankingPanelRect);
     ui::draw_text_in_rect("RANKING", 24, layout::kRankingTitleRect, theme.text, ui::text_align::left);
 
-    const ui::dropdown_state source_dropdown = ui::enqueue_dropdown(
-        layout::kRankingSourceDropdownRect,
-        layout::ranking_source_dropdown_menu_rect(),
-        "",
-        source_label(state.ranking_panel.selected_source),
-        kRankingSourceOptions,
-        source_index(state.ranking_panel.selected_source),
-        state.ranking_panel.source_dropdown_open,
-        ui::draw_layer::base,
-        ui::draw_layer::overlay,
-        18,
-        0.0f);
-    result.source_dropdown_toggled = source_dropdown.trigger.clicked;
-    result.source_clicked_index = source_dropdown.clicked_index;
-    result.source_dropdown_close_requested =
-        state.ranking_panel.source_dropdown_open &&
-        IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
-        !ui::is_hovered(layout::kRankingSourceDropdownRect, ui::draw_layer::base) &&
-        !ui::is_hovered(layout::ranking_source_dropdown_menu_rect(), ui::draw_layer::overlay);
+    if (source_dropdown_interactive) {
+        const ui::dropdown_state source_dropdown = ui::enqueue_dropdown(
+            layout::kRankingSourceDropdownRect,
+            layout::ranking_source_dropdown_menu_rect(),
+            "",
+            source_label(state.ranking_panel.selected_source),
+            kRankingSourceOptions,
+            source_index(state.ranking_panel.selected_source),
+            state.ranking_panel.source_dropdown_open,
+            ui::draw_layer::base,
+            ui::draw_layer::overlay,
+            18,
+            0.0f);
+        result.source_dropdown_toggled = source_dropdown.trigger.clicked;
+        result.source_clicked_index = source_dropdown.clicked_index;
+        result.source_dropdown_close_requested =
+            state.ranking_panel.source_dropdown_open &&
+            IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
+            !ui::is_hovered(layout::kRankingSourceDropdownRect, ui::draw_layer::base) &&
+            !ui::is_hovered(layout::ranking_source_dropdown_menu_rect(), ui::draw_layer::overlay);
+    } else {
+        draw_static_source_dropdown(state.ranking_panel.selected_source);
+    }
 
     ui::scoped_clip_rect clip_scope(layout::kRankingListRect);
     const float base_y = layout::kRankingListRect.y - state.ranking_panel.scroll_y;

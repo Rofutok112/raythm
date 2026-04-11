@@ -7,6 +7,8 @@
 #include <utility>
 
 #include "core/app_paths.h"
+#include "core/window_dialog_support.h"
+#include "network/auth_client.h"
 #include "file_dialog.h"
 #include "mv/mv_storage.h"
 #include "path_utils.h"
@@ -17,6 +19,7 @@
 #include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_layout.h"
 #include "song_select/song_select_last_played.h"
+#include "song_select/song_select_login_dialog.h"
 #include "song_select/song_select_list_view.h"
 #include "song_select/song_select_navigation.h"
 #include "song_select/song_select_ranking_view.h"
@@ -28,6 +31,10 @@ namespace {
 
 std::string format_offset_label(int offset_ms) {
     return (offset_ms > 0 ? "+" : "") + std::to_string(offset_ms) + "ms";
+}
+
+std::string register_web_url() {
+    return auth::normalize_server_url(auth::kDefaultServerUrl) + "/register";
 }
 
 }  // namespace
@@ -49,12 +56,17 @@ void song_select_scene::on_enter() {
     }
     song_select::reset_for_enter(state_);
     state_.recent_result_offset = recent_result_offset_;
+    refresh_auth_state();
+    if (state_.auth.logged_in) {
+        start_auth_restore();
+    }
     reload_song_library(preferred_song_id_, preferred_chart_id_);
 }
 
 void song_select_scene::on_exit() {
     song_select::close_context_menu(state_);
     state_.confirmation_dialog = {};
+    state_.login_dialog.open = false;
     if (pending_song_import_request_.has_value()) {
         song_select::cleanup_song_import_request(*pending_song_import_request_);
         pending_song_import_request_.reset();
@@ -86,6 +98,13 @@ void song_select_scene::reload_selected_chart_ranking() {
     state_.ranking_panel.scrollbar_drag_offset = 0.0f;
 }
 
+void song_select_scene::refresh_auth_state() {
+    const auth::session_summary summary = auth::load_session_summary();
+    state_.auth.logged_in = summary.logged_in;
+    state_.auth.email = summary.email;
+    state_.auth.display_name = summary.display_name;
+}
+
 void song_select_scene::apply_delete_result(const song_select::delete_result& result) {
     state_.confirmation_dialog = {};
     if (!result.success) {
@@ -111,6 +130,102 @@ void song_select_scene::apply_transfer_result(const song_select::transfer_result
         reload_song_library(result.preferred_song_id, result.preferred_chart_id);
     }
     song_select::queue_status_message(state_, result.message, false);
+}
+
+void song_select_scene::start_auth_restore() {
+    auth_restore_active_ = true;
+    auth_restore_ = std::async(std::launch::async, []() {
+        return auth::restore_saved_session();
+    });
+}
+
+void song_select_scene::poll_auth_restore() {
+    if (!auth_restore_active_) {
+        return;
+    }
+
+    if (auth_restore_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    auth_restore_active_ = false;
+    const auth::operation_result result = auth_restore_.get();
+    refresh_auth_state();
+    if (!result.success) {
+        if (state_.login_dialog.open) {
+            state_.login_dialog.status_message = result.message;
+            state_.login_dialog.status_message_is_error = true;
+        } else {
+            song_select::queue_status_message(state_, result.message, true);
+        }
+    }
+}
+
+void song_select_scene::start_login_request(song_select::login_dialog_command command) {
+    if (auth_request_active_) {
+        return;
+    }
+
+    if (command == song_select::login_dialog_command::open_register_web) {
+        const bool opened = window_dialog_support::open_url(register_web_url());
+        state_.login_dialog.status_message = opened
+            ? "Opened the account page in your browser."
+            : "Failed to open the account page.";
+        state_.login_dialog.status_message_is_error = !opened;
+        return;
+    }
+
+    auth_request_active_ = true;
+    state_.login_dialog.status_message_is_error = false;
+    const std::string server_url = auth::kDefaultServerUrl;
+    const std::string email = state_.login_dialog.email_input.value;
+    const std::string password = state_.login_dialog.password_input.value;
+
+    switch (command) {
+    case song_select::login_dialog_command::request_restore:
+        state_.login_dialog.status_message = "Restoring session...";
+        auth_request_ = std::async(std::launch::async, []() {
+            return auth::restore_saved_session();
+        });
+        break;
+    case song_select::login_dialog_command::request_login:
+        state_.login_dialog.status_message = "Connecting to raythm-Server...";
+        auth_request_ = std::async(std::launch::async, [server_url, email, password]() {
+            return auth::login_user(server_url, email, password);
+        });
+        break;
+    case song_select::login_dialog_command::request_logout:
+        state_.login_dialog.status_message = "Logging out...";
+        auth_request_ = std::async(std::launch::async, []() {
+            return auth::logout_saved_session();
+        });
+        break;
+    case song_select::login_dialog_command::open_register_web:
+    case song_select::login_dialog_command::none:
+    case song_select::login_dialog_command::close:
+        auth_request_active_ = false;
+        break;
+    }
+}
+
+void song_select_scene::poll_login_request() {
+    if (!auth_request_active_) {
+        return;
+    }
+
+    if (auth_request_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    auth_request_active_ = false;
+    const auth::operation_result result = auth_request_.get();
+    refresh_auth_state();
+    state_.login_dialog.password_input.value.clear();
+    state_.login_dialog.status_message = result.message;
+    state_.login_dialog.status_message_is_error = !result.success;
+
+    const auth::session_summary summary = auth::load_session_summary();
+    state_.login_dialog.email_input.value = summary.email;
 }
 
 void song_select_scene::poll_song_import_prepare() {
@@ -602,18 +717,28 @@ void song_select_scene::apply_confirmation_command(song_select::confirmation_com
 
 void song_select_scene::update(float dt) {
     ui::begin_hit_regions();
+    const bool modal_ui_active = state_.confirmation_dialog.open || state_.login_dialog.open ||
+                                 background_song_import_prepare_active_ || background_transfer_active_;
+    if (modal_ui_active) {
+        state_.ranking_panel.source_dropdown_open = false;
+    }
     if (state_.context_menu.open) {
         ui::register_hit_region(state_.context_menu.rect, song_select::layout::kContextMenuLayer);
     }
-    if (state_.ranking_panel.source_dropdown_open) {
+    if (state_.ranking_panel.source_dropdown_open && !modal_ui_active) {
         ui::register_hit_region(song_select::layout::ranking_source_dropdown_menu_rect(), ui::draw_layer::overlay);
     }
     if (state_.confirmation_dialog.open) {
         ui::register_hit_region(song_select::layout::kConfirmDialogRect, song_select::layout::kModalLayer);
     }
+    if (state_.login_dialog.open) {
+        ui::register_hit_region(song_select::login_dialog_rect(state_), song_select::layout::kModalLayer);
+    }
 
     preview_controller_.update(dt, song_select::selected_song(state_));
     song_select::tick_animations(state_, dt);
+    poll_auth_restore();
+    poll_login_request();
     poll_song_import_prepare();
     poll_background_transfer();
 
@@ -624,6 +749,20 @@ void song_select_scene::update(float dt) {
     }
 
     if (background_song_import_prepare_active_ || background_transfer_active_) {
+        return;
+    }
+
+    if (state_.login_dialog.open) {
+        const Vector2 mouse = virtual_screen::get_virtual_mouse();
+        if (!auth_request_active_ &&
+            IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+            !CheckCollisionPointRec(mouse, song_select::login_dialog_rect(state_))) {
+            state_.login_dialog.open = false;
+            return;
+        }
+        if (IsKeyPressed(KEY_ESCAPE) && !auth_request_active_) {
+            state_.login_dialog.open = false;
+        }
         return;
     }
 
@@ -666,6 +805,12 @@ void song_select_scene::update(float dt) {
     if (IsKeyPressed(KEY_F1) || ui::is_clicked(song_select::layout::kSettingsButtonRect, song_select::layout::kSceneLayer)) {
         song_select::close_context_menu(state_);
         manager_.change_scene(song_select::make_settings_scene(manager_));
+        return;
+    }
+
+    if (ui::is_clicked(song_select::layout::kLoginButtonRect, song_select::layout::kSceneLayer)) {
+        song_select::close_context_menu(state_);
+        song_select::open_login_dialog(state_, auth::load_session_summary());
         return;
     }
 
@@ -815,7 +960,7 @@ void song_select_scene::draw() {
     ClearBackground(theme.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, theme.bg, theme.bg_alt);
     ui::begin_draw_queue();
-    song_select::draw_frame();
+    song_select::draw_frame(state_);
     song_select::draw_song_list(state_);
 
     if (state_.songs.empty()) {
@@ -825,6 +970,13 @@ void song_select_scene::draw() {
             song_select::draw_busy_overlay(background_transfer_label_);
         }
         apply_context_menu_command(song_select::draw_context_menu(state_));
+        const song_select::login_dialog_command login_command =
+            song_select::draw_login_dialog(state_, auth_request_active_);
+        if (login_command == song_select::login_dialog_command::close) {
+            state_.login_dialog.open = false;
+        } else if (login_command != song_select::login_dialog_command::none) {
+            start_login_request(login_command);
+        }
         ui::flush_draw_queue();
         virtual_screen::end();
         ClearBackground(BLACK);
@@ -833,13 +985,26 @@ void song_select_scene::draw() {
     }
 
     song_select::draw_song_details(state_, preview_controller_);
-    const song_select::ranking_panel_result ranking_result = song_select::draw_ranking_panel(state_);
+    const bool ranking_source_dropdown_interactive =
+        !state_.confirmation_dialog.open &&
+        !state_.login_dialog.open &&
+        !background_song_import_prepare_active_ &&
+        !background_transfer_active_;
+    const song_select::ranking_panel_result ranking_result =
+        song_select::draw_ranking_panel(state_, ranking_source_dropdown_interactive);
     song_select::draw_status_message(state_);
     if (background_song_import_prepare_active_ || background_transfer_active_) {
         song_select::draw_busy_overlay(background_transfer_label_);
     }
     apply_context_menu_command(song_select::draw_context_menu(state_));
     apply_confirmation_command(song_select::draw_confirmation_dialog(state_));
+    const song_select::login_dialog_command login_command =
+        song_select::draw_login_dialog(state_, auth_request_active_);
+    if (login_command == song_select::login_dialog_command::close) {
+        state_.login_dialog.open = false;
+    } else if (login_command != song_select::login_dialog_command::none) {
+        start_login_request(login_command);
+    }
     if (ranking_result.source_dropdown_toggled) {
         state_.ranking_panel.source_dropdown_open = !state_.ranking_panel.source_dropdown_open;
     }

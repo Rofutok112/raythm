@@ -19,6 +19,19 @@ constexpr float kHeaderHeight = 48.0f;
 constexpr float kPadding = 16.0f;
 constexpr float kBackButtonWidth = 100.0f;
 constexpr float kBackButtonHeight = 30.0f;
+constexpr float kMetadataButtonWidth = 152.0f;
+constexpr float kMetadataModalWidth = 360.0f;
+constexpr float kMetadataModalHeight = 208.0f;
+constexpr float kMetadataModalOffsetY = 18.0f;
+constexpr float kMetadataModalPaddingX = 18.0f;
+constexpr float kMetadataHeaderTop = 18.0f;
+constexpr float kMetadataTitleHeight = 26.0f;
+constexpr float kMetadataSubtitleHeight = 18.0f;
+constexpr float kMetadataHeaderGap = 6.0f;
+constexpr float kMetadataBodyTop = 78.0f;
+constexpr float kMetadataRowHeight = 36.0f;
+constexpr float kMetadataRowGap = 8.0f;
+constexpr float kMetadataButtonHeight = 36.0f;
 
 bool wide_text_filter(int codepoint, const std::string&) {
     return codepoint >= 32;
@@ -28,13 +41,33 @@ std::string default_script_source() {
     return "def draw(ctx):\n  DrawBackground(fill=\"#0a0a1a\")\n";
 }
 
-Rectangle tab_button_rect(int index) {
+Rectangle metadata_button_rect() {
     return {
-        kPadding + static_cast<float>(index) * 164.0f,
+        kPadding,
         (kHeaderHeight - kBackButtonHeight) * 0.5f,
-        152.0f,
+        kMetadataButtonWidth,
         30.0f
     };
+}
+
+float ease_out_cubic(float t) {
+    const float clamped = std::clamp(t, 0.0f, 1.0f);
+    const float inv = 1.0f - clamped;
+    return 1.0f - inv * inv * inv;
+}
+
+Rectangle metadata_modal_rect(float open_anim = 1.0f) {
+    Rectangle rect = {
+        metadata_button_rect().x,
+        metadata_button_rect().y + metadata_button_rect().height + kMetadataModalOffsetY,
+        kMetadataModalWidth,
+        kMetadataModalHeight
+    };
+    rect.x = std::clamp(rect.x, 12.0f, static_cast<float>(kScreenWidth) - rect.width - 12.0f);
+    rect.y = std::clamp(rect.y, 12.0f, static_cast<float>(kScreenHeight) - rect.height - 12.0f);
+    const float anim_t = ease_out_cubic(open_anim);
+    rect.y -= (1.0f - anim_t) * 18.0f;
+    return rect;
 }
 
 }  // namespace
@@ -73,8 +106,36 @@ void mv_editor_scene::update(float dt) {
     (void)dt;
     ui::begin_hit_regions();
 
+    if (metadata_modal_open_) {
+        metadata_modal_open_anim_ = std::min(1.0f, metadata_modal_open_anim_ + dt * 8.0f);
+    } else {
+        metadata_modal_open_anim_ = 0.0f;
+    }
+
+    const Rectangle modal_rect = metadata_modal_rect(metadata_modal_open_anim_);
+    if (metadata_modal_open_) {
+        ui::register_hit_region({0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)},
+                                ui::draw_layer::overlay);
+        ui::register_hit_region(modal_rect, ui::draw_layer::modal);
+    }
+
     if (IsKeyPressed(KEY_ESCAPE)) {
+        if (metadata_modal_open_) {
+            metadata_modal_open_ = false;
+            name_input_.active = false;
+            author_input_.active = false;
+            return;
+        }
         manager_.change_scene(std::make_unique<song_select_scene>(manager_, song_.meta.song_id));
+        return;
+    }
+
+    if (metadata_modal_open_ &&
+        IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+        !CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), modal_rect)) {
+        metadata_modal_open_ = false;
+        name_input_.active = false;
+        author_input_.active = false;
         return;
     }
 
@@ -89,6 +150,10 @@ void mv_editor_scene::draw() {
     ClearBackground(g_theme->bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, g_theme->bg, g_theme->bg_alt);
     ui::begin_draw_queue();
+
+    if (metadata_modal_open_) {
+        panel_state_.editor.active = false;
+    }
 
     // Header
     Rectangle header = {0, 0, static_cast<float>(kScreenWidth), kHeaderHeight};
@@ -110,17 +175,15 @@ void mv_editor_scene::draw() {
         return;
     }
 
-    if (ui::draw_button_colored(tab_button_rect(0), "Script", 14,
-                                active_tab_ == tab::script ? g_theme->row_selected : g_theme->row,
-                                active_tab_ == tab::script ? g_theme->row_active : g_theme->row_hover,
+    if (ui::draw_button_colored(metadata_button_rect(), "Metadata", 14,
+                                metadata_modal_open_ ? g_theme->row_selected : g_theme->row,
+                                metadata_modal_open_ ? g_theme->row_active : g_theme->row_hover,
                                 g_theme->text).clicked) {
-        active_tab_ = tab::script;
-    }
-    if (ui::draw_button_colored(tab_button_rect(1), "Metadata", 14,
-                                active_tab_ == tab::metadata ? g_theme->row_selected : g_theme->row,
-                                active_tab_ == tab::metadata ? g_theme->row_active : g_theme->row_hover,
-                                g_theme->text).clicked) {
-        active_tab_ = tab::metadata;
+        metadata_modal_open_ = true;
+        metadata_modal_open_anim_ = 0.0f;
+        panel_state_.editor.active = false;
+        name_input_.active = false;
+        author_input_.active = false;
     }
 
     Rectangle content = {
@@ -129,31 +192,43 @@ void mv_editor_scene::draw() {
         static_cast<float>(kScreenHeight) - kHeaderHeight - kPadding * 2.0f
     };
 
-    if (active_tab_ == tab::script) {
-        const auto result = mv_script_panel::draw({content, virtual_screen::get_virtual_mouse()}, panel_state_);
-        if (result.text_changed) {
-            dirty_ = true;
-            last_change_time_ = GetTime();
-            pending_compile_ = true;
-        }
-    } else {
-        ui::draw_panel(content);
+    const auto result = mv_script_panel::draw({content, virtual_screen::get_virtual_mouse()}, panel_state_);
+    if (result.text_changed) {
+        dirty_ = true;
+        last_change_time_ = GetTime();
+        pending_compile_ = true;
+    }
 
+    if (metadata_modal_open_) {
+        const float anim_t = ease_out_cubic(metadata_modal_open_anim_);
+        const Rectangle modal = metadata_modal_rect(metadata_modal_open_anim_);
         const Rectangle body = {
-            content.x + 20.0f,
-            content.y + 20.0f,
-            content.width - 40.0f,
-            content.height - 40.0f
+            modal.x + kMetadataModalPaddingX,
+            modal.y + kMetadataBodyTop,
+            modal.width - kMetadataModalPaddingX * 2.0f,
+            modal.height - kMetadataBodyTop - 18.0f
         };
-
-        const Rectangle name_rect = {body.x, body.y, body.width, 42.0f};
-        const Rectangle author_rect = {body.x, body.y + 56.0f, body.width, 42.0f};
+        const Rectangle name_rect = {body.x, body.y, body.width, kMetadataRowHeight};
+        const Rectangle author_rect = {body.x, body.y + kMetadataRowHeight + kMetadataRowGap,
+                                       body.width, kMetadataRowHeight};
+        DrawRectangleRec({0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)},
+                         with_alpha(g_theme->pause_overlay, static_cast<unsigned char>(180.0f + anim_t * 40.0f)));
+        ui::draw_panel(modal);
+        ui::draw_text_in_rect("MV Metadata", 28,
+                              {modal.x + kMetadataModalPaddingX, modal.y + kMetadataHeaderTop,
+                               modal.width - kMetadataModalPaddingX * 2.0f, kMetadataTitleHeight},
+                              g_theme->text, ui::text_align::left);
+        ui::draw_text_in_rect("Update the MV title and author.", 14,
+                              {modal.x + kMetadataModalPaddingX,
+                               modal.y + kMetadataHeaderTop + kMetadataTitleHeight + kMetadataHeaderGap,
+                               modal.width - kMetadataModalPaddingX * 2.0f, kMetadataSubtitleHeight},
+                              g_theme->text_secondary, ui::text_align::left);
 
         const auto name_result = ui::draw_text_input(name_rect, name_input_, "MV Name", "Untitled MV",
-                                                     nullptr, ui::draw_layer::base, 16, 128,
+                                                     nullptr, ui::draw_layer::modal, 16, 128,
                                                      wide_text_filter, 120.0f);
         const auto author_result = ui::draw_text_input(author_rect, author_input_, "Author", "Author name",
-                                                       nullptr, ui::draw_layer::base, 16, 128,
+                                                       nullptr, ui::draw_layer::modal, 16, 128,
                                                        wide_text_filter, 120.0f);
         if (name_result.changed || author_result.changed) {
             dirty_ = true;

@@ -130,6 +130,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/song_writer.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
+        src/network/auth_client.cpp
+        src/network/auth_client.h
         src/core/app_paths.cpp
         src/core/app_paths.h
         src/core/file_dialog.cpp
@@ -170,6 +172,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_select_detail_view.cpp
         src/scenes/song_select/song_select_detail_view.h
         src/scenes/song_select/song_select_layout.h
+        src/scenes/song_select/song_select_login_dialog.cpp
+        src/scenes/song_select/song_select_login_dialog.h
         src/scenes/song_select/song_select_list_view.cpp
         src/scenes/song_select/song_select_list_view.h
         src/scenes/song_select/song_select_navigation.cpp
@@ -653,7 +657,7 @@ target_include_directories(update_version_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(mv_lang_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(mv_api_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(mv_storage_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_link_libraries(raythm PRIVATE raylib ${RAYTHM_BASS_IMPORT_LIB} comdlg32 crypt32)
+target_link_libraries(raythm PRIVATE raylib ${RAYTHM_BASS_IMPORT_LIB} comdlg32 crypt32 winhttp)
 target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)
 target_link_libraries(update_version_smoke PRIVATE winhttp)

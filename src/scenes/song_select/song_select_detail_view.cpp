@@ -65,11 +65,14 @@ std::string format_recent_offset_label(float offset_ms) {
 
 namespace song_select {
 
-void draw_frame() {
+void draw_frame(const state& state) {
     const auto& theme = *g_theme;
     ui::draw_panel(layout::kLeftPanelRect);
     ui::draw_panel(layout::kSongListRect);
     ui::draw_text_in_rect("SONG SELECT", 30, layout::kSceneTitleRect, theme.text, ui::text_align::left);
+    const char* login_label = state.auth.logged_in ? "ACCOUNT" : "LOGIN";
+    ui::draw_button_colored(layout::kLoginButtonRect, login_label, 20,
+                            theme.row, theme.row_hover, theme.text);
     ui::draw_button_colored(layout::kSettingsButtonRect, "SETTINGS", 20,
                             theme.row, theme.row_hover, theme.text);
 }
@@ -191,17 +194,7 @@ void draw_song_details(const state& state, const preview_controller& preview_con
 }
 
 void draw_status_message(const state& state) {
-    if (state.status_message.empty()) {
-        return;
-    }
-
-    const auto& theme = *g_theme;
-    ui::draw_text_in_rect(state.status_message.c_str(), 18,
-                          ui::place(layout::kScreenRect, 520.0f, 24.0f,
-                                    ui::anchor::bottom_right, ui::anchor::bottom_right,
-                                    {-24.0f, -10.0f}),
-                          state.status_message_is_error ? theme.error : theme.success,
-                          ui::text_align::right);
+    ui::draw_notice_queue_bottom_right(state.notices, layout::kScreenRect);
 }
 
 void draw_busy_overlay(const std::string& message) {

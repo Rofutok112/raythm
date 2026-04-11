@@ -1,6 +1,7 @@
 #include "window_dialog_support.h"
 
 #include <algorithm>
+#include <string>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -10,6 +11,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <shellapi.h>
 #endif
 
 extern "C" {
@@ -60,6 +62,31 @@ int current_monitor_height() {
 
 void* native_window_handle() {
     return GetWindowHandle();
+}
+
+bool open_url(std::string_view url) {
+#ifdef _WIN32
+    if (url.empty()) {
+        return false;
+    }
+
+    int utf16_length = MultiByteToWideChar(CP_UTF8, 0, url.data(), static_cast<int>(url.size()), nullptr, 0);
+    if (utf16_length <= 0) {
+        return false;
+    }
+
+    std::wstring wide_url(static_cast<size_t>(utf16_length), L'\0');
+    if (MultiByteToWideChar(CP_UTF8, 0, url.data(), static_cast<int>(url.size()),
+                            wide_url.data(), utf16_length) <= 0) {
+        return false;
+    }
+
+    const HINSTANCE result = ShellExecuteW(nullptr, L"open", wide_url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    return reinterpret_cast<INT_PTR>(result) > 32;
+#else
+    (void)url;
+    return false;
+#endif
 }
 
 #ifdef _WIN32

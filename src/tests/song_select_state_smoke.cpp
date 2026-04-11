@@ -44,9 +44,25 @@ int main() {
     assert(state.difficulty_index == 1);
     assert(state.scroll_y == 0.0f);
     assert(state.scroll_y_target == 0.0f);
+    assert(std::fabs(song_select::layout::kLoginButtonRect.y - song_select::layout::kSettingsButtonRect.y) < 0.01f);
+    assert(std::fabs(song_select::layout::kLoginButtonRect.x + song_select::layout::kLoginButtonRect.width + 10.0f -
+                     song_select::layout::kSettingsButtonRect.x) < 0.01f);
 
-    const float expected_height = song_select::layout::kRowHeight + 14.0f + 2.0f * 30.0f + song_select::layout::kRowHeight;
+    const float expected_height = song_select::layout::kSongListTopPadding +
+                                  song_select::layout::kRowHeight + 14.0f + 2.0f * 30.0f +
+                                  song_select::layout::kRowHeight;
     assert(std::fabs(song_select::content_height(state) - expected_height) < 0.01f);
+
+    song_select::queue_status_message(state, "First notice", true);
+    song_select::queue_status_message(state, "Second notice", false);
+    assert(state.notices.items.size() == 2);
+    assert(state.notices.items.front().message == "First notice");
+    assert(state.notices.items.back().message == "Second notice");
+
+    song_select::tick_animations(state, 1.0f);
+    assert(state.notices.items.size() == 2);
+    song_select::tick_animations(state, 1.0f);
+    assert(state.notices.items.empty());
 
     const bool changed = song_select::apply_song_selection(state, 1, 3);
     assert(changed);
