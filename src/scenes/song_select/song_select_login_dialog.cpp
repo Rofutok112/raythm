@@ -9,7 +9,7 @@ namespace {
 constexpr ui::draw_layer kModalLayer = song_select::layout::kModalLayer;
 constexpr float kDialogWidth = 360.0f;
 constexpr float kLoginDialogHeight = 308.0f;
-constexpr float kAccountDialogHeight = 238.0f;
+constexpr float kAccountDialogHeight = 258.0f;
 constexpr float kDialogOffsetY = 18.0f;
 constexpr float kDialogPaddingX = 18.0f;
 constexpr float kTitleHeight = 26.0f;
@@ -103,6 +103,7 @@ login_dialog_command draw_login_dialog(state& state, bool request_active) {
         const Rectangle signed_in_rect = {form_x, dialog_rect.y + kBodyTop, form_width, 22.0f};
         const Rectangle display_name_rect = {form_x, dialog_rect.y + kBodyTop + 28.0f, form_width, 20.0f};
         const Rectangle email_rect = {form_x, dialog_rect.y + kBodyTop + 52.0f, form_width, 16.0f};
+        const Rectangle verify_rect = {form_x, dialog_rect.y + kBodyTop + 74.0f, form_width, 16.0f};
         const Rectangle button_row = {form_x, footer_y, form_width, kButtonHeight};
         constexpr float kButtonWidth = 92.0f;
         const Rectangle logout_rect = {button_row.x + button_row.width - kButtonWidth, button_row.y, kButtonWidth, kButtonHeight};
@@ -118,6 +119,13 @@ login_dialog_command draw_login_dialog(state& state, bool request_active) {
                               14,
                               email_rect,
                               theme.text_muted,
+                              ui::text_align::left);
+        ui::draw_text_in_rect(state.auth.email_verified
+                                  ? "Email verified"
+                                  : "Verify on the Web to submit online scores.",
+                              13,
+                              verify_rect,
+                              state.auth.email_verified ? theme.success : theme.error,
                               ui::text_align::left);
 
         if (!state.login_dialog.status_message.empty()) {
@@ -165,7 +173,7 @@ login_dialog_command draw_login_dialog(state& state, bool request_active) {
 
     ui::enqueue_text_in_rect("New to raythm? Register on the Web.", 14, helper_rect,
                              theme.text_muted, ui::text_align::center, kModalLayer);
-    if (ui::enqueue_button(web_button_rect, "Create Account", 15, kModalLayer, 1.5f).clicked && !request_active) {
+    if (ui::enqueue_button(web_button_rect, "Create", 15, kModalLayer, 1.5f).clicked && !request_active) {
         return login_dialog_command::open_register_web;
     }
     if ((ui::enqueue_button(primary_rect, "LOGIN", 16, kModalLayer, 1.5f).clicked || submitted) && !request_active) {
