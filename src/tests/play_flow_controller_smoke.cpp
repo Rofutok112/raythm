@@ -178,6 +178,20 @@ int main() {
         }
     }
 
+    {
+        play_session_state state = make_initialized_state();
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.05f;
+        context.bgm_audio_time_ms = 1010.0;
+
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (result.navigation.has_value() || state.current_ms != 1010.0) {
+            std::cerr << "Gameplay clock should follow audio time without running ahead on dt\n";
+            return EXIT_FAILURE;
+        }
+    }
+
     std::cout << "play_flow_controller smoke test passed\n";
     return EXIT_SUCCESS;
 }
