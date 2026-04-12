@@ -94,6 +94,7 @@ struct auth_state {
     bool logged_in = false;
     std::string email;
     std::string display_name;
+    bool email_verified = false;
 };
 
 struct login_dialog_state {

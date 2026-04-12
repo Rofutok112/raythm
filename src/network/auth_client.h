@@ -11,6 +11,7 @@ struct public_user {
     std::string id;
     std::string email;
     std::string display_name;
+    bool email_verified = false;
 };
 
 struct session {
@@ -25,6 +26,7 @@ struct session_summary {
     std::string server_url;
     std::string email;
     std::string display_name;
+    bool email_verified = false;
 };
 
 struct operation_result {

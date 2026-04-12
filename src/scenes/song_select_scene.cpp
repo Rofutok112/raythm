@@ -103,6 +103,7 @@ void song_select_scene::refresh_auth_state() {
     state_.auth.logged_in = summary.logged_in;
     state_.auth.email = summary.email;
     state_.auth.display_name = summary.display_name;
+    state_.auth.email_verified = summary.email_verified;
 }
 
 void song_select_scene::apply_delete_result(const song_select::delete_result& result) {

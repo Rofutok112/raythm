@@ -192,6 +192,23 @@ std::optional<std::string> extract_json_object(const std::string& content, const
     return std::nullopt;
 }
 
+std::optional<bool> extract_json_bool(const std::string& content, const std::string& key) {
+    const auto start_opt = find_value_start(content, key);
+    if (!start_opt.has_value()) {
+        return std::nullopt;
+    }
+
+    if (content.compare(*start_opt, 4, "true") == 0) {
+        return true;
+    }
+
+    if (content.compare(*start_opt, 5, "false") == 0) {
+        return false;
+    }
+
+    return std::nullopt;
+}
+
 std::optional<auth::public_user> parse_user_object(const std::string& content) {
     const std::optional<std::string> id = extract_json_string(content, "id");
     std::optional<std::string> email = extract_json_string(content, "email");
@@ -203,10 +220,13 @@ std::optional<auth::public_user> parse_user_object(const std::string& content) {
         return std::nullopt;
     }
 
+    const bool email_verified = extract_json_bool(content, "emailVerified").value_or(false);
+
     return auth::public_user{
         .id = *id,
         .email = *email,
         .display_name = *display_name,
+        .email_verified = email_verified,
     };
 }
 
@@ -259,7 +279,8 @@ bool write_session_file(const auth::session& session_data) {
     output << "  \"user\": {\n";
     output << "    \"id\": \"" << escape_json_string(session_data.user.id) << "\",\n";
     output << "    \"email\": \"" << escape_json_string(session_data.user.email) << "\",\n";
-    output << "    \"displayName\": \"" << escape_json_string(session_data.user.display_name) << "\"\n";
+    output << "    \"displayName\": \"" << escape_json_string(session_data.user.display_name) << "\",\n";
+    output << "    \"emailVerified\": " << (session_data.user.email_verified ? "true" : "false") << "\n";
     output << "  }\n";
     output << "}\n";
     return output.good();
@@ -545,6 +566,7 @@ session_summary load_session_summary() {
             .server_url = kDefaultServerUrl,
             .email = {},
             .display_name = {},
+            .email_verified = false,
         };
     }
 
@@ -553,6 +575,7 @@ session_summary load_session_summary() {
         .server_url = stored->server_url,
         .email = stored->user.email,
         .display_name = stored->user.display_name,
+        .email_verified = stored->user.email_verified,
     };
 }
 
