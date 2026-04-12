@@ -192,6 +192,30 @@ int main() {
         }
     }
 
+    {
+        play_session_state state = make_initialized_state();
+        state.score_system.init(1);
+        state.timing_engine = make_basic_timing_engine();
+        state.judge_system.init({note_data{note_type::tap, 480, 0, 480}}, state.timing_engine);
+        state.hitsound_path = "hitsound.mp3";
+
+        play_note_draw_queue draw_queue;
+        int immediate_hitsound_count = 0;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.bgm_audio_time_ms = 500.0;
+        context.play_hitsound_immediately = [&immediate_hitsound_count]() {
+            ++immediate_hitsound_count;
+        };
+
+        state.input_handler.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 500.0);
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (immediate_hitsound_count != 1 || result.hitsound_count != 0) {
+            std::cerr << "Gameplay hitsound should use the immediate callback when available\n";
+            return EXIT_FAILURE;
+        }
+    }
+
     std::cout << "play_flow_controller smoke test passed\n";
     return EXIT_SUCCESS;
 }

@@ -1,9 +1,7 @@
 #include "mv_editor_scene.h"
 
-#include "core/app_paths.h"
 #include "mv/api/mv_builtins.h"
 #include "mv/lang/mv_sandbox.h"
-#include "path_utils.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select_scene.h"
@@ -278,7 +276,6 @@ void mv_editor_scene::save_mv() {
     package_.meta.name = name_input_.value.empty() ? (song_.meta.title + " MV") : name_input_.value;
     package_.meta.author = author_input_.value;
     package_.meta.script_file = "script.rmv";
-    package_.directory = path_utils::to_utf8(app_paths::mv_dir(package_.meta.mv_id));
     if (mv::write_mv_json(package_.meta, package_.directory) &&
         mv::save_script(package_, ui::text_editor_get_text(panel_state_.editor))) {
         dirty_ = false;

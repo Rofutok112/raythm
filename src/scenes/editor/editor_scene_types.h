@@ -107,7 +107,6 @@ struct editor_session_load_result {
     bool waveform_visible = true;
     int waveform_offset_ms = 0;
     audio_waveform_summary waveform_summary;
-    std::vector<editor_timeline_waveform_sample> waveform_samples;
     float bottom_tick = 0.0f;
     float bottom_tick_target = 0.0f;
     float ticks_per_pixel = 2.0f;

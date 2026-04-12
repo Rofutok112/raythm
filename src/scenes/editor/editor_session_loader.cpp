@@ -102,9 +102,6 @@ editor_session_load_result load(const editor_start_request& request) {
         result.timing_panel,
         result.metadata_panel,
         result.selected_note_index,
-        result.waveform_summary,
-        result.waveform_samples,
-        result.waveform_offset_ms,
     };
     editor_scene_sync::sync_metadata_inputs(sync_context);
     editor_scene_sync::load_timing_event_inputs(sync_context);
@@ -117,7 +114,6 @@ editor_session_load_result load(const editor_start_request& request) {
 
     if (std::filesystem::exists(audio_path)) {
         result.waveform_summary = audio_waveform::build(path_utils::to_utf8(audio_path));
-        editor_scene_sync::rebuild_waveform_samples(sync_context);
         if (result.waveform_summary.length_seconds > 0.0) {
             result.audio_length_tick = std::max(
                 result.audio_length_tick,

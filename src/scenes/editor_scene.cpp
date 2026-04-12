@@ -89,7 +89,6 @@ void editor_scene::on_enter() {
     waveform_visible_ = load_result.waveform_visible;
     waveform_offset_ms_ = load_result.waveform_offset_ms;
     waveform_summary_ = load_result.waveform_summary;
-    waveform_samples_ = load_result.waveform_samples;
     viewport_.bottom_tick = resume_state_.has_value() ? load_result.bottom_tick : editor_timeline_viewport::min_bottom_tick();
     viewport_.bottom_tick_target = resume_state_.has_value() ? load_result.bottom_tick_target : viewport_.bottom_tick;
     viewport_.ticks_per_pixel = load_result.ticks_per_pixel;
@@ -388,9 +387,6 @@ editor_scene_sync_context editor_scene::make_sync_context() {
         timing_panel_,
         metadata_panel_,
         selected_note_index_,
-        waveform_summary_,
-        waveform_samples_,
-        waveform_offset_ms_,
     };
 }
 
@@ -566,8 +562,9 @@ void editor_scene::draw_timeline() const {
     editor_timeline_presenter::draw({
         *state_,
         meter_map_,
-        &waveform_samples_,
+        &waveform_summary_,
         waveform_visible_,
+        waveform_offset_ms_,
         transport_.audio_loaded,
         transport_.playback_tick,
         selected_note_index_,

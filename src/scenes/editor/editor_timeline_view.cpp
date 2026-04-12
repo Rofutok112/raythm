@@ -84,18 +84,21 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
     {
         ui::scoped_clip_rect clip_scope(content);
 
-        if (model.waveform_visible && model.waveform_samples != nullptr) {
+        if (model.waveform_visible && model.waveform_summary != nullptr && model.timing_engine != nullptr) {
             const float center_x = content.x + content.width * 0.5f;
             const bool dark_theme = t.bg.r < 128;
             const unsigned char primary_alpha = dark_theme ? 84 : 24;
             const unsigned char secondary_alpha = dark_theme ? 38 : 10;
-            for (const editor_timeline_waveform_sample& sample : *model.waveform_samples) {
-                if (sample.tick < model.min_tick || sample.tick > model.max_tick) {
+            for (const audio_waveform_peak& peak : model.waveform_summary->peaks) {
+                const double shifted_ms =
+                    peak.seconds * 1000.0 + static_cast<double>(model.waveform_offset_ms);
+                const int tick = model.timing_engine->ms_to_tick(shifted_ms);
+                if (tick < model.min_tick || tick > model.max_tick) {
                     continue;
                 }
 
-                const float y = model.metrics.tick_to_y(sample.tick);
-                const float half_width = content.width * 0.5f * std::clamp(sample.amplitude, 0.0f, 1.0f);
+                const float y = model.metrics.tick_to_y(tick);
+                const float half_width = content.width * 0.5f * std::clamp(peak.amplitude, 0.0f, 1.0f);
                 ui::draw_line_f(center_x - half_width, y - 1.0f, center_x + half_width, y - 1.0f, with_alpha(t.accent, secondary_alpha));
                 ui::draw_line_f(center_x - half_width, y, center_x + half_width, y, with_alpha(t.accent, primary_alpha));
                 ui::draw_line_f(center_x - half_width, y + 1.0f, center_x + half_width, y + 1.0f, with_alpha(t.accent, secondary_alpha));

@@ -3,7 +3,9 @@
 #include <optional>
 #include <vector>
 
+#include "audio_waveform.h"
 #include "editor_meter_map.h"
+#include "timing_engine.h"
 #include "raylib.h"
 
 enum class editor_timeline_note_type {
@@ -23,11 +25,6 @@ struct editor_timeline_note_draw_info {
     Rectangle body_rect = {};
     Rectangle tail_rect = {};
     bool has_body = false;
-};
-
-struct editor_timeline_waveform_sample {
-    int tick = 0;
-    float amplitude = 0.0f;
 };
 
 struct editor_timeline_metrics {
@@ -57,8 +54,10 @@ struct editor_timeline_view_model {
     std::vector<editor_timeline_note> notes;
     std::optional<size_t> selected_note_index;
     std::optional<int> playback_tick;
-    const std::vector<editor_timeline_waveform_sample>* waveform_samples = nullptr;
+    const audio_waveform_summary* waveform_summary = nullptr;
+    const timing_engine* timing_engine = nullptr;
     bool waveform_visible = false;
+    int waveform_offset_ms = 0;
     std::optional<editor_timeline_note> preview_note;
     bool preview_has_overlap = false;
     int min_tick = 0;

@@ -49,6 +49,21 @@ std::shared_ptr<mv_list> as_list(const mv_value* v) {
     return v ? as_list(*v) : nullptr;
 }
 
+std::shared_ptr<mv_object> make_typed_object_for_name(const std::string& type_name) {
+    if (type_name == "Scene") return std::make_shared<scene_mv_object>();
+    if (type_name == "Point") return std::make_shared<point_mv_object>();
+    if (type_name == "Color") return std::make_shared<color_mv_object>();
+    if (type_name == "DrawRect") return std::make_shared<rect_mv_object>();
+    if (type_name == "DrawLine") return std::make_shared<line_mv_object>();
+    if (type_name == "DrawText") return std::make_shared<text_mv_object>();
+    if (type_name == "DrawCircle") return std::make_shared<circle_mv_object>();
+    if (type_name == "DrawPolyline") return std::make_shared<polyline_mv_object>();
+    if (type_name == "DrawBackground") return std::make_shared<background_mv_object>();
+    auto obj = std::make_shared<mv_object>();
+    obj->type_name = type_name;
+    return obj;
+}
+
 // Find kwarg by name
 const mv_value* find_kwarg(const std::vector<std::pair<std::string, mv_value>>& kwargs,
                            const std::string& name) {
@@ -412,11 +427,21 @@ std::optional<scene_node> convert_node(const mv_value& val) {
         return *obj->cached_scene_node;
     }
 
+    switch (obj->kind) {
+    case mv_object_kind::draw_rect: return extract_rect(obj);
+    case mv_object_kind::draw_line: return extract_line(obj);
+    case mv_object_kind::draw_text: return extract_text(obj);
+    case mv_object_kind::draw_circle: return extract_circle(obj);
+    case mv_object_kind::draw_polyline: return extract_polyline(obj);
+    case mv_object_kind::draw_background: return extract_background(obj);
+    default: break;
+    }
+
     const auto& type = obj->type_name;
-    if (type == "DrawRect")     return extract_rect(obj);
-    if (type == "DrawLine")     return extract_line(obj);
-    if (type == "DrawText")     return extract_text(obj);
-    if (type == "DrawCircle")   return extract_circle(obj);
+    if (type == "DrawRect") return extract_rect(obj);
+    if (type == "DrawLine") return extract_line(obj);
+    if (type == "DrawText") return extract_text(obj);
+    if (type == "DrawCircle") return extract_circle(obj);
     if (type == "DrawPolyline") return extract_polyline(obj);
     if (type == "DrawBackground") return extract_background(obj);
     return std::nullopt;
@@ -428,8 +453,7 @@ std::optional<scene_node> convert_node(const mv_value& val) {
 mv_value make_node_kwargs(const std::string& type_name,
                           const std::vector<mv_value>& /*args*/,
                           const std::vector<std::pair<std::string, mv_value>>& kwargs) {
-    auto obj = std::make_shared<mv_object>();
-    obj->type_name = type_name;
+    auto obj = make_typed_object_for_name(type_name);
     obj->reserve_attrs(kwargs.size() + 2);
     for (auto& [k, v] : kwargs) {
         obj->set_attr(k, v);
@@ -533,12 +557,11 @@ void register_builtins_impl(Host& host) {
 
     // Color constructor: rgb(r, g, b) or rgba(r, g, b, a)
     host.register_native("rgb", [](const std::vector<mv_value>& args) -> mv_value {
-        auto obj = std::make_shared<mv_object>();
-        obj->type_name = "Color";
-        obj->set_attr("r", args.size() > 0 ? as_number(args[0]) : 255.0);
-        obj->set_attr("g", args.size() > 1 ? as_number(args[1]) : 255.0);
-        obj->set_attr("b", args.size() > 2 ? as_number(args[2]) : 255.0);
-        obj->set_attr("a", args.size() > 3 ? as_number(args[3]) : 255.0);
+        auto obj = std::make_shared<color_mv_object>();
+        obj->r = args.size() > 0 ? as_number(args[0]) : 255.0;
+        obj->g = args.size() > 1 ? as_number(args[1]) : 255.0;
+        obj->b = args.size() > 2 ? as_number(args[2]) : 255.0;
+        obj->a = args.size() > 3 ? as_number(args[3]) : 255.0;
         return mv_value{obj};
     });
 
@@ -590,8 +613,7 @@ void register_builtins_impl(Host& host) {
 
     host.register_native_kwargs("Scene", [](const std::vector<mv_value>& args,
                                           const std::vector<std::pair<std::string, mv_value>>& kwargs) -> mv_value {
-        auto obj = std::make_shared<mv_object>();
-        obj->type_name = "Scene";
+        auto obj = std::make_shared<scene_mv_object>();
         // nodes from first positional arg (list) or default empty
         if (!args.empty()) {
             obj->set_attr("nodes", args[0]);
@@ -632,11 +654,12 @@ void register_builtins_to_sandbox(sandbox& sb) { register_builtins_impl(sb); }
 
 // ---- extract_scene ----
 
-std::optional<scene> extract_scene(const mv_value& val) {
+bool extract_scene_into(const mv_value& val, scene& sc) {
     auto obj = as_object(val);
-    if (!obj || obj->type_name != "Scene") return std::nullopt;
+    if (!obj || (obj->kind != mv_object_kind::scene && obj->type_name != "Scene")) return false;
 
-    scene sc;
+    sc.clear_color = {0, 0, 0, 0};
+    sc.nodes.clear();
 
     // clear_color
     auto cc_val = obj->get_attr("clear_color");
@@ -657,15 +680,27 @@ std::optional<scene> extract_scene(const mv_value& val) {
     auto nodes_val = obj->get_attr("nodes");
     auto nodes_list = as_list(nodes_val);
     if (nodes_list) {
-        sc.nodes.reserve(nodes_list->elements.size());
-        for (auto& elem : nodes_list->elements) {
-            auto node = convert_node(elem);
-            if (node.has_value()) {
-                sc.nodes.push_back(std::move(*node));
+        if (nodes_list->cached_scene_nodes.has_value()) {
+            sc.nodes = *nodes_list->cached_scene_nodes;
+        } else {
+            sc.nodes.reserve(nodes_list->elements.size());
+            for (auto& elem : nodes_list->elements) {
+                auto node = convert_node(elem);
+                if (node.has_value()) {
+                    sc.nodes.push_back(std::move(*node));
+                }
             }
         }
     }
 
+    return true;
+}
+
+std::optional<scene> extract_scene(const mv_value& val) {
+    scene sc;
+    if (!extract_scene_into(val, sc)) {
+        return std::nullopt;
+    }
     return sc;
 }
 

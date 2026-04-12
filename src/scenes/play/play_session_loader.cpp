@@ -131,6 +131,9 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     const std::filesystem::path audio_path =
         path_utils::join_utf8(state.song_data->directory, state.song_data->meta.audio_file);
     audio.load_bgm(path_utils::to_utf8(audio_path));
+    if (!state.hitsound_path.empty()) {
+        audio.preload_se(state.hitsound_path);
+    }
     state.mv_waveform = build_mv_waveform(audio_path);
     if (state.start_ms > 0.0) {
         audio.seek_bgm(state.start_ms / 1000.0);

@@ -533,6 +533,13 @@ bool sandbox::compile(const std::string& source) {
     for (auto& [name, fn] : natives_kwargs_) {
         runtime_vm_->register_native_kwargs(name, fn);
     }
+
+    auto init_result = runtime_vm_->run_top_level();
+    if (!init_result.success) {
+        errors_.push_back({"runtime", init_result.error->message, init_result.error->line, 0});
+        runtime_vm_.reset();
+        return false;
+    }
     compiled_ = true;
     return true;
 }

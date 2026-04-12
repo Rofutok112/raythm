@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <filesystem>
-#include <fstream>
 #include <optional>
 #include <sstream>
 
@@ -13,6 +13,24 @@
 
 namespace {
 namespace fs = std::filesystem;
+
+#ifdef _WIN32
+FILE* open_file_read_binary(const fs::path& path) {
+    return _wfopen(path.c_str(), L"rb");
+}
+
+FILE* open_file_write_binary(const fs::path& path) {
+    return _wfopen(path.c_str(), L"wb");
+}
+#else
+FILE* open_file_read_binary(const fs::path& path) {
+    return std::fopen(path.string().c_str(), "rb");
+}
+
+FILE* open_file_write_binary(const fs::path& path) {
+    return std::fopen(path.string().c_str(), "wb");
+}
+#endif
 
 std::string trim(std::string_view value) {
     size_t start = 0;
@@ -29,14 +47,60 @@ std::string trim(std::string_view value) {
 }
 
 std::string read_file(const fs::path& path) {
-    std::ifstream input(path);
-    if (!input.is_open()) {
+    FILE* file = open_file_read_binary(path);
+    if (file == nullptr) {
         return {};
     }
 
-    std::ostringstream buffer;
-    buffer << input.rdbuf();
-    return buffer.str();
+    std::string content;
+    if (std::fseek(file, 0, SEEK_END) != 0) {
+        std::fclose(file);
+        return {};
+    }
+
+    const long size = std::ftell(file);
+    if (size < 0) {
+        std::fclose(file);
+        return {};
+    }
+
+    if (std::fseek(file, 0, SEEK_SET) != 0) {
+        std::fclose(file);
+        return {};
+    }
+
+    content.resize(static_cast<size_t>(size));
+    if (size > 0) {
+        const size_t read = std::fread(content.data(), 1, static_cast<size_t>(size), file);
+        if (read != static_cast<size_t>(size)) {
+            std::fclose(file);
+            return {};
+        }
+    }
+
+    std::fclose(file);
+    return content;
+}
+
+bool write_file(const fs::path& path, const std::string& content) {
+    if (path.has_parent_path()) {
+        std::error_code ec;
+        fs::create_directories(path.parent_path(), ec);
+        if (ec) {
+            return false;
+        }
+    }
+
+    FILE* file = open_file_write_binary(path);
+    if (file == nullptr) {
+        return false;
+    }
+
+    const size_t size = content.size();
+    const size_t written = size == 0 ? 0 : std::fwrite(content.data(), 1, size, file);
+    const bool ok = (written == size) && (std::fflush(file) == 0);
+    std::fclose(file);
+    return ok;
 }
 
 std::optional<std::string> extract_json_string(const std::string& content, const std::string& key) {
@@ -183,14 +247,8 @@ std::filesystem::path script_path(const mv_package& package) {
 }
 
 bool write_mv_json(const mv_metadata& meta, const std::string& directory) {
-    std::filesystem::create_directories(path_utils::from_utf8(directory));
-
     const std::filesystem::path json_path = path_utils::from_utf8(directory) / "mv.json";
-    std::ofstream out(json_path, std::ios::trunc);
-    if (!out.is_open()) {
-        return false;
-    }
-
+    std::ostringstream out;
     out << "{\n";
     out << "  \"mvId\": \"" << escape_json_string(meta.mv_id) << "\",\n";
     out << "  \"songId\": \"" << escape_json_string(meta.song_id) << "\",\n";
@@ -198,7 +256,7 @@ bool write_mv_json(const mv_metadata& meta, const std::string& directory) {
     out << "  \"author\": \"" << escape_json_string(meta.author) << "\",\n";
     out << "  \"scriptFile\": \"" << escape_json_string(meta.script_file.empty() ? "script.rmv" : meta.script_file) << "\"\n";
     out << "}\n";
-    return out.good();
+    return write_file(json_path, out.str());
 }
 
 std::string load_script(const mv_package& package) {
@@ -206,14 +264,25 @@ std::string load_script(const mv_package& package) {
 }
 
 bool save_script(const mv_package& package, const std::string& script) {
-    const fs::path path = script_path(package);
-    std::filesystem::create_directories(path.parent_path());
-    std::ofstream out(path, std::ios::trunc);
-    if (!out.is_open()) {
+    return write_file(script_path(package), script);
+}
+
+bool import_script(const mv_package& package, const std::string& source_path_utf8) {
+    const fs::path source_path = path_utils::from_utf8(source_path_utf8);
+    const std::string script = read_file(source_path);
+    if (script.empty() && !std::filesystem::exists(source_path)) {
         return false;
     }
-    out << script;
-    return out.good();
+    return save_script(package, script);
+}
+
+bool export_script(const mv_package& package, const std::string& destination_path_utf8) {
+    const fs::path destination_path = path_utils::from_utf8(destination_path_utf8);
+    const std::string script = load_script(package);
+    if (script.empty() && !std::filesystem::exists(script_path(package))) {
+        return false;
+    }
+    return write_file(destination_path, script);
 }
 
 }  // namespace mv

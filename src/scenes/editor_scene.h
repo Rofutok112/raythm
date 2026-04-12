@@ -70,7 +70,6 @@ private:
     bool waveform_visible_ = true;
     int waveform_offset_ms_ = 0;
     audio_waveform_summary waveform_summary_;
-    std::vector<editor_timeline_waveform_sample> waveform_samples_;
     editor_timeline_viewport_state viewport_;
     bool snap_dropdown_open_ = false;
     std::optional<size_t> selected_note_index_;

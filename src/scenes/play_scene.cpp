@@ -46,28 +46,30 @@ int sample_mv_waveform_index(const std::vector<float>& waveform, double current_
         static_cast<std::size_t>(progress * static_cast<double>(last)), 0, last));
 }
 
-std::vector<float> build_mv_spectrum() {
+void fill_mv_spectrum(std::vector<float>& spectrum) {
     std::array<float, 128> fft = {};
     if (!audio_manager::instance().get_bgm_fft256(fft)) {
-        return {};
+        spectrum.clear();
+        return;
     }
 
-    std::vector<float> spectrum;
-    spectrum.reserve(fft.size());
-    for (float sample : fft) {
+    spectrum.resize(fft.size());
+    for (std::size_t i = 0; i < fft.size(); ++i) {
+        const float sample = fft[i];
         const float shaped = std::sqrt(std::max(0.0f, sample)) * 8.0f;
-        spectrum.push_back(std::clamp(shaped, 0.0f, kMvSpectrumClampMax));
+        spectrum[i] = std::clamp(shaped, 0.0f, kMvSpectrumClampMax);
     }
-    return spectrum;
 }
 
-std::vector<float> build_mv_oscilloscope() {
+void fill_mv_oscilloscope(std::vector<float>& oscilloscope) {
     std::array<float, 256> pcm = {};
     if (!audio_manager::instance().get_bgm_oscilloscope256(pcm)) {
-        return {};
+        oscilloscope.clear();
+        return;
     }
 
-    return {pcm.begin(), pcm.end()};
+    oscilloscope.resize(pcm.size());
+    std::copy(pcm.begin(), pcm.end(), oscilloscope.begin());
 }
 
 float compute_oscilloscope_rms(const std::vector<float>& oscilloscope) {
@@ -204,6 +206,11 @@ void play_scene::update(float dt) {
         context.pause_restart_clicked = ui::is_clicked(pause_buttons[1], ui::draw_layer::modal);
         context.pause_song_select_clicked = ui::is_clicked(pause_buttons[2], ui::draw_layer::modal);
     }
+    if (!state_.hitsound_path.empty()) {
+        context.play_hitsound_immediately = [hitsound_path = state_.hitsound_path]() {
+            audio_manager::instance().play_se(hitsound_path);
+        };
+    }
 
     if (state_.initialized) {
         const Camera3D camera = make_play_camera();
@@ -227,9 +234,6 @@ void play_scene::update(float dt) {
     }
     if (result.request_play_bgm && audio_manager::instance().is_bgm_loaded()) {
         audio_manager::instance().play_bgm(false);
-    }
-    for (int i = 0; i < result.hitsound_count; ++i) {
-        audio_manager::instance().play_se(state_.hitsound_path);
     }
     if (result.navigation.has_value()) {
         apply_navigation(result.navigation);
@@ -328,11 +332,12 @@ void play_scene::draw() {
 
         mv_input.combo = state_.combo_display;
         mv_input.key_count = state_.key_count;
-        mv_input.spectrum = build_mv_spectrum();
-        std::vector<float> oscilloscope = build_mv_oscilloscope();
-        mv_input.oscilloscope = &oscilloscope;
-        mv_input.rms = compute_oscilloscope_rms(oscilloscope);
-        mv_input.peak = compute_oscilloscope_peak(oscilloscope);
+        fill_mv_spectrum(mv_spectrum_buffer_);
+        mv_input.spectrum = mv_spectrum_buffer_;
+        fill_mv_oscilloscope(mv_oscilloscope_buffer_);
+        mv_input.oscilloscope = &mv_oscilloscope_buffer_;
+        mv_input.rms = compute_oscilloscope_rms(mv_oscilloscope_buffer_);
+        mv_input.peak = compute_oscilloscope_peak(mv_oscilloscope_buffer_);
         const std::size_t spectrum_size = mv_input.spectrum.size();
         const std::size_t first_split = spectrum_size / 3;
         const std::size_t second_split = (spectrum_size * 2) / 3;
@@ -364,15 +369,15 @@ void play_scene::draw() {
         mv_input.screen_w = static_cast<float>(kScreenWidth);
         mv_input.screen_h = static_cast<float>(kScreenHeight);
 
-        auto scene_opt = mv_runtime_->tick(mv_input);
-        if (scene_opt.has_value()) {
+        const mv::scene* scene_ptr = mv_runtime_->tick_ref(mv_input);
+        if (scene_ptr != nullptr) {
             static int mv_log_count = 0;
             if (mv_log_count < 3) {
-                TraceLog(LOG_INFO, "MV: tick OK, %d nodes", static_cast<int>(scene_opt->nodes.size()));
+                TraceLog(LOG_INFO, "MV: tick OK, %d nodes", static_cast<int>(scene_ptr->nodes.size()));
                 mv_log_count++;
             }
             virtual_screen::begin();
-            mv::render_scene(*scene_opt);
+            mv::render_scene(*scene_ptr);
             virtual_screen::end();
             virtual_screen::draw_to_screen(true);
         } else {

@@ -1,10 +1,12 @@
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <system_error>
 
 #include "app_paths.h"
+#include "core/path_utils.h"
 #include "data_models.h"
 #include "mv/mv_storage.h"
 
@@ -85,6 +87,24 @@ int main() {
         expect(mv::write_mv_json(package.meta, package.directory), "Expected mv.json to be written.", ok);
         expect(mv::save_script(package, "def draw(ctx):\n  return Scene([])\n"), "Expected script to be written.", ok);
 
+        const fs::path import_dir = temp_local_app_data / "MV Import" / "日本語";
+        fs::create_directories(import_dir, ec);
+        expect(!ec, "Expected to create import directory.", ok);
+        const fs::path import_path = import_dir / "imported.rmv";
+        {
+            std::ofstream out(import_path, std::ios::trunc);
+            out << "def draw(ctx):\n  DrawBackground(fill=\"#112233\")\n";
+        }
+        expect(mv::import_script(package, path_utils::to_utf8(import_path)),
+               "Expected import_script to overwrite the package script.",
+               ok);
+        expect(mv::load_script(package) == "def draw(ctx):\n  DrawBackground(fill=\"#112233\")\n",
+               "Expected imported script to replace the previous script.",
+               ok);
+        expect(mv::import_script(package, path_utils::to_utf8(mv::script_path(package))),
+               "Expected import_script to accept re-importing the current script file.",
+               ok);
+
         const auto found = mv::find_first_package_for_song(song.song_id);
         expect(found.has_value(), "Expected to find MV package by song ID.", ok);
         if (found.has_value()) {
@@ -92,7 +112,7 @@ int main() {
             expect(found->meta.name == package.meta.name, "Expected MV name to round-trip.", ok);
             expect(found->meta.author == package.meta.author, "Expected MV author to round-trip.", ok);
             expect(found->meta.song_id == song.song_id, "Expected song_id to round-trip.", ok);
-            expect(mv::load_script(*found) == "def draw(ctx):\n  return Scene([])\n",
+            expect(mv::load_script(*found) == "def draw(ctx):\n  DrawBackground(fill=\"#112233\")\n",
                    "Expected script source to round-trip.",
                    ok);
         }

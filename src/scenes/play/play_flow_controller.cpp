@@ -126,7 +126,11 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
             state.gauge.on_judge(event.result);
         }
         if (!state.hitsound_path.empty() && event.play_hitsound && event.result != judge_result::miss) {
-            ++result.hitsound_count;
+            if (context.play_hitsound_immediately) {
+                context.play_hitsound_immediately();
+            } else {
+                ++result.hitsound_count;
+            }
         }
         if (event.show_feedback) {
             state.display_judge = event;

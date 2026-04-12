@@ -347,6 +347,43 @@ def helper():
     check(!result.success, "missing draw: error");
 }
 
+void test_top_level_runs_once_per_compile() {
+    mv::sandbox sb;
+    sb.set_limits({1000000, 32, 1024, 1024});
+
+    int counter = 0;
+    sb.register_native("bump", [&](const std::vector<mv::mv_value>&) -> mv::mv_value {
+        counter += 1;
+        return 0.0;
+    });
+    sb.register_native("counter", [&](const std::vector<mv::mv_value>&) -> mv::mv_value {
+        return static_cast<double>(counter);
+    });
+
+    std::string source = R"(
+bump()
+
+def draw(ctx):
+    return counter()
+)";
+
+    check(sb.compile(source), "top-level one-shot: compile");
+    auto first = sb.call("draw", {std::monostate{}});
+    auto second = sb.call("draw", {std::monostate{}});
+
+    check(first.success, "top-level one-shot: first draw");
+    check(second.success, "top-level one-shot: second draw");
+    check(counter == 1, "top-level one-shot: native ran once");
+    if (first.success) {
+        auto* val = std::get_if<double>(&first.value);
+        check(val != nullptr && *val == 1.0, "top-level one-shot: first draw sees initialized state");
+    }
+    if (second.success) {
+        auto* val = std::get_if<double>(&second.value);
+        check(val != nullptr && *val == 1.0, "top-level one-shot: second draw reuses initialized state");
+    }
+}
+
 } // anonymous namespace
 
 int main() {
@@ -366,6 +403,7 @@ int main() {
     test_list_operations();
     test_division_by_zero();
     test_missing_draw();
+    test_top_level_runs_once_per_compile();
 
     std::cout << tests_passed << " passed, " << tests_failed << " failed\n";
 

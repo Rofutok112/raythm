@@ -2,6 +2,9 @@
 
 #include <array>
 #include <algorithm>
+#include <cctype>
+#include <cstdint>
+#include <filesystem>
 #include <unordered_map>
 #include <vector>
 
@@ -11,15 +14,19 @@ namespace {
 constexpr unsigned long kLowLatencyUpdatePeriodMs = 5;
 constexpr unsigned long kLowLatencyDeviceBufferMs = 10;
 constexpr unsigned long kSeSampleMaxVoices = 16;
+constexpr std::size_t kSeSampleCacheLimit = 8;
 
 struct se_sample_entry {
     unsigned long handle = 0;
+    std::uint64_t last_use_generation = 0;
+    bool pinned = false;
 };
 
 struct se_voice_entry {
     unsigned long handle = 0;
     float local_volume = 1.0f;
     bool stream_fallback = false;
+    std::string sample_path;
 };
 
 std::unordered_map<std::string, se_sample_entry>& se_samples() {
@@ -30,6 +37,79 @@ std::unordered_map<std::string, se_sample_entry>& se_samples() {
 std::unordered_map<int, se_voice_entry>& se_voices() {
     static std::unordered_map<int, se_voice_entry> voices;
     return voices;
+}
+
+std::uint64_t& se_sample_generation() {
+    static std::uint64_t generation = 0;
+    return generation;
+}
+
+std::string lowercase_ascii(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return value;
+}
+
+bool is_pinned_se_sample_path(const std::string& file_path) {
+    return lowercase_ascii(std::filesystem::path(file_path).filename().string()) == "hitsound.mp3";
+}
+
+se_sample_entry* find_or_load_se_sample(const std::string& file_path) {
+    auto sample_it = se_samples().find(file_path);
+    if (sample_it == se_samples().end()) {
+        const unsigned long sample_handle = BASS_SampleLoad(
+            FALSE, file_path.c_str(), 0, 0, kSeSampleMaxVoices, BASS_SAMPLE_OVER_POS);
+        if (sample_handle == 0) {
+            return nullptr;
+        }
+
+        sample_it = se_samples().emplace(file_path, se_sample_entry{
+            sample_handle,
+            ++se_sample_generation(),
+            is_pinned_se_sample_path(file_path),
+        }).first;
+    }
+
+    sample_it->second.last_use_generation = ++se_sample_generation();
+    return &sample_it->second;
+}
+
+bool has_active_sample_voice(const std::string& sample_path) {
+    for (const auto& [voice_id, voice] : se_voices()) {
+        (void)voice_id;
+        if (voice.stream_fallback || voice.sample_path != sample_path || voice.handle == 0) {
+            continue;
+        }
+
+        if (BASS_ChannelIsActive(voice.handle) != BASS_ACTIVE_STOPPED) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void trim_se_sample_cache() {
+    while (se_samples().size() > kSeSampleCacheLimit) {
+        auto eviction_it = se_samples().end();
+        for (auto it = se_samples().begin(); it != se_samples().end(); ++it) {
+            if (it->second.handle == 0 || it->second.pinned || has_active_sample_voice(it->first)) {
+                continue;
+            }
+
+            if (eviction_it == se_samples().end() ||
+                it->second.last_use_generation < eviction_it->second.last_use_generation) {
+                eviction_it = it;
+            }
+        }
+
+        if (eviction_it == se_samples().end()) {
+            break;
+        }
+
+        BASS_SampleFree(eviction_it->second.handle);
+        se_samples().erase(eviction_it);
+    }
 }
 
 void free_se_samples() {
@@ -251,17 +331,8 @@ int audio_manager::play_se(const std::string& file_path, float volume) {
 
     unsigned long handle = 0;
     bool stream_fallback = false;
-    auto sample_it = se_samples().find(file_path);
-    if (sample_it == se_samples().end()) {
-        const unsigned long sample_handle = BASS_SampleLoad(
-            FALSE, file_path.c_str(), 0, 0, kSeSampleMaxVoices, BASS_SAMPLE_OVER_POS);
-        if (sample_handle != 0) {
-            sample_it = se_samples().emplace(file_path, se_sample_entry{sample_handle}).first;
-        }
-    }
-
-    if (sample_it != se_samples().end() && sample_it->second.handle != 0) {
-        handle = BASS_SampleGetChannel(sample_it->second.handle, FALSE);
+    if (se_sample_entry* sample = find_or_load_se_sample(file_path); sample != nullptr && sample->handle != 0) {
+        handle = BASS_SampleGetChannel(sample->handle, FALSE);
     }
 
     if (handle == 0) {
@@ -274,10 +345,25 @@ int audio_manager::play_se(const std::string& file_path, float volume) {
     }
 
     const int voice_id = next_se_voice_id_++;
-    se_voices()[voice_id] = {handle, std::clamp(volume, 0.0f, 1.0f), stream_fallback};
+    se_voices()[voice_id] = {handle, std::clamp(volume, 0.0f, 1.0f), stream_fallback,
+                             stream_fallback ? std::string{} : file_path};
     BASS_ChannelSetAttribute(handle, BASS_ATTRIB_VOL, se_voices()[voice_id].local_volume * se_volume_);
     play_voice(handle, true);
+    trim_se_sample_cache();
     return voice_id;
+}
+
+bool audio_manager::preload_se(const std::string& file_path) {
+    if (!ensure_initialized()) {
+        return false;
+    }
+
+    if (find_or_load_se_sample(file_path) == nullptr) {
+        return false;
+    }
+
+    trim_se_sample_cache();
+    return true;
 }
 
 bool audio_manager::is_se_voice_active(int voice_id) const {

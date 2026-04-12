@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include <memory>
 #include <string>
 
@@ -36,4 +37,6 @@ private:
     play_session_state state_;
     play_note_draw_queue draw_queue_;
     std::unique_ptr<mv::mv_runtime> mv_runtime_;
+    std::vector<float> mv_spectrum_buffer_;
+    std::vector<float> mv_oscilloscope_buffer_;
 };

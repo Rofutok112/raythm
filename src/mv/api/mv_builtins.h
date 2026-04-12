@@ -15,5 +15,6 @@ void register_builtins_to_sandbox(sandbox& sb);
 // Convert a VM mv_value (expected to be a Scene mv_object) into a C++ scene struct.
 // Returns nullopt if the value is not a valid scene.
 std::optional<scene> extract_scene(const mv_value& val);
+bool extract_scene_into(const mv_value& val, scene& out);
 
 } // namespace mv

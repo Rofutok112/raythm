@@ -618,18 +618,13 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
                     .value_or(mv::make_default_package_for_song(song.song.meta));
                 package.meta.song_id = song.song.meta.song_id;
                 package.meta.script_file = "script.rmv";
-                package.directory = path_utils::to_utf8(app_paths::mv_dir(package.meta.mv_id));
-                std::error_code ec;
                 if (!mv::write_mv_json(package.meta, package.directory)) {
                     song_select::queue_status_message(state_, "Failed to prepare MV package.", true);
+                } else if (!mv::import_script(package, src)) {
+                    song_select::queue_status_message(state_, "Failed to import MV script.", true);
                 } else {
-                    std::filesystem::copy_file(src, mv::script_path(package),
-                                               std::filesystem::copy_options::overwrite_existing, ec);
-                    if (ec) {
-                        song_select::queue_status_message(state_, "Failed to import MV script.", true);
-                    } else {
-                        song_select::queue_status_message(state_, "MV script imported.", false);
-                    }
+                    reload_song_library(song.song.meta.song_id, "");
+                    song_select::queue_status_message(state_, "MV script imported.", false);
                 }
             }
         }
@@ -640,20 +635,13 @@ void song_select_scene::apply_context_menu_command(song_select::context_menu_com
             const auto& song = state_.songs[static_cast<size_t>(state_.context_menu.song_index)];
             song_select::close_context_menu(state_);
             if (const auto package = mv::find_first_package_for_song(song.song.meta.song_id); package.has_value()) {
-                const auto src = mv::script_path(*package);
-                if (std::filesystem::exists(src)) {
-                    const std::string dest = file_dialog::save_mv_script_file(package->meta.mv_id + ".rmv");
-                    if (!dest.empty()) {
-                        std::error_code ec;
-                        std::filesystem::copy_file(src, dest, std::filesystem::copy_options::overwrite_existing, ec);
-                        if (ec) {
-                            song_select::queue_status_message(state_, "Failed to export MV script.", true);
-                        } else {
-                            song_select::queue_status_message(state_, "MV script exported.", false);
-                        }
+                const std::string dest = file_dialog::save_mv_script_file(package->meta.mv_id + ".rmv");
+                if (!dest.empty()) {
+                    if (!mv::export_script(*package, dest)) {
+                        song_select::queue_status_message(state_, "Failed to export MV script.", true);
+                    } else {
+                        song_select::queue_status_message(state_, "MV script exported.", false);
                     }
-                } else {
-                    song_select::queue_status_message(state_, "Failed to export MV script.", true);
                 }
             }
         }

@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "audio_waveform.h"
 #include "editor/editor_meter_map.h"
 #include "editor/editor_state.h"
 #include "editor/editor_timeline_view.h"
@@ -10,8 +11,9 @@
 struct editor_timeline_presenter_model {
     const editor_state& state;
     const editor_meter_map& meter_map;
-    const std::vector<editor_timeline_waveform_sample>* waveform_samples = nullptr;
+    const audio_waveform_summary* waveform_summary = nullptr;
     bool waveform_visible = false;
+    int waveform_offset_ms = 0;
     bool audio_loaded = false;
     int playback_tick = 0;
     std::optional<size_t> selected_note_index;

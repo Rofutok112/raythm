@@ -33,7 +33,15 @@ bool mv_runtime::load_source(const std::string& source) {
 }
 
 std::optional<scene> mv_runtime::tick(const context_input& input) {
-    if (!loaded_) return std::nullopt;
+    const scene* scene_ptr = tick_ref(input);
+    if (scene_ptr == nullptr) {
+        return std::nullopt;
+    }
+    return *scene_ptr;
+}
+
+const scene* mv_runtime::tick_ref(const context_input& input) {
+    if (!loaded_) return nullptr;
 
     auto ctx = context_builder_.build(input);
     auto result = sandbox_.call("draw", {mv_value{ctx}});
@@ -47,11 +55,10 @@ std::optional<scene> mv_runtime::tick(const context_input& input) {
             }
             log_count_a++;
         }
-        return std::nullopt;
+        return nullptr;
     }
 
-    auto sc = extract_scene(result.value);
-    if (!sc.has_value()) {
+    if (!extract_scene_into(result.value, scratch_scene_)) {
         static int log_count_b = 0;
         if (log_count_b < 5) {
             TraceLog(LOG_WARNING, "MV tick: extract_scene failed (return value is not a Scene)");
@@ -61,11 +68,13 @@ std::optional<scene> mv_runtime::tick(const context_input& input) {
             }
             log_count_b++;
         }
-        return std::nullopt;
+        return nullptr;
     }
 
-    validate_scene(*sc, validation_limits_);
-    return sc;
+    if (validation_enabled_) {
+        validate_scene(scratch_scene_, validation_limits_);
+    }
+    return &scratch_scene_;
 }
 
 void mv_runtime::reset() {

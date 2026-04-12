@@ -59,7 +59,7 @@ struct compiler_state {
         current_chunk().code[offset].arg = static_cast<uint32_t>(current_chunk().code.size());
     }
 
-    int resolve_local(const std::string& name) {
+    int resolve_local(const std::string& name) const {
         for (int i = static_cast<int>(locals.size()) - 1; i >= 0; i--) {
             if (locals[i].first == name) return locals[i].second;
         }
@@ -130,6 +130,339 @@ struct compiler_state {
         compile_expr(*node.args[0]);
         emit(opcode::append_list, line);
         emit(opcode::load_none, line);
+    }
+
+    bool is_builtin_ctor_name(std::string_view name) const {
+        return name == "Scene" || name == "Point" ||
+               name == "DrawRect" || name == "DrawLine" || name == "DrawText" ||
+               name == "DrawCircle" || name == "DrawPolyline" || name == "DrawBackground";
+    }
+
+    bool is_unshadowed_builtin_identifier(const expr& e, std::string_view name) const {
+        const auto* id = std::get_if<identifier>(&e.kind);
+        return id != nullptr && id->name == name && resolve_local(id->name) < 0;
+    }
+
+    const expr* find_kwarg(const std::vector<keyword_arg>& kwargs, std::string_view name) const {
+        for (const auto& kw : kwargs) {
+            if (kw.name == name) return kw.value.get();
+        }
+        return nullptr;
+    }
+
+    bool kwargs_only_from(const std::vector<keyword_arg>& kwargs,
+                          std::initializer_list<std::string_view> allowed) const {
+        for (const auto& kw : kwargs) {
+            bool ok = false;
+            for (auto allowed_name : allowed) {
+                if (kw.name == allowed_name) {
+                    ok = true;
+                    break;
+                }
+            }
+            if (!ok) return false;
+        }
+        return true;
+    }
+
+    void compile_expr_or_none(const expr* value, int line) {
+        if (value != nullptr) {
+            compile_expr(*value);
+        } else {
+            emit(opcode::load_none, line);
+        }
+    }
+
+    bool try_get_ctx_attr_slot(const expr& expression, int& ctx_slot_out, ctx_attr_slot& slot_out) const {
+        std::vector<std::string_view> path;
+        const expr* current = &expression;
+        while (true) {
+            if (const auto* attr = std::get_if<attr_expr>(&current->kind)) {
+                path.push_back(attr->attr);
+                current = attr->object.get();
+                continue;
+            }
+            const auto* id = std::get_if<identifier>(&current->kind);
+            if (id == nullptr || id->name != "ctx") {
+                return false;
+            }
+            ctx_slot_out = resolve_local(id->name);
+            if (ctx_slot_out < 0) return false;
+            path.push_back("ctx");
+            break;
+        }
+
+        std::reverse(path.begin(), path.end());
+
+        auto match = [&](std::initializer_list<std::string_view> target, ctx_attr_slot slot) -> bool {
+            if (path.size() != target.size()) return false;
+            size_t i = 0;
+            for (auto part : target) {
+                if (path[i++] != part) return false;
+            }
+            slot_out = slot;
+            return true;
+        };
+
+        return
+            match({"ctx", "time"}, ctx_attr_slot::ctx_time) ||
+            match({"ctx", "time", "ms"}, ctx_attr_slot::ctx_time_ms) ||
+            match({"ctx", "time", "sec"}, ctx_attr_slot::ctx_time_sec) ||
+            match({"ctx", "time", "length_ms"}, ctx_attr_slot::ctx_time_length_ms) ||
+            match({"ctx", "time", "bpm"}, ctx_attr_slot::ctx_time_bpm) ||
+            match({"ctx", "time", "beat"}, ctx_attr_slot::ctx_time_beat) ||
+            match({"ctx", "time", "beat_phase"}, ctx_attr_slot::ctx_time_beat_phase) ||
+            match({"ctx", "time", "meter_numerator"}, ctx_attr_slot::ctx_time_meter_numerator) ||
+            match({"ctx", "time", "meter_denominator"}, ctx_attr_slot::ctx_time_meter_denominator) ||
+            match({"ctx", "time", "progress"}, ctx_attr_slot::ctx_time_progress) ||
+            match({"ctx", "audio"}, ctx_attr_slot::ctx_audio) ||
+            match({"ctx", "audio", "analysis"}, ctx_attr_slot::ctx_audio_analysis) ||
+            match({"ctx", "audio", "analysis", "level"}, ctx_attr_slot::ctx_audio_analysis_level) ||
+            match({"ctx", "audio", "analysis", "rms"}, ctx_attr_slot::ctx_audio_analysis_rms) ||
+            match({"ctx", "audio", "analysis", "peak"}, ctx_attr_slot::ctx_audio_analysis_peak) ||
+            match({"ctx", "audio", "bands"}, ctx_attr_slot::ctx_audio_bands) ||
+            match({"ctx", "audio", "bands", "low"}, ctx_attr_slot::ctx_audio_bands_low) ||
+            match({"ctx", "audio", "bands", "mid"}, ctx_attr_slot::ctx_audio_bands_mid) ||
+            match({"ctx", "audio", "bands", "high"}, ctx_attr_slot::ctx_audio_bands_high) ||
+            match({"ctx", "audio", "buffers"}, ctx_attr_slot::ctx_audio_buffers) ||
+            match({"ctx", "audio", "buffers", "spectrum"}, ctx_attr_slot::ctx_audio_buffers_spectrum) ||
+            match({"ctx", "audio", "buffers", "spectrum_size"}, ctx_attr_slot::ctx_audio_buffers_spectrum_size) ||
+            match({"ctx", "audio", "buffers", "waveform"}, ctx_attr_slot::ctx_audio_buffers_waveform) ||
+            match({"ctx", "audio", "buffers", "waveform_size"}, ctx_attr_slot::ctx_audio_buffers_waveform_size) ||
+            match({"ctx", "audio", "buffers", "waveform_index"}, ctx_attr_slot::ctx_audio_buffers_waveform_index) ||
+            match({"ctx", "audio", "buffers", "oscilloscope"}, ctx_attr_slot::ctx_audio_buffers_oscilloscope) ||
+            match({"ctx", "audio", "buffers", "oscilloscope_size"}, ctx_attr_slot::ctx_audio_buffers_oscilloscope_size) ||
+            match({"ctx", "song"}, ctx_attr_slot::ctx_song) ||
+            match({"ctx", "song", "song_id"}, ctx_attr_slot::ctx_song_song_id) ||
+            match({"ctx", "song", "title"}, ctx_attr_slot::ctx_song_title) ||
+            match({"ctx", "song", "artist"}, ctx_attr_slot::ctx_song_artist) ||
+            match({"ctx", "song", "base_bpm"}, ctx_attr_slot::ctx_song_base_bpm) ||
+            match({"ctx", "chart"}, ctx_attr_slot::ctx_chart) ||
+            match({"ctx", "chart", "chart_id"}, ctx_attr_slot::ctx_chart_chart_id) ||
+            match({"ctx", "chart", "song_id"}, ctx_attr_slot::ctx_chart_song_id) ||
+            match({"ctx", "chart", "difficulty"}, ctx_attr_slot::ctx_chart_difficulty) ||
+            match({"ctx", "chart", "level"}, ctx_attr_slot::ctx_chart_level) ||
+            match({"ctx", "chart", "chart_author"}, ctx_attr_slot::ctx_chart_chart_author) ||
+            match({"ctx", "chart", "resolution"}, ctx_attr_slot::ctx_chart_resolution) ||
+            match({"ctx", "chart", "offset"}, ctx_attr_slot::ctx_chart_offset) ||
+            match({"ctx", "chart", "total_notes"}, ctx_attr_slot::ctx_chart_total_notes) ||
+            match({"ctx", "chart", "combo"}, ctx_attr_slot::ctx_chart_combo) ||
+            match({"ctx", "chart", "accuracy"}, ctx_attr_slot::ctx_chart_accuracy) ||
+            match({"ctx", "chart", "key_count"}, ctx_attr_slot::ctx_chart_key_count) ||
+            match({"ctx", "screen"}, ctx_attr_slot::ctx_screen) ||
+            match({"ctx", "screen", "w"}, ctx_attr_slot::ctx_screen_w) ||
+            match({"ctx", "screen", "h"}, ctx_attr_slot::ctx_screen_h);
+    }
+
+    bool try_compile_fast_scene_call(const call_expr& node, int line) {
+        if (!is_unshadowed_builtin_identifier(*node.callee, "Scene") || node.args.size() > 1) {
+            return false;
+        }
+        compile_expr_or_none(node.args.empty() ? nullptr : node.args[0].get(), line);
+        emit(opcode::load_none, line);
+        emit(opcode::make_scene, line);
+        return true;
+    }
+
+    bool try_compile_fast_scene_call(const call_with_kwargs_expr& node, int line) {
+        if (!is_unshadowed_builtin_identifier(*node.callee, "Scene") ||
+            !kwargs_only_from(node.keyword_args, {"nodes", "clear_color"}) ||
+            node.positional_args.size() > 1) {
+            return false;
+        }
+        const expr* nodes_expr = !node.positional_args.empty() ? node.positional_args[0].get() : find_kwarg(node.keyword_args, "nodes");
+        compile_expr_or_none(nodes_expr, line);
+        compile_expr_or_none(find_kwarg(node.keyword_args, "clear_color"), line);
+        emit(opcode::make_scene, line);
+        return true;
+    }
+
+    bool try_compile_fast_node_ctor(const call_with_kwargs_expr& node, int line) {
+        const auto* callee = std::get_if<identifier>(&node.callee->kind);
+        if (callee == nullptr || resolve_local(callee->name) >= 0) {
+            return false;
+        }
+
+        if (callee->name == "Point" && kwargs_only_from(node.keyword_args, {"x", "y"}) &&
+            node.positional_args.empty()) {
+            compile_expr_or_none(find_kwarg(node.keyword_args, "x"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "y"), line);
+            emit(opcode::make_point, line);
+            return true;
+        }
+        if (callee->name == "DrawRect" && kwargs_only_from(node.keyword_args, {"x", "y", "w", "h", "rotation", "opacity", "fill"}) &&
+            node.positional_args.empty()) {
+            compile_expr_or_none(find_kwarg(node.keyword_args, "x"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "y"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "w"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "h"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "rotation"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "opacity"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "fill"), line);
+            emit(opcode::make_draw_rect, line);
+            return true;
+        }
+        if (callee->name == "DrawLine" && kwargs_only_from(node.keyword_args, {"x1", "y1", "x2", "y2", "thickness", "opacity", "stroke"}) &&
+            node.positional_args.empty()) {
+            compile_expr_or_none(find_kwarg(node.keyword_args, "x1"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "y1"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "x2"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "y2"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "thickness"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "opacity"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "stroke"), line);
+            emit(opcode::make_draw_line, line);
+            return true;
+        }
+        if (callee->name == "DrawText" && kwargs_only_from(node.keyword_args, {"text", "x", "y", "font_size", "opacity", "fill"}) &&
+            node.positional_args.empty()) {
+            compile_expr_or_none(find_kwarg(node.keyword_args, "text"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "x"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "y"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "font_size"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "opacity"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "fill"), line);
+            emit(opcode::make_draw_text, line);
+            return true;
+        }
+        if (callee->name == "DrawCircle" && kwargs_only_from(node.keyword_args, {"cx", "cy", "radius", "opacity", "fill"}) &&
+            node.positional_args.empty()) {
+            compile_expr_or_none(find_kwarg(node.keyword_args, "cx"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "cy"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "radius"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "opacity"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "fill"), line);
+            emit(opcode::make_draw_circle, line);
+            return true;
+        }
+        if (callee->name == "DrawPolyline" && kwargs_only_from(node.keyword_args, {"points", "thickness", "opacity", "stroke"}) &&
+            node.positional_args.empty()) {
+            compile_expr_or_none(find_kwarg(node.keyword_args, "points"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "thickness"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "opacity"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "stroke"), line);
+            emit(opcode::make_draw_polyline, line);
+            return true;
+        }
+        if (callee->name == "DrawBackground" && kwargs_only_from(node.keyword_args, {"fill", "opacity"}) &&
+            node.positional_args.empty()) {
+            compile_expr_or_none(find_kwarg(node.keyword_args, "fill"), line);
+            compile_expr_or_none(find_kwarg(node.keyword_args, "opacity"), line);
+            emit(opcode::make_draw_background, line);
+            return true;
+        }
+        return false;
+    }
+
+    bool try_compile_range_loop(const for_stmt& node, int line) {
+        const auto* call = std::get_if<call_expr>(&node.iterable->kind);
+        if (call == nullptr || !is_unshadowed_builtin_identifier(*call->callee, "range")) {
+            return false;
+        }
+
+        int start_slot = declare_local("__range_start__");
+        int end_slot = declare_local("__range_end__");
+        int step_slot = declare_local("__range_step__");
+        int current_slot = declare_local("__range_current__");
+        int var_slot = resolve_local(node.var_name);
+        if (var_slot < 0) var_slot = declare_local(node.var_name);
+
+        int zero_const = add_constant(0.0);
+        int one_const = add_constant(1.0);
+
+        auto emit_number_const = [&](int const_idx) {
+            emit(opcode::load_const, static_cast<uint32_t>(const_idx), line);
+        };
+
+        if (call->args.empty()) {
+            emit_number_const(zero_const);
+            emit(opcode::store_local, start_slot, line);
+            emit_number_const(zero_const);
+            emit(opcode::store_local, end_slot, line);
+            emit_number_const(one_const);
+            emit(opcode::store_local, step_slot, line);
+        } else if (call->args.size() == 1) {
+            emit_number_const(zero_const);
+            emit(opcode::store_local, start_slot, line);
+            compile_expr(*call->args[0]);
+            emit(opcode::store_local, end_slot, line);
+            emit_number_const(one_const);
+            emit(opcode::store_local, step_slot, line);
+        } else {
+            compile_expr(*call->args[0]);
+            emit(opcode::store_local, start_slot, line);
+            compile_expr(*call->args[1]);
+            emit(opcode::store_local, end_slot, line);
+            if (call->args.size() >= 3) {
+                compile_expr(*call->args[2]);
+            } else {
+                emit_number_const(one_const);
+            }
+            emit(opcode::store_local, step_slot, line);
+        }
+
+        emit(opcode::load_local, step_slot, line);
+        emit_number_const(zero_const);
+        emit(opcode::cmp_eq, line);
+        int step_nonzero = emit_jump(opcode::jump_if_false, line);
+        emit(opcode::pop, line);
+        emit_number_const(one_const);
+        emit(opcode::store_local, step_slot, line);
+        int after_step_fix = emit_jump(opcode::jump, line);
+        patch_jump(step_nonzero);
+        emit(opcode::pop, line);
+        patch_jump(after_step_fix);
+
+        emit(opcode::load_local, start_slot, line);
+        emit(opcode::store_local, current_slot, line);
+
+        emit(opcode::load_local, step_slot, line);
+        emit_number_const(zero_const);
+        emit(opcode::cmp_gt, line);
+        int negative_branch = emit_jump(opcode::jump_if_false, line);
+        emit(opcode::pop, line);
+
+        int positive_loop_start = static_cast<int>(current_chunk().code.size());
+        emit(opcode::load_local, current_slot, line);
+        emit(opcode::load_local, end_slot, line);
+        emit(opcode::cmp_lt, line);
+        int positive_exit = emit_jump(opcode::jump_if_false, line);
+        emit(opcode::pop, line);
+        emit(opcode::load_local, current_slot, line);
+        emit(opcode::store_local, var_slot, line);
+        for (auto& stmt : node.body) {
+            compile_stmt(*stmt);
+        }
+        emit(opcode::load_local, current_slot, line);
+        emit(opcode::load_local, step_slot, line);
+        emit(opcode::add, line);
+        emit(opcode::store_local, current_slot, line);
+        emit(opcode::jump, static_cast<uint32_t>(positive_loop_start), line);
+
+        patch_jump(negative_branch);
+        emit(opcode::pop, line);
+
+        int negative_loop_start = static_cast<int>(current_chunk().code.size());
+        emit(opcode::load_local, current_slot, line);
+        emit(opcode::load_local, end_slot, line);
+        emit(opcode::cmp_gt, line);
+        int negative_exit = emit_jump(opcode::jump_if_false, line);
+        emit(opcode::pop, line);
+        emit(opcode::load_local, current_slot, line);
+        emit(opcode::store_local, var_slot, line);
+        for (auto& stmt : node.body) {
+            compile_stmt(*stmt);
+        }
+        emit(opcode::load_local, current_slot, line);
+        emit(opcode::load_local, step_slot, line);
+        emit(opcode::add, line);
+        emit(opcode::store_local, current_slot, line);
+        emit(opcode::jump, static_cast<uint32_t>(negative_loop_start), line);
+
+        patch_jump(positive_exit);
+        patch_jump(negative_exit);
+        emit(opcode::pop, line);
+        return true;
     }
 
     // ---- Compile expressions ----
@@ -211,6 +544,8 @@ struct compiler_state {
             else if constexpr (std::is_same_v<T, call_expr>) {
                 if (is_append_call(node)) {
                     compile_append_call_expr(node, line);
+                } else if (try_compile_fast_scene_call(node, line)) {
+                    return;
                 } else {
                     compile_expr(*node.callee);
                     for (auto& arg : node.args) {
@@ -220,6 +555,9 @@ struct compiler_state {
                 }
             }
             else if constexpr (std::is_same_v<T, call_with_kwargs_expr>) {
+                if (try_compile_fast_scene_call(node, line) || try_compile_fast_node_ctor(node, line)) {
+                    return;
+                }
                 compile_expr(*node.callee);
                 for (auto& arg : node.positional_args) {
                     compile_expr(*arg);
@@ -233,6 +571,13 @@ struct compiler_state {
                 emit(opcode::kwarg_count, static_cast<uint32_t>(node.keyword_args.size()), line);
             }
             else if constexpr (std::is_same_v<T, attr_expr>) {
+                int ctx_slot = -1;
+                ctx_attr_slot ctx_slot_id = ctx_attr_slot::ctx_time;
+                if (try_get_ctx_attr_slot(e, ctx_slot, ctx_slot_id)) {
+                    emit(opcode::load_local, static_cast<uint32_t>(ctx_slot), line);
+                    emit(opcode::load_ctx_attr, static_cast<uint32_t>(ctx_slot_id), line);
+                    return;
+                }
                 compile_expr(*node.object);
                 int name_idx = add_string_constant(node.attr);
                 emit(opcode::load_attr, name_idx, line);
@@ -333,6 +678,9 @@ struct compiler_state {
                 }
             }
             else if constexpr (std::is_same_v<T, for_stmt>) {
+                if (try_compile_range_loop(node, line)) {
+                    return;
+                }
                 // Evaluate iterable
                 compile_expr(*node.iterable);
                 int list_slot = declare_local("__for_list__");
@@ -426,10 +774,9 @@ struct compiler_state {
 
                 // Implicit return Scene(collected_nodes) for draw(), otherwise None
                 if (current_func_name == "draw") {
-                    int scene_name_idx = add_string_constant("Scene");
-                    emit(opcode::load_global, scene_name_idx, line);
                     emit(opcode::load_local, draw_nodes_slot, line);
-                    emit(opcode::call, 1, line);
+                    emit(opcode::load_none, line);
+                    emit(opcode::make_scene, line);
                 } else {
                     emit(opcode::load_none, line);
                 }

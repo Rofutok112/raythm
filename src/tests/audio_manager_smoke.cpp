@@ -51,6 +51,11 @@ int main() {
         return 1;
     }
 
+    if (!manager.preload_se(audio_path.string())) {
+        std::cerr << "SE preload failed\n";
+        return 1;
+    }
+
     if (!manager.load_preview(audio_path.string())) {
         std::cerr << "Preview load failed\n";
         return 1;

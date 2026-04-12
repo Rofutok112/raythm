@@ -8,9 +8,6 @@ struct editor_scene_sync_context {
     editor_timing_panel_state& timing_panel;
     metadata_panel_state& metadata_panel;
     std::optional<size_t>& selected_note_index;
-    const audio_waveform_summary& waveform_summary;
-    std::vector<editor_timeline_waveform_sample>& waveform_samples;
-    int waveform_offset_ms = 0;
 };
 
 namespace editor_scene_sync {
@@ -19,7 +16,6 @@ void sync_metadata_inputs(editor_scene_sync_context context);
 void sync_timing_event_selection(editor_scene_sync_context context);
 void load_timing_event_inputs(editor_scene_sync_context context);
 void clear_timing_event_inputs(editor_scene_sync_context context);
-void rebuild_waveform_samples(editor_scene_sync_context context);
 void sync_after_history_change(editor_scene_sync_context context);
 void sync_after_timing_change(editor_scene_sync_context context);
 void sync_after_metadata_change(editor_scene_sync_context context, bool key_count_changed);

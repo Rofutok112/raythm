@@ -504,6 +504,84 @@ def draw(ctx):
     ASSERT(r4 && r4->x == 40.0f);
 }
 
+TEST(test_fast_and_generic_drawrect_paths_match) {
+    const char* src = R"(
+def draw(ctx):
+    fast = DrawRect(x=12, y=34, w=56, h=78, fill="#112233", opacity=0.5)
+    ctor = DrawRect
+    slow = ctor(x=12, y=34, w=56, h=78, fill="#112233", opacity=0.5)
+    return Scene([fast, slow])
+)";
+    mv::mv_runtime rt;
+    ASSERT(rt.load_source(src));
+
+    mv::context_input input;
+    auto scene = rt.tick(input);
+    ASSERT(scene.has_value());
+    ASSERT(scene->nodes.size() == 2);
+
+    const auto* fast = std::get_if<mv::rect_node>(&scene->nodes[0]);
+    const auto* slow = std::get_if<mv::rect_node>(&scene->nodes[1]);
+    ASSERT(fast != nullptr);
+    ASSERT(slow != nullptr);
+    ASSERT(std::abs(fast->x - slow->x) < 0.001f);
+    ASSERT(std::abs(fast->y - slow->y) < 0.001f);
+    ASSERT(std::abs(fast->w - slow->w) < 0.001f);
+    ASSERT(std::abs(fast->h - slow->h) < 0.001f);
+    ASSERT(std::abs(fast->opacity - slow->opacity) < 0.001f);
+    ASSERT(fast->fill.r == slow->fill.r);
+    ASSERT(fast->fill.g == slow->fill.g);
+    ASSERT(fast->fill.b == slow->fill.b);
+}
+
+TEST(test_negative_range_loop_builds_nodes) {
+    const char* src = R"(
+def draw(ctx):
+    nodes = []
+    for i in range(5, 0, -2):
+        nodes = nodes + [DrawRect(x=i, y=0, w=1, h=1)]
+    return Scene(nodes)
+)";
+    mv::mv_runtime rt;
+    ASSERT(rt.load_source(src));
+
+    mv::context_input input;
+    auto scene = rt.tick(input);
+    ASSERT(scene.has_value());
+    ASSERT(scene->nodes.size() == 3);
+    auto* r0 = std::get_if<mv::rect_node>(&scene->nodes[0]);
+    auto* r1 = std::get_if<mv::rect_node>(&scene->nodes[1]);
+    auto* r2 = std::get_if<mv::rect_node>(&scene->nodes[2]);
+    ASSERT(r0 && std::abs(r0->x - 5.0f) < 0.01f);
+    ASSERT(r1 && std::abs(r1->x - 3.0f) < 0.01f);
+    ASSERT(r2 && std::abs(r2->x - 1.0f) < 0.01f);
+}
+
+TEST(test_runtime_validation_toggle) {
+    const char* src = R"(
+def draw(ctx):
+    return Scene([DrawRect(x=99999, y=0, w=-5, h=10, fill="#ffffff")])
+)";
+    mv::mv_runtime rt;
+    ASSERT(rt.load_source(src));
+
+    mv::context_input input;
+    auto raw_scene = rt.tick(input);
+    ASSERT(raw_scene.has_value());
+    auto* raw_rect = std::get_if<mv::rect_node>(&raw_scene->nodes[0]);
+    ASSERT(raw_rect != nullptr);
+    ASSERT(raw_rect->x > 90000.0f);
+    ASSERT(raw_rect->w < 0.0f);
+
+    rt.set_validation_enabled(true);
+    auto validated_scene = rt.tick(input);
+    ASSERT(validated_scene.has_value());
+    auto* validated_rect = std::get_if<mv::rect_node>(&validated_scene->nodes[0]);
+    ASSERT(validated_rect != nullptr);
+    ASSERT(validated_rect->x == 4096.0f);
+    ASSERT(validated_rect->w == 0.0f);
+}
+
 int main() {
     std::printf("=== MV API Smoke Tests ===\n");
 
@@ -530,6 +608,9 @@ int main() {
     RUN(test_scene_clear_color);
     RUN(test_runtime_no_draw_function);
     RUN(test_for_loop_builds_nodes);
+    RUN(test_fast_and_generic_drawrect_paths_match);
+    RUN(test_negative_range_loop_builds_nodes);
+    RUN(test_runtime_validation_toggle);
 
     std::printf("\n%d passed, %d failed\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

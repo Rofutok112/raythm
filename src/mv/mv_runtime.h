@@ -27,8 +27,14 @@ public:
     // Returns nullopt on error or if no script is loaded.
     std::optional<scene> tick(const context_input& input);
 
+    // Hot-path gameplay accessor that reuses internal scene storage.
+    const scene* tick_ref(const context_input& input);
+
     // Get last error messages (compile or runtime).
     const std::vector<script_error>& last_errors() const { return sandbox_.last_errors(); }
+
+    void set_validation_enabled(bool enabled) { validation_enabled_ = enabled; }
+    void set_validation_limits(const validation_limits& limits) { validation_limits_ = limits; }
 
     // Reset state (unload script).
     void reset();
@@ -38,6 +44,8 @@ private:
     context_builder context_builder_;
     bool loaded_ = false;
     validation_limits validation_limits_;
+    bool validation_enabled_ = false;
+    scene scratch_scene_;
 };
 
 } // namespace mv

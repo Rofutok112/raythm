@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <optional>
 
 #include "play_note_draw_queue.h"
@@ -18,6 +19,7 @@ struct play_update_context {
     bool pause_restart_clicked = false;
     bool pause_song_select_clicked = false;
     std::optional<play_draw_window> draw_window;
+    std::function<void()> play_hitsound_immediately;
 };
 
 struct play_update_result {

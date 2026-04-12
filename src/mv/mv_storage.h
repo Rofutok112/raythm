@@ -29,5 +29,7 @@ std::filesystem::path script_path(const mv_package& package);
 bool write_mv_json(const mv_metadata& meta, const std::string& directory);
 std::string load_script(const mv_package& package);
 bool save_script(const mv_package& package, const std::string& script);
+bool import_script(const mv_package& package, const std::string& source_path_utf8);
+bool export_script(const mv_package& package, const std::string& destination_path_utf8);
 
 }  // namespace mv
