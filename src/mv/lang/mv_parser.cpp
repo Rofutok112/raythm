@@ -281,8 +281,10 @@ struct parser_state {
         auto l = loc();
 
         if (check(token_type::number)) {
-            double val = std::stod(advance().text);
-            return make_expr<number_literal>(l, val);
+            const token& number_tok = advance();
+            return make_expr<number_literal>(l, number_tok.has_number_value
+                                                    ? number_tok.number_value
+                                                    : std::stod(number_tok.text));
         }
         if (check(token_type::string_lit)) {
             return make_expr<string_literal>(l, advance().text);

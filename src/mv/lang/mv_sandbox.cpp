@@ -23,6 +23,57 @@ struct validation_error {
 using name_set = std::unordered_set<std::string>;
 using type_map = std::unordered_map<std::string, std::string>;
 
+class validation_scope {
+public:
+    validation_scope(name_set& visible_names, type_map& visible_types)
+        : visible_names_(visible_names), visible_types_(visible_types) {
+    }
+
+    validation_scope(const validation_scope&) = delete;
+    validation_scope& operator=(const validation_scope&) = delete;
+
+    ~validation_scope() {
+        for (auto it = added_names_.rbegin(); it != added_names_.rend(); ++it) {
+            visible_names_.erase(*it);
+        }
+        for (auto it = touched_types_.rbegin(); it != touched_types_.rend(); ++it) {
+            if (it->second.has_value()) {
+                visible_types_[it->first] = *it->second;
+            } else {
+                visible_types_.erase(it->first);
+            }
+        }
+    }
+
+    void declare_name(const std::string& name) {
+        if (visible_names_.insert(name).second) {
+            added_names_.push_back(name);
+        }
+    }
+
+    void set_type(const std::string& name, std::optional<std::string> type_name) {
+        if (!touched_type_names_.contains(name)) {
+            touched_type_names_.insert(name);
+            const auto it = visible_types_.find(name);
+            touched_types_.push_back({name, it != visible_types_.end() ? std::optional<std::string>{it->second}
+                                                                       : std::nullopt});
+        }
+
+        if (type_name.has_value()) {
+            visible_types_[name] = *type_name;
+        } else {
+            visible_types_.erase(name);
+        }
+    }
+
+private:
+    name_set& visible_names_;
+    type_map& visible_types_;
+    std::vector<std::string> added_names_;
+    std::vector<std::pair<std::string, std::optional<std::string>>> touched_types_;
+    std::unordered_set<std::string> touched_type_names_;
+};
+
 using member_set = std::unordered_set<std::string_view>;
 
 const std::unordered_map<std::string_view, member_set>& ctx_member_schema() {
@@ -293,12 +344,21 @@ void validate_stmt(const stmt& statement,
 
 void validate_block(const std::vector<stmt_ptr>& statements,
                     const name_set& callable_names,
-                    name_set visible_names,
-                    type_map visible_types,
+                    name_set& visible_names,
+                    type_map& visible_types,
                     std::vector<validation_error>& errors) {
     for (const auto& statement : statements) {
         validate_stmt(*statement, callable_names, visible_names, visible_types, errors);
     }
+}
+
+void validate_scoped_block(const std::vector<stmt_ptr>& statements,
+                           const name_set& callable_names,
+                           name_set& visible_names,
+                           type_map& visible_types,
+                           std::vector<validation_error>& errors) {
+    validation_scope scope(visible_names, visible_types);
+    validate_block(statements, callable_names, visible_names, visible_types, errors);
 }
 
 void validate_expr(const expr& expression,
@@ -391,29 +451,29 @@ void validate_stmt(const stmt& statement,
             }
         } else if constexpr (std::is_same_v<T, if_stmt>) {
             validate_expr_ptr(node.main.condition, callable_names, visible_names, visible_types, errors);
-            validate_block(node.main.body, callable_names, visible_names, visible_types, errors);
+            validate_scoped_block(node.main.body, callable_names, visible_names, visible_types, errors);
             for (const auto& branch : node.elifs) {
                 validate_expr_ptr(branch.condition, callable_names, visible_names, visible_types, errors);
-                validate_block(branch.body, callable_names, visible_names, visible_types, errors);
+                validate_scoped_block(branch.body, callable_names, visible_names, visible_types, errors);
             }
-            validate_block(node.else_body, callable_names, visible_names, visible_types, errors);
+            validate_scoped_block(node.else_body, callable_names, visible_names, visible_types, errors);
         } else if constexpr (std::is_same_v<T, for_stmt>) {
             validate_expr_ptr(node.iterable, callable_names, visible_names, visible_types, errors);
-            name_set loop_visible = visible_names;
-            type_map loop_types = visible_types;
-            loop_visible.insert(node.var_name);
-            loop_types.erase(node.var_name);
-            validate_block(node.body, callable_names, loop_visible, loop_types, errors);
+            {
+                validation_scope scope(visible_names, visible_types);
+                scope.declare_name(node.var_name);
+                scope.set_type(node.var_name, std::nullopt);
+                validate_block(node.body, callable_names, visible_names, visible_types, errors);
+            }
             visible_names.insert(node.var_name);
             visible_types.erase(node.var_name);
         } else if constexpr (std::is_same_v<T, func_def>) {
-            name_set function_visible = visible_names;
-            type_map function_types = visible_types;
+            validation_scope scope(visible_names, visible_types);
             for (const auto& param : node.params) {
-                function_visible.insert(param);
-                function_types.erase(param);
+                scope.declare_name(param);
+                scope.set_type(param, std::nullopt);
             }
-            validate_block(node.body, callable_names, function_visible, function_types, errors);
+            validate_block(node.body, callable_names, visible_names, visible_types, errors);
         } else if constexpr (std::is_same_v<T, augmented_assign_stmt>) {
             validate_expr_ptr(node.value, callable_names, visible_names, visible_types, errors);
             visible_names.insert(node.name);

@@ -1,7 +1,9 @@
 #include "mv_lexer.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <sstream>
+#include <string_view>
 
 namespace mv {
 
@@ -22,6 +24,11 @@ struct lexer_state {
     bool at_line_start = true;
     bool has_error = false;
 
+    explicit lexer_state(const std::string& source_ref) : source(source_ref) {
+        tokens.reserve(std::max<std::size_t>(32, source.size() / 4));
+        errors.reserve(8);
+    }
+
     char peek() const { return pos < static_cast<int>(source.size()) ? source[pos] : '\0'; }
     char peek_next() const { return pos + 1 < static_cast<int>(source.size()) ? source[pos + 1] : '\0'; }
     bool at_end() const { return pos >= static_cast<int>(source.size()); }
@@ -34,7 +41,15 @@ struct lexer_state {
     }
 
     void emit(token_type type, const std::string& text, int tok_line, int tok_col) {
-        tokens.push_back({type, text, tok_line, tok_col});
+        tokens.push_back({type, text, 0.0, false, tok_line, tok_col});
+    }
+
+    void emit_owned(token_type type, std::string&& text, int tok_line, int tok_col) {
+        tokens.push_back({type, std::move(text), 0.0, false, tok_line, tok_col});
+    }
+
+    void emit_number(std::string text, double value, int tok_line, int tok_col) {
+        tokens.push_back({token_type::number, std::move(text), value, true, tok_line, tok_col});
     }
 
     void error(const std::string& msg) {
@@ -78,7 +93,7 @@ struct lexer_state {
         }
     }
 
-    token_type keyword_or_ident(const std::string& text) {
+    token_type keyword_or_ident(std::string_view text) {
         if (text == "def") return token_type::kw_def;
         if (text == "return") return token_type::kw_return;
         if (text == "if") return token_type::kw_if;
@@ -95,7 +110,7 @@ struct lexer_state {
         return token_type::ident;
     }
 
-    bool is_forbidden_keyword(const std::string& text) {
+    bool is_forbidden_keyword(std::string_view text) {
         return text == "import" || text == "class" || text == "eval" ||
                text == "exec" || text == "global" || text == "nonlocal" ||
                text == "open" || text == "from" || text == "with" ||
@@ -112,13 +127,17 @@ struct lexer_state {
             advance(); // consume '.'
             while (!at_end() && is_digit(peek())) advance();
         }
-        emit(token_type::number, source.substr(start, pos - start), tok_line, tok_col);
+        emit_number(source.substr(start, pos - start),
+                    std::strtod(source.c_str() + start, nullptr),
+                    tok_line,
+                    tok_col);
     }
 
     void lex_string(char quote) {
         int tok_line = line, tok_col = column;
         advance(); // consume opening quote
         std::string value;
+        value.reserve(16);
         while (!at_end() && peek() != quote && peek() != '\n') {
             if (peek() == '\\') {
                 advance();
@@ -141,22 +160,26 @@ struct lexer_state {
             return;
         }
         advance(); // consume closing quote
-        emit(token_type::string_lit, value, tok_line, tok_col);
+        emit_owned(token_type::string_lit, std::move(value), tok_line, tok_col);
     }
 
     void lex_identifier() {
         int tok_line = line, tok_col = column;
         int start = pos;
         while (!at_end() && is_alnum(peek())) advance();
-        std::string text = source.substr(start, pos - start);
+        const std::string_view text(source.data() + start, static_cast<std::size_t>(pos - start));
 
         if (is_forbidden_keyword(text)) {
-            error("'" + text + "' is not allowed in MV scripts");
+            error("'" + std::string(text) + "' is not allowed in MV scripts");
             return;
         }
 
         token_type type = keyword_or_ident(text);
-        emit(type, text, tok_line, tok_col);
+        if (type == token_type::ident) {
+            emit_owned(type, std::string(text), tok_line, tok_col);
+        } else {
+            emit(type, std::string(text), tok_line, tok_col);
+        }
     }
 
     void lex_all() {
@@ -255,7 +278,7 @@ struct lexer_state {
 } // anonymous namespace
 
 lex_result lex(const std::string& source) {
-    lexer_state state{source};
+    lexer_state state(source);
     state.lex_all();
     return {std::move(state.tokens), std::move(state.errors), state.errors.empty()};
 }
