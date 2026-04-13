@@ -36,6 +36,8 @@ enum class token_type {
 struct token {
     token_type type = token_type::eof;
     std::string text;
+    double number_value = 0.0;
+    bool has_number_value = false;
     int line = 0;
     int column = 0;
 };
