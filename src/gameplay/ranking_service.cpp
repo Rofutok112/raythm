@@ -14,6 +14,8 @@
 #include <vector>
 
 #include "app_paths.h"
+#include "network/auth_client.h"
+#include "network/ranking_client.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -280,8 +282,44 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
     }
 
     if (ranking_source == source::online) {
-        result.available = false;
-        result.message = "Online ranking coming soon.";
+        const std::optional<auth::session> stored = auth::load_saved_session();
+        if (!stored.has_value()) {
+            result.available = false;
+            result.message = "Sign in to view online rankings.";
+            return result;
+        }
+
+        ranking_client::operation_result online_result =
+            ranking_client::fetch_chart_ranking(stored->server_url, stored->access_token, chart_id, limit);
+
+        if (online_result.unauthorized) {
+            const auth::operation_result restored = auth::restore_saved_session();
+            if (!restored.success || !restored.session_data.has_value()) {
+                result.available = false;
+                result.message = restored.message.empty()
+                    ? "Sign in to view online rankings."
+                    : restored.message;
+                return result;
+            }
+
+            online_result = ranking_client::fetch_chart_ranking(
+                restored.session_data->server_url,
+                restored.session_data->access_token,
+                chart_id,
+                limit);
+        }
+
+        if (!online_result.success || !online_result.listing.has_value()) {
+            result.available = false;
+            result.message = online_result.message.empty()
+                ? "Failed to load online rankings."
+                : online_result.message;
+            return result;
+        }
+
+        result.available = online_result.listing->available;
+        result.entries = std::move(online_result.listing->entries);
+        result.message = online_result.listing->message;
         return result;
     }
 

@@ -58,7 +58,7 @@ int main() {
     const ranking_service::listing online_listing =
         ranking_service::load_chart_ranking(chart.chart_id, ranking_service::source::online, 50);
     if (online_listing.available || online_listing.message.empty()) {
-        std::cerr << "Online placeholder listing failed\n";
+        std::cerr << "Online unavailable listing failed\n";
         return EXIT_FAILURE;
     }
 
