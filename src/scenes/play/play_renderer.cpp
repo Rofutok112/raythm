@@ -182,6 +182,7 @@ std::array<Rectangle, 3> pause_button_rects() {
 }
 
 void draw_status(const play_session_state& state) {
+    ClearBackground(g_theme->bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, g_theme->bg, g_theme->bg_alt);
     DrawText("Play", 96, 90, 44, g_theme->error);
     DrawText(state.status_text.c_str(), 96, 170, 28, g_theme->text);
@@ -189,6 +190,7 @@ void draw_status(const play_session_state& state) {
 }
 
 void draw_world_background() {
+    ClearBackground(g_theme->bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, g_theme->bg, g_theme->bg_alt);
 }
 
