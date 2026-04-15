@@ -116,6 +116,48 @@ std::optional<std::string> extract_json_string(const std::string& content, const
     return std::nullopt;
 }
 
+std::optional<std::string> extract_json_object(const std::string& content, const std::string& key) {
+    const auto start_opt = find_value_start(content, key);
+    if (!start_opt.has_value() || content[*start_opt] != '{') {
+        return std::nullopt;
+    }
+
+    size_t depth = 0;
+    bool in_string = false;
+    bool escaping = false;
+    for (size_t index = *start_opt; index < content.size(); ++index) {
+        const char ch = content[index];
+        if (in_string) {
+            if (escaping) {
+                escaping = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaping = true;
+            } else if (ch == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+
+        if (ch == '"') {
+            in_string = true;
+            continue;
+        }
+
+        if (ch == '{') {
+            ++depth;
+        } else if (ch == '}') {
+            --depth;
+            if (depth == 0) {
+                return content.substr(*start_opt, index - *start_opt + 1);
+            }
+        }
+    }
+
+    return std::nullopt;
+}
+
 std::optional<bool> extract_json_bool(const std::string& content, const std::string& key) {
     const auto start_opt = find_value_start(content, key);
     if (!start_opt.has_value()) {
@@ -451,6 +493,11 @@ http_response send_request(const std::string&,
 #endif
 
 std::optional<ranking_service::entry> parse_ranking_entry(const std::string& content) {
+    std::string player_display_name;
+    if (const auto player_object = extract_json_object(content, "player"); player_object.has_value()) {
+        player_display_name = extract_json_string(*player_object, "display_name").value_or("");
+    }
+
     const auto placement = extract_json_int(content, "placement");
     const auto accuracy = extract_json_float(content, "accuracy");
     const auto is_full_combo = extract_json_bool(content, "is_full_combo");
@@ -470,6 +517,7 @@ std::optional<ranking_service::entry> parse_ranking_entry(const std::string& con
 
     return ranking_service::entry{
         .placement = *placement,
+        .player_display_name = player_display_name,
         .accuracy = *accuracy,
         .is_full_combo = *is_full_combo,
         .max_combo = *max_combo,
