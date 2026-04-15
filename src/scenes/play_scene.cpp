@@ -309,6 +309,7 @@ void play_scene::draw() {
         return;
     }
 
+    virtual_screen::begin();
     play_renderer::draw_world_background();
 
     // MV script layer (2D, behind notes)
@@ -376,10 +377,7 @@ void play_scene::draw() {
                 TraceLog(LOG_INFO, "MV: tick OK, %d nodes", static_cast<int>(scene_ptr->nodes.size()));
                 mv_log_count++;
             }
-            virtual_screen::begin();
             mv::render_scene(*scene_ptr);
-            virtual_screen::end();
-            virtual_screen::draw_to_screen(true);
         } else {
             static int mv_fail_count = 0;
             if (mv_fail_count < 3) {
@@ -404,15 +402,14 @@ void play_scene::draw() {
     }
     EndMode3D();
 
-    virtual_screen::begin();
     rebuild_hit_regions();
     ui::begin_draw_queue();
-    ClearBackground(BLANK);
     play_renderer::draw_overlay(state_);
     ui::flush_draw_queue();
     virtual_screen::end();
 
-    virtual_screen::draw_to_screen(true);
+    ClearBackground(BLACK);
+    virtual_screen::draw_to_screen();
 }
 
 double play_scene::get_visual_ms() const {
