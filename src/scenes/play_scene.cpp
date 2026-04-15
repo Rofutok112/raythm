@@ -127,6 +127,11 @@ std::optional<float> ground_z_offset(float height, float angle_rad, float half_f
     return height * (cos_a + k * sin_a) / denominator;
 }
 
+void present_virtual_screen() {
+    ClearBackground(BLACK);
+    virtual_screen::draw_to_screen();
+}
+
 }  // namespace
 
 play_scene::play_scene(scene_manager& manager, int key_count) : scene(manager) {
@@ -304,17 +309,18 @@ void play_scene::draw() {
         play_renderer::draw_status(state_);
         virtual_screen::end();
 
-        ClearBackground(BLACK);
-        virtual_screen::draw_to_screen();
+        present_virtual_screen();
         return;
     }
 
+    virtual_screen::begin();
     play_renderer::draw_world_background();
+    const double visual_ms = get_visual_ms();
 
     // MV script layer (2D, behind notes)
     if (mv_runtime_ && mv_runtime_->is_loaded()) {
         mv::context_input mv_input;
-        mv_input.current_ms = get_visual_ms();
+        mv_input.current_ms = visual_ms;
         mv_input.song_length_ms = state_.song_end_ms;
 
         int current_tick = state_.timing_engine.ms_to_tick(state_.current_ms);
@@ -376,10 +382,7 @@ void play_scene::draw() {
                 TraceLog(LOG_INFO, "MV: tick OK, %d nodes", static_cast<int>(scene_ptr->nodes.size()));
                 mv_log_count++;
             }
-            virtual_screen::begin();
             mv::render_scene(*scene_ptr);
-            virtual_screen::end();
-            virtual_screen::draw_to_screen(true);
         } else {
             static int mv_fail_count = 0;
             if (mv_fail_count < 3) {
@@ -400,19 +403,17 @@ void play_scene::draw() {
 
     BeginMode3D(camera);
     if (has_bounds) {
-        play_renderer::draw_world(state_, draw_queue_, lane_start_z, judgement_z, lane_end_z, get_visual_ms());
+        play_renderer::draw_world(state_, draw_queue_, lane_start_z, judgement_z, lane_end_z, visual_ms);
     }
     EndMode3D();
 
-    virtual_screen::begin();
     rebuild_hit_regions();
     ui::begin_draw_queue();
-    ClearBackground(BLANK);
     play_renderer::draw_overlay(state_);
     ui::flush_draw_queue();
     virtual_screen::end();
 
-    virtual_screen::draw_to_screen(true);
+    present_virtual_screen();
 }
 
 double play_scene::get_visual_ms() const {

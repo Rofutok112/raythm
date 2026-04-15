@@ -191,7 +191,7 @@ void draw_status(const play_session_state& state) {
 
 void draw_world_background() {
     ClearBackground(g_theme->bg);
-    DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(), g_theme->bg, g_theme->bg_alt);
+    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, g_theme->bg, g_theme->bg_alt);
 }
 
 void draw_world(const play_session_state& state, const play_note_draw_queue& draw_queue,
