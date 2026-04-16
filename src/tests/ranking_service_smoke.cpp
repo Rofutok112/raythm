@@ -38,19 +38,35 @@ int main() {
     higher_result.max_combo = 654;
     higher_result.score = 765432;
 
-    if (!ranking_service::submit_local_result(chart, lower_result) ||
-        !ranking_service::submit_local_result(chart, higher_result)) {
+    const ranking_service::local_submit_result lower_submission =
+        ranking_service::submit_local_result_detailed(chart, lower_result);
+    const ranking_service::local_submit_result higher_submission =
+        ranking_service::submit_local_result_detailed(chart, higher_result);
+    const ranking_service::local_submit_result duplicate_lower_submission =
+        ranking_service::submit_local_result_detailed(chart, lower_result);
+
+    if (!lower_submission.success ||
+        !higher_submission.success ||
+        !duplicate_lower_submission.success) {
         std::cerr << "Failed to save encrypted local ranking\n";
+        return EXIT_FAILURE;
+    }
+
+    if (!lower_submission.best_updated ||
+        !higher_submission.best_updated ||
+        duplicate_lower_submission.best_updated) {
+        std::cerr << "Local best update detection failed\n";
         return EXIT_FAILURE;
     }
 
     const ranking_service::listing local_listing =
         ranking_service::load_chart_ranking(chart.chart_id, ranking_service::source::local, 50);
-    if (local_listing.entries.size() != 2 ||
+    if (local_listing.entries.size() != 3 ||
         local_listing.entries[0].score != higher_result.score ||
         local_listing.entries[0].max_combo != higher_result.max_combo ||
         local_listing.entries[0].placement != 1 ||
-        local_listing.entries[1].placement != 2) {
+        local_listing.entries[1].placement != 2 ||
+        local_listing.entries[2].placement != 3) {
         std::cerr << "Local ranking ordering failed\n";
         return EXIT_FAILURE;
     }

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <thread>
 
 #include "play_scene.h"
 #include "raylib.h"
@@ -38,7 +39,13 @@ constexpr Rectangle kJudgeRowsRect = ui::inset(kJudgeRect, 16.0f);
 constexpr Rectangle kStatsRowsRect = ui::inset(kStatsRect, ui::edge_insets{24.0f, 24.0f, 68.0f, 24.0f});
 constexpr Rectangle kStatsHintRect = {
     kStatsRect.x + 24.0f,
-    kStatsRect.y + kStatsRect.height - 46.0f,
+    kStatsRect.y + kStatsRect.height - 64.0f,
+    kStatsRect.width - 48.0f,
+    24.0f
+};
+constexpr Rectangle kOnlineStatusRect = {
+    kStatsRect.x + 24.0f,
+    kStatsRect.y + kStatsRect.height - 36.0f,
     kStatsRect.width - 48.0f,
     24.0f
 };
@@ -83,7 +90,27 @@ result_scene::result_scene(scene_manager& manager, result_data result, bool rank
 
 void result_scene::on_enter() {
     if (ranking_enabled_) {
-        ranking_service::submit_local_result(chart_, result_);
+        const ranking_service::local_submit_result local_result =
+            ranking_service::submit_local_result_detailed(chart_, result_);
+
+        if (local_result.success && local_result.best_updated && local_result.submitted_entry.has_value()) {
+            online_submit_status_message_ = "Submitting online ranking...";
+            online_submit_status_is_error_ = false;
+
+            online_submit_task_ = std::make_shared<online_submit_task_state>();
+            std::shared_ptr<online_submit_task_state> task = online_submit_task_;
+            const chart_meta chart = chart_;
+            const ranking_service::entry entry = *local_result.submitted_entry;
+            std::thread([task, chart, entry]() {
+                ranking_service::online_submit_result result =
+                    ranking_service::submit_online_result(chart, entry);
+                {
+                    std::scoped_lock lock(task->mutex);
+                    task->result = std::move(result);
+                }
+                task->done.store(true);
+            }).detach();
+        }
     }
 }
 
@@ -97,6 +124,7 @@ void result_scene::return_to_song_select() const {
 
 void result_scene::update(float dt) {
     fade_in_.update(dt);
+    poll_online_submit();
 
     if (IsKeyPressed(KEY_ENTER)) {
         return_to_song_select();
@@ -104,6 +132,33 @@ void result_scene::update(float dt) {
         return_to_song_select();
     } else if (IsKeyPressed(KEY_R)) {
         manager_.change_scene(std::make_unique<play_scene>(manager_, song_, chart_path_, key_count_));
+    }
+}
+
+void result_scene::poll_online_submit() {
+    if (!online_submit_task_ || online_submit_consumed_ || !online_submit_task_->done.load()) {
+        return;
+    }
+
+    online_submit_consumed_ = true;
+    ranking_service::online_submit_result result;
+    {
+        std::scoped_lock lock(online_submit_task_->mutex);
+        result = online_submit_task_->result;
+    }
+
+    if (!result.message.empty()) {
+        online_submit_status_message_ = result.message;
+        online_submit_status_is_error_ = !result.success;
+    } else if (result.success && result.updated) {
+        online_submit_status_message_ = "Online ranking updated.";
+        online_submit_status_is_error_ = false;
+    } else if (result.success) {
+        online_submit_status_message_ = "Submitted score did not beat your online best.";
+        online_submit_status_is_error_ = false;
+    } else {
+        online_submit_status_message_.clear();
+        online_submit_status_is_error_ = false;
     }
 }
 
@@ -214,6 +269,12 @@ void result_scene::draw() {
         ui::draw_label_value(stat_rows[3], "Slow", TextFormat("%d", result_.slow_count), 24, t.text_dim, t.slow);
         ui::draw_text_in_rect("ENTER: Song Select    R: Retry    Use AUTO APPLY there", 20,
                               kStatsHintRect, t.text_hint, ui::text_align::left);
+        if (!online_submit_status_message_.empty()) {
+            ui::draw_text_in_rect(online_submit_status_message_.c_str(), 18,
+                                  kOnlineStatusRect,
+                                  online_submit_status_is_error_ ? t.error : t.text_secondary,
+                                  ui::text_align::left);
+        }
     }
 
     // フェードイン（暗い状態から明るくなる）
