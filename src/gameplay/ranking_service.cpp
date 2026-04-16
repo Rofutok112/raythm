@@ -213,6 +213,10 @@ bool ranking_entry_better(const ranking_service::entry& left, const ranking_serv
     return left.recorded_at < right.recorded_at;
 }
 
+bool chart_obviously_eligible_for_online_ranking(const chart_meta& chart) {
+    return !chart.chart_id.empty() && chart.is_public;
+}
+
 #ifdef _WIN32
 bool crypt_protect_utf8(const std::string& plaintext, std::vector<std::byte>& ciphertext) {
     DATA_BLOB input_blob{};
@@ -387,13 +391,16 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
     return result;
 }
 
-bool submit_local_result(const chart_meta& chart, const result_data& result) {
+local_submit_result submit_local_result_detailed(const chart_meta& chart, const result_data& result) {
+    local_submit_result submission;
     if (chart.chart_id.empty() || result.failed) {
-        return false;
+        return submission;
     }
 
     std::vector<entry> entries = load_local_entries(chart.chart_id);
-    entries.push_back({
+    std::sort(entries.begin(), entries.end(), ranking_entry_better);
+
+    entry new_entry{
         .placement = 0,
         .player_display_name = current_local_player_display_name(),
         .accuracy = result.accuracy,
@@ -402,14 +409,87 @@ bool submit_local_result(const chart_meta& chart, const result_data& result) {
         .score = result.score,
         .recorded_at = current_timestamp_utc(),
         .verified = false,
-    });
+    };
 
+    submission.best_updated =
+        entries.empty() || ranking_entry_better(new_entry, entries.front());
+
+    entries.push_back(new_entry);
     std::sort(entries.begin(), entries.end(), ranking_entry_better);
     if (entries.size() > 50) {
         entries.resize(50);
     }
 
-    return save_local_entries(chart.chart_id, entries);
+    submission.success = save_local_entries(chart.chart_id, entries);
+    if (submission.success) {
+        submission.submitted_entry = std::move(new_entry);
+    }
+    return submission;
+}
+
+bool submit_local_result(const chart_meta& chart, const result_data& result) {
+    return submit_local_result_detailed(chart, result).success;
+}
+
+online_submit_result submit_online_result(const chart_meta& chart, const entry& submitted_entry) {
+    online_submit_result submission;
+    if (!chart_obviously_eligible_for_online_ranking(chart)) {
+        return submission;
+    }
+
+    const auth::session_summary summary = auth::load_session_summary();
+    if (!summary.logged_in) {
+        return submission;
+    }
+
+    if (!summary.email_verified) {
+        submission.message = "Verify your email on the Web to submit online rankings.";
+        return submission;
+    }
+
+    const std::optional<auth::session> stored = auth::load_saved_session();
+    if (!stored.has_value()) {
+        submission.message = "Sign in to submit online rankings.";
+        return submission;
+    }
+
+    submission.attempted = true;
+
+    ranking_client::submit_operation_result request =
+        ranking_client::submit_chart_ranking(
+            stored->server_url,
+            stored->access_token,
+            chart.chart_id,
+            submitted_entry);
+
+    if (request.unauthorized) {
+        const auth::operation_result restored = auth::restore_saved_session();
+        if (!restored.success || !restored.session_data.has_value()) {
+            submission.success = false;
+            submission.message = restored.message.empty()
+                ? "Sign in to submit online rankings."
+                : restored.message;
+            return submission;
+        }
+
+        request = ranking_client::submit_chart_ranking(
+            restored.session_data->server_url,
+            restored.session_data->access_token,
+            chart.chart_id,
+            submitted_entry);
+    }
+
+    submission.success = request.success;
+    submission.message = request.message;
+    if (request.submission.has_value()) {
+        submission.updated = request.submission->updated;
+        submission.entry = request.submission->entry;
+        if (submission.message.empty()) {
+            submission.message = request.submission->message;
+        }
+    }
+
+    return submission;
 }
 
 }  // namespace ranking_service

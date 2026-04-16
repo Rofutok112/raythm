@@ -1,9 +1,8 @@
 #include "song_select/song_select_ranking_view.h"
 
 #include <chrono>
+#include <cstdio>
 #include <ctime>
-#include <iomanip>
-#include <sstream>
 #include <string>
 
 #include "song_select/song_select_layout.h"
@@ -76,11 +75,29 @@ std::optional<std::chrono::system_clock::time_point> parse_recorded_at_utc(const
     }
 
     std::tm utc_tm{};
-    std::istringstream input(value);
-    input >> std::get_time(&utc_tm, "%Y-%m-%dT%H:%M:%SZ");
-    if (input.fail()) {
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = 0;
+    int minute = 0;
+    int second = 0;
+    if (std::sscanf(value.c_str(),
+                    "%d-%d-%dT%d:%d:%dZ",
+                    &year,
+                    &month,
+                    &day,
+                    &hour,
+                    &minute,
+                    &second) != 6) {
         return std::nullopt;
     }
+
+    utc_tm.tm_year = year - 1900;
+    utc_tm.tm_mon = month - 1;
+    utc_tm.tm_mday = day;
+    utc_tm.tm_hour = hour;
+    utc_tm.tm_min = minute;
+    utc_tm.tm_sec = second;
 
 #ifdef _WIN32
     const std::time_t raw_time = _mkgmtime(&utc_tm);

@@ -48,6 +48,22 @@ std::string trim(std::string_view value) {
     return std::string(value.substr(start, end - start));
 }
 
+std::string escape_json_string(const std::string& value) {
+    std::string result;
+    result.reserve(value.size() + 8);
+    for (const char ch : value) {
+        switch (ch) {
+            case '\\': result += "\\\\"; break;
+            case '"': result += "\\\""; break;
+            case '\n': result += "\\n"; break;
+            case '\r': result += "\\r"; break;
+            case '\t': result += "\\t"; break;
+            default: result += ch; break;
+        }
+    }
+    return result;
+}
+
 std::optional<size_t> find_json_key(const std::string& content, const std::string& key) {
     const std::string token = "\"" + key + "\"";
     const size_t key_pos = content.find(token);
@@ -375,7 +391,8 @@ std::optional<http_url_parts> parse_url_parts(const std::string& url) {
 
 http_response send_request(const std::string& method,
                            const std::string& url,
-                           const std::vector<std::pair<std::string, std::string>>& headers) {
+                           const std::vector<std::pair<std::string, std::string>>& headers,
+                           const std::string& body = {}) {
     http_response response;
 
     const std::optional<http_url_parts> parts = parse_url_parts(url);
@@ -429,9 +446,9 @@ http_response send_request(const std::string& method,
     const BOOL sent = WinHttpSendRequest(request,
                                          header_block.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS : header_block.c_str(),
                                          header_block.empty() ? 0 : static_cast<DWORD>(-1L),
-                                         WINHTTP_NO_REQUEST_DATA,
-                                         0,
-                                         0,
+                                         body.empty() ? WINHTTP_NO_REQUEST_DATA : reinterpret_cast<LPVOID>(const_cast<char*>(body.data())),
+                                         static_cast<DWORD>(body.size()),
+                                         static_cast<DWORD>(body.size()),
                                          0);
     if (sent == FALSE || WinHttpReceiveResponse(request, nullptr) == FALSE) {
         response.error_message = describe_winhttp_error(GetLastError());
@@ -483,7 +500,8 @@ http_response send_request(const std::string& method,
 #else
 http_response send_request(const std::string&,
                            const std::string&,
-                           const std::vector<std::pair<std::string, std::string>>&) {
+                           const std::vector<std::pair<std::string, std::string>>&,
+                           const std::string&) {
     return {
         .status_code = 0,
         .body = {},
@@ -553,6 +571,33 @@ std::optional<ranking_client::listing_response> parse_listing_response(const std
 std::string build_ranking_url(const std::string& server_url, const std::string& chart_id, int limit) {
     const int clamped_limit = std::max(1, limit);
     return server_url + "/charts/" + chart_id + "/rankings?page=1&pageSize=" + std::to_string(clamped_limit);
+}
+
+std::string build_submit_ranking_url(const std::string& server_url, const std::string& chart_id) {
+    return server_url + "/charts/" + chart_id + "/rankings";
+}
+
+std::string build_submit_payload(const ranking_service::entry& entry) {
+    return "{"
+        "\"score\":" + std::to_string(entry.score) + ","
+        "\"accuracy\":" + std::to_string(entry.accuracy) + ","
+        "\"is_full_combo\":" + std::string(entry.is_full_combo ? "true" : "false") + ","
+        "\"max_combo\":" + std::to_string(entry.max_combo) + ","
+        "\"recorded_at\":\"" + escape_json_string(entry.recorded_at) + "\""
+        "}";
+}
+
+std::optional<ranking_client::submit_response> parse_submit_response(const std::string& body) {
+    ranking_client::submit_response response;
+    response.available = extract_json_bool(body, "available").value_or(true);
+    response.updated = extract_json_bool(body, "updated").value_or(false);
+    response.message = extract_json_string(body, "message").value_or("");
+
+    if (const auto entry_object = extract_json_object(body, "entry"); entry_object.has_value()) {
+        response.entry = parse_ranking_entry(*entry_object);
+    }
+
+    return response;
 }
 
 }  // namespace
@@ -632,6 +677,84 @@ operation_result fetch_chart_ranking(const std::string& server_url,
         .unauthorized = false,
         .message = listing->message,
         .listing = listing,
+    };
+}
+
+submit_operation_result submit_chart_ranking(const std::string& server_url,
+                                             const std::string& access_token,
+                                             const std::string& chart_id,
+                                             const ranking_service::entry& entry) {
+    if (server_url.empty()) {
+        return {
+            .success = false,
+            .unauthorized = false,
+            .message = "No server URL is configured.",
+            .submission = std::nullopt,
+        };
+    }
+
+    if (access_token.empty()) {
+        return {
+            .success = false,
+            .unauthorized = true,
+            .message = "Sign in to submit online rankings.",
+            .submission = std::nullopt,
+        };
+    }
+
+    const http_response response = send_request(
+        "POST",
+        build_submit_ranking_url(server_url, chart_id),
+        {
+            {"Accept", "application/json"},
+            {"Authorization", "Bearer " + access_token},
+            {"Content-Type", "application/json"},
+            {"User-Agent", "raythm/0.1"},
+        },
+        build_submit_payload(entry));
+
+    if (!response.error_message.empty()) {
+        return {
+            .success = false,
+            .unauthorized = false,
+            .message = response.error_message,
+            .submission = std::nullopt,
+        };
+    }
+
+    if (response.status_code == 401) {
+        return {
+            .success = false,
+            .unauthorized = true,
+            .message = "Sign in to submit online rankings.",
+            .submission = std::nullopt,
+        };
+    }
+
+    if (response.status_code < 200 || response.status_code >= 300) {
+        return {
+            .success = false,
+            .unauthorized = false,
+            .message = extract_json_string(response.body, "message").value_or("Failed to submit online ranking."),
+            .submission = std::nullopt,
+        };
+    }
+
+    const std::optional<submit_response> submission = parse_submit_response(response.body);
+    if (!submission.has_value()) {
+        return {
+            .success = false,
+            .unauthorized = false,
+            .message = "Server returned an unexpected ranking response.",
+            .submission = std::nullopt,
+        };
+    }
+
+    return {
+        .success = true,
+        .unauthorized = false,
+        .message = submission->message,
+        .submission = submission,
     };
 }
 

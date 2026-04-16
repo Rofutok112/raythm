@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -32,7 +33,23 @@ struct listing {
     bool available = true;
 };
 
+struct local_submit_result {
+    bool success = false;
+    bool best_updated = false;
+    std::optional<entry> submitted_entry;
+};
+
+struct online_submit_result {
+    bool attempted = false;
+    bool success = false;
+    bool updated = false;
+    std::string message;
+    std::optional<entry> entry;
+};
+
 listing load_chart_ranking(const std::string& chart_id, source ranking_source, int limit = 50);
+local_submit_result submit_local_result_detailed(const chart_meta& chart, const result_data& result);
 bool submit_local_result(const chart_meta& chart, const result_data& result);
+online_submit_result submit_online_result(const chart_meta& chart, const entry& entry);
 
 }  // namespace ranking_service
