@@ -99,11 +99,13 @@ void result_scene::on_enter() {
 
             online_submit_task_ = std::make_shared<online_submit_task_state>();
             std::shared_ptr<online_submit_task_state> task = online_submit_task_;
+            const song_data song = song_;
+            const std::string chart_path = chart_path_;
             const chart_meta chart = chart_;
             const ranking_service::entry entry = *local_result.submitted_entry;
-            std::thread([task, chart, entry]() {
+            std::thread([task, song, chart_path, chart, entry]() {
                 ranking_service::online_submit_result result =
-                    ranking_service::submit_online_result(chart, entry);
+                    ranking_service::submit_online_result(song, chart_path, chart, entry);
                 {
                     std::scoped_lock lock(task->mutex);
                     task->result = std::move(result);

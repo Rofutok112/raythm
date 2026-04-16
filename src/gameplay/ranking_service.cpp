@@ -16,6 +16,8 @@
 #include "app_paths.h"
 #include "network/auth_client.h"
 #include "network/ranking_client.h"
+#include "path_utils.h"
+#include "updater/update_verify.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -215,6 +217,148 @@ bool ranking_entry_better(const ranking_service::entry& left, const ranking_serv
 
 bool chart_obviously_eligible_for_online_ranking(const chart_meta& chart) {
     return !chart.chart_id.empty() && chart.is_public;
+}
+
+std::string lowercase(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
+
+struct local_official_hashes {
+    std::string song_json_sha256;
+    std::string audio_sha256;
+    std::string jacket_sha256;
+    std::string chart_sha256;
+};
+
+struct verification_result {
+    bool success = false;
+    std::string message;
+};
+
+verification_result compare_hash(const std::string& label,
+                                 const std::string& local_hash,
+                                 const std::string& server_hash) {
+    if (local_hash.empty() || server_hash.empty()) {
+        return {
+            .success = false,
+            .message = "Official chart verification is missing required hash data.",
+        };
+    }
+
+    if (lowercase(local_hash) != lowercase(server_hash)) {
+        return {
+            .success = false,
+            .message = "Official chart verification failed for " + label + ".",
+        };
+    }
+
+    return {
+        .success = true,
+        .message = {},
+    };
+}
+
+std::optional<local_official_hashes> compute_local_official_hashes(const song_data& song,
+                                                                   const std::string& chart_path,
+                                                                   std::string& error_message) {
+    const std::filesystem::path song_dir = path_utils::from_utf8(song.directory);
+    const std::filesystem::path song_json_path = song_dir / "song.json";
+    const std::filesystem::path audio_path = song_dir / path_utils::from_utf8(song.meta.audio_file);
+    const std::filesystem::path jacket_path = song_dir / path_utils::from_utf8(song.meta.jacket_file);
+    const std::filesystem::path local_chart_path = path_utils::from_utf8(chart_path);
+
+    const std::optional<std::string> song_json_sha256 = updater::compute_sha256_hex(song_json_path);
+    if (!song_json_sha256.has_value()) {
+        error_message = "Failed to hash local song.json for Official verification.";
+        return std::nullopt;
+    }
+
+    const std::optional<std::string> audio_sha256 = updater::compute_sha256_hex(audio_path);
+    if (!audio_sha256.has_value()) {
+        error_message = "Failed to hash local audio for Official verification.";
+        return std::nullopt;
+    }
+
+    const std::optional<std::string> jacket_sha256 = updater::compute_sha256_hex(jacket_path);
+    if (!jacket_sha256.has_value()) {
+        error_message = "Failed to hash local jacket for Official verification.";
+        return std::nullopt;
+    }
+
+    const std::optional<std::string> chart_sha256 = updater::compute_sha256_hex(local_chart_path);
+    if (!chart_sha256.has_value()) {
+        error_message = "Failed to hash local chart for Official verification.";
+        return std::nullopt;
+    }
+
+    return local_official_hashes{
+        .song_json_sha256 = *song_json_sha256,
+        .audio_sha256 = *audio_sha256,
+        .jacket_sha256 = *jacket_sha256,
+        .chart_sha256 = *chart_sha256,
+    };
+}
+
+verification_result verify_official_manifest(const song_data& song,
+                                             const std::string& chart_path,
+                                             const chart_meta& chart,
+                                             const std::string& server_url) {
+    const ranking_client::manifest_operation_result manifest_result =
+        ranking_client::fetch_official_chart_manifest(server_url, chart.chart_id);
+    if (!manifest_result.success || !manifest_result.manifest.has_value()) {
+        return {
+            .success = false,
+            .message = manifest_result.message.empty()
+                ? "Failed to fetch Official verification manifest."
+                : manifest_result.message,
+        };
+    }
+
+    const ranking_client::official_manifest& manifest = *manifest_result.manifest;
+    if (!manifest.available) {
+        return {
+            .success = false,
+            .message = manifest.message.empty()
+                ? "This chart is not eligible for Official ranking verification."
+                : manifest.message,
+        };
+    }
+
+    if (manifest.chart_id != chart.chart_id || manifest.song_id != song.meta.song_id) {
+        return {
+            .success = false,
+            .message = "Official chart verification failed because the manifest IDs do not match local content.",
+        };
+    }
+
+    std::string hash_error;
+    const std::optional<local_official_hashes> local_hashes =
+        compute_local_official_hashes(song, chart_path, hash_error);
+    if (!local_hashes.has_value()) {
+        return {
+            .success = false,
+            .message = hash_error,
+        };
+    }
+
+    for (const verification_result& result : {
+             compare_hash("song.json", local_hashes->song_json_sha256, manifest.song_json_sha256),
+             compare_hash("audio", local_hashes->audio_sha256, manifest.audio_sha256),
+             compare_hash("jacket", local_hashes->jacket_sha256, manifest.jacket_sha256),
+             compare_hash("chart", local_hashes->chart_sha256, manifest.chart_sha256),
+         }) {
+        if (!result.success) {
+            return result;
+        }
+    }
+
+    return {
+        .success = true,
+        .message = {},
+    };
 }
 
 #ifdef _WIN32
@@ -431,7 +575,10 @@ bool submit_local_result(const chart_meta& chart, const result_data& result) {
     return submit_local_result_detailed(chart, result).success;
 }
 
-online_submit_result submit_online_result(const chart_meta& chart, const entry& submitted_entry) {
+online_submit_result submit_online_result(const song_data& song,
+                                          const std::string& chart_path,
+                                          const chart_meta& chart,
+                                          const entry& submitted_entry) {
     online_submit_result submission;
     if (!chart_obviously_eligible_for_online_ranking(chart)) {
         return submission;
@@ -450,6 +597,13 @@ online_submit_result submit_online_result(const chart_meta& chart, const entry& 
     const std::optional<auth::session> stored = auth::load_saved_session();
     if (!stored.has_value()) {
         submission.message = "Sign in to submit online rankings.";
+        return submission;
+    }
+
+    const verification_result verification =
+        verify_official_manifest(song, chart_path, chart, stored->server_url);
+    if (!verification.success) {
+        submission.message = verification.message;
         return submission;
     }
 

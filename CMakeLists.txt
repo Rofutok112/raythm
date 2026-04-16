@@ -134,6 +134,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/network/auth_client.h
         src/network/ranking_client.cpp
         src/network/ranking_client.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
         src/core/app_paths.cpp
         src/core/app_paths.h
         src/core/file_dialog.cpp
@@ -444,6 +446,8 @@ add_executable(ranking_service_smoke
         src/network/auth_client.h
         src/network/ranking_client.cpp
         src/network/ranking_client.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
         src/tests/ranking_service_smoke.cpp)
 
 add_executable(play_note_draw_queue_smoke

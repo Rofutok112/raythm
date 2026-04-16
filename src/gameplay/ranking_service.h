@@ -50,6 +50,9 @@ struct online_submit_result {
 listing load_chart_ranking(const std::string& chart_id, source ranking_source, int limit = 50);
 local_submit_result submit_local_result_detailed(const chart_meta& chart, const result_data& result);
 bool submit_local_result(const chart_meta& chart, const result_data& result);
-online_submit_result submit_online_result(const chart_meta& chart, const entry& entry);
+online_submit_result submit_online_result(const song_data& song,
+                                          const std::string& chart_path,
+                                          const chart_meta& chart,
+                                          const entry& entry);
 
 }  // namespace ranking_service
