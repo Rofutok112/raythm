@@ -35,6 +35,23 @@ struct submit_operation_result {
     std::optional<submit_response> submission;
 };
 
+struct official_manifest {
+    bool available = false;
+    std::string message;
+    std::string chart_id;
+    std::string song_id;
+    std::string song_json_sha256;
+    std::string audio_sha256;
+    std::string jacket_sha256;
+    std::string chart_sha256;
+};
+
+struct manifest_operation_result {
+    bool success = false;
+    std::string message;
+    std::optional<official_manifest> manifest;
+};
+
 operation_result fetch_chart_ranking(const std::string& server_url,
                                      const std::string& access_token,
                                      const std::string& chart_id,
@@ -44,5 +61,8 @@ submit_operation_result submit_chart_ranking(const std::string& server_url,
                                              const std::string& access_token,
                                              const std::string& chart_id,
                                              const ranking_service::entry& entry);
+
+manifest_operation_result fetch_official_chart_manifest(const std::string& server_url,
+                                                        const std::string& chart_id);
 
 }  // namespace ranking_client
