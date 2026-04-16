@@ -1,0 +1,263 @@
+name: Discord Notifications
+
+on:
+  issues:
+    types:
+      - opened
+      - reopened
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+      - closed
+  release:
+    types:
+      - published
+  page_build:
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+    steps:
+      - name: Report missing webhook
+        if: ${{ env.DISCORD_WEBHOOK_URL == '' }}
+        run: |
+          echo "DISCORD_WEBHOOK_URL is not configured. Skipping notification."
+
+      - name: Build Discord payload
+        if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
+        id: payload
+        uses: actions/github-script@v7
+        env:
+          BODY_PREVIEW_LIMIT: "280"
+        with:
+          script: |
+            const maxLength = Number(process.env.BODY_PREVIEW_LIMIT || 280);
+            const repoName = `${context.repo.owner}/${context.repo.repo}`;
+            const repoUrl =
+              context.payload.repository?.html_url || `https://github.com/${repoName}`;
+            const action = context.payload.action;
+
+            const normalize = (text) => {
+              if (!text) {
+                return "";
+              }
+
+              return text
+                .replace(/<!--[\s\S]*?-->/g, " ")
+                .replace(/```[\s\S]*?```/g, " [code block omitted] ")
+                .replace(/`([^`]+)`/g, "$1")
+                .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+                .replace(/^#{1,6}\s+/gm, "")
+                .replace(/\r/g, "")
+                .replace(/\s+/g, " ")
+                .trim();
+            };
+
+            const truncate = (text, limit) => {
+              if (!text) {
+                return "本文なし";
+              }
+
+              if (text.length <= limit) {
+                return text;
+              }
+
+              return `${text.slice(0, Math.max(limit - 1, 1))}…`;
+            };
+
+            const sanitizeForDiscord = (text) =>
+              text.replace(/@(everyone|here)/g, "@\u200b$1");
+
+            const trimField = (text, fallback = "-") => {
+              const normalized =
+                text !== undefined && text !== null && `${text}`.trim() ? `${text}`.trim() : fallback;
+              return normalized.length <= 1024 ? normalized : `${normalized.slice(0, 1021)}...`;
+            };
+
+            const makeSummary = (text, fallback = "本文なし") =>
+              sanitizeForDiscord(truncate(normalize(text), maxLength || 280)) || fallback;
+
+            const addField = (fields, name, value, inline = true, fallback = "-") => {
+              fields.push({
+                name,
+                value: trimField(value, fallback),
+                inline
+              });
+            };
+
+            let embed;
+
+            if (context.eventName === "issues") {
+              const item = context.payload.issue;
+              const labels = (item.labels || []).map((label) => label.name).join(", ") || "なし";
+              const eventLabel =
+                action === "opened"
+                  ? "Issue 作成"
+                  : action === "reopened"
+                    ? "Issue 再オープン"
+                    : `Issue ${action}`;
+              const color = action === "reopened" ? 0xf59e0b : 0x2563eb;
+              const fields = [];
+
+              addField(fields, "作成者", `@${item.user?.login || "unknown"}`);
+              addField(fields, "状態", item.state);
+              addField(fields, "ラベル", labels);
+              addField(fields, "要約", makeSummary(item.body), false, "本文なし");
+
+              embed = {
+                title: sanitizeForDiscord(`#${item.number} ${item.title || "(no title)"}`).slice(0, 256),
+                url: item.html_url,
+                description: eventLabel,
+                color,
+                timestamp: item.updated_at || item.created_at || new Date().toISOString(),
+                fields,
+                footer: {
+                  text: repoName
+                }
+              };
+            } else if (context.eventName === "pull_request") {
+              const item = context.payload.pull_request;
+              const labels = (item.labels || []).map((label) => label.name).join(", ") || "なし";
+              const stateLabel = item.merged ? "merged" : item.draft ? "draft" : item.state;
+              const eventLabel = (() => {
+                if (action === "opened") return item.draft ? "Draft PR 作成" : "PR 作成";
+                if (action === "reopened") return "PR 再オープン";
+                if (action === "ready_for_review") return "PR レビュー準備完了";
+                if (action === "closed") return item.merged ? "PR マージ" : "PR クローズ";
+                return `PR ${action}`;
+              })();
+              const color = (() => {
+                if (action === "closed") {
+                  return item.merged ? 0x16a34a : 0x6b7280;
+                }
+
+                if (action === "ready_for_review") {
+                  return 0x0f766e;
+                }
+
+                return item.draft ? 0xf59e0b : 0x7c3aed;
+              })();
+              const fields = [];
+
+              addField(fields, "作成者", `@${item.user?.login || "unknown"}`);
+              addField(fields, "状態", stateLabel);
+              addField(fields, "ラベル", labels);
+              addField(fields, "ブランチ", `${item.head?.ref || "-"} -> ${item.base?.ref || "-"}`);
+              addField(fields, "変更量", `+${item.additions || 0} / -${item.deletions || 0}`);
+              addField(fields, "要約", makeSummary(item.body), false, "本文なし");
+
+              embed = {
+                title: sanitizeForDiscord(`#${item.number} ${item.title || "(no title)"}`).slice(0, 256),
+                url: item.html_url,
+                description: eventLabel,
+                color,
+                timestamp:
+                  item.merged_at || item.updated_at || item.created_at || new Date().toISOString(),
+                fields,
+                footer: {
+                  text: repoName
+                }
+              };
+            } else if (context.eventName === "release") {
+              const release = context.payload.release;
+              const status = release.draft
+                ? "draft"
+                : release.prerelease
+                  ? "prerelease"
+                  : "published";
+              const fields = [];
+
+              addField(fields, "作成者", `@${release.author?.login || "unknown"}`);
+              addField(fields, "タグ", release.tag_name || "-");
+              addField(fields, "状態", status);
+              addField(fields, "対象", release.target_commitish || "-", true);
+              addField(fields, "要約", makeSummary(release.body), false, "本文なし");
+
+              embed = {
+                title: sanitizeForDiscord(`Release ${release.name || release.tag_name || "(no title)"}`).slice(0, 256),
+                url: release.html_url || repoUrl,
+                description: release.prerelease ? "Pre-release 公開" : "Release 公開",
+                color: release.prerelease ? 0xf59e0b : 0x16a34a,
+                timestamp:
+                  release.published_at || release.created_at || new Date().toISOString(),
+                fields,
+                footer: {
+                  text: repoName
+                }
+              };
+            } else if (context.eventName === "page_build") {
+              const build = context.payload.build || {};
+              const fields = [];
+              const status = build.status || "unknown";
+              const summarySource =
+                build.error?.message ||
+                (build.pusher?.login ? `Triggered by @${build.pusher.login}` : "") ||
+                "GitHub Pages build event";
+              const description =
+                status === "built"
+                  ? "GitHub Pages ビルド完了"
+                  : status === "errored"
+                    ? "GitHub Pages ビルド失敗"
+                    : "GitHub Pages ビルド";
+              const color =
+                status === "built" ? 0x16a34a : status === "errored" ? 0xdc2626 : 0x2563eb;
+
+              addField(fields, "状態", status);
+              addField(fields, "実行者", build.pusher?.login ? `@${build.pusher.login}` : "-", true);
+              addField(fields, "コミット", build.commit || "-", true);
+
+              if (build.duration !== undefined && build.duration !== null) {
+                addField(fields, "所要時間", `${build.duration}s`, true);
+              }
+
+              if (context.payload.repository?.homepage) {
+                addField(fields, "公開URL", context.payload.repository.homepage, false);
+              }
+
+              addField(fields, "要約", makeSummary(summarySource, "詳細なし"), false, "詳細なし");
+
+              embed = {
+                title: "GitHub Pages Build",
+                url: repoUrl,
+                description,
+                color,
+                timestamp: build.updated_at || build.created_at || new Date().toISOString(),
+                fields,
+                footer: {
+                  text: repoName
+                }
+              };
+            } else {
+              core.setFailed(`Unsupported event: ${context.eventName}`);
+              return;
+            }
+
+            const payload = {
+              embeds: [
+                embed
+              ]
+            };
+
+            core.setOutput("json", JSON.stringify(payload));
+
+      - name: Send Discord notification
+        if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
+        env:
+          PAYLOAD_JSON: ${{ steps.payload.outputs.json }}
+        run: |
+          printf '%s' "$PAYLOAD_JSON" > payload.json
+
+          curl --fail --silent --show-error \
+            -H "Content-Type: application/json" \
+            --data @payload.json \
+            "$DISCORD_WEBHOOK_URL"
