@@ -132,6 +132,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/timing_engine.h
         src/network/auth_client.cpp
         src/network/auth_client.h
+        src/network/ranking_client.cpp
+        src/network/ranking_client.h
         src/core/app_paths.cpp
         src/core/app_paths.h
         src/core/file_dialog.cpp
@@ -438,6 +440,10 @@ add_executable(ranking_service_smoke
         src/models/data_models.h
         src/gameplay/ranking_service.cpp
         src/gameplay/ranking_service.h
+        src/network/auth_client.cpp
+        src/network/auth_client.h
+        src/network/ranking_client.cpp
+        src/network/ranking_client.h
         src/tests/ranking_service_smoke.cpp)
 
 add_executable(play_note_draw_queue_smoke
@@ -690,7 +696,7 @@ target_link_libraries(song_select_state_smoke PRIVATE raylib)
 target_link_libraries(settings_io_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
-target_link_libraries(ranking_service_smoke PRIVATE crypt32)
+target_link_libraries(ranking_service_smoke PRIVATE crypt32 winhttp)
 target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_timeline_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_panel_controller_smoke PRIVATE raylib)

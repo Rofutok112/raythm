@@ -14,6 +14,8 @@
 #include <vector>
 
 #include "app_paths.h"
+#include "network/auth_client.h"
+#include "network/ranking_client.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -25,6 +27,7 @@ namespace {
 constexpr std::string_view kFileHeaderV1 = "RAYTHM_LOCAL_RANKING_V1";
 constexpr std::string_view kFileHeaderV2 = "RAYTHM_LOCAL_RANKING_V2";
 constexpr std::string_view kFileHeaderV3 = "RAYTHM_LOCAL_RANKING_V3";
+constexpr std::string_view kFileHeaderV4 = "RAYTHM_LOCAL_RANKING_V4";
 constexpr wchar_t kEntropyLabel[] = L"raythm-local-ranking";
 
 std::string trim(std::string_view value) {
@@ -56,20 +59,48 @@ std::string current_timestamp_utc() {
     return out.str();
 }
 
+std::string sanitize_player_display_name(std::string_view value) {
+    std::string sanitized;
+    sanitized.reserve(value.size());
+    for (const char ch : value) {
+        switch (ch) {
+            case '\t':
+            case '\r':
+            case '\n':
+                sanitized += ' ';
+                break;
+            default:
+                sanitized += ch;
+                break;
+        }
+    }
+    const std::string trimmed = trim(sanitized);
+    return trimmed.empty() ? "Guest" : trimmed;
+}
+
+std::string current_local_player_display_name() {
+    const auth::session_summary summary = auth::load_session_summary();
+    if (summary.logged_in && !summary.display_name.empty()) {
+        return sanitize_player_display_name(summary.display_name);
+    }
+    return "Guest";
+}
+
 std::string serialize_entries(const std::vector<ranking_service::entry>& entries) {
     std::ostringstream out;
-    out << kFileHeaderV3 << '\n';
+    out << kFileHeaderV4 << '\n';
     for (const ranking_service::entry& entry : entries) {
         out << std::fixed << std::setprecision(4) << entry.accuracy << '\t'
             << (entry.is_full_combo ? 1 : 0) << '\t'
             << entry.max_combo << '\t'
             << entry.score << '\t'
-            << entry.recorded_at << '\n';
+            << entry.recorded_at << '\t'
+            << sanitize_player_display_name(entry.player_display_name) << '\n';
     }
     return out.str();
 }
 
-enum class file_version { v1, v2, v3 };
+enum class file_version { v1, v2, v3, v4 };
 
 std::vector<ranking_service::entry> parse_entries(const std::string& content) {
     std::vector<ranking_service::entry> entries;
@@ -80,7 +111,9 @@ std::vector<ranking_service::entry> parse_entries(const std::string& content) {
     }
     const std::string header = trim(line);
     file_version version;
-    if (header == kFileHeaderV3) {
+    if (header == kFileHeaderV4) {
+        version = file_version::v4;
+    } else if (header == kFileHeaderV3) {
         version = file_version::v3;
     } else if (header == kFileHeaderV2) {
         version = file_version::v2;
@@ -100,21 +133,35 @@ std::vector<ranking_service::entry> parse_entries(const std::string& content) {
         try {
             ranking_service::entry entry;
 
-            if (version == file_version::v3) {
+            if (version == file_version::v4 || version == file_version::v3) {
                 // V3: accuracy \t is_full_combo \t max_combo \t score \t timestamp
-                std::string accuracy_token, fc_token, combo_token, score_token, timestamp_token;
+                // V4: accuracy \t is_full_combo \t max_combo \t score \t timestamp \t player_display_name
+                std::string accuracy_token, fc_token, combo_token, score_token, timestamp_token, player_token;
                 if (!std::getline(row, accuracy_token, '\t') ||
                     !std::getline(row, fc_token, '\t') ||
                     !std::getline(row, combo_token, '\t') ||
-                    !std::getline(row, score_token, '\t') ||
-                    !std::getline(row, timestamp_token)) {
+                    !std::getline(row, score_token, '\t')) {
                     continue;
+                }
+                if (version == file_version::v4) {
+                    if (!std::getline(row, timestamp_token, '\t')) {
+                        continue;
+                    }
+                } else {
+                    if (!std::getline(row, timestamp_token)) {
+                        continue;
+                    }
                 }
                 entry.accuracy = std::clamp(std::stof(trim(accuracy_token)), 0.0f, 100.0f);
                 entry.is_full_combo = trim(fc_token) == "1";
                 entry.max_combo = std::clamp(std::stoi(trim(combo_token)), 0, 999999);
                 entry.score = std::clamp(std::stoi(trim(score_token)), 0, 1000000);
                 entry.recorded_at = trim(timestamp_token);
+                if (version == file_version::v4 && std::getline(row, player_token)) {
+                    entry.player_display_name = sanitize_player_display_name(player_token);
+                } else {
+                    entry.player_display_name = "Guest";
+                }
             } else {
                 // V1/V2: rank \t accuracy \t [max_combo \t] score \t timestamp
                 std::string rank_token, accuracy_token, combo_token, score_token, timestamp_token;
@@ -143,6 +190,7 @@ std::vector<ranking_service::entry> parse_entries(const std::string& content) {
                 // V1/V2 にはフルコンボ情報がないので、保存された rank が SS/S ならフルコンボとみなす。
                 const int stored_rank = std::clamp(std::stoi(trim(rank_token)), 0, 6);
                 entry.is_full_combo = (stored_rank == static_cast<int>(rank::ss) || stored_rank == static_cast<int>(rank::s));
+                entry.player_display_name = "Guest";
             }
 
             entry.verified = false;
@@ -280,8 +328,44 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
     }
 
     if (ranking_source == source::online) {
-        result.available = false;
-        result.message = "Online ranking coming soon.";
+        const std::optional<auth::session> stored = auth::load_saved_session();
+        if (!stored.has_value()) {
+            result.available = false;
+            result.message = "Sign in to view online rankings.";
+            return result;
+        }
+
+        ranking_client::operation_result online_result =
+            ranking_client::fetch_chart_ranking(stored->server_url, stored->access_token, chart_id, limit);
+
+        if (online_result.unauthorized) {
+            const auth::operation_result restored = auth::restore_saved_session();
+            if (!restored.success || !restored.session_data.has_value()) {
+                result.available = false;
+                result.message = restored.message.empty()
+                    ? "Sign in to view online rankings."
+                    : restored.message;
+                return result;
+            }
+
+            online_result = ranking_client::fetch_chart_ranking(
+                restored.session_data->server_url,
+                restored.session_data->access_token,
+                chart_id,
+                limit);
+        }
+
+        if (!online_result.success || !online_result.listing.has_value()) {
+            result.available = false;
+            result.message = online_result.message.empty()
+                ? "Failed to load online rankings."
+                : online_result.message;
+            return result;
+        }
+
+        result.available = online_result.listing->available;
+        result.entries = std::move(online_result.listing->entries);
+        result.message = online_result.listing->message;
         return result;
     }
 
@@ -311,6 +395,7 @@ bool submit_local_result(const chart_meta& chart, const result_data& result) {
     std::vector<entry> entries = load_local_entries(chart.chart_id);
     entries.push_back({
         .placement = 0,
+        .player_display_name = current_local_player_display_name(),
         .accuracy = result.accuracy,
         .is_full_combo = result.is_full_combo,
         .max_combo = result.max_combo,

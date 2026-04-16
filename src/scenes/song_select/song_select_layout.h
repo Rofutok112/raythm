@@ -45,7 +45,7 @@ inline constexpr Rectangle kRankingListRect = ui::scroll_view(kRankingPanelRect,
 inline constexpr Rectangle kRankingScrollbarTrackRect = ui::place(kRankingListRect, 6.0f, kRankingListRect.height,
                                                                   ui::anchor::top_right, ui::anchor::top_right,
                                                                   {-8.0f, 0.0f});
-inline constexpr float kRankingRowHeight = 42.0f;
+inline constexpr float kRankingRowHeight = 54.0f;
 inline constexpr float kDetailColumnX = kJacketRect.x + kJacketRect.width + 20.0f;
 inline constexpr float kDetailColumnWidth = kLeftPanelRect.x + kLeftPanelRect.width - kDetailColumnX - 16.0f;
 inline constexpr Rectangle kLocalOffsetLabelRect = {kDetailColumnX, kJacketRect.y + 236.0f, kDetailColumnWidth, 22.0f};
