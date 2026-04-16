@@ -112,7 +112,6 @@ jobs:
               addField(fields, "作成者", `@${item.user?.login || "unknown"}`);
               addField(fields, "状態", item.state);
               addField(fields, "ラベル", labels);
-              addField(fields, "要約", makeSummary(item.body), false, "本文なし");
 
               embed = {
                 title: sanitizeForDiscord(`#${item.number} ${item.title || "(no title)"}`).slice(0, 256),
@@ -154,7 +153,6 @@ jobs:
               addField(fields, "ラベル", labels);
               addField(fields, "ブランチ", `${item.head?.ref || "-"} -> ${item.base?.ref || "-"}`);
               addField(fields, "変更量", `+${item.additions || 0} / -${item.deletions || 0}`);
-              addField(fields, "要約", makeSummary(item.body), false, "本文なし");
 
               embed = {
                 title: sanitizeForDiscord(`#${item.number} ${item.title || "(no title)"}`).slice(0, 256),
