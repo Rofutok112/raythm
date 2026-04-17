@@ -5,7 +5,7 @@
 
 namespace auth {
 
-inline constexpr const char* kDefaultServerUrl = "http://192.168.11.22";
+inline constexpr const char* kDefaultServerUrl = "http://192.168.11.33";
 
 struct public_user {
     std::string id;
