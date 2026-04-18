@@ -93,7 +93,7 @@ void result_scene::on_enter() {
         const ranking_service::local_submit_result local_result =
             ranking_service::submit_local_result_detailed(chart_, result_);
 
-        if (local_result.success && local_result.best_updated && local_result.submitted_entry.has_value()) {
+        if (ranking_service::should_attempt_online_submit(local_result)) {
             online_submit_status_message_ = "Submitting online ranking...";
             online_submit_status_is_error_ = false;
 

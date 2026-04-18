@@ -59,6 +59,13 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    if (!ranking_service::should_attempt_online_submit(lower_submission) ||
+        !ranking_service::should_attempt_online_submit(higher_submission) ||
+        !ranking_service::should_attempt_online_submit(duplicate_lower_submission)) {
+        std::cerr << "Online submit eligibility should not depend on local best updates\n";
+        return EXIT_FAILURE;
+    }
+
     const ranking_service::listing local_listing =
         ranking_service::load_chart_ranking(chart.chart_id, ranking_service::source::local, 50);
     if (local_listing.entries.size() != 3 ||
