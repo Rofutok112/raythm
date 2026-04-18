@@ -9,7 +9,7 @@ class scene_manager;
 
 namespace song_select {
 
-std::unique_ptr<scene> make_title_scene(scene_manager& manager);
+std::unique_ptr<scene> make_title_scene(scene_manager& manager, bool start_with_home_open = false);
 std::unique_ptr<scene> make_settings_scene(scene_manager& manager);
 std::unique_ptr<scene> make_song_create_scene(scene_manager& manager);
 std::unique_ptr<scene> make_edit_song_scene(scene_manager& manager, const song_entry& song);

@@ -1,0 +1,135 @@
+#include "shared/auth_overlay_controller.h"
+
+#include <chrono>
+
+#include "core/window_dialog_support.h"
+
+namespace {
+
+std::string register_web_url() {
+    return auth::normalize_server_url(auth::kDefaultServerUrl) + "/register";
+}
+
+}  // namespace
+
+namespace auth_overlay {
+
+void refresh_auth_state(song_select::auth_state& auth_state) {
+    const auth::session_summary summary = auth::load_session_summary();
+    auth_state.logged_in = summary.logged_in;
+    auth_state.email = summary.email;
+    auth_state.display_name = summary.display_name;
+    auth_state.email_verified = summary.email_verified;
+}
+
+void start_restore(controller& controller_state, song_select::login_dialog_state&) {
+    controller_state.restore_active = true;
+    controller_state.restore_future = std::async(std::launch::async, []() {
+        return auth::restore_saved_session();
+    });
+}
+
+void start_request(controller& controller_state,
+                   song_select::login_dialog_state& dialog_state,
+                   song_select::login_dialog_command command) {
+    if (controller_state.request_active) {
+        return;
+    }
+
+    if (command == song_select::login_dialog_command::open_register_web) {
+        const bool opened = window_dialog_support::open_url(register_web_url());
+        dialog_state.status_message = opened
+            ? "Opened the account page in your browser."
+            : "Failed to open the account page.";
+        dialog_state.status_message_is_error = !opened;
+        return;
+    }
+
+    controller_state.request_active = true;
+    dialog_state.status_message_is_error = false;
+    const std::string server_url = auth::kDefaultServerUrl;
+    const std::string email = dialog_state.email_input.value;
+    const std::string password = dialog_state.password_input.value;
+
+    switch (command) {
+    case song_select::login_dialog_command::request_restore:
+        dialog_state.status_message = "Restoring session...";
+        controller_state.request_future = std::async(std::launch::async, []() {
+            return auth::restore_saved_session();
+        });
+        break;
+    case song_select::login_dialog_command::request_login:
+        dialog_state.status_message = "Connecting to raythm-Server...";
+        controller_state.request_future = std::async(std::launch::async, [server_url, email, password]() {
+            return auth::login_user(server_url, email, password);
+        });
+        break;
+    case song_select::login_dialog_command::request_logout:
+        dialog_state.status_message = "Logging out...";
+        controller_state.request_future = std::async(std::launch::async, []() {
+            return auth::logout_saved_session();
+        });
+        break;
+    case song_select::login_dialog_command::open_register_web:
+    case song_select::login_dialog_command::none:
+    case song_select::login_dialog_command::close:
+        controller_state.request_active = false;
+        break;
+    }
+}
+
+poll_result poll_restore(controller& controller_state,
+                         song_select::auth_state& auth_state,
+                         song_select::login_dialog_state& dialog_state) {
+    if (!controller_state.restore_active) {
+        return {};
+    }
+
+    if (controller_state.restore_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return {};
+    }
+
+    controller_state.restore_active = false;
+    const auth::operation_result result = controller_state.restore_future.get();
+    refresh_auth_state(auth_state);
+
+    if (!result.success) {
+        if (dialog_state.open) {
+            dialog_state.status_message = result.message;
+            dialog_state.status_message_is_error = true;
+        } else {
+            return {
+                true,
+                true,
+                result.message,
+            };
+        }
+    }
+
+    return {};
+}
+
+poll_result poll_request(controller& controller_state,
+                         song_select::auth_state& auth_state,
+                         song_select::login_dialog_state& dialog_state) {
+    if (!controller_state.request_active) {
+        return {};
+    }
+
+    if (controller_state.request_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return {};
+    }
+
+    controller_state.request_active = false;
+    const auth::operation_result result = controller_state.request_future.get();
+    refresh_auth_state(auth_state);
+    dialog_state.password_input.value.clear();
+    dialog_state.status_message = result.message;
+    dialog_state.status_message_is_error = !result.success;
+
+    const auth::session_summary summary = auth::load_session_summary();
+    dialog_state.email_input.value = summary.email;
+    return {};
+}
+
+}  // namespace auth_overlay

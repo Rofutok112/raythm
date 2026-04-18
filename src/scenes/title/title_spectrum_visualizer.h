@@ -6,7 +6,7 @@
 
 class title_spectrum_visualizer final {
 public:
-    static constexpr int kBarCount = 32;
+    static constexpr int kBarCount = 48;
 
     void reset();
     void update();
@@ -14,5 +14,8 @@ public:
 
 private:
     std::array<float, kBarCount> bars_ = {};
+    std::array<float, kBarCount> peaks_ = {};
+    std::array<float, kBarCount> peak_velocities_ = {};
+    std::array<float, kBarCount> peak_hold_timers_ = {};
     float dynamic_peak_ = 0.12f;
 };

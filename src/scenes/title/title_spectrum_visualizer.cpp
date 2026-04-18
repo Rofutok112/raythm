@@ -9,12 +9,12 @@
 
 namespace {
 
-constexpr std::array kSpectrumRanges = {
-    1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 17, 20, 24, 29, 35, 42,
-    50, 58, 66, 74, 82, 90, 98, 104, 109, 113, 117, 120, 123, 125, 127, 128
-};
+Color with_alpha_scale(Color color, float alpha_scale) {
+    color.a = static_cast<unsigned char>(std::clamp(alpha_scale, 0.0f, 1.0f) * 255.0f);
+    return color;
+}
 
-float average_band_energy(const std::array<float, 128>& spectrum, int begin, int end) {
+float average_bucket_energy(const std::array<float, 128>& spectrum, int begin, int end) {
     if (begin >= end) {
         return 0.0f;
     }
@@ -26,28 +26,13 @@ float average_band_energy(const std::array<float, 128>& spectrum, int begin, int
     return sum / static_cast<float>(end - begin);
 }
 
-Color with_alpha_scale(Color color, float alpha_scale) {
-    color.a = static_cast<unsigned char>(std::clamp(alpha_scale, 0.0f, 1.0f) * 255.0f);
-    return color;
-}
-
-Color fade_spectrum_color(Color base, float alpha_scale) {
-    return with_alpha_scale(base, alpha_scale);
-}
-
-float band_visual_weight(int band_index, int band_count) {
-    if (band_count <= 1) {
-        return 1.0f;
-    }
-
-    const float normalized_index = static_cast<float>(band_index) / static_cast<float>(band_count - 1);
-    return 0.34f + normalized_index * 0.92f;
-}
-
 }  // namespace
 
 void title_spectrum_visualizer::reset() {
     bars_.fill(0.0f);
+    peaks_.fill(0.0f);
+    peak_velocities_.fill(0.0f);
+    peak_hold_timers_.fill(0.0f);
     dynamic_peak_ = 0.12f;
 }
 
@@ -56,31 +41,58 @@ void title_spectrum_visualizer::update() {
     const bool has_audio = audio_manager::instance().get_bgm_fft256(spectrum);
     std::array<float, kBarCount> targets = {};
     float frame_peak = 0.0f;
+    constexpr float kFrequencyCurve = 1.55f;
 
     for (int i = 0; i < kBarCount; ++i) {
         float target = 0.0f;
         if (has_audio) {
-            const float band = average_band_energy(spectrum, kSpectrumRanges[static_cast<size_t>(i)],
-                                                   kSpectrumRanges[static_cast<size_t>(i + 1)]);
-            target = std::sqrt(std::max(0.0f, band)) * 7.5f * band_visual_weight(i, kBarCount);
+            const float start_t = static_cast<float>(i) / static_cast<float>(kBarCount);
+            const float end_t = static_cast<float>(i + 1) / static_cast<float>(kBarCount);
+            int begin = static_cast<int>(std::floor(std::pow(start_t, kFrequencyCurve) * static_cast<float>(spectrum.size())));
+            int end = static_cast<int>(std::floor(std::pow(end_t, kFrequencyCurve) * static_cast<float>(spectrum.size())));
+            begin = std::clamp(begin, 0, static_cast<int>(spectrum.size()) - 1);
+            end = std::clamp(end, begin + 1, static_cast<int>(spectrum.size()));
+
+            const float averaged = average_bucket_energy(spectrum, begin, end);
+            const float normalized = std::clamp(averaged, 0.0f, 1.0f);
+            const float band_t = static_cast<float>(i) / static_cast<float>(kBarCount - 1);
+            const float low_cut = 0.24f + band_t * 0.98f;
+            const float detail_boost = 0.82f + std::sqrt(band_t) * 0.36f;
+            target = std::pow(normalized, 0.82f) * low_cut * detail_boost;
         }
         targets[static_cast<size_t>(i)] = target;
         frame_peak = std::max(frame_peak, target);
     }
 
     if (frame_peak > dynamic_peak_) {
-        dynamic_peak_ += (frame_peak - dynamic_peak_) * 0.18f;
+        dynamic_peak_ += (frame_peak - dynamic_peak_) * 0.14f;
     } else {
-        dynamic_peak_ += (frame_peak - dynamic_peak_) * 0.04f;
+        dynamic_peak_ += (frame_peak - dynamic_peak_) * 0.035f;
     }
     dynamic_peak_ = std::max(0.12f, dynamic_peak_);
 
     for (int i = 0; i < kBarCount; ++i) {
         const float target = std::clamp(targets[static_cast<size_t>(i)] / dynamic_peak_, 0.0f, 1.0f);
         if (target > bars_[static_cast<size_t>(i)]) {
-            bars_[static_cast<size_t>(i)] += (target - bars_[static_cast<size_t>(i)]) * 0.45f;
+            bars_[static_cast<size_t>(i)] += (target - bars_[static_cast<size_t>(i)]) * 0.36f;
         } else {
-            bars_[static_cast<size_t>(i)] += (target - bars_[static_cast<size_t>(i)]) * 0.12f;
+            bars_[static_cast<size_t>(i)] += (target - bars_[static_cast<size_t>(i)]) * 0.045f;
+        }
+
+        const float bar_height = bars_[static_cast<size_t>(i)];
+        if (bar_height > peaks_[static_cast<size_t>(i)]) {
+            peaks_[static_cast<size_t>(i)] +=
+                (bar_height - peaks_[static_cast<size_t>(i)]) * 0.24f;
+            peak_velocities_[static_cast<size_t>(i)] = 0.0f;
+            peak_hold_timers_[static_cast<size_t>(i)] = 7.0f;
+        } else {
+            if (peak_hold_timers_[static_cast<size_t>(i)] > 0.0f) {
+                peak_hold_timers_[static_cast<size_t>(i)] -= 1.0f;
+            } else {
+                peak_velocities_[static_cast<size_t>(i)] += 0.0035f;
+                peaks_[static_cast<size_t>(i)] =
+                    std::max(0.0f, peaks_[static_cast<size_t>(i)] - peak_velocities_[static_cast<size_t>(i)]);
+            }
         }
     }
 }
@@ -90,22 +102,33 @@ void title_spectrum_visualizer::draw(const Rectangle& rect) const {
         return;
     }
 
-    const auto& t = *g_theme;
-    const float gap = 4.0f;
+    const float gap = 3.0f;
     const float bar_width =
         (rect.width - gap * static_cast<float>(kBarCount - 1)) / static_cast<float>(kBarCount);
     const float baseline = rect.y + rect.height;
-    const Color base_color = t.accent;
+    const float max_height = rect.height;// * 0.55f;
+    const Color base_low = {107, 33, 168, 128};
+    const Color base_top = {216, 180, 254, 230};
+    const Color peak_glow = {216, 180, 254, 110};
+    const Color peak_color = {242, 230, 255, 220};
 
     for (int i = 0; i < kBarCount; ++i) {
         const float value = std::clamp(bars_[static_cast<size_t>(i)], 0.0f, 1.0f);
-        const float shaped_value = std::pow(value, 0.82f);
-        const float min_height = rect.height * 0.012f;
-        const float height = min_height + (rect.height - min_height) * shaped_value;
+        const float height = value * max_height;
         const float x = rect.x + static_cast<float>(i) * (bar_width + gap);
-        const Rectangle bar_rect = {x, baseline - height, bar_width, height};
-        const float color_t = static_cast<float>(i) / static_cast<float>(kBarCount - 1);
-        const float alpha_scale = 0.42f - color_t * 0.24f;
-        DrawRectangleRec(bar_rect, fade_spectrum_color(base_color, alpha_scale));
+        if (height > 0.5f) {
+            const float y = baseline - height;
+            DrawRectangleGradientV(
+                static_cast<int>(x),
+                static_cast<int>(y),
+                static_cast<int>(bar_width),
+                static_cast<int>(height),
+                base_top,
+                base_low);
+        }
+
+        const float peak_y = baseline - std::clamp(peaks_[static_cast<size_t>(i)], 0.0f, 1.0f) * max_height - 3.0f;
+        DrawRectangleRec({x, peak_y - 1.0f, bar_width, 4.0f}, peak_glow);
+        DrawRectangleRec({x, peak_y, bar_width, 2.0f}, peak_color);
     }
 }
