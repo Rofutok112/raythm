@@ -41,11 +41,13 @@ std::string register_web_url() {
 
 song_select_scene::song_select_scene(scene_manager& manager, std::string preferred_song_id,
                                      std::string preferred_chart_id,
-                                     std::optional<song_select::recent_result_offset> recent_result_offset)
+                                     std::optional<song_select::recent_result_offset> recent_result_offset,
+                                     bool open_login_dialog_on_enter)
     : scene(manager),
       preferred_song_id_(std::move(preferred_song_id)),
       preferred_chart_id_(std::move(preferred_chart_id)),
-      recent_result_offset_(std::move(recent_result_offset)) {
+      recent_result_offset_(std::move(recent_result_offset)),
+      open_login_dialog_on_enter_(open_login_dialog_on_enter) {
 }
 
 void song_select_scene::on_enter() {
@@ -57,6 +59,9 @@ void song_select_scene::on_enter() {
     song_select::reset_for_enter(state_);
     state_.recent_result_offset = recent_result_offset_;
     refresh_auth_state();
+    if (open_login_dialog_on_enter_) {
+        song_select::open_login_dialog(state_, auth::load_session_summary());
+    }
     if (state_.auth.logged_in) {
         start_auth_restore();
     }

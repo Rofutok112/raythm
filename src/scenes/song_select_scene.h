@@ -19,7 +19,8 @@ class song_select_scene final : public scene {
 public:
     explicit song_select_scene(scene_manager& manager, std::string preferred_song_id = "",
                                std::string preferred_chart_id = "",
-                               std::optional<song_select::recent_result_offset> recent_result_offset = std::nullopt);
+                               std::optional<song_select::recent_result_offset> recent_result_offset = std::nullopt,
+                               bool open_login_dialog_on_enter = false);
 
     void on_enter() override;
     void on_exit() override;
@@ -56,6 +57,7 @@ private:
     std::string preferred_song_id_;
     std::string preferred_chart_id_;
     std::optional<song_select::recent_result_offset> recent_result_offset_;
+    bool open_login_dialog_on_enter_ = false;
     std::future<song_select::transfer_result> background_transfer_;
     std::future<song_select::song_import_prepare_result> background_song_import_prepare_;
     std::future<auth::operation_result> auth_restore_;
