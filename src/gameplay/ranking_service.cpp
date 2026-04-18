@@ -575,6 +575,10 @@ bool submit_local_result(const chart_meta& chart, const result_data& result) {
     return submit_local_result_detailed(chart, result).success;
 }
 
+bool should_attempt_online_submit(const local_submit_result& local_result) {
+    return local_result.success && local_result.submitted_entry.has_value();
+}
+
 online_submit_result submit_online_result(const song_data& song,
                                           const std::string& chart_path,
                                           const chart_meta& chart,
