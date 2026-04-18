@@ -34,7 +34,8 @@ void init() {
     render_target_ = LoadRenderTexture(kDesignWidth, kDesignHeight);
     ui_render_target_ = LoadRenderTexture(kDesignWidth * kUiRenderScale, kDesignHeight * kUiRenderScale);
     SetTextureFilter(render_target_.texture, TEXTURE_FILTER_BILINEAR);
-    SetTextureFilter(ui_render_target_.texture, TEXTURE_FILTER_BILINEAR);
+    // 高解像度 UI RT は最終拡大時にぼやけやすいため、まずは point で比較する。
+    SetTextureFilter(ui_render_target_.texture, TEXTURE_FILTER_POINT);
     active_mode_ = render_mode::none;
     present_mode_ = render_mode::standard;
     initialized_ = true;
