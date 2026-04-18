@@ -224,7 +224,7 @@ void editor_scene::rebuild_hit_regions() const {
 void editor_scene::draw() {
     const auto& t = *g_theme;
     const double now = GetTime();
-    virtual_screen::begin();
+    virtual_screen::begin_ui();
     rebuild_hit_regions();
     ui::begin_draw_queue();
     ClearBackground(t.bg);

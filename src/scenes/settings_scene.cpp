@@ -62,7 +62,7 @@ void settings_scene::update(float dt) {
 
 void settings_scene::draw() {
     const auto& t = *g_theme;
-    virtual_screen::begin();
+    virtual_screen::begin_ui();
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
     ui::draw_panel(settings::kSidebarRect);

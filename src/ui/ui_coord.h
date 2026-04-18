@@ -5,6 +5,7 @@
 
 #include "raylib.h"
 #include "ui_font.h"
+#include "virtual_screen.h"
 
 // 描画境界の座標変換ヘルパー。
 // float → int の static_cast を一元管理し、呼び出し側の記述を簡潔にする。
@@ -67,14 +68,21 @@ inline void draw_rect_span(Rectangle rect, Color color) {
 // floor/ceil で端数を広めに取り、空矩形は画面外 1px に逃がして描画を無効化する。
 inline void begin_scissor_rect(Rectangle rect) {
     if (rect.width <= 0.0f || rect.height <= 0.0f) {
-        BeginScissorMode(GetRenderWidth(), GetRenderHeight(), 1, 1);
+        BeginScissorMode(virtual_screen::current_render_width(), virtual_screen::current_render_height(), 1, 1);
         return;
     }
 
-    const int sx = static_cast<int>(std::floor(rect.x));
-    const int sy = static_cast<int>(std::floor(rect.y));
-    const int sw = std::max(1, static_cast<int>(std::ceil(rect.x + rect.width) - std::floor(rect.x)));
-    const int sh = std::max(1, static_cast<int>(std::ceil(rect.y + rect.height) - std::floor(rect.y)));
+    const float render_scale = virtual_screen::current_render_scale();
+    const Rectangle scaled = {
+        rect.x * render_scale,
+        rect.y * render_scale,
+        rect.width * render_scale,
+        rect.height * render_scale,
+    };
+    const int sx = static_cast<int>(std::floor(scaled.x));
+    const int sy = static_cast<int>(std::floor(scaled.y));
+    const int sw = std::max(1, static_cast<int>(std::ceil(scaled.x + scaled.width) - std::floor(scaled.x)));
+    const int sh = std::max(1, static_cast<int>(std::ceil(scaled.y + scaled.height) - std::floor(scaled.y)));
     BeginScissorMode(sx, sy, sw, sh);
 }
 

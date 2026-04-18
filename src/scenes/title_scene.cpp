@@ -341,7 +341,7 @@ void title_scene::draw() {
                                                          kTitleOpenHeaderRect.width - 10.0f, 30.0f},
                                                         ui::text_align::left);
     const Vector2 subtitle_pos = lerp_vec2(closed_subtitle_pos, open_subtitle_pos, menu_t);
-    virtual_screen::begin();
+    virtual_screen::begin_ui();
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
     ui::begin_draw_queue();

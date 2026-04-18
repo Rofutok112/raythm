@@ -846,7 +846,7 @@ void song_select_scene::update(float dt) {
 
 void song_select_scene::draw() {
     const auto& theme = *g_theme;
-    virtual_screen::begin();
+    virtual_screen::begin_ui();
     ClearBackground(theme.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, theme.bg, theme.bg_alt);
     ui::begin_draw_queue();
