@@ -1,8 +1,10 @@
 #pragma once
 
 #include "scene.h"
-#include "network/auth_client.h"
+#include "shared/auth_overlay_controller.h"
 #include "shared/scene_fade.h"
+#include "song_select/song_select_login_dialog.h"
+#include "song_select/song_select_state.h"
 #include "title/title_bgm_controller.h"
 #include "title/title_spectrum_visualizer.h"
 #include <string>
@@ -12,7 +14,6 @@ class title_scene final : public scene {
 public:
     enum class transition_target {
         song_select,
-        song_select_account,
         song_create,
     };
 
@@ -25,7 +26,6 @@ public:
 
 private:
     void start_transition(transition_target target);
-    void refresh_auth_summary();
 
     bool quitting_ = false;
     scene_fade quit_fade_{scene_fade::direction::out, 1.5f, 1.0f};
@@ -37,7 +37,9 @@ private:
     float home_menu_anim_ = 0.0f;
     int home_menu_selected_index_ = 0;
     std::string home_status_message_;
-    auth::session_summary auth_summary_;
+    song_select::auth_state auth_state_;
+    song_select::login_dialog_state login_dialog_;
     title_bgm_controller bgm_controller_;
     title_spectrum_visualizer spectrum_visualizer_;
+    auth_overlay::controller auth_controller_;
 };

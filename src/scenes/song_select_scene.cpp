@@ -1,14 +1,11 @@
 #include "song_select_scene.h"
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <utility>
 
 #include "core/app_paths.h"
-#include "core/window_dialog_support.h"
-#include "network/auth_client.h"
 #include "file_dialog.h"
 #include "mv/mv_storage.h"
 #include "path_utils.h"
@@ -31,10 +28,6 @@ namespace {
 
 std::string format_offset_label(int offset_ms) {
     return (offset_ms > 0 ? "+" : "") + std::to_string(offset_ms) + "ms";
-}
-
-std::string register_web_url() {
-    return auth::normalize_server_url(auth::kDefaultServerUrl) + "/register";
 }
 
 }  // namespace
@@ -63,7 +56,7 @@ void song_select_scene::on_enter() {
         song_select::open_login_dialog(state_, auth::load_session_summary());
     }
     if (state_.auth.logged_in) {
-        start_auth_restore();
+        auth_overlay::start_restore(auth_controller_, state_.login_dialog);
     }
     reload_song_library(preferred_song_id_, preferred_chart_id_);
 }
@@ -104,11 +97,7 @@ void song_select_scene::reload_selected_chart_ranking() {
 }
 
 void song_select_scene::refresh_auth_state() {
-    const auth::session_summary summary = auth::load_session_summary();
-    state_.auth.logged_in = summary.logged_in;
-    state_.auth.email = summary.email;
-    state_.auth.display_name = summary.display_name;
-    state_.auth.email_verified = summary.email_verified;
+    auth_overlay::refresh_auth_state(state_.auth);
 }
 
 void song_select_scene::apply_delete_result(const song_select::delete_result& result) {
@@ -136,102 +125,6 @@ void song_select_scene::apply_transfer_result(const song_select::transfer_result
         reload_song_library(result.preferred_song_id, result.preferred_chart_id);
     }
     song_select::queue_status_message(state_, result.message, false);
-}
-
-void song_select_scene::start_auth_restore() {
-    auth_restore_active_ = true;
-    auth_restore_ = std::async(std::launch::async, []() {
-        return auth::restore_saved_session();
-    });
-}
-
-void song_select_scene::poll_auth_restore() {
-    if (!auth_restore_active_) {
-        return;
-    }
-
-    if (auth_restore_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
-        return;
-    }
-
-    auth_restore_active_ = false;
-    const auth::operation_result result = auth_restore_.get();
-    refresh_auth_state();
-    if (!result.success) {
-        if (state_.login_dialog.open) {
-            state_.login_dialog.status_message = result.message;
-            state_.login_dialog.status_message_is_error = true;
-        } else {
-            song_select::queue_status_message(state_, result.message, true);
-        }
-    }
-}
-
-void song_select_scene::start_login_request(song_select::login_dialog_command command) {
-    if (auth_request_active_) {
-        return;
-    }
-
-    if (command == song_select::login_dialog_command::open_register_web) {
-        const bool opened = window_dialog_support::open_url(register_web_url());
-        state_.login_dialog.status_message = opened
-            ? "Opened the account page in your browser."
-            : "Failed to open the account page.";
-        state_.login_dialog.status_message_is_error = !opened;
-        return;
-    }
-
-    auth_request_active_ = true;
-    state_.login_dialog.status_message_is_error = false;
-    const std::string server_url = auth::kDefaultServerUrl;
-    const std::string email = state_.login_dialog.email_input.value;
-    const std::string password = state_.login_dialog.password_input.value;
-
-    switch (command) {
-    case song_select::login_dialog_command::request_restore:
-        state_.login_dialog.status_message = "Restoring session...";
-        auth_request_ = std::async(std::launch::async, []() {
-            return auth::restore_saved_session();
-        });
-        break;
-    case song_select::login_dialog_command::request_login:
-        state_.login_dialog.status_message = "Connecting to raythm-Server...";
-        auth_request_ = std::async(std::launch::async, [server_url, email, password]() {
-            return auth::login_user(server_url, email, password);
-        });
-        break;
-    case song_select::login_dialog_command::request_logout:
-        state_.login_dialog.status_message = "Logging out...";
-        auth_request_ = std::async(std::launch::async, []() {
-            return auth::logout_saved_session();
-        });
-        break;
-    case song_select::login_dialog_command::open_register_web:
-    case song_select::login_dialog_command::none:
-    case song_select::login_dialog_command::close:
-        auth_request_active_ = false;
-        break;
-    }
-}
-
-void song_select_scene::poll_login_request() {
-    if (!auth_request_active_) {
-        return;
-    }
-
-    if (auth_request_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
-        return;
-    }
-
-    auth_request_active_ = false;
-    const auth::operation_result result = auth_request_.get();
-    refresh_auth_state();
-    state_.login_dialog.password_input.value.clear();
-    state_.login_dialog.status_message = result.message;
-    state_.login_dialog.status_message_is_error = !result.success;
-
-    const auth::session_summary summary = auth::load_session_summary();
-    state_.login_dialog.email_input.value = summary.email;
 }
 
 void song_select_scene::poll_song_import_prepare() {
@@ -731,8 +624,11 @@ void song_select_scene::update(float dt) {
 
     preview_controller_.update(dt, song_select::selected_song(state_));
     song_select::tick_animations(state_, dt);
-    poll_auth_restore();
-    poll_login_request();
+    if (const auto restore_result = auth_overlay::poll_restore(auth_controller_, state_.auth, state_.login_dialog);
+        restore_result.should_show_notice) {
+        song_select::queue_status_message(state_, restore_result.notice_message, restore_result.notice_is_error);
+    }
+    auth_overlay::poll_request(auth_controller_, state_.auth, state_.login_dialog);
     poll_song_import_prepare();
     poll_background_transfer();
 
@@ -748,13 +644,13 @@ void song_select_scene::update(float dt) {
 
     if (state_.login_dialog.open) {
         const Vector2 mouse = virtual_screen::get_virtual_mouse();
-        if (!auth_request_active_ &&
+        if (!auth_controller_.request_active &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
             !CheckCollisionPointRec(mouse, song_select::login_dialog_rect(state_))) {
             state_.login_dialog.open = false;
             return;
         }
-        if (IsKeyPressed(KEY_ESCAPE) && !auth_request_active_) {
+        if (IsKeyPressed(KEY_ESCAPE) && !auth_controller_.request_active) {
             state_.login_dialog.open = false;
         }
         return;
@@ -965,11 +861,11 @@ void song_select_scene::draw() {
         }
         apply_context_menu_command(song_select::draw_context_menu(state_));
         const song_select::login_dialog_command login_command =
-            song_select::draw_login_dialog(state_, auth_request_active_);
+            song_select::draw_login_dialog(state_, auth_controller_.request_active);
         if (login_command == song_select::login_dialog_command::close) {
             state_.login_dialog.open = false;
         } else if (login_command != song_select::login_dialog_command::none) {
-            start_login_request(login_command);
+            auth_overlay::start_request(auth_controller_, state_.login_dialog, login_command);
         }
         ui::flush_draw_queue();
         virtual_screen::end();
@@ -993,11 +889,11 @@ void song_select_scene::draw() {
     apply_context_menu_command(song_select::draw_context_menu(state_));
     apply_confirmation_command(song_select::draw_confirmation_dialog(state_));
     const song_select::login_dialog_command login_command =
-        song_select::draw_login_dialog(state_, auth_request_active_);
+        song_select::draw_login_dialog(state_, auth_controller_.request_active);
     if (login_command == song_select::login_dialog_command::close) {
         state_.login_dialog.open = false;
     } else if (login_command != song_select::login_dialog_command::none) {
-        start_login_request(login_command);
+        auth_overlay::start_request(auth_controller_, state_.login_dialog, login_command);
     }
     if (ranking_result.source_dropdown_toggled) {
         state_.ranking_panel.source_dropdown_open = !state_.ranking_panel.source_dropdown_open;

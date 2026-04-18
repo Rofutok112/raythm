@@ -153,6 +153,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/settings_io.h
         src/scenes/scene_common.cpp
         src/scenes/scene_common.h
+        src/scenes/shared/auth_overlay_controller.cpp
+        src/scenes/shared/auth_overlay_controller.h
         src/scenes/title_scene.cpp
         src/scenes/title_scene.h
         src/scenes/title/title_bgm_controller.cpp

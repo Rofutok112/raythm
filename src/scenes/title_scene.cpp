@@ -3,14 +3,13 @@
 #include <array>
 #include <cctype>
 #include <memory>
-#include <optional>
 #include <string>
 
-#include "network/auth_client.h"
 #include "raylib.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select_scene.h"
+#include "song_select/song_select_layout.h"
 #include "song_select/song_select_navigation.h"
 #include "theme.h"
 #include "ui_draw.h"
@@ -39,6 +38,7 @@ constexpr float kHomeButtonGap = 18.0f;
 constexpr float kHomeAnimSpeed = 6.5f;
 constexpr float kHomeButtonRowY = 376.0f;
 constexpr float kHomeButtonIntroOffsetY = 24.0f;
+constexpr ui::draw_layer kTitleModalLayer = ui::draw_layer::modal;
 
 struct home_entry {
     const char* label;
@@ -81,14 +81,15 @@ std::string make_avatar_label(const auth::session_summary& summary) {
     return result.empty() ? "A" : result;
 }
 
-Rectangle lerp_rect(Rectangle from, Rectangle to, float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    return {
-        from.x + (to.x - from.x) * clamped,
-        from.y + (to.y - from.y) * clamped,
-        from.width + (to.width - from.width) * clamped,
-        from.height + (to.height - from.height) * clamped,
+std::string make_avatar_label(const song_select::auth_state& auth_state) {
+    const auth::session_summary summary = {
+        auth_state.logged_in,
+        {},
+        auth_state.email,
+        auth_state.display_name,
+        auth_state.email_verified,
     };
+    return make_avatar_label(summary);
 }
 
 Vector2 lerp_vec2(Vector2 from, Vector2 to, float t) {
@@ -99,8 +100,18 @@ Vector2 lerp_vec2(Vector2 from, Vector2 to, float t) {
     };
 }
 
-Rectangle title_header_rect(float anim_t) {
-    return lerp_rect(kTitleClosedHeaderRect, kTitleOpenHeaderRect, ease_out_cubic(anim_t));
+const char* account_name_for(const song_select::auth_state& auth_state) {
+    if (!auth_state.logged_in) {
+        return "ACCOUNT";
+    }
+    return auth_state.display_name.empty() ? auth_state.email.c_str() : auth_state.display_name.c_str();
+}
+
+const char* account_status_for(const song_select::auth_state& auth_state) {
+    if (!auth_state.logged_in) {
+        return "Manage account";
+    }
+    return auth_state.email_verified ? "Verified profile" : "Manage account";
 }
 
 Rectangle home_button_rect(int index, float anim_t) {
@@ -132,24 +143,25 @@ void title_scene::start_transition(transition_target target) {
     transition_fade_.restart(scene_fade::direction::out, 0.3f, 0.65f);
 }
 
-void title_scene::refresh_auth_summary() {
-    auth_summary_ = auth::load_session_summary();
-}
-
 void title_scene::on_enter() {
     bgm_controller_.configure(kTitleIntroPath, kTitleLoopPath);
     spectrum_visualizer_.reset();
     bgm_controller_.on_enter();
-    refresh_auth_summary();
+    auth_overlay::refresh_auth_state(auth_state_);
     home_menu_open_ = false;
     home_menu_anim_ = 0.0f;
     home_menu_selected_index_ = 0;
     home_status_message_.clear();
+    login_dialog_.open = false;
+    if (auth_state_.logged_in) {
+        auth_overlay::start_restore(auth_controller_, login_dialog_);
+    }
 }
 
 void title_scene::on_exit() {
     bgm_controller_.on_exit();
     spectrum_visualizer_.reset();
+    login_dialog_.open = false;
 }
 
 // Title 上で Home 展開、Play/Create への遷移、Account 導線を扱う。
@@ -157,6 +169,13 @@ void title_scene::update(float dt) {
     ui::begin_hit_regions();
     bgm_controller_.update();
     spectrum_visualizer_.update();
+    auth_overlay::poll_restore(auth_controller_, auth_state_, login_dialog_);
+    auth_overlay::poll_request(auth_controller_, auth_state_, login_dialog_);
+    if (login_dialog_.open) {
+        login_dialog_.open_anim = std::min(1.0f, login_dialog_.open_anim + dt * 8.0f);
+    } else {
+        login_dialog_.open_anim = 0.0f;
+    }
     const float target_anim = home_menu_open_ ? 1.0f : 0.0f;
     home_menu_anim_ = std::clamp(home_menu_anim_ + (target_anim - home_menu_anim_) * std::min(1.0f, dt * kHomeAnimSpeed),
                                  0.0f, 1.0f);
@@ -170,9 +189,6 @@ void title_scene::update(float dt) {
             switch (transition_target_) {
             case transition_target::song_select:
                 manager_.change_scene(std::make_unique<song_select_scene>(manager_));
-                break;
-            case transition_target::song_select_account:
-                manager_.change_scene(std::make_unique<song_select_scene>(manager_, "", "", std::nullopt, true));
                 break;
             case transition_target::song_create:
                 manager_.change_scene(song_select::make_song_create_scene(manager_));
@@ -191,14 +207,33 @@ void title_scene::update(float dt) {
     }
 
     if (ui::is_clicked(kAccountChipRect)) {
-        start_transition(transition_target::song_select_account);
+        if (login_dialog_.open) {
+            login_dialog_.open = false;
+        } else {
+            song_select::open_login_dialog(login_dialog_, auth::load_session_summary());
+            auth_overlay::refresh_auth_state(auth_state_);
+        }
         return;
     }
 
+    if (login_dialog_.open) {
+        if ((IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) &&
+            !auth_controller_.request_active) {
+            login_dialog_.open = false;
+        }
+        return;
+    }
+
+    const bool account_hovered = ui::is_hovered(kAccountChipRect);
+    const bool left_click_for_home =
+        IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+        !account_hovered;
+    const bool right_click_for_home = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
+
     if (!home_menu_open_ &&
         (IsKeyPressed(KEY_ENTER) ||
-         IsMouseButtonPressed(MOUSE_BUTTON_LEFT) ||
-         IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))) {
+         left_click_for_home ||
+         right_click_for_home)) {
         home_menu_open_ = true;
         home_status_message_.clear();
         return;
@@ -281,6 +316,7 @@ void title_scene::draw() {
     virtual_screen::begin();
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
+    ui::begin_draw_queue();
     spectrum_visualizer_.draw(kSpectrumRect);
     ui::draw_text_f("raythm", title_pos.x, title_pos.y, 124, t.text);
     ui::draw_text_f("trace the line before the beat disappears", subtitle_pos.x, subtitle_pos.y, 30, t.text_dim);
@@ -288,23 +324,18 @@ void title_scene::draw() {
     ui::draw_panel(kAccountChipRect);
     const Rectangle avatar_rect = {kAccountChipRect.x + 12.0f, kAccountChipRect.y + 9.0f, 40.0f, 40.0f};
     const Vector2 avatar_center = {avatar_rect.x + avatar_rect.width * 0.5f, avatar_rect.y + avatar_rect.height * 0.5f};
-    DrawCircleV(avatar_center, 20.0f, auth_summary_.logged_in ? t.accent : t.row_selected);
-    const std::string avatar_label = make_avatar_label(auth_summary_);
+    DrawCircleV(avatar_center, 20.0f, auth_state_.logged_in ? t.accent : t.row_selected);
+    const std::string avatar_label = make_avatar_label(auth_state_);
     ui::draw_text_in_rect(avatar_label.c_str(), 18, avatar_rect,
-                          auth_summary_.logged_in ? t.panel : t.text, ui::text_align::center);
+                          auth_state_.logged_in ? t.panel : t.text, ui::text_align::center);
     const Rectangle account_name_rect = {
         kAccountChipRect.x + 64.0f, kAccountChipRect.y + 8.0f, kAccountChipRect.width - 88.0f, 22.0f
     };
-    const char* account_name = auth_summary_.logged_in
-        ? (auth_summary_.display_name.empty() ? auth_summary_.email.c_str() : auth_summary_.display_name.c_str())
-        : "ACCOUNT";
-    draw_marquee_text(account_name, account_name_rect, 18, t.text, GetTime());
-    ui::draw_text_in_rect(auth_summary_.logged_in
-                              ? (auth_summary_.email_verified ? "Verified profile" : "Manage account")
-                              : "Manage account",
+    draw_marquee_text(account_name_for(auth_state_), account_name_rect, 18, t.text, GetTime());
+    ui::draw_text_in_rect(account_status_for(auth_state_),
                           13,
                           {kAccountChipRect.x + 64.0f, kAccountChipRect.y + 30.0f, kAccountChipRect.width - 88.0f, 16.0f},
-                          auth_summary_.logged_in && !auth_summary_.email_verified ? t.error : t.text_muted,
+                          auth_state_.logged_in && !auth_state_.email_verified ? t.error : t.text_muted,
                           ui::text_align::left);
     ui::draw_text_in_rect(">", 18,
                           {kAccountChipRect.x + kAccountChipRect.width - 24.0f, kAccountChipRect.y + 12.0f, 12.0f, 24.0f},
@@ -343,6 +374,24 @@ void title_scene::draw() {
                                   ui::text_align::center);
         }
     }
+
+    const Rectangle account_dialog_anchor = {
+        kAccountChipRect.x,
+        kAccountChipRect.y + 12.0f,
+        kAccountChipRect.width,
+        kAccountChipRect.height
+    };
+    const song_select::login_dialog_command login_command =
+        song_select::draw_login_dialog(auth_state_, login_dialog_,
+                                       account_dialog_anchor, kScreenRect,
+                                       auth_controller_.request_active, kTitleModalLayer);
+    if (login_command == song_select::login_dialog_command::close) {
+        login_dialog_.open = false;
+    } else if (login_command != song_select::login_dialog_command::none) {
+        auth_overlay::start_request(auth_controller_, login_dialog_, login_command);
+    }
+
+    ui::flush_draw_queue();
 
     if (transitioning_to_song_select_) {
         transition_fade_.draw();
