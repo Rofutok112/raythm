@@ -17,7 +17,9 @@ public:
         song_create,
     };
 
-    explicit title_scene(scene_manager& manager);
+    explicit title_scene(scene_manager& manager,
+                         bool start_with_home_open = false,
+                         bool play_intro_fade = true);
 
     void on_enter() override;
     void on_exit() override;
@@ -32,8 +34,13 @@ private:
     float esc_hold_t_ = 0.0f;
     bool transitioning_to_song_select_ = false;
     scene_fade transition_fade_{scene_fade::direction::out, 0.3f, 0.65f};
+    scene_fade intro_fade_{scene_fade::direction::in, 0.45f, 1.0f};
+    float intro_hold_t_ = 0.0f;
     transition_target transition_target_ = transition_target::song_select;
+    bool start_with_home_open_ = false;
+    bool play_intro_fade_ = true;
     bool home_menu_open_ = false;
+    bool suppress_home_pointer_until_release_ = false;
     float home_menu_anim_ = 0.0f;
     int home_menu_selected_index_ = 0;
     std::string home_status_message_;

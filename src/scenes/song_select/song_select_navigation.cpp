@@ -13,8 +13,8 @@
 
 namespace song_select {
 
-std::unique_ptr<scene> make_title_scene(scene_manager& manager) {
-    return std::make_unique<title_scene>(manager);
+std::unique_ptr<scene> make_title_scene(scene_manager& manager, bool start_with_home_open) {
+    return std::make_unique<title_scene>(manager, start_with_home_open, !start_with_home_open);
 }
 
 std::unique_ptr<scene> make_settings_scene(scene_manager& manager) {

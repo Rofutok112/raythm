@@ -38,6 +38,7 @@ constexpr float kHomeButtonGap = 18.0f;
 constexpr float kHomeAnimSpeed = 6.5f;
 constexpr float kHomeButtonRowY = 376.0f;
 constexpr float kHomeButtonIntroOffsetY = 24.0f;
+constexpr float kAccountChipInteractiveThreshold = 0.2f;
 constexpr ui::draw_layer kTitleModalLayer = ui::draw_layer::modal;
 
 struct home_entry {
@@ -131,7 +132,10 @@ Rectangle home_button_rect(int index, float anim_t) {
 
 }  // namespace
 
-title_scene::title_scene(scene_manager& manager) : scene(manager) {
+title_scene::title_scene(scene_manager& manager, bool start_with_home_open, bool play_intro_fade) :
+    scene(manager),
+    start_with_home_open_(start_with_home_open),
+    play_intro_fade_(play_intro_fade) {
 }
 
 void title_scene::start_transition(transition_target target) {
@@ -148,8 +152,16 @@ void title_scene::on_enter() {
     spectrum_visualizer_.reset();
     bgm_controller_.on_enter();
     auth_overlay::refresh_auth_state(auth_state_);
-    home_menu_open_ = false;
-    home_menu_anim_ = 0.0f;
+    if (play_intro_fade_) {
+        intro_fade_.restart(scene_fade::direction::in, 1.0f, 1.0f);
+        intro_hold_t_ = 0.5f;
+    } else {
+        intro_fade_.restart(scene_fade::direction::in, 0.0f, 0.0f);
+        intro_hold_t_ = 0.0f;
+    }
+    home_menu_open_ = start_with_home_open_;
+    suppress_home_pointer_until_release_ = false;
+    home_menu_anim_ = start_with_home_open_ ? 1.0f : 0.0f;
     home_menu_selected_index_ = 0;
     home_status_message_.clear();
     login_dialog_.open = false;
@@ -171,6 +183,11 @@ void title_scene::update(float dt) {
     spectrum_visualizer_.update();
     auth_overlay::poll_restore(auth_controller_, auth_state_, login_dialog_);
     auth_overlay::poll_request(auth_controller_, auth_state_, login_dialog_);
+    if (intro_hold_t_ > 0.0f) {
+        intro_hold_t_ = std::max(0.0f, intro_hold_t_ - dt);
+    } else {
+        intro_fade_.update(dt);
+    }
     if (login_dialog_.open) {
         login_dialog_.open_anim = std::min(1.0f, login_dialog_.open_anim + dt * 8.0f);
     } else {
@@ -206,7 +223,7 @@ void title_scene::update(float dt) {
         return;
     }
 
-    if (ui::is_clicked(kAccountChipRect)) {
+    if (home_menu_anim_ >= kAccountChipInteractiveThreshold && ui::is_clicked(kAccountChipRect)) {
         if (login_dialog_.open) {
             login_dialog_.open = false;
         } else {
@@ -224,7 +241,14 @@ void title_scene::update(float dt) {
         return;
     }
 
-    const bool account_hovered = ui::is_hovered(kAccountChipRect);
+    if (suppress_home_pointer_until_release_ &&
+        !IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
+        !IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+        suppress_home_pointer_until_release_ = false;
+    }
+
+    const bool account_hovered =
+        home_menu_anim_ >= kAccountChipInteractiveThreshold && ui::is_hovered(kAccountChipRect);
     const bool left_click_for_home =
         IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
         !account_hovered;
@@ -235,6 +259,7 @@ void title_scene::update(float dt) {
          left_click_for_home ||
          right_click_for_home)) {
         home_menu_open_ = true;
+        suppress_home_pointer_until_release_ = left_click_for_home || right_click_for_home;
         home_status_message_.clear();
         return;
     }
@@ -242,22 +267,25 @@ void title_scene::update(float dt) {
     if (home_menu_open_) {
         if (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
             home_menu_open_ = false;
+            suppress_home_pointer_until_release_ = false;
             home_status_message_.clear();
             return;
         }
 
-        for (int index = 0; index < static_cast<int>(kHomeEntries.size()); ++index) {
-            const Rectangle rect = home_button_rect(index, home_menu_anim_);
-            if (ui::is_hovered(rect)) {
-                home_menu_selected_index_ = index;
-            }
-            if (ui::is_clicked(rect)) {
-                if (kHomeEntries[static_cast<size_t>(index)].enabled) {
-                    start_transition(kHomeEntries[static_cast<size_t>(index)].target);
-                } else {
-                    home_status_message_ = "This route is still warming up.";
+        if (!suppress_home_pointer_until_release_) {
+            for (int index = 0; index < static_cast<int>(kHomeEntries.size()); ++index) {
+                const Rectangle rect = home_button_rect(index, home_menu_anim_);
+                if (ui::is_hovered(rect)) {
+                    home_menu_selected_index_ = index;
                 }
-                return;
+                if (ui::is_clicked(rect)) {
+                    if (kHomeEntries[static_cast<size_t>(index)].enabled) {
+                        start_transition(kHomeEntries[static_cast<size_t>(index)].target);
+                    } else {
+                        home_status_message_ = "This route is still warming up.";
+                    }
+                    return;
+                }
             }
         }
 
@@ -321,25 +349,29 @@ void title_scene::draw() {
     ui::draw_text_f("raythm", title_pos.x, title_pos.y, 124, t.text);
     ui::draw_text_f("trace the line before the beat disappears", subtitle_pos.x, subtitle_pos.y, 30, t.text_dim);
 
-    ui::draw_panel(kAccountChipRect);
-    const Rectangle avatar_rect = {kAccountChipRect.x + 12.0f, kAccountChipRect.y + 9.0f, 40.0f, 40.0f};
-    const Vector2 avatar_center = {avatar_rect.x + avatar_rect.width * 0.5f, avatar_rect.y + avatar_rect.height * 0.5f};
-    DrawCircleV(avatar_center, 20.0f, auth_state_.logged_in ? t.accent : t.row_selected);
-    const std::string avatar_label = make_avatar_label(auth_state_);
-    ui::draw_text_in_rect(avatar_label.c_str(), 18, avatar_rect,
-                          auth_state_.logged_in ? t.panel : t.text, ui::text_align::center);
-    const Rectangle account_name_rect = {
-        kAccountChipRect.x + 64.0f, kAccountChipRect.y + 8.0f, kAccountChipRect.width - 88.0f, 22.0f
-    };
-    draw_marquee_text(account_name_for(auth_state_), account_name_rect, 18, t.text, GetTime());
-    ui::draw_text_in_rect(account_status_for(auth_state_),
-                          13,
-                          {kAccountChipRect.x + 64.0f, kAccountChipRect.y + 30.0f, kAccountChipRect.width - 88.0f, 16.0f},
-                          auth_state_.logged_in && !auth_state_.email_verified ? t.error : t.text_muted,
-                          ui::text_align::left);
-    ui::draw_text_in_rect(">", 18,
-                          {kAccountChipRect.x + kAccountChipRect.width - 24.0f, kAccountChipRect.y + 12.0f, 12.0f, 24.0f},
-                          t.text_muted, ui::text_align::center);
+    if (menu_t > 0.01f) {
+        const unsigned char account_alpha = static_cast<unsigned char>(255.0f * menu_t);
+        DrawRectangleRec(kAccountChipRect, with_alpha(t.panel, account_alpha));
+        DrawRectangleLinesEx(kAccountChipRect, 2.0f, with_alpha(t.border, account_alpha));
+        const Rectangle avatar_rect = {kAccountChipRect.x + 12.0f, kAccountChipRect.y + 9.0f, 40.0f, 40.0f};
+        const Vector2 avatar_center = {avatar_rect.x + avatar_rect.width * 0.5f, avatar_rect.y + avatar_rect.height * 0.5f};
+        DrawCircleV(avatar_center, 20.0f, with_alpha(auth_state_.logged_in ? t.accent : t.row_selected, account_alpha));
+        const std::string avatar_label = make_avatar_label(auth_state_);
+        ui::draw_text_in_rect(avatar_label.c_str(), 18, avatar_rect,
+                              with_alpha(auth_state_.logged_in ? t.panel : t.text, account_alpha), ui::text_align::center);
+        const Rectangle account_name_rect = {
+            kAccountChipRect.x + 64.0f, kAccountChipRect.y + 8.0f, kAccountChipRect.width - 88.0f, 22.0f
+        };
+        draw_marquee_text(account_name_for(auth_state_), account_name_rect, 18, with_alpha(t.text, account_alpha), GetTime());
+        ui::draw_text_in_rect(account_status_for(auth_state_),
+                              13,
+                              {kAccountChipRect.x + 64.0f, kAccountChipRect.y + 30.0f, kAccountChipRect.width - 88.0f, 16.0f},
+                              with_alpha(auth_state_.logged_in && !auth_state_.email_verified ? t.error : t.text_muted, account_alpha),
+                              ui::text_align::left);
+        ui::draw_text_in_rect(">", 18,
+                              {kAccountChipRect.x + kAccountChipRect.width - 24.0f, kAccountChipRect.y + 12.0f, 12.0f, 24.0f},
+                              with_alpha(t.text_muted, account_alpha), ui::text_align::center);
+    }
 
     if (home_menu_anim_ > 0.01f) {
         for (int index = 0; index < static_cast<int>(kHomeEntries.size()); ++index) {
@@ -393,6 +425,11 @@ void title_scene::draw() {
 
     ui::flush_draw_queue();
 
+    if (intro_hold_t_ > 0.0f) {
+        ui::draw_fullscreen_overlay(BLACK);
+    } else {
+        intro_fade_.draw();
+    }
     if (transitioning_to_song_select_) {
         transition_fade_.draw();
     }

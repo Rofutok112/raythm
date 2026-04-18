@@ -65,18 +65,18 @@ void title_spectrum_visualizer::update() {
     }
 
     if (frame_peak > dynamic_peak_) {
-        dynamic_peak_ += (frame_peak - dynamic_peak_) * 0.18f;
+        dynamic_peak_ += (frame_peak - dynamic_peak_) * 0.14f;
     } else {
-        dynamic_peak_ += (frame_peak - dynamic_peak_) * 0.04f;
+        dynamic_peak_ += (frame_peak - dynamic_peak_) * 0.035f;
     }
     dynamic_peak_ = std::max(0.12f, dynamic_peak_);
 
     for (int i = 0; i < kBarCount; ++i) {
         const float target = std::clamp(targets[static_cast<size_t>(i)] / dynamic_peak_, 0.0f, 1.0f);
         if (target > bars_[static_cast<size_t>(i)]) {
-            bars_[static_cast<size_t>(i)] += (target - bars_[static_cast<size_t>(i)]) * 0.38f;
+            bars_[static_cast<size_t>(i)] += (target - bars_[static_cast<size_t>(i)]) * 0.36f;
         } else {
-            bars_[static_cast<size_t>(i)] += (target - bars_[static_cast<size_t>(i)]) * 0.15f;
+            bars_[static_cast<size_t>(i)] += (target - bars_[static_cast<size_t>(i)]) * 0.045f;
         }
 
         const float bar_height = bars_[static_cast<size_t>(i)];
@@ -106,7 +106,7 @@ void title_spectrum_visualizer::draw(const Rectangle& rect) const {
     const float bar_width =
         (rect.width - gap * static_cast<float>(kBarCount - 1)) / static_cast<float>(kBarCount);
     const float baseline = rect.y + rect.height;
-    const float max_height = rect.height * 0.55f;
+    const float max_height = rect.height;// * 0.55f;
     const Color base_low = {107, 33, 168, 128};
     const Color base_top = {216, 180, 254, 230};
     const Color peak_glow = {216, 180, 254, 110};

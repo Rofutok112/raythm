@@ -665,7 +665,7 @@ void song_select_scene::update(float dt) {
             song_select::close_context_menu(state_);
             return;
         }
-        manager_.change_scene(song_select::make_title_scene(manager_));
+        manager_.change_scene(song_select::make_title_scene(manager_, true));
         return;
     }
 
