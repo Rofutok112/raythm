@@ -33,8 +33,7 @@ namespace virtual_screen {
 void init() {
     render_target_ = LoadRenderTexture(kDesignWidth, kDesignHeight);
     ui_render_target_ = LoadRenderTexture(kDesignWidth * kUiRenderScale, kDesignHeight * kUiRenderScale);
-    SetTextureFilter(render_target_.texture, TEXTURE_FILTER_BILINEAR);
-    // 高解像度 UI RT は最終拡大時にぼやけやすいため、まずは point で比較する。
+    SetTextureFilter(render_target_.texture, TEXTURE_FILTER_POINT);
     SetTextureFilter(ui_render_target_.texture, TEXTURE_FILTER_POINT);
     active_mode_ = render_mode::none;
     present_mode_ = render_mode::standard;
@@ -119,6 +118,14 @@ Vector2 get_virtual_mouse() {
         normalized_x * static_cast<float>(kDesignWidth),
         normalized_y * static_cast<float>(kDesignHeight),
     };
+}
+
+float design_to_screen_scale() {
+    const float screen_w = static_cast<float>(GetScreenWidth());
+    const float screen_h = static_cast<float>(GetScreenHeight());
+    const float scale_x = screen_w / static_cast<float>(kDesignWidth);
+    const float scale_y = screen_h / static_cast<float>(kDesignHeight);
+    return (scale_x < scale_y) ? scale_x : scale_y;
 }
 
 float current_render_scale() {

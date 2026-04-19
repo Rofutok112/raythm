@@ -10,6 +10,7 @@
 
 #include "core/app_paths.h"
 #include "core/path_utils.h"
+#include "virtual_screen.h"
 
 namespace ui {
 
@@ -18,7 +19,6 @@ namespace {
 constexpr int kFontBaseSize = 48;
 constexpr float kCustomFontSizeScale = 0.8f;
 constexpr float kCustomFontSpacingOffset = 2.0f;
-constexpr float kSmallAsciiCustomFontThreshold = 16.0f;
 
 std::string g_font_path;
 Font g_font = {};
@@ -31,6 +31,25 @@ float snap_custom_font_size(float font_size) {
 
 float snap_custom_coordinate(float value) {
     return std::round(value);
+}
+
+float snap_default_font_size(float font_size) {
+    const float screen_scale = virtual_screen::design_to_screen_scale();
+    if (screen_scale <= 0.0f) {
+        return font_size;
+    }
+
+    const float physical_size = std::max(1.0f, std::round(font_size * screen_scale));
+    return physical_size / screen_scale;
+}
+
+float snap_default_coordinate(float value) {
+    const float screen_scale = virtual_screen::design_to_screen_scale();
+    if (screen_scale <= 0.0f) {
+        return value;
+    }
+
+    return std::round(value * screen_scale) / screen_scale;
 }
 
 bool contains_non_ascii_bytes(const char* text) {
@@ -46,18 +65,6 @@ bool contains_non_ascii_bytes(const char* text) {
         ++cursor;
     }
     return false;
-}
-
-bool should_use_custom_font(const char* text, float font_size) {
-    if (!g_font_loaded || text == nullptr || *text == '\0') {
-        return false;
-    }
-
-    if (contains_non_ascii_bytes(text)) {
-        return true;
-    }
-
-    return font_size <= kSmallAsciiCustomFontThreshold;
 }
 
 std::string find_font_path() {
@@ -147,8 +154,8 @@ Font text_font() {
     return g_font_loaded ? g_font : GetFontDefault();
 }
 
-Font text_font_for_text(const char* text, float font_size) {
-    if (should_use_custom_font(text, font_size)) {
+Font text_font_for_text(const char* text) {
+    if (g_font_loaded && contains_non_ascii_bytes(text)) {
         return g_font;
     }
     return GetFontDefault();
@@ -158,10 +165,7 @@ float text_font_size_for_text(const char* text, float font_size) {
     if (g_font_loaded && contains_non_ascii_bytes(text)) {
         return snap_custom_font_size(font_size * kCustomFontSizeScale);
     }
-    if (should_use_custom_font(text, font_size)) {
-        return snap_custom_font_size(font_size);
-    }
-    return font_size;
+    return snap_default_font_size(font_size);
 }
 
 float text_spacing_for_text(const char* text, float font_size, float spacing) {
@@ -170,12 +174,12 @@ float text_spacing_for_text(const char* text, float font_size, float spacing) {
     }
 
     if (spacing != 0.0f) {
-        return spacing;
+        return snap_default_font_size(spacing);
     }
 
-    const Font font = text_font_for_text(text, font_size);
+    const Font font = text_font_for_text(text);
     if (font.texture.id == GetFontDefault().texture.id && font.baseSize > 0) {
-        return font_size / static_cast<float>(font.baseSize);
+        return snap_default_font_size(font_size) / static_cast<float>(font.baseSize);
     }
     return 0.0f;
 }
@@ -212,7 +216,7 @@ Vector2 measure_text_size(const char* text, float font_size, float spacing) {
 
     ensure_text_glyphs(text);
     const float adjusted_font_size = text_font_size_for_text(text, font_size);
-    return MeasureTextEx(text_font_for_text(text, font_size), text, adjusted_font_size,
+    return MeasureTextEx(text_font_for_text(text), text, adjusted_font_size,
                          text_spacing_for_text(text, adjusted_font_size, spacing));
 }
 
@@ -223,11 +227,11 @@ void draw_text_auto(const char* text, Vector2 position, float font_size, float s
 
     ensure_text_glyphs(text);
     const float adjusted_font_size = text_font_size_for_text(text, font_size);
-    const bool uses_custom_font = should_use_custom_font(text, font_size);
+    const bool uses_custom_font = g_font_loaded && contains_non_ascii_bytes(text);
     const Vector2 draw_position = uses_custom_font
                                       ? Vector2{snap_custom_coordinate(position.x), snap_custom_coordinate(position.y)}
-                                      : position;
-    DrawTextEx(text_font_for_text(text, font_size), text, draw_position, adjusted_font_size,
+                                      : Vector2{snap_default_coordinate(position.x), snap_default_coordinate(position.y)};
+    DrawTextEx(text_font_for_text(text), text, draw_position, adjusted_font_size,
                text_spacing_for_text(text, adjusted_font_size, spacing), color);
 }
 

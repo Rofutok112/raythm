@@ -33,6 +33,9 @@ void draw_to_screen(bool use_alpha = false);
 // 物理スクリーンのマウス座標を仮想座標に変換する。
 Vector2 get_virtual_mouse();
 
+// 1280x720 の論理座標が、実画面へどれだけ拡大されているかを返す。
+float design_to_screen_scale();
+
 // 現在の仮想スクリーン描画倍率を返す。通常描画は 1、高品質 UI 描画は 2。
 float current_render_scale();
 
