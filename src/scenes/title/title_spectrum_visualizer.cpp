@@ -36,9 +36,12 @@ void title_spectrum_visualizer::reset() {
     dynamic_peak_ = 0.12f;
 }
 
-void title_spectrum_visualizer::update() {
+void title_spectrum_visualizer::update(source input_source) {
     std::array<float, 128> spectrum = {};
-    const bool has_audio = audio_manager::instance().get_bgm_fft256(spectrum);
+    const bool has_audio =
+        input_source == source::preview
+            ? audio_manager::instance().get_preview_fft256(spectrum)
+            : audio_manager::instance().get_bgm_fft256(spectrum);
     std::array<float, kBarCount> targets = {};
     float frame_peak = 0.0f;
     constexpr float kFrequencyCurve = 1.55f;
@@ -97,20 +100,21 @@ void title_spectrum_visualizer::update() {
     }
 }
 
-void title_spectrum_visualizer::draw(const Rectangle& rect) const {
+void title_spectrum_visualizer::draw(const Rectangle& rect, float alpha_scale) const {
     if (rect.width <= 0.0f || rect.height <= 0.0f) {
         return;
     }
 
+    const float clamped_alpha = std::clamp(alpha_scale, 0.0f, 1.0f);
     const float gap = 3.0f;
     const float bar_width =
         (rect.width - gap * static_cast<float>(kBarCount - 1)) / static_cast<float>(kBarCount);
     const float baseline = rect.y + rect.height;
     const float max_height = rect.height;// * 0.55f;
-    const Color base_low = {107, 33, 168, 128};
-    const Color base_top = {216, 180, 254, 230};
-    const Color peak_glow = {216, 180, 254, 110};
-    const Color peak_color = {242, 230, 255, 220};
+    const Color base_low = with_alpha_scale({107, 33, 168, 255}, clamped_alpha * (128.0f / 255.0f));
+    const Color base_top = with_alpha_scale({216, 180, 254, 255}, clamped_alpha * (230.0f / 255.0f));
+    const Color peak_glow = with_alpha_scale({216, 180, 254, 255}, clamped_alpha * (110.0f / 255.0f));
+    const Color peak_color = with_alpha_scale({242, 230, 255, 255}, clamped_alpha * (220.0f / 255.0f));
 
     for (int i = 0; i < kBarCount; ++i) {
         const float value = std::clamp(bars_[static_cast<size_t>(i)], 0.0f, 1.0f);

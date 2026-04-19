@@ -46,6 +46,8 @@ void reset_for_enter(state& state) {
     state.difficulty_index = 0;
     state.scroll_y = 0.0f;
     state.scroll_y_target = 0.0f;
+    state.chart_scroll_y = 0.0f;
+    state.chart_scroll_y_target = 0.0f;
     state.song_change_anim_t = 1.0f;
     state.chart_change_anim_t = 1.0f;
     state.scene_fade_in.restart(scene_fade::direction::in, 0.3f, 0.65f);
@@ -62,6 +64,7 @@ void reset_for_enter(state& state) {
 void tick_animations(state& state, float dt) {
     state.song_change_anim_t = std::max(0.0f, state.song_change_anim_t - dt * 4.0f);
     state.chart_change_anim_t = std::max(0.0f, state.chart_change_anim_t - dt * 5.0f);
+    state.ranking_panel.reveal_anim += dt;
     if (state.login_dialog.open) {
         state.login_dialog.open_anim = std::min(1.0f, state.login_dialog.open_anim + dt * 8.0f);
     } else {
@@ -80,12 +83,15 @@ void apply_catalog(state& state, catalog_data catalog,
     state.difficulty_index = 0;
     state.scroll_y = 0.0f;
     state.scroll_y_target = 0.0f;
+    state.chart_scroll_y = 0.0f;
+    state.chart_scroll_y_target = 0.0f;
     state.scrollbar_dragging = false;
     state.scrollbar_drag_offset = 0.0f;
     state.context_menu = {};
     state.confirmation_dialog = {};
     state.ranking_panel.scroll_y = 0.0f;
     state.ranking_panel.scroll_y_target = 0.0f;
+    state.ranking_panel.reveal_anim = 0.0f;
     state.ranking_panel.source_dropdown_open = false;
     state.ranking_panel.scrollbar_dragging = false;
     state.ranking_panel.scrollbar_drag_offset = 0.0f;
@@ -137,6 +143,8 @@ bool apply_song_selection(state& state, int song_index, int chart_index) {
 
     if (song_changed) {
         state.song_change_anim_t = 1.0f;
+        state.chart_scroll_y = 0.0f;
+        state.chart_scroll_y_target = 0.0f;
     }
     if (song_changed || previous_chart_index != state.difficulty_index) {
         state.chart_change_anim_t = 1.0f;

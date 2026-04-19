@@ -131,6 +131,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     const std::filesystem::path audio_path =
         path_utils::join_utf8(state.song_data->directory, state.song_data->meta.audio_file);
     audio.load_bgm(path_utils::to_utf8(audio_path));
+    audio.set_bgm_volume(g_settings.bgm_volume);
     if (!state.hitsound_path.empty()) {
         audio.preload_se(state.hitsound_path);
     }

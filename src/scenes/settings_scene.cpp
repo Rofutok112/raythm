@@ -6,9 +6,8 @@
 #include "scene_manager.h"
 #include "settings_io.h"
 #include "settings/settings_layout.h"
-#include "song_select_scene.h"
+#include "song_select/song_select_navigation.h"
 #include "theme.h"
-#include "title_scene.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
 
@@ -41,9 +40,9 @@ void settings_scene::update(float dt) {
     if (ui::is_clicked(settings::kBackRect, settings::kLayer)) {
         save_settings(g_settings);
         if (return_target_ == return_target::song_select) {
-            manager_.change_scene(std::make_unique<song_select_scene>(manager_));
+            manager_.change_scene(song_select::make_seamless_song_select_scene(manager_));
         } else {
-            manager_.change_scene(std::make_unique<title_scene>(manager_));
+            manager_.change_scene(song_select::make_title_scene(manager_));
         }
         return;
     }

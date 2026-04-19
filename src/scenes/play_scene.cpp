@@ -22,7 +22,7 @@
 #include "result_scene.h"
 #include "scene_common.h"
 #include "scene_manager.h"
-#include "song_select_scene.h"
+#include "song_select/song_select_navigation.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
 
@@ -428,7 +428,10 @@ void play_scene::apply_navigation(play_navigation_request navigation) {
         case play_navigation_target::none:
             return;
         case play_navigation_target::song_select:
-            manager_.change_scene(std::make_unique<song_select_scene>(manager_));
+            manager_.change_scene(song_select::make_seamless_song_select_scene(
+                manager_,
+                state_.song_data.has_value() ? state_.song_data->meta.song_id : "",
+                state_.chart_data.has_value() ? state_.chart_data->meta.chart_id : ""));
             return;
         case play_navigation_target::result:
             if (state_.song_data.has_value() && state_.chart_data.has_value()) {
@@ -436,7 +439,7 @@ void play_scene::apply_navigation(play_navigation_request navigation) {
                     manager_, state_.final_result, state_.ranking_enabled,
                     *state_.song_data, state_.selected_chart_path.value_or(""), state_.chart_data->meta, state_.key_count));
             } else {
-                manager_.change_scene(std::make_unique<song_select_scene>(manager_));
+                manager_.change_scene(song_select::make_seamless_song_select_scene(manager_));
             }
             return;
         case play_navigation_target::editor:
@@ -444,7 +447,7 @@ void play_scene::apply_navigation(play_navigation_request navigation) {
                 manager_.change_scene(std::make_unique<editor_scene>(
                     manager_, *state_.song_data, std::move(*state_.editor_resume_state)));
             } else {
-                manager_.change_scene(std::make_unique<song_select_scene>(manager_));
+                manager_.change_scene(song_select::make_seamless_song_select_scene(manager_));
             }
             return;
         case play_navigation_target::restart:

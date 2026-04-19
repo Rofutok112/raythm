@@ -9,7 +9,7 @@
 #include "ranking_service.h"
 #include "scene_common.h"
 #include "scene_manager.h"
-#include "song_select_scene.h"
+#include "song_select/song_select_navigation.h"
 #include "theme.h"
 #include "ui_draw.h"
 #include "ui/ui_font.h"
@@ -121,7 +121,8 @@ void result_scene::return_to_song_select() const {
     recent_result.song_id = song_.meta.song_id;
     recent_result.chart_id = chart_.chart_id;
     recent_result.avg_offset_ms = result_.avg_offset;
-    manager_.change_scene(std::make_unique<song_select_scene>(manager_, song_.meta.song_id, chart_.chart_id, recent_result));
+    manager_.change_scene(song_select::make_seamless_song_select_scene(
+        manager_, song_.meta.song_id, chart_.chart_id, recent_result));
 }
 
 void result_scene::update(float dt) {

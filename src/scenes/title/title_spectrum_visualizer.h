@@ -6,11 +6,15 @@
 
 class title_spectrum_visualizer final {
 public:
-    static constexpr int kBarCount = 48;
+    static constexpr int kBarCount = 64;
+    enum class source {
+        bgm,
+        preview,
+    };
 
     void reset();
-    void update();
-    void draw(const Rectangle& rect) const;
+    void update(source input_source);
+    void draw(const Rectangle& rect, float alpha_scale = 1.0f) const;
 
 private:
     std::array<float, kBarCount> bars_ = {};

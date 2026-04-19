@@ -8,6 +8,7 @@
 #include "play_scene.h"
 #include "settings_scene.h"
 #include "song_create_scene.h"
+#include "song_select_scene.h"
 #include "song_select/song_select_last_played.h"
 #include "title_scene.h"
 
@@ -15,6 +16,47 @@ namespace song_select {
 
 std::unique_ptr<scene> make_title_scene(scene_manager& manager, bool start_with_home_open) {
     return std::make_unique<title_scene>(manager, start_with_home_open, !start_with_home_open);
+}
+
+std::unique_ptr<scene> make_seamless_song_select_scene(scene_manager& manager,
+                                                       std::string preferred_song_id,
+                                                       std::string preferred_chart_id,
+                                                       std::optional<recent_result_offset> recent_result_offset) {
+    return std::make_unique<title_scene>(
+        manager,
+        true,
+        false,
+        std::move(preferred_song_id),
+        std::move(preferred_chart_id),
+        std::move(recent_result_offset),
+        true);
+}
+
+std::unique_ptr<scene> make_seamless_create_scene(scene_manager& manager,
+                                                  std::string preferred_song_id,
+                                                  std::string preferred_chart_id) {
+    return std::make_unique<title_scene>(
+        manager,
+        true,
+        false,
+        std::move(preferred_song_id),
+        std::move(preferred_chart_id),
+        std::nullopt,
+        false,
+        true);
+}
+
+std::unique_ptr<scene> make_legacy_song_select_scene(scene_manager& manager,
+                                                     std::string preferred_song_id,
+                                                     std::string preferred_chart_id,
+                                                     std::optional<recent_result_offset> recent_result_offset,
+                                                     bool open_login_dialog_on_enter) {
+    return std::make_unique<song_select_scene>(
+        manager,
+        std::move(preferred_song_id),
+        std::move(preferred_chart_id),
+        std::move(recent_result_offset),
+        open_login_dialog_on_enter);
 }
 
 std::unique_ptr<scene> make_settings_scene(scene_manager& manager) {

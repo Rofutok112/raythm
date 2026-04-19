@@ -53,6 +53,7 @@ public:
     bool is_preview_playing() const;
     double get_preview_position_seconds() const;
     double get_preview_length_seconds() const;
+    bool get_preview_fft256(std::array<float, 128>& spectrum) const;
 
     bool preload_se(const std::string& file_path);
     int play_se(const std::string& file_path, float volume = 1.0f);

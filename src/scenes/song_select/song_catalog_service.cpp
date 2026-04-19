@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <unordered_map>
 #include <system_error>
 
 #include "app_paths.h"
@@ -41,6 +42,33 @@ bool is_chart_file_path(const std::filesystem::path& path) {
     return path.extension() == ".rchart";
 }
 
+struct chart_level_cache_entry {
+    std::filesystem::file_time_type write_time{};
+    float level = 0.0f;
+};
+
+float cached_chart_level(const std::string& chart_path, const chart_data& chart) {
+    static std::unordered_map<std::string, chart_level_cache_entry> cache;
+
+    std::error_code ec;
+    const std::filesystem::path path = path_utils::from_utf8(chart_path);
+    const auto write_time = std::filesystem::last_write_time(path, ec);
+    if (ec) {
+        return chart_difficulty::calculate_level(chart);
+    }
+
+    if (const auto it = cache.find(chart_path); it != cache.end() && it->second.write_time == write_time) {
+        return it->second.level;
+    }
+
+    const float level = chart_difficulty::calculate_level(chart);
+    cache[chart_path] = chart_level_cache_entry{
+        .write_time = write_time,
+        .level = level,
+    };
+    return level;
+}
+
 std::optional<rank> load_best_local_rank(const std::string& chart_id) {
     if (chart_id.empty()) {
         return std::nullopt;
@@ -52,6 +80,29 @@ std::optional<rank> load_best_local_rank(const std::string& chart_id) {
         return std::nullopt;
     }
     return listing.entries.front().clear_rank();
+}
+
+std::pair<float, float> collect_bpm_range(const chart_data& chart) {
+    float min_bpm = 0.0f;
+    float max_bpm = 0.0f;
+    bool found = false;
+
+    for (const timing_event& event : chart.timing_events) {
+        if (event.type != timing_event_type::bpm || event.bpm <= 0.0f) {
+            continue;
+        }
+        if (!found) {
+            min_bpm = event.bpm;
+            max_bpm = event.bpm;
+            found = true;
+            continue;
+        }
+        min_bpm = std::min(min_bpm, event.bpm);
+        max_bpm = std::max(max_bpm, event.bpm);
+    }
+
+    return found ? std::pair<float, float>{min_bpm, max_bpm}
+                 : std::pair<float, float>{0.0f, 0.0f};
 }
 
 }  // namespace
@@ -83,13 +134,17 @@ catalog_data load_catalog() {
             }
 
             chart_meta meta = parse_result.data->meta;
-            meta.level = chart_difficulty::calculate_level(*parse_result.data);
+            meta.level = cached_chart_level(chart_path, *parse_result.data);
+            const auto [min_bpm, max_bpm] = collect_bpm_range(*parse_result.data);
 
             entry.charts.push_back({
                 chart_path,
                 meta,
                 chart_offsets.contains(meta.chart_id) ? chart_offsets.at(meta.chart_id) : 0,
                 load_best_local_rank(meta.chart_id),
+                static_cast<int>(parse_result.data->notes.size()),
+                min_bpm,
+                max_bpm,
             });
         }
 

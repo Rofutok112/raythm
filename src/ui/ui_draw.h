@@ -73,8 +73,9 @@ inline void draw_button_visual(Rectangle rect, bool hovered, bool pressed, const
                                int font_size, Color bg, Color bg_hover, Color text_color,
                                float border_width) {
     const Rectangle visual = pressed ? inset(rect, 1.5f) : rect;
-    DrawRectangleRec(visual, lerp_color(bg, bg_hover, hovered ? 1.0f : 0.0f));
-    DrawRectangleLinesEx(visual, border_width, g_theme->border);
+    const Color fill = lerp_color(bg, bg_hover, hovered ? 1.0f : 0.0f);
+    DrawRectangleRec(visual, fill);
+    DrawRectangleLinesEx(visual, border_width, with_alpha(g_theme->border, fill.a));
     draw_text_in_rect(label, font_size, visual, text_color);
 }
 

@@ -63,6 +63,15 @@ void preview_controller::update(float dt, const song_entry* selected_song) {
     }
 }
 
+void preview_controller::fade_out() {
+    pending_preview_song_.reset();
+    if (preview_song_id_.empty() || !audio_manager::instance().is_preview_loaded()) {
+        stop();
+        return;
+    }
+    preview_fade_direction_ = -1;
+}
+
 void preview_controller::stop() {
     audio_manager::instance().unload_preview();
     preview_song_id_.clear();
@@ -109,6 +118,9 @@ void preview_controller::load_jacket(const song_entry* song) {
     const std::string jacket_path_utf8 = path_utils::to_utf8(jacket_path);
     jacket_texture_ = LoadTexture(jacket_path_utf8.c_str());
     jacket_loaded_ = jacket_texture_.id != 0;
+    if (jacket_loaded_) {
+        SetTextureFilter(jacket_texture_, TEXTURE_FILTER_BILINEAR);
+    }
 }
 
 void preview_controller::queue_preview(const song_entry* song) {

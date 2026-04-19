@@ -22,7 +22,7 @@
 #include "play_scene.h"
 #include "scene_common.h"
 #include "scene_manager.h"
-#include "song_select_scene.h"
+#include "song_select/song_select_navigation.h"
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
@@ -403,7 +403,10 @@ void editor_scene::apply_flow_result(const editor_flow_result& result) {
         case editor_navigation_target::none:
             return;
         case editor_navigation_target::song_select:
-            manager_.change_scene(std::make_unique<song_select_scene>(manager_, song_.meta.song_id));
+            manager_.change_scene(song_select::make_seamless_create_scene(
+                manager_,
+                song_.meta.song_id,
+                state_->file_path().empty() ? "" : state_->data().meta.chart_id));
             return;
         case editor_navigation_target::playtest:
             manager_.change_scene(std::make_unique<play_scene>(

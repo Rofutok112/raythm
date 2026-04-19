@@ -6,13 +6,14 @@
 #include "raylib.h"
 #include "scene.h"
 #include "shared/auth_overlay_controller.h"
-#include "song_select/song_import_export_service.h"
 #include "song_select/song_catalog_service.h"
+#include "song_select/song_select_command_controller.h"
 #include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_login_dialog.h"
 #include "song_select/song_preview_controller.h"
 #include "song_select/song_select_overlay_view.h"
 #include "song_select/song_select_state.h"
+#include "song_select/song_transfer_controller.h"
 
 class song_select_scene final : public scene {
 public:
@@ -32,20 +33,13 @@ private:
     void sync_selected_song_media();
     void apply_delete_result(const song_select::delete_result& result);
     void apply_transfer_result(const song_select::transfer_result& result);
-    void poll_song_import_prepare();
-    void poll_background_transfer();
-    void start_song_import_prepare(std::string source_path);
-    void start_song_export(song_select::song_export_request request);
-    void start_song_import(song_select::song_import_request request);
-    void open_overwrite_song_confirmation(song_select::song_import_request request);
-    void open_overwrite_chart_confirmation(song_select::chart_import_request request);
     bool adjust_selected_song_local_offset(int delta_ms);
     bool apply_recent_result_offset();
     void reload_selected_chart_ranking();
     void refresh_auth_state();
     bool handle_song_list_pointer(Vector2 mouse, bool left_pressed, bool right_pressed);
-    void apply_context_menu_command(song_select::context_menu_command command);
-    void apply_confirmation_command(song_select::confirmation_command command);
+    void open_overwrite_song_confirmation(song_select::song_import_request request);
+    void open_overwrite_chart_confirmation(song_select::chart_import_request request);
 
     song_select::state state_;
     song_select::preview_controller preview_controller_;
@@ -53,12 +47,6 @@ private:
     std::string preferred_chart_id_;
     std::optional<song_select::recent_result_offset> recent_result_offset_;
     bool open_login_dialog_on_enter_ = false;
-    std::future<song_select::transfer_result> background_transfer_;
-    std::future<song_select::song_import_prepare_result> background_song_import_prepare_;
-    bool background_transfer_active_ = false;
-    bool background_song_import_prepare_active_ = false;
     auth_overlay::controller auth_controller_;
-    std::string background_transfer_label_;
-    std::optional<song_select::song_import_request> pending_song_import_request_;
-    std::optional<song_select::chart_import_request> pending_chart_import_request_;
+    song_select::transfer::controller transfer_controller_;
 };
