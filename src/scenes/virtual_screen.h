@@ -2,12 +2,12 @@
 
 #include "raylib.h"
 
-// 仮想解像度（1280x720）で描画し、実際のウィンドウサイズにスケーリングする。
+// 仮想解像度（1920x1080）で描画し、実際のウィンドウサイズにスケーリングする。
 // メニューシーンなど2D UIはすべてこの仮想座標系で描画する。
 namespace virtual_screen {
 
-constexpr int kDesignWidth = 1280;
-constexpr int kDesignHeight = 720;
+constexpr int kDesignWidth = 1920;
+constexpr int kDesignHeight = 1080;
 constexpr int kUiRenderScale = 2;
 
 // InitWindow() の後に呼ぶ。RenderTexture を確保する。
@@ -20,7 +20,7 @@ void cleanup();
 void begin();
 
 // UI 品質優先の高解像度仮想スクリーンへの描画を開始する。
-// 論理座標は 1280x720 のまま維持しつつ、内部では高解像度 RT に描画する。
+// 論理座標は 1920x1080 のまま維持しつつ、内部では高解像度 RT に描画する。
 void begin_ui();
 
 // 仮想スクリーンへの描画を終了する。
@@ -33,7 +33,7 @@ void draw_to_screen(bool use_alpha = false);
 // 物理スクリーンのマウス座標を仮想座標に変換する。
 Vector2 get_virtual_mouse();
 
-// 1280x720 の論理座標が、実画面へどれだけ拡大されているかを返す。
+// 1920x1080 の論理座標が、実画面へどれだけ拡大されているかを返す。
 float design_to_screen_scale();
 
 // 現在の仮想スクリーン描画倍率を返す。通常描画は 1、高品質 UI 描画は 2。

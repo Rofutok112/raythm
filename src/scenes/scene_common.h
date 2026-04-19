@@ -4,8 +4,8 @@
 
 // 仮想解像度。すべての2D UIはこの座標系で描画される。
 // 実際の表示は virtual_screen を通じてウィンドウサイズにスケーリングされる。
-constexpr int kScreenWidth = 1280;
-constexpr int kScreenHeight = 720;
+constexpr int kScreenWidth = 1920;
+constexpr int kScreenHeight = 1080;
 
 // メニュー系シーン共通のフレーム（グラデーション背景・角丸枠・タイトル文字列）を描画する。
 void draw_scene_frame(const char* title, const char* subtitle, Color accent);

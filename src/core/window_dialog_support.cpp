@@ -30,8 +30,8 @@ namespace window_dialog_support {
 
 namespace {
 
-int g_last_windowed_width = 1280;
-int g_last_windowed_height = 720;
+int g_last_windowed_width = 1920;
+int g_last_windowed_height = 1080;
 
 }
 

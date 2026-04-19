@@ -437,8 +437,8 @@ protected:
 struct ctx_screen_object final : mv_object {
     ctx_screen_object() : mv_object(mv_object_kind::ctx_screen, "screen") {}
 
-    double w = 1280.0;
-    double h = 720.0;
+    double w = 1920.0;
+    double h = 1080.0;
 
 protected:
     std::optional<mv_value> get_known_attr(std::string_view name) const override {

@@ -827,7 +827,7 @@ inline scrollbar_interaction update_vertical_scrollbar(Rectangle track_rect, flo
 
 // 画面全体を覆う半透明オーバーレイ。ポーズ画面やフェードイン/アウトに使用する。
 inline void draw_fullscreen_overlay(Color color) {
-    DrawRectangle(0, 0, 1280, 720, color);
+    DrawRectangle(0, 0, kScreenWidth, kScreenHeight, color);
 }
 
 inline void enqueue_fullscreen_overlay(Color color, draw_layer layer = draw_layer::overlay) {
