@@ -10,7 +10,7 @@ void initialize_text_font();
 void shutdown_text_font();
 
 Font text_font();
-Font text_font_for_text(const char* text);
+Font text_font_for_text(const char* text, float font_size);
 float text_font_size_for_text(const char* text, float font_size);
 float text_spacing_for_text(const char* text, float font_size, float spacing = 0.0f);
 void ensure_text_glyphs(const char* text);
