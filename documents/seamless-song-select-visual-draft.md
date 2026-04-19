@@ -83,8 +83,8 @@ The new screen should feel like a wide composition with 3 reading zones:
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Song Select                                                                     Account ○   │
-│ from PLAY                                                                        Online ✓   │
+│                                                                                  Account ○   │
+│                                                                                   Online ✓   │
 │                                                                                              │
 │  SONGS                         SELECTED SONG                         RANKING                  │
 │                                                                                              │
@@ -115,6 +115,16 @@ Desired feeling:
 - the `PLAY` card becomes the origin of the next screen
 - the HOME row stretches and dissolves into the new layout
 - the song list and ranking column appear from that motion
+
+### No explicit scene label
+
+Avoid placing a strong top-left scene title such as `Song Select`.
+
+Reasons:
+
+- it makes the screen feel like a hard scene cut
+- it weakens the continuity from HOME
+- the selected content and layout should already communicate that this is the play entry screen
 
 ### Ranking emphasis
 
