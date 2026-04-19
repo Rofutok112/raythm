@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <mutex>
 #include <sstream>
 #include <ctime>
 #include <string_view>
@@ -17,6 +18,7 @@
 #include "network/auth_client.h"
 #include "network/ranking_client.h"
 #include "path_utils.h"
+#include "scoring_ruleset_runtime.h"
 #include "updater/update_verify.h"
 
 #ifdef _WIN32
@@ -30,6 +32,7 @@ constexpr std::string_view kFileHeaderV1 = "RAYTHM_LOCAL_RANKING_V1";
 constexpr std::string_view kFileHeaderV2 = "RAYTHM_LOCAL_RANKING_V2";
 constexpr std::string_view kFileHeaderV3 = "RAYTHM_LOCAL_RANKING_V3";
 constexpr std::string_view kFileHeaderV4 = "RAYTHM_LOCAL_RANKING_V4";
+constexpr std::string_view kFileHeaderV5 = "RAYTHM_LOCAL_RANKING_V5";
 constexpr wchar_t kEntropyLabel[] = L"raythm-local-ranking";
 
 std::string trim(std::string_view value) {
@@ -88,41 +91,178 @@ std::string current_local_player_display_name() {
     return "Guest";
 }
 
-std::string serialize_entries(const std::vector<ranking_service::entry>& entries) {
+std::string local_rank_label(rank clear_rank) {
+    switch (clear_rank) {
+        case rank::ss: return "ss";
+        case rank::s: return "s";
+        case rank::aa: return "aa";
+        case rank::a: return "a";
+        case rank::b: return "b";
+        case rank::c: return "c";
+        case rank::f: return "f";
+    }
+
+    return "f";
+}
+
+rank parse_rank_label_local(std::string_view value) {
+    std::string normalized = trim(value);
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (normalized == "ss") return rank::ss;
+    if (normalized == "s") return rank::s;
+    if (normalized == "aa") return rank::aa;
+    if (normalized == "a") return rank::a;
+    if (normalized == "b") return rank::b;
+    if (normalized == "c") return rank::c;
+    return rank::f;
+}
+
+std::string judge_result_label(judge_result result) {
+    switch (result) {
+        case judge_result::perfect: return "perfect";
+        case judge_result::great: return "great";
+        case judge_result::good: return "good";
+        case judge_result::bad: return "bad";
+        case judge_result::miss: return "miss";
+    }
+
+    return "miss";
+}
+
+std::optional<judge_result> parse_judge_result_label(std::string_view value) {
+    std::string normalized = trim(value);
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (normalized == "perfect") return judge_result::perfect;
+    if (normalized == "great") return judge_result::great;
+    if (normalized == "good") return judge_result::good;
+    if (normalized == "bad") return judge_result::bad;
+    if (normalized == "miss") return judge_result::miss;
+    return std::nullopt;
+}
+
+std::string serialize_note_results(const std::vector<note_result_entry>& note_results) {
     std::ostringstream out;
-    out << kFileHeaderV4 << '\n';
-    for (const ranking_service::entry& entry : entries) {
-        out << std::fixed << std::setprecision(4) << entry.accuracy << '\t'
-            << (entry.is_full_combo ? 1 : 0) << '\t'
-            << entry.max_combo << '\t'
-            << entry.score << '\t'
-            << entry.recorded_at << '\t'
-            << sanitize_player_display_name(entry.player_display_name) << '\n';
+    for (size_t i = 0; i < note_results.size(); ++i) {
+        const note_result_entry& entry = note_results[i];
+        if (i > 0) {
+            out << ';';
+        }
+        out << entry.event_index << ','
+            << judge_result_label(entry.result) << ','
+            << std::fixed << std::setprecision(3) << entry.offset_ms;
     }
     return out.str();
 }
 
-enum class file_version { v1, v2, v3, v4 };
+std::optional<std::vector<note_result_entry>> parse_note_results(std::string_view value) {
+    std::vector<note_result_entry> note_results;
+    std::istringstream row{std::string(value)};
+    std::string token;
+    while (std::getline(row, token, ';')) {
+        if (token.empty()) {
+            continue;
+        }
 
-std::vector<ranking_service::entry> parse_entries(const std::string& content) {
-    std::vector<ranking_service::entry> entries;
+        std::istringstream event_row(token);
+        std::string event_index_token;
+        std::string result_token;
+        std::string offset_token;
+        if (!std::getline(event_row, event_index_token, ',') ||
+            !std::getline(event_row, result_token, ',') ||
+            !std::getline(event_row, offset_token)) {
+            return std::nullopt;
+        }
+
+        const std::optional<judge_result> parsed_result = parse_judge_result_label(result_token);
+        if (!parsed_result.has_value()) {
+            return std::nullopt;
+        }
+
+        try {
+            note_results.push_back(note_result_entry{
+                .event_index = std::stoi(trim(event_index_token)),
+                .result = *parsed_result,
+                .offset_ms = std::stod(trim(offset_token)),
+            });
+        } catch (...) {
+            return std::nullopt;
+        }
+    }
+
+    return note_results;
+}
+
+struct stored_local_record {
+    std::string recorded_at;
+    std::string player_display_name;
+    std::vector<note_result_entry> note_results;
+    std::optional<ranking_service::entry> legacy_entry;
+};
+
+ranking_service::entry resolve_record_entry(const stored_local_record& record,
+                                           const scoring_ruleset_runtime::ruleset& ruleset) {
+    if (record.legacy_entry.has_value()) {
+        ranking_service::entry entry = *record.legacy_entry;
+        entry.recorded_at = record.recorded_at;
+        entry.player_display_name = sanitize_player_display_name(record.player_display_name);
+        entry.verified = false;
+        return entry;
+    }
+
+    const scoring_ruleset_runtime::computed_result computed =
+        scoring_ruleset_runtime::compute_result_for(ruleset, record.note_results);
+    return ranking_service::entry{
+        .placement = 0,
+        .player_display_name = sanitize_player_display_name(record.player_display_name),
+        .accuracy = computed.accuracy,
+        .is_full_combo = computed.is_full_combo,
+        .max_combo = computed.max_combo,
+        .score = computed.score,
+        .recorded_at = record.recorded_at,
+        .verified = false,
+        .resolved_clear_rank = computed.clear_rank,
+    };
+}
+
+std::string serialize_records(const std::vector<stored_local_record>& records) {
+    std::ostringstream out;
+    out << kFileHeaderV5 << '\n';
+    for (const stored_local_record& record : records) {
+        if (record.legacy_entry.has_value()) {
+            const ranking_service::entry& entry = *record.legacy_entry;
+            out << "legacy" << '\t'
+                << record.recorded_at << '\t'
+                << sanitize_player_display_name(record.player_display_name) << '\t'
+                << std::fixed << std::setprecision(4) << entry.accuracy << '\t'
+                << (entry.is_full_combo ? 1 : 0) << '\t'
+                << entry.max_combo << '\t'
+                << entry.score << '\t'
+                << local_rank_label(entry.resolved_clear_rank) << '\n';
+            continue;
+        }
+
+        out << "record" << '\t'
+            << record.recorded_at << '\t'
+            << sanitize_player_display_name(record.player_display_name) << '\t'
+            << serialize_note_results(record.note_results) << '\n';
+    }
+    return out.str();
+}
+
+std::vector<stored_local_record> parse_records(const std::string& content) {
+    std::vector<stored_local_record> records;
     std::istringstream input(content);
     std::string line;
     if (!std::getline(input, line)) {
-        return entries;
+        return records;
     }
     const std::string header = trim(line);
-    file_version version;
-    if (header == kFileHeaderV4) {
-        version = file_version::v4;
-    } else if (header == kFileHeaderV3) {
-        version = file_version::v3;
-    } else if (header == kFileHeaderV2) {
-        version = file_version::v2;
-    } else if (header == kFileHeaderV1) {
-        version = file_version::v1;
-    } else {
-        return entries;
+    if (header != kFileHeaderV5) {
+        return records;
     }
 
     while (std::getline(input, line)) {
@@ -133,76 +273,60 @@ std::vector<ranking_service::entry> parse_entries(const std::string& content) {
         std::istringstream row(line);
 
         try {
-            ranking_service::entry entry;
+            stored_local_record record;
+            std::string kind_token, recorded_at_token, player_token;
+            if (!std::getline(row, kind_token, '\t') ||
+                !std::getline(row, recorded_at_token, '\t') ||
+                !std::getline(row, player_token, '\t')) {
+                continue;
+            }
 
-            if (version == file_version::v4 || version == file_version::v3) {
-                // V3: accuracy \t is_full_combo \t max_combo \t score \t timestamp
-                // V4: accuracy \t is_full_combo \t max_combo \t score \t timestamp \t player_display_name
-                std::string accuracy_token, fc_token, combo_token, score_token, timestamp_token, player_token;
+            record.recorded_at = trim(recorded_at_token);
+            record.player_display_name = sanitize_player_display_name(player_token);
+            const std::string kind = trim(kind_token);
+
+            if (kind == "record") {
+                std::string note_results_token;
+                if (!std::getline(row, note_results_token)) {
+                    continue;
+                }
+                const std::optional<std::vector<note_result_entry>> note_results =
+                    parse_note_results(note_results_token);
+                if (!note_results.has_value()) {
+                    continue;
+                }
+                record.note_results = *note_results;
+            } else if (kind == "legacy") {
+                std::string accuracy_token, fc_token, combo_token, score_token, rank_token;
                 if (!std::getline(row, accuracy_token, '\t') ||
                     !std::getline(row, fc_token, '\t') ||
                     !std::getline(row, combo_token, '\t') ||
-                    !std::getline(row, score_token, '\t')) {
+                    !std::getline(row, score_token, '\t') ||
+                    !std::getline(row, rank_token)) {
                     continue;
                 }
-                if (version == file_version::v4) {
-                    if (!std::getline(row, timestamp_token, '\t')) {
-                        continue;
-                    }
-                } else {
-                    if (!std::getline(row, timestamp_token)) {
-                        continue;
-                    }
-                }
+
+                ranking_service::entry entry;
                 entry.accuracy = std::clamp(std::stof(trim(accuracy_token)), 0.0f, 100.0f);
                 entry.is_full_combo = trim(fc_token) == "1";
                 entry.max_combo = std::clamp(std::stoi(trim(combo_token)), 0, 999999);
                 entry.score = std::clamp(std::stoi(trim(score_token)), 0, 1000000);
-                entry.recorded_at = trim(timestamp_token);
-                if (version == file_version::v4 && std::getline(row, player_token)) {
-                    entry.player_display_name = sanitize_player_display_name(player_token);
-                } else {
-                    entry.player_display_name = "Guest";
-                }
+                entry.recorded_at = record.recorded_at;
+                entry.player_display_name = record.player_display_name;
+                entry.verified = false;
+                entry.resolved_clear_rank = parse_rank_label_local(rank_token);
+                record.legacy_entry = std::move(entry);
             } else {
-                // V1/V2: rank \t accuracy \t [max_combo \t] score \t timestamp
-                std::string rank_token, accuracy_token, combo_token, score_token, timestamp_token;
-                if (!std::getline(row, rank_token, '\t') ||
-                    !std::getline(row, accuracy_token, '\t')) {
-                    continue;
-                }
-                if (version == file_version::v2) {
-                    if (!std::getline(row, combo_token, '\t') ||
-                        !std::getline(row, score_token, '\t') ||
-                        !std::getline(row, timestamp_token)) {
-                        continue;
-                    }
-                } else {
-                    if (!std::getline(row, score_token, '\t') ||
-                        !std::getline(row, timestamp_token)) {
-                        continue;
-                    }
-                }
-
-                entry.accuracy = std::clamp(std::stof(trim(accuracy_token)), 0.0f, 100.0f);
-                entry.max_combo = (version == file_version::v2) ? std::clamp(std::stoi(trim(combo_token)), 0, 999999) : 0;
-                entry.score = std::clamp(std::stoi(trim(score_token)), 0, 1000000);
-                entry.recorded_at = trim(timestamp_token);
-
-                // V1/V2 にはフルコンボ情報がないので、保存された rank が SS/S ならフルコンボとみなす。
-                const int stored_rank = std::clamp(std::stoi(trim(rank_token)), 0, 6);
-                entry.is_full_combo = (stored_rank == static_cast<int>(rank::ss) || stored_rank == static_cast<int>(rank::s));
-                entry.player_display_name = "Guest";
+                continue;
             }
 
-            entry.verified = false;
-            entries.push_back(std::move(entry));
+            records.push_back(std::move(record));
         } catch (...) {
             continue;
         }
     }
 
-    return entries;
+    return records;
 }
 
 bool ranking_entry_better(const ranking_service::entry& left, const ranking_service::entry& right) {
@@ -217,6 +341,216 @@ bool ranking_entry_better(const ranking_service::entry& left, const ranking_serv
 
 bool chart_obviously_eligible_for_online_ranking(const chart_meta& chart) {
     return !chart.chart_id.empty() && chart.is_public;
+}
+
+std::optional<auth::session> load_online_session_for_ruleset() {
+    const auth::session_summary summary = auth::load_session_summary();
+    if (!summary.logged_in) {
+        return std::nullopt;
+    }
+
+    return auth::load_saved_session();
+}
+
+std::string display_ruleset_server_url() {
+    const auth::session_summary summary = auth::load_session_summary();
+    if (!summary.server_url.empty()) {
+        return auth::normalize_server_url(summary.server_url);
+    }
+
+    return auth::normalize_server_url(auth::kDefaultServerUrl);
+}
+
+struct cached_scoring_ruleset_state {
+    std::mutex mutex;
+    std::string server_url;
+    std::optional<ranking_client::scoring_ruleset> ruleset;
+};
+
+cached_scoring_ruleset_state& scoring_ruleset_cache() {
+    static cached_scoring_ruleset_state cache;
+    return cache;
+}
+
+std::string rank_to_label(rank clear_rank) {
+    switch (clear_rank) {
+        case rank::ss: return "ss";
+        case rank::s: return "s";
+        case rank::aa: return "aa";
+        case rank::a: return "a";
+        case rank::b: return "b";
+        case rank::c: return "c";
+        case rank::f: return "f";
+    }
+
+    return "f";
+}
+
+rank parse_rank_label(std::string_view value) {
+    std::string normalized = trim(value);
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (normalized == "ss") return rank::ss;
+    if (normalized == "s") return rank::s;
+    if (normalized == "aa") return rank::aa;
+    if (normalized == "a") return rank::a;
+    if (normalized == "b") return rank::b;
+    if (normalized == "c") return rank::c;
+    return rank::f;
+}
+
+bool save_cached_ruleset_to_disk(const std::string& server_url,
+                                 const ranking_client::scoring_ruleset& ruleset) {
+    app_paths::ensure_directories();
+    std::ofstream output(app_paths::scoring_ruleset_cache_path(), std::ios::binary | std::ios::trunc);
+    if (!output.is_open()) {
+        return false;
+    }
+
+    output << "server_url\t" << server_url << '\n';
+    output << "active\t" << (ruleset.active ? 1 : 0) << '\n';
+    output << "accepted_input\t" << ruleset.accepted_input << '\n';
+    output << "ruleset_version\t" << ruleset.ruleset_version << '\n';
+    output << "score_model\t" << ruleset.score_model << '\n';
+    output << "max_score\t" << ruleset.max_score << '\n';
+    output << "judge_values\t"
+           << ruleset.judge_values[0] << ','
+           << ruleset.judge_values[1] << ','
+           << ruleset.judge_values[2] << ','
+           << ruleset.judge_values[3] << ','
+           << ruleset.judge_values[4] << '\n';
+    for (const auto& threshold : ruleset.rank_thresholds) {
+        output << "rank_threshold\t"
+               << rank_to_label(threshold.clear_rank) << ','
+               << threshold.min_accuracy << ','
+               << (threshold.requires_full_combo ? 1 : 0) << '\n';
+    }
+    return output.good();
+}
+
+std::optional<std::pair<std::string, ranking_client::scoring_ruleset>> load_cached_ruleset_from_disk() {
+    std::ifstream input(app_paths::scoring_ruleset_cache_path(), std::ios::binary);
+    if (!input.is_open()) {
+        return std::nullopt;
+    }
+
+    ranking_client::scoring_ruleset ruleset = scoring_ruleset_runtime::make_default_ruleset();
+    std::string server_url;
+    std::string line;
+    std::vector<scoring_ruleset_runtime::rank_threshold> thresholds;
+    while (std::getline(input, line)) {
+        if (line.empty()) {
+            continue;
+        }
+        const size_t tab = line.find('\t');
+        if (tab == std::string::npos) {
+            continue;
+        }
+        const std::string key = trim(line.substr(0, tab));
+        const std::string value = line.substr(tab + 1);
+        if (key == "server_url") {
+            server_url = trim(value);
+        } else if (key == "active") {
+            ruleset.active = trim(value) == "1";
+        } else if (key == "accepted_input") {
+            ruleset.accepted_input = trim(value);
+        } else if (key == "ruleset_version") {
+            ruleset.ruleset_version = trim(value);
+        } else if (key == "score_model") {
+            ruleset.score_model = trim(value);
+        } else if (key == "max_score") {
+            try {
+                ruleset.max_score = std::stoi(trim(value));
+            } catch (...) {
+                return std::nullopt;
+            }
+        } else if (key == "judge_values") {
+            std::array<int, 5> judge_values = {};
+            std::istringstream row(value);
+            std::string token;
+            for (size_t i = 0; i < judge_values.size(); ++i) {
+                if (!std::getline(row, token, ',')) {
+                    return std::nullopt;
+                }
+                try {
+                    judge_values[i] = std::stoi(trim(token));
+                } catch (...) {
+                    return std::nullopt;
+                }
+            }
+            ruleset.judge_values = judge_values;
+        } else if (key == "rank_threshold") {
+            std::istringstream row(value);
+            std::string label_token, accuracy_token, fc_token;
+            if (!std::getline(row, label_token, ',') ||
+                !std::getline(row, accuracy_token, ',') ||
+                !std::getline(row, fc_token, ',')) {
+                return std::nullopt;
+            }
+            try {
+                thresholds.push_back(scoring_ruleset_runtime::rank_threshold{
+                    .clear_rank = parse_rank_label(label_token),
+                    .min_accuracy = std::stof(trim(accuracy_token)),
+                    .requires_full_combo = trim(fc_token) == "1",
+                });
+            } catch (...) {
+                return std::nullopt;
+            }
+        }
+    }
+
+    if (server_url.empty()) {
+        return std::nullopt;
+    }
+    if (!thresholds.empty()) {
+        ruleset.rank_thresholds = std::move(thresholds);
+    }
+    return std::make_pair(server_url, ruleset);
+}
+
+void store_cached_ruleset(const std::string& server_url,
+                         const ranking_client::scoring_ruleset& ruleset) {
+    auto& cache = scoring_ruleset_cache();
+    std::scoped_lock lock(cache.mutex);
+    cache.server_url = server_url;
+    cache.ruleset = ruleset;
+    scoring_ruleset_runtime::apply_server_ruleset(ruleset);
+    save_cached_ruleset_to_disk(server_url, ruleset);
+}
+
+std::optional<ranking_client::scoring_ruleset> load_cached_ruleset_for_server(const std::string& server_url) {
+    auto& cache = scoring_ruleset_cache();
+    {
+        std::scoped_lock lock(cache.mutex);
+        if (cache.server_url == server_url && cache.ruleset.has_value()) {
+            return cache.ruleset;
+        }
+    }
+
+    const auto persisted = load_cached_ruleset_from_disk();
+    if (!persisted.has_value() || persisted->first != server_url) {
+        return std::nullopt;
+    }
+
+    {
+        std::scoped_lock lock(cache.mutex);
+        cache.server_url = persisted->first;
+        cache.ruleset = persisted->second;
+    }
+    scoring_ruleset_runtime::apply_server_ruleset(persisted->second);
+    return persisted->second;
+}
+
+std::optional<ranking_client::scoring_ruleset> fetch_and_cache_scoring_ruleset(const std::string& server_url) {
+    const ranking_client::scoring_ruleset_operation_result ruleset_request =
+        ranking_client::fetch_scoring_ruleset(server_url);
+    if (!ruleset_request.success || !ruleset_request.ruleset.has_value()) {
+        return std::nullopt;
+    }
+
+    store_cached_ruleset(server_url, *ruleset_request.ruleset);
+    return ruleset_request.ruleset;
 }
 
 std::string lowercase(std::string value) {
@@ -402,7 +736,7 @@ bool crypt_unprotect_utf8(const std::vector<std::byte>& ciphertext, std::string&
 }
 #endif
 
-std::vector<ranking_service::entry> load_local_entries(const std::string& chart_id) {
+std::vector<stored_local_record> load_local_records(const std::string& chart_id) {
     if (chart_id.empty()) {
         return {};
     }
@@ -425,18 +759,18 @@ std::vector<ranking_service::entry> load_local_entries(const std::string& chart_
     if (!crypt_unprotect_utf8(encrypted, plaintext)) {
         return {};
     }
-    return parse_entries(plaintext);
+    return parse_records(plaintext);
 #else
-    return parse_entries(std::string(bytes.begin(), bytes.end()));
+    return parse_records(std::string(bytes.begin(), bytes.end()));
 #endif
 }
 
-bool save_local_entries(const std::string& chart_id, const std::vector<ranking_service::entry>& entries) {
+bool save_local_records(const std::string& chart_id, const std::vector<stored_local_record>& records) {
     if (chart_id.empty()) {
         return false;
     }
 
-    const std::string plaintext = serialize_entries(entries);
+    const std::string plaintext = serialize_records(records);
     app_paths::ensure_directories();
     const std::filesystem::path path = app_paths::local_ranking_path(chart_id);
 
@@ -517,7 +851,12 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
         return result;
     }
 
-    result.entries = load_local_entries(chart_id);
+    const std::vector<stored_local_record> records = load_local_records(chart_id);
+    const scoring_ruleset_runtime::ruleset ruleset = scoring_ruleset_runtime::current_ruleset();
+    result.entries.reserve(records.size());
+    for (const stored_local_record& record : records) {
+        result.entries.push_back(resolve_record_entry(record, ruleset));
+    }
     std::sort(result.entries.begin(), result.entries.end(), ranking_entry_better);
     if (limit > 0 && static_cast<int>(result.entries.size()) > limit) {
         result.entries.resize(static_cast<size_t>(limit));
@@ -541,30 +880,57 @@ local_submit_result submit_local_result_detailed(const chart_meta& chart, const 
         return submission;
     }
 
-    std::vector<entry> entries = load_local_entries(chart.chart_id);
+    std::vector<stored_local_record> records = load_local_records(chart.chart_id);
+    const scoring_ruleset_runtime::ruleset ruleset = scoring_ruleset_runtime::current_ruleset();
+    std::vector<entry> entries;
+    entries.reserve(records.size());
+    for (const stored_local_record& record : records) {
+        entries.push_back(resolve_record_entry(record, ruleset));
+    }
     std::sort(entries.begin(), entries.end(), ranking_entry_better);
 
-    entry new_entry{
-        .placement = 0,
-        .player_display_name = current_local_player_display_name(),
-        .accuracy = result.accuracy,
-        .is_full_combo = result.is_full_combo,
-        .max_combo = result.max_combo,
-        .score = result.score,
-        .recorded_at = current_timestamp_utc(),
-        .verified = false,
+    const std::string recorded_at = current_timestamp_utc();
+    const std::string player_display_name = current_local_player_display_name();
+    stored_local_record new_record{
+        .recorded_at = recorded_at,
+        .player_display_name = player_display_name,
     };
+    entry new_entry;
+    if (!result.note_results.empty()) {
+        new_record.note_results = result.note_results;
+        new_entry = resolve_record_entry(new_record, ruleset);
+    } else {
+        new_entry = entry{
+            .placement = 0,
+            .player_display_name = player_display_name,
+            .accuracy = result.accuracy,
+            .is_full_combo = result.is_full_combo,
+            .max_combo = result.max_combo,
+            .score = result.score,
+            .recorded_at = recorded_at,
+            .verified = false,
+            .resolved_clear_rank = result.clear_rank,
+        };
+        new_record.legacy_entry = new_entry;
+    }
 
     submission.best_updated =
         entries.empty() || ranking_entry_better(new_entry, entries.front());
 
+    records.push_back(new_record);
     entries.push_back(new_entry);
     std::sort(entries.begin(), entries.end(), ranking_entry_better);
     if (entries.size() > 50) {
         entries.resize(50);
     }
+    std::sort(records.begin(), records.end(), [&ruleset](const stored_local_record& left, const stored_local_record& right) {
+        return ranking_entry_better(resolve_record_entry(left, ruleset), resolve_record_entry(right, ruleset));
+    });
+    if (records.size() > 50) {
+        records.resize(50);
+    }
 
-    submission.success = save_local_entries(chart.chart_id, entries);
+    submission.success = save_local_records(chart.chart_id, records);
     if (submission.success) {
         submission.submitted_entry = std::move(new_entry);
     }
@@ -579,10 +945,37 @@ bool should_attempt_online_submit(const local_submit_result& local_result) {
     return local_result.success && local_result.submitted_entry.has_value();
 }
 
+bool warm_scoring_ruleset_cache(bool force_refresh) {
+    const std::string server_url = display_ruleset_server_url();
+    if (server_url.empty()) {
+        return false;
+    }
+
+    if (!force_refresh) {
+        if (const std::optional<ranking_client::scoring_ruleset> cached =
+                load_cached_ruleset_for_server(server_url);
+            cached.has_value()) {
+            scoring_ruleset_runtime::apply_server_ruleset(*cached);
+            return true;
+        }
+    }
+
+    return fetch_and_cache_scoring_ruleset(server_url).has_value();
+}
+
+bool refresh_scoring_ruleset_cache_for_chart_start(const chart_meta& chart, bool force_refresh) {
+    if (!chart_obviously_eligible_for_online_ranking(chart)) {
+        return false;
+    }
+
+    return warm_scoring_ruleset_cache(force_refresh);
+}
+
 online_submit_result submit_online_result(const song_data& song,
                                           const std::string& chart_path,
                                           const chart_meta& chart,
-                                          const entry& submitted_entry) {
+                                          const result_data& result,
+                                          const std::string& recorded_at) {
     online_submit_result submission;
     if (!chart_obviously_eligible_for_online_ranking(chart)) {
         return submission;
@@ -611,6 +1004,23 @@ online_submit_result submit_online_result(const song_data& song,
         return submission;
     }
 
+    std::optional<ranking_client::scoring_ruleset> ruleset =
+        load_cached_ruleset_for_server(stored->server_url);
+    if (!ruleset.has_value()) {
+        ruleset = fetch_and_cache_scoring_ruleset(stored->server_url);
+    }
+
+    if (!ruleset.has_value()) {
+        submission.message = "Failed to fetch scoring ruleset.";
+        return submission;
+    }
+
+    if (!ruleset->active ||
+        ruleset->accepted_input != "note_results_v1") {
+        submission.message = "The server does not accept this ranking submission format.";
+        return submission;
+    }
+
     submission.attempted = true;
 
     ranking_client::submit_operation_result request =
@@ -618,7 +1028,9 @@ online_submit_result submit_online_result(const song_data& song,
             stored->server_url,
             stored->access_token,
             chart.chart_id,
-            submitted_entry);
+            result,
+            recorded_at,
+            ruleset->ruleset_version);
 
     if (request.unauthorized) {
         const auth::operation_result restored = auth::restore_saved_session();
@@ -634,7 +1046,9 @@ online_submit_result submit_online_result(const song_data& song,
             restored.session_data->server_url,
             restored.session_data->access_token,
             chart.chart_id,
-            submitted_entry);
+            result,
+            recorded_at,
+            ruleset->ruleset_version);
     }
 
     submission.success = request.success;

@@ -3,13 +3,6 @@
 #include <algorithm>
 
 namespace {
-constexpr int kMaxScore = 1000000;
-constexpr int kPerfectBase = 1000;
-constexpr int kGreatBase = 800;
-constexpr int kGoodBase = 500;
-constexpr int kBadBase = 200;
-constexpr int kMissBase = 0;
-
 size_t judge_index(judge_result result) {
     switch (result) {
         case judge_result::perfect:
@@ -27,23 +20,6 @@ size_t judge_index(judge_result result) {
     return 4;
 }
 
-int base_score(judge_result result) {
-    switch (result) {
-        case judge_result::perfect:
-            return kPerfectBase;
-        case judge_result::great:
-            return kGreatBase;
-        case judge_result::good:
-            return kGoodBase;
-        case judge_result::bad:
-            return kBadBase;
-        case judge_result::miss:
-            return kMissBase;
-    }
-
-    return 0;
-}
-
 double combo_score_multiplier(int combo, int total_notes) {
     if (total_notes <= 0) {
         return 1.0;
@@ -53,20 +29,23 @@ double combo_score_multiplier(int combo, int total_notes) {
     return progress * progress;
 }
 
-double max_raw_score_for_total_notes(int total_notes) {
+double max_raw_score_for_total_notes(const scoring_ruleset_runtime::ruleset& ruleset, int total_notes) {
     if (total_notes <= 0) {
         return 0.0;
     }
 
     double max_score = 0.0;
     for (int combo = 1; combo <= total_notes; ++combo) {
-        max_score += static_cast<double>(kPerfectBase) * combo_score_multiplier(combo, total_notes);
+        max_score += static_cast<double>(
+            scoring_ruleset_runtime::judge_value_for(ruleset, judge_result::perfect)) *
+            combo_score_multiplier(combo, total_notes);
     }
     return max_score;
 }
 }
 
 void score_system::init(int total_notes) {
+    ruleset_ = scoring_ruleset_runtime::current_ruleset();
     total_notes_ = std::max(total_notes, 0);
     raw_score_ = 0.0;
     combo_ = 0;
@@ -76,11 +55,20 @@ void score_system::init(int total_notes) {
     slow_count_ = 0;
     offset_sum_ = 0.0;
     judged_notes_ = 0;
+    note_results_.clear();
+    note_results_.reserve(static_cast<size_t>(total_notes_));
 }
 
 void score_system::on_judge(const judge_event& event) {
     ++judge_counts_[judge_index(event.result)];
     ++judged_notes_;
+    if (event.event_index >= 0) {
+        note_results_.push_back(note_result_entry{
+            .event_index = event.event_index,
+            .result = event.result,
+            .offset_ms = event.offset_ms,
+        });
+    }
 
     if (event.offset_ms < 0.0) {
         ++fast_count_;
@@ -96,7 +84,7 @@ void score_system::on_judge(const judge_event& event) {
         max_combo_ = std::max(max_combo_, combo_);
     }
 
-    const int raw = base_score(event.result);
+    const int raw = scoring_ruleset_runtime::judge_value_for(ruleset_, event.result);
     raw_score_ += static_cast<double>(raw) * combo_score_multiplier(combo_, total_notes_);
 }
 
@@ -113,12 +101,13 @@ float score_system::get_live_accuracy() const {
         return 0.0f;
     }
 
-    const double max_achievement_points = static_cast<double>(judged_notes_ * kPerfectBase);
+    const int perfect_value = scoring_ruleset_runtime::judge_value_for(ruleset_, judge_result::perfect);
+    const double max_achievement_points = static_cast<double>(judged_notes_ * perfect_value);
     const double earned_achievement_points =
-        judge_counts_[judge_index(judge_result::perfect)] * kPerfectBase +
-        judge_counts_[judge_index(judge_result::great)] * kGreatBase +
-        judge_counts_[judge_index(judge_result::good)] * kGoodBase +
-        judge_counts_[judge_index(judge_result::bad)] * kBadBase;
+        judge_counts_[judge_index(judge_result::perfect)] * scoring_ruleset_runtime::judge_value_for(ruleset_, judge_result::perfect) +
+        judge_counts_[judge_index(judge_result::great)] * scoring_ruleset_runtime::judge_value_for(ruleset_, judge_result::great) +
+        judge_counts_[judge_index(judge_result::good)] * scoring_ruleset_runtime::judge_value_for(ruleset_, judge_result::good) +
+        judge_counts_[judge_index(judge_result::bad)] * scoring_ruleset_runtime::judge_value_for(ruleset_, judge_result::bad);
     return static_cast<float>((earned_achievement_points / max_achievement_points) * 100.0);
 }
 
@@ -135,20 +124,21 @@ result_data score_system::get_result_data() const {
     result.is_all_perfect = judged_notes_ > 0 &&
                             judge_counts_[judge_index(judge_result::perfect)] == judged_notes_;
     result.accuracy = get_live_accuracy();
+    result.note_results = note_results_;
 
-    result.clear_rank = compute_rank(result.accuracy, result.is_full_combo);
+    result.clear_rank = scoring_ruleset_runtime::compute_rank_for(ruleset_, result.accuracy, result.is_full_combo);
 
     return result;
 }
 
 int score_system::normalized_score() const {
-    const double max_raw_score = max_raw_score_for_total_notes(total_notes_);
+    const double max_raw_score = max_raw_score_for_total_notes(ruleset_, total_notes_);
     if (max_raw_score <= 0.0) {
         return 0;
     }
 
     const double normalized = raw_score_ / max_raw_score;
-    return static_cast<int>(std::clamp(normalized, 0.0, 1.0) * kMaxScore);
+    return static_cast<int>(std::clamp(normalized, 0.0, 1.0) * ruleset_.max_score);
 }
 
 void gauge::on_judge(judge_result result) {

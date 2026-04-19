@@ -523,6 +523,7 @@ std::optional<ranking_service::entry> parse_ranking_entry(const std::string& con
     const auto score = extract_json_int(content, "score");
     const auto recorded_at = extract_json_string(content, "recorded_at");
     const auto verified = extract_json_bool(content, "verified");
+    const std::string clear_rank_label = extract_json_string(content, "clear_rank").value_or("");
     if (!placement.has_value() ||
         !accuracy.has_value() ||
         !is_full_combo.has_value() ||
@@ -542,6 +543,20 @@ std::optional<ranking_service::entry> parse_ranking_entry(const std::string& con
         .score = *score,
         .recorded_at = *recorded_at,
         .verified = *verified,
+        .resolved_clear_rank = clear_rank_label.empty()
+            ? scoring_ruleset_runtime::compute_rank_for(
+                scoring_ruleset_runtime::current_ruleset(),
+                *accuracy,
+                *is_full_combo)
+            : [&clear_rank_label]() {
+                if (clear_rank_label == "ss") return rank::ss;
+                if (clear_rank_label == "s") return rank::s;
+                if (clear_rank_label == "aa") return rank::aa;
+                if (clear_rank_label == "a") return rank::a;
+                if (clear_rank_label == "b") return rank::b;
+                if (clear_rank_label == "c") return rank::c;
+                return rank::f;
+            }(),
     };
 }
 
@@ -581,13 +596,42 @@ std::string build_manifest_url(const std::string& server_url, const std::string&
     return server_url + "/charts/" + chart_id + "/official-manifest";
 }
 
-std::string build_submit_payload(const ranking_service::entry& entry) {
+std::string judge_result_label(judge_result result) {
+    switch (result) {
+        case judge_result::perfect: return "perfect";
+        case judge_result::great: return "great";
+        case judge_result::good: return "good";
+        case judge_result::bad: return "bad";
+        case judge_result::miss: return "miss";
+    }
+
+    return "miss";
+}
+
+std::string build_note_results_json(const std::vector<note_result_entry>& note_results) {
+    std::string json = "[";
+    for (size_t i = 0; i < note_results.size(); ++i) {
+        const note_result_entry& entry = note_results[i];
+        if (i > 0) {
+            json += ",";
+        }
+        json += "{";
+        json += "\"event_index\":" + std::to_string(entry.event_index) + ",";
+        json += "\"result\":\"" + judge_result_label(entry.result) + "\",";
+        json += "\"offset_ms\":" + std::to_string(entry.offset_ms);
+        json += "}";
+    }
+    json += "]";
+    return json;
+}
+
+std::string build_submit_payload(const result_data& result,
+                                 const std::string& recorded_at,
+                                 const std::string& ruleset_version) {
     return "{"
-        "\"score\":" + std::to_string(entry.score) + ","
-        "\"accuracy\":" + std::to_string(entry.accuracy) + ","
-        "\"is_full_combo\":" + std::string(entry.is_full_combo ? "true" : "false") + ","
-        "\"max_combo\":" + std::to_string(entry.max_combo) + ","
-        "\"recorded_at\":\"" + escape_json_string(entry.recorded_at) + "\""
+        "\"recorded_at\":\"" + escape_json_string(recorded_at) + "\","
+        "\"ruleset_version\":\"" + escape_json_string(ruleset_version) + "\","
+        "\"note_results\":" + build_note_results_json(result.note_results) +
         "}";
 }
 
@@ -621,6 +665,72 @@ std::optional<ranking_client::official_manifest> parse_official_manifest_respons
         .audio_sha256 = extract_json_string(body, "audio_sha256").value_or(""),
         .jacket_sha256 = extract_json_string(body, "jacket_sha256").value_or(""),
         .chart_sha256 = extract_json_string(body, "chart_sha256").value_or(""),
+    };
+}
+
+std::optional<ranking_client::scoring_ruleset> parse_scoring_ruleset_response(const std::string& body) {
+    const auto active = extract_json_bool(body, "active");
+    const auto accepted_input = extract_json_string(body, "accepted_input");
+    const auto ruleset_version = extract_json_string(body, "ruleset_version");
+    const auto score_model = extract_json_string(body, "score_model");
+    const auto max_score = extract_json_int(body, "max_score");
+    const auto judges_object = extract_json_object(body, "judges");
+    const auto thresholds_array = extract_json_array(body, "rank_thresholds");
+    if (!active.has_value() || !accepted_input.has_value() || !ruleset_version.has_value() ||
+        !score_model.has_value() || !max_score.has_value() ||
+        !judges_object.has_value() || !thresholds_array.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto perfect = extract_json_int(*judges_object, "perfect");
+    const auto great = extract_json_int(*judges_object, "great");
+    const auto good = extract_json_int(*judges_object, "good");
+    const auto bad = extract_json_int(*judges_object, "bad");
+    const auto miss = extract_json_int(*judges_object, "miss");
+    if (!perfect.has_value() || !great.has_value() || !good.has_value() ||
+        !bad.has_value() || !miss.has_value()) {
+        return std::nullopt;
+    }
+
+    std::vector<scoring_ruleset_runtime::rank_threshold> rank_thresholds;
+    for (const std::string& object : extract_json_objects_from_array(*thresholds_array)) {
+        const auto rank_label = extract_json_string(object, "rank");
+        const auto min_accuracy = extract_json_float(object, "min_accuracy");
+        const auto requires_full_combo = extract_json_bool(object, "requires_full_combo");
+        if (!rank_label.has_value() || !min_accuracy.has_value() || !requires_full_combo.has_value()) {
+            return std::nullopt;
+        }
+
+        rank parsed_rank = rank::f;
+        if (*rank_label == "ss") {
+            parsed_rank = rank::ss;
+        } else if (*rank_label == "s") {
+            parsed_rank = rank::s;
+        } else if (*rank_label == "aa") {
+            parsed_rank = rank::aa;
+        } else if (*rank_label == "a") {
+            parsed_rank = rank::a;
+        } else if (*rank_label == "b") {
+            parsed_rank = rank::b;
+        } else if (*rank_label == "c") {
+            parsed_rank = rank::c;
+        }
+
+        rank_thresholds.push_back(scoring_ruleset_runtime::rank_threshold{
+            .clear_rank = parsed_rank,
+            .min_accuracy = *min_accuracy,
+            .requires_full_combo = *requires_full_combo,
+        });
+    }
+
+    return ranking_client::scoring_ruleset{
+        .active = *active,
+        .accepted_input = *accepted_input,
+        .ruleset_version = *ruleset_version,
+        .score_model = *score_model,
+        .max_score = *max_score,
+        .judge_values = {*perfect, *great, *good, *bad, *miss},
+        .rank_thresholds = std::move(rank_thresholds),
     };
 }
 
@@ -707,7 +817,9 @@ operation_result fetch_chart_ranking(const std::string& server_url,
 submit_operation_result submit_chart_ranking(const std::string& server_url,
                                              const std::string& access_token,
                                              const std::string& chart_id,
-                                             const ranking_service::entry& entry) {
+                                             const result_data& result,
+                                             const std::string& recorded_at,
+                                             const std::string& ruleset_version) {
     if (server_url.empty()) {
         return {
             .success = false,
@@ -735,7 +847,7 @@ submit_operation_result submit_chart_ranking(const std::string& server_url,
             {"Content-Type", "application/json"},
             {"User-Agent", "raythm/0.1"},
         },
-        build_submit_payload(entry));
+        build_submit_payload(result, recorded_at, ruleset_version));
 
     if (!response.error_message.empty()) {
         return {
@@ -779,6 +891,55 @@ submit_operation_result submit_chart_ranking(const std::string& server_url,
         .unauthorized = false,
         .message = submission->message,
         .submission = submission,
+    };
+}
+
+scoring_ruleset_operation_result fetch_scoring_ruleset(const std::string& server_url) {
+    if (server_url.empty()) {
+        return {
+            .success = false,
+            .message = "No server URL is configured.",
+            .ruleset = std::nullopt,
+        };
+    }
+
+    const http_response response = send_request(
+        "GET",
+        server_url + "/scoring/ruleset",
+        {
+            {"Accept", "application/json"},
+            {"User-Agent", "raythm/0.1"},
+        });
+
+    if (!response.error_message.empty()) {
+        return {
+            .success = false,
+            .message = response.error_message,
+            .ruleset = std::nullopt,
+        };
+    }
+
+    if (response.status_code < 200 || response.status_code >= 300) {
+        return {
+            .success = false,
+            .message = extract_json_string(response.body, "message").value_or("Failed to fetch scoring ruleset."),
+            .ruleset = std::nullopt,
+        };
+    }
+
+    const std::optional<scoring_ruleset> ruleset = parse_scoring_ruleset_response(response.body);
+    if (!ruleset.has_value()) {
+        return {
+            .success = false,
+            .message = "Server returned an unexpected scoring ruleset response.",
+            .ruleset = std::nullopt,
+        };
+    }
+
+    return {
+        .success = true,
+        .message = {},
+        .ruleset = ruleset,
     };
 }
 

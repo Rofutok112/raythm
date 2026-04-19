@@ -8,6 +8,10 @@
 
 namespace title_play_session {
 
+void warm_scoring_ruleset() {
+    ranking_service::warm_scoring_ruleset_cache(false);
+}
+
 void reload_catalog(song_select::state& state,
                     song_select::preview_controller& preview_controller,
                     const std::string& preferred_song_id,
@@ -44,6 +48,7 @@ bool start_selected_chart(scene_manager& manager,
     if (song == nullptr || chart == nullptr) {
         return false;
     }
+    ranking_service::refresh_scoring_ruleset_cache_for_chart_start(chart->meta, true);
     preview_controller.stop();
     manager.change_scene(song_select::make_play_scene(manager, *song, *chart));
     return true;

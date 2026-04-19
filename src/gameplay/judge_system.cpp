@@ -12,12 +12,15 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
     active_hold_indices_.fill(std::nullopt);
     judge_events_.clear();
 
+    int next_event_index = 0;
     for (size_t i = 0; i < notes.size(); ++i) {
         const note_data& note = notes[i];
         note_state state;
         state.note_ref = note;
         state.target_ms = engine.tick_to_ms(note.tick);
         state.end_target_ms = engine.tick_to_ms(note.type == note_type::hold ? note.end_tick : note.tick);
+        state.head_event_index = next_event_index++;
+        state.tail_event_index = note.type == note_type::hold ? next_event_index++ : state.head_event_index;
         note_states_.push_back(state);
         if (note.lane >= 0 && note.lane < kMaxLanes) {
             lane_note_indices_[static_cast<size_t>(note.lane)].push_back(i);
@@ -134,7 +137,7 @@ void judge_system::handle_hold_release(const input_event& event) {
     active_hold.reset();
     judge_emit_options options;
     options.play_hitsound = false;
-    emit_judge(state.result, release_offset_ms, state.note_ref.lane, options);
+    emit_judge(state.result, release_offset_ms, state.note_ref.lane, state.tail_event_index, options);
 }
 
 void judge_system::handle_press(const input_event& event) {
@@ -162,7 +165,7 @@ void judge_system::handle_press(const input_event& event) {
     if (candidate.is_holding()) {
         active_hold_indices_[static_cast<size_t>(event.lane)] = *candidate_index;
     }
-    emit_judge(result, offset_ms, event.lane);
+    emit_judge(result, offset_ms, event.lane, candidate.head_event_index);
 }
 
 void judge_system::resolve_hold_completions(double current_ms) {
@@ -199,7 +202,7 @@ void judge_system::resolve_auto_misses(double current_ms) {
             // head が最大判定幅を超えたら、そのノートはもう叩けない。
             state.progress = note_progress_state::completed;
             state.result = judge_result::miss;
-            emit_judge(judge_result::miss, offset_ms, state.note_ref.lane);
+            emit_judge(judge_result::miss, offset_ms, state.note_ref.lane, state.head_event_index);
             ++head_index;
         }
     }
@@ -257,18 +260,20 @@ void judge_system::complete_held_note(size_t note_index, bool emit_display_judge
     options.play_hitsound = false;
     options.apply_gameplay_effects = true;
     options.show_feedback = emit_display_judge;
-    emit_judge(judge_result::perfect, 0.0, state.note_ref.lane, options);
+    emit_judge(judge_result::perfect, 0.0, state.note_ref.lane, state.tail_event_index, options);
 }
 
-void judge_system::emit_judge(judge_result result, double offset_ms, int lane) {
-    emit_judge(result, offset_ms, lane, judge_emit_options{});
+void judge_system::emit_judge(judge_result result, double offset_ms, int lane, int event_index) {
+    emit_judge(result, offset_ms, lane, event_index, judge_emit_options{});
 }
 
 void judge_system::emit_judge(judge_result result, double offset_ms, int lane,
+                              int event_index,
                               judge_emit_options options) {
     judge_event event{result, offset_ms, lane,
                       options.play_hitsound,
                       options.apply_gameplay_effects,
-                      options.show_feedback};
+                      options.show_feedback,
+                      event_index};
     judge_events_.push_back(event);
 }

@@ -408,6 +408,7 @@ void title_scene::on_enter() {
     song_select::reset_for_enter(play_state_);
     play_state_.ranking_panel.selected_source = ranking_service::source::local;
     auth_overlay::refresh_auth_state(play_state_.auth);
+    title_play_session::warm_scoring_ruleset();
     // Preload song/chart catalog once on scene entry so HOME -> PLAY animation
     // does not have to wait for difficulty calculation and local rank scanning.
     title_play_session::reload_catalog(play_state_, preview_controller_,

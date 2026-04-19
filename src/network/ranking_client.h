@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "scoring_ruleset_runtime.h"
 #include "ranking_service.h"
 
 namespace ranking_client {
@@ -35,6 +36,14 @@ struct submit_operation_result {
     std::optional<submit_response> submission;
 };
 
+using scoring_ruleset = scoring_ruleset_runtime::ruleset;
+
+struct scoring_ruleset_operation_result {
+    bool success = false;
+    std::string message;
+    std::optional<scoring_ruleset> ruleset;
+};
+
 struct official_manifest {
     bool available = false;
     std::string message;
@@ -60,7 +69,11 @@ operation_result fetch_chart_ranking(const std::string& server_url,
 submit_operation_result submit_chart_ranking(const std::string& server_url,
                                              const std::string& access_token,
                                              const std::string& chart_id,
-                                             const ranking_service::entry& entry);
+                                             const result_data& result,
+                                             const std::string& recorded_at,
+                                             const std::string& ruleset_version);
+
+scoring_ruleset_operation_result fetch_scoring_ruleset(const std::string& server_url);
 
 manifest_operation_result fetch_official_chart_manifest(const std::string& server_url,
                                                         const std::string& chart_id);
