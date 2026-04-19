@@ -157,8 +157,24 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/shared/auth_overlay_controller.h
         src/scenes/title_scene.cpp
         src/scenes/title_scene.h
+        src/scenes/title/home_menu_view.cpp
+        src/scenes/title/home_menu_view.h
+        src/scenes/title/title_layout.cpp
+        src/scenes/title/title_layout.h
+        src/scenes/title/play_session_controller.cpp
+        src/scenes/title/play_session_controller.h
+        src/scenes/title/title_header_view.cpp
+        src/scenes/title/title_header_view.h
+        src/scenes/title/ranking_panel_view.cpp
+        src/scenes/title/ranking_panel_view.h
+        src/scenes/title/center_panel_view.cpp
+        src/scenes/title/center_panel_view.h
+        src/scenes/title/song_list_view.cpp
+        src/scenes/title/song_list_view.h
         src/scenes/title/title_bgm_controller.cpp
         src/scenes/title/title_bgm_controller.h
+        src/scenes/title/seamless_song_select_view.cpp
+        src/scenes/title/seamless_song_select_view.h
         src/scenes/title/title_spectrum_visualizer.cpp
         src/scenes/title/title_spectrum_visualizer.h
         src/scenes/mv_editor_scene.cpp
@@ -171,6 +187,10 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_select_confirmation_dialog.h
         src/scenes/song_select/song_import_export_service.cpp
         src/scenes/song_select/song_import_export_service.h
+        src/scenes/song_select/song_select_command_controller.cpp
+        src/scenes/song_select/song_select_command_controller.h
+        src/scenes/song_select/song_transfer_controller.cpp
+        src/scenes/song_select/song_transfer_controller.h
         src/scenes/song_select/song_select_last_played.cpp
         src/scenes/song_select/song_select_last_played.h
         src/scenes/song_select/song_preview_controller.cpp
@@ -263,7 +283,6 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/theme.h
         src/scenes/virtual_screen.cpp
         src/scenes/virtual_screen.h
-        src/game_scenes.h
         src/ui/ui_layout.h
         src/ui/ui_font.cpp
         src/ui/ui_font.h

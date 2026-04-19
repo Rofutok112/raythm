@@ -3,23 +3,36 @@
 #include "scene.h"
 #include "shared/auth_overlay_controller.h"
 #include "shared/scene_fade.h"
-#include "song_select/song_select_login_dialog.h"
+#include "song_select/song_preview_controller.h"
 #include "song_select/song_select_state.h"
 #include "title/title_bgm_controller.h"
 #include "title/title_spectrum_visualizer.h"
+#include <optional>
 #include <string>
 
 // タイトル画面。曲選択画面・設定画面への遷移を提供する。
 class title_scene final : public scene {
 public:
+    enum class hub_mode {
+        title,
+        home,
+        play,
+        create,
+    };
+
     enum class transition_target {
         song_select,
-        song_create,
+        create_tools,
     };
 
     explicit title_scene(scene_manager& manager,
                          bool start_with_home_open = false,
-                         bool play_intro_fade = true);
+                         bool play_intro_fade = true,
+                         std::string preferred_song_id = "",
+                         std::string preferred_chart_id = "",
+                         std::optional<song_select::recent_result_offset> recent_result_offset = std::nullopt,
+                         bool start_in_play_view = false,
+                         bool start_in_create_view = false);
 
     void on_enter() override;
     void on_exit() override;
@@ -28,6 +41,20 @@ public:
 
 private:
     void start_transition(transition_target target);
+    void enter_title_mode();
+    void enter_home_mode(bool suppress_pointer = false);
+    void enter_play_mode();
+    void enter_create_mode();
+    void update_play_mode(float dt);
+    void update_create_mode(float dt);
+    void update_common_animation(float dt);
+    bool handle_account_input();
+    bool handle_login_dialog_input();
+    void update_home_pointer_suppression();
+    bool handle_title_input(bool left_click_for_home, bool right_click_for_home);
+    bool handle_home_input();
+    void update_title_quit(float dt);
+    void sync_audio_mode();
 
     bool quitting_ = false;
     scene_fade quit_fade_{scene_fade::direction::out, 1.5f, 1.0f};
@@ -39,13 +66,20 @@ private:
     transition_target transition_target_ = transition_target::song_select;
     bool start_with_home_open_ = false;
     bool play_intro_fade_ = true;
-    bool home_menu_open_ = false;
+    std::string preferred_song_id_;
+    std::string preferred_chart_id_;
+    std::optional<song_select::recent_result_offset> recent_result_offset_;
+    bool start_in_play_view_ = false;
+    bool start_in_create_view_ = false;
     bool suppress_home_pointer_until_release_ = false;
+    hub_mode mode_ = hub_mode::title;
     float home_menu_anim_ = 0.0f;
     int home_menu_selected_index_ = 0;
     std::string home_status_message_;
-    song_select::auth_state auth_state_;
-    song_select::login_dialog_state login_dialog_;
+    float play_view_anim_ = 0.0f;
+    Rectangle play_entry_origin_rect_{};
+    song_select::state play_state_;
+    song_select::preview_controller preview_controller_;
     title_bgm_controller bgm_controller_;
     title_spectrum_visualizer spectrum_visualizer_;
     auth_overlay::controller auth_controller_;

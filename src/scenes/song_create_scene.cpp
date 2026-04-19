@@ -15,7 +15,7 @@
 #include "raylib.h"
 #include "scene_common.h"
 #include "scene_manager.h"
-#include "song_select_scene.h"
+#include "song_select/song_select_navigation.h"
 #include "song_writer.h"
 #include "theme.h"
 #include "ui_draw.h"
@@ -480,7 +480,7 @@ bool song_create_scene::save_song_edits() {
 }
 
 void song_create_scene::go_back_to_song_select(const std::string& preferred_song_id) {
-    manager_.change_scene(std::make_unique<song_select_scene>(manager_, preferred_song_id));
+    manager_.change_scene(song_select::make_seamless_create_scene(manager_, preferred_song_id));
 }
 
 bool song_create_scene::is_edit_mode() const {

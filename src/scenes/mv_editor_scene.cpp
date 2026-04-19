@@ -4,7 +4,7 @@
 #include "mv/lang/mv_sandbox.h"
 #include "scene_common.h"
 #include "scene_manager.h"
-#include "song_select_scene.h"
+#include "song_select/song_select_navigation.h"
 #include "theme.h"
 #include "ui_draw.h"
 #include "ui_text_input.h"
@@ -124,7 +124,7 @@ void mv_editor_scene::update(float dt) {
             author_input_.active = false;
             return;
         }
-        manager_.change_scene(std::make_unique<song_select_scene>(manager_, song_.meta.song_id));
+        manager_.change_scene(song_select::make_seamless_create_scene(manager_, song_.meta.song_id));
         return;
     }
 
@@ -165,7 +165,7 @@ void mv_editor_scene::draw() {
     };
     auto back_result = ui::draw_button(back_btn, "Back", 14);
     if (back_result.clicked) {
-        manager_.change_scene(std::make_unique<song_select_scene>(manager_, song_.meta.song_id));
+        manager_.change_scene(song_select::make_seamless_create_scene(manager_, song_.meta.song_id));
         ui::flush_draw_queue();
         virtual_screen::end();
         ClearBackground(BLACK);

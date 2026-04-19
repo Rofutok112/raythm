@@ -16,6 +16,7 @@ public:
 
     void select_song(const song_entry* song);
     void update(float dt, const song_entry* selected_song);
+    void fade_out();
     void stop();
 
     [[nodiscard]] bool jacket_loaded() const {

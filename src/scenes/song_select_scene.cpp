@@ -65,10 +65,7 @@ void song_select_scene::on_exit() {
     song_select::close_context_menu(state_);
     state_.confirmation_dialog = {};
     state_.login_dialog.open = false;
-    if (pending_song_import_request_.has_value()) {
-        song_select::cleanup_song_import_request(*pending_song_import_request_);
-        pending_song_import_request_.reset();
-    }
+    transfer_controller_.on_exit();
     preview_controller_.stop();
 }
 
@@ -127,83 +124,8 @@ void song_select_scene::apply_transfer_result(const song_select::transfer_result
     song_select::queue_status_message(state_, result.message, false);
 }
 
-void song_select_scene::poll_song_import_prepare() {
-    if (!background_song_import_prepare_active_) {
-        return;
-    }
-
-    if (background_song_import_prepare_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
-        return;
-    }
-
-    background_song_import_prepare_active_ = false;
-    background_transfer_label_.clear();
-    song_select::song_import_prepare_result prepared = background_song_import_prepare_.get();
-    if (!prepared.request.has_value()) {
-        apply_transfer_result(prepared.transfer);
-        return;
-    }
-
-    if (prepared.request->overwrite_existing) {
-        open_overwrite_song_confirmation(*prepared.request);
-        return;
-    }
-
-    start_song_import(*prepared.request);
-}
-
-void song_select_scene::poll_background_transfer() {
-    if (!background_transfer_active_) {
-        return;
-    }
-
-    if (background_transfer_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
-        return;
-    }
-
-    background_transfer_active_ = false;
-    background_transfer_label_.clear();
-    song_select::transfer_result result = background_transfer_.get();
-    if (pending_song_import_request_.has_value()) {
-        song_select::cleanup_song_import_request(*pending_song_import_request_);
-        pending_song_import_request_.reset();
-    }
-    apply_transfer_result(result);
-}
-
-void song_select_scene::start_song_import_prepare(std::string source_path) {
-    background_song_import_prepare_active_ = true;
-    background_transfer_label_ = "Reading song package...";
-    song_select::queue_status_message(state_, "Reading song package...", false);
-    const song_select::state catalog_state = state_;
-    background_song_import_prepare_ = std::async(
-        std::launch::async,
-        [catalog_state, source_path = std::move(source_path)]() {
-            return song_select::prepare_song_import_from_path(catalog_state, source_path);
-        });
-}
-
-void song_select_scene::start_song_export(song_select::song_export_request request) {
-    background_transfer_active_ = true;
-    background_transfer_label_ = "Exporting song package...";
-    song_select::queue_status_message(state_, "Exporting song package...", false);
-    background_transfer_ = std::async(std::launch::async, [request = std::move(request)]() {
-        return song_select::export_song_package(request);
-    });
-}
-
-void song_select_scene::start_song_import(song_select::song_import_request request) {
-    background_transfer_active_ = true;
-    background_transfer_label_ = "Importing song package...";
-    song_select::queue_status_message(state_, "Importing song package...", false);
-    pending_song_import_request_ = request;
-    background_transfer_ = std::async(std::launch::async, [request = std::move(request)]() {
-        return song_select::import_song_package(request);
-    });
-}
-
 void song_select_scene::open_overwrite_song_confirmation(song_select::song_import_request request) {
-    pending_song_import_request_ = std::move(request);
+    transfer_controller_.set_pending_song_import_request(std::move(request));
     song_select::open_confirmation_dialog(
         state_, song_select::pending_confirmation_action::overwrite_song_import,
         "Overwrite Song",
@@ -213,7 +135,7 @@ void song_select_scene::open_overwrite_song_confirmation(song_select::song_impor
 }
 
 void song_select_scene::open_overwrite_chart_confirmation(song_select::chart_import_request request) {
-    pending_chart_import_request_ = std::move(request);
+    transfer_controller_.set_pending_chart_import_request(std::move(request));
     song_select::open_confirmation_dialog(
         state_, song_select::pending_confirmation_action::overwrite_chart_import,
         "Overwrite Chart",
@@ -360,252 +282,10 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
     return true;
 }
 
-void song_select_scene::apply_context_menu_command(song_select::context_menu_command command) {
-    switch (command) {
-    case song_select::context_menu_command::none:
-        return;
-    case song_select::context_menu_command::open_song_section:
-        state_.context_menu.section = song_select::context_menu_section::song;
-        state_.context_menu.rect = song_select::layout::make_context_menu_rect(
-            {state_.context_menu.rect.x, state_.context_menu.rect.y},
-            song_select::context_menu_item_count(
-                state_, state_.context_menu.target, state_.context_menu.section,
-                state_.context_menu.song_index, state_.context_menu.chart_index));
-        return;
-    case song_select::context_menu_command::open_chart_section:
-        state_.context_menu.section = song_select::context_menu_section::chart;
-        state_.context_menu.rect = song_select::layout::make_context_menu_rect(
-            {state_.context_menu.rect.x, state_.context_menu.rect.y},
-            song_select::context_menu_item_count(
-                state_, state_.context_menu.target, state_.context_menu.section,
-                state_.context_menu.song_index, state_.context_menu.chart_index));
-        return;
-    case song_select::context_menu_command::open_mv_section:
-        state_.context_menu.section = song_select::context_menu_section::mv;
-        state_.context_menu.rect = song_select::layout::make_context_menu_rect(
-            {state_.context_menu.rect.x, state_.context_menu.rect.y},
-            song_select::context_menu_item_count(
-                state_, state_.context_menu.target, state_.context_menu.section,
-                state_.context_menu.song_index, state_.context_menu.chart_index));
-        return;
-    case song_select::context_menu_command::back_to_root:
-        state_.context_menu.section = song_select::context_menu_section::root;
-        state_.context_menu.rect = song_select::layout::make_context_menu_rect(
-            {state_.context_menu.rect.x, state_.context_menu.rect.y},
-            song_select::context_menu_item_count(
-                state_, state_.context_menu.target, state_.context_menu.section,
-                state_.context_menu.song_index, state_.context_menu.chart_index));
-        return;
-    case song_select::context_menu_command::close_menu:
-        song_select::close_context_menu(state_);
-        return;
-    case song_select::context_menu_command::new_song:
-        song_select::close_context_menu(state_);
-        manager_.change_scene(song_select::make_song_create_scene(manager_));
-        return;
-    case song_select::context_menu_command::import_song:
-        song_select::close_context_menu(state_);
-        {
-            const std::string source_path = file_dialog::open_song_package_file();
-            if (!source_path.empty()) {
-                start_song_import_prepare(source_path);
-            }
-        }
-        return;
-    case song_select::context_menu_command::edit_song:
-        if (state_.context_menu.song_index >= 0 &&
-            state_.context_menu.song_index < static_cast<int>(state_.songs.size())) {
-            const song_select::song_entry& song = state_.songs[static_cast<size_t>(state_.context_menu.song_index)];
-            song_select::close_context_menu(state_);
-            manager_.change_scene(song_select::make_edit_song_scene(manager_, song));
-        }
-        return;
-    case song_select::context_menu_command::new_chart:
-        if (state_.context_menu.song_index >= 0 &&
-            state_.context_menu.song_index < static_cast<int>(state_.songs.size())) {
-            const song_select::song_entry& song = state_.songs[static_cast<size_t>(state_.context_menu.song_index)];
-            song_select::close_context_menu(state_);
-            manager_.change_scene(song_select::make_new_chart_scene(manager_, song, state_.difficulty_index));
-        }
-        return;
-    case song_select::context_menu_command::import_chart:
-    {
-        song_select::close_context_menu(state_);
-        song_select::transfer_result result;
-        if (const auto request = song_select::prepare_chart_import(state_, result); request.has_value()) {
-            if (request->overwrite_existing) {
-                open_overwrite_chart_confirmation(*request);
-            } else {
-                apply_transfer_result(song_select::import_chart_package(*request));
-            }
-        } else {
-            apply_transfer_result(result);
-        }
-        return;
-    }
-    case song_select::context_menu_command::export_song:
-    {
-        const int song_index = state_.context_menu.song_index;
-        song_select::close_context_menu(state_);
-        if (const auto request = song_select::prepare_song_export(state_, song_index); request.has_value()) {
-            start_song_export(*request);
-        }
-        return;
-    }
-    case song_select::context_menu_command::request_delete_song:
-        song_select::open_confirmation_dialog(
-            state_, song_select::pending_confirmation_action::delete_song,
-            "", "", "", "DELETE", state_.context_menu.song_index, -1);
-        song_select::close_context_menu(state_);
-        return;
-    case song_select::context_menu_command::edit_chart:
-        if (state_.context_menu.song_index >= 0 &&
-            state_.context_menu.song_index < static_cast<int>(state_.songs.size())) {
-            const auto& song = state_.songs[static_cast<size_t>(state_.context_menu.song_index)];
-            if (state_.context_menu.chart_index >= 0 &&
-                state_.context_menu.chart_index < static_cast<int>(song.charts.size())) {
-                const auto& chart = song.charts[static_cast<size_t>(state_.context_menu.chart_index)];
-                song_select::close_context_menu(state_);
-                manager_.change_scene(song_select::make_edit_chart_scene(manager_, song, chart));
-            }
-        }
-        return;
-    case song_select::context_menu_command::export_chart:
-    {
-        const int song_index = state_.context_menu.song_index;
-        const int chart_index = state_.context_menu.chart_index;
-        song_select::close_context_menu(state_);
-        apply_transfer_result(song_select::export_chart_package(
-            state_, song_index, chart_index));
-        return;
-    }
-    case song_select::context_menu_command::request_delete_chart:
-        song_select::open_confirmation_dialog(
-            state_, song_select::pending_confirmation_action::delete_chart,
-            "", "", "", "DELETE",
-            state_.context_menu.song_index, state_.context_menu.chart_index);
-        song_select::close_context_menu(state_);
-        return;
-    case song_select::context_menu_command::new_mv:
-    case song_select::context_menu_command::edit_mv:
-        if (state_.context_menu.song_index >= 0 &&
-            state_.context_menu.song_index < static_cast<int>(state_.songs.size())) {
-            const auto& song = state_.songs[static_cast<size_t>(state_.context_menu.song_index)];
-            song_select::close_context_menu(state_);
-            manager_.change_scene(song_select::make_mv_editor_scene(manager_, song));
-        }
-        return;
-    case song_select::context_menu_command::delete_mv:
-        song_select::open_confirmation_dialog(
-            state_, song_select::pending_confirmation_action::delete_mv,
-            "Delete MV Script",
-            "Are you sure you want to delete this MV script?",
-            "This action cannot be undone.",
-            "DELETE",
-            state_.context_menu.song_index);
-        song_select::close_context_menu(state_);
-        return;
-    case song_select::context_menu_command::import_mv:
-        if (state_.context_menu.song_index >= 0 &&
-            state_.context_menu.song_index < static_cast<int>(state_.songs.size())) {
-            const auto& song = state_.songs[static_cast<size_t>(state_.context_menu.song_index)];
-            song_select::close_context_menu(state_);
-            const std::string src = file_dialog::open_mv_script_file();
-            if (!src.empty()) {
-                mv::mv_package package = mv::find_first_package_for_song(song.song.meta.song_id)
-                    .value_or(mv::make_default_package_for_song(song.song.meta));
-                package.meta.song_id = song.song.meta.song_id;
-                package.meta.script_file = "script.rmv";
-                if (!mv::write_mv_json(package.meta, package.directory)) {
-                    song_select::queue_status_message(state_, "Failed to prepare MV package.", true);
-                } else if (!mv::import_script(package, src)) {
-                    song_select::queue_status_message(state_, "Failed to import MV script.", true);
-                } else {
-                    reload_song_library(song.song.meta.song_id, "");
-                    song_select::queue_status_message(state_, "MV script imported.", false);
-                }
-            }
-        }
-        return;
-    case song_select::context_menu_command::export_mv:
-        if (state_.context_menu.song_index >= 0 &&
-            state_.context_menu.song_index < static_cast<int>(state_.songs.size())) {
-            const auto& song = state_.songs[static_cast<size_t>(state_.context_menu.song_index)];
-            song_select::close_context_menu(state_);
-            if (const auto package = mv::find_first_package_for_song(song.song.meta.song_id); package.has_value()) {
-                const std::string dest = file_dialog::save_mv_script_file(package->meta.mv_id + ".rmv");
-                if (!dest.empty()) {
-                    if (!mv::export_script(*package, dest)) {
-                        song_select::queue_status_message(state_, "Failed to export MV script.", true);
-                    } else {
-                        song_select::queue_status_message(state_, "MV script exported.", false);
-                    }
-                }
-            }
-        }
-        return;
-    }
-}
-
-void song_select_scene::apply_confirmation_command(song_select::confirmation_command command) {
-    switch (command) {
-    case song_select::confirmation_command::none:
-        return;
-    case song_select::confirmation_command::cancel:
-        if (pending_song_import_request_.has_value()) {
-            song_select::cleanup_song_import_request(*pending_song_import_request_);
-            pending_song_import_request_.reset();
-        }
-        pending_chart_import_request_.reset();
-        state_.confirmation_dialog = {};
-        return;
-    case song_select::confirmation_command::confirm:
-        if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::delete_mv) {
-            const int si = state_.confirmation_dialog.song_index;
-            state_.confirmation_dialog = {};
-            if (si >= 0 && si < static_cast<int>(state_.songs.size())) {
-                const auto& song_id = state_.songs[static_cast<size_t>(si)].song.meta.song_id;
-                if (const auto package = mv::find_first_package_for_song(song_id); package.has_value()) {
-                    std::error_code ec;
-                    std::filesystem::remove_all(path_utils::from_utf8(package->directory), ec);
-                    if (ec) {
-                        song_select::queue_status_message(state_, "Failed to delete MV script.", true);
-                    } else {
-                        song_select::queue_status_message(state_, "MV script deleted.", false);
-                    }
-                } else {
-                    song_select::queue_status_message(state_, "MV script not found.", true);
-                }
-            }
-            return;
-        }
-        if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::delete_song) {
-            preview_controller_.stop();
-            apply_delete_result(song_select::delete_song(state_, state_.confirmation_dialog.song_index));
-        } else if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::delete_chart) {
-            apply_delete_result(song_select::delete_chart(state_, state_.confirmation_dialog.song_index,
-                                                          state_.confirmation_dialog.chart_index));
-        } else if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::overwrite_song_import) {
-            state_.confirmation_dialog = {};
-            if (pending_song_import_request_.has_value()) {
-                song_select::song_import_request request = *pending_song_import_request_;
-                start_song_import(request);
-            }
-        } else if (state_.confirmation_dialog.action == song_select::pending_confirmation_action::overwrite_chart_import) {
-            state_.confirmation_dialog = {};
-            if (pending_chart_import_request_.has_value()) {
-                apply_transfer_result(song_select::import_chart_package(*pending_chart_import_request_));
-                pending_chart_import_request_.reset();
-            }
-        }
-        return;
-    }
-}
-
 void song_select_scene::update(float dt) {
     ui::begin_hit_regions();
     const bool modal_ui_active = state_.confirmation_dialog.open || state_.login_dialog.open ||
-                                 background_song_import_prepare_active_ || background_transfer_active_;
+                                 transfer_controller_.busy();
     if (modal_ui_active) {
         state_.ranking_panel.source_dropdown_open = false;
     }
@@ -629,8 +309,19 @@ void song_select_scene::update(float dt) {
         song_select::queue_status_message(state_, restore_result.notice_message, restore_result.notice_is_error);
     }
     auth_overlay::poll_request(auth_controller_, state_.auth, state_.login_dialog);
-    poll_song_import_prepare();
-    poll_background_transfer();
+    if (const auto prepared = transfer_controller_.poll_song_import_prepare(); prepared.has_value()) {
+        if (!prepared->request.has_value()) {
+            apply_transfer_result(prepared->transfer);
+        } else if (prepared->request->overwrite_existing) {
+            open_overwrite_song_confirmation(*prepared->request);
+        } else {
+            transfer_controller_.start_song_import(*prepared->request);
+            song_select::queue_status_message(state_, transfer_controller_.busy_label(), false);
+        }
+    }
+    if (const auto result = transfer_controller_.poll_background_transfer(); result.has_value()) {
+        apply_transfer_result(*result);
+    }
 
     if (state_.confirmation_dialog.open &&
         !IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
@@ -638,7 +329,7 @@ void song_select_scene::update(float dt) {
         state_.confirmation_dialog.suppress_initial_pointer_cancel = false;
     }
 
-    if (background_song_import_prepare_active_ || background_transfer_active_) {
+    if (transfer_controller_.busy()) {
         return;
     }
 
@@ -856,10 +547,17 @@ void song_select_scene::draw() {
     if (state_.songs.empty()) {
         song_select::draw_empty_state(state_);
         song_select::draw_status_message(state_);
-        if (background_song_import_prepare_active_ || background_transfer_active_) {
-            song_select::draw_busy_overlay(background_transfer_label_);
+        if (transfer_controller_.busy()) {
+            song_select::draw_busy_overlay(transfer_controller_.busy_label());
         }
-        apply_context_menu_command(song_select::draw_context_menu(state_));
+        song_select::commands::apply_context_menu_command(
+            manager_, state_, transfer_controller_, song_select::draw_context_menu(state_),
+            [this](const song_select::transfer_result& result) { apply_transfer_result(result); },
+            [this](const std::string& preferred_song_id, const std::string& preferred_chart_id) {
+                reload_song_library(preferred_song_id, preferred_chart_id);
+            },
+            [this](song_select::song_import_request request) { open_overwrite_song_confirmation(std::move(request)); },
+            [this](song_select::chart_import_request request) { open_overwrite_chart_confirmation(std::move(request)); });
         const song_select::login_dialog_command login_command =
             song_select::draw_login_dialog(state_, auth_controller_.request_active);
         if (login_command == song_select::login_dialog_command::close) {
@@ -878,16 +576,25 @@ void song_select_scene::draw() {
     const bool ranking_source_dropdown_interactive =
         !state_.confirmation_dialog.open &&
         !state_.login_dialog.open &&
-        !background_song_import_prepare_active_ &&
-        !background_transfer_active_;
+        !transfer_controller_.busy();
     const song_select::ranking_panel_result ranking_result =
         song_select::draw_ranking_panel(state_, ranking_source_dropdown_interactive);
     song_select::draw_status_message(state_);
-    if (background_song_import_prepare_active_ || background_transfer_active_) {
-        song_select::draw_busy_overlay(background_transfer_label_);
+    if (transfer_controller_.busy()) {
+        song_select::draw_busy_overlay(transfer_controller_.busy_label());
     }
-    apply_context_menu_command(song_select::draw_context_menu(state_));
-    apply_confirmation_command(song_select::draw_confirmation_dialog(state_));
+    song_select::commands::apply_context_menu_command(
+        manager_, state_, transfer_controller_, song_select::draw_context_menu(state_),
+        [this](const song_select::transfer_result& result) { apply_transfer_result(result); },
+        [this](const std::string& preferred_song_id, const std::string& preferred_chart_id) {
+            reload_song_library(preferred_song_id, preferred_chart_id);
+        },
+        [this](song_select::song_import_request request) { open_overwrite_song_confirmation(std::move(request)); },
+        [this](song_select::chart_import_request request) { open_overwrite_chart_confirmation(std::move(request)); });
+    song_select::commands::apply_confirmation_command(
+        state_, preview_controller_, transfer_controller_, song_select::draw_confirmation_dialog(state_),
+        [this](const song_select::delete_result& result) { apply_delete_result(result); },
+        [this](const song_select::transfer_result& result) { apply_transfer_result(result); });
     const song_select::login_dialog_command login_command =
         song_select::draw_login_dialog(state_, auth_controller_.request_active);
     if (login_command == song_select::login_dialog_command::close) {

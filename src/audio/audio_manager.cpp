@@ -324,6 +324,16 @@ double audio_manager::get_preview_length_seconds() const {
     return get_voice_length_seconds(preview_handle_);
 }
 
+bool audio_manager::get_preview_fft256(std::array<float, 128>& spectrum) const {
+    spectrum.fill(0.0f);
+    if (!is_voice_loaded(preview_handle_)) {
+        return false;
+    }
+
+    return BASS_ChannelGetData(preview_handle_, spectrum.data(),
+                               BASS_DATA_FFT256 | BASS_DATA_FFT_REMOVEDC) != static_cast<DWORD>(-1);
+}
+
 int audio_manager::play_se(const std::string& file_path, float volume) {
     if (!ensure_initialized()) {
         return 0;

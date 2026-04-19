@@ -18,6 +18,9 @@ struct chart_option {
     chart_meta meta;
     int local_note_offset_ms = 0;
     std::optional<rank> best_local_rank;
+    int note_count = 0;
+    float min_bpm = 0.0f;
+    float max_bpm = 0.0f;
 };
 
 struct song_entry {
@@ -86,6 +89,7 @@ struct ranking_panel_state {
     bool source_dropdown_open = false;
     float scroll_y = 0.0f;
     float scroll_y_target = 0.0f;
+    float reveal_anim = 0.0f;
     bool scrollbar_dragging = false;
     float scrollbar_drag_offset = 0.0f;
 };
@@ -113,6 +117,8 @@ struct state {
     int difficulty_index = 0;
     float scroll_y = 0.0f;
     float scroll_y_target = 0.0f;
+    float chart_scroll_y = 0.0f;
+    float chart_scroll_y_target = 0.0f;
     float song_change_anim_t = 0.0f;
     float chart_change_anim_t = 0.0f;
     scene_fade scene_fade_in{scene_fade::direction::in, 0.3f, 0.65f};

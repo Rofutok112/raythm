@@ -22,6 +22,14 @@ struct ui_theme {
     Color row_selected_hover;   // 選択 + ホバー
     Color row_active;           // アクティブタブ背景
     Color row_list_hover;       // 未選択リスト項目のホバー
+    Color row_soft;             // 半透明ボタン・カードの通常状態
+    Color row_soft_hover;       // 半透明ボタン・カードのホバー状態
+    Color row_soft_selected;    // 半透明ボタン・カードの選択状態
+    Color row_soft_selected_hover; // 半透明ボタン・カードの選択 + ホバー
+    unsigned char row_soft_alpha;               // 半透明ボタン・カードの通常アルファ
+    unsigned char row_soft_hover_alpha;         // 半透明ボタン・カードのホバーアルファ
+    unsigned char row_soft_selected_alpha;      // 半透明ボタン・カードの選択アルファ
+    unsigned char row_soft_selected_hover_alpha; // 半透明ボタン・カードの選択 + ホバーアルファ
 
     // --- ボーダー ---
     Color border;               // 主要ボーダー
@@ -112,6 +120,14 @@ inline constexpr ui_theme kLightTheme = {
     .row_selected_hover = {214, 220, 227, 255},
     .row_active = {210, 216, 224, 255},
     .row_list_hover = {236, 240, 245, 255},
+    .row_soft = {250, 251, 253, 255},
+    .row_soft_hover = {245, 247, 250, 255},
+    .row_soft_selected = {236, 239, 244, 255},
+    .row_soft_selected_hover = {231, 235, 241, 255},
+    .row_soft_alpha = 250,
+    .row_soft_hover_alpha = 250,
+    .row_soft_selected_alpha = 250,
+    .row_soft_selected_hover_alpha = 250,
     // border
     .border = {206, 210, 218, 255},
     .border_light = {216, 220, 228, 255},
@@ -194,6 +210,14 @@ inline constexpr ui_theme kDarkTheme = {
     .row_selected_hover = {62, 66, 76, 255},
     .row_active = {58, 62, 72, 255},
     .row_list_hover = {48, 52, 58, 255},
+    .row_soft = {52, 56, 64, 255},
+    .row_soft_hover = {60, 64, 72, 255},
+    .row_soft_selected = {44, 48, 56, 255},
+    .row_soft_selected_hover = {52, 56, 66, 255},
+    .row_soft_alpha = 188,
+    .row_soft_hover_alpha = 208,
+    .row_soft_selected_alpha = 180,
+    .row_soft_selected_hover_alpha = 194,
     // border
     .border = {60, 64, 72, 255},
     .border_light = {52, 56, 64, 255},
