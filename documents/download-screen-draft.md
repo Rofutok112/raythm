@@ -1,53 +1,54 @@
-# Download Screen Draft
+# ダウンロード画面 Draft
 
-## Goal
-- Add an in-game screen for browsing and downloading songs/charts from `raythm-server`.
-- Keep this as a draft-only design note for now.
-- Do not implement network/UI behavior in this branch.
+## 目的
+- `raythm-server` 上の楽曲・譜面を、ゲーム内から閲覧してダウンロードできる画面を追加する
+- この branch では実装はせず、まず画面導線と構成だけを固める
+- HOME 導線に自然につながることを優先する
 
-## Entry Point
+## 入口
 - `HOME -> ONLINE`
-- The new screen should feel like the existing seamless hub flow, not like a hard scene break.
+- できるだけ hard な scene 切替感は避けて、今の hub の延長として入る
 
-## Scope
-- Public songs/charts can be browsed without login.
-- Download only selected content instead of downloading everything.
-- Show jacket, title, artist, and lightweight chart metadata.
-- Separate this screen from upload/create tooling.
+## 想定スコープ
+- 公開されている楽曲・譜面は、未ログインでも閲覧可能
+- 必要な曲だけを選んでダウンロードする
+- Jacket、曲名、アーティスト、軽めの譜面情報を表示する
+- Upload / Create 系とは分けて扱う
 
-## Layout Direction
-- Left column: vertical song list
-- Center: selected song hero area
-  - jacket
-  - title / artist
-  - short metadata
-- Right column: available charts for the selected song
-  - difficulty
-  - key count
+## 画面構成の方向性
+- 左カラム: 縦スクロールの楽曲リスト
+- 中央: 選択中楽曲のメイン表示
+  - Jacket
+  - 曲名 / アーティスト
+  - 短いメタ情報
+- 右カラム: 選択中楽曲に紐づく譜面一覧
+  - 難易度
+  - key 数
   - level
-  - note count / BPM if available
-- Bottom or lower-right action area:
-  - `DOWNLOAD SONG`
-  - `DOWNLOAD CHART`
-  - `OPEN LOCAL`
+  - ノーツ数 / BPM など
+- 下部、または右下:
+  - `楽曲をダウンロード`
+  - `譜面をダウンロード`
+  - `ローカルで開く`
 
-## Interaction Notes
-- Song list and chart list should both support scrolling.
-- Download buttons should reflect state:
-  - not downloaded
-  - downloading
-  - already downloaded
-- If a local copy exists, surface that clearly instead of silently replacing it.
+## 操作メモ
+- 楽曲リスト、譜面リストのどちらもスクロール対応
+- ダウンロードボタンは状態を持つ
+  - 未ダウンロード
+  - ダウンロード中
+  - ダウンロード済み
+- すでにローカルに同じ楽曲がある場合は、無言で上書きせず状態を分かるようにする
 
-## State / Data Notes
-- Use server song list as the remote source of truth.
-- Preserve current local storage layout under `%LOCALAPPDATA%/raythm`.
-- Keep room for future filters:
-  - official only
-  - downloaded only
-  - search
+## 状態 / データまわり
+- リモートの正本は server 側の楽曲一覧
+- ローカル保存形式は、今の `%LOCALAPPDATA%/raythm` 構成を維持する
+- 将来的にフィルタを追加できる余地を残す
+  - Official のみ
+  - ダウンロード済みのみ
+  - 検索
 
-## Open Questions
-- Should `ONLINE` land directly on download browsing, or should it later split into `Download / Multiplayer / Rankings`?
-- What should happen when a downloaded song already exists but server metadata changed?
-- Do we want song-level download, chart-level download, or both from day one?
+## 未決事項
+- `ONLINE` は最初からダウンロード閲覧画面に入るべきか  
+  それとも将来的に `Download / Multiplayer / Rankings` に分けるべきか
+- すでにダウンロード済みの曲で、server 側メタ情報が更新されていた場合どう扱うか
+- 初期段階では「楽曲単位ダウンロード」と「譜面単位ダウンロード」のどちらを優先するか
