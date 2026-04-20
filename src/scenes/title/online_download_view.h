@@ -1,5 +1,6 @@
 #pragma once
 
+#include <future>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -15,12 +16,15 @@ namespace title_online_view {
 enum class catalog_mode {
     official,
     community,
+    owned,
 };
 
 enum class requested_action {
     none,
     primary,
     open_local,
+    restart_preview,
+    stop_preview,
 };
 
 struct chart_entry_state {
@@ -34,6 +38,12 @@ struct song_entry_state {
     std::vector<chart_entry_state> charts;
     bool installed = false;
     bool update_available = false;
+};
+
+struct catalog_load_result {
+    std::vector<song_entry_state> official_songs;
+    std::vector<song_entry_state> community_songs;
+    std::vector<song_entry_state> owned_songs;
 };
 
 class jacket_cache {
@@ -60,11 +70,14 @@ private:
 struct state {
     std::vector<song_entry_state> official_songs;
     std::vector<song_entry_state> community_songs;
+    std::vector<song_entry_state> owned_songs;
     catalog_mode mode = catalog_mode::official;
     int official_selected_song_index = 0;
     int community_selected_song_index = 0;
+    int owned_selected_song_index = 0;
     int official_selected_chart_index = 0;
     int community_selected_chart_index = 0;
+    int owned_selected_chart_index = 0;
     float song_scroll_y = 0.0f;
     float song_scroll_y_target = 0.0f;
     float chart_scroll_y = 0.0f;
@@ -72,16 +85,26 @@ struct state {
     ui::text_input_state search_input;
     ui::notice_queue notices;
     jacket_cache jackets;
+    std::future<catalog_load_result> catalog_future;
+    bool catalog_loading = false;
+    bool catalog_loaded_once = false;
+    bool detail_open = false;
 };
 
 struct layout {
     Rectangle back_rect;
     Rectangle official_tab_rect;
     Rectangle community_tab_rect;
+    Rectangle owned_tab_rect;
     Rectangle search_rect;
-    Rectangle song_lane_rect;
-    Rectangle detail_rect;
+    Rectangle content_rect;
+    Rectangle song_grid_rect;
+    Rectangle detail_left_rect;
+    Rectangle detail_right_rect;
     Rectangle hero_jacket_rect;
+    Rectangle preview_bar_rect;
+    Rectangle preview_play_rect;
+    Rectangle preview_stop_rect;
     Rectangle chart_list_rect;
     Rectangle primary_action_rect;
     Rectangle open_local_rect;
@@ -95,6 +118,7 @@ struct update_result {
 };
 
 void reload_catalog(state& state);
+bool poll_catalog(state& state);
 void on_enter(state& state, song_select::preview_controller& preview_controller);
 void on_exit(state& state);
 

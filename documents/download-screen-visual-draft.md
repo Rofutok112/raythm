@@ -2,12 +2,12 @@
 
 ## Intent
 
-This is a visual direction draft for the HOME-driven online download screen.
+This is a visual direction draft for the HOME-driven browse/download screen.
 
 The screen should not feel like the current song select with a different label.
 It should instead feel like:
 
-- a continuation of `HOME -> ONLINE`
+- a continuation of `HOME -> BROWSE`
 - a lighter browsing surface
 - a catalog that is song-first and chart-second
 - a screen where `OFFICIAL` and `COMMUNITY` are clearly separated
@@ -19,16 +19,18 @@ It should instead feel like:
 - therefore the browsing structure is always `song -> charts`
 - search is required
 - official and unofficial content should not be mixed in one list
+- only server-published entries appear in `BROWSE`
+- local-only songs should never appear as list items in this screen
 
 ## Core Layout Decision
 
-Use a `top search rail + left song lane + right detail stage` composition.
+Use a `top mode rail + left song lane with integrated search + right detail stage` composition.
 
 This is intentionally different from the current song select.
 
 Reasons:
 
-- the top rail gives search a first-class position
+- the left lane header keeps search attached to the song list it controls
 - the left lane keeps fast vertical scanning for songs
 - the right stage gives enough room for parent song details and child charts
 - the whole screen can still inherit the HOME atmosphere
@@ -41,7 +43,6 @@ Persistent across the whole screen.
 
 - back to `HOME`
 - `OFFICIAL / COMMUNITY` mode switch
-- search field
 - account / network state
 
 The top rail should feel like it grew out of the HOME menu row, not like a hard app toolbar.
@@ -50,10 +51,14 @@ The top rail should feel like it grew out of the HOME menu row, not like a hard 
 
 This is the primary browsing zone.
 
+- lane title and state copy
+- full-width search field embedded into the lane header
 - vertical song results
 - jacket thumbnail kept small
 - title and artist remain primary
 - installed / update badges are visible but quiet
+- search matches title and artist only
+- local state is only an annotation on server entries, never a separate source list
 
 The selected song should feel like a soft-lit card, not a dense list row from the old song select.
 
@@ -96,11 +101,13 @@ Avoid:
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────┐
-│ HOME          OFFICIAL     COMMUNITY          [ Search songs / artists...            ]  ○  │
+│ HOME          OFFICIAL     COMMUNITY                                            ○      │
 │                                                                                              │
-│  SONGS                                               SELECTED SONG                          │
+│  SONGS                                                                       SELECTED SONG  │
+│  Catalog unavailable                                                         OFFICIAL       │
+│  [ Search songs / artists...                                               ]               │
 │                                                                                              │
-│  > [jk] Song A            INSTALLED              [ medium jacket ]      OFFICIAL            │
+│  > [jk] Song A            INSTALLED              [ medium jacket ]                          │
 │    [jk] Song B            UPDATE                 Title                                       │
 │    [jk] Song C                                   Artist                                      │
 │    [jk] Song D                                   BPM 174 / 4 Charts / Server Version        │
@@ -156,6 +163,12 @@ Rules:
 - no tag UI for now
 
 The search field should not be hidden behind a modal or submenu.
+It should live inside the left song lane rather than floating as a separate top-bar control.
+
+Match targets:
+
+- title
+- artist
 
 ## Action Hierarchy
 
@@ -168,11 +181,13 @@ Secondary actions:
 - `Open Local`
 - per-chart install or update
 
+`Open Local` is only shown as a follow-up action for a selected server entry that is already installed.
+
 This prevents the UI from over-emphasizing chart-only operations before the parent song is understood.
 
 ## Transition From HOME
 
-`ONLINE` on HOME should visually expand into this screen.
+`BROWSE` on HOME should visually expand into this screen.
 
 Desired feeling:
 
@@ -188,7 +203,7 @@ This keeps continuity with the HOME-driven flow instead of hard-cutting into a u
 The first usable version only needs:
 
 - `OFFICIAL / COMMUNITY` split
-- top search bar
+- integrated lane search bar
 - song list
 - selected song detail
 - child chart list

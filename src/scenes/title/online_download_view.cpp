@@ -2,13 +2,16 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <future>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "audio_manager.h"
 #include "app_paths.h"
 #include "chart_difficulty.h"
 #include "path_utils.h"
@@ -25,18 +28,28 @@ namespace {
 constexpr Rectangle kBackRect = {48.0f, 38.0f, 98.0f, 38.0f};
 constexpr Rectangle kOfficialTabRect = {186.0f, 40.0f, 128.0f, 38.0f};
 constexpr Rectangle kCommunityTabRect = {322.0f, 40.0f, 146.0f, 38.0f};
-constexpr Rectangle kSearchRect = {736.0f, 36.0f, 474.0f, 44.0f};
-constexpr Rectangle kSongLaneRect = {72.0f, 124.0f, 382.0f, 516.0f};
-constexpr Rectangle kDetailRect = {490.0f, 124.0f, 728.0f, 516.0f};
-constexpr Rectangle kHeroJacketRect = {520.0f, 178.0f, 196.0f, 196.0f};
-constexpr Rectangle kChartListRect = {520.0f, 406.0f, 670.0f, 150.0f};
-constexpr Rectangle kPrimaryActionRect = {520.0f, 584.0f, 214.0f, 40.0f};
-constexpr Rectangle kOpenLocalRect = {748.0f, 584.0f, 184.0f, 40.0f};
+constexpr Rectangle kOwnedTabRect = {476.0f, 40.0f, 108.0f, 38.0f};
+constexpr Rectangle kSearchRect = {880.0f, 40.0f, 332.0f, 38.0f};
+constexpr Rectangle kContentRect = {60.0f, 118.0f, 1160.0f, 548.0f};
+constexpr Rectangle kSongGridRect = {72.0f, 154.0f, 1136.0f, 488.0f};
+constexpr Rectangle kDetailLeftRect = {72.0f, 154.0f, 336.0f, 488.0f};
+constexpr Rectangle kDetailRightRect = {470.0f, 154.0f, 738.0f, 488.0f};
+constexpr Rectangle kHeroJacketRect = {92.0f, 174.0f, 270.0f, 270.0f};
+constexpr Rectangle kPreviewBarRect = {92.0f, 552.0f, 270.0f, 8.0f};
+constexpr Rectangle kPreviewPlayRect = {92.0f, 576.0f, 126.0f, 40.0f};
+constexpr Rectangle kPreviewStopRect = {236.0f, 576.0f, 126.0f, 40.0f};
+constexpr Rectangle kPrimaryActionRect = {92.0f, 624.0f, 126.0f, 40.0f};
+constexpr Rectangle kOpenLocalRect = {236.0f, 624.0f, 126.0f, 40.0f};
+constexpr Rectangle kChartListRect = {500.0f, 176.0f, 680.0f, 448.0f};
 
-constexpr float kSongRowHeight = 74.0f;
-constexpr float kSongRowGap = 10.0f;
-constexpr float kChartRowHeight = 42.0f;
-constexpr float kChartRowGap = 8.0f;
+constexpr int kSongGridColumns = 4;
+constexpr float kSongCardHeight = 164.0f;
+constexpr float kSongGridGapX = 18.0f;
+constexpr float kSongGridGapY = 18.0f;
+constexpr int kChartGridColumns = 2;
+constexpr float kChartCardHeight = 92.0f;
+constexpr float kChartGridGapX = 22.0f;
+constexpr float kChartGridGapY = 18.0f;
 
 float ease_out_cubic(float t) {
     const float clamped = std::clamp(t, 0.0f, 1.0f);
@@ -99,6 +112,228 @@ bool contains_case_insensitive(const std::string& haystack, const std::string& n
         return true;
     }
     return to_lower_ascii(haystack).find(to_lower_ascii(needle)) != std::string::npos;
+}
+
+ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_state& state,
+                                             const char* label, const char* placeholder,
+                                             int font_size, size_t max_length,
+                                             Color button_base, Color button_hover, Color button_selected,
+                                             unsigned char normal_row_alpha,
+                                             unsigned char hover_row_alpha,
+                                             unsigned char selected_row_alpha,
+                                             unsigned char alpha) {
+    ui::text_input_result result;
+    ui::clamp_text_input_state(state);
+    const auto& t = *g_theme;
+
+    const bool hovered = ui::is_hovered(rect);
+    const bool pressed = ui::is_pressed(rect);
+    const bool clicked = ui::is_clicked(rect);
+    const Rectangle visual = pressed ? ui::inset(rect, 1.5f) : rect;
+    const unsigned char row_alpha = state.active ? selected_row_alpha
+        : hovered ? hover_row_alpha
+                  : normal_row_alpha;
+    DrawRectangleRec(visual, with_alpha(state.active ? button_selected : button_base, row_alpha));
+    DrawRectangleLinesEx(visual, 1.2f,
+                         with_alpha(state.active ? t.border_active : t.border_light, alpha));
+
+    const Rectangle content_rect = ui::inset(visual, ui::edge_insets::symmetric(0.0f, 14.0f));
+    constexpr float kLabelWidth = 82.0f;
+    const Rectangle label_rect = {content_rect.x, content_rect.y, kLabelWidth, content_rect.height};
+    const Rectangle text_rect = {
+        content_rect.x + kLabelWidth,
+        content_rect.y,
+        std::max(0.0f, content_rect.width - kLabelWidth),
+        content_rect.height,
+    };
+
+    if (clicked) {
+        result.clicked = true;
+        if (!state.active) {
+            result.activated = true;
+        }
+        state.active = true;
+
+        if (CheckCollisionPointRec(GetMousePosition(), text_rect)) {
+            const float local_x = GetMousePosition().x - text_rect.x + state.scroll_x;
+            state.cursor = ui::text_input_cursor_from_mouse(state.value, local_x, font_size);
+            ui::clear_text_input_selection(state);
+            state.mouse_selecting = true;
+        } else {
+            state.cursor = ui::utf8_codepoint_count(state.value);
+            ui::clear_text_input_selection(state);
+        }
+    } else if (state.active && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !hovered) {
+        state.active = false;
+        state.mouse_selecting = false;
+        ui::clear_text_input_selection(state);
+        result.deactivated = true;
+    }
+
+    if (state.active && state.mouse_selecting && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        const Vector2 mouse = GetMousePosition();
+        const float local_x = mouse.x - text_rect.x + state.scroll_x;
+        const size_t mouse_cursor = ui::text_input_cursor_from_mouse(state.value, local_x, font_size);
+        state.cursor = mouse_cursor;
+        state.has_selection = state.cursor != state.selection_anchor;
+    }
+
+    if (state.mouse_selecting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        state.mouse_selecting = false;
+    }
+
+    if (state.active) {
+        const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+        const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+
+        if (ctrl && IsKeyPressed(KEY_A)) {
+            state.selection_anchor = 0;
+            state.cursor = ui::utf8_codepoint_count(state.value);
+            state.has_selection = state.cursor > 0;
+        }
+
+        if (ctrl && IsKeyPressed(KEY_C) && state.has_selection) {
+            SetClipboardText(ui::selected_text_input_text(state).c_str());
+        }
+
+        if (ctrl && IsKeyPressed(KEY_X) && state.has_selection) {
+            SetClipboardText(ui::selected_text_input_text(state).c_str());
+            result.changed = ui::delete_text_input_selection(state) || result.changed;
+        }
+
+        if (ctrl && IsKeyPressed(KEY_V)) {
+            const char* clipboard = GetClipboardText();
+            if (clipboard != nullptr) {
+                result.changed =
+                    ui::paste_text_input_at_cursor(state, clipboard, max_length, ui::default_text_input_filter) ||
+                    result.changed;
+            }
+        }
+
+        int codepoint = GetCharPressed();
+        while (codepoint > 0) {
+            if (state.has_selection) {
+                result.changed = ui::delete_text_input_selection(state) || result.changed;
+            }
+            if (ui::utf8_codepoint_count(state.value) < max_length &&
+                ui::default_text_input_filter(codepoint, state.value)) {
+                result.changed = ui::insert_codepoint_at_cursor(state, codepoint) || result.changed;
+            }
+            codepoint = GetCharPressed();
+        }
+
+        if (ui::text_input_key_action(KEY_BACKSPACE)) {
+            if (state.has_selection) {
+                result.changed = ui::delete_text_input_selection(state) || result.changed;
+            } else if (state.cursor > 0) {
+                const size_t end_byte = ui::utf8_codepoint_to_byte_index(state.value, state.cursor);
+                const size_t start_byte = ui::utf8_codepoint_to_byte_index(state.value, state.cursor - 1);
+                state.value.erase(start_byte, end_byte - start_byte);
+                --state.cursor;
+                ui::clear_text_input_selection(state);
+                result.changed = true;
+            }
+        }
+
+        if (ui::text_input_key_action(KEY_DELETE)) {
+            if (state.has_selection) {
+                result.changed = ui::delete_text_input_selection(state) || result.changed;
+            } else if (state.cursor < ui::utf8_codepoint_count(state.value)) {
+                const size_t start_byte = ui::utf8_codepoint_to_byte_index(state.value, state.cursor);
+                const size_t end_byte = ui::utf8_codepoint_to_byte_index(state.value, state.cursor + 1);
+                state.value.erase(start_byte, end_byte - start_byte);
+                result.changed = true;
+            }
+        }
+
+        if (ui::text_input_key_action(KEY_LEFT)) {
+            if (state.has_selection && !shift) {
+                ui::move_text_input_cursor(state, ui::text_input_selection_range(state).first, false);
+            } else if (state.cursor > 0) {
+                ui::move_text_input_cursor(state, state.cursor - 1, shift);
+            }
+        }
+
+        if (ui::text_input_key_action(KEY_RIGHT)) {
+            if (state.has_selection && !shift) {
+                ui::move_text_input_cursor(state, ui::text_input_selection_range(state).second, false);
+            } else if (state.cursor < ui::utf8_codepoint_count(state.value)) {
+                ui::move_text_input_cursor(state, state.cursor + 1, shift);
+            }
+        }
+
+        if (ui::text_input_key_action(KEY_HOME)) {
+            ui::move_text_input_cursor(state, 0, shift);
+        }
+
+        if (ui::text_input_key_action(KEY_END)) {
+            ui::move_text_input_cursor(state, ui::utf8_codepoint_count(state.value), shift);
+        }
+
+        if (IsKeyPressed(KEY_ENTER)) {
+            result.submitted = true;
+            state.active = false;
+            state.mouse_selecting = false;
+            ui::clear_text_input_selection(state);
+            result.deactivated = true;
+        }
+    }
+
+    ui::update_text_input_scroll(state, text_rect.width - 8.0f, font_size);
+
+    ui::draw_text_in_rect(label, font_size, label_rect,
+                          with_alpha(state.active ? t.text : t.text_secondary, alpha), ui::text_align::left);
+
+    std::string display_value = state.value;
+    if (display_value.empty() && !state.active && placeholder != nullptr) {
+        display_value = placeholder;
+    }
+
+    const Color text_color = with_alpha(state.value.empty() && !state.active ? t.text_hint : t.text, alpha);
+    const float text_y = text_rect.y + (text_rect.height - static_cast<float>(font_size)) * 0.5f + 1.5f;
+    const float selection_y = text_y - 1.0f;
+    const float selection_height = static_cast<float>(font_size) + 4.0f;
+    const float cursor_y = text_y + 1.0f;
+    const float cursor_height = std::max(12.0f, static_cast<float>(font_size) - 3.0f);
+
+    if (!state.active && !state.value.empty()) {
+        draw_marquee_text(display_value.c_str(), text_rect.x, text_y, font_size, text_color,
+                          text_rect.width, GetTime());
+    } else if (!state.active) {
+        ui::draw_text_in_rect(display_value.c_str(), font_size,
+                              {text_rect.x, text_rect.y + 1.5f, text_rect.width, text_rect.height},
+                              text_color, ui::text_align::left);
+    } else {
+        ui::begin_scissor_rect(text_rect);
+
+        if (state.has_selection) {
+            const auto [selection_start, selection_end] = ui::text_input_selection_range(state);
+            const float selection_x = text_rect.x +
+                                      ui::text_input_prefix_width(state.value, selection_start, font_size) -
+                                      state.scroll_x;
+            const float selection_end_x = text_rect.x +
+                                          ui::text_input_prefix_width(state.value, selection_end, font_size) -
+                                          state.scroll_x;
+            ui::draw_rect_span({selection_x, selection_y,
+                                selection_end_x - selection_x, selection_height},
+                               with_alpha(t.row_selected, alpha));
+        }
+
+        ui::draw_text_f(state.value.c_str(), text_rect.x - state.scroll_x, text_y, font_size, with_alpha(t.text, alpha));
+
+        const double blink = GetTime() * 1.6;
+        if (std::fmod(blink, 1.0) < 0.6) {
+            const float cursor_x = text_rect.x +
+                                   ui::text_input_prefix_width(state.value, state.cursor, font_size) -
+                                   state.scroll_x;
+            ui::draw_rect_span({cursor_x, cursor_y, 1.5f, cursor_height},
+                               with_alpha(t.text, alpha));
+        }
+
+        EndScissorMode();
+    }
+
+    return result;
 }
 
 std::string key_mode_label(int key_count) {
@@ -251,6 +486,58 @@ song_entry_state build_song_state(const song_select::song_entry& remote_song,
     return state_entry;
 }
 
+song_entry_state build_owned_song_state(const song_select::song_entry& local_song) {
+    song_entry_state state_entry;
+    state_entry.song = local_song;
+    state_entry.installed = true;
+    state_entry.update_available = false;
+    state_entry.charts.reserve(local_song.charts.size());
+    for (const song_select::chart_option& chart : local_song.charts) {
+        state_entry.charts.push_back({
+            chart,
+            true,
+            false,
+        });
+    }
+    return state_entry;
+}
+
+std::vector<song_select::song_entry> load_remote_song_entries(catalog_mode mode) {
+    (void)mode;
+    return {};
+}
+
+catalog_load_result load_catalog_result() {
+    const std::vector<song_select::song_entry> local_songs =
+        load_song_entries_from_directory(app_paths::songs_root(), true);
+    const local_song_lookup local_lookup = build_local_lookup(local_songs);
+
+    const std::vector<song_select::song_entry> official_remote_songs =
+        load_remote_song_entries(catalog_mode::official);
+    const std::vector<song_select::song_entry> community_remote_songs =
+        load_remote_song_entries(catalog_mode::community);
+
+    catalog_load_result result;
+    result.official_songs.reserve(official_remote_songs.size());
+    for (const song_select::song_entry& song : official_remote_songs) {
+        result.official_songs.push_back(build_song_state(song, local_lookup));
+    }
+
+    result.community_songs.reserve(community_remote_songs.size());
+    for (const song_select::song_entry& song : community_remote_songs) {
+        result.community_songs.push_back(build_song_state(song, local_lookup));
+    }
+
+    result.owned_songs.reserve(local_songs.size());
+    for (const song_select::song_entry& song : local_songs) {
+        result.owned_songs.push_back(build_owned_song_state(song));
+    }
+
+    return result;
+}
+
+const std::vector<song_entry_state>& active_songs(const state& state);
+
 std::vector<int> filtered_indices_for(const std::vector<song_entry_state>& songs, const std::string& query) {
     std::vector<int> indices;
     indices.reserve(songs.size());
@@ -259,8 +546,7 @@ std::vector<int> filtered_indices_for(const std::vector<song_entry_state>& songs
         const song_entry_state& song = songs[static_cast<size_t>(index)];
         if (query.empty() ||
             contains_case_insensitive(song.song.song.meta.title, query) ||
-            contains_case_insensitive(song.song.song.meta.artist, query) ||
-            contains_case_insensitive(song.song.song.meta.song_id, query)) {
+            contains_case_insensitive(song.song.song.meta.artist, query)) {
             indices.push_back(index);
         }
     }
@@ -269,32 +555,68 @@ std::vector<int> filtered_indices_for(const std::vector<song_entry_state>& songs
 }
 
 std::vector<int> filtered_indices(const state& state) {
-    const auto& songs = state.mode == catalog_mode::official ? state.official_songs : state.community_songs;
+    const auto& songs = active_songs(state);
     return filtered_indices_for(songs, state.search_input.value);
 }
 
 int& selected_song_index_ref(state& state) {
-    return state.mode == catalog_mode::official ? state.official_selected_song_index
-                                                : state.community_selected_song_index;
+    switch (state.mode) {
+    case catalog_mode::official:
+        return state.official_selected_song_index;
+    case catalog_mode::community:
+        return state.community_selected_song_index;
+    case catalog_mode::owned:
+        return state.owned_selected_song_index;
+    }
+    return state.official_selected_song_index;
 }
 
 const int& selected_song_index_ref(const state& state) {
-    return state.mode == catalog_mode::official ? state.official_selected_song_index
-                                                : state.community_selected_song_index;
+    switch (state.mode) {
+    case catalog_mode::official:
+        return state.official_selected_song_index;
+    case catalog_mode::community:
+        return state.community_selected_song_index;
+    case catalog_mode::owned:
+        return state.owned_selected_song_index;
+    }
+    return state.official_selected_song_index;
 }
 
 int& selected_chart_index_ref(state& state) {
-    return state.mode == catalog_mode::official ? state.official_selected_chart_index
-                                                : state.community_selected_chart_index;
+    switch (state.mode) {
+    case catalog_mode::official:
+        return state.official_selected_chart_index;
+    case catalog_mode::community:
+        return state.community_selected_chart_index;
+    case catalog_mode::owned:
+        return state.owned_selected_chart_index;
+    }
+    return state.official_selected_chart_index;
 }
 
 const int& selected_chart_index_ref(const state& state) {
-    return state.mode == catalog_mode::official ? state.official_selected_chart_index
-                                                : state.community_selected_chart_index;
+    switch (state.mode) {
+    case catalog_mode::official:
+        return state.official_selected_chart_index;
+    case catalog_mode::community:
+        return state.community_selected_chart_index;
+    case catalog_mode::owned:
+        return state.owned_selected_chart_index;
+    }
+    return state.official_selected_chart_index;
 }
 
 const std::vector<song_entry_state>& active_songs(const state& state) {
-    return state.mode == catalog_mode::official ? state.official_songs : state.community_songs;
+    switch (state.mode) {
+    case catalog_mode::official:
+        return state.official_songs;
+    case catalog_mode::community:
+        return state.community_songs;
+    case catalog_mode::owned:
+        return state.owned_songs;
+    }
+    return state.official_songs;
 }
 
 void ensure_selection_valid(state& state) {
@@ -309,6 +631,7 @@ void ensure_selection_valid(state& state) {
         state.song_scroll_y_target = 0.0f;
         state.chart_scroll_y = 0.0f;
         state.chart_scroll_y_target = 0.0f;
+        state.detail_open = false;
         return;
     }
 
@@ -340,19 +663,25 @@ float song_list_content_height(int count) {
     if (count <= 0) {
         return 0.0f;
     }
-    return static_cast<float>(count) * (kSongRowHeight + kSongRowGap) - kSongRowGap;
+    const int rows = (count + kSongGridColumns - 1) / kSongGridColumns;
+    return static_cast<float>(rows) * (kSongCardHeight + kSongGridGapY) - kSongGridGapY;
 }
 
 float max_song_scroll(Rectangle area, int count) {
-    return std::max(0.0f, song_list_content_height(count) - area.height + 18.0f);
+    return std::max(0.0f, song_list_content_height(count) - area.height + 4.0f);
 }
 
 Rectangle song_row_rect(Rectangle area, int display_index, float scroll_y) {
+    const float width =
+        (area.width - static_cast<float>(kSongGridColumns - 1) * kSongGridGapX) /
+        static_cast<float>(kSongGridColumns);
+    const int row = display_index / kSongGridColumns;
+    const int column = display_index % kSongGridColumns;
     return {
-        area.x,
-        area.y + 10.0f + static_cast<float>(display_index) * (kSongRowHeight + kSongRowGap) - scroll_y,
-        area.width,
-        kSongRowHeight
+        area.x + static_cast<float>(column) * (width + kSongGridGapX),
+        area.y + static_cast<float>(row) * (kSongCardHeight + kSongGridGapY) - scroll_y,
+        width,
+        kSongCardHeight
     };
 }
 
@@ -360,19 +689,34 @@ float chart_list_content_height(int count) {
     if (count <= 0) {
         return 0.0f;
     }
-    return static_cast<float>(count) * (kChartRowHeight + kChartRowGap) - kChartRowGap;
+    const int rows = (count + kChartGridColumns - 1) / kChartGridColumns;
+    return static_cast<float>(rows) * (kChartCardHeight + kChartGridGapY) - kChartGridGapY;
 }
 
 float max_chart_scroll(Rectangle area, int count) {
-    return std::max(0.0f, chart_list_content_height(count) - area.height + 6.0f);
+    return std::max(0.0f, chart_list_content_height(count) - area.height + 4.0f);
 }
 
 Rectangle chart_row_rect(Rectangle area, int index, float scroll_y) {
+    const float width =
+        (area.width - static_cast<float>(kChartGridColumns - 1) * kChartGridGapX) /
+        static_cast<float>(kChartGridColumns);
+    const int row = index / kChartGridColumns;
+    const int column = index % kChartGridColumns;
     return {
-        area.x,
-        area.y + static_cast<float>(index) * (kChartRowHeight + kChartRowGap) - scroll_y,
-        area.width,
-        kChartRowHeight
+        area.x + static_cast<float>(column) * (width + kChartGridGapX),
+        area.y + static_cast<float>(row) * (kChartCardHeight + kChartGridGapY) - scroll_y,
+        width,
+        kChartCardHeight
+    };
+}
+
+Rectangle song_list_viewport(Rectangle content_rect) {
+    return {
+        content_rect.x + 12.0f,
+        content_rect.y + 34.0f,
+        content_rect.width - 24.0f,
+        content_rect.height - 46.0f,
     };
 }
 
@@ -411,7 +755,7 @@ std::string song_status_label(const song_entry_state& song) {
     if (song.installed) {
         return "LOCAL";
     }
-    return "REMOTE";
+    return "SERVER";
 }
 
 Color song_status_color(const song_entry_state& song) {
@@ -433,6 +777,38 @@ std::string chart_status_label(const chart_entry_state& chart) {
         return "LOCAL";
     }
     return "GET";
+}
+
+const char* mode_label(catalog_mode mode) {
+    switch (mode) {
+    case catalog_mode::official:
+        return "OFFICIAL";
+    case catalog_mode::community:
+        return "COMMUNITY";
+    case catalog_mode::owned:
+        return "OWNED";
+    }
+    return "OFFICIAL";
+}
+
+const char* catalog_caption(const state& state, const std::vector<song_entry_state>& songs) {
+    if (state.catalog_loading) {
+        return state.catalog_loaded_once ? "Refreshing..." : "Loading...";
+    }
+    switch (state.mode) {
+    case catalog_mode::official:
+        return songs.empty() ? "Official catalog unavailable" : "Official catalog";
+    case catalog_mode::community:
+        return songs.empty() ? "Community catalog unavailable" : "Community catalog";
+    case catalog_mode::owned:
+        return songs.empty() ? "No owned songs yet" : "Owned library";
+    }
+    return "Catalog";
+}
+
+std::string format_time_label(double seconds) {
+    const int total = std::max(0, static_cast<int>(std::floor(seconds + 0.5)));
+    return TextFormat("%d:%02d", total / 60, total % 60);
 }
 
 }  // namespace
@@ -478,36 +854,47 @@ void jacket_cache::clear() {
 }
 
 void reload_catalog(state& state) {
+    if (state.catalog_loading) {
+        return;
+    }
+    state.catalog_loading = true;
+    state.catalog_future = std::async(std::launch::async, []() {
+        return load_catalog_result();
+    });
+}
+
+bool poll_catalog(state& state) {
+    if (!state.catalog_loading) {
+        return false;
+    }
+    if (state.catalog_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return false;
+    }
+
+    catalog_load_result result = state.catalog_future.get();
+    state.catalog_loading = false;
+    state.catalog_loaded_once = true;
     state.jackets.clear();
-    const std::vector<song_select::song_entry> local_songs =
-        load_song_entries_from_directory(app_paths::songs_root(), true);
-    const local_song_lookup local_lookup = build_local_lookup(local_songs);
+    state.official_songs = std::move(result.official_songs);
+    state.community_songs = std::move(result.community_songs);
+    state.owned_songs = std::move(result.owned_songs);
 
-    state.community_songs.clear();
-    state.community_songs.reserve(local_songs.size());
-    for (const song_select::song_entry& song : local_songs) {
-        state.community_songs.push_back(build_song_state(song, local_lookup));
-    }
-
-    const std::vector<song_select::song_entry> official_songs =
-        load_song_entries_from_directory(app_paths::assets_root() / "songs", false);
-    state.official_songs.clear();
-    state.official_songs.reserve(official_songs.size());
-    for (const song_select::song_entry& song : official_songs) {
-        state.official_songs.push_back(build_song_state(song, local_lookup));
-    }
-
-    if (state.official_songs.empty() && !state.community_songs.empty()) {
+    if (state.official_songs.empty() && state.community_songs.empty() && !state.owned_songs.empty()) {
+        state.mode = catalog_mode::owned;
+    } else if (state.official_songs.empty() && !state.community_songs.empty()) {
         state.mode = catalog_mode::community;
     } else if (state.community_songs.empty() && !state.official_songs.empty()) {
         state.mode = catalog_mode::official;
     }
 
     ensure_selection_valid(state);
+    return true;
 }
 
 void on_enter(state& state, song_select::preview_controller& preview_controller) {
-    reload_catalog(state);
+    if (!state.catalog_loaded_once && !state.catalog_loading) {
+        reload_catalog(state);
+    }
     sync_preview(state, preview_controller);
 }
 
@@ -567,22 +954,34 @@ layout make_layout(float anim_t, Rectangle origin_rect) {
     const Rectangle seed_back = centered_scaled_rect(origin, kBackRect, 0.9f, {-448.0f, -198.0f});
     const Rectangle seed_official_tab = centered_scaled_rect(origin, kOfficialTabRect, 0.84f, {-276.0f, -194.0f});
     const Rectangle seed_community_tab = centered_scaled_rect(origin, kCommunityTabRect, 0.84f, {-132.0f, -194.0f});
-    const Rectangle seed_search = centered_scaled_rect(origin, kSearchRect, 0.74f, {266.0f, -192.0f});
-    const Rectangle seed_song_lane = centered_scaled_rect(origin, kSongLaneRect, 0.68f, {-316.0f, 56.0f});
-    const Rectangle seed_detail = centered_scaled_rect(origin, kDetailRect, 0.74f, {168.0f, 44.0f});
-    const Rectangle seed_jacket = centered_scaled_rect(origin, kHeroJacketRect, 0.82f, {-50.0f, -18.0f});
-    const Rectangle seed_chart_list = centered_scaled_rect(origin, kChartListRect, 0.86f, {70.0f, 152.0f});
-    const Rectangle seed_primary = centered_scaled_rect(origin, kPrimaryActionRect, 0.9f, {-28.0f, 254.0f});
-    const Rectangle seed_open_local = centered_scaled_rect(origin, kOpenLocalRect, 0.9f, {176.0f, 254.0f});
+    const Rectangle seed_owned_tab = centered_scaled_rect(origin, kOwnedTabRect, 0.84f, {12.0f, -194.0f});
+    const Rectangle seed_search = centered_scaled_rect(origin, kSearchRect, 0.86f, {358.0f, -192.0f});
+    const Rectangle seed_content = centered_scaled_rect(origin, kContentRect, 0.84f, {96.0f, 48.0f});
+    const Rectangle seed_detail_left = centered_scaled_rect(origin, kDetailLeftRect, 0.78f, {-238.0f, 66.0f});
+    const Rectangle seed_detail_right = centered_scaled_rect(origin, kDetailRightRect, 0.8f, {186.0f, 66.0f});
+    const Rectangle seed_jacket = centered_scaled_rect(origin, kHeroJacketRect, 0.82f, {-264.0f, -20.0f});
+    const Rectangle seed_preview_bar = centered_scaled_rect(origin, kPreviewBarRect, 0.9f, {-268.0f, 212.0f});
+    const Rectangle seed_preview_play = centered_scaled_rect(origin, kPreviewPlayRect, 0.9f, {-338.0f, 244.0f});
+    const Rectangle seed_preview_stop = centered_scaled_rect(origin, kPreviewStopRect, 0.9f, {-196.0f, 244.0f});
+    const Rectangle seed_chart_list = centered_scaled_rect(origin, kChartListRect, 0.84f, {198.0f, 44.0f});
+    const Rectangle seed_primary = centered_scaled_rect(origin, kPrimaryActionRect, 0.9f, {-338.0f, 292.0f});
+    const Rectangle seed_open_local = centered_scaled_rect(origin, kOpenLocalRect, 0.9f, {-196.0f, 292.0f});
+    const Rectangle current_content = lerp_rect(seed_content, kContentRect, t);
 
     return {
         lerp_rect(seed_back, kBackRect, t),
         lerp_rect(seed_official_tab, kOfficialTabRect, t),
         lerp_rect(seed_community_tab, kCommunityTabRect, t),
+        lerp_rect(seed_owned_tab, kOwnedTabRect, t),
         lerp_rect(seed_search, kSearchRect, t),
-        lerp_rect(seed_song_lane, kSongLaneRect, t),
-        lerp_rect(seed_detail, kDetailRect, t),
+        current_content,
+        song_list_viewport(current_content),
+        lerp_rect(seed_detail_left, kDetailLeftRect, t),
+        lerp_rect(seed_detail_right, kDetailRightRect, t),
         lerp_rect(seed_jacket, kHeroJacketRect, t),
+        lerp_rect(seed_preview_bar, kPreviewBarRect, t),
+        lerp_rect(seed_preview_play, kPreviewPlayRect, t),
+        lerp_rect(seed_preview_stop, kPreviewStopRect, t),
         lerp_rect(seed_chart_list, kChartListRect, t),
         lerp_rect(seed_primary, kPrimaryActionRect, t),
         lerp_rect(seed_open_local, kOpenLocalRect, t),
@@ -596,48 +995,65 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
     const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     const float wheel = GetMouseWheelMove();
 
-    if (ui::is_clicked(current.back_rect) || IsKeyPressed(KEY_ESCAPE)) {
+    if (ui::is_clicked(current.back_rect)) {
+        result.back_requested = true;
+        return result;
+    }
+    if (state.detail_open && (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))) {
+        state.detail_open = false;
+        state.chart_scroll_y = 0.0f;
+        state.chart_scroll_y_target = 0.0f;
+        return result;
+    }
+    if (!state.detail_open && (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))) {
         result.back_requested = true;
         return result;
     }
 
-    if (ui::is_clicked(current.official_tab_rect) && state.mode != catalog_mode::official) {
-        state.mode = catalog_mode::official;
+    const auto switch_mode = [&](catalog_mode new_mode) -> bool {
+        if (state.mode == new_mode) {
+            return false;
+        }
+        state.mode = new_mode;
+        state.detail_open = false;
         state.song_scroll_y = 0.0f;
         state.song_scroll_y_target = 0.0f;
         state.chart_scroll_y = 0.0f;
         state.chart_scroll_y_target = 0.0f;
         ensure_selection_valid(state);
         result.song_selection_changed = true;
+        return true;
+    };
+
+    if (ui::is_clicked(current.official_tab_rect) && switch_mode(catalog_mode::official)) {
         return result;
     }
-    if (ui::is_clicked(current.community_tab_rect) && state.mode != catalog_mode::community) {
-        state.mode = catalog_mode::community;
-        state.song_scroll_y = 0.0f;
-        state.song_scroll_y_target = 0.0f;
-        state.chart_scroll_y = 0.0f;
-        state.chart_scroll_y_target = 0.0f;
-        ensure_selection_valid(state);
-        result.song_selection_changed = true;
+    if (ui::is_clicked(current.community_tab_rect) && switch_mode(catalog_mode::community)) {
+        return result;
+    }
+    if (ui::is_clicked(current.owned_tab_rect) && switch_mode(catalog_mode::owned)) {
         return result;
     }
 
     ensure_selection_valid(state);
 
-    if (left_pressed) {
-        const int clicked_song = hit_test_song_list(state, current.song_lane_rect, mouse);
+    const Rectangle song_list_rect = current.song_grid_rect;
+
+    if (!state.detail_open && left_pressed) {
+        const int clicked_song = hit_test_song_list(state, song_list_rect, mouse);
         if (clicked_song >= 0) {
             int& selected_song_index = selected_song_index_ref(state);
-            if (selected_song_index != clicked_song) {
-                selected_song_index = clicked_song;
-                selected_chart_index_ref(state) = 0;
-                state.chart_scroll_y = 0.0f;
-                state.chart_scroll_y_target = 0.0f;
-                result.song_selection_changed = true;
-                return result;
-            }
+            selected_song_index = clicked_song;
+            selected_chart_index_ref(state) = 0;
+            state.chart_scroll_y = 0.0f;
+            state.chart_scroll_y_target = 0.0f;
+            state.detail_open = true;
+            result.song_selection_changed = true;
+            return result;
         }
+    }
 
+    if (state.detail_open && left_pressed) {
         const int clicked_chart = hit_test_chart_list(state, current.chart_list_rect, mouse);
         if (clicked_chart >= 0) {
             int& selected_chart_index = selected_chart_index_ref(state);
@@ -649,13 +1065,23 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
         }
     }
 
-    if (ui::is_clicked(current.primary_action_rect)) {
-        result.action = requested_action::primary;
-        return result;
-    }
-    if (can_open_local(state) && ui::is_clicked(current.open_local_rect)) {
-        result.action = requested_action::open_local;
-        return result;
+    if (state.detail_open) {
+        if (ui::is_clicked(current.preview_play_rect)) {
+            result.action = requested_action::restart_preview;
+            return result;
+        }
+        if (ui::is_clicked(current.preview_stop_rect)) {
+            result.action = requested_action::stop_preview;
+            return result;
+        }
+        if (selected_song(state) != nullptr && ui::is_clicked(current.primary_action_rect)) {
+            result.action = requested_action::primary;
+            return result;
+        }
+        if (can_open_local(state) && ui::is_clicked(current.open_local_rect)) {
+            result.action = requested_action::open_local;
+            return result;
+        }
     }
 
     const bool allow_navigation_keys = !state.search_input.active;
@@ -664,34 +1090,49 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
         int& selected_song_index = selected_song_index_ref(state);
         int& selected_chart_index = selected_chart_index_ref(state);
 
-        if (!indices.empty()) {
+        if (!indices.empty() && !state.detail_open) {
             auto selected_it = std::find(indices.begin(), indices.end(), selected_song_index);
             int display_index = selected_it == indices.end() ? 0 : static_cast<int>(selected_it - indices.begin());
 
-            if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
-                display_index = std::max(0, display_index - 1);
-                selected_song_index = indices[static_cast<size_t>(display_index)];
-                selected_chart_index = 0;
-                state.chart_scroll_y = 0.0f;
-                state.chart_scroll_y_target = 0.0f;
-                result.song_selection_changed = true;
+            int next_display_index = display_index;
+            if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) {
+                next_display_index = std::max(0, display_index - 1);
+            } else if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) {
+                next_display_index = std::min(static_cast<int>(indices.size()) - 1, display_index + 1);
+            } else if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
+                next_display_index = std::max(0, display_index - kSongGridColumns);
             } else if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
-                display_index = std::min(static_cast<int>(indices.size()) - 1, display_index + 1);
-                selected_song_index = indices[static_cast<size_t>(display_index)];
+                next_display_index = std::min(static_cast<int>(indices.size()) - 1, display_index + kSongGridColumns);
+            }
+
+            if (next_display_index != display_index) {
+                selected_song_index = indices[static_cast<size_t>(next_display_index)];
                 selected_chart_index = 0;
                 state.chart_scroll_y = 0.0f;
                 state.chart_scroll_y_target = 0.0f;
                 result.song_selection_changed = true;
             }
+
+            if (IsKeyPressed(KEY_ENTER) && selected_song(state) != nullptr) {
+                state.detail_open = true;
+                return result;
+            }
         }
 
         const song_entry_state* song = selected_song(state);
-        if (song != nullptr && !song->charts.empty()) {
+        if (state.detail_open && song != nullptr && !song->charts.empty()) {
+            int next_chart_index = selected_chart_index;
             if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) {
-                selected_chart_index = std::max(0, selected_chart_index - 1);
-                result.chart_selection_changed = true;
+                next_chart_index = std::max(0, selected_chart_index - 1);
             } else if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) {
-                selected_chart_index = std::min(static_cast<int>(song->charts.size()) - 1, selected_chart_index + 1);
+                next_chart_index = std::min(static_cast<int>(song->charts.size()) - 1, selected_chart_index + 1);
+            } else if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
+                next_chart_index = std::max(0, selected_chart_index - kChartGridColumns);
+            } else if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
+                next_chart_index = std::min(static_cast<int>(song->charts.size()) - 1, selected_chart_index + kChartGridColumns);
+            }
+            if (next_chart_index != selected_chart_index) {
+                selected_chart_index = next_chart_index;
                 result.chart_selection_changed = true;
             }
         }
@@ -700,14 +1141,14 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
     const int filtered_song_count = static_cast<int>(filtered_indices(state).size());
     const song_entry_state* song = selected_song(state);
     const int chart_count = song != nullptr ? static_cast<int>(song->charts.size()) : 0;
-    if (CheckCollisionPointRec(mouse, current.song_lane_rect) && wheel != 0.0f) {
-        state.song_scroll_y_target -= wheel * 42.0f;
-    } else if (CheckCollisionPointRec(mouse, current.chart_list_rect) && wheel != 0.0f) {
-        state.chart_scroll_y_target -= wheel * 36.0f;
+    if (!state.detail_open && CheckCollisionPointRec(mouse, song_list_rect) && wheel != 0.0f) {
+        state.song_scroll_y_target -= wheel * 54.0f;
+    } else if (state.detail_open && CheckCollisionPointRec(mouse, current.chart_list_rect) && wheel != 0.0f) {
+        state.chart_scroll_y_target -= wheel * 42.0f;
     }
 
     state.song_scroll_y_target = std::clamp(state.song_scroll_y_target, 0.0f,
-                                            max_song_scroll(current.song_lane_rect, filtered_song_count));
+                                            max_song_scroll(song_list_rect, filtered_song_count));
     state.song_scroll_y += (state.song_scroll_y_target - state.song_scroll_y) * std::min(1.0f, dt * 12.0f);
     if (std::fabs(state.song_scroll_y - state.song_scroll_y_target) < 0.5f) {
         state.song_scroll_y = state.song_scroll_y_target;
@@ -746,6 +1187,11 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
 
     const bool official_active = state.mode == catalog_mode::official;
     const bool community_active = state.mode == catalog_mode::community;
+    const bool owned_active = state.mode == catalog_mode::owned;
+    const auto indices = filtered_indices(state);
+    const auto& songs = active_songs(state);
+    const bool loading = state.catalog_loading;
+    const char* caption = catalog_caption(state, songs);
 
     ui::draw_button_colored(current.back_rect, "HOME", 16,
                             with_alpha(button_base, normal_row_alpha),
@@ -763,165 +1209,274 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                             with_alpha(community_active ? button_selected : button_hover,
                                        community_active ? selected_row_alpha : hover_row_alpha),
                             with_alpha(community_active ? t.text : t.text_secondary, alpha), 1.5f);
+    ui::draw_button_colored(current.owned_tab_rect, "OWNED", 16,
+                            with_alpha(owned_active ? button_selected : button_base,
+                                       owned_active ? selected_row_alpha : normal_row_alpha),
+                            with_alpha(owned_active ? button_selected : button_hover,
+                                       owned_active ? selected_row_alpha : hover_row_alpha),
+                            with_alpha(owned_active ? t.text : t.text_secondary, alpha), 1.5f);
+    draw_song_search_input(current.search_rect, state.search_input, "SEARCH", "songs / artists",
+                           16, 64,
+                           button_base, button_hover, button_selected,
+                           normal_row_alpha, hover_row_alpha, selected_row_alpha,
+                           alpha);
 
-    ui::draw_text_input(current.search_rect, state.search_input, "SEARCH", "songs / artists / id",
-                        nullptr, ui::draw_layer::base, 16, 64, ui::default_text_input_filter, 94.0f);
-
-    DrawLineEx({current.song_lane_rect.x + current.song_lane_rect.width + 18.0f, current.song_lane_rect.y + 8.0f},
-               {current.song_lane_rect.x + current.song_lane_rect.width + 18.0f,
-                current.song_lane_rect.y + current.song_lane_rect.height - 8.0f},
-               1.2f, with_alpha(t.border_light, static_cast<unsigned char>(160.0f * play_t)));
-
-    const auto indices = filtered_indices(state);
-    const auto& songs = active_songs(state);
+    DrawRectangleRec(current.content_rect, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha / 2)));
+    DrawRectangleLinesEx(current.content_rect, 1.2f, with_alpha(t.border_light, alpha));
+    ui::draw_text_in_rect(caption, 17,
+                          {current.content_rect.x + 12.0f, current.content_rect.y + 6.0f,
+                           current.content_rect.width * 0.52f, 20.0f},
+                          with_alpha(loading ? t.text : t.text_secondary, alpha), ui::text_align::left);
     ui::draw_text_in_rect(
-        state.mode == catalog_mode::official
-            ? (songs.empty() ? "OFFICIAL catalog is not wired yet in this build." : "Curated songs and charts.")
-            : (songs.empty() ? "COMMUNITY catalog is empty." : "User-side songs and charts."),
-        15,
-        {current.song_lane_rect.x, current.song_lane_rect.y - 26.0f, current.song_lane_rect.width, 18.0f},
-        with_alpha(t.text_muted, alpha), ui::text_align::left);
+        state.detail_open ? "Press Esc to return to the grid"
+                          : TextFormat("%d songs", static_cast<int>(indices.size())),
+        14,
+        {current.content_rect.x + current.content_rect.width * 0.46f, current.content_rect.y + 8.0f,
+         current.content_rect.width * 0.5f - 12.0f, 16.0f},
+        with_alpha(t.text_muted, alpha), ui::text_align::right);
 
-    ui::scoped_clip_rect song_clip(current.song_lane_rect);
-    for (int display_index = 0; display_index < static_cast<int>(indices.size()); ++display_index) {
-        const int song_index = indices[static_cast<size_t>(display_index)];
-        const song_entry_state& song = songs[static_cast<size_t>(song_index)];
-        const Rectangle row = song_row_rect(current.song_lane_rect, display_index, state.song_scroll_y);
-        if (row.y + row.height < current.song_lane_rect.y - 4.0f ||
-            row.y > current.song_lane_rect.y + current.song_lane_rect.height + 4.0f) {
-            continue;
+    if (!state.detail_open) {
+        ui::scoped_clip_rect song_clip(current.song_grid_rect);
+        if (indices.empty()) {
+            const Rectangle placeholder = {
+                current.song_grid_rect.x + 96.0f,
+                current.song_grid_rect.y + current.song_grid_rect.height * 0.5f - 42.0f,
+                current.song_grid_rect.width - 192.0f,
+                84.0f,
+            };
+            DrawRectangleRec(placeholder, with_alpha(button_base, selected_row_alpha));
+            DrawRectangleLinesEx(placeholder, 1.5f, with_alpha(t.border_light, alpha));
+            ui::draw_text_in_rect(loading ? "Loading..." : "No songs found.",
+                                  30, placeholder, with_alpha(t.text, alpha), ui::text_align::center);
         }
 
-        const bool selected = song_index == selected_song_index_ref(state);
-        const bool hovered = ui::is_hovered(row);
-        const unsigned char row_alpha = selected ? selected_row_alpha
-            : hovered ? hover_row_alpha
-                      : normal_row_alpha;
-        DrawRectangleRec(row, with_alpha(selected ? button_selected : button_base, row_alpha));
-        DrawRectangleLinesEx(row, 1.0f, with_alpha(t.border_light, static_cast<unsigned char>(150.0f * play_t)));
+        for (int display_index = 0; display_index < static_cast<int>(indices.size()); ++display_index) {
+            const int song_index = indices[static_cast<size_t>(display_index)];
+            const song_entry_state& song = songs[static_cast<size_t>(song_index)];
+            const Rectangle card = song_row_rect(current.song_grid_rect, display_index, state.song_scroll_y);
+            if (card.y + card.height < current.song_grid_rect.y - 4.0f ||
+                card.y > current.song_grid_rect.y + current.song_grid_rect.height + 4.0f) {
+                continue;
+            }
 
-        const Rectangle jacket_rect = {row.x + 10.0f, row.y + 10.0f, 54.0f, 54.0f};
-        if (const Texture2D* jacket = state.jackets.get(song.song.song)) {
-            DrawTexturePro(*jacket,
-                           {0.0f, 0.0f, static_cast<float>(jacket->width), static_cast<float>(jacket->height)},
-                           jacket_rect, {0.0f, 0.0f}, 0.0f, with_alpha(WHITE, alpha));
-        } else {
-            DrawRectangleRec(jacket_rect, with_alpha(t.section, row_alpha));
-            ui::draw_text_in_rect("JK", 18, jacket_rect, with_alpha(t.text_muted, alpha));
+            const bool selected = song_index == selected_song_index_ref(state);
+            const bool hovered = ui::is_hovered(card);
+            const unsigned char row_alpha = selected ? selected_row_alpha
+                : hovered ? hover_row_alpha
+                          : normal_row_alpha;
+            DrawRectangleRec(card, with_alpha(selected ? button_selected : button_base, row_alpha));
+            DrawRectangleLinesEx(card, 1.15f,
+                                 with_alpha(selected ? t.border_active : t.border_light, alpha));
+
+            const float jacket_size = std::min(card.width - 34.0f, 92.0f);
+            const Rectangle jacket_rect = {
+                card.x + (card.width - jacket_size) * 0.5f,
+                card.y + 16.0f,
+                jacket_size,
+                jacket_size
+            };
+            if (const Texture2D* jacket = state.jackets.get(song.song.song)) {
+                DrawTexturePro(*jacket,
+                               {0.0f, 0.0f, static_cast<float>(jacket->width), static_cast<float>(jacket->height)},
+                               jacket_rect, {0.0f, 0.0f}, 0.0f, with_alpha(WHITE, alpha));
+            } else {
+                DrawRectangleRec(jacket_rect, with_alpha(t.bg_alt, row_alpha));
+                ui::draw_text_in_rect("JACKET", 18, jacket_rect, with_alpha(t.text_muted, alpha), ui::text_align::center);
+            }
+            DrawRectangleLinesEx(jacket_rect, 1.0f, with_alpha(t.border_image, alpha));
+
+            const Rectangle badge_rect = {card.x + card.width - 90.0f, card.y + 12.0f, 72.0f, 18.0f};
+            ui::draw_text_in_rect(song_status_label(song).c_str(), 12, badge_rect,
+                                  with_alpha(song_status_color(song), alpha), ui::text_align::right);
+
+            draw_marquee_text(song.song.song.meta.title.c_str(),
+                              {card.x + 14.0f, card.y + 118.0f, card.width - 28.0f, 18.0f},
+                              18, with_alpha(t.text, alpha), now);
+            draw_marquee_text(song.song.song.meta.artist.c_str(),
+                              {card.x + 14.0f, card.y + 138.0f, card.width - 28.0f, 16.0f},
+                              13, with_alpha(t.text_muted, alpha), now);
+            ui::draw_text_in_rect(TextFormat("%d charts", static_cast<int>(song.charts.size())), 12,
+                                  {card.x + 14.0f, card.y + card.height - 22.0f, card.width - 28.0f, 14.0f},
+                                  with_alpha(t.text_dim, alpha), ui::text_align::right);
         }
-        DrawRectangleLinesEx(jacket_rect, 1.2f, with_alpha(t.border_image, alpha));
 
-        draw_marquee_text(song.song.song.meta.title.c_str(),
-                          {row.x + 78.0f, row.y + 11.0f, row.width - 168.0f, 20.0f},
-                          20, with_alpha(t.text, alpha), now);
-        draw_marquee_text(song.song.song.meta.artist.c_str(),
-                          {row.x + 78.0f, row.y + 38.0f, row.width - 168.0f, 16.0f},
-                          14, with_alpha(t.text_muted, alpha), now);
-        ui::draw_text_in_rect(song_status_label(song).c_str(), 12,
-                              {row.x + row.width - 88.0f, row.y + 14.0f, 72.0f, 14.0f},
-                              with_alpha(song_status_color(song), alpha), ui::text_align::right);
-        ui::draw_text_in_rect(TextFormat("%d charts", static_cast<int>(song.charts.size())), 12,
-                              {row.x + row.width - 88.0f, row.y + 38.0f, 72.0f, 14.0f},
-                              with_alpha(t.text_muted, alpha), ui::text_align::right);
+        ui::draw_notice_queue_bottom_right(state.notices,
+                                           {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)});
+        return;
     }
 
     const song_entry_state* song = selected_song(state);
     const chart_entry_state* chart = selected_chart(state);
     if (song == nullptr) {
-        ui::draw_text_in_rect("No songs match the current catalog and search.", 28,
-                              current.detail_rect,
-                              with_alpha(t.text_muted, alpha), ui::text_align::center);
-        ui::draw_notice_queue_bottom_right(state.notices, {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)});
+        ui::draw_notice_queue_bottom_right(state.notices,
+                                           {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)});
         return;
     }
+
+    DrawRectangleRec(current.detail_left_rect, with_alpha(button_base, normal_row_alpha));
+    DrawRectangleRec(current.detail_right_rect, with_alpha(button_base, normal_row_alpha));
+    DrawRectangleLinesEx(current.detail_left_rect, 1.0f, with_alpha(t.border_light, alpha));
+    DrawRectangleLinesEx(current.detail_right_rect, 1.0f, with_alpha(t.border_light, alpha));
+    DrawLineEx({current.detail_right_rect.x - 18.0f, current.detail_left_rect.y + 8.0f},
+               {current.detail_right_rect.x - 18.0f, current.detail_left_rect.y + current.detail_left_rect.height - 8.0f},
+               1.4f, with_alpha(t.border_light, static_cast<unsigned char>(170.0f * play_t)));
 
     if (const Texture2D* hero_jacket = state.jackets.get(song->song.song)) {
         DrawTexturePro(*hero_jacket,
                        {0.0f, 0.0f, static_cast<float>(hero_jacket->width), static_cast<float>(hero_jacket->height)},
                        current.hero_jacket_rect, {0.0f, 0.0f}, 0.0f, with_alpha(WHITE, alpha));
     } else {
-        DrawRectangleRec(current.hero_jacket_rect, with_alpha(t.section, alpha));
-        ui::draw_text_in_rect("JACKET", 24, current.hero_jacket_rect, with_alpha(t.text_muted, alpha));
+        DrawRectangleRec(current.hero_jacket_rect, with_alpha(t.bg_alt, selected_row_alpha));
+        ui::draw_text_in_rect("JACKET", 26, current.hero_jacket_rect, with_alpha(t.text_muted, alpha), ui::text_align::center);
     }
-    DrawRectangleLinesEx(current.hero_jacket_rect, 1.6f, with_alpha(t.border_image, alpha));
+    DrawRectangleLinesEx(current.hero_jacket_rect, 1.5f, with_alpha(t.border_image, alpha));
 
-    const Rectangle title_rect = {760.0f, 182.0f, 420.0f, 30.0f};
-    const Rectangle artist_rect = {760.0f, 220.0f, 420.0f, 20.0f};
-    const Rectangle meta_rect = {760.0f, 258.0f, 420.0f, 80.0f};
-    draw_marquee_text(song->song.song.meta.title.c_str(), title_rect, 30, with_alpha(t.text, alpha), now);
-    draw_marquee_text(song->song.song.meta.artist.c_str(), artist_rect, 18,
+    const Rectangle title_rect = {
+        current.detail_left_rect.x + 12.0f,
+        current.hero_jacket_rect.y + current.hero_jacket_rect.height + 20.0f,
+        current.detail_left_rect.width - 24.0f,
+        28.0f
+    };
+    const Rectangle artist_rect = {
+        title_rect.x,
+        title_rect.y + 32.0f,
+        title_rect.width,
+        18.0f
+    };
+    const Rectangle meta_rect = {
+        title_rect.x,
+        artist_rect.y + 26.0f,
+        title_rect.width,
+        46.0f
+    };
+    draw_marquee_text(song->song.song.meta.title.c_str(), title_rect, 28, with_alpha(t.text, alpha), now);
+    draw_marquee_text(song->song.song.meta.artist.c_str(), artist_rect, 17,
                       with_alpha(t.text_secondary, alpha), now);
+    ui::draw_text_in_rect(mode_label(state.mode), 13,
+                          {meta_rect.x, meta_rect.y, meta_rect.width, 14.0f},
+                          with_alpha(state.mode == catalog_mode::official ? t.accent :
+                                     (state.mode == catalog_mode::community ? t.success : t.text_secondary), alpha),
+                          ui::text_align::left);
     ui::draw_text_in_rect(
-        state.mode == catalog_mode::official ? "OFFICIAL CATALOG" : "COMMUNITY CATALOG",
-        14,
-        {meta_rect.x, meta_rect.y, meta_rect.width, 16.0f},
-        with_alpha(state.mode == catalog_mode::official ? t.accent : t.success, alpha),
-        ui::text_align::left);
-    ui::draw_text_in_rect(
-        TextFormat("BPM %.0f   %d charts   song id %s",
+        TextFormat("BPM %.0f   %d charts   %s",
                    song->song.song.meta.base_bpm,
                    static_cast<int>(song->charts.size()),
-                   song->song.song.meta.song_id.c_str()),
-        15,
-        {meta_rect.x, meta_rect.y + 24.0f, meta_rect.width, 18.0f},
+                   song_status_label(*song).c_str()),
+        14,
+        {meta_rect.x, meta_rect.y + 18.0f, meta_rect.width, 16.0f},
         with_alpha(t.text_muted, alpha), ui::text_align::left);
+    ui::draw_text_in_rect(song->song.song.meta.song_id.c_str(), 12,
+                          {meta_rect.x, meta_rect.y + 34.0f, meta_rect.width, 14.0f},
+                          with_alpha(t.text_dim, alpha), ui::text_align::left);
+
+    const audio_manager& audio = audio_manager::instance();
+    const double preview_length = audio.get_preview_length_seconds();
+    const double preview_position = audio.get_preview_position_seconds();
+    const float preview_ratio =
+        preview_length > 0.0 ? std::clamp(static_cast<float>(preview_position / preview_length), 0.0f, 1.0f) : 0.0f;
+    DrawRectangleRec(current.preview_bar_rect, with_alpha(t.bg_alt, normal_row_alpha));
+    DrawRectangleRec({current.preview_bar_rect.x, current.preview_bar_rect.y,
+                      current.preview_bar_rect.width * preview_ratio, current.preview_bar_rect.height},
+                     with_alpha(t.accent, alpha));
+    DrawRectangleLinesEx(current.preview_bar_rect, 1.0f, with_alpha(t.border_light, alpha));
     ui::draw_text_in_rect(
-        song->update_available ? "A local copy exists and looks older than this catalog entry."
-                               : (song->installed ? "This song already exists locally." :
-                                                    "This song is not installed locally yet."),
-        15,
-        {meta_rect.x, meta_rect.y + 50.0f, meta_rect.width, 34.0f},
+        audio.is_preview_loaded()
+            ? TextFormat("%s / %s",
+                         format_time_label(preview_position).c_str(),
+                         format_time_label(preview_length).c_str())
+            : "Preview stopped",
+        13,
+        {current.preview_bar_rect.x, current.preview_bar_rect.y - 18.0f, current.preview_bar_rect.width, 14.0f},
+        with_alpha(t.text_muted, alpha), ui::text_align::left);
+
+    ui::draw_button_colored(current.preview_play_rect, "PLAY", 16,
+                            with_alpha(button_selected, selected_row_alpha),
+                            with_alpha(button_selected, hover_row_alpha),
+                            with_alpha(t.text, alpha), 1.5f);
+    ui::draw_button_colored(current.preview_stop_rect, "STOP", 16,
+                            with_alpha(button_base, audio.is_preview_loaded() ? normal_row_alpha : static_cast<unsigned char>(normal_row_alpha / 2)),
+                            with_alpha(button_hover, audio.is_preview_loaded() ? hover_row_alpha : static_cast<unsigned char>(hover_row_alpha / 2)),
+                            with_alpha(audio.is_preview_loaded() ? t.text : t.text_muted, alpha), 1.5f);
+
+    const char* primary_label = song->update_available ? "UPDATE SONG"
+        : (song->installed ? "DOWNLOAD AGAIN" : "DOWNLOAD SONG");
+    ui::draw_button_colored(current.primary_action_rect, primary_label, 15,
+                            with_alpha(button_selected, selected_row_alpha),
+                            with_alpha(button_selected, hover_row_alpha),
+                            with_alpha(t.text, alpha), 1.5f);
+    ui::draw_button_colored(current.open_local_rect, "OPEN LOCAL", 15,
+                            with_alpha(button_base, song->installed ? normal_row_alpha : static_cast<unsigned char>(normal_row_alpha / 2)),
+                            with_alpha(button_hover, song->installed ? hover_row_alpha : static_cast<unsigned char>(hover_row_alpha / 2)),
+                            with_alpha(song->installed ? t.text : t.text_muted, alpha), 1.5f);
+
+    ui::draw_text_in_rect(
+        song->update_available ? "A newer server version appears to exist."
+                               : (song->installed ? "Installed locally." : "Not installed locally."),
+        13,
+        {current.detail_left_rect.x + 12.0f, current.detail_left_rect.y + current.detail_left_rect.height - 22.0f,
+         current.detail_left_rect.width - 24.0f, 14.0f},
         with_alpha(t.text_dim, alpha), ui::text_align::left);
 
-    ui::draw_text_in_rect("Charts", 18,
+    ui::draw_text_in_rect("CHARTS", 19,
                           {current.chart_list_rect.x, current.chart_list_rect.y - 28.0f,
-                           current.chart_list_rect.width, 18.0f},
+                           current.chart_list_rect.width * 0.45f, 18.0f},
                           with_alpha(t.text, alpha), ui::text_align::left);
+    ui::draw_text_in_rect(TextFormat("%d items", static_cast<int>(song->charts.size())), 14,
+                          {current.chart_list_rect.x + current.chart_list_rect.width * 0.46f, current.chart_list_rect.y - 26.0f,
+                           current.chart_list_rect.width * 0.54f, 16.0f},
+                          with_alpha(t.text_muted, alpha), ui::text_align::right);
 
     ui::scoped_clip_rect chart_clip(current.chart_list_rect);
+    if (song->charts.empty()) {
+        const Rectangle placeholder = {
+            current.chart_list_rect.x + 64.0f,
+            current.chart_list_rect.y + current.chart_list_rect.height * 0.5f - 36.0f,
+            current.chart_list_rect.width - 128.0f,
+            72.0f,
+        };
+        DrawRectangleRec(placeholder, with_alpha(button_base, selected_row_alpha));
+        DrawRectangleLinesEx(placeholder, 1.5f, with_alpha(t.border_light, alpha));
+        ui::draw_text_in_rect("No charts found.", 28, placeholder, with_alpha(t.text, alpha), ui::text_align::center);
+    }
+
     for (int index = 0; index < static_cast<int>(song->charts.size()); ++index) {
         const chart_entry_state& item = song->charts[static_cast<size_t>(index)];
-        const Rectangle row = chart_row_rect(current.chart_list_rect, index, state.chart_scroll_y);
-        if (row.y + row.height < current.chart_list_rect.y - 4.0f ||
-            row.y > current.chart_list_rect.y + current.chart_list_rect.height + 4.0f) {
+        const Rectangle card = chart_row_rect(current.chart_list_rect, index, state.chart_scroll_y);
+        if (card.y + card.height < current.chart_list_rect.y - 4.0f ||
+            card.y > current.chart_list_rect.y + current.chart_list_rect.height + 4.0f) {
             continue;
         }
 
         const bool selected = chart != nullptr && index == selected_chart_index_ref(state);
-        const bool hovered = ui::is_hovered(row);
+        const bool hovered = ui::is_hovered(card);
         const unsigned char row_alpha = selected ? selected_row_alpha
             : hovered ? hover_row_alpha
                       : normal_row_alpha;
-        DrawRectangleRec(row, with_alpha(selected ? button_selected : button_base, row_alpha));
-        DrawRectangleLinesEx(row, 1.0f, with_alpha(t.border_light, static_cast<unsigned char>(140.0f * play_t)));
+        DrawRectangleRec(card, with_alpha(selected ? button_selected : button_base, row_alpha));
+        DrawRectangleLinesEx(card, 1.0f,
+                             with_alpha(selected ? t.border_active : t.border_light, alpha));
+
         ui::draw_text_in_rect(
             TextFormat("%s  %s", key_mode_label(item.chart.meta.key_count).c_str(), item.chart.meta.difficulty.c_str()),
             16,
-            {row.x + 12.0f, row.y + 8.0f, 220.0f, 18.0f},
+            {card.x + 14.0f, card.y + 12.0f, card.width - 110.0f, 18.0f},
             with_alpha(key_mode_color(item.chart.meta.key_count), alpha), ui::text_align::left);
-        ui::draw_text_in_rect(
-            TextFormat("Lv.%.1f  %d Notes  BPM %s",
-                       item.chart.meta.level, item.chart.note_count,
-                       format_bpm_range(item.chart.min_bpm, item.chart.max_bpm).c_str()),
-            13,
-            {row.x + 12.0f, row.y + 23.0f, row.width - 130.0f, 14.0f},
-            with_alpha(t.text_muted, alpha), ui::text_align::left);
         ui::draw_text_in_rect(chart_status_label(item).c_str(), 12,
-                              {row.x + row.width - 80.0f, row.y + 13.0f, 64.0f, 14.0f},
+                              {card.x + card.width - 86.0f, card.y + 14.0f, 72.0f, 14.0f},
                               with_alpha(item.update_available ? t.accent : (item.installed ? t.success : t.text_muted), alpha),
                               ui::text_align::right);
+        ui::draw_text_in_rect(TextFormat("Lv.%.1f", item.chart.meta.level), 20,
+                              {card.x + 14.0f, card.y + 38.0f, 96.0f, 22.0f},
+                              with_alpha(t.text, alpha), ui::text_align::left);
+        ui::draw_text_in_rect(TextFormat("%d Notes", item.chart.note_count), 13,
+                              {card.x + 14.0f, card.y + 64.0f, card.width * 0.45f, 14.0f},
+                              with_alpha(t.text_muted, alpha), ui::text_align::left);
+        ui::draw_text_in_rect(
+            TextFormat("BPM %s", format_bpm_range(item.chart.min_bpm, item.chart.max_bpm).c_str()),
+            13,
+            {card.x + card.width * 0.45f, card.y + 64.0f, card.width * 0.55f - 14.0f, 14.0f},
+            with_alpha(t.text_muted, alpha), ui::text_align::right);
     }
-
-    const char* primary_label = song->update_available ? "UPDATE SONG"
-        : (song->installed ? "DOWNLOAD AGAIN" : "DOWNLOAD SONG");
-    ui::draw_button_colored(current.primary_action_rect, primary_label, 16,
-                            with_alpha(button_selected, selected_row_alpha),
-                            with_alpha(button_selected, hover_row_alpha),
-                            with_alpha(t.text, alpha), 1.5f);
-    ui::draw_button_colored(current.open_local_rect, "OPEN LOCAL", 16,
-                            with_alpha(button_base, song->installed ? normal_row_alpha : static_cast<unsigned char>(normal_row_alpha / 2)),
-                            with_alpha(button_hover, song->installed ? hover_row_alpha : static_cast<unsigned char>(hover_row_alpha / 2)),
-                            with_alpha(song->installed ? t.text : t.text_muted, alpha), 1.5f);
 
     ui::draw_notice_queue_bottom_right(state.notices,
                                        {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)});

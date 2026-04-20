@@ -248,6 +248,14 @@ void title_scene::update_online_mode(float dt) {
         ui::push_notice(online_state_.notices, "Download flow is still a UI prototype.", ui::notice_tone::info, 2.4f);
         return;
     }
+    if (result.action == title_online_view::requested_action::restart_preview) {
+        audio_controller_.preview().select_song(title_online_view::preview_song(online_state_));
+        return;
+    }
+    if (result.action == title_online_view::requested_action::stop_preview) {
+        audio_controller_.preview().stop();
+        return;
+    }
     if (result.action == title_online_view::requested_action::open_local) {
         manager_.change_scene(song_select::make_seamless_song_select_scene(
             manager_, title_online_view::selected_song_id(online_state_)));
@@ -257,6 +265,9 @@ void title_scene::update_online_mode(float dt) {
 void title_scene::update_common_animation(float dt) {
     auth_overlay::poll_restore(auth_controller_, play_state_.auth, play_state_.login_dialog);
     auth_overlay::poll_request(auth_controller_, play_state_.auth, play_state_.login_dialog);
+    if (title_online_view::poll_catalog(online_state_) && mode_ == hub_mode::online) {
+        audio_controller_.preview().select_song(title_online_view::preview_song(online_state_));
+    }
 
     if (intro_hold_t_ > 0.0f) {
         intro_hold_t_ = std::max(0.0f, intro_hold_t_ - dt);
