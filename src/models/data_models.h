@@ -124,6 +124,8 @@ struct note_state {
     note_data note_ref;
     double target_ms = 0.0;
     double end_target_ms = 0.0;
+    int head_event_index = -1;
+    int tail_event_index = -1;
     note_progress_state progress = note_progress_state::pending;
     judge_result result = judge_result::miss;
 
@@ -148,6 +150,7 @@ struct judge_event {
     bool play_hitsound = true;
     bool apply_gameplay_effects = true;
     bool show_feedback = true;
+    int event_index = -1;
 };
 
 // 達成率に応じたランク種別。
@@ -172,6 +175,12 @@ inline rank compute_rank(float accuracy, bool is_full_combo) {
     return rank::f;
 }
 
+struct note_result_entry {
+    int event_index = -1;
+    judge_result result = judge_result::miss;
+    double offset_ms = 0.0;
+};
+
 // リザルト画面で表示する集計結果。
 struct result_data {
     int score = 0;
@@ -185,4 +194,5 @@ struct result_data {
     bool failed = false;
     bool is_full_combo = false;
     bool is_all_perfect = false;
+    std::vector<note_result_entry> note_results;
 };

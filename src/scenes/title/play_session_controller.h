@@ -14,6 +14,7 @@ void reload_catalog(song_select::state& state,
                     const std::string& preferred_song_id = "",
                     const std::string& preferred_chart_id = "",
                     bool sync_media_now = false);
+void warm_scoring_ruleset();
 
 void sync_media(song_select::state& state, song_select::preview_controller& preview_controller);
 void reload_ranking(song_select::state& state);

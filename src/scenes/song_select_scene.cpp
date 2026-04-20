@@ -245,6 +245,7 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
             const auto filtered = song_select::filtered_charts_for_selected_song(state_);
             const song_select::chart_option* chart = song_select::selected_chart_for(state_, filtered);
             if (song != nullptr && chart != nullptr) {
+                ranking_service::refresh_scoring_ruleset_cache_for_chart_start(chart->meta, true);
                 manager_.change_scene(song_select::make_play_scene(manager_, *song, *chart));
             }
         } else {
@@ -508,6 +509,7 @@ void song_select_scene::update(float dt) {
         if (song != nullptr && chart != nullptr) {
             if (IsKeyPressed(KEY_ENTER)) {
                 song_select::close_context_menu(state_);
+                ranking_service::refresh_scoring_ruleset_cache_for_chart_start(chart->meta, true);
                 manager_.change_scene(song_select::make_play_scene(manager_, *song, *chart));
                 return;
             }

@@ -98,6 +98,10 @@ std::filesystem::path auth_session_path() {
     return app_data_root() / "auth_session.json";
 }
 
+std::filesystem::path scoring_ruleset_cache_path() {
+    return app_data_root() / "scoring_ruleset_cache.txt";
+}
+
 std::filesystem::path mvs_root() {
     return app_data_root() / "mvs";
 }

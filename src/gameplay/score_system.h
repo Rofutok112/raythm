@@ -1,8 +1,10 @@
 #pragma once
 
 #include <array>
+#include <vector>
 
 #include "data_models.h"
+#include "scoring_ruleset_runtime.h"
 
 class score_system {
 public:
@@ -25,6 +27,8 @@ private:
     int slow_count_ = 0;
     double offset_sum_ = 0.0;
     int judged_notes_ = 0;
+    std::vector<note_result_entry> note_results_;
+    scoring_ruleset_runtime::ruleset ruleset_ = scoring_ruleset_runtime::make_default_ruleset();
 };
 
 class gauge {

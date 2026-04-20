@@ -40,9 +40,9 @@ private:
     void advance_lane_head_index(int lane);
     std::optional<size_t> find_press_candidate(int lane, double timestamp_ms);
     void complete_held_note(size_t note_index, bool emit_display_judge);
-    void emit_judge(judge_result result, double offset_ms, int lane);
+    void emit_judge(judge_result result, double offset_ms, int lane, int event_index);
     void emit_judge(judge_result result, double offset_ms, int lane,
-                    judge_emit_options options);
+                    int event_index, judge_emit_options options);
 
     std::vector<note_state> note_states_;
     // Each lane keeps its own ordered note list and next unresolved head index.

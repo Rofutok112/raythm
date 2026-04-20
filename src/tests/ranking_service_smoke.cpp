@@ -25,18 +25,20 @@ int main() {
     chart.chart_id = "smoke-chart";
 
     result_data lower_result;
-    lower_result.clear_rank = rank::a;
-    lower_result.accuracy = 92.5f;
-    lower_result.is_full_combo = false;
-    lower_result.max_combo = 321;
-    lower_result.score = 654321;
+    lower_result.note_results = {
+        {.event_index = 0, .result = judge_result::perfect, .offset_ms = -4.0},
+        {.event_index = 1, .result = judge_result::great, .offset_ms = 7.0},
+        {.event_index = 2, .result = judge_result::good, .offset_ms = 12.0},
+        {.event_index = 3, .result = judge_result::perfect, .offset_ms = -2.0},
+    };
 
     result_data higher_result;
-    higher_result.clear_rank = rank::s;
-    higher_result.accuracy = 97.25f;
-    higher_result.is_full_combo = true;
-    higher_result.max_combo = 654;
-    higher_result.score = 765432;
+    higher_result.note_results = {
+        {.event_index = 0, .result = judge_result::perfect, .offset_ms = -1.0},
+        {.event_index = 1, .result = judge_result::perfect, .offset_ms = 2.0},
+        {.event_index = 2, .result = judge_result::perfect, .offset_ms = -3.0},
+        {.event_index = 3, .result = judge_result::perfect, .offset_ms = 1.0},
+    };
 
     const ranking_service::local_submit_result lower_submission =
         ranking_service::submit_local_result_detailed(chart, lower_result);
@@ -69,8 +71,8 @@ int main() {
     const ranking_service::listing local_listing =
         ranking_service::load_chart_ranking(chart.chart_id, ranking_service::source::local, 50);
     if (local_listing.entries.size() != 3 ||
-        local_listing.entries[0].score != higher_result.score ||
-        local_listing.entries[0].max_combo != higher_result.max_combo ||
+        local_listing.entries[0].score <= local_listing.entries[1].score ||
+        local_listing.entries[0].max_combo != 4 ||
         local_listing.entries[0].placement != 1 ||
         local_listing.entries[1].placement != 2 ||
         local_listing.entries[2].placement != 3) {

@@ -122,6 +122,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/player_note_offsets.h
         src/gameplay/ranking_service.cpp
         src/gameplay/ranking_service.h
+        src/gameplay/scoring_ruleset_runtime.cpp
+        src/gameplay/scoring_ruleset_runtime.h
         src/gameplay/score_system.cpp
         src/gameplay/score_system.h
         src/gameplay/song_loader.cpp
@@ -453,6 +455,8 @@ add_executable(judge_system_smoke
 
 add_executable(score_system_smoke
         src/models/data_models.h
+        src/gameplay/scoring_ruleset_runtime.cpp
+        src/gameplay/scoring_ruleset_runtime.h
         src/gameplay/score_system.cpp
         src/gameplay/score_system.h
         src/tests/score_system_smoke.cpp)
@@ -463,6 +467,8 @@ add_executable(ranking_service_smoke
         src/models/data_models.h
         src/gameplay/ranking_service.cpp
         src/gameplay/ranking_service.h
+        src/gameplay/scoring_ruleset_runtime.cpp
+        src/gameplay/scoring_ruleset_runtime.h
         src/network/auth_client.cpp
         src/network/auth_client.h
         src/network/ranking_client.cpp
@@ -491,6 +497,8 @@ add_executable(play_flow_controller_smoke
         src/gameplay/input_handler.h
         src/gameplay/judge_system.cpp
         src/gameplay/judge_system.h
+        src/gameplay/scoring_ruleset_runtime.cpp
+        src/gameplay/scoring_ruleset_runtime.h
         src/gameplay/score_system.cpp
         src/gameplay/score_system.h
         src/gameplay/timing_engine.cpp

@@ -102,13 +102,14 @@ void result_scene::on_enter() {
             const song_data song = song_;
             const std::string chart_path = chart_path_;
             const chart_meta chart = chart_;
-            const ranking_service::entry entry = *local_result.submitted_entry;
-            std::thread([task, song, chart_path, chart, entry]() {
-                ranking_service::online_submit_result result =
-                    ranking_service::submit_online_result(song, chart_path, chart, entry);
+            const std::string recorded_at = local_result.submitted_entry->recorded_at;
+            const result_data result_payload = result_;
+            std::thread([task, song, chart_path, chart, result_payload, recorded_at]() {
+                ranking_service::online_submit_result submit_result =
+                    ranking_service::submit_online_result(song, chart_path, chart, result_payload, recorded_at);
                 {
                     std::scoped_lock lock(task->mutex);
-                    task->result = std::move(result);
+                    task->result = std::move(submit_result);
                 }
                 task->done.store(true);
             }).detach();
