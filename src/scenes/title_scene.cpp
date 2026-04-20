@@ -14,7 +14,6 @@
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_select_login_dialog.h"
 #include "song_select/song_select_navigation.h"
-#include "title/title_audio_policy.h"
 #include "title/home_menu_view.h"
 #include "title/play_session_controller.h"
 #include "title/title_header_view.h"
@@ -115,30 +114,30 @@ void title_scene::enter_title_mode() {
     mode_ = hub_mode::title;
     suppress_home_pointer_until_release_ = false;
     home_status_message_.clear();
-    sync_audio_mode();
+    audio_controller_.update(current_audio_mode(), song_select::selected_song(play_state_), 0.0f);
 }
 
 void title_scene::enter_home_mode(bool suppress_pointer) {
     mode_ = hub_mode::home;
     suppress_home_pointer_until_release_ = suppress_pointer;
     home_status_message_.clear();
-    sync_audio_mode();
+    audio_controller_.update(current_audio_mode(), song_select::selected_song(play_state_), 0.0f);
 }
 
 void title_scene::enter_play_mode() {
     mode_ = hub_mode::play;
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
-    sync_audio_mode();
-    title_play_session::sync_media(play_state_, preview_controller_);
+    title_play_session::sync_media(play_state_, audio_controller_.preview());
+    audio_controller_.update(current_audio_mode(), song_select::selected_song(play_state_), 0.0f);
 }
 
 void title_scene::enter_create_mode() {
     mode_ = hub_mode::create;
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
-    sync_audio_mode();
-    title_play_session::sync_media(play_state_, preview_controller_);
+    title_play_session::sync_media(play_state_, audio_controller_.preview());
+    audio_controller_.update(current_audio_mode(), song_select::selected_song(play_state_), 0.0f);
 }
 
 void title_scene::update_play_mode(float dt) {
@@ -150,11 +149,11 @@ void title_scene::update_play_mode(float dt) {
         return;
     }
     if (result.play_requested) {
-        title_play_session::start_selected_chart(manager_, play_state_, preview_controller_);
+        title_play_session::start_selected_chart(manager_, play_state_, audio_controller_.preview());
         return;
     }
     if (result.song_selection_changed) {
-        title_play_session::sync_media(play_state_, preview_controller_);
+        title_play_session::sync_media(play_state_, audio_controller_.preview());
         return;
     }
     if (result.chart_selection_changed || result.ranking_source_changed) {
@@ -172,7 +171,7 @@ void title_scene::update_create_mode(float dt) {
         return;
     }
     if (result.song_selection_changed) {
-        title_play_session::sync_media(play_state_, preview_controller_);
+        title_play_session::sync_media(play_state_, audio_controller_.preview());
         return;
     }
     if (result.chart_selection_changed) {
@@ -244,17 +243,10 @@ void title_scene::update_common_animation(float dt) {
         play_view_anim_ = target_play_anim;
     }
 
-    const title_audio_policy::resolved_state audio_state = current_audio_state();
-    if (audio_state.update_preview) {
-        preview_controller_.update(dt, song_select::selected_song(play_state_));
-    }
     if (play_view_anim_ > 0.0f) {
         song_select::tick_animations(play_state_, dt);
     }
-
-    sync_audio_mode();
-    bgm_controller_.update();
-    spectrum_visualizer_.update(audio_state.spectrum);
+    audio_controller_.update(current_audio_mode(), song_select::selected_song(play_state_), dt);
 }
 
 bool title_scene::handle_account_input() {
@@ -370,15 +362,6 @@ void title_scene::update_title_quit(float dt) {
     }
 }
 
-title_audio_policy::resolved_state title_scene::current_audio_state() const {
-    const title_audio_policy::hub_mode policy_mode =
-        mode_ == hub_mode::title ? title_audio_policy::hub_mode::title :
-        mode_ == hub_mode::home ? title_audio_policy::hub_mode::home :
-        mode_ == hub_mode::play ? title_audio_policy::hub_mode::play :
-        title_audio_policy::hub_mode::create;
-    return title_audio_policy::resolve(policy_mode, preview_controller_.is_audio_active());
-}
-
 void title_scene::start_transition(transition_target target) {
     if (transitioning_to_song_select_) {
         return;
@@ -396,25 +379,23 @@ void title_scene::start_transition(transition_target target) {
     transition_fade_.restart(scene_fade::direction::out, 0.3f, 0.65f);
 }
 
-void title_scene::sync_audio_mode() {
-    if (current_audio_state().music == title_audio_policy::music_source::preview_song) {
-        bgm_controller_.suspend();
-        return;
-    }
-    bgm_controller_.resume();
+title_audio_policy::hub_mode title_scene::current_audio_mode() const {
+    return mode_ == hub_mode::title ? title_audio_policy::hub_mode::title :
+           mode_ == hub_mode::home ? title_audio_policy::hub_mode::home :
+           mode_ == hub_mode::play ? title_audio_policy::hub_mode::play :
+                                     title_audio_policy::hub_mode::create;
 }
 
 void title_scene::on_enter() {
-    bgm_controller_.configure(kTitleIntroPath, kTitleLoopPath);
-    spectrum_visualizer_.reset();
-    bgm_controller_.on_enter();
+    audio_controller_.configure(kTitleIntroPath, kTitleLoopPath);
+    audio_controller_.on_enter();
     song_select::reset_for_enter(play_state_);
     play_state_.ranking_panel.selected_source = ranking_service::source::local;
     auth_overlay::refresh_auth_state(play_state_.auth);
     title_play_session::warm_scoring_ruleset();
     // Preload song/chart catalog once on scene entry so HOME -> PLAY animation
     // does not have to wait for difficulty calculation and local rank scanning.
-    title_play_session::reload_catalog(play_state_, preview_controller_,
+    title_play_session::reload_catalog(play_state_, audio_controller_.preview(),
                                        preferred_song_id_, preferred_chart_id_,
                                        (mode_ == hub_mode::play || mode_ == hub_mode::create));
     play_state_.recent_result_offset = recent_result_offset_;
@@ -433,23 +414,20 @@ void title_scene::on_enter() {
     home_status_message_.clear();
     play_view_anim_ = (mode_ == hub_mode::play || mode_ == hub_mode::create) ? 1.0f : 0.0f;
     play_entry_origin_rect_ = {};
-    preview_controller_.stop();
     play_state_.login_dialog.open = false;
     if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
         play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
-        bgm_controller_.suspend();
-        title_play_session::sync_media(play_state_, preview_controller_);
+        title_play_session::sync_media(play_state_, audio_controller_.preview());
     }
     if (play_state_.auth.logged_in) {
         auth_overlay::start_restore(auth_controller_, play_state_.login_dialog);
     }
+    audio_controller_.update(current_audio_mode(), song_select::selected_song(play_state_), 0.0f);
 }
 
 void title_scene::on_exit() {
-    bgm_controller_.on_exit();
-    spectrum_visualizer_.reset();
     play_state_.login_dialog.open = false;
-    preview_controller_.stop();
+    audio_controller_.on_exit();
 }
 
 // Title 上で Home 展開、Play/Create への遷移、Account 導線を扱う。
@@ -531,7 +509,7 @@ void title_scene::draw() {
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
     ui::begin_draw_queue();
     const float spectrum_alpha = lerp_value(1.0f, 0.5f, play_t);
-    spectrum_visualizer_.draw(spectrum_rect, spectrum_alpha);
+    audio_controller_.draw_spectrum(spectrum_rect, spectrum_alpha);
     title_header_view::draw({
         .closed_header_rect = title_layout::closed_header_rect(),
         .open_header_rect = title_layout::open_header_rect(),
@@ -548,7 +526,7 @@ void title_scene::draw() {
 
     title_home_view::draw(home_menu_anim_, play_view_anim_, home_menu_selected_index_, home_status_message_);
 
-    title_play_view::draw(play_state_, preview_controller_,
+    title_play_view::draw(play_state_, audio_controller_.preview(),
                           mode_ == hub_mode::create ? title_play_view::mode::create : title_play_view::mode::play,
                           play_view_anim_, play_entry_origin_rect_);
 

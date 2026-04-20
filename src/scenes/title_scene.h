@@ -3,11 +3,8 @@
 #include "scene.h"
 #include "shared/auth_overlay_controller.h"
 #include "shared/scene_fade.h"
-#include "song_select/song_preview_controller.h"
 #include "song_select/song_select_state.h"
-#include "title/title_audio_policy.h"
-#include "title/title_bgm_controller.h"
-#include "title/title_spectrum_visualizer.h"
+#include "title/title_audio_controller.h"
 #include <optional>
 #include <string>
 
@@ -55,8 +52,7 @@ private:
     bool handle_title_input(bool left_click_for_home, bool right_click_for_home);
     bool handle_home_input();
     void update_title_quit(float dt);
-    title_audio_policy::resolved_state current_audio_state() const;
-    void sync_audio_mode();
+    [[nodiscard]] title_audio_policy::hub_mode current_audio_mode() const;
 
     bool quitting_ = false;
     scene_fade quit_fade_{scene_fade::direction::out, 1.5f, 1.0f};
@@ -81,8 +77,6 @@ private:
     float play_view_anim_ = 0.0f;
     Rectangle play_entry_origin_rect_{};
     song_select::state play_state_;
-    song_select::preview_controller preview_controller_;
-    title_bgm_controller bgm_controller_;
-    title_spectrum_visualizer spectrum_visualizer_;
+    title_audio_controller audio_controller_;
     auth_overlay::controller auth_controller_;
 };
