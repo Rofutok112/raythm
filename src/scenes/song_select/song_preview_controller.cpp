@@ -83,6 +83,11 @@ void preview_controller::stop() {
     unload_jacket();
 }
 
+bool preview_controller::is_audio_active() const {
+    audio_manager& audio = audio_manager::instance();
+    return audio.is_preview_loaded() || audio.is_preview_playing();
+}
+
 void preview_controller::unload_jacket() {
     if (!jacket_loaded_) {
         return;

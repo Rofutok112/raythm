@@ -5,6 +5,7 @@
 #include "shared/scene_fade.h"
 #include "song_select/song_preview_controller.h"
 #include "song_select/song_select_state.h"
+#include "title/title_audio_policy.h"
 #include "title/title_bgm_controller.h"
 #include "title/title_spectrum_visualizer.h"
 #include <optional>
@@ -54,6 +55,7 @@ private:
     bool handle_title_input(bool left_click_for_home, bool right_click_for_home);
     bool handle_home_input();
     void update_title_quit(float dt);
+    title_audio_policy::resolved_state current_audio_state() const;
     void sync_audio_mode();
 
     bool quitting_ = false;

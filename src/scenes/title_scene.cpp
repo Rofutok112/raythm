@@ -8,13 +8,13 @@
 #include <memory>
 #include <string>
 
-#include "audio_manager.h"
 #include "raylib.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_select_login_dialog.h"
 #include "song_select/song_select_navigation.h"
+#include "title/title_audio_policy.h"
 #include "title/home_menu_view.h"
 #include "title/play_session_controller.h"
 #include "title/title_header_view.h"
@@ -33,11 +33,6 @@ constexpr float kHomeAnimSpeed = 6.5f;
 constexpr float kAccountChipInteractiveThreshold = 0.2f;
 constexpr float kPlayViewAnimSpeed = 6.0f;
 constexpr ui::draw_layer kTitleModalLayer = ui::draw_layer::modal;
-
-bool preview_audio_active() {
-    audio_manager& audio = audio_manager::instance();
-    return audio.is_preview_loaded() || audio.is_preview_playing();
-}
 
 float ease_out_cubic(float t) {
     const float clamped = std::clamp(t, 0.0f, 1.0f);
@@ -249,7 +244,8 @@ void title_scene::update_common_animation(float dt) {
         play_view_anim_ = target_play_anim;
     }
 
-    if (play_view_anim_ > 0.0f || preview_audio_active()) {
+    const title_audio_policy::resolved_state audio_state = current_audio_state();
+    if (audio_state.update_preview) {
         preview_controller_.update(dt, song_select::selected_song(play_state_));
     }
     if (play_view_anim_ > 0.0f) {
@@ -258,9 +254,7 @@ void title_scene::update_common_animation(float dt) {
 
     sync_audio_mode();
     bgm_controller_.update();
-    spectrum_visualizer_.update((mode_ == hub_mode::play || mode_ == hub_mode::create || preview_audio_active())
-                                    ? title_spectrum_visualizer::source::preview
-                                    : title_spectrum_visualizer::source::bgm);
+    spectrum_visualizer_.update(audio_state.spectrum);
 }
 
 bool title_scene::handle_account_input() {
@@ -376,6 +370,15 @@ void title_scene::update_title_quit(float dt) {
     }
 }
 
+title_audio_policy::resolved_state title_scene::current_audio_state() const {
+    const title_audio_policy::hub_mode policy_mode =
+        mode_ == hub_mode::title ? title_audio_policy::hub_mode::title :
+        mode_ == hub_mode::home ? title_audio_policy::hub_mode::home :
+        mode_ == hub_mode::play ? title_audio_policy::hub_mode::play :
+        title_audio_policy::hub_mode::create;
+    return title_audio_policy::resolve(policy_mode, preview_controller_.is_audio_active());
+}
+
 void title_scene::start_transition(transition_target target) {
     if (transitioning_to_song_select_) {
         return;
@@ -394,7 +397,7 @@ void title_scene::start_transition(transition_target target) {
 }
 
 void title_scene::sync_audio_mode() {
-    if (mode_ == hub_mode::play || mode_ == hub_mode::create || preview_audio_active()) {
+    if (current_audio_state().music == title_audio_policy::music_source::preview_song) {
         bgm_controller_.suspend();
         return;
     }

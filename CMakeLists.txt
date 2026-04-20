@@ -161,6 +161,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title_scene.h
         src/scenes/title/home_menu_view.cpp
         src/scenes/title/home_menu_view.h
+        src/scenes/title/title_audio_policy.cpp
+        src/scenes/title/title_audio_policy.h
         src/scenes/title/title_layout.cpp
         src/scenes/title/title_layout.h
         src/scenes/title/play_session_controller.cpp
