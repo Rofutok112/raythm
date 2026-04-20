@@ -15,6 +15,7 @@
 #include "song_select/song_select_login_dialog.h"
 #include "song_select/song_select_navigation.h"
 #include "title/home_menu_view.h"
+#include "title/online_download_view.h"
 #include "title/play_session_controller.h"
 #include "title/title_header_view.h"
 #include "title/title_layout.h"
@@ -90,6 +91,15 @@ const char* account_status_for(const song_select::auth_state& auth_state) {
     return auth_state.email_verified ? "Verified profile" : "Manage account";
 }
 
+const song_select::song_entry* selected_audio_song(title_scene::hub_mode mode,
+                                                   const song_select::state& play_state,
+                                                   const title_online_view::state& online_state) {
+    if (mode == title_scene::hub_mode::online) {
+        return title_online_view::preview_song(online_state);
+    }
+    return song_select::selected_song(play_state);
+}
+
 }  // namespace
 
 title_scene::title_scene(scene_manager& manager,
@@ -129,7 +139,15 @@ void title_scene::enter_play_mode() {
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
     title_play_session::sync_media(play_state_, audio_controller_.preview());
-    audio_controller_.update(current_audio_mode(), song_select::selected_song(play_state_), 0.0f);
+    audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
+}
+
+void title_scene::enter_online_mode() {
+    mode_ = hub_mode::online;
+    home_status_message_.clear();
+    play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
+    title_online_view::on_enter(online_state_, audio_controller_.preview());
+    audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
 }
 
 void title_scene::enter_create_mode() {
@@ -137,7 +155,7 @@ void title_scene::enter_create_mode() {
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
     title_play_session::sync_media(play_state_, audio_controller_.preview());
-    audio_controller_.update(current_audio_mode(), song_select::selected_song(play_state_), 0.0f);
+    audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
 }
 
 void title_scene::update_play_mode(float dt) {
@@ -213,6 +231,29 @@ void title_scene::update_create_mode(float dt) {
     }
 }
 
+void title_scene::update_online_mode(float dt) {
+    ui::tick_notices(online_state_.notices, dt);
+    const title_online_view::update_result result =
+        title_online_view::update(online_state_, play_view_anim_, play_entry_origin_rect_, dt);
+
+    if (result.back_requested) {
+        enter_home_mode(false);
+        return;
+    }
+    if (result.song_selection_changed) {
+        audio_controller_.preview().select_song(title_online_view::preview_song(online_state_));
+        return;
+    }
+    if (result.action == title_online_view::requested_action::primary) {
+        ui::push_notice(online_state_.notices, "Download flow is still a UI prototype.", ui::notice_tone::info, 2.4f);
+        return;
+    }
+    if (result.action == title_online_view::requested_action::open_local) {
+        manager_.change_scene(song_select::make_seamless_song_select_scene(
+            manager_, title_online_view::selected_song_id(online_state_)));
+    }
+}
+
 void title_scene::update_common_animation(float dt) {
     auth_overlay::poll_restore(auth_controller_, play_state_.auth, play_state_.login_dialog);
     auth_overlay::poll_request(auth_controller_, play_state_.auth, play_state_.login_dialog);
@@ -236,17 +277,18 @@ void title_scene::update_common_animation(float dt) {
         home_menu_anim_ = target_anim;
     }
 
-    const float target_play_anim = (mode_ == hub_mode::play || mode_ == hub_mode::create) ? 1.0f : 0.0f;
+    const float target_play_anim =
+        (mode_ == hub_mode::play || mode_ == hub_mode::online || mode_ == hub_mode::create) ? 1.0f : 0.0f;
     play_view_anim_ = std::clamp(play_view_anim_ + (target_play_anim - play_view_anim_) * std::min(1.0f, dt * kPlayViewAnimSpeed),
                                  0.0f, 1.0f);
     if (std::fabs(play_view_anim_ - target_play_anim) < 0.002f) {
         play_view_anim_ = target_play_anim;
     }
 
-    if (play_view_anim_ > 0.0f) {
+    if (play_view_anim_ > 0.0f && (mode_ == hub_mode::play || mode_ == hub_mode::create)) {
         song_select::tick_animations(play_state_, dt);
     }
-    audio_controller_.update(current_audio_mode(), song_select::selected_song(play_state_), dt);
+    audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), dt);
 }
 
 bool title_scene::handle_account_input() {
@@ -318,7 +360,9 @@ bool title_scene::handle_home_input() {
                 if (entry.enabled) {
                     start_transition(entry.target == title_home_view::action::create
                                          ? transition_target::create_tools
-                                         : transition_target::song_select);
+                                         : entry.target == title_home_view::action::online
+                                             ? transition_target::online_download
+                                             : transition_target::song_select);
                 } else {
                     home_status_message_ = "This route is still warming up.";
                 }
@@ -340,7 +384,9 @@ bool title_scene::handle_home_input() {
         if (entry.enabled) {
             start_transition(entry.target == title_home_view::action::create
                                  ? transition_target::create_tools
-                                 : transition_target::song_select);
+                                 : entry.target == title_home_view::action::online
+                                     ? transition_target::online_download
+                                     : transition_target::song_select);
         } else {
             home_status_message_ = "This route is still warming up.";
         }
@@ -370,6 +416,10 @@ void title_scene::start_transition(transition_target target) {
         enter_play_mode();
         return;
     }
+    if (target == transition_target::online_download) {
+        enter_online_mode();
+        return;
+    }
     if (target == transition_target::create_tools) {
         enter_create_mode();
         return;
@@ -383,6 +433,7 @@ title_audio_policy::hub_mode title_scene::current_audio_mode() const {
     return mode_ == hub_mode::title ? title_audio_policy::hub_mode::title :
            mode_ == hub_mode::home ? title_audio_policy::hub_mode::home :
            mode_ == hub_mode::play ? title_audio_policy::hub_mode::play :
+           mode_ == hub_mode::online ? title_audio_policy::hub_mode::online :
                                      title_audio_policy::hub_mode::create;
 }
 
@@ -412,9 +463,10 @@ void title_scene::on_enter() {
     home_menu_anim_ = mode_ == hub_mode::title ? 0.0f : 1.0f;
     home_menu_selected_index_ = 0;
     home_status_message_.clear();
-    play_view_anim_ = (mode_ == hub_mode::play || mode_ == hub_mode::create) ? 1.0f : 0.0f;
+    play_view_anim_ = (mode_ == hub_mode::play || mode_ == hub_mode::online || mode_ == hub_mode::create) ? 1.0f : 0.0f;
     play_entry_origin_rect_ = {};
     play_state_.login_dialog.open = false;
+    title_online_view::reload_catalog(online_state_);
     if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
         play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
         title_play_session::sync_media(play_state_, audio_controller_.preview());
@@ -422,11 +474,12 @@ void title_scene::on_enter() {
     if (play_state_.auth.logged_in) {
         auth_overlay::start_restore(auth_controller_, play_state_.login_dialog);
     }
-    audio_controller_.update(current_audio_mode(), song_select::selected_song(play_state_), 0.0f);
+    audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
 }
 
 void title_scene::on_exit() {
     play_state_.login_dialog.open = false;
+    title_online_view::on_exit(online_state_);
     audio_controller_.on_exit();
 }
 
@@ -441,6 +494,9 @@ void title_scene::update(float dt) {
             switch (transition_target_) {
             case transition_target::song_select:
                 enter_play_mode();
+                break;
+            case transition_target::online_download:
+                enter_online_mode();
                 break;
             case transition_target::create_tools:
                 enter_create_mode();
@@ -482,6 +538,10 @@ void title_scene::update(float dt) {
 
     if (mode_ == hub_mode::play) {
         update_play_mode(dt);
+        return;
+    }
+    if (mode_ == hub_mode::online) {
+        update_online_mode(dt);
         return;
     }
     if (mode_ == hub_mode::create) {
@@ -526,9 +586,14 @@ void title_scene::draw() {
 
     title_home_view::draw(home_menu_anim_, play_view_anim_, home_menu_selected_index_, home_status_message_);
 
-    title_play_view::draw(play_state_, audio_controller_.preview(),
-                          mode_ == hub_mode::create ? title_play_view::mode::create : title_play_view::mode::play,
-                          play_view_anim_, play_entry_origin_rect_);
+    if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
+        title_play_view::draw(play_state_, audio_controller_.preview(),
+                              mode_ == hub_mode::create ? title_play_view::mode::create : title_play_view::mode::play,
+                              play_view_anim_, play_entry_origin_rect_);
+    }
+    if (mode_ == hub_mode::online) {
+        title_online_view::draw(online_state_, play_view_anim_, play_entry_origin_rect_);
+    }
 
     const Rectangle account_dialog_anchor = {
         account_chip_rect.x,

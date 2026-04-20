@@ -4,6 +4,7 @@
 #include "shared/auth_overlay_controller.h"
 #include "shared/scene_fade.h"
 #include "song_select/song_select_state.h"
+#include "title/online_download_view.h"
 #include "title/title_audio_controller.h"
 #include <optional>
 #include <string>
@@ -15,11 +16,13 @@ public:
         title,
         home,
         play,
+        online,
         create,
     };
 
     enum class transition_target {
         song_select,
+        online_download,
         create_tools,
     };
 
@@ -42,8 +45,10 @@ private:
     void enter_title_mode();
     void enter_home_mode(bool suppress_pointer = false);
     void enter_play_mode();
+    void enter_online_mode();
     void enter_create_mode();
     void update_play_mode(float dt);
+    void update_online_mode(float dt);
     void update_create_mode(float dt);
     void update_common_animation(float dt);
     bool handle_account_input();
@@ -77,6 +82,7 @@ private:
     float play_view_anim_ = 0.0f;
     Rectangle play_entry_origin_rect_{};
     song_select::state play_state_;
+    title_online_view::state online_state_;
     title_audio_controller audio_controller_;
     auth_overlay::controller auth_controller_;
 };

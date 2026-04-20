@@ -8,6 +8,7 @@ enum class hub_mode {
     title,
     home,
     play,
+    online,
     create,
 };
 
