@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "audio_manager.h"
+#include "tween.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
 
@@ -15,6 +16,9 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     const float wheel = GetMouseWheelMove();
+    const float detail_target = state.detail_open ? 1.0f : 0.0f;
+    const float detail_lerp_speed = state.detail_open ? 6.5f : 10.0f;
+    state.detail_transition = tween::damp(state.detail_transition, detail_target, dt, detail_lerp_speed, 0.002f);
 
     if (ui::is_clicked(current.back_rect)) {
         result.back_requested = true;
@@ -64,12 +68,16 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
         const int clicked_song = detail::hit_test_song_list(state, song_list_rect, mouse);
         if (clicked_song >= 0) {
             int& selected_song_index = detail::selected_song_index_ref(state);
-            selected_song_index = clicked_song;
-            detail::selected_chart_index_ref(state) = 0;
-            state.chart_scroll_y = 0.0f;
-            state.chart_scroll_y_target = 0.0f;
-            state.detail_open = true;
-            result.song_selection_changed = true;
+            if (selected_song_index != clicked_song) {
+                selected_song_index = clicked_song;
+                detail::selected_chart_index_ref(state) = 0;
+                state.chart_scroll_y = 0.0f;
+                state.chart_scroll_y_target = 0.0f;
+                result.song_selection_changed = true;
+            } else {
+                state.detail_open = true;
+                request_charts_for_selected_song(state);
+            }
             return result;
         }
     }
@@ -87,14 +95,32 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
     }
 
     if (state.detail_open) {
+        const song_entry_state* song = selected_song(state);
+        if (song != nullptr && (!song->charts_loaded || song->charts_has_more)) {
+            request_charts_for_selected_song(state);
+        }
+        if (song != nullptr && left_pressed && CheckCollisionPointRec(mouse, current.preview_bar_rect)) {
+            const double preview_length = detail::preview_display_length_seconds(*song);
+            if (preview_length > 0.0 && audio_manager::instance().is_preview_loaded()) {
+                const float ratio = std::clamp((mouse.x - current.preview_bar_rect.x) / current.preview_bar_rect.width,
+                                               0.0f, 1.0f);
+                audio_manager::instance().seek_preview(preview_length * static_cast<double>(ratio));
+            }
+            return result;
+        }
         if (ui::is_clicked(current.preview_play_rect)) {
             result.action = audio_manager::instance().is_preview_playing()
                 ? requested_action::stop_preview
                 : requested_action::restart_preview;
             return result;
         }
-        if (selected_song(state) != nullptr && ui::is_clicked(current.primary_action_rect)) {
-            result.action = requested_action::primary;
+        const bool download_ready = song != nullptr &&
+            (song->charts_loaded || (song->installed && !song->update_available));
+        if (song != nullptr && !state.download_in_progress && download_ready &&
+            ui::is_clicked(current.primary_action_rect)) {
+            result.action = needs_download(*song)
+                ? requested_action::primary
+                : requested_action::open_local;
             return result;
         }
     }
@@ -166,16 +192,18 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
 
     state.song_scroll_y_target = std::clamp(state.song_scroll_y_target, 0.0f,
                                             detail::max_song_scroll(song_list_rect, filtered_song_count));
-    state.song_scroll_y += (state.song_scroll_y_target - state.song_scroll_y) * std::min(1.0f, dt * 12.0f);
-    if (std::fabs(state.song_scroll_y - state.song_scroll_y_target) < 0.5f) {
-        state.song_scroll_y = state.song_scroll_y_target;
+    state.song_scroll_y = tween::damp(state.song_scroll_y, state.song_scroll_y_target, dt, 12.0f, 0.5f);
+    if (!state.detail_open &&
+        state.song_scroll_y_target >= std::max(0.0f, detail::max_song_scroll(song_list_rect, filtered_song_count) - 120.0f)) {
+        request_next_song_page(state, state.mode);
     }
 
     state.chart_scroll_y_target = std::clamp(state.chart_scroll_y_target, 0.0f,
                                              detail::max_chart_scroll(current.chart_list_rect, chart_count));
-    state.chart_scroll_y += (state.chart_scroll_y_target - state.chart_scroll_y) * std::min(1.0f, dt * 12.0f);
-    if (std::fabs(state.chart_scroll_y - state.chart_scroll_y_target) < 0.5f) {
-        state.chart_scroll_y = state.chart_scroll_y_target;
+    state.chart_scroll_y = tween::damp(state.chart_scroll_y, state.chart_scroll_y_target, dt, 12.0f, 0.5f);
+    if (state.detail_open && song != nullptr && song->charts_has_more &&
+        state.chart_scroll_y_target >= std::max(0.0f, detail::max_chart_scroll(current.chart_list_rect, chart_count) - 80.0f)) {
+        request_charts_for_selected_song(state);
     }
 
     return result;

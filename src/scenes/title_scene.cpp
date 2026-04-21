@@ -5,15 +5,20 @@
 #include <chrono>
 #include <cstdio>
 #include <ctime>
+#include <future>
 #include <memory>
 #include <string>
+#include <thread>
 
 #include "raylib.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select/song_catalog_service.h"
+#include "song_select/song_select_confirmation_dialog.h"
+#include "song_select/song_select_layout.h"
 #include "song_select/song_select_login_dialog.h"
 #include "song_select/song_select_navigation.h"
+#include "tween.h"
 #include "title/home_menu_view.h"
 #include "title/online_download_view.h"
 #include "title/play_session_controller.h"
@@ -33,12 +38,6 @@ constexpr float kHomeAnimSpeed = 6.5f;
 constexpr float kAccountChipInteractiveThreshold = 0.2f;
 constexpr float kPlayViewAnimSpeed = 6.0f;
 constexpr ui::draw_layer kTitleModalLayer = ui::draw_layer::modal;
-
-float ease_out_cubic(float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    const float inv = 1.0f - clamped;
-    return 1.0f - inv * inv * inv;
-}
 
 std::string make_avatar_label(const auth::session_summary& summary) {
     const std::string source = summary.logged_in
@@ -72,11 +71,6 @@ std::string make_avatar_label(const song_select::auth_state& auth_state) {
     return make_avatar_label(summary);
 }
 
-float lerp_value(float from, float to, float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    return from + (to - from) * clamped;
-}
-
 const char* account_name_for(const song_select::auth_state& auth_state) {
     if (!auth_state.logged_in) {
         return "ACCOUNT";
@@ -98,6 +92,23 @@ const song_select::song_entry* selected_audio_song(title_scene::hub_mode mode,
         return title_online_view::preview_song(online_state);
     }
     return song_select::selected_song(play_state);
+}
+
+bool select_local_song(song_select::state& state, const std::string& song_id) {
+    if (song_id.empty()) {
+        return false;
+    }
+
+    for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
+        if (state.songs[static_cast<size_t>(i)].song.meta.song_id != song_id) {
+            continue;
+        }
+
+        song_select::apply_song_selection(state, i, 0);
+        return true;
+    }
+
+    return false;
 }
 
 }  // namespace
@@ -158,12 +169,99 @@ void title_scene::enter_create_mode() {
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
 }
 
+void title_scene::request_play_catalog_reload(std::string preferred_song_id,
+                                              std::string preferred_chart_id,
+                                              bool sync_media_on_apply) {
+    if (play_catalog_loading_) {
+        play_catalog_reload_pending_ = true;
+        queued_play_catalog_song_id_ = std::move(preferred_song_id);
+        queued_play_catalog_chart_id_ = std::move(preferred_chart_id);
+        queued_play_catalog_sync_media_on_apply_ =
+            queued_play_catalog_sync_media_on_apply_ || sync_media_on_apply;
+        play_state_.catalog_loading = true;
+        return;
+    }
+
+    play_catalog_song_id_ = std::move(preferred_song_id);
+    play_catalog_chart_id_ = std::move(preferred_chart_id);
+    play_catalog_sync_media_on_apply_ = sync_media_on_apply;
+    play_catalog_loading_ = true;
+    play_state_.catalog_loading = true;
+    std::promise<song_select::catalog_data> promise;
+    play_catalog_future_ = promise.get_future();
+    std::thread([promise = std::move(promise)]() mutable {
+        try {
+            promise.set_value(song_select::load_catalog());
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
+}
+
+void title_scene::poll_play_catalog_reload() {
+    if (!play_catalog_loading_) {
+        return;
+    }
+    if (play_catalog_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    try {
+        song_select::apply_catalog(play_state_, play_catalog_future_.get(),
+                                   play_catalog_song_id_, play_catalog_chart_id_);
+    } catch (const std::exception& ex) {
+        song_select::apply_catalog(play_state_, {}, play_catalog_song_id_, play_catalog_chart_id_);
+        play_state_.load_errors = {ex.what()};
+    }
+    play_catalog_loading_ = false;
+    const bool should_sync_media =
+        play_catalog_sync_media_on_apply_ || mode_ == hub_mode::play || mode_ == hub_mode::create;
+    if (should_sync_media) {
+        title_play_session::sync_media(play_state_, audio_controller_.preview());
+    }
+    play_catalog_sync_media_on_apply_ = false;
+
+    if (!play_catalog_reload_pending_) {
+        return;
+    }
+
+    play_catalog_reload_pending_ = false;
+    request_play_catalog_reload(queued_play_catalog_song_id_,
+                                queued_play_catalog_chart_id_,
+                                queued_play_catalog_sync_media_on_apply_);
+    queued_play_catalog_song_id_.clear();
+    queued_play_catalog_chart_id_.clear();
+    queued_play_catalog_sync_media_on_apply_ = false;
+}
+
+void title_scene::apply_play_delete_result(const song_select::delete_result& result) {
+    play_state_.confirmation_dialog = {};
+    if (!result.success) {
+        song_select::queue_status_message(play_state_, result.message, true);
+        return;
+    }
+
+    const song_select::song_entry* selected_song = song_select::selected_song(play_state_);
+    const std::string deleted_song_id = selected_song != nullptr ? selected_song->song.meta.song_id : "";
+    preferred_song_id_ = result.preferred_song_id;
+    preferred_chart_id_ = result.preferred_chart_id;
+    audio_controller_.preview().stop();
+    title_online_view::mark_song_removed(online_state_, deleted_song_id);
+    title_online_view::reload_catalog(online_state_);
+    request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
+                                mode_ == hub_mode::play || mode_ == hub_mode::create);
+    song_select::queue_status_message(play_state_, result.message, false);
+}
+
 void title_scene::update_play_mode(float dt) {
     const title_play_view::update_result result =
         title_play_view::update(play_state_, title_play_view::mode::play, play_view_anim_, play_entry_origin_rect_, dt);
 
     if (result.back_requested) {
         enter_home_mode(false);
+        return;
+    }
+    if (result.delete_song_requested) {
         return;
     }
     if (result.play_requested) {
@@ -245,7 +343,7 @@ void title_scene::update_online_mode(float dt) {
         return;
     }
     if (result.action == title_online_view::requested_action::primary) {
-        ui::push_notice(online_state_.notices, "Download flow is still a UI prototype.", ui::notice_tone::info, 2.4f);
+        title_online_view::start_download(online_state_);
         return;
     }
     if (result.action == title_online_view::requested_action::restart_preview) {
@@ -257,14 +355,28 @@ void title_scene::update_online_mode(float dt) {
         return;
     }
     if (result.action == title_online_view::requested_action::open_local) {
-        manager_.change_scene(song_select::make_seamless_song_select_scene(
-            manager_, title_online_view::selected_song_id(online_state_)));
+        preferred_song_id_ = title_online_view::selected_song_id(online_state_);
+        preferred_chart_id_.clear();
+        if (!select_local_song(play_state_, preferred_song_id_)) {
+            request_play_catalog_reload(preferred_song_id_, preferred_chart_id_, true);
+        }
+        enter_play_mode();
     }
 }
 
 void title_scene::update_common_animation(float dt) {
     auth_overlay::poll_restore(auth_controller_, play_state_.auth, play_state_.login_dialog);
     auth_overlay::poll_request(auth_controller_, play_state_.auth, play_state_.login_dialog);
+    poll_play_catalog_reload();
+    title_online_view::poll_song_page(online_state_);
+    title_online_view::poll_chart_page(online_state_);
+    title_online_view::poll_owned(online_state_);
+    if (title_online_view::poll_download(online_state_)) {
+        preferred_song_id_ = title_online_view::selected_song_id(online_state_);
+        preferred_chart_id_.clear();
+        request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
+                                    mode_ == hub_mode::play || mode_ == hub_mode::create);
+    }
     if (title_online_view::poll_catalog(online_state_) && mode_ == hub_mode::online) {
         audio_controller_.preview().select_song(title_online_view::preview_song(online_state_));
     }
@@ -276,25 +388,17 @@ void title_scene::update_common_animation(float dt) {
     }
 
     if (play_state_.login_dialog.open) {
-        play_state_.login_dialog.open_anim = std::min(1.0f, play_state_.login_dialog.open_anim + dt * 8.0f);
+        play_state_.login_dialog.open_anim = tween::advance(play_state_.login_dialog.open_anim, dt, 8.0f);
     } else {
         play_state_.login_dialog.open_anim = 0.0f;
     }
 
     const float target_anim = mode_ == hub_mode::title ? 0.0f : 1.0f;
-    home_menu_anim_ = std::clamp(home_menu_anim_ + (target_anim - home_menu_anim_) * std::min(1.0f, dt * kHomeAnimSpeed),
-                                 0.0f, 1.0f);
-    if (std::fabs(home_menu_anim_ - target_anim) < 0.002f) {
-        home_menu_anim_ = target_anim;
-    }
+    home_menu_anim_ = tween::damp(home_menu_anim_, target_anim, dt, kHomeAnimSpeed, 0.002f);
 
     const float target_play_anim =
         (mode_ == hub_mode::play || mode_ == hub_mode::online || mode_ == hub_mode::create) ? 1.0f : 0.0f;
-    play_view_anim_ = std::clamp(play_view_anim_ + (target_play_anim - play_view_anim_) * std::min(1.0f, dt * kPlayViewAnimSpeed),
-                                 0.0f, 1.0f);
-    if (std::fabs(play_view_anim_ - target_play_anim) < 0.002f) {
-        play_view_anim_ = target_play_anim;
-    }
+    play_view_anim_ = tween::damp(play_view_anim_, target_play_anim, dt, kPlayViewAnimSpeed, 0.002f);
 
     if (play_view_anim_ > 0.0f && (mode_ == hub_mode::play || mode_ == hub_mode::create)) {
         song_select::tick_animations(play_state_, dt);
@@ -452,14 +556,17 @@ void title_scene::on_enter() {
     audio_controller_.configure(kTitleIntroPath, kTitleLoopPath);
     audio_controller_.on_enter();
     song_select::reset_for_enter(play_state_);
+    play_catalog_loading_ = false;
+    play_catalog_reload_pending_ = false;
+    play_catalog_sync_media_on_apply_ = false;
+    queued_play_catalog_sync_media_on_apply_ = false;
+    play_catalog_song_id_.clear();
+    play_catalog_chart_id_.clear();
+    queued_play_catalog_song_id_.clear();
+    queued_play_catalog_chart_id_.clear();
     play_state_.ranking_panel.selected_source = ranking_service::source::local;
     auth_overlay::refresh_auth_state(play_state_.auth);
     title_play_session::warm_scoring_ruleset();
-    // Preload song/chart catalog once on scene entry so HOME -> PLAY animation
-    // does not have to wait for difficulty calculation and local rank scanning.
-    title_play_session::reload_catalog(play_state_, audio_controller_.preview(),
-                                       preferred_song_id_, preferred_chart_id_,
-                                       (mode_ == hub_mode::play || mode_ == hub_mode::create));
     play_state_.recent_result_offset = recent_result_offset_;
     if (play_intro_fade_) {
         intro_fade_.restart(scene_fade::direction::in, 1.0f, 1.0f);
@@ -478,9 +585,10 @@ void title_scene::on_enter() {
     play_entry_origin_rect_ = {};
     play_state_.login_dialog.open = false;
     title_online_view::reload_catalog(online_state_);
+    request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
+                                mode_ == hub_mode::play || mode_ == hub_mode::create);
     if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
         play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
-        title_play_session::sync_media(play_state_, audio_controller_.preview());
     }
     if (play_state_.auth.logged_in) {
         auth_overlay::start_restore(auth_controller_, play_state_.login_dialog);
@@ -497,6 +605,12 @@ void title_scene::on_exit() {
 // Title 上で Home 展開、Play/Create への遷移、Account 導線を扱う。
 void title_scene::update(float dt) {
     ui::begin_hit_regions();
+    if (play_state_.context_menu.open) {
+        ui::register_hit_region(play_state_.context_menu.rect, song_select::layout::kContextMenuLayer);
+    }
+    if (play_state_.confirmation_dialog.open) {
+        ui::register_hit_region(song_select::layout::kConfirmDialogRect, song_select::layout::kModalLayer);
+    }
     update_common_animation(dt);
 
     if (transitioning_to_song_select_) {
@@ -570,8 +684,8 @@ void title_scene::update(float dt) {
 // タイトルと、そこから展開する Home 導線を描画する。
 void title_scene::draw() {
     const auto& t = *g_theme;
-    const float menu_t = ease_out_cubic(home_menu_anim_);
-    const float play_t = ease_out_cubic(play_view_anim_);
+    const float menu_t = tween::ease_out_cubic(home_menu_anim_);
+    const float play_t = tween::ease_out_cubic(play_view_anim_);
     const Rectangle screen_rect = title_layout::screen_rect();
     const Rectangle spectrum_rect = title_layout::spectrum_rect();
     const Rectangle account_chip_rect = title_layout::account_chip_rect();
@@ -579,7 +693,7 @@ void title_scene::draw() {
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
     ui::begin_draw_queue();
-    const float spectrum_alpha = lerp_value(1.0f, 0.5f, play_t);
+    const float spectrum_alpha = tween::lerp(1.0f, 0.5f, play_t);
     audio_controller_.draw_spectrum(spectrum_rect, spectrum_alpha);
     title_header_view::draw({
         .closed_header_rect = title_layout::closed_header_rect(),
@@ -612,6 +726,16 @@ void title_scene::draw() {
         account_chip_rect.width,
         account_chip_rect.height
     };
+    if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
+        const song_select::confirmation_command command = song_select::draw_confirmation_dialog(play_state_);
+        if (command == song_select::confirmation_command::confirm &&
+            play_state_.confirmation_dialog.action == song_select::pending_confirmation_action::delete_song) {
+            apply_play_delete_result(
+                song_select::delete_song(play_state_, play_state_.confirmation_dialog.song_index));
+        } else if (command == song_select::confirmation_command::cancel) {
+            play_state_.confirmation_dialog = {};
+        }
+    }
     const song_select::login_dialog_command login_command =
         song_select::draw_login_dialog(play_state_.auth, play_state_.login_dialog,
                                        account_dialog_anchor, screen_rect,

@@ -173,6 +173,9 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_header_view.h
         src/scenes/title/online_download_internal.h
         src/scenes/title/online_download_catalog.cpp
+        src/scenes/title/online_download_remote_client.cpp
+        src/scenes/title/online_download_remote_client.h
+        src/scenes/title/online_download_transfer.cpp
         src/scenes/title/online_download_update.cpp
         src/scenes/title/online_download_render.cpp
         src/scenes/title/online_download_view.cpp

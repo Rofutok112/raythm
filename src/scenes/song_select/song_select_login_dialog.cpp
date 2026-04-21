@@ -2,6 +2,7 @@
 
 #include "song_select/song_select_layout.h"
 #include "theme.h"
+#include "tween.h"
 #include "ui_draw.h"
 
 namespace {
@@ -24,12 +25,6 @@ constexpr float kPrimaryButtonWidth = 128.0f;
 constexpr float kSecondaryButtonWidth = 164.0f;
 constexpr float kHelperTextHeight = 18.0f;
 
-float ease_out_cubic(float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    const float inv = 1.0f - clamped;
-    return 1.0f - inv * inv * inv;
-}
-
 Rectangle dialog_rect_for(const song_select::state& state) {
     const float dialog_height = state.auth.logged_in
         ? kAccountDialogHeight
@@ -42,7 +37,7 @@ Rectangle dialog_rect_for(const song_select::state& state) {
     };
     rect.x = std::clamp(rect.x, 12.0f, song_select::layout::kScreenRect.width - rect.width - 12.0f);
     rect.y = std::clamp(rect.y, 12.0f, song_select::layout::kScreenRect.height - rect.height - 12.0f);
-    const float anim_t = ease_out_cubic(state.login_dialog.open_anim);
+    const float anim_t = tween::ease_out_cubic(state.login_dialog.open_anim);
     rect.y -= (1.0f - anim_t) * 18.0f;
     return rect;
 }
@@ -62,7 +57,7 @@ Rectangle dialog_rect_for(const song_select::auth_state& auth_state,
     };
     rect.x = std::clamp(rect.x, 12.0f, screen_rect.width - rect.width - 12.0f);
     rect.y = std::clamp(rect.y, 12.0f, screen_rect.height - rect.height - 12.0f);
-    const float anim_t = ease_out_cubic(dialog_state.open_anim);
+    const float anim_t = tween::ease_out_cubic(dialog_state.open_anim);
     rect.y -= (1.0f - anim_t) * 18.0f;
     return rect;
 }

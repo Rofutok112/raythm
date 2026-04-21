@@ -11,6 +11,23 @@ namespace {
 
 constexpr float kPreviewFadeSpeed = 2.4f;
 constexpr float kPreviewMaxVolume = 0.55f;
+constexpr double kPreviewLoopTailSeconds = 1.0;
+
+double effective_preview_length_seconds(const song_data& song) {
+    const double metadata_length = static_cast<double>(song.meta.duration_seconds);
+    if (!song.meta.audio_url.empty()) {
+        return metadata_length;
+    }
+
+    const double stream_length = audio_manager::instance().get_preview_length_seconds();
+    if (metadata_length > 0.0) {
+        if (stream_length <= 0.0) {
+            return metadata_length;
+        }
+        return stream_length;
+    }
+    return stream_length;
+}
 
 }  // namespace
 
@@ -53,10 +70,16 @@ void preview_controller::update(float dt, const song_entry* selected_song) {
         if (preview_volume_ >= kPreviewMaxVolume) {
             preview_fade_direction_ = 0;
         }
-    } else if (active_preview_song_.has_value() && audio_manager::instance().is_preview_loaded()) {
-        const double remaining = audio_manager::instance().get_preview_length_seconds() -
-                                 audio_manager::instance().get_preview_position_seconds();
-        if (remaining <= 1.0) {
+    } else if (active_preview_song_.has_value() &&
+               audio_manager::instance().is_preview_loaded() &&
+               audio_manager::instance().is_preview_playing()) {
+        const double preview_length = effective_preview_length_seconds(*active_preview_song_);
+        if (preview_length <= 0.0) {
+            return;
+        }
+
+        const double remaining = preview_length - audio_manager::instance().get_preview_position_seconds();
+        if (remaining <= kPreviewLoopTailSeconds) {
             preview_fade_direction_ = -1;
             pending_preview_song_ = *active_preview_song_;
         }
@@ -184,8 +207,20 @@ void preview_controller::queue_preview(const song_entry* song) {
 
 void preview_controller::start_preview(const song_entry& song) {
     audio_manager& audio = audio_manager::instance();
-    const std::filesystem::path audio_path = path_utils::join_utf8(song.song.directory, song.song.meta.audio_file);
-    audio.load_preview(path_utils::to_utf8(audio_path));
+    std::string audio_source = song.song.meta.audio_url;
+    if (audio_source.empty()) {
+        if (song.song.meta.audio_file.empty()) {
+            preview_song_id_.clear();
+            preview_volume_ = 0.0f;
+            preview_fade_direction_ = 0;
+            return;
+        }
+
+        const std::filesystem::path audio_path = path_utils::join_utf8(song.song.directory, song.song.meta.audio_file);
+        audio_source = path_utils::to_utf8(audio_path);
+    }
+
+    audio.load_preview(audio_source);
     if (!audio.is_preview_loaded()) {
         preview_song_id_.clear();
         preview_volume_ = 0.0f;

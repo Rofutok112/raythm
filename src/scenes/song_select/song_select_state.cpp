@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "song_select/song_select_layout.h"
+#include "tween.h"
 
 namespace song_select {
 
@@ -42,6 +43,8 @@ const chart_option* selected_chart_for(const state& state, const std::vector<con
 }
 
 void reset_for_enter(state& state) {
+    state.catalog_loading = false;
+    state.catalog_loaded_once = false;
     state.selected_song_index = 0;
     state.difficulty_index = 0;
     state.scroll_y = 0.0f;
@@ -62,11 +65,11 @@ void reset_for_enter(state& state) {
 }
 
 void tick_animations(state& state, float dt) {
-    state.song_change_anim_t = std::max(0.0f, state.song_change_anim_t - dt * 4.0f);
-    state.chart_change_anim_t = std::max(0.0f, state.chart_change_anim_t - dt * 5.0f);
+    state.song_change_anim_t = tween::retreat(state.song_change_anim_t, dt, 4.0f);
+    state.chart_change_anim_t = tween::retreat(state.chart_change_anim_t, dt, 5.0f);
     state.ranking_panel.reveal_anim += dt;
     if (state.login_dialog.open) {
-        state.login_dialog.open_anim = std::min(1.0f, state.login_dialog.open_anim + dt * 8.0f);
+        state.login_dialog.open_anim = tween::advance(state.login_dialog.open_anim, dt, 8.0f);
     } else {
         state.login_dialog.open_anim = 0.0f;
     }
@@ -79,6 +82,8 @@ void apply_catalog(state& state, catalog_data catalog,
                    const std::string& preferred_chart_id) {
     state.songs = std::move(catalog.songs);
     state.load_errors = std::move(catalog.load_errors);
+    state.catalog_loading = false;
+    state.catalog_loaded_once = true;
     state.selected_song_index = 0;
     state.difficulty_index = 0;
     state.scroll_y = 0.0f;

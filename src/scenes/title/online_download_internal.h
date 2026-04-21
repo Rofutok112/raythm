@@ -37,5 +37,6 @@ Color song_status_color(const song_entry_state& song);
 std::string chart_status_label(const chart_entry_state& chart);
 const char* catalog_caption(const state& state, const std::vector<song_entry_state>& songs);
 std::string format_time_label(double seconds);
+double preview_display_length_seconds(const song_entry_state& song);
 
 }  // namespace title_online_view::detail

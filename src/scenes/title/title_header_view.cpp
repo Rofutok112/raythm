@@ -4,24 +4,8 @@
 
 #include "title/title_layout.h"
 #include "theme.h"
+#include "tween.h"
 #include "ui_draw.h"
-
-namespace {
-
-Vector2 lerp_vec2(Vector2 from, Vector2 to, float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    return {
-        from.x + (to.x - from.x) * clamped,
-        from.y + (to.y - from.y) * clamped,
-    };
-}
-
-float lerp_value(float from, float to, float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    return from + (to - from) * clamped;
-}
-
-}  // namespace
 
 namespace title_header_view {
 
@@ -42,7 +26,7 @@ void draw(const draw_config& config) {
                                                       title_play_header_rect.width, 108.0f},
                                                      ui::text_align::left);
     const Vector2 title_pos =
-        lerp_vec2(lerp_vec2(closed_title_pos, home_title_pos, config.menu_t), play_title_pos, config.play_t);
+        tween::lerp(tween::lerp(closed_title_pos, home_title_pos, config.menu_t), play_title_pos, config.play_t);
 
     const Vector2 closed_subtitle_pos = ui::text_position("trace the line before the beat disappears", 30,
                                                           {config.closed_header_rect.x + 10.0f, config.closed_header_rect.y + 128.0f,
@@ -57,7 +41,7 @@ void draw(const draw_config& config) {
                                                          title_play_header_rect.width - 8.0f, 24.0f},
                                                         ui::text_align::left);
     const Vector2 subtitle_pos =
-        lerp_vec2(lerp_vec2(closed_subtitle_pos, home_subtitle_pos, config.menu_t), play_subtitle_pos, config.play_t);
+        tween::lerp(tween::lerp(closed_subtitle_pos, home_subtitle_pos, config.menu_t), play_subtitle_pos, config.play_t);
 
     const float title_visibility = std::clamp(1.0f - config.play_t * 1.35f, 0.0f, 1.0f);
     const Color title_color = with_alpha(t.text, static_cast<unsigned char>(255.0f * title_visibility));

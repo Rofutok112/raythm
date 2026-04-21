@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "audio_manager.h"
+#include "tween.h"
 #include "title/title_layout.h"
 #include "theme.h"
 
@@ -24,7 +26,7 @@ constexpr Rectangle kHeroJacketRect = {92.0f, 174.0f, 270.0f, 270.0f};
 constexpr Rectangle kPreviewBarRect = {92.0f, 505.0f, 270.0f, 8.0f};
 constexpr Rectangle kPreviewPlayRect = {92.0f, 529.0f, 126.0f, 40.0f};
 constexpr Rectangle kPrimaryActionRect = {92.0f, 577.0f, 126.0f, 40.0f};
-constexpr Rectangle kChartListRect = {500.0f, 130.0f, 680.0f, 494.0f};
+constexpr Rectangle kChartListRect = {500.0f, 136.0f, 680.0f, 488.0f};
 
 constexpr float kSongCardHeight = 164.0f;
 constexpr float kSongGridGapX = 18.0f;
@@ -35,27 +37,6 @@ constexpr float kChartGridGapY = 18.0f;
 constexpr float kPreviewBarBottomInset = (kContentRect.y + kContentRect.height) - kPreviewBarRect.y;
 constexpr float kPreviewButtonBottomInset = (kContentRect.y + kContentRect.height) - kPreviewPlayRect.y;
 constexpr float kActionButtonBottomInset = (kContentRect.y + kContentRect.height) - kPrimaryActionRect.y;
-
-float ease_out_cubic(float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    const float inv = 1.0f - clamped;
-    return 1.0f - inv * inv * inv;
-}
-
-float lerp_value(float from, float to, float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    return from + (to - from) * clamped;
-}
-
-Rectangle lerp_rect(Rectangle from, Rectangle to, float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    return {
-        lerp_value(from.x, to.x, clamped),
-        lerp_value(from.y, to.y, clamped),
-        lerp_value(from.width, to.width, clamped),
-        lerp_value(from.height, to.height, clamped),
-    };
-}
 
 Rectangle centered_scaled_rect(Rectangle anchor, Rectangle target, float scale, Vector2 offset = {0.0f, 0.0f}) {
     const Vector2 center = {
@@ -399,6 +380,9 @@ const char* catalog_caption(const state& state, const std::vector<song_entry_sta
     if (state.catalog_loading) {
         return state.catalog_loaded_once ? "Refreshing..." : "Loading...";
     }
+    if (state.mode == catalog_mode::owned && state.owned_loading) {
+        return "Syncing owned songs...";
+    }
     switch (state.mode) {
     case catalog_mode::official:
         return songs.empty() ? "Official catalog unavailable" : "Official catalog";
@@ -413,6 +397,25 @@ const char* catalog_caption(const state& state, const std::vector<song_entry_sta
 std::string format_time_label(double seconds) {
     const int total = std::max(0, static_cast<int>(std::floor(seconds + 0.5)));
     return TextFormat("%d:%02d", total / 60, total % 60);
+}
+
+double preview_display_length_seconds(const song_entry_state& song) {
+    const double metadata_length = static_cast<double>(song.song.song.meta.duration_seconds);
+    if (!song.song.song.meta.audio_url.empty()) {
+        return metadata_length;
+    }
+
+    const double stream_length = audio_manager::instance().get_preview_length_seconds();
+    if (metadata_length > 0.0) {
+        if (stream_length <= 0.0) {
+            return metadata_length;
+        }
+        return stream_length;
+    }
+    if (stream_length > 0.0) {
+        return stream_length;
+    }
+    return 0.0;
 }
 
 }  // namespace detail
@@ -463,7 +466,7 @@ std::string selected_song_id(const state& state) {
 }
 
 layout make_layout(float anim_t, Rectangle origin_rect) {
-    const float t = ease_out_cubic(anim_t);
+    const float t = tween::ease_out_cubic(anim_t);
     const Rectangle origin = resolve_origin_rect(origin_rect);
     const Rectangle search_rect = browse_search_rect();
 
@@ -476,10 +479,11 @@ layout make_layout(float anim_t, Rectangle origin_rect) {
     const Rectangle seed_detail_left = centered_scaled_rect(origin, kDetailLeftRect, 0.78f, {-238.0f, 66.0f});
     const Rectangle seed_detail_right = centered_scaled_rect(origin, kDetailRightRect, 0.8f, {186.0f, 66.0f});
     const Rectangle seed_chart_list = centered_scaled_rect(origin, kChartListRect, 0.84f, {198.0f, 44.0f});
-    const Rectangle current_content = lerp_rect(seed_content, kContentRect, t);
-    const Rectangle current_detail_left = lerp_rect(seed_detail_left, kDetailLeftRect, t);
-    const Rectangle current_detail_right = lerp_rect(seed_detail_right, kDetailRightRect, t);
-    const Rectangle current_jacket = centered_left_pane_jacket_rect(current_detail_left, lerp_value(0.82f, 1.0f, t));
+    const Rectangle current_content = tween::lerp(seed_content, kContentRect, t);
+    const Rectangle current_detail_left = tween::lerp(seed_detail_left, kDetailLeftRect, t);
+    const Rectangle current_detail_right = tween::lerp(seed_detail_right, kDetailRightRect, t);
+    const Rectangle current_jacket =
+        centered_left_pane_jacket_rect(current_detail_left, tween::lerp(0.82f, 1.0f, t));
     const Rectangle current_preview_bar = left_pane_preview_bar_rect(current_content, current_jacket);
     const Rectangle current_preview_play =
         left_pane_full_width_button_rect(current_content, current_jacket, kPreviewButtonBottomInset, kPreviewPlayRect.height);
@@ -487,11 +491,11 @@ layout make_layout(float anim_t, Rectangle origin_rect) {
         left_pane_full_width_button_rect(current_content, current_jacket, kActionButtonBottomInset, kPrimaryActionRect.height);
 
     return {
-        lerp_rect(seed_back, kBackRect, t),
-        lerp_rect(seed_official_tab, kOfficialTabRect, t),
-        lerp_rect(seed_community_tab, kCommunityTabRect, t),
-        lerp_rect(seed_owned_tab, kOwnedTabRect, t),
-        lerp_rect(seed_search, search_rect, t),
+        tween::lerp(seed_back, kBackRect, t),
+        tween::lerp(seed_official_tab, kOfficialTabRect, t),
+        tween::lerp(seed_community_tab, kCommunityTabRect, t),
+        tween::lerp(seed_owned_tab, kOwnedTabRect, t),
+        tween::lerp(seed_search, search_rect, t),
         current_content,
         detail::song_list_viewport(current_content),
         current_detail_left,
@@ -500,7 +504,7 @@ layout make_layout(float anim_t, Rectangle origin_rect) {
         current_preview_bar,
         current_preview_play,
         {},
-        lerp_rect(seed_chart_list, kChartListRect, t),
+        tween::lerp(seed_chart_list, kChartListRect, t),
         current_primary,
         {},
     };
