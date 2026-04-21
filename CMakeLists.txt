@@ -171,6 +171,10 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/play_session_controller.h
         src/scenes/title/title_header_view.cpp
         src/scenes/title/title_header_view.h
+        src/scenes/title/online_download_internal.h
+        src/scenes/title/online_download_catalog.cpp
+        src/scenes/title/online_download_update.cpp
+        src/scenes/title/online_download_render.cpp
         src/scenes/title/online_download_view.cpp
         src/scenes/title/online_download_view.h
         src/scenes/title/ranking_panel_view.cpp
