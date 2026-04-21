@@ -249,11 +249,11 @@ void title_scene::update_online_mode(float dt) {
         return;
     }
     if (result.action == title_online_view::requested_action::restart_preview) {
-        audio_controller_.preview().select_song(title_online_view::preview_song(online_state_));
+        audio_controller_.preview().resume(title_online_view::preview_song(online_state_));
         return;
     }
     if (result.action == title_online_view::requested_action::stop_preview) {
-        audio_controller_.preview().stop();
+        audio_controller_.preview().pause();
         return;
     }
     if (result.action == title_online_view::requested_action::open_local) {
