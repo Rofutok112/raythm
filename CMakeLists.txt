@@ -188,7 +188,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/online_download_transfer.cpp
         src/scenes/title/online_download_update.cpp
         src/scenes/title/online_download_render.cpp
-        src/scenes/title/online_download_view.cpp
+        src/scenes/title/online_download_layout.cpp
+        src/scenes/title/online_download_state.cpp
         src/scenes/title/online_download_view.h
         src/scenes/title/ranking_panel_view.cpp
         src/scenes/title/ranking_panel_view.h
