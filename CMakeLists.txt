@@ -43,21 +43,31 @@ if(WIN32)
     endif()
 
     find_program(RAYTHM_POWERSHELL_EXECUTABLE NAMES powershell pwsh REQUIRED)
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${RAYTHM_APP_ICON_PNG}")
-
     set(RAYTHM_APP_ICON_ICO "${CMAKE_CURRENT_BINARY_DIR}/raythm.ico")
     set(RAYTHM_APP_ICON_RC "${CMAKE_CURRENT_BINARY_DIR}/raythm_app_icon.rc")
+    set(RAYTHM_APP_ICON_RC_TEMPLATE "${CMAKE_SOURCE_DIR}/src/platform/windows_app_icon.rc.in")
+    set(RAYTHM_APP_ICON_RC_GENERATOR "${CMAKE_SOURCE_DIR}/cmake/generate_windows_app_icon_rc.cmake")
 
-    execute_process(
+    add_custom_command(
+            OUTPUT "${RAYTHM_APP_ICON_ICO}" "${RAYTHM_APP_ICON_RC}"
             COMMAND "${RAYTHM_POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
                     -File "${CMAKE_SOURCE_DIR}/cmake/convert_png_to_ico.ps1"
                     -InputPng "${RAYTHM_APP_ICON_PNG}"
                     -OutputIco "${RAYTHM_APP_ICON_ICO}"
-            COMMAND_ERROR_IS_FATAL ANY
+            COMMAND "${CMAKE_COMMAND}"
+                    -DINPUT_FILE=${RAYTHM_APP_ICON_RC_TEMPLATE}
+                    -DOUTPUT_FILE=${RAYTHM_APP_ICON_RC}
+                    -DRAYTHM_APP_ICON_ICO=${RAYTHM_APP_ICON_ICO}
+                    -P "${RAYTHM_APP_ICON_RC_GENERATOR}"
+            DEPENDS
+                    "${RAYTHM_APP_ICON_PNG}"
+                    "${CMAKE_SOURCE_DIR}/cmake/convert_png_to_ico.ps1"
+                    "${RAYTHM_APP_ICON_RC_TEMPLATE}"
+                    "${RAYTHM_APP_ICON_RC_GENERATOR}"
+            COMMENT "Generating Windows app icon resources"
+            VERBATIM
     )
-
-    configure_file("${CMAKE_SOURCE_DIR}/src/platform/windows_app_icon.rc.in"
-            "${RAYTHM_APP_ICON_RC}" @ONLY)
+    set_source_files_properties("${RAYTHM_APP_ICON_ICO}" "${RAYTHM_APP_ICON_RC}" PROPERTIES GENERATED TRUE)
 endif()
 
 add_executable(raythm WIN32 src/main.cpp
