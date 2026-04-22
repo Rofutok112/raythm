@@ -113,6 +113,8 @@ struct login_dialog_state {
 struct state {
     std::vector<song_entry> songs;
     std::vector<std::string> load_errors;
+    bool catalog_loading = false;
+    bool catalog_loaded_once = false;
     int selected_song_index = 0;
     int difficulty_index = 0;
     float scroll_y = 0.0f;

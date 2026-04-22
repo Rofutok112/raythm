@@ -5,11 +5,14 @@
 #include "ranking_service.h"
 #include "raylib.h"
 #include "scene_common.h"
+#include "song_select/song_select_confirmation_dialog.h"
+#include "song_select/song_select_layout.h"
 #include "song_select/song_select_login_dialog.h"
 #include "title/center_panel_view.h"
 #include "title/ranking_panel_view.h"
 #include "title/song_list_view.h"
 #include "theme.h"
+#include "tween.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
 
@@ -30,24 +33,14 @@ constexpr Rectangle kPlayRankingSourceOnlineRect = {1126.0f, 98.0f, 90.0f, 34.0f
 constexpr Rectangle kPlayRankingListRect = {878.0f, 150.0f, 338.0f, 468.0f};
 constexpr float kCreateToolButtonHeight = 54.0f;
 constexpr float kCreateToolButtonGap = 12.0f;
-float ease_out_cubic(float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    const float inv = 1.0f - clamped;
-    return 1.0f - inv * inv * inv;
-}
+constexpr int kPlaySongContextMenuItemCount = 1;
 
-float lerp_value(float from, float to, float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    return from + (to - from) * clamped;
-}
-
-Rectangle lerp_rect(Rectangle from, Rectangle to, float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
+Rectangle delete_song_menu_item_rect(Rectangle menu_rect) {
     return {
-        lerp_value(from.x, to.x, clamped),
-        lerp_value(from.y, to.y, clamped),
-        lerp_value(from.width, to.width, clamped),
-        lerp_value(from.height, to.height, clamped),
+        menu_rect.x + 6.0f,
+        menu_rect.y + 6.0f,
+        menu_rect.width - 12.0f,
+        song_select::layout::kContextMenuItemHeight
     };
 }
 
@@ -81,7 +74,7 @@ Rectangle resolve_origin_rect(Rectangle origin_rect) {
 }  // namespace
 
 layout make_layout(float anim_t, Rectangle origin_rect) {
-    const float t = ease_out_cubic(anim_t);
+    const float t = tween::ease_out_cubic(anim_t);
     const Rectangle origin = resolve_origin_rect(origin_rect);
 
     const Rectangle seed_song = centered_scaled_rect(origin, kPlaySongColumnRect, 0.68f, {-330.0f, 22.0f});
@@ -98,18 +91,18 @@ layout make_layout(float anim_t, Rectangle origin_rect) {
     const Rectangle seed_ranking_list = centered_scaled_rect(origin, kPlayRankingListRect, 0.7f, {348.0f, 20.0f});
 
     return {
-        lerp_rect(seed_back, kPlayBackButtonRect, t),
-        lerp_rect(seed_song, kPlaySongColumnRect, t),
-        lerp_rect(seed_main, kPlayMainColumnRect, t),
-        lerp_rect(seed_ranking, kPlayRankingColumnRect, t),
-        lerp_rect(seed_jacket, kPlayJacketRect, t),
-        lerp_rect(seed_meta, kPlayMetaRect, t),
-        lerp_rect(seed_chart_detail, kPlayChartDetailRect, t),
-        lerp_rect(seed_chart_buttons, kPlayChartButtonsRect, t),
-        lerp_rect(seed_ranking_header, kPlayRankingHeaderRect, t),
-        lerp_rect(seed_ranking_source_local, kPlayRankingSourceLocalRect, t),
-        lerp_rect(seed_ranking_source_online, kPlayRankingSourceOnlineRect, t),
-        lerp_rect(seed_ranking_list, kPlayRankingListRect, t),
+        tween::lerp(seed_back, kPlayBackButtonRect, t),
+        tween::lerp(seed_song, kPlaySongColumnRect, t),
+        tween::lerp(seed_main, kPlayMainColumnRect, t),
+        tween::lerp(seed_ranking, kPlayRankingColumnRect, t),
+        tween::lerp(seed_jacket, kPlayJacketRect, t),
+        tween::lerp(seed_meta, kPlayMetaRect, t),
+        tween::lerp(seed_chart_detail, kPlayChartDetailRect, t),
+        tween::lerp(seed_chart_buttons, kPlayChartButtonsRect, t),
+        tween::lerp(seed_ranking_header, kPlayRankingHeaderRect, t),
+        tween::lerp(seed_ranking_source_local, kPlayRankingSourceLocalRect, t),
+        tween::lerp(seed_ranking_source_online, kPlayRankingSourceOnlineRect, t),
+        tween::lerp(seed_ranking_list, kPlayRankingListRect, t),
     };
 }
 
@@ -117,15 +110,50 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
     update_result result;
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    const bool right_pressed = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
     const float wheel = GetMouseWheelMove();
     const layout current = make_layout(anim_t, origin_rect);
+    const auto filtered = song_select::filtered_charts_for_selected_song(state);
+    const bool has_selection = song_select::selected_song(state) != nullptr &&
+                               song_select::selected_chart_for(state, filtered) != nullptr;
+    const bool play_song_menu_open =
+        view_mode == mode::play &&
+        state.context_menu.open &&
+        state.context_menu.target == song_select::context_menu_target::song;
+
+    if (state.confirmation_dialog.open) {
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            state.confirmation_dialog = {};
+        }
+        return result;
+    }
+
+    if (play_song_menu_open) {
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            song_select::close_context_menu(state);
+            return result;
+        }
+        if (left_pressed && CheckCollisionPointRec(mouse, delete_song_menu_item_rect(state.context_menu.rect))) {
+            song_select::open_confirmation_dialog(
+                state, song_select::pending_confirmation_action::delete_song,
+                "", "", "", "DELETE", state.context_menu.song_index, -1);
+            song_select::close_context_menu(state);
+            result.delete_song_requested = true;
+            return result;
+        }
+        if ((left_pressed || right_pressed) && !CheckCollisionPointRec(mouse, state.context_menu.rect)) {
+            song_select::close_context_menu(state);
+            return result;
+        }
+        return result;
+    }
 
     if (ui::is_clicked(current.back_rect) || IsKeyPressed(KEY_ESCAPE)) {
         result.back_requested = true;
         return result;
     }
 
-    if (IsKeyPressed(KEY_ENTER)) {
+    if (IsKeyPressed(KEY_ENTER) && has_selection) {
         result.play_requested = true;
         return result;
     }
@@ -164,7 +192,6 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
     }
 
     if (left_pressed) {
-        const auto filtered = song_select::filtered_charts_for_selected_song(state);
         const int clicked_chart =
             title_center_view::hit_test_chart(current.chart_buttons_rect, state.chart_scroll_y, mouse,
                                               static_cast<int>(filtered.size()));
@@ -176,6 +203,25 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
                 state.chart_change_anim_t = 1.0f;
                 result.chart_selection_changed = true;
             }
+            return result;
+        }
+    }
+
+    if (right_pressed && view_mode == mode::play && !state.songs.empty()) {
+        const int clicked_song =
+            title_song_list_view::hit_test(current.song_column, state.scroll_y, mouse,
+                                           static_cast<int>(state.songs.size()));
+        if (clicked_song >= 0) {
+            if (song_select::apply_song_selection(state, clicked_song, 0)) {
+                result.song_selection_changed = true;
+            }
+            state.context_menu.open = true;
+            state.context_menu.target = song_select::context_menu_target::song;
+            state.context_menu.section = song_select::context_menu_section::song;
+            state.context_menu.song_index = clicked_song;
+            state.context_menu.chart_index = -1;
+            state.context_menu.rect = song_select::layout::make_context_menu_rect(
+                mouse, kPlaySongContextMenuItemCount);
             return result;
         }
     }
@@ -192,27 +238,26 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
         }
     }
 
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
+    if (!state.songs.empty() && (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W))) {
         const int next_index = std::clamp(state.selected_song_index - 1, 0, static_cast<int>(state.songs.size()) - 1);
         if (next_index != state.selected_song_index && song_select::apply_song_selection(state, next_index, 0)) {
             result.song_selection_changed = true;
         }
-    } else if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
+    } else if (!state.songs.empty() && (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S))) {
         const int next_index = std::clamp(state.selected_song_index + 1, 0, static_cast<int>(state.songs.size()) - 1);
         if (next_index != state.selected_song_index && song_select::apply_song_selection(state, next_index, 0)) {
             result.song_selection_changed = true;
         }
     }
 
-    const auto filtered = song_select::filtered_charts_for_selected_song(state);
-    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) {
+    if (!filtered.empty() && (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A))) {
         const int next_index = std::clamp(state.difficulty_index - 1, 0, static_cast<int>(filtered.size()) - 1);
         if (next_index != state.difficulty_index) {
             state.difficulty_index = next_index;
             state.chart_change_anim_t = 1.0f;
             result.chart_selection_changed = true;
         }
-    } else if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) {
+    } else if (!filtered.empty() && (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D))) {
         const int next_index = std::clamp(state.difficulty_index + 1, 0, static_cast<int>(filtered.size()) - 1);
         if (next_index != state.difficulty_index) {
             state.difficulty_index = next_index;
@@ -232,29 +277,19 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
     state.scroll_y_target = std::clamp(
         state.scroll_y_target, 0.0f,
         title_song_list_view::max_scroll(current.song_column, static_cast<int>(state.songs.size())));
-    state.scroll_y += (state.scroll_y_target - state.scroll_y) * std::min(1.0f, dt * 12.0f);
-    if (std::fabs(state.scroll_y - state.scroll_y_target) < 0.5f) {
-        state.scroll_y = state.scroll_y_target;
-    }
+    state.scroll_y = tween::damp(state.scroll_y, state.scroll_y_target, dt, 12.0f, 0.5f);
 
     state.chart_scroll_y_target = std::clamp(
         state.chart_scroll_y_target, 0.0f,
         title_center_view::max_chart_scroll(current.chart_buttons_rect, static_cast<int>(filtered.size())));
-    state.chart_scroll_y += (state.chart_scroll_y_target - state.chart_scroll_y) * std::min(1.0f, dt * 12.0f);
-    if (std::fabs(state.chart_scroll_y - state.chart_scroll_y_target) < 0.5f) {
-        state.chart_scroll_y = state.chart_scroll_y_target;
-    }
+    state.chart_scroll_y = tween::damp(state.chart_scroll_y, state.chart_scroll_y_target, dt, 12.0f, 0.5f);
 
     if (view_mode == mode::play) {
         state.ranking_panel.scroll_y_target = std::clamp(
             state.ranking_panel.scroll_y_target, 0.0f,
             title_ranking_view::max_scroll(current.ranking_list_rect, state.ranking_panel.listing));
-        state.ranking_panel.scroll_y +=
-            (state.ranking_panel.scroll_y_target - state.ranking_panel.scroll_y) *
-            std::min(1.0f, dt * 12.0f);
-        if (std::fabs(state.ranking_panel.scroll_y - state.ranking_panel.scroll_y_target) < 0.5f) {
-            state.ranking_panel.scroll_y = state.ranking_panel.scroll_y_target;
-        }
+        state.ranking_panel.scroll_y =
+            tween::damp(state.ranking_panel.scroll_y, state.ranking_panel.scroll_y_target, dt, 12.0f, 0.5f);
     }
 
     return result;
@@ -266,7 +301,7 @@ void draw(const song_select::state& state,
           float anim_t,
           Rectangle origin_rect) {
     const auto& t = *g_theme;
-    const float play_t = ease_out_cubic(anim_t);
+    const float play_t = tween::ease_out_cubic(anim_t);
     if (play_t <= 0.01f) {
         return;
     }
@@ -274,6 +309,8 @@ void draw(const song_select::state& state,
     const layout current = make_layout(anim_t, origin_rect);
     const float content_fade_t = std::clamp((play_t - 0.18f) / 0.62f, 0.0f, 1.0f);
     const unsigned char alpha = static_cast<unsigned char>(255.0f * content_fade_t);
+    const bool hide_unloaded_content =
+        state.catalog_loading && !state.catalog_loaded_once && state.songs.empty();
     const double now = GetTime();
     const Color button_base = t.row_soft;
     const Color button_hover = t.row_soft_hover;
@@ -297,38 +334,45 @@ void draw(const song_select::state& state,
                {current.ranking_column.x - 24.0f, current.ranking_column.y + current.ranking_column.height - 20.0f},
                1.2f, with_alpha(t.border_light, static_cast<unsigned char>(170.0f * play_t)));
 
-    title_song_list_view::draw(state, {
-        .column_rect = current.song_column,
-        .play_t = play_t,
-        .alpha = alpha,
-        .button_base = button_base,
-        .button_selected = button_selected,
-        .normal_row_alpha = normal_row_alpha,
-        .hover_row_alpha = hover_row_alpha,
-        .selected_row_alpha = selected_row_alpha,
-        .now = now,
-    });
+    if (!hide_unloaded_content) {
+        title_song_list_view::draw(state, {
+            .column_rect = current.song_column,
+            .play_t = play_t,
+            .alpha = alpha,
+            .button_base = button_base,
+            .button_selected = button_selected,
+            .normal_row_alpha = normal_row_alpha,
+            .hover_row_alpha = hover_row_alpha,
+            .selected_row_alpha = selected_row_alpha,
+            .now = now,
+        });
+    }
 
     const song_select::song_entry* song = song_select::selected_song(state);
     const auto filtered = song_select::filtered_charts_for_selected_song(state);
     const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
 
-    title_center_view::draw(state, preview_controller, song, chart, filtered, {
-        .main_column_rect = current.main_column,
-        .jacket_rect = current.jacket_rect,
-        .chart_detail_rect = current.chart_detail_rect,
-        .chart_buttons_rect = current.chart_buttons_rect,
-        .play_t = play_t,
-        .alpha = alpha,
-        .button_base = button_base,
-        .button_selected = button_selected,
-        .normal_row_alpha = normal_row_alpha,
-        .hover_row_alpha = hover_row_alpha,
-        .selected_row_alpha = selected_row_alpha,
-        .now = now,
-    });
+    if (!hide_unloaded_content) {
+        title_center_view::draw(state, preview_controller, song, chart, filtered, {
+            .main_column_rect = current.main_column,
+            .jacket_rect = current.jacket_rect,
+            .chart_detail_rect = current.chart_detail_rect,
+            .chart_buttons_rect = current.chart_buttons_rect,
+            .play_t = play_t,
+            .alpha = alpha,
+            .button_base = button_base,
+            .button_selected = button_selected,
+            .normal_row_alpha = normal_row_alpha,
+            .hover_row_alpha = hover_row_alpha,
+            .selected_row_alpha = selected_row_alpha,
+            .now = now,
+        });
+    }
 
     if (view_mode == mode::play) {
+        if (hide_unloaded_content) {
+            return;
+        }
         title_ranking_view::draw(state.ranking_panel, {
             .header_rect = current.ranking_header_rect,
             .source_local_rect = current.ranking_source_local_rect,
@@ -374,6 +418,23 @@ void draw(const song_select::state& state,
                                   with_alpha(t.text_muted, alpha), ui::text_align::left);
         }
     }
+
+    if (view_mode == mode::play &&
+        state.context_menu.open &&
+        state.context_menu.target == song_select::context_menu_target::song) {
+        const ui::context_menu_item items[] = {
+            {"DELETE SONG", true, ui::context_menu_item::kind::action},
+        };
+        ui::enqueue_context_menu(state.context_menu.rect, items,
+                                 song_select::layout::kContextMenuLayer, 16,
+                                 song_select::layout::kContextMenuItemHeight,
+                                 song_select::layout::kContextMenuItemSpacing);
+    }
+
+    ui::draw_notice_queue_bottom_right(state.notices,
+                                       {0.0f, 0.0f,
+                                        static_cast<float>(kScreenWidth),
+                                        static_cast<float>(kScreenHeight)});
 }
 
 }  // namespace title_play_view

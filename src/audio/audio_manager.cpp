@@ -51,6 +51,11 @@ std::string lowercase_ascii(std::string value) {
     return value;
 }
 
+bool is_remote_stream_url(const std::string& file_path) {
+    const std::string lowered = lowercase_ascii(file_path);
+    return lowered.rfind("http://", 0) == 0 || lowered.rfind("https://", 0) == 0;
+}
+
 bool is_pinned_se_sample_path(const std::string& file_path) {
     return lowercase_ascii(std::filesystem::path(file_path).filename().string()) == "hitsound.mp3";
 }
@@ -460,6 +465,9 @@ double audio_manager::get_voice_position_seconds(unsigned long handle) {
     }
 
     const QWORD position = BASS_ChannelGetPosition(handle, BASS_POS_BYTE);
+    if (position == static_cast<QWORD>(-1)) {
+        return 0.0;
+    }
     return BASS_ChannelBytes2Seconds(handle, position);
 }
 
@@ -469,6 +477,9 @@ double audio_manager::get_voice_length_seconds(unsigned long handle) {
     }
 
     const QWORD length = BASS_ChannelGetLength(handle, BASS_POS_BYTE);
+    if (length == static_cast<QWORD>(-1)) {
+        return 0.0;
+    }
     return BASS_ChannelBytes2Seconds(handle, length);
 }
 
@@ -525,6 +536,9 @@ bool audio_manager::ensure_initialized() {
 }
 
 unsigned long audio_manager::create_stream(const std::string& file_path) const {
+    if (is_remote_stream_url(file_path)) {
+        return BASS_StreamCreateURL(file_path.c_str(), 0, BASS_STREAM_PRESCAN, nullptr, nullptr);
+    }
     return BASS_StreamCreateFile(FALSE, file_path.c_str(), 0, 0, 0);
 }
 

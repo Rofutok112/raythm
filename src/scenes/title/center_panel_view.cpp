@@ -105,6 +105,9 @@ void draw(const song_select::state& state,
     const auto& t = *g_theme;
 
     if (song == nullptr) {
+        if (state.catalog_loading && !state.catalog_loaded_once && state.songs.empty()) {
+            return;
+        }
         ui::draw_text_in_rect("No songs found yet.", 34,
                               {config.main_column_rect.x, config.main_column_rect.y + 120.0f,
                                config.main_column_rect.width, 40.0f},

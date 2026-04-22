@@ -2,9 +2,12 @@
 
 #include "scene.h"
 #include "shared/auth_overlay_controller.h"
+#include "song_select/song_catalog_service.h"
 #include "shared/scene_fade.h"
 #include "song_select/song_select_state.h"
+#include "title/online_download_view.h"
 #include "title/title_audio_controller.h"
+#include <future>
 #include <optional>
 #include <string>
 
@@ -15,11 +18,13 @@ public:
         title,
         home,
         play,
+        online,
         create,
     };
 
     enum class transition_target {
         song_select,
+        online_download,
         create_tools,
     };
 
@@ -42,12 +47,19 @@ private:
     void enter_title_mode();
     void enter_home_mode(bool suppress_pointer = false);
     void enter_play_mode();
+    void enter_online_mode();
     void enter_create_mode();
     void update_play_mode(float dt);
+    void update_online_mode(float dt);
     void update_create_mode(float dt);
     void update_common_animation(float dt);
+    void apply_play_delete_result(const song_select::delete_result& result);
     bool handle_account_input();
     bool handle_login_dialog_input();
+    void request_play_catalog_reload(std::string preferred_song_id = "",
+                                     std::string preferred_chart_id = "",
+                                     bool sync_media_on_apply = false);
+    void poll_play_catalog_reload();
     void update_home_pointer_suppression();
     bool handle_title_input(bool left_click_for_home, bool right_click_for_home);
     bool handle_home_input();
@@ -77,6 +89,16 @@ private:
     float play_view_anim_ = 0.0f;
     Rectangle play_entry_origin_rect_{};
     song_select::state play_state_;
+    std::future<song_select::catalog_data> play_catalog_future_;
+    bool play_catalog_loading_ = false;
+    bool play_catalog_reload_pending_ = false;
+    bool play_catalog_sync_media_on_apply_ = false;
+    bool queued_play_catalog_sync_media_on_apply_ = false;
+    std::string play_catalog_song_id_;
+    std::string play_catalog_chart_id_;
+    std::string queued_play_catalog_song_id_;
+    std::string queued_play_catalog_chart_id_;
+    title_online_view::state online_state_;
     title_audio_controller audio_controller_;
     auth_overlay::controller auth_controller_;
 };

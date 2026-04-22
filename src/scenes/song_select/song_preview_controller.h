@@ -16,9 +16,12 @@ public:
 
     void select_song(const song_entry* song);
     void update(float dt, const song_entry* selected_song);
+    void resume(const song_entry* song);
+    void pause();
     void fade_out();
     void stop();
     [[nodiscard]] bool is_audio_active() const;
+    [[nodiscard]] bool is_playing() const;
 
     [[nodiscard]] bool jacket_loaded() const {
         return jacket_loaded_;

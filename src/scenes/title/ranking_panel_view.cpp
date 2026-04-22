@@ -9,18 +9,13 @@
 #include "ranking_service.h"
 #include "scene_common.h"
 #include "theme.h"
+#include "tween.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
 
 namespace {
 
 constexpr float kRankingRowHeight = 58.0f;
-
-float ease_out_quad(float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    const float inv = 1.0f - clamped;
-    return 1.0f - inv * inv;
-}
 
 const char* rank_label(rank value) {
     switch (value) {
@@ -171,7 +166,8 @@ void draw(const song_select::ranking_panel_state& panel, const draw_config& conf
 
     for (int i = 0; i < static_cast<int>(panel.listing.entries.size()); ++i) {
         const ranking_service::entry& entry = panel.listing.entries[static_cast<size_t>(i)];
-        const float row_reveal_t = ease_out_quad(std::clamp((reveal_anim - static_cast<float>(i) * 0.075f) / 0.24f, 0.0f, 1.0f));
+        const float row_reveal_t =
+            tween::ease_out_quad(std::clamp((reveal_anim - static_cast<float>(i) * 0.075f) / 0.24f, 0.0f, 1.0f));
         if (row_reveal_t <= 0.0f) {
             continue;
         }

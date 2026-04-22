@@ -32,6 +32,7 @@ struct update_result {
     bool song_selection_changed = false;
     bool chart_selection_changed = false;
     bool ranking_source_changed = false;
+    bool delete_song_requested = false;
     bool create_song_requested = false;
     bool edit_song_requested = false;
     bool create_chart_requested = false;

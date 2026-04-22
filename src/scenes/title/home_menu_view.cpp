@@ -5,6 +5,7 @@
 
 #include "scene_common.h"
 #include "theme.h"
+#include "tween.h"
 #include "ui_draw.h"
 
 namespace {
@@ -18,15 +19,9 @@ constexpr float kHomeButtonIntroOffsetY = 24.0f;
 constexpr std::array<title_home_view::entry, 4> kHomeEntries = {{
     {"PLAY", "Solo song select.", true, title_home_view::action::play},
     {"MULTIPLAY", "Room battles soon.", false, title_home_view::action::multiplayer},
-    {"ONLINE", "Browse and download.", false, title_home_view::action::online},
+    {"BROWSE", "Browse and download.", true, title_home_view::action::online},
     {"CREATE", "Create, import, export.", true, title_home_view::action::create},
 }};
-
-float ease_out_cubic(float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    const float inv = 1.0f - clamped;
-    return 1.0f - inv * inv * inv;
-}
 
 Rectangle translate_rect(Rectangle rect, float dx, float dy) {
     rect.x += dx;
@@ -47,7 +42,7 @@ const entry& entry_at(std::size_t index) {
 }
 
 Rectangle button_rect(int index, float anim_t) {
-    const float eased = ease_out_cubic(anim_t);
+    const float eased = tween::ease_out_cubic(anim_t);
     const float total_width =
         static_cast<float>(kHomeEntries.size()) * kHomeButtonWidth +
         static_cast<float>(kHomeEntries.size() - 1) * kHomeButtonGap;
@@ -62,7 +57,7 @@ Rectangle button_rect(int index, float anim_t) {
 
 void draw(float menu_anim_t, float play_anim_t, int selected_index, std::string_view status_message) {
     const auto& t = *g_theme;
-    const float menu_t = ease_out_cubic(menu_anim_t);
+    const float menu_t = tween::ease_out_cubic(menu_anim_t);
     if (menu_t <= 0.01f) {
         return;
     }

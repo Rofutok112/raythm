@@ -21,6 +21,7 @@
 #include "song_select/song_select_navigation.h"
 #include "song_select/song_select_ranking_view.h"
 #include "theme.h"
+#include "tween.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
 
@@ -457,11 +458,8 @@ void song_select_scene::update(float dt) {
                                                          song_select::content_height(state_),
                                                          state_.scroll_y_target).max_scroll;
     state_.scroll_y_target = std::clamp(state_.scroll_y_target, 0.0f, max_scroll);
-    state_.scroll_y += (state_.scroll_y_target - state_.scroll_y) *
-                       std::min(1.0f, song_select::layout::kScrollLerpSpeed * dt);
-    if (std::fabs(state_.scroll_y - state_.scroll_y_target) < 0.5f) {
-        state_.scroll_y = state_.scroll_y_target;
-    }
+    state_.scroll_y = tween::damp(state_.scroll_y, state_.scroll_y_target, dt,
+                                  song_select::layout::kScrollLerpSpeed, 0.5f);
 
     const ui::scrollbar_interaction ranking_scrollbar = ui::update_vertical_scrollbar(
         song_select::layout::kRankingScrollbarTrackRect,
@@ -483,11 +481,9 @@ void song_select_scene::update(float dt) {
                                                                  song_select::ranking_content_height(state_),
                                                                  state_.ranking_panel.scroll_y_target).max_scroll;
     state_.ranking_panel.scroll_y_target = std::clamp(state_.ranking_panel.scroll_y_target, 0.0f, max_ranking_scroll);
-    state_.ranking_panel.scroll_y += (state_.ranking_panel.scroll_y_target - state_.ranking_panel.scroll_y) *
-                                     std::min(1.0f, song_select::layout::kScrollLerpSpeed * dt);
-    if (std::fabs(state_.ranking_panel.scroll_y - state_.ranking_panel.scroll_y_target) < 0.5f) {
-        state_.ranking_panel.scroll_y = state_.ranking_panel.scroll_y_target;
-    }
+    state_.ranking_panel.scroll_y = tween::damp(state_.ranking_panel.scroll_y,
+                                                state_.ranking_panel.scroll_y_target, dt,
+                                                song_select::layout::kScrollLerpSpeed, 0.5f);
 
     const auto filtered = song_select::filtered_charts_for_selected_song(state_);
     if (!filtered.empty()) {

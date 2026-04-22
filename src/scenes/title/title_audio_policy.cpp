@@ -5,6 +5,7 @@ namespace title_audio_policy {
 resolved_state resolve(hub_mode mode, bool preview_active) {
     switch (mode) {
         case hub_mode::play:
+        case hub_mode::online:
         case hub_mode::create:
             return {
                 .music = music_source::preview_song,

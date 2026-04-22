@@ -49,6 +49,11 @@ int hit_test(Rectangle area, float scroll_y, Vector2 point, int count) {
 
 void draw(const song_select::state& state, const draw_config& config) {
     const auto& t = *g_theme;
+    const bool hide_unloaded_content =
+        state.catalog_loading && !state.catalog_loaded_once && state.songs.empty();
+    if (hide_unloaded_content) {
+        return;
+    }
 
     ui::draw_text_in_rect(TextFormat("%d songs", static_cast<int>(state.songs.size())), 16,
                           {config.column_rect.x, config.column_rect.y - 24.0f, config.column_rect.width, 18.0f},

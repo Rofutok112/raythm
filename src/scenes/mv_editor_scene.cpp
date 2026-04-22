@@ -6,6 +6,7 @@
 #include "scene_manager.h"
 #include "song_select/song_select_navigation.h"
 #include "theme.h"
+#include "tween.h"
 #include "ui_draw.h"
 #include "ui_text_input.h"
 #include "ui_text_editor.h"
@@ -48,12 +49,6 @@ Rectangle metadata_button_rect() {
     };
 }
 
-float ease_out_cubic(float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    const float inv = 1.0f - clamped;
-    return 1.0f - inv * inv * inv;
-}
-
 Rectangle metadata_modal_rect(float open_anim = 1.0f) {
     Rectangle rect = {
         metadata_button_rect().x,
@@ -63,7 +58,7 @@ Rectangle metadata_modal_rect(float open_anim = 1.0f) {
     };
     rect.x = std::clamp(rect.x, 12.0f, static_cast<float>(kScreenWidth) - rect.width - 12.0f);
     rect.y = std::clamp(rect.y, 12.0f, static_cast<float>(kScreenHeight) - rect.height - 12.0f);
-    const float anim_t = ease_out_cubic(open_anim);
+    const float anim_t = tween::ease_out_cubic(open_anim);
     rect.y -= (1.0f - anim_t) * 18.0f;
     return rect;
 }
@@ -105,7 +100,7 @@ void mv_editor_scene::update(float dt) {
     ui::begin_hit_regions();
 
     if (metadata_modal_open_) {
-        metadata_modal_open_anim_ = std::min(1.0f, metadata_modal_open_anim_ + dt * 8.0f);
+        metadata_modal_open_anim_ = tween::advance(metadata_modal_open_anim_, dt, 8.0f);
     } else {
         metadata_modal_open_anim_ = 0.0f;
     }
@@ -198,7 +193,7 @@ void mv_editor_scene::draw() {
     }
 
     if (metadata_modal_open_) {
-        const float anim_t = ease_out_cubic(metadata_modal_open_anim_);
+        const float anim_t = tween::ease_out_cubic(metadata_modal_open_anim_);
         const Rectangle modal = metadata_modal_rect(metadata_modal_open_anim_);
         const Rectangle body = {
             modal.x + kMetadataModalPaddingX,
