@@ -5,6 +5,7 @@
 #include "song_select/song_catalog_service.h"
 #include "shared/scene_fade.h"
 #include "song_select/song_select_state.h"
+#include "title/create_upload_client.h"
 #include "title/online_download_view.h"
 #include "title/title_audio_controller.h"
 #include <future>
@@ -60,6 +61,10 @@ private:
                                      std::string preferred_chart_id = "",
                                      bool sync_media_on_apply = false);
     void poll_play_catalog_reload();
+    void start_song_upload(const song_select::song_entry& song);
+    void start_chart_upload(const song_select::song_entry& song,
+                            const song_select::chart_option& chart);
+    void poll_create_upload();
     void update_home_pointer_suppression();
     bool handle_title_input(bool left_click_for_home, bool right_click_for_home);
     bool handle_home_input();
@@ -91,6 +96,8 @@ private:
     song_select::state play_state_;
     std::future<song_select::catalog_data> play_catalog_future_;
     bool play_catalog_loading_ = false;
+    std::future<title_create_upload::upload_result> create_upload_future_;
+    bool create_upload_in_progress_ = false;
     bool play_catalog_reload_pending_ = false;
     bool play_catalog_sync_media_on_apply_ = false;
     bool queued_play_catalog_sync_media_on_apply_ = false;

@@ -26,6 +26,7 @@
 #include "title/title_layout.h"
 #include "title/seamless_song_select_view.h"
 #include "theme.h"
+#include "ui_notice.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
@@ -234,6 +235,49 @@ void title_scene::poll_play_catalog_reload() {
     queued_play_catalog_sync_media_on_apply_ = false;
 }
 
+void title_scene::start_song_upload(const song_select::song_entry& song) {
+    if (create_upload_in_progress_) {
+        ui::push_notice(play_state_.notices, "Upload already in progress.", ui::notice_tone::info, 1.8f);
+        return;
+    }
+
+    create_upload_in_progress_ = true;
+    ui::push_notice(play_state_.notices, "Uploading song...", ui::notice_tone::info, 1.8f);
+    create_upload_future_ = std::async(std::launch::async, [song]() {
+        return title_create_upload::upload_song(song);
+    });
+}
+
+void title_scene::start_chart_upload(const song_select::song_entry& song,
+                                     const song_select::chart_option& chart) {
+    if (create_upload_in_progress_) {
+        ui::push_notice(play_state_.notices, "Upload already in progress.", ui::notice_tone::info, 1.8f);
+        return;
+    }
+
+    create_upload_in_progress_ = true;
+    ui::push_notice(play_state_.notices, "Uploading chart...", ui::notice_tone::info, 1.8f);
+    create_upload_future_ = std::async(std::launch::async, [song, chart]() {
+        return title_create_upload::upload_chart(song, chart);
+    });
+}
+
+void title_scene::poll_create_upload() {
+    if (!create_upload_in_progress_) {
+        return;
+    }
+    if (create_upload_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    const title_create_upload::upload_result result = create_upload_future_.get();
+    create_upload_in_progress_ = false;
+    song_select::queue_status_message(play_state_, result.message, !result.success);
+    if (result.success && result.should_refresh_online_catalog) {
+        title_online_view::reload_catalog(online_state_);
+    }
+}
+
 void title_scene::apply_play_delete_result(const song_select::delete_result& result) {
     play_state_.confirmation_dialog = {};
     if (!result.success) {
@@ -281,6 +325,15 @@ void title_scene::update_play_mode(float dt) {
 void title_scene::update_create_mode(float dt) {
     const title_play_view::update_result result =
         title_play_view::update(play_state_, title_play_view::mode::create, play_view_anim_, play_entry_origin_rect_, dt);
+    const bool create_action_requested =
+        result.create_song_requested ||
+        result.edit_song_requested ||
+        result.upload_song_requested ||
+        result.create_chart_requested ||
+        result.edit_chart_requested ||
+        result.upload_chart_requested ||
+        result.edit_mv_requested ||
+        result.manage_library_requested;
 
     if (result.back_requested) {
         enter_home_mode(false);
@@ -291,6 +344,10 @@ void title_scene::update_create_mode(float dt) {
         return;
     }
     if (result.chart_selection_changed) {
+        return;
+    }
+    if (create_upload_in_progress_ && create_action_requested) {
+        ui::push_notice(play_state_.notices, "Wait for the current upload to finish.", ui::notice_tone::info, 1.8f);
         return;
     }
 
@@ -306,12 +363,28 @@ void title_scene::update_create_mode(float dt) {
         manager_.change_scene(song_select::make_edit_song_scene(manager_, *song));
         return;
     }
+    if (result.upload_song_requested) {
+        if (song == nullptr) {
+            song_select::queue_status_message(play_state_, "Select a song to upload.", true);
+        } else {
+            start_song_upload(*song);
+        }
+        return;
+    }
     if (result.create_chart_requested && song != nullptr) {
         manager_.change_scene(song_select::make_new_chart_scene(manager_, *song, play_state_.difficulty_index));
         return;
     }
     if (result.edit_chart_requested && song != nullptr && chart != nullptr) {
         manager_.change_scene(song_select::make_edit_chart_scene(manager_, *song, *chart));
+        return;
+    }
+    if (result.upload_chart_requested) {
+        if (song == nullptr || chart == nullptr) {
+            song_select::queue_status_message(play_state_, "Select a chart to upload.", true);
+        } else {
+            start_chart_upload(*song, *chart);
+        }
         return;
     }
     if (result.edit_mv_requested && song != nullptr) {
@@ -368,6 +441,7 @@ void title_scene::update_common_animation(float dt) {
     auth_overlay::poll_restore(auth_controller_, play_state_.auth, play_state_.login_dialog);
     auth_overlay::poll_request(auth_controller_, play_state_.auth, play_state_.login_dialog);
     poll_play_catalog_reload();
+    poll_create_upload();
     title_online_view::poll_song_page(online_state_);
     title_online_view::poll_chart_page(online_state_);
     title_online_view::poll_owned(online_state_);

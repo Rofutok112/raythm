@@ -44,6 +44,9 @@ std::filesystem::path chart_offsets_path();
 // AppData/Local/raythm/auth_session.json
 std::filesystem::path auth_session_path();
 
+// AppData/Local/raythm/upload_mappings.txt
+std::filesystem::path upload_mapping_path();
+
 // AppData/Local/raythm/scoring_ruleset_cache.txt
 std::filesystem::path scoring_ruleset_cache_path();
 

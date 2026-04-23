@@ -35,8 +35,10 @@ struct update_result {
     bool delete_song_requested = false;
     bool create_song_requested = false;
     bool edit_song_requested = false;
+    bool upload_song_requested = false;
     bool create_chart_requested = false;
     bool edit_chart_requested = false;
+    bool upload_chart_requested = false;
     bool edit_mv_requested = false;
     bool manage_library_requested = false;
 };
