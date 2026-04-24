@@ -84,7 +84,7 @@ std::unique_ptr<scene> make_edit_chart_scene(scene_manager& manager, const song_
 
 std::unique_ptr<scene> make_play_scene(scene_manager& manager, const song_entry& song, const chart_option& chart) {
     save_last_played_selection(song.song.meta.song_id, chart.meta.chart_id);
-    return std::make_unique<play_scene>(manager, song.song, chart.path, chart.meta.key_count);
+    return std::make_unique<play_scene>(manager, song.song, chart.path, chart.meta.key_count, chart.meta.level);
 }
 
 std::unique_ptr<scene> make_mv_editor_scene(scene_manager& manager, const song_entry& song) {

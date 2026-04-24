@@ -219,12 +219,7 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
         } else if (key == "difficulty") {
             meta.difficulty = value;
         } else if (key == "level") {
-            const std::optional<float> parsed = parse_float(value);
-            if (!parsed.has_value()) {
-                errors.push_back(format_line_error(line.first, "level must be a number"));
-            } else {
-                meta.level = *parsed;
-            }
+            // Legacy field. Runtime levels are always calculated from chart notes.
         } else if (key == "chartName" || key == "description") {
             // Accept legacy metadata fields for backward compatibility, but they are no longer used.
         } else if (key == "chartAuthor") {
@@ -257,11 +252,10 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
         }
     }
 
-    const std::array<std::string, 7> required_fields = {
+    const std::array<std::string, 6> required_fields = {
         "chartId",
         "keyCount",
         "difficulty",
-        "level",
         "chartAuthor",
         "formatVersion",
         "resolution",
@@ -392,10 +386,6 @@ std::vector<std::string> chart_parser::validate(const chart_data& data) {
 
     if (data.meta.key_count != 4 && data.meta.key_count != 6) {
         errors.push_back("Metadata keyCount must be 4 or 6");
-    }
-
-    if (data.meta.level < 0) {
-        errors.push_back("Metadata level must be zero or greater");
     }
 
     if (data.meta.format_version <= 0) {

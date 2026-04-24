@@ -13,6 +13,7 @@
 #include <future>
 #include <optional>
 #include <string>
+#include <vector>
 
 // タイトル画面。曲選択画面・設定画面への遷移を提供する。
 class title_scene final : public scene {
@@ -58,8 +59,8 @@ private:
     void update_common_animation(float dt);
     void apply_play_delete_result(const song_select::delete_result& result);
     void apply_play_transfer_result(const song_select::transfer_result& result);
-    void open_overwrite_song_confirmation(song_select::song_import_request request);
-    void open_overwrite_chart_confirmation(song_select::chart_import_request request);
+    void open_overwrite_song_confirmation(std::vector<song_select::song_import_request> requests);
+    void open_overwrite_chart_confirmation(std::vector<song_select::chart_import_request> requests);
     void poll_play_transfer();
     void start_song_import();
     void start_chart_import();

@@ -16,7 +16,8 @@ namespace mv { class mv_runtime; }
 class play_scene final : public scene {
 public:
     explicit play_scene(scene_manager& manager, int key_count);
-    play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count);
+    play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
+               float chart_level = 0.0f);
     play_scene(scene_manager& manager, song_data song, chart_data chart, int start_tick,
                editor_resume_state editor_resume);
     ~play_scene() override;

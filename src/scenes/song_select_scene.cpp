@@ -237,22 +237,26 @@ void song_select_scene::apply_transfer_result(const song_select::transfer_result
     song_select::queue_status_message(state_, result.message, false);
 }
 
-void song_select_scene::open_overwrite_song_confirmation(song_select::song_import_request request) {
-    transfer_controller_.set_pending_song_import_request(std::move(request));
+void song_select_scene::open_overwrite_song_confirmation(std::vector<song_select::song_import_request> requests) {
+    const size_t overwrite_count = requests.size();
+    transfer_controller_.set_pending_song_import_requests(std::move(requests));
     song_select::open_confirmation_dialog(
         state_, song_select::pending_confirmation_action::overwrite_song_import,
-        "Overwrite Song",
-        "A user song with the same song ID already exists. Overwrite it?",
+        overwrite_count <= 1 ? "Overwrite Song" : "Overwrite Songs",
+        overwrite_count <= 1 ? "A user song with the same song ID already exists. Overwrite it?"
+                             : "Some selected songs already exist. Overwrite them?",
         "",
         "OVERWRITE");
 }
 
-void song_select_scene::open_overwrite_chart_confirmation(song_select::chart_import_request request) {
-    transfer_controller_.set_pending_chart_import_request(std::move(request));
+void song_select_scene::open_overwrite_chart_confirmation(std::vector<song_select::chart_import_request> requests) {
+    const size_t overwrite_count = requests.size();
+    transfer_controller_.set_pending_chart_import_requests(std::move(requests));
     song_select::open_confirmation_dialog(
         state_, song_select::pending_confirmation_action::overwrite_chart_import,
-        "Overwrite Chart",
-        "A user chart with the same chart ID already exists. Overwrite it?",
+        overwrite_count <= 1 ? "Overwrite Chart" : "Overwrite Charts",
+        overwrite_count <= 1 ? "A user chart with the same chart ID already exists. Overwrite it?"
+                             : "Some selected charts already exist. Overwrite them?",
         "",
         "OVERWRITE");
 }
@@ -425,12 +429,12 @@ void song_select_scene::update(float dt) {
     }
     auth_overlay::poll_request(auth_controller_, state_.auth, state_.login_dialog);
     if (const auto prepared = transfer_controller_.poll_song_import_prepare(); prepared.has_value()) {
-        if (!prepared->request.has_value()) {
+        if (prepared->requests.empty()) {
             apply_transfer_result(prepared->transfer);
-        } else if (prepared->request->overwrite_existing) {
-            open_overwrite_song_confirmation(*prepared->request);
+        } else if (prepared->overwrite_count > 0) {
+            open_overwrite_song_confirmation(prepared->requests);
         } else {
-            transfer_controller_.start_song_import(*prepared->request);
+            transfer_controller_.start_song_imports(prepared->requests);
             song_select::queue_status_message(state_, transfer_controller_.busy_label(), false);
         }
     }
@@ -666,8 +670,12 @@ void song_select_scene::draw() {
             [this](const std::string& preferred_song_id, const std::string& preferred_chart_id) {
                 reload_song_library(preferred_song_id, preferred_chart_id);
             },
-            [this](song_select::song_import_request request) { open_overwrite_song_confirmation(std::move(request)); },
-            [this](song_select::chart_import_request request) { open_overwrite_chart_confirmation(std::move(request)); });
+            [this](std::vector<song_select::song_import_request> requests) {
+                open_overwrite_song_confirmation(std::move(requests));
+            },
+            [this](std::vector<song_select::chart_import_request> requests) {
+                open_overwrite_chart_confirmation(std::move(requests));
+            });
         const song_select::login_dialog_command login_command =
             song_select::draw_login_dialog(state_, auth_controller_.request_active);
         if (login_command == song_select::login_dialog_command::close) {
@@ -699,8 +707,12 @@ void song_select_scene::draw() {
         [this](const std::string& preferred_song_id, const std::string& preferred_chart_id) {
             reload_song_library(preferred_song_id, preferred_chart_id);
         },
-        [this](song_select::song_import_request request) { open_overwrite_song_confirmation(std::move(request)); },
-        [this](song_select::chart_import_request request) { open_overwrite_chart_confirmation(std::move(request)); });
+        [this](std::vector<song_select::song_import_request> requests) {
+            open_overwrite_song_confirmation(std::move(requests));
+        },
+        [this](std::vector<song_select::chart_import_request> requests) {
+            open_overwrite_chart_confirmation(std::move(requests));
+        });
     song_select::commands::apply_confirmation_command(
         state_, preview_controller_, transfer_controller_, song_select::draw_confirmation_dialog(state_),
         [this](const song_select::delete_result& result) { apply_delete_result(result); },

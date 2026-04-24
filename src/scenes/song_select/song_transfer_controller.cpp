@@ -14,13 +14,17 @@ void controller::on_exit() {
 }
 
 void controller::start_song_import_prepare(const state& catalog_state, std::string source_path) {
+    start_song_import_prepare(catalog_state, std::vector<std::string>{std::move(source_path)});
+}
+
+void controller::start_song_import_prepare(const state& catalog_state, std::vector<std::string> source_paths) {
     prepare_active_ = true;
-    busy_label_ = "Reading song package...";
-    std::promise<song_import_prepare_result> promise;
+    busy_label_ = source_paths.size() <= 1 ? "Reading song package..." : "Reading song packages...";
+    std::promise<song_import_prepare_batch_result> promise;
     background_song_import_prepare_ = promise.get_future();
-    std::thread([promise = std::move(promise), catalog_state, source_path = std::move(source_path)]() mutable {
+    std::thread([promise = std::move(promise), catalog_state, source_paths = std::move(source_paths)]() mutable {
         try {
-            promise.set_value(prepare_song_import_from_path(catalog_state, source_path));
+            promise.set_value(prepare_song_imports_from_paths(catalog_state, source_paths));
         } catch (...) {
             promise.set_exception(std::current_exception());
         }
@@ -42,21 +46,25 @@ void controller::start_song_export(song_export_request request) {
 }
 
 void controller::start_song_import(song_import_request request) {
+    start_song_imports(std::vector<song_import_request>{std::move(request)});
+}
+
+void controller::start_song_imports(std::vector<song_import_request> requests) {
     transfer_active_ = true;
-    busy_label_ = "Importing song package...";
-    pending_song_import_request_ = request;
+    busy_label_ = requests.size() <= 1 ? "Importing song package..." : "Importing song packages...";
+    pending_song_import_requests_ = requests;
     std::promise<transfer_result> promise;
     background_transfer_ = promise.get_future();
-    std::thread([promise = std::move(promise), request = std::move(request)]() mutable {
+    std::thread([promise = std::move(promise), requests = std::move(requests)]() mutable {
         try {
-            promise.set_value(import_song_package(request));
+            promise.set_value(import_song_packages(requests));
         } catch (...) {
             promise.set_exception(std::current_exception());
         }
     }).detach();
 }
 
-std::optional<song_import_prepare_result> controller::poll_song_import_prepare() {
+std::optional<song_import_prepare_batch_result> controller::poll_song_import_prepare() {
     if (!prepare_active_) {
         return std::nullopt;
     }
@@ -69,12 +77,12 @@ std::optional<song_import_prepare_result> controller::poll_song_import_prepare()
     try {
         return background_song_import_prepare_.get();
     } catch (const std::exception& ex) {
-        song_import_prepare_result result;
+        song_import_prepare_batch_result result;
         result.transfer.success = false;
         result.transfer.message = ex.what();
         return result;
     } catch (...) {
-        song_import_prepare_result result;
+        song_import_prepare_batch_result result;
         result.transfer.success = false;
         result.transfer.message = "Failed to read song package.";
         return result;
@@ -106,22 +114,30 @@ std::optional<transfer_result> controller::poll_background_transfer() {
 }
 
 void controller::set_pending_song_import_request(song_import_request request) {
-    pending_song_import_request_ = std::move(request);
+    set_pending_song_import_requests(std::vector<song_import_request>{std::move(request)});
+}
+
+void controller::set_pending_song_import_requests(std::vector<song_import_request> requests) {
+    pending_song_import_requests_ = std::move(requests);
 }
 
 void controller::clear_pending_song_import_request(bool cleanup_request) {
-    if (cleanup_request && pending_song_import_request_.has_value()) {
-        cleanup_song_import_request(*pending_song_import_request_);
+    if (cleanup_request) {
+        cleanup_song_import_requests(pending_song_import_requests_);
     }
-    pending_song_import_request_.reset();
+    pending_song_import_requests_.clear();
 }
 
 void controller::set_pending_chart_import_request(chart_import_request request) {
-    pending_chart_import_request_ = std::move(request);
+    set_pending_chart_import_requests(std::vector<chart_import_request>{std::move(request)});
+}
+
+void controller::set_pending_chart_import_requests(std::vector<chart_import_request> requests) {
+    pending_chart_import_requests_ = std::move(requests);
 }
 
 void controller::clear_pending_chart_import_request() {
-    pending_chart_import_request_.reset();
+    pending_chart_import_requests_.clear();
 }
 
 }  // namespace song_select::transfer

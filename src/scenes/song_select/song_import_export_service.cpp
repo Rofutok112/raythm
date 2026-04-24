@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <optional>
 #include <system_error>
+#include <unordered_set>
+#include <vector>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -23,6 +25,7 @@
 #endif
 
 #include "app_paths.h"
+#include "chart_level_cache.h"
 #include "chart_parser.h"
 #include "chart_serializer.h"
 #include "file_dialog.h"
@@ -358,13 +361,55 @@ std::optional<chart_import_request> prepare_chart_import(const state& state, tra
     }
 
     const std::optional<chart_option> existing_chart = find_chart_by_id(state, parsed.data->meta.chart_id);
-
     return chart_import_request{
         .source_path = source_path,
         .target_song_id = target_song->song.meta.song_id,
         .chart = *parsed.data,
         .overwrite_existing = existing_chart.has_value(),
     };
+}
+
+std::optional<chart_import_batch_request> prepare_chart_imports(const state& state, transfer_result& result) {
+    const std::vector<std::string> source_paths = file_dialog::open_chart_package_files();
+    if (source_paths.empty()) {
+        result.cancelled = true;
+        return std::nullopt;
+    }
+
+    chart_import_batch_request batch;
+    std::unordered_set<std::string> seen_chart_ids;
+    for (const std::string& source_path : source_paths) {
+        const chart_parse_result parsed = chart_parser::parse(source_path);
+        if (!parsed.success || !parsed.data.has_value()) {
+            result.message = "Failed to import the chart package.";
+            return std::nullopt;
+        }
+
+        const std::optional<song_entry> target_song = find_song_by_id(state, parsed.data->meta.song_id);
+        if (!target_song.has_value()) {
+            result.message = "No song with a matching song ID was found.";
+            return std::nullopt;
+        }
+
+        const std::optional<chart_option> existing_chart = find_chart_by_id(state, parsed.data->meta.chart_id);
+        const bool duplicate_selection = !seen_chart_ids.insert(parsed.data->meta.chart_id).second;
+
+        batch.requests.push_back(chart_import_request{
+            .source_path = source_path,
+            .target_song_id = target_song->song.meta.song_id,
+            .chart = *parsed.data,
+            .overwrite_existing = existing_chart.has_value() || duplicate_selection,
+        });
+        if (existing_chart.has_value() || duplicate_selection) {
+            ++batch.overwrite_count;
+        }
+    }
+
+    if (batch.requests.empty()) {
+        result.cancelled = true;
+        return std::nullopt;
+    }
+    return batch;
 }
 
 transfer_result import_chart_package(const chart_import_request& request) {
@@ -375,12 +420,42 @@ transfer_result import_chart_package(const chart_import_request& request) {
         result.message = "Failed to save the imported chart.";
         return result;
     }
+    chart_level_cache::calculate_and_store(path_utils::to_utf8(destination_path), request.chart);
 
     result.success = true;
     result.reload_catalog = true;
     result.message = "Chart imported.";
     result.preferred_song_id = request.target_song_id;
     result.preferred_chart_id = request.chart.meta.chart_id;
+    return result;
+}
+
+transfer_result import_chart_packages(const std::vector<chart_import_request>& requests) {
+    transfer_result result;
+    if (requests.empty()) {
+        result.cancelled = true;
+        return result;
+    }
+
+    int imported_count = 0;
+    for (const chart_import_request& request : requests) {
+        transfer_result single = import_chart_package(request);
+        if (!single.success) {
+            result = single;
+            result.message = imported_count == 0
+                ? single.message
+                : single.message + " (" + std::to_string(imported_count) + " chart(s) imported before failure.)";
+            return result;
+        }
+        ++imported_count;
+        result.preferred_song_id = single.preferred_song_id;
+        result.preferred_chart_id = single.preferred_chart_id;
+    }
+
+    result.success = true;
+    result.reload_catalog = true;
+    result.message = imported_count == 1 ? "Chart imported."
+                                          : std::to_string(imported_count) + " charts imported.";
     return result;
 }
 
@@ -532,6 +607,33 @@ song_import_prepare_result prepare_song_import_from_path(const state& state, con
     return prepared;
 }
 
+song_import_prepare_batch_result prepare_song_imports_from_paths(const state& state,
+                                                                 const std::vector<std::string>& source_paths) {
+    song_import_prepare_batch_result batch;
+    if (source_paths.empty()) {
+        batch.transfer.cancelled = true;
+        return batch;
+    }
+
+    std::unordered_set<std::string> seen_song_ids;
+    for (const std::string& source_path : source_paths) {
+        song_import_prepare_result prepared = prepare_song_import_from_path(state, source_path);
+        if (!prepared.request.has_value()) {
+            batch.transfer = prepared.transfer;
+            cleanup_song_import_requests(batch.requests);
+            return batch;
+        }
+        const bool duplicate_selection = !seen_song_ids.insert(prepared.request->imported_song.meta.song_id).second;
+        prepared.request->overwrite_existing = prepared.request->overwrite_existing || duplicate_selection;
+        if (prepared.request->overwrite_existing) {
+            ++batch.overwrite_count;
+        }
+        batch.requests.push_back(std::move(*prepared.request));
+    }
+
+    return batch;
+}
+
 transfer_result import_song_package(const song_import_request& request) {
     transfer_result result;
     const fs::path extracted_song_root = path_utils::from_utf8(request.imported_song.directory);
@@ -568,11 +670,69 @@ transfer_result import_song_package(const song_import_request& request) {
         result.message = "Failed to import the song package.";
         return result;
     }
+    if (!request.imported_song.chart_paths.empty()) {
+        const fs::path charts_destination = destination_root / "charts";
+        std::error_code chart_ec;
+        fs::create_directories(charts_destination, chart_ec);
+        if (chart_ec) {
+            result.message = "Failed to import the song package charts.";
+            return result;
+        }
+
+        for (const std::string& chart_path_utf8 : request.imported_song.chart_paths) {
+            const chart_parse_result parsed_chart = chart_parser::parse(chart_path_utf8);
+            if (!parsed_chart.success || !parsed_chart.data.has_value()) {
+                result.message = "Failed to read a chart from the song package.";
+                return result;
+            }
+
+            const fs::path source_chart_path = path_utils::from_utf8(chart_path_utf8);
+            const fs::path chart_file_name = source_chart_path.filename().empty()
+                ? path_utils::from_utf8(sanitize_file_stem(parsed_chart.data->meta.chart_id, "chart") + ".rchart")
+                : source_chart_path.filename();
+            const fs::path destination_chart_path = charts_destination / chart_file_name;
+            const std::string destination_chart_utf8 = path_utils::to_utf8(destination_chart_path);
+            if (!chart_serializer::serialize(*parsed_chart.data, destination_chart_utf8)) {
+                result.message = "Failed to import the song package charts.";
+                return result;
+            }
+            chart_level_cache::calculate_and_store(destination_chart_utf8, *parsed_chart.data);
+        }
+    }
 
     result.success = true;
     result.reload_catalog = true;
     result.message = "Song package imported.";
     result.preferred_song_id = request.imported_song.meta.song_id;
+    return result;
+}
+
+transfer_result import_song_packages(const std::vector<song_import_request>& requests) {
+    transfer_result result;
+    if (requests.empty()) {
+        result.cancelled = true;
+        return result;
+    }
+
+    int imported_count = 0;
+    for (const song_import_request& request : requests) {
+        transfer_result single = import_song_package(request);
+        if (!single.success) {
+            result = single;
+            result.message = imported_count == 0
+                ? single.message
+                : single.message + " (" + std::to_string(imported_count) + " song(s) imported before failure.)";
+            return result;
+        }
+        ++imported_count;
+        result.preferred_song_id = single.preferred_song_id;
+        result.preferred_chart_id = single.preferred_chart_id;
+    }
+
+    result.success = true;
+    result.reload_catalog = true;
+    result.message = imported_count == 1 ? "Song package imported."
+                                          : std::to_string(imported_count) + " song packages imported.";
     return result;
 }
 
@@ -584,6 +744,13 @@ void cleanup_song_import_request(song_import_request& request) {
     std::error_code ec;
     fs::remove_all(path_utils::from_utf8(request.extracted_root), ec);
     request.extracted_root.clear();
+}
+
+void cleanup_song_import_requests(std::vector<song_import_request>& requests) {
+    for (song_import_request& request : requests) {
+        cleanup_song_import_request(request);
+    }
+    requests.clear();
 }
 
 }  // namespace song_select

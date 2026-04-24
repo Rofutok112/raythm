@@ -3,6 +3,7 @@
 #include <future>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "raylib.h"
 #include "scene.h"
@@ -41,8 +42,8 @@ private:
     void poll_selected_chart_ranking();
     void refresh_auth_state();
     bool handle_song_list_pointer(Vector2 mouse, bool left_pressed, bool right_pressed);
-    void open_overwrite_song_confirmation(song_select::song_import_request request);
-    void open_overwrite_chart_confirmation(song_select::chart_import_request request);
+    void open_overwrite_song_confirmation(std::vector<song_select::song_import_request> requests);
+    void open_overwrite_chart_confirmation(std::vector<song_select::chart_import_request> requests);
 
     song_select::state state_;
     song_select::preview_controller preview_controller_;

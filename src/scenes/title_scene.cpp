@@ -11,6 +11,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "core/file_dialog.h"
 #include "raylib.h"
@@ -116,6 +117,15 @@ bool select_local_song(song_select::state& state, const std::string& song_id) {
     }
 
     return false;
+}
+
+bool consume_startup_level_calculation() {
+    static bool consumed = false;
+    if (consumed) {
+        return false;
+    }
+    consumed = true;
+    return true;
 }
 
 }  // namespace
@@ -456,34 +466,38 @@ void title_scene::apply_play_transfer_result(const song_select::transfer_result&
     song_select::queue_status_message(play_state_, result.message, false);
 }
 
-void title_scene::open_overwrite_song_confirmation(song_select::song_import_request request) {
-    transfer_controller_.set_pending_song_import_request(std::move(request));
+void title_scene::open_overwrite_song_confirmation(std::vector<song_select::song_import_request> requests) {
+    const size_t overwrite_count = requests.size();
+    transfer_controller_.set_pending_song_import_requests(std::move(requests));
     song_select::open_confirmation_dialog(
         play_state_, song_select::pending_confirmation_action::overwrite_song_import,
-        "Overwrite Song",
-        "A user song with the same song ID already exists. Overwrite it?",
+        overwrite_count <= 1 ? "Overwrite Song" : "Overwrite Songs",
+        overwrite_count <= 1 ? "A user song with the same song ID already exists. Overwrite it?"
+                             : "Some selected songs already exist. Overwrite them?",
         "",
         "OVERWRITE");
 }
 
-void title_scene::open_overwrite_chart_confirmation(song_select::chart_import_request request) {
-    transfer_controller_.set_pending_chart_import_request(std::move(request));
+void title_scene::open_overwrite_chart_confirmation(std::vector<song_select::chart_import_request> requests) {
+    const size_t overwrite_count = requests.size();
+    transfer_controller_.set_pending_chart_import_requests(std::move(requests));
     song_select::open_confirmation_dialog(
         play_state_, song_select::pending_confirmation_action::overwrite_chart_import,
-        "Overwrite Chart",
-        "A user chart with the same chart ID already exists. Overwrite it?",
+        overwrite_count <= 1 ? "Overwrite Chart" : "Overwrite Charts",
+        overwrite_count <= 1 ? "A user chart with the same chart ID already exists. Overwrite it?"
+                             : "Some selected charts already exist. Overwrite them?",
         "",
         "OVERWRITE");
 }
 
 void title_scene::poll_play_transfer() {
     if (const auto prepared = transfer_controller_.poll_song_import_prepare(); prepared.has_value()) {
-        if (!prepared->request.has_value()) {
+        if (prepared->requests.empty()) {
             apply_play_transfer_result(prepared->transfer);
-        } else if (prepared->request->overwrite_existing) {
-            open_overwrite_song_confirmation(*prepared->request);
+        } else if (prepared->overwrite_count > 0) {
+            open_overwrite_song_confirmation(prepared->requests);
         } else {
-            transfer_controller_.start_song_import(*prepared->request);
+            transfer_controller_.start_song_imports(prepared->requests);
             song_select::queue_status_message(play_state_, transfer_controller_.busy_label(), false);
         }
     }
@@ -493,21 +507,21 @@ void title_scene::poll_play_transfer() {
 }
 
 void title_scene::start_song_import() {
-    const std::string source_path = file_dialog::open_song_package_file();
-    if (source_path.empty()) {
+    const std::vector<std::string> source_paths = file_dialog::open_song_package_files();
+    if (source_paths.empty()) {
         return;
     }
-    transfer_controller_.start_song_import_prepare(play_state_, source_path);
+    transfer_controller_.start_song_import_prepare(play_state_, source_paths);
     song_select::queue_status_message(play_state_, transfer_controller_.busy_label(), false);
 }
 
 void title_scene::start_chart_import() {
     song_select::transfer_result result;
-    if (const auto request = song_select::prepare_chart_import(play_state_, result); request.has_value()) {
-        if (request->overwrite_existing) {
-            open_overwrite_chart_confirmation(*request);
+    if (const auto batch = song_select::prepare_chart_imports(play_state_, result); batch.has_value()) {
+        if (batch->overwrite_count > 0) {
+            open_overwrite_chart_confirmation(batch->requests);
         } else {
-            apply_play_transfer_result(song_select::import_chart_package(*request));
+            apply_play_transfer_result(song_select::import_chart_packages(batch->requests));
         }
     } else {
         apply_play_transfer_result(result);
@@ -900,6 +914,16 @@ title_audio_policy::hub_mode title_scene::current_audio_mode() const {
 }
 
 void title_scene::on_enter() {
+    const bool calculate_startup_levels = consume_startup_level_calculation();
+    song_select::catalog_data startup_catalog;
+    try {
+        startup_catalog = song_select::load_catalog(calculate_startup_levels);
+    } catch (const std::exception& ex) {
+        startup_catalog.load_errors = {ex.what()};
+    } catch (...) {
+        startup_catalog.load_errors = {"Failed to load song catalog."};
+    }
+
     audio_controller_.configure(kTitleIntroPath, kTitleLoopPath);
     audio_controller_.on_enter();
     song_select::reset_for_enter(play_state_);
@@ -937,10 +961,10 @@ void title_scene::on_enter() {
     play_entry_origin_rect_ = {};
     play_state_.login_dialog.open = false;
     title_online_view::reload_catalog(online_state_);
-    request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
-                                mode_ == hub_mode::play || mode_ == hub_mode::create);
+    song_select::apply_catalog(play_state_, std::move(startup_catalog), preferred_song_id_, preferred_chart_id_);
     if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
         play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
+        sync_play_media();
     }
     if (play_state_.auth.logged_in) {
         auth_overlay::start_restore(auth_controller_, play_state_.login_dialog);

@@ -42,6 +42,7 @@ struct play_start_request {
     int key_count = 4;
     std::optional<song_data> song_data;
     std::optional<std::string> selected_chart_path;
+    std::optional<float> selected_chart_level;
     std::optional<chart_data> chart_data;
     std::optional<editor_resume_state> editor_resume_state;
     int start_tick = 0;

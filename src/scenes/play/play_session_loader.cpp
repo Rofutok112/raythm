@@ -6,6 +6,7 @@
 #include "app_paths.h"
 #include "audio_manager.h"
 #include "audio_waveform.h"
+#include "chart_level_cache.h"
 #include "game_settings.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
@@ -27,7 +28,12 @@ std::optional<chart_data> load_chart_for_key_count(const song_data& song, int ke
         const chart_parse_result parse_result = song_loader::load_chart(chart_path);
         if (parse_result.success && parse_result.data.has_value() &&
             parse_result.data->meta.key_count == key_count) {
-            return parse_result.data;
+            chart_data chart = *parse_result.data;
+            if (const std::optional<float> cached_level = chart_level_cache::find_level(chart_path);
+                cached_level.has_value()) {
+                chart.meta.level = *cached_level;
+            }
+            return chart;
         }
     }
     return std::nullopt;
@@ -97,6 +103,13 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
         if (parse_result.success && parse_result.data.has_value()) {
             state.chart_data = parse_result.data;
             state.key_count = state.chart_data->meta.key_count;
+            if (request.selected_chart_level.has_value()) {
+                state.chart_data->meta.level = *request.selected_chart_level;
+            } else if (const std::optional<float> cached_level =
+                           chart_level_cache::find_level(*state.selected_chart_path);
+                       cached_level.has_value()) {
+                state.chart_data->meta.level = *cached_level;
+            }
         } else {
             state.status_text = "Failed to load selected chart";
             draw_queue.clear();

@@ -121,6 +121,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/chart_parser.h
         src/gameplay/chart_difficulty.cpp
         src/gameplay/chart_difficulty.h
+        src/gameplay/chart_level_cache.cpp
+        src/gameplay/chart_level_cache.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
         src/models/data_models.h
@@ -392,8 +394,6 @@ add_executable(chart_parser_smoke
 add_executable(chart_serializer_smoke
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
-        src/gameplay/chart_difficulty.cpp
-        src/gameplay/chart_difficulty.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
         src/tests/chart_serializer_smoke.cpp
