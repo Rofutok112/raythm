@@ -13,6 +13,7 @@
 
 #include "app_paths.h"
 #include "network/auth_client.h"
+#include "network/json_helpers.h"
 #include "path_utils.h"
 #include "title/online_download_remote_client.h"
 
@@ -36,6 +37,7 @@
 namespace title_create_upload {
 namespace {
 namespace fs = std::filesystem;
+namespace json = network::json;
 
 struct http_response {
     int status_code = 0;
@@ -134,22 +136,6 @@ std::vector<std::string> split_tab_fields(const std::string& line) {
     return fields;
 }
 
-std::string escape_json_string(const std::string& value) {
-    std::string result;
-    result.reserve(value.size() + 8);
-    for (const char ch : value) {
-        switch (ch) {
-            case '\\': result += "\\\\"; break;
-            case '"': result += "\\\""; break;
-            case '\n': result += "\\n"; break;
-            case '\r': result += "\\r"; break;
-            case '\t': result += "\\t"; break;
-            default: result += ch; break;
-        }
-    }
-    return result;
-}
-
 std::string escape_multipart_header_value(const std::string& value) {
     std::string result;
     result.reserve(value.size());
@@ -162,118 +148,8 @@ std::string escape_multipart_header_value(const std::string& value) {
     return result;
 }
 
-std::optional<size_t> find_json_key(const std::string& content, const std::string& key) {
-    const std::string token = "\"" + key + "\"";
-    const size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
-        return std::nullopt;
-    }
-    return key_pos + token.size();
-}
-
-std::optional<size_t> find_value_start(const std::string& content, const std::string& key) {
-    const auto key_end = find_json_key(content, key);
-    if (!key_end.has_value()) {
-        return std::nullopt;
-    }
-
-    const size_t colon_pos = content.find(':', *key_end);
-    if (colon_pos == std::string::npos) {
-        return std::nullopt;
-    }
-
-    size_t start = colon_pos + 1;
-    while (start < content.size() && std::isspace(static_cast<unsigned char>(content[start])) != 0) {
-        ++start;
-    }
-
-    if (start >= content.size()) {
-        return std::nullopt;
-    }
-
-    return start;
-}
-
-std::optional<std::string> extract_json_string(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '"') {
-        return std::nullopt;
-    }
-
-    std::string result;
-    bool escaping = false;
-    for (size_t index = *start_opt + 1; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (escaping) {
-            switch (ch) {
-                case 'n': result += '\n'; break;
-                case 'r': result += '\r'; break;
-                case 't': result += '\t'; break;
-                default: result += ch; break;
-            }
-            escaping = false;
-            continue;
-        }
-
-        if (ch == '\\') {
-            escaping = true;
-            continue;
-        }
-
-        if (ch == '"') {
-            return result;
-        }
-
-        result += ch;
-    }
-
-    return std::nullopt;
-}
-
-std::optional<std::string> extract_json_object(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '{') {
-        return std::nullopt;
-    }
-
-    size_t depth = 0;
-    bool in_string = false;
-    bool escaping = false;
-    for (size_t index = *start_opt; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (in_string) {
-            if (escaping) {
-                escaping = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaping = true;
-            } else if (ch == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-
-        if (ch == '"') {
-            in_string = true;
-            continue;
-        }
-
-        if (ch == '{') {
-            ++depth;
-        } else if (ch == '}') {
-            --depth;
-            if (depth == 0) {
-                return content.substr(*start_opt, index - *start_opt + 1);
-            }
-        }
-    }
-
-    return std::nullopt;
-}
-
 std::string parse_error_message(const http_response& response, std::string fallback) {
-    if (const std::optional<std::string> message = extract_json_string(response.body, "message");
+    if (const std::optional<std::string> message = json::extract_string(response.body, "message");
         message.has_value() && !message->empty()) {
         return *message;
     }
@@ -550,8 +426,8 @@ std::string build_external_links_json(const song_meta& meta) {
             stream << ',';
         }
         first = false;
-        stream << "{\"url\":\"" << escape_json_string(*link.url)
-               << "\",\"label\":\"" << escape_json_string(link.label) << "\"}";
+        stream << "{\"url\":\"" << json::escape_string(*link.url)
+               << "\",\"label\":\"" << json::escape_string(link.label) << "\"}";
     }
     stream << ']';
     return stream.str();
@@ -812,13 +688,13 @@ upload_request_result parse_song_upload_response(const http_response& response,
         return result;
     }
 
-    const std::optional<std::string> song_object = extract_json_object(response.body, "song");
+    const std::optional<std::string> song_object = json::extract_object(response.body, "song");
     if (!song_object.has_value()) {
         result.message = "Song upload succeeded, but the response was invalid.";
         return result;
     }
 
-    const std::optional<std::string> song_id = extract_json_string(*song_object, "id");
+    const std::optional<std::string> song_id = json::extract_string(*song_object, "id");
     if (!song_id.has_value() || song_id->empty()) {
         result.message = "Song upload succeeded, but the server did not return a song ID.";
         return result;
@@ -855,13 +731,13 @@ upload_request_result parse_chart_upload_response(const http_response& response,
         return result;
     }
 
-    const std::optional<std::string> chart_object = extract_json_object(response.body, "chart");
+    const std::optional<std::string> chart_object = json::extract_object(response.body, "chart");
     if (!chart_object.has_value()) {
         result.message = "Chart upload succeeded, but the response was invalid.";
         return result;
     }
 
-    const std::optional<std::string> chart_id = extract_json_string(*chart_object, "id");
+    const std::optional<std::string> chart_id = json::extract_string(*chart_object, "id");
     if (!chart_id.has_value() || chart_id->empty()) {
         result.message = "Chart upload succeeded, but the server did not return a chart ID.";
         return result;

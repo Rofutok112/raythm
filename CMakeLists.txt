@@ -144,6 +144,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/timing_engine.h
         src/network/auth_client.cpp
         src/network/auth_client.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
         src/network/ranking_client.cpp
         src/network/ranking_client.h
         src/updater/update_verify.cpp
@@ -497,6 +499,8 @@ add_executable(ranking_service_smoke
         src/gameplay/scoring_ruleset_runtime.h
         src/network/auth_client.cpp
         src/network/auth_client.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
         src/network/ranking_client.cpp
         src/network/ranking_client.h
         src/updater/update_verify.cpp

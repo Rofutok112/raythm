@@ -7,7 +7,6 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -16,6 +15,7 @@
 #include <vector>
 
 #include "app_paths.h"
+#include "network/json_helpers.h"
 #include "path_utils.h"
 #include "song_loader.h"
 #include "title/online_download_remote_client.h"
@@ -23,6 +23,7 @@
 
 namespace title_online_view {
 namespace {
+namespace json = network::json;
 
 struct staged_chart_file {
     std::string chart_id;
@@ -41,74 +42,6 @@ std::string trim_ascii(std::string_view value) {
     }
 
     return std::string(value.substr(start, end - start));
-}
-
-std::optional<size_t> find_json_key(const std::string& content, const std::string& key) {
-    const std::string token = "\"" + key + "\"";
-    const size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
-        return std::nullopt;
-    }
-    return key_pos + token.size();
-}
-
-std::optional<size_t> find_value_start(const std::string& content, const std::string& key) {
-    const auto key_end = find_json_key(content, key);
-    if (!key_end.has_value()) {
-        return std::nullopt;
-    }
-
-    const size_t colon_pos = content.find(':', *key_end);
-    if (colon_pos == std::string::npos) {
-        return std::nullopt;
-    }
-
-    size_t start = colon_pos + 1;
-    while (start < content.size() && std::isspace(static_cast<unsigned char>(content[start]))) {
-        ++start;
-    }
-
-    if (start >= content.size()) {
-        return std::nullopt;
-    }
-
-    return start;
-}
-
-std::optional<std::string> extract_json_string(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '"') {
-        return std::nullopt;
-    }
-
-    std::string result;
-    bool escaping = false;
-    for (size_t index = *start_opt + 1; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (escaping) {
-            switch (ch) {
-                case 'n': result += '\n'; break;
-                case 'r': result += '\r'; break;
-                case 't': result += '\t'; break;
-                default: result += ch; break;
-            }
-            escaping = false;
-            continue;
-        }
-
-        if (ch == '\\') {
-            escaping = true;
-            continue;
-        }
-
-        if (ch == '"') {
-            return result;
-        }
-
-        result += ch;
-    }
-
-    return std::nullopt;
 }
 
 bool write_binary_file(const std::filesystem::path& path,
@@ -242,8 +175,8 @@ download_song_result download_song_package(const song_entry_state song,
     finish_step();
 
     const std::string metadata_json(metadata_fetch.bytes.begin(), metadata_fetch.bytes.end());
-    const std::string audio_file = trim_ascii(extract_json_string(metadata_json, "audioFile").value_or(""));
-    const std::string jacket_file = trim_ascii(extract_json_string(metadata_json, "jacketFile").value_or(""));
+    const std::string audio_file = trim_ascii(json::extract_string(metadata_json, "audioFile").value_or(""));
+    const std::string jacket_file = trim_ascii(json::extract_string(metadata_json, "jacketFile").value_or(""));
     if (audio_file.empty()) {
         result.message = "Downloaded song metadata did not include audioFile.";
         return result;
