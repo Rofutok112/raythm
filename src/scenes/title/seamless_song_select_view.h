@@ -36,9 +36,13 @@ struct update_result {
     bool create_song_requested = false;
     bool edit_song_requested = false;
     bool upload_song_requested = false;
+    bool import_song_requested = false;
+    bool export_song_requested = false;
     bool create_chart_requested = false;
     bool edit_chart_requested = false;
     bool upload_chart_requested = false;
+    bool import_chart_requested = false;
+    bool export_chart_requested = false;
     bool edit_mv_requested = false;
     bool manage_library_requested = false;
 };

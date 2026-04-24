@@ -6,6 +6,7 @@
 #include "song_select/song_catalog_service.h"
 #include "shared/scene_fade.h"
 #include "song_select/song_select_state.h"
+#include "song_select/song_transfer_controller.h"
 #include "title/create_upload_client.h"
 #include "title/online_download_view.h"
 #include "title/title_audio_controller.h"
@@ -56,6 +57,14 @@ private:
     void update_create_mode(float dt);
     void update_common_animation(float dt);
     void apply_play_delete_result(const song_select::delete_result& result);
+    void apply_play_transfer_result(const song_select::transfer_result& result);
+    void open_overwrite_song_confirmation(song_select::song_import_request request);
+    void open_overwrite_chart_confirmation(song_select::chart_import_request request);
+    void poll_play_transfer();
+    void start_song_import();
+    void start_chart_import();
+    void start_song_export();
+    void start_chart_export();
     bool handle_account_input();
     bool handle_login_dialog_input();
     void request_play_catalog_reload(std::string preferred_song_id = "",
@@ -105,6 +114,7 @@ private:
     std::future<title_create_upload::upload_result> create_upload_future_;
     bool create_upload_in_progress_ = false;
     std::future<ranking_service::listing> play_ranking_future_;
+    song_select::transfer::controller transfer_controller_;
     bool play_ranking_loading_ = false;
     bool play_ranking_reload_pending_ = false;
     int play_ranking_generation_ = 0;
