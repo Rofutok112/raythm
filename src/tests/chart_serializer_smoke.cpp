@@ -8,7 +8,6 @@
 #include <iostream>
 #include <string>
 
-#include "chart_difficulty.h"
 #include "chart_parser.h"
 #include "chart_serializer.h"
 
@@ -21,7 +20,6 @@ bool equal_chart_meta(const chart_meta& left, const chart_meta& right) {
     return left.chart_id == right.chart_id &&
            left.key_count == right.key_count &&
            left.difficulty == right.difficulty &&
-           left.level == right.level &&
            left.chart_author == right.chart_author &&
            left.format_version == right.format_version &&
            left.resolution == right.resolution &&
@@ -129,7 +127,7 @@ int main() {
     bool ok = true;
 
     ok = content.find("offset=-35") != std::string::npos && ok;
-    ok = content.find("level=9.0") == std::string::npos && ok;
+    ok = content.find("level=") == std::string::npos && ok;
     ok = expect_contains_in_order(content, "meter,0,4/4", "bpm,960,180.5") && ok;
     ok = expect_contains_in_order(content, "tap,480,0", "hold,480,2,840") && ok;
 
@@ -144,7 +142,6 @@ int main() {
     }
 
     chart_data expected = normalized_chart(source);
-    chart_difficulty::apply_auto_level(expected);
     if (!equal_chart_data(expected, *reparsed.data)) {
         std::cerr << "Round-trip chart data mismatch\n";
         ok = false;
