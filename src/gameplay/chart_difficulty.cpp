@@ -43,6 +43,7 @@ constexpr double kBalanceRadiusMs = 800.0;
 constexpr double kReadRadiusMs = 500.0;
 constexpr double kStaminaWindowMs = 8000.0;
 constexpr double kTimeEpsilonSeconds = 0.015;
+constexpr double kChordMergeMs = 2.0;
 
 constexpr float kScale = 12.0f;
 constexpr float kPeakPower = 2.2f;
@@ -58,6 +59,9 @@ constexpr float kStaminaThreshold = 3.2f;
 // pattern: ジャック・配置の崩れ・局所バーストなどの最大風速寄り要素
 // balance: 左右寄りの偏り
 // stamina: 数秒単位で高密度が続く持久力負荷
+// chord: 同時押しの個数・形・押し分けづらさ
+// hand: 片手へ寄る局所密度と回復不足
+// hold_conflict: LN 拘束中に同じ手で別ノーツや離しを処理する負荷
 // read: 見た目の詰まりや読みづらさ
 constexpr float kWeightDensity = 1.50f;
 constexpr float kWeightStream = 1.00f;
@@ -68,6 +72,9 @@ constexpr float kWeightOverlap = 1.20f;
 constexpr float kWeightPattern = 1.40f;
 constexpr float kWeightBalance = 0.35f;
 constexpr float kWeightStamina = 0.5f;
+constexpr float kWeightChord = 0.85f;
+constexpr float kWeightHand = 0.70f;
+constexpr float kWeightHoldConflict = 0.95f;
 constexpr float kWeightRead = 1.20f;
 
 // 各要素の非線形補正。大きいほど、その要素の「高い値」を強調しやすい。
@@ -82,6 +89,9 @@ constexpr float kGammaJack = 0.95f;
 constexpr float kGammaBurst = 1.30f;
 constexpr float kGammaBalance = 0.80f;
 constexpr float kGammaStamina = 1.10f;
+constexpr float kGammaChord = 1.25f;
+constexpr float kGammaHand = 0.88f;
+constexpr float kGammaHoldConflict = 1.05f;
 constexpr float kGammaReadOverlap = 0.70f;
 constexpr float kGammaReadTail = 0.60f;
 
@@ -94,6 +104,8 @@ constexpr float kCouplingHoldJump = 0.22f;
 constexpr float kCouplingOverlapJump = 0.16f;
 constexpr float kCouplingStaminaStream = 0.14f;
 constexpr float kCouplingReadOverlap = 0.10f;
+constexpr float kCouplingChordJump = 0.08f;
+constexpr float kCouplingHandHold = 0.12f;
 
 template <typename Predicate>
 std::vector<const note_event*> collect_events_near(const std::vector<note_event>& events,
@@ -164,6 +176,17 @@ std::vector<transition_sample> build_transitions(const std::vector<note_event>& 
     return transitions;
 }
 
+bool is_press_event(const note_event& event) {
+    return event.type == note_event::kind::tap || event.type == note_event::kind::hold_head;
+}
+
+int hand_for_lane(int lane, int key_count) {
+    if (key_count <= 1) {
+        return 0;
+    }
+    return lane < key_count / 2 ? 0 : 1;
+}
+
 double total_chart_length_ms(const std::vector<note_event>& events, const std::vector<hold_interval>& holds) {
     double total = 0.0;
     if (!events.empty()) {
@@ -179,6 +202,17 @@ int active_hold_count_at(const std::vector<hold_interval>& holds, double time_ms
     int count = 0;
     for (const hold_interval& hold : holds) {
         if (hold.start_ms <= time_ms && time_ms < hold.end_ms) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+int active_hold_count_for_hand_at(const std::vector<hold_interval>& holds, double time_ms, int hand, int key_count) {
+    int count = 0;
+    for (const hold_interval& hold : holds) {
+        if (hold.start_ms <= time_ms && time_ms < hold.end_ms &&
+            hand_for_lane(hold.lane, key_count) == hand) {
             ++count;
         }
     }
@@ -289,8 +323,110 @@ float local_overlap_factor(const std::vector<note_event>& events, const std::vec
     return sum / static_cast<float>((400.0 * 2.0) / 1000.0);
 }
 
-float local_pattern_factor(const std::vector<transition_sample>& transitions, double center_ms, const std::vector<note_event>& events) {
+float local_chord_factor(const std::vector<note_event>& events, double center_ms, int key_count) {
+    if (key_count <= 1) {
+        return 0.0f;
+    }
+
+    float sum = 0.0f;
+    size_t i = 0;
+    while (i < events.size()) {
+        const note_event& first = events[i];
+        if (!is_press_event(first)) {
+            ++i;
+            continue;
+        }
+
+        size_t j = i + 1;
+        int count = 1;
+        int min_lane = first.lane;
+        int max_lane = first.lane;
+        int hands[2] = {0, 0};
+        ++hands[hand_for_lane(first.lane, key_count)];
+        while (j < events.size() && std::abs(events[j].time_ms - first.time_ms) <= kChordMergeMs) {
+            if (is_press_event(events[j])) {
+                ++count;
+                min_lane = std::min(min_lane, events[j].lane);
+                max_lane = std::max(max_lane, events[j].lane);
+                ++hands[hand_for_lane(events[j].lane, key_count)];
+            }
+            ++j;
+        }
+
+        if (count >= 2 && std::abs(first.time_ms - center_ms) <= kReadRadiusMs) {
+            const float spread = static_cast<float>(max_lane - min_lane) / static_cast<float>(key_count - 1);
+            const float one_hand_bias =
+                static_cast<float>(std::max(hands[0], hands[1])) / static_cast<float>(count);
+            sum += std::pow(static_cast<float>(count), kGammaChord) * (1.0f + 0.35f * spread + 0.45f * one_hand_bias);
+        }
+        i = j;
+    }
+
+    return sum / static_cast<float>((kReadRadiusMs * 2.0) / 1000.0);
+}
+
+float local_hand_load_factor(const std::vector<note_event>& events, const std::vector<hold_interval>& holds,
+                             double center_ms, int key_count) {
+    float hand_load[2] = {0.0f, 0.0f};
+    for (const note_event& event : events) {
+        if (!is_press_event(event) || std::abs(event.time_ms - center_ms) > kBalanceRadiusMs) {
+            continue;
+        }
+
+        const int hand = hand_for_lane(event.lane, key_count);
+        const int active_holds = active_hold_count_for_hand_at(holds, event.time_ms, hand, key_count);
+        hand_load[hand] += 1.0f + 0.55f * static_cast<float>(active_holds);
+    }
+
+    const float seconds = static_cast<float>((kBalanceRadiusMs * 2.0) / 1000.0);
+    const float left_rate = hand_load[0] / seconds;
+    const float right_rate = hand_load[1] / seconds;
+    const float peak = std::max(left_rate, right_rate);
+    const float skew = std::abs(left_rate - right_rate);
+    return std::pow(peak, kGammaHand) + 0.55f * std::pow(skew, kGammaHand);
+}
+
+float local_hold_responsibility_conflict_factor(const std::vector<note_event>& events,
+                                                const std::vector<hold_interval>& holds,
+                                                double center_ms,
+                                                int key_count) {
+    float sum = 0.0f;
+    for (const note_event& event : events) {
+        if (std::abs(event.time_ms - center_ms) > kReleaseRadiusMs) {
+            continue;
+        }
+
+        const int hand = hand_for_lane(event.lane, key_count);
+        if (event.type == note_event::kind::hold_tail) {
+            for (const note_event& nearby : events) {
+                if (!is_press_event(nearby) ||
+                    hand_for_lane(nearby.lane, key_count) != hand ||
+                    std::abs(nearby.time_ms - event.time_ms) > 140.0) {
+                    continue;
+                }
+                sum += 1.35f / static_cast<float>(std::abs(nearby.time_ms - event.time_ms) / 1000.0 + kTimeEpsilonSeconds);
+            }
+            continue;
+        }
+
+        if (!is_press_event(event)) {
+            continue;
+        }
+        const int same_hand_holds = active_hold_count_for_hand_at(holds, event.time_ms, hand, key_count);
+        if (same_hand_holds > 0) {
+            sum += std::pow(1.0f + static_cast<float>(same_hand_holds), kGammaHoldConflict);
+        }
+    }
+
+    return sum / static_cast<float>((kReleaseRadiusMs * 2.0) / 1000.0);
+}
+
+float local_pattern_factor(const std::vector<transition_sample>& transitions,
+                           double center_ms,
+                           const std::vector<note_event>& events,
+                           int key_count) {
     std::vector<float> alt_costs;
+    std::vector<const note_event*> presses;
     float jack_sum = 0.0f;
     int jack_count = 0;
 
@@ -305,6 +441,45 @@ float local_pattern_factor(const std::vector<transition_sample>& transitions, do
         if (transition.same_lane) {
             jack_sum += std::pow(1.0 / (transition.dt_seconds + kTimeEpsilonSeconds), kGammaJack);
             ++jack_count;
+        }
+    }
+
+    for (const note_event& event : events) {
+        if (is_press_event(event) && std::abs(event.time_ms - center_ms) <= 700.0) {
+            presses.push_back(&event);
+        }
+    }
+
+    float trill = 0.0f;
+    float stair = 0.0f;
+    float anchor = 0.0f;
+    for (size_t i = 3; i < presses.size(); ++i) {
+        const note_event& a = *presses[i - 3];
+        const note_event& b = *presses[i - 2];
+        const note_event& c = *presses[i - 1];
+        const note_event& d = *presses[i];
+        const double span_seconds = std::max((d.time_ms - a.time_ms) / 1000.0, kTimeEpsilonSeconds);
+        if (span_seconds > 0.9) {
+            continue;
+        }
+
+        const float speed = static_cast<float>(3.0 / span_seconds);
+        if (a.lane == c.lane && b.lane == d.lane && a.lane != b.lane) {
+            const bool one_hand = hand_for_lane(a.lane, key_count) == hand_for_lane(b.lane, key_count);
+            trill += speed * (one_hand ? 1.35f : 1.0f);
+        }
+
+        const int ab = b.lane - a.lane;
+        const int bc = c.lane - b.lane;
+        const int cd = d.lane - c.lane;
+        if (ab != 0 && bc != 0 && cd != 0 &&
+            (ab > 0) == (bc > 0) && (bc > 0) == (cd > 0)) {
+            stair += speed * 0.80f;
+        }
+
+        if ((a.lane == c.lane && a.lane != b.lane) ||
+            (b.lane == d.lane && b.lane != c.lane)) {
+            anchor += speed * 0.65f;
         }
     }
 
@@ -323,8 +498,12 @@ float local_pattern_factor(const std::vector<transition_sample>& transitions, do
                                  local_density_per_second(events, center_ms, kAverageRadiusMs));
     burst = std::pow(burst, kGammaBurst);
 
-    return 0.45f * irregularity + 0.90f * (jack_count == 0 ? 0.0f : jack_sum / static_cast<float>(jack_count)) +
-           0.60f * burst;
+    return 0.45f * irregularity +
+           0.90f * (jack_count == 0 ? 0.0f : jack_sum / static_cast<float>(jack_count)) +
+           0.60f * burst +
+           0.22f * trill +
+           0.16f * stair +
+           0.18f * anchor;
 }
 
 float local_balance_factor(const std::vector<note_event>& events, double center_ms, int key_count) {
@@ -361,7 +540,32 @@ float local_stamina_factor(const std::vector<note_event>& events, double center_
 float local_read_factor(const std::vector<note_event>& events, const std::vector<hold_interval>& holds, double center_ms) {
     const float overlap = std::pow(local_density_per_second(events, center_ms, kReadRadiusMs), kGammaReadOverlap);
     const float tail_clutter = std::pow(static_cast<float>(active_hold_count_at(holds, center_ms)), kGammaReadTail);
-    return overlap + tail_clutter;
+
+    std::vector<double> gaps;
+    const note_event* previous = nullptr;
+    for (const note_event& event : events) {
+        if (!is_press_event(event) || std::abs(event.time_ms - center_ms) > kReadRadiusMs) {
+            continue;
+        }
+        if (previous != nullptr) {
+            gaps.push_back((event.time_ms - previous->time_ms) / 1000.0);
+        }
+        previous = &event;
+    }
+
+    float rhythm_variance = 0.0f;
+    if (gaps.size() >= 2) {
+        const double mean = std::accumulate(gaps.begin(), gaps.end(), 0.0) / static_cast<double>(gaps.size());
+        double variance = 0.0;
+        for (double gap : gaps) {
+            const double delta = gap - mean;
+            variance += delta * delta;
+        }
+        rhythm_variance = static_cast<float>(std::sqrt(variance / static_cast<double>(gaps.size())) /
+                                             (mean + kTimeEpsilonSeconds));
+    }
+
+    return overlap + tail_clutter + 0.55f * rhythm_variance;
 }
 
 float local_difficulty_at(const std::vector<note_event>& events, const std::vector<hold_interval>& holds,
@@ -372,9 +576,12 @@ float local_difficulty_at(const std::vector<note_event>& events, const std::vect
     const float hold = std::pow(static_cast<float>(active_hold_count_at(holds, center_ms)), kGammaHold);
     const float release = local_release_factor(events, center_ms);
     const float overlap = local_overlap_factor(events, holds, center_ms, key_count);
-    const float pattern = local_pattern_factor(transitions, center_ms, events);
+    const float pattern = local_pattern_factor(transitions, center_ms, events, key_count);
     const float balance = local_balance_factor(events, center_ms, key_count);
     const float stamina = local_stamina_factor(events, center_ms);
+    const float chord = local_chord_factor(events, center_ms, key_count);
+    const float hand = local_hand_load_factor(events, holds, center_ms, key_count);
+    const float hold_conflict = local_hold_responsibility_conflict_factor(events, holds, center_ms, key_count);
     const float read = local_read_factor(events, holds, center_ms);
 
     const float base =
@@ -388,6 +595,9 @@ float local_difficulty_at(const std::vector<note_event>& events, const std::vect
         kWeightPattern * pattern +
         kWeightBalance * balance +
         kWeightStamina * stamina +
+        kWeightChord * chord +
+        kWeightHand * hand +
+        kWeightHoldConflict * hold_conflict +
         kWeightRead * read;
 
     const float coupling =
@@ -396,7 +606,9 @@ float local_difficulty_at(const std::vector<note_event>& events, const std::vect
         kCouplingHoldJump * hold * jump +
         kCouplingOverlapJump * overlap * jump +
         kCouplingStaminaStream * stamina * stream +
-        kCouplingReadOverlap * read * overlap;
+        kCouplingReadOverlap * read * overlap +
+        kCouplingChordJump * chord * jump +
+        kCouplingHandHold * hand * hold_conflict;
 
     return base * coupling;
 }

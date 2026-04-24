@@ -1,6 +1,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "chart_difficulty.h"
 
@@ -58,6 +61,68 @@ chart_data make_hard_chart() {
     return data;
 }
 
+chart_data make_chart(std::string chart_id, std::vector<note_data> notes) {
+    chart_data data;
+    data.meta.chart_id = std::move(chart_id);
+    data.meta.key_count = 4;
+    data.meta.difficulty = "Pattern";
+    data.meta.resolution = 480;
+    data.meta.format_version = 1;
+    data.timing_events = {
+        {timing_event_type::bpm, 0, 120.0f, 4, 4},
+        {timing_event_type::meter, 0, 0.0f, 4, 4},
+    };
+    data.notes = std::move(notes);
+    return data;
+}
+
+chart_data make_hold_conflict_chart(bool same_hand) {
+    std::vector<note_data> notes = {
+        {note_type::hold, 0, 0, 2160},
+    };
+    const int tap_lane = same_hand ? 1 : 3;
+    for (int tick = 120; tick <= 2040; tick += 120) {
+        notes.push_back({note_type::tap, tick, tap_lane, 0});
+    }
+    return make_chart(same_hand ? "same_hand_hold" : "opposite_hand_hold", std::move(notes));
+}
+
+chart_data make_chord_shape_chart() {
+    std::vector<note_data> notes;
+    for (int tick = 0; tick < 3840; tick += 240) {
+        notes.push_back({note_type::tap, tick, 0, 0});
+        notes.push_back({note_type::tap, tick, 3, 0});
+    }
+    return make_chart("wide_chords", std::move(notes));
+}
+
+chart_data make_split_shape_chart() {
+    std::vector<note_data> notes;
+    const int lanes[] = {0, 3};
+    for (int i = 0; i < 32; ++i) {
+        notes.push_back({note_type::tap, i * 120, lanes[i % 2], 0});
+    }
+    return make_chart("split_taps", std::move(notes));
+}
+
+chart_data make_one_hand_stream_chart() {
+    std::vector<note_data> notes;
+    const int lanes[] = {0, 1};
+    for (int i = 0; i < 32; ++i) {
+        notes.push_back({note_type::tap, i * 120, lanes[i % 2], 0});
+    }
+    return make_chart("one_hand_stream", std::move(notes));
+}
+
+chart_data make_balanced_stream_chart() {
+    std::vector<note_data> notes;
+    const int lanes[] = {0, 2, 1, 3};
+    for (int i = 0; i < 32; ++i) {
+        notes.push_back({note_type::tap, i * 120, lanes[i % 4], 0});
+    }
+    return make_chart("balanced_stream", std::move(notes));
+}
+
 bool approx(float actual, float expected, float tolerance = 0.05f) {
     return std::fabs(actual - expected) <= tolerance;
 }
@@ -100,6 +165,30 @@ int main() {
         chart_difficulty::level_from_rating(1000.0f) >= chart_difficulty::level_from_rating(10000.0f) ||
         chart_difficulty::level_from_rating(10000.0f) >= chart_difficulty::level_from_rating(100000.0f)) {
         std::cerr << "Expected calibrated display levels to stay monotonic across rating decades\n";
+        return EXIT_FAILURE;
+    }
+
+    const float same_hand_hold = chart_difficulty::calculate_rating(make_hold_conflict_chart(true));
+    const float opposite_hand_hold = chart_difficulty::calculate_rating(make_hold_conflict_chart(false));
+    if (same_hand_hold <= opposite_hand_hold * 1.08f) {
+        std::cerr << "Expected same-hand LN responsibility conflict to rate higher than opposite-hand handling: "
+                  << same_hand_hold << " <= " << opposite_hand_hold << "\n";
+        return EXIT_FAILURE;
+    }
+
+    const float wide_chords = chart_difficulty::calculate_rating(make_chord_shape_chart());
+    const float split_taps = chart_difficulty::calculate_rating(make_split_shape_chart());
+    if (wide_chords <= split_taps) {
+        std::cerr << "Expected simultaneous chord shapes to rate higher than split taps with the same note count: "
+                  << wide_chords << " <= " << split_taps << "\n";
+        return EXIT_FAILURE;
+    }
+
+    const float one_hand_stream = chart_difficulty::calculate_rating(make_one_hand_stream_chart());
+    const float balanced_stream = chart_difficulty::calculate_rating(make_balanced_stream_chart());
+    if (one_hand_stream <= balanced_stream * 0.95f) {
+        std::cerr << "Expected one-hand stream burden to stay visible against balanced streams: "
+                  << one_hand_stream << " <= " << balanced_stream << "\n";
         return EXIT_FAILURE;
     }
 
