@@ -1,6 +1,5 @@
 #include "title/online_download_remote_client.h"
 
-#include <cctype>
 #include <optional>
 #include <sstream>
 #include <string_view>
@@ -8,6 +7,7 @@
 #include <vector>
 
 #include "network/auth_client.h"
+#include "network/json_helpers.h"
 #include "title/online_download_view.h"
 
 #ifdef _WIN32
@@ -29,6 +29,7 @@
 
 namespace title_online_view {
 namespace {
+namespace json = network::json;
 
 struct http_response {
     int status_code = 0;
@@ -66,236 +67,12 @@ constexpr int kSendTimeoutMs = 5000;
 constexpr int kReceiveTimeoutMs = 5000;
 #endif
 
-std::string trim(std::string_view value) {
-    size_t start = 0;
-    while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
-        ++start;
-    }
-
-    size_t end = value.size();
-    while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1]))) {
-        --end;
-    }
-
-    return std::string(value.substr(start, end - start));
-}
-
-std::optional<size_t> find_json_key(const std::string& content, const std::string& key) {
-    const std::string token = "\"" + key + "\"";
-    const size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
-        return std::nullopt;
-    }
-    return key_pos + token.size();
-}
-
-std::optional<size_t> find_value_start(const std::string& content, const std::string& key) {
-    const auto key_end = find_json_key(content, key);
-    if (!key_end.has_value()) {
-        return std::nullopt;
-    }
-
-    const size_t colon_pos = content.find(':', *key_end);
-    if (colon_pos == std::string::npos) {
-        return std::nullopt;
-    }
-
-    size_t start = colon_pos + 1;
-    while (start < content.size() && std::isspace(static_cast<unsigned char>(content[start]))) {
-        ++start;
-    }
-
-    if (start >= content.size()) {
-        return std::nullopt;
-    }
-
-    return start;
-}
-
-std::optional<std::string> extract_json_string(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '"') {
-        return std::nullopt;
-    }
-
-    std::string result;
-    bool escaping = false;
-    for (size_t index = *start_opt + 1; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (escaping) {
-            switch (ch) {
-                case 'n': result += '\n'; break;
-                case 'r': result += '\r'; break;
-                case 't': result += '\t'; break;
-                default: result += ch; break;
-            }
-            escaping = false;
-            continue;
-        }
-
-        if (ch == '\\') {
-            escaping = true;
-            continue;
-        }
-
-        if (ch == '"') {
-            return result;
-        }
-
-        result += ch;
-    }
-
-    return std::nullopt;
-}
-
-std::optional<int> extract_json_int(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value()) {
-        return std::nullopt;
-    }
-
-    size_t end = *start_opt;
-    if (content[end] == '-') {
-        ++end;
-    }
-    while (end < content.size() && std::isdigit(static_cast<unsigned char>(content[end]))) {
-        ++end;
-    }
-    if (end == *start_opt) {
-        return std::nullopt;
-    }
-
-    try {
-        return std::stoi(content.substr(*start_opt, end - *start_opt));
-    } catch (...) {
-        return std::nullopt;
-    }
-}
-
-std::optional<float> extract_json_float(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value()) {
-        return std::nullopt;
-    }
-
-    size_t end = *start_opt;
-    if (content[end] == '-') {
-        ++end;
-    }
-    while (end < content.size()) {
-        const char ch = content[end];
-        if (!(std::isdigit(static_cast<unsigned char>(ch)) || ch == '.')) {
-            break;
-        }
-        ++end;
-    }
-    if (end == *start_opt) {
-        return std::nullopt;
-    }
-
-    try {
-        return std::stof(content.substr(*start_opt, end - *start_opt));
-    } catch (...) {
-        return std::nullopt;
-    }
-}
-
-std::optional<std::string> extract_json_array(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '[') {
-        return std::nullopt;
-    }
-
-    size_t depth = 0;
-    bool in_string = false;
-    bool escaping = false;
-    for (size_t index = *start_opt; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (in_string) {
-            if (escaping) {
-                escaping = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaping = true;
-            } else if (ch == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-
-        if (ch == '"') {
-            in_string = true;
-            continue;
-        }
-
-        if (ch == '[') {
-            ++depth;
-        } else if (ch == ']') {
-            --depth;
-            if (depth == 0) {
-                return content.substr(*start_opt, index - *start_opt + 1);
-            }
-        }
-    }
-
-    return std::nullopt;
-}
-
-std::vector<std::string> extract_json_objects_from_array(const std::string& array_content) {
-    std::vector<std::string> objects;
-    size_t index = 0;
-    while (index < array_content.size()) {
-        index = array_content.find('{', index);
-        if (index == std::string::npos) {
-            break;
-        }
-
-        const size_t start = index;
-        size_t depth = 0;
-        bool in_string = false;
-        bool escaping = false;
-        for (; index < array_content.size(); ++index) {
-            const char ch = array_content[index];
-            if (in_string) {
-                if (escaping) {
-                    escaping = false;
-                    continue;
-                }
-                if (ch == '\\') {
-                    escaping = true;
-                } else if (ch == '"') {
-                    in_string = false;
-                }
-                continue;
-            }
-
-            if (ch == '"') {
-                in_string = true;
-                continue;
-            }
-
-            if (ch == '{') {
-                ++depth;
-            } else if (ch == '}') {
-                --depth;
-                if (depth == 0) {
-                    objects.push_back(array_content.substr(start, index - start + 1));
-                    ++index;
-                    break;
-                }
-            }
-        }
-    }
-    return objects;
-}
-
 bool is_absolute_remote_url(std::string_view value) {
     return value.rfind("http://", 0) == 0 || value.rfind("https://", 0) == 0;
 }
 
 void push_candidate_server_url(std::vector<std::string>& urls, std::string url) {
-    url = auth::normalize_server_url(trim(url));
+    url = auth::normalize_server_url(json::trim(url));
     if (url.empty()) {
         return;
     }
@@ -582,9 +359,9 @@ http_response send_request(const std::string&, const std::string&) {
 #endif
 
 std::optional<remote_song_payload> parse_remote_song(const std::string& object) {
-    const auto id = extract_json_string(object, "id");
-    const auto title = extract_json_string(object, "title");
-    const auto artist = extract_json_string(object, "artist");
+    const auto id = json::extract_string(object, "id");
+    const auto title = json::extract_string(object, "title");
+    const auto artist = json::extract_string(object, "artist");
     if (!id.has_value() || !title.has_value() || !artist.has_value()) {
         return std::nullopt;
     }
@@ -593,20 +370,20 @@ std::optional<remote_song_payload> parse_remote_song(const std::string& object) 
         .id = *id,
         .title = *title,
         .artist = *artist,
-        .base_bpm = extract_json_float(object, "baseBpm").value_or(0.0f),
-        .duration_seconds = extract_json_float(object, "durationSec").value_or(0.0f),
-        .preview_start_ms = extract_json_int(object, "previewStartMs").value_or(0),
-        .song_version = extract_json_int(object, "songVersion").value_or(0),
-        .content_source = extract_json_string(object, "contentSource").value_or("community"),
-        .audio_url = extract_json_string(object, "audioUrl").value_or(""),
-        .jacket_url = extract_json_string(object, "jacketUrl").value_or(""),
+        .base_bpm = json::extract_float(object, "baseBpm").value_or(0.0f),
+        .duration_seconds = json::extract_float(object, "durationSec").value_or(0.0f),
+        .preview_start_ms = json::extract_int(object, "previewStartMs").value_or(0),
+        .song_version = json::extract_int(object, "songVersion").value_or(0),
+        .content_source = json::extract_string(object, "contentSource").value_or("community"),
+        .audio_url = json::extract_string(object, "audioUrl").value_or(""),
+        .jacket_url = json::extract_string(object, "jacketUrl").value_or(""),
     };
 }
 
 std::optional<remote_chart_payload> parse_remote_chart(const std::string& object) {
-    const auto id = extract_json_string(object, "id");
-    const auto song_id = extract_json_string(object, "songId");
-    const auto difficulty_name = extract_json_string(object, "difficultyName");
+    const auto id = json::extract_string(object, "id");
+    const auto song_id = json::extract_string(object, "songId");
+    const auto difficulty_name = json::extract_string(object, "difficultyName");
     if (!id.has_value() || !song_id.has_value() || !difficulty_name.has_value()) {
         return std::nullopt;
     }
@@ -614,14 +391,14 @@ std::optional<remote_chart_payload> parse_remote_chart(const std::string& object
     return remote_chart_payload{
         .id = *id,
         .song_id = *song_id,
-        .key_count = extract_json_int(object, "keyCount").value_or(4),
+        .key_count = json::extract_int(object, "keyCount").value_or(4),
         .difficulty_name = *difficulty_name,
-        .level = extract_json_float(object, "level").value_or(0.0f),
-        .chart_author = extract_json_string(object, "chartAuthor").value_or(""),
-        .format_version = extract_json_int(object, "formatVersion").value_or(0),
-        .resolution = extract_json_int(object, "resolution").value_or(0),
-        .offset = extract_json_int(object, "offset").value_or(0),
-        .content_source = extract_json_string(object, "contentSource").value_or("community"),
+        .level = json::extract_float(object, "level").value_or(0.0f),
+        .chart_author = json::extract_string(object, "chartAuthor").value_or(""),
+        .format_version = json::extract_int(object, "formatVersion").value_or(0),
+        .resolution = json::extract_int(object, "resolution").value_or(0),
+        .offset = json::extract_int(object, "offset").value_or(0),
+        .content_source = json::extract_string(object, "contentSource").value_or("community"),
     };
 }
 
@@ -642,13 +419,13 @@ remote_song_fetch_result fetch_remote_songs(const std::string& server_url) {
             return result;
         }
 
-        const std::optional<std::string> items_array = extract_json_array(response.body, "items");
+        const std::optional<std::string> items_array = json::extract_array(response.body, "items");
         if (!items_array.has_value()) {
             result.error_message = "raythm-Server returned an unexpected song catalog response.";
             return result;
         }
 
-        const std::vector<std::string> objects = extract_json_objects_from_array(*items_array);
+        const std::vector<std::string> objects = json::extract_objects_from_array(*items_array);
         for (const std::string& object : objects) {
             const auto song = parse_remote_song(object);
             if (song.has_value()) {
@@ -656,7 +433,7 @@ remote_song_fetch_result fetch_remote_songs(const std::string& server_url) {
             }
         }
 
-        total = extract_json_int(response.body, "total").value_or(static_cast<int>(result.songs.size()));
+        total = json::extract_int(response.body, "total").value_or(static_cast<int>(result.songs.size()));
         if (result.songs.empty() || static_cast<int>(result.songs.size()) >= total ||
             static_cast<int>(objects.size()) < kRemotePageSize) {
             break;
@@ -688,13 +465,13 @@ remote_song_page_fetch_result fetch_remote_song_page_from_server(const std::stri
         return result;
     }
 
-    const std::optional<std::string> items_array = extract_json_array(response.body, "items");
+    const std::optional<std::string> items_array = json::extract_array(response.body, "items");
     if (!items_array.has_value()) {
         result.error_message = "raythm-Server returned an unexpected song catalog response.";
         return result;
     }
 
-    const std::vector<std::string> objects = extract_json_objects_from_array(*items_array);
+    const std::vector<std::string> objects = json::extract_objects_from_array(*items_array);
     for (const std::string& object : objects) {
         const auto song = parse_remote_song(object);
         if (song.has_value()) {
@@ -702,7 +479,7 @@ remote_song_page_fetch_result fetch_remote_song_page_from_server(const std::stri
         }
     }
 
-    result.total = extract_json_int(response.body, "total").value_or(static_cast<int>(result.songs.size()));
+    result.total = json::extract_int(response.body, "total").value_or(static_cast<int>(result.songs.size()));
     result.success = true;
     return result;
 }
@@ -724,13 +501,13 @@ remote_chart_fetch_result fetch_remote_charts(const std::string& server_url) {
             return result;
         }
 
-        const std::optional<std::string> items_array = extract_json_array(response.body, "items");
+        const std::optional<std::string> items_array = json::extract_array(response.body, "items");
         if (!items_array.has_value()) {
             result.error_message = "raythm-Server returned an unexpected chart catalog response.";
             return result;
         }
 
-        const std::vector<std::string> objects = extract_json_objects_from_array(*items_array);
+        const std::vector<std::string> objects = json::extract_objects_from_array(*items_array);
         for (const std::string& object : objects) {
             const auto chart = parse_remote_chart(object);
             if (chart.has_value()) {
@@ -738,7 +515,7 @@ remote_chart_fetch_result fetch_remote_charts(const std::string& server_url) {
             }
         }
 
-        total = extract_json_int(response.body, "total").value_or(static_cast<int>(result.charts.size()));
+        total = json::extract_int(response.body, "total").value_or(static_cast<int>(result.charts.size()));
         if (result.charts.empty() || static_cast<int>(result.charts.size()) >= total ||
             static_cast<int>(objects.size()) < kRemotePageSize) {
             break;
@@ -771,13 +548,13 @@ remote_chart_page_fetch_result fetch_remote_chart_page_from_server(const std::st
         return result;
     }
 
-    const std::optional<std::string> items_array = extract_json_array(response.body, "items");
+    const std::optional<std::string> items_array = json::extract_array(response.body, "items");
     if (!items_array.has_value()) {
         result.error_message = "raythm-Server returned an unexpected chart catalog response.";
         return result;
     }
 
-    const std::vector<std::string> objects = extract_json_objects_from_array(*items_array);
+    const std::vector<std::string> objects = json::extract_objects_from_array(*items_array);
     for (const std::string& object : objects) {
         const auto chart = parse_remote_chart(object);
         if (chart.has_value()) {
@@ -785,7 +562,7 @@ remote_chart_page_fetch_result fetch_remote_chart_page_from_server(const std::st
         }
     }
 
-    result.total = extract_json_int(response.body, "total").value_or(static_cast<int>(result.charts.size()));
+    result.total = json::extract_int(response.body, "total").value_or(static_cast<int>(result.charts.size()));
     result.success = true;
     return result;
 }
@@ -810,52 +587,20 @@ remote_song_lookup_result fetch_remote_song_by_id_from_server(const std::string&
         return result;
     }
 
-    const auto start = find_value_start(response.body, "song");
-    if (!start.has_value() || response.body[*start] != '{') {
+    const auto song_object = json::extract_object(response.body, "song");
+    if (!song_object.has_value()) {
         result.error_message = "raythm-Server returned an unexpected song detail response.";
         return result;
     }
 
-    size_t depth = 0;
-    bool in_string = false;
-    bool escaping = false;
-    for (size_t index = *start; index < response.body.size(); ++index) {
-        const char ch = response.body[index];
-        if (in_string) {
-            if (escaping) {
-                escaping = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaping = true;
-            } else if (ch == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-
-        if (ch == '"') {
-            in_string = true;
-            continue;
-        }
-        if (ch == '{') {
-            ++depth;
-        } else if (ch == '}') {
-            --depth;
-            if (depth == 0) {
-                const auto song = parse_remote_song(response.body.substr(*start, index - *start + 1));
-                if (!song.has_value()) {
-                    result.error_message = "raythm-Server returned an unexpected song detail response.";
-                    return result;
-                }
-                result.song = *song;
-                result.success = true;
-                return result;
-            }
-        }
+    const auto song = parse_remote_song(*song_object);
+    if (!song.has_value()) {
+        result.error_message = "raythm-Server returned an unexpected song detail response.";
+        return result;
     }
 
-    result.error_message = "raythm-Server returned an unexpected song detail response.";
+    result.song = *song;
+    result.success = true;
     return result;
 }
 

@@ -1,6 +1,10 @@
 #include "shared/auth_overlay_controller.h"
 
 #include <chrono>
+#include <exception>
+#include <future>
+#include <thread>
+#include <utility>
 
 #include "core/window_dialog_support.h"
 
@@ -8,6 +12,26 @@ namespace {
 
 std::string register_web_url() {
     return auth::normalize_server_url(auth::kDefaultServerUrl) + "/register";
+}
+
+template <typename Fn>
+std::future<auth::operation_result> start_auth_task(Fn task) {
+    std::promise<auth::operation_result> promise;
+    std::future<auth::operation_result> future = promise.get_future();
+    std::thread([promise = std::move(promise), task = std::move(task)]() mutable {
+        auth::operation_result result;
+        try {
+            result = task();
+        } catch (const std::exception& ex) {
+            result.success = false;
+            result.message = ex.what();
+        } catch (...) {
+            result.success = false;
+            result.message = "Authentication request failed.";
+        }
+        promise.set_value(std::move(result));
+    }).detach();
+    return future;
 }
 
 }  // namespace
@@ -24,7 +48,7 @@ void refresh_auth_state(song_select::auth_state& auth_state) {
 
 void start_restore(controller& controller_state, song_select::login_dialog_state&) {
     controller_state.restore_active = true;
-    controller_state.restore_future = std::async(std::launch::async, []() {
+    controller_state.restore_future = start_auth_task([]() {
         return auth::restore_saved_session();
     });
 }
@@ -54,19 +78,19 @@ void start_request(controller& controller_state,
     switch (command) {
     case song_select::login_dialog_command::request_restore:
         dialog_state.status_message = "Restoring session...";
-        controller_state.request_future = std::async(std::launch::async, []() {
+        controller_state.request_future = start_auth_task([]() {
             return auth::restore_saved_session();
         });
         break;
     case song_select::login_dialog_command::request_login:
         dialog_state.status_message = "Connecting to raythm-Server...";
-        controller_state.request_future = std::async(std::launch::async, [server_url, email, password]() {
+        controller_state.request_future = start_auth_task([server_url, email, password]() {
             return auth::login_user(server_url, email, password);
         });
         break;
     case song_select::login_dialog_command::request_logout:
         dialog_state.status_message = "Logging out...";
-        controller_state.request_future = std::async(std::launch::async, []() {
+        controller_state.request_future = start_auth_task([]() {
             return auth::logout_saved_session();
         });
         break;

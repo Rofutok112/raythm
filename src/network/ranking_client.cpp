@@ -1,11 +1,12 @@
 #include "network/ranking_client.h"
 
-#include <cctype>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include "network/json_helpers.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -13,6 +14,7 @@
 #endif
 
 namespace {
+namespace json = network::json;
 
 struct http_response {
     int status_code = 0;
@@ -33,304 +35,6 @@ constexpr int kConnectTimeoutMs = 5000;
 constexpr int kSendTimeoutMs = 5000;
 constexpr int kReceiveTimeoutMs = 5000;
 #endif
-
-std::string trim(std::string_view value) {
-    size_t start = 0;
-    while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
-        ++start;
-    }
-
-    size_t end = value.size();
-    while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1]))) {
-        --end;
-    }
-
-    return std::string(value.substr(start, end - start));
-}
-
-std::string escape_json_string(const std::string& value) {
-    std::string result;
-    result.reserve(value.size() + 8);
-    for (const char ch : value) {
-        switch (ch) {
-            case '\\': result += "\\\\"; break;
-            case '"': result += "\\\""; break;
-            case '\n': result += "\\n"; break;
-            case '\r': result += "\\r"; break;
-            case '\t': result += "\\t"; break;
-            default: result += ch; break;
-        }
-    }
-    return result;
-}
-
-std::optional<size_t> find_json_key(const std::string& content, const std::string& key) {
-    const std::string token = "\"" + key + "\"";
-    const size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
-        return std::nullopt;
-    }
-    return key_pos + token.size();
-}
-
-std::optional<size_t> find_value_start(const std::string& content, const std::string& key) {
-    const auto key_end = find_json_key(content, key);
-    if (!key_end.has_value()) {
-        return std::nullopt;
-    }
-
-    const size_t colon_pos = content.find(':', *key_end);
-    if (colon_pos == std::string::npos) {
-        return std::nullopt;
-    }
-
-    size_t start = colon_pos + 1;
-    while (start < content.size() && std::isspace(static_cast<unsigned char>(content[start]))) {
-        ++start;
-    }
-
-    if (start >= content.size()) {
-        return std::nullopt;
-    }
-
-    return start;
-}
-
-std::optional<std::string> extract_json_string(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '"') {
-        return std::nullopt;
-    }
-
-    std::string result;
-    bool escaping = false;
-    for (size_t index = *start_opt + 1; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (escaping) {
-            switch (ch) {
-                case 'n': result += '\n'; break;
-                case 'r': result += '\r'; break;
-                case 't': result += '\t'; break;
-                default: result += ch; break;
-            }
-            escaping = false;
-            continue;
-        }
-
-        if (ch == '\\') {
-            escaping = true;
-            continue;
-        }
-
-        if (ch == '"') {
-            return result;
-        }
-
-        result += ch;
-    }
-
-    return std::nullopt;
-}
-
-std::optional<std::string> extract_json_object(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '{') {
-        return std::nullopt;
-    }
-
-    size_t depth = 0;
-    bool in_string = false;
-    bool escaping = false;
-    for (size_t index = *start_opt; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (in_string) {
-            if (escaping) {
-                escaping = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaping = true;
-            } else if (ch == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-
-        if (ch == '"') {
-            in_string = true;
-            continue;
-        }
-
-        if (ch == '{') {
-            ++depth;
-        } else if (ch == '}') {
-            --depth;
-            if (depth == 0) {
-                return content.substr(*start_opt, index - *start_opt + 1);
-            }
-        }
-    }
-
-    return std::nullopt;
-}
-
-std::optional<bool> extract_json_bool(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value()) {
-        return std::nullopt;
-    }
-
-    if (content.compare(*start_opt, 4, "true") == 0) {
-        return true;
-    }
-
-    if (content.compare(*start_opt, 5, "false") == 0) {
-        return false;
-    }
-
-    return std::nullopt;
-}
-
-std::optional<int> extract_json_int(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value()) {
-        return std::nullopt;
-    }
-
-    size_t end = *start_opt;
-    if (content[end] == '-') {
-        ++end;
-    }
-    while (end < content.size() && std::isdigit(static_cast<unsigned char>(content[end]))) {
-        ++end;
-    }
-    if (end == *start_opt) {
-        return std::nullopt;
-    }
-
-    try {
-        return std::stoi(content.substr(*start_opt, end - *start_opt));
-    } catch (...) {
-        return std::nullopt;
-    }
-}
-
-std::optional<float> extract_json_float(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value()) {
-        return std::nullopt;
-    }
-
-    size_t end = *start_opt;
-    if (content[end] == '-') {
-        ++end;
-    }
-    while (end < content.size()) {
-        const char ch = content[end];
-        if (!(std::isdigit(static_cast<unsigned char>(ch)) || ch == '.')) {
-            break;
-        }
-        ++end;
-    }
-    if (end == *start_opt) {
-        return std::nullopt;
-    }
-
-    try {
-        return std::stof(content.substr(*start_opt, end - *start_opt));
-    } catch (...) {
-        return std::nullopt;
-    }
-}
-
-std::optional<std::string> extract_json_array(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '[') {
-        return std::nullopt;
-    }
-
-    size_t depth = 0;
-    bool in_string = false;
-    bool escaping = false;
-    for (size_t index = *start_opt; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (in_string) {
-            if (escaping) {
-                escaping = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaping = true;
-            } else if (ch == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-
-        if (ch == '"') {
-            in_string = true;
-            continue;
-        }
-
-        if (ch == '[') {
-            ++depth;
-        } else if (ch == ']') {
-            --depth;
-            if (depth == 0) {
-                return content.substr(*start_opt, index - *start_opt + 1);
-            }
-        }
-    }
-
-    return std::nullopt;
-}
-
-std::vector<std::string> extract_json_objects_from_array(const std::string& content) {
-    std::vector<std::string> objects;
-    bool in_string = false;
-    bool escaping = false;
-    size_t object_start = std::string::npos;
-    size_t depth = 0;
-
-    for (size_t index = 0; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (in_string) {
-            if (escaping) {
-                escaping = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaping = true;
-            } else if (ch == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-
-        if (ch == '"') {
-            in_string = true;
-            continue;
-        }
-
-        if (ch == '{') {
-            if (depth == 0) {
-                object_start = index;
-            }
-            ++depth;
-        } else if (ch == '}') {
-            if (depth == 0) {
-                continue;
-            }
-            --depth;
-            if (depth == 0 && object_start != std::string::npos) {
-                objects.push_back(content.substr(object_start, index - object_start + 1));
-                object_start = std::string::npos;
-            }
-        }
-    }
-
-    return objects;
-}
 
 #ifdef _WIN32
 std::wstring to_wstring(std::string_view value) {
@@ -512,18 +216,18 @@ http_response send_request(const std::string&,
 
 std::optional<ranking_service::entry> parse_ranking_entry(const std::string& content) {
     std::string player_display_name;
-    if (const auto player_object = extract_json_object(content, "player"); player_object.has_value()) {
-        player_display_name = extract_json_string(*player_object, "display_name").value_or("");
+    if (const auto player_object = json::extract_object(content, "player"); player_object.has_value()) {
+        player_display_name = json::extract_string(*player_object, "display_name").value_or("");
     }
 
-    const auto placement = extract_json_int(content, "placement");
-    const auto accuracy = extract_json_float(content, "accuracy");
-    const auto is_full_combo = extract_json_bool(content, "is_full_combo");
-    const auto max_combo = extract_json_int(content, "max_combo");
-    const auto score = extract_json_int(content, "score");
-    const auto recorded_at = extract_json_string(content, "recorded_at");
-    const auto verified = extract_json_bool(content, "verified");
-    const std::string clear_rank_label = extract_json_string(content, "clear_rank").value_or("");
+    const auto placement = json::extract_int(content, "placement");
+    const auto accuracy = json::extract_float(content, "accuracy");
+    const auto is_full_combo = json::extract_bool(content, "is_full_combo");
+    const auto max_combo = json::extract_int(content, "max_combo");
+    const auto score = json::extract_int(content, "score");
+    const auto recorded_at = json::extract_string(content, "recorded_at");
+    const auto verified = json::extract_bool(content, "verified");
+    const std::string clear_rank_label = json::extract_string(content, "clear_rank").value_or("");
     if (!placement.has_value() ||
         !accuracy.has_value() ||
         !is_full_combo.has_value() ||
@@ -561,19 +265,19 @@ std::optional<ranking_service::entry> parse_ranking_entry(const std::string& con
 }
 
 std::optional<ranking_client::listing_response> parse_listing_response(const std::string& body) {
-    const bool available = extract_json_bool(body, "available").value_or(false);
-    const std::string message = extract_json_string(body, "message").value_or("");
+    const bool available = json::extract_bool(body, "available").value_or(false);
+    const std::string message = json::extract_string(body, "message").value_or("");
 
     ranking_client::listing_response listing;
     listing.available = available;
     listing.message = message;
 
-    const std::optional<std::string> entries_array = extract_json_array(body, "entries");
+    const std::optional<std::string> entries_array = json::extract_array(body, "entries");
     if (!entries_array.has_value()) {
         return listing;
     }
 
-    for (const std::string& object : extract_json_objects_from_array(*entries_array)) {
+    for (const std::string& object : json::extract_objects_from_array(*entries_array)) {
         const auto entry = parse_ranking_entry(object);
         if (entry.has_value()) {
             listing.entries.push_back(*entry);
@@ -629,19 +333,19 @@ std::string build_submit_payload(const result_data& result,
                                  const std::string& recorded_at,
                                  const std::string& ruleset_version) {
     return "{"
-        "\"recorded_at\":\"" + escape_json_string(recorded_at) + "\","
-        "\"ruleset_version\":\"" + escape_json_string(ruleset_version) + "\","
+        "\"recorded_at\":\"" + json::escape_string(recorded_at) + "\","
+        "\"ruleset_version\":\"" + json::escape_string(ruleset_version) + "\","
         "\"note_results\":" + build_note_results_json(result.note_results) +
         "}";
 }
 
 std::optional<ranking_client::submit_response> parse_submit_response(const std::string& body) {
     ranking_client::submit_response response;
-    response.available = extract_json_bool(body, "available").value_or(true);
-    response.updated = extract_json_bool(body, "updated").value_or(false);
-    response.message = extract_json_string(body, "message").value_or("");
+    response.available = json::extract_bool(body, "available").value_or(true);
+    response.updated = json::extract_bool(body, "updated").value_or(false);
+    response.message = json::extract_string(body, "message").value_or("");
 
-    if (const auto entry_object = extract_json_object(body, "entry"); entry_object.has_value()) {
+    if (const auto entry_object = json::extract_object(body, "entry"); entry_object.has_value()) {
         response.entry = parse_ranking_entry(*entry_object);
     }
 
@@ -649,54 +353,54 @@ std::optional<ranking_client::submit_response> parse_submit_response(const std::
 }
 
 std::optional<ranking_client::official_manifest> parse_official_manifest_response(const std::string& body) {
-    const auto available = extract_json_bool(body, "available");
-    const auto chart_id = extract_json_string(body, "chart_id");
-    const auto song_id = extract_json_string(body, "song_id");
+    const auto available = json::extract_bool(body, "available");
+    const auto chart_id = json::extract_string(body, "chart_id");
+    const auto song_id = json::extract_string(body, "song_id");
     if (!available.has_value() || !chart_id.has_value() || !song_id.has_value()) {
         return std::nullopt;
     }
 
     return ranking_client::official_manifest{
         .available = *available,
-        .message = extract_json_string(body, "message").value_or(""),
+        .message = json::extract_string(body, "message").value_or(""),
         .chart_id = *chart_id,
         .song_id = *song_id,
-        .song_json_sha256 = extract_json_string(body, "song_json_sha256").value_or(""),
-        .audio_sha256 = extract_json_string(body, "audio_sha256").value_or(""),
-        .jacket_sha256 = extract_json_string(body, "jacket_sha256").value_or(""),
-        .chart_sha256 = extract_json_string(body, "chart_sha256").value_or(""),
+        .song_json_sha256 = json::extract_string(body, "song_json_sha256").value_or(""),
+        .audio_sha256 = json::extract_string(body, "audio_sha256").value_or(""),
+        .jacket_sha256 = json::extract_string(body, "jacket_sha256").value_or(""),
+        .chart_sha256 = json::extract_string(body, "chart_sha256").value_or(""),
     };
 }
 
 std::optional<ranking_client::scoring_ruleset> parse_scoring_ruleset_response(const std::string& body) {
-    const auto active = extract_json_bool(body, "active");
-    const auto accepted_input = extract_json_string(body, "accepted_input");
-    const auto ruleset_version = extract_json_string(body, "ruleset_version");
-    const auto score_model = extract_json_string(body, "score_model");
-    const auto max_score = extract_json_int(body, "max_score");
-    const auto judges_object = extract_json_object(body, "judges");
-    const auto thresholds_array = extract_json_array(body, "rank_thresholds");
+    const auto active = json::extract_bool(body, "active");
+    const auto accepted_input = json::extract_string(body, "accepted_input");
+    const auto ruleset_version = json::extract_string(body, "ruleset_version");
+    const auto score_model = json::extract_string(body, "score_model");
+    const auto max_score = json::extract_int(body, "max_score");
+    const auto judges_object = json::extract_object(body, "judges");
+    const auto thresholds_array = json::extract_array(body, "rank_thresholds");
     if (!active.has_value() || !accepted_input.has_value() || !ruleset_version.has_value() ||
         !score_model.has_value() || !max_score.has_value() ||
         !judges_object.has_value() || !thresholds_array.has_value()) {
         return std::nullopt;
     }
 
-    const auto perfect = extract_json_int(*judges_object, "perfect");
-    const auto great = extract_json_int(*judges_object, "great");
-    const auto good = extract_json_int(*judges_object, "good");
-    const auto bad = extract_json_int(*judges_object, "bad");
-    const auto miss = extract_json_int(*judges_object, "miss");
+    const auto perfect = json::extract_int(*judges_object, "perfect");
+    const auto great = json::extract_int(*judges_object, "great");
+    const auto good = json::extract_int(*judges_object, "good");
+    const auto bad = json::extract_int(*judges_object, "bad");
+    const auto miss = json::extract_int(*judges_object, "miss");
     if (!perfect.has_value() || !great.has_value() || !good.has_value() ||
         !bad.has_value() || !miss.has_value()) {
         return std::nullopt;
     }
 
     std::vector<scoring_ruleset_runtime::rank_threshold> rank_thresholds;
-    for (const std::string& object : extract_json_objects_from_array(*thresholds_array)) {
-        const auto rank_label = extract_json_string(object, "rank");
-        const auto min_accuracy = extract_json_float(object, "min_accuracy");
-        const auto requires_full_combo = extract_json_bool(object, "requires_full_combo");
+    for (const std::string& object : json::extract_objects_from_array(*thresholds_array)) {
+        const auto rank_label = json::extract_string(object, "rank");
+        const auto min_accuracy = json::extract_float(object, "min_accuracy");
+        const auto requires_full_combo = json::extract_bool(object, "requires_full_combo");
         if (!rank_label.has_value() || !min_accuracy.has_value() || !requires_full_combo.has_value()) {
             return std::nullopt;
         }
@@ -791,7 +495,7 @@ operation_result fetch_chart_ranking(const std::string& server_url,
         return {
             .success = false,
             .unauthorized = false,
-            .message = extract_json_string(response.body, "message").value_or("Failed to load online rankings."),
+            .message = json::extract_string(response.body, "message").value_or("Failed to load online rankings."),
             .listing = std::nullopt,
         };
     }
@@ -871,7 +575,7 @@ submit_operation_result submit_chart_ranking(const std::string& server_url,
         return {
             .success = false,
             .unauthorized = false,
-            .message = extract_json_string(response.body, "message").value_or("Failed to submit online ranking."),
+            .message = json::extract_string(response.body, "message").value_or("Failed to submit online ranking."),
             .submission = std::nullopt,
         };
     }
@@ -922,7 +626,7 @@ scoring_ruleset_operation_result fetch_scoring_ruleset(const std::string& server
     if (response.status_code < 200 || response.status_code >= 300) {
         return {
             .success = false,
-            .message = extract_json_string(response.body, "message").value_or("Failed to fetch scoring ruleset."),
+            .message = json::extract_string(response.body, "message").value_or("Failed to fetch scoring ruleset."),
             .ruleset = std::nullopt,
         };
     }
@@ -972,7 +676,7 @@ manifest_operation_result fetch_official_chart_manifest(const std::string& serve
     if (response.status_code < 200 || response.status_code >= 300) {
         return {
             .success = false,
-            .message = extract_json_string(response.body, "message").value_or("Failed to fetch official manifest."),
+            .message = json::extract_string(response.body, "message").value_or("Failed to fetch official manifest."),
             .manifest = std::nullopt,
         };
     }

@@ -1,10 +1,12 @@
 #pragma once
 
 #include "scene.h"
+#include "ranking_service.h"
 #include "shared/auth_overlay_controller.h"
 #include "song_select/song_catalog_service.h"
 #include "shared/scene_fade.h"
 #include "song_select/song_select_state.h"
+#include "title/create_upload_client.h"
 #include "title/online_download_view.h"
 #include "title/title_audio_controller.h"
 #include <future>
@@ -60,6 +62,15 @@ private:
                                      std::string preferred_chart_id = "",
                                      bool sync_media_on_apply = false);
     void poll_play_catalog_reload();
+    void sync_play_media();
+    void request_play_ranking_reload();
+    void poll_play_ranking_reload();
+    void request_scoring_ruleset_warm(bool force_refresh = false);
+    void poll_scoring_ruleset_warm();
+    void start_song_upload(const song_select::song_entry& song);
+    void start_chart_upload(const song_select::song_entry& song,
+                            const song_select::chart_option& chart);
+    void poll_create_upload();
     void update_home_pointer_suppression();
     bool handle_title_input(bool left_click_for_home, bool right_click_for_home);
     bool handle_home_input();
@@ -91,6 +102,15 @@ private:
     song_select::state play_state_;
     std::future<song_select::catalog_data> play_catalog_future_;
     bool play_catalog_loading_ = false;
+    std::future<title_create_upload::upload_result> create_upload_future_;
+    bool create_upload_in_progress_ = false;
+    std::future<ranking_service::listing> play_ranking_future_;
+    bool play_ranking_loading_ = false;
+    bool play_ranking_reload_pending_ = false;
+    int play_ranking_generation_ = 0;
+    int play_ranking_pending_generation_ = 0;
+    std::future<bool> scoring_ruleset_future_;
+    bool scoring_ruleset_loading_ = false;
     bool play_catalog_reload_pending_ = false;
     bool play_catalog_sync_media_on_apply_ = false;
     bool queued_play_catalog_sync_media_on_apply_ = false;

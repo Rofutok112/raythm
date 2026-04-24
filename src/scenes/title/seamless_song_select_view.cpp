@@ -31,8 +31,8 @@ constexpr Rectangle kPlayRankingHeaderRect = {878.0f, 102.0f, 338.0f, 36.0f};
 constexpr Rectangle kPlayRankingSourceLocalRect = {1034.0f, 98.0f, 86.0f, 34.0f};
 constexpr Rectangle kPlayRankingSourceOnlineRect = {1126.0f, 98.0f, 90.0f, 34.0f};
 constexpr Rectangle kPlayRankingListRect = {878.0f, 150.0f, 338.0f, 468.0f};
-constexpr float kCreateToolButtonHeight = 54.0f;
-constexpr float kCreateToolButtonGap = 12.0f;
+constexpr float kCreateToolButtonHeight = 48.0f;
+constexpr float kCreateToolButtonGap = 8.0f;
 constexpr int kPlaySongContextMenuItemCount = 1;
 
 Rectangle delete_song_menu_item_rect(Rectangle menu_rect) {
@@ -182,13 +182,17 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
             {list_rect.x, list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * 3.0f, list_rect.width, kCreateToolButtonHeight},
             {list_rect.x, list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * 4.0f, list_rect.width, kCreateToolButtonHeight},
             {list_rect.x, list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * 5.0f, list_rect.width, kCreateToolButtonHeight},
+            {list_rect.x, list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * 6.0f, list_rect.width, kCreateToolButtonHeight},
+            {list_rect.x, list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * 7.0f, list_rect.width, kCreateToolButtonHeight},
         };
         if (CheckCollisionPointRec(mouse, tools[0])) { result.create_song_requested = true; return result; }
         if (CheckCollisionPointRec(mouse, tools[1])) { result.edit_song_requested = true; return result; }
-        if (CheckCollisionPointRec(mouse, tools[2])) { result.create_chart_requested = true; return result; }
-        if (CheckCollisionPointRec(mouse, tools[3])) { result.edit_chart_requested = true; return result; }
-        if (CheckCollisionPointRec(mouse, tools[4])) { result.edit_mv_requested = true; return result; }
-        if (CheckCollisionPointRec(mouse, tools[5])) { result.manage_library_requested = true; return result; }
+        if (CheckCollisionPointRec(mouse, tools[2])) { result.upload_song_requested = true; return result; }
+        if (CheckCollisionPointRec(mouse, tools[3])) { result.create_chart_requested = true; return result; }
+        if (CheckCollisionPointRec(mouse, tools[4])) { result.edit_chart_requested = true; return result; }
+        if (CheckCollisionPointRec(mouse, tools[5])) { result.upload_chart_requested = true; return result; }
+        if (CheckCollisionPointRec(mouse, tools[6])) { result.edit_mv_requested = true; return result; }
+        if (CheckCollisionPointRec(mouse, tools[7])) { result.manage_library_requested = true; return result; }
     }
 
     if (left_pressed) {
@@ -394,12 +398,14 @@ void draw(const song_select::state& state,
         const struct tool_entry { const char* title; const char* detail; } entries[] = {
             {"NEW SONG", "Start a new song package."},
             {"EDIT SONG", "Edit selected song metadata."},
+            {"UPLOAD SONG", "Publish selected song to Community."},
             {"NEW CHART", "Open editor for a new chart."},
             {"EDIT CHART", "Open selected chart in editor."},
+            {"UPLOAD CHART", "Publish selected chart to Community."},
             {"MV EDITOR", "Open MV editor for song."},
             {"MANAGE", "Import / export with legacy tools."},
         };
-        for (int i = 0; i < 6; ++i) {
+        for (int i = 0; i < 8; ++i) {
             const Rectangle rect = {
                 current.ranking_list_rect.x,
                 current.ranking_list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * static_cast<float>(i),
@@ -411,10 +417,10 @@ void draw(const song_select::state& state,
             DrawRectangleRec(rect, with_alpha(button_base, row_alpha));
             DrawRectangleLinesEx(rect, 1.2f, with_alpha(t.border, row_alpha));
             ui::draw_text_in_rect(entries[i].title, 18,
-                                  {rect.x + 14.0f, rect.y + 8.0f, rect.width - 28.0f, 20.0f},
+                                  {rect.x + 14.0f, rect.y + 6.0f, rect.width - 28.0f, 20.0f},
                                   with_alpha(t.text, alpha), ui::text_align::left);
             ui::draw_text_in_rect(entries[i].detail, 12,
-                                  {rect.x + 14.0f, rect.y + 30.0f, rect.width - 28.0f, 16.0f},
+                                  {rect.x + 14.0f, rect.y + 26.0f, rect.width - 28.0f, 16.0f},
                                   with_alpha(t.text_muted, alpha), ui::text_align::left);
         }
     }

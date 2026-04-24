@@ -1,6 +1,5 @@
 #include "network/auth_client.h"
 
-#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -12,6 +11,7 @@
 #include <vector>
 
 #include "app_paths.h"
+#include "network/json_helpers.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -20,6 +20,7 @@
 
 namespace {
 namespace fs = std::filesystem;
+namespace json = network::json;
 
 struct http_response {
     int status_code = 0;
@@ -41,36 +42,6 @@ constexpr int kSendTimeoutMs = 5000;
 constexpr int kReceiveTimeoutMs = 5000;
 #endif
 
-std::string trim(std::string_view value) {
-    size_t start = 0;
-    while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
-        ++start;
-    }
-
-    size_t end = value.size();
-    while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1]))) {
-        --end;
-    }
-
-    return std::string(value.substr(start, end - start));
-}
-
-std::string escape_json_string(const std::string& value) {
-    std::string result;
-    result.reserve(value.size() + 8);
-    for (const char ch : value) {
-        switch (ch) {
-            case '\\': result += "\\\\"; break;
-            case '"': result += "\\\""; break;
-            case '\n': result += "\\n"; break;
-            case '\r': result += "\\r"; break;
-            case '\t': result += "\\t"; break;
-            default: result += ch; break;
-        }
-    }
-    return result;
-}
-
 std::string read_file(const fs::path& path) {
     std::ifstream input(path, std::ios::binary);
     if (!input.is_open()) {
@@ -82,145 +53,18 @@ std::string read_file(const fs::path& path) {
     return buffer.str();
 }
 
-std::optional<size_t> find_json_key(const std::string& content, const std::string& key) {
-    const std::string token = "\"" + key + "\"";
-    const size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
-        return std::nullopt;
-    }
-    return key_pos + token.size();
-}
-
-std::optional<size_t> find_value_start(const std::string& content, const std::string& key) {
-    const auto key_end = find_json_key(content, key);
-    if (!key_end.has_value()) {
-        return std::nullopt;
-    }
-
-    const size_t colon_pos = content.find(':', *key_end);
-    if (colon_pos == std::string::npos) {
-        return std::nullopt;
-    }
-
-    size_t start = colon_pos + 1;
-    while (start < content.size() && std::isspace(static_cast<unsigned char>(content[start]))) {
-        ++start;
-    }
-
-    if (start >= content.size()) {
-        return std::nullopt;
-    }
-
-    return start;
-}
-
-std::optional<std::string> extract_json_string(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '"') {
-        return std::nullopt;
-    }
-
-    std::string result;
-    bool escaping = false;
-    for (size_t index = *start_opt + 1; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (escaping) {
-            switch (ch) {
-                case 'n': result += '\n'; break;
-                case 'r': result += '\r'; break;
-                case 't': result += '\t'; break;
-                default: result += ch; break;
-            }
-            escaping = false;
-            continue;
-        }
-
-        if (ch == '\\') {
-            escaping = true;
-            continue;
-        }
-
-        if (ch == '"') {
-            return result;
-        }
-
-        result += ch;
-    }
-
-    return std::nullopt;
-}
-
-std::optional<std::string> extract_json_object(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '{') {
-        return std::nullopt;
-    }
-
-    size_t depth = 0;
-    bool in_string = false;
-    bool escaping = false;
-    for (size_t index = *start_opt; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (in_string) {
-            if (escaping) {
-                escaping = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaping = true;
-            } else if (ch == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-
-        if (ch == '"') {
-            in_string = true;
-            continue;
-        }
-
-        if (ch == '{') {
-            ++depth;
-        } else if (ch == '}') {
-            --depth;
-            if (depth == 0) {
-                return content.substr(*start_opt, index - *start_opt + 1);
-            }
-        }
-    }
-
-    return std::nullopt;
-}
-
-std::optional<bool> extract_json_bool(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value()) {
-        return std::nullopt;
-    }
-
-    if (content.compare(*start_opt, 4, "true") == 0) {
-        return true;
-    }
-
-    if (content.compare(*start_opt, 5, "false") == 0) {
-        return false;
-    }
-
-    return std::nullopt;
-}
-
 std::optional<auth::public_user> parse_user_object(const std::string& content) {
-    const std::optional<std::string> id = extract_json_string(content, "id");
-    std::optional<std::string> email = extract_json_string(content, "email");
+    const std::optional<std::string> id = json::extract_string(content, "id");
+    std::optional<std::string> email = json::extract_string(content, "email");
     if (!email.has_value()) {
-        email = extract_json_string(content, "username");
+        email = json::extract_string(content, "username");
     }
-    const std::optional<std::string> display_name = extract_json_string(content, "displayName");
+    const std::optional<std::string> display_name = json::extract_string(content, "displayName");
     if (!id.has_value() || !email.has_value() || !display_name.has_value()) {
         return std::nullopt;
     }
 
-    const bool email_verified = extract_json_bool(content, "emailVerified").value_or(false);
+    const bool email_verified = json::extract_bool(content, "emailVerified").value_or(false);
 
     return auth::public_user{
         .id = *id,
@@ -231,9 +75,9 @@ std::optional<auth::public_user> parse_user_object(const std::string& content) {
 }
 
 std::optional<auth::session> parse_auth_session_response(const std::string& body, const std::string& server_url) {
-    const std::optional<std::string> access_token = extract_json_string(body, "accessToken");
-    const std::optional<std::string> refresh_token = extract_json_string(body, "refreshToken");
-    const std::optional<std::string> user_object = extract_json_object(body, "user");
+    const std::optional<std::string> access_token = json::extract_string(body, "accessToken");
+    const std::optional<std::string> refresh_token = json::extract_string(body, "refreshToken");
+    const std::optional<std::string> user_object = json::extract_object(body, "user");
     if (!access_token.has_value() || !refresh_token.has_value() || !user_object.has_value()) {
         return std::nullopt;
     }
@@ -252,7 +96,7 @@ std::optional<auth::session> parse_auth_session_response(const std::string& body
 }
 
 std::optional<auth::public_user> parse_me_response(const std::string& body) {
-    const std::optional<std::string> user_object = extract_json_object(body, "user");
+    const std::optional<std::string> user_object = json::extract_object(body, "user");
     if (!user_object.has_value()) {
         return std::nullopt;
     }
@@ -261,7 +105,7 @@ std::optional<auth::public_user> parse_me_response(const std::string& body) {
 }
 
 std::string parse_error_message(const std::string& body, std::string fallback) {
-    const std::optional<std::string> message = extract_json_string(body, "message");
+    const std::optional<std::string> message = json::extract_string(body, "message");
     return message.value_or(std::move(fallback));
 }
 
@@ -273,13 +117,13 @@ bool write_session_file(const auth::session& session_data) {
     }
 
     output << "{\n";
-    output << "  \"serverUrl\": \"" << escape_json_string(session_data.server_url) << "\",\n";
-    output << "  \"accessToken\": \"" << escape_json_string(session_data.access_token) << "\",\n";
-    output << "  \"refreshToken\": \"" << escape_json_string(session_data.refresh_token) << "\",\n";
+    output << "  \"serverUrl\": \"" << json::escape_string(session_data.server_url) << "\",\n";
+    output << "  \"accessToken\": \"" << json::escape_string(session_data.access_token) << "\",\n";
+    output << "  \"refreshToken\": \"" << json::escape_string(session_data.refresh_token) << "\",\n";
     output << "  \"user\": {\n";
-    output << "    \"id\": \"" << escape_json_string(session_data.user.id) << "\",\n";
-    output << "    \"email\": \"" << escape_json_string(session_data.user.email) << "\",\n";
-    output << "    \"displayName\": \"" << escape_json_string(session_data.user.display_name) << "\",\n";
+    output << "    \"id\": \"" << json::escape_string(session_data.user.id) << "\",\n";
+    output << "    \"email\": \"" << json::escape_string(session_data.user.email) << "\",\n";
+    output << "    \"displayName\": \"" << json::escape_string(session_data.user.display_name) << "\",\n";
     output << "    \"emailVerified\": " << (session_data.user.email_verified ? "true" : "false") << "\n";
     output << "  }\n";
     output << "}\n";
@@ -524,7 +368,7 @@ auth::operation_result parse_auth_response(const http_response& response,
 namespace auth {
 
 std::string normalize_server_url(const std::string& server_url) {
-    std::string normalized = trim(server_url);
+    std::string normalized = json::trim(server_url);
     while (!normalized.empty() && normalized.back() == '/') {
         normalized.pop_back();
     }
@@ -537,10 +381,10 @@ std::optional<session> load_saved_session() {
         return std::nullopt;
     }
 
-    const std::optional<std::string> server_url = extract_json_string(content, "serverUrl");
-    const std::optional<std::string> access_token = extract_json_string(content, "accessToken");
-    const std::optional<std::string> refresh_token = extract_json_string(content, "refreshToken");
-    const std::optional<std::string> user_object = extract_json_object(content, "user");
+    const std::optional<std::string> server_url = json::extract_string(content, "serverUrl");
+    const std::optional<std::string> access_token = json::extract_string(content, "accessToken");
+    const std::optional<std::string> refresh_token = json::extract_string(content, "refreshToken");
+    const std::optional<std::string> user_object = json::extract_object(content, "user");
     if (!server_url.has_value() || !access_token.has_value() || !refresh_token.has_value() || !user_object.has_value()) {
         return std::nullopt;
     }
@@ -601,12 +445,12 @@ operation_result register_user(const std::string& server_url,
         };
     }
 
-    const std::string trimmed_display_name = trim(display_name);
+    const std::string trimmed_display_name = json::trim(display_name);
     const std::string body =
         "{"
-        "\"email\":\"" + escape_json_string(trim(email)) + "\","
-        "\"displayName\":\"" + escape_json_string(trimmed_display_name) + "\","
-        "\"password\":\"" + escape_json_string(password) + "\""
+        "\"email\":\"" + json::escape_string(json::trim(email)) + "\","
+        "\"displayName\":\"" + json::escape_string(trimmed_display_name) + "\","
+        "\"password\":\"" + json::escape_string(password) + "\""
         "}";
 
     const http_response response = send_request(
@@ -636,8 +480,8 @@ operation_result login_user(const std::string& server_url,
 
     const std::string body =
         "{"
-        "\"email\":\"" + escape_json_string(trim(email)) + "\","
-        "\"password\":\"" + escape_json_string(password) + "\""
+        "\"email\":\"" + json::escape_string(json::trim(email)) + "\","
+        "\"password\":\"" + json::escape_string(password) + "\""
         "}";
 
     const http_response response = send_request(
@@ -712,7 +556,7 @@ operation_result restore_saved_session() {
 
     const std::string refresh_body =
         "{"
-        "\"refreshToken\":\"" + escape_json_string(stored->refresh_token) + "\""
+        "\"refreshToken\":\"" + json::escape_string(stored->refresh_token) + "\""
         "}";
 
     const http_response refresh_response = send_request(
@@ -780,7 +624,7 @@ operation_result logout_saved_session() {
 
     const std::string body =
         "{"
-        "\"refreshToken\":\"" + escape_json_string(stored->refresh_token) + "\""
+        "\"refreshToken\":\"" + json::escape_string(stored->refresh_token) + "\""
         "}";
 
     const http_response response = send_request(

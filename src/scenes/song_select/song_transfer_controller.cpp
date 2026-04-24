@@ -1,6 +1,9 @@
 #include "song_transfer_controller.h"
 
 #include <chrono>
+#include <exception>
+#include <future>
+#include <thread>
 #include <utility>
 
 namespace song_select::transfer {
@@ -13,28 +16,44 @@ void controller::on_exit() {
 void controller::start_song_import_prepare(const state& catalog_state, std::string source_path) {
     prepare_active_ = true;
     busy_label_ = "Reading song package...";
-    background_song_import_prepare_ = std::async(
-        std::launch::async,
-        [catalog_state, source_path = std::move(source_path)]() {
-            return prepare_song_import_from_path(catalog_state, source_path);
-        });
+    std::promise<song_import_prepare_result> promise;
+    background_song_import_prepare_ = promise.get_future();
+    std::thread([promise = std::move(promise), catalog_state, source_path = std::move(source_path)]() mutable {
+        try {
+            promise.set_value(prepare_song_import_from_path(catalog_state, source_path));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
 }
 
 void controller::start_song_export(song_export_request request) {
     transfer_active_ = true;
     busy_label_ = "Exporting song package...";
-    background_transfer_ = std::async(std::launch::async, [request = std::move(request)]() {
-        return export_song_package(request);
-    });
+    std::promise<transfer_result> promise;
+    background_transfer_ = promise.get_future();
+    std::thread([promise = std::move(promise), request = std::move(request)]() mutable {
+        try {
+            promise.set_value(export_song_package(request));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
 }
 
 void controller::start_song_import(song_import_request request) {
     transfer_active_ = true;
     busy_label_ = "Importing song package...";
     pending_song_import_request_ = request;
-    background_transfer_ = std::async(std::launch::async, [request = std::move(request)]() {
-        return import_song_package(request);
-    });
+    std::promise<transfer_result> promise;
+    background_transfer_ = promise.get_future();
+    std::thread([promise = std::move(promise), request = std::move(request)]() mutable {
+        try {
+            promise.set_value(import_song_package(request));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
 }
 
 std::optional<song_import_prepare_result> controller::poll_song_import_prepare() {
@@ -47,7 +66,19 @@ std::optional<song_import_prepare_result> controller::poll_song_import_prepare()
 
     prepare_active_ = false;
     busy_label_.clear();
-    return background_song_import_prepare_.get();
+    try {
+        return background_song_import_prepare_.get();
+    } catch (const std::exception& ex) {
+        song_import_prepare_result result;
+        result.transfer.success = false;
+        result.transfer.message = ex.what();
+        return result;
+    } catch (...) {
+        song_import_prepare_result result;
+        result.transfer.success = false;
+        result.transfer.message = "Failed to read song package.";
+        return result;
+    }
 }
 
 std::optional<transfer_result> controller::poll_background_transfer() {
@@ -60,7 +91,16 @@ std::optional<transfer_result> controller::poll_background_transfer() {
 
     transfer_active_ = false;
     busy_label_.clear();
-    transfer_result result = background_transfer_.get();
+    transfer_result result;
+    try {
+        result = background_transfer_.get();
+    } catch (const std::exception& ex) {
+        result.success = false;
+        result.message = ex.what();
+    } catch (...) {
+        result.success = false;
+        result.message = "Song transfer failed.";
+    }
     clear_pending_song_import_request(true);
     return result;
 }

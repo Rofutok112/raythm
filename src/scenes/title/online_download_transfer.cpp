@@ -3,16 +3,19 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <exception>
 #include <filesystem>
 #include <fstream>
-#include <optional>
+#include <future>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
 #include "app_paths.h"
+#include "network/json_helpers.h"
 #include "path_utils.h"
 #include "song_loader.h"
 #include "title/online_download_remote_client.h"
@@ -20,6 +23,7 @@
 
 namespace title_online_view {
 namespace {
+namespace json = network::json;
 
 struct staged_chart_file {
     std::string chart_id;
@@ -38,74 +42,6 @@ std::string trim_ascii(std::string_view value) {
     }
 
     return std::string(value.substr(start, end - start));
-}
-
-std::optional<size_t> find_json_key(const std::string& content, const std::string& key) {
-    const std::string token = "\"" + key + "\"";
-    const size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
-        return std::nullopt;
-    }
-    return key_pos + token.size();
-}
-
-std::optional<size_t> find_value_start(const std::string& content, const std::string& key) {
-    const auto key_end = find_json_key(content, key);
-    if (!key_end.has_value()) {
-        return std::nullopt;
-    }
-
-    const size_t colon_pos = content.find(':', *key_end);
-    if (colon_pos == std::string::npos) {
-        return std::nullopt;
-    }
-
-    size_t start = colon_pos + 1;
-    while (start < content.size() && std::isspace(static_cast<unsigned char>(content[start]))) {
-        ++start;
-    }
-
-    if (start >= content.size()) {
-        return std::nullopt;
-    }
-
-    return start;
-}
-
-std::optional<std::string> extract_json_string(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '"') {
-        return std::nullopt;
-    }
-
-    std::string result;
-    bool escaping = false;
-    for (size_t index = *start_opt + 1; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (escaping) {
-            switch (ch) {
-                case 'n': result += '\n'; break;
-                case 'r': result += '\r'; break;
-                case 't': result += '\t'; break;
-                default: result += ch; break;
-            }
-            escaping = false;
-            continue;
-        }
-
-        if (ch == '\\') {
-            escaping = true;
-            continue;
-        }
-
-        if (ch == '"') {
-            return result;
-        }
-
-        result += ch;
-    }
-
-    return std::nullopt;
 }
 
 bool write_binary_file(const std::filesystem::path& path,
@@ -239,8 +175,8 @@ download_song_result download_song_package(const song_entry_state song,
     finish_step();
 
     const std::string metadata_json(metadata_fetch.bytes.begin(), metadata_fetch.bytes.end());
-    const std::string audio_file = trim_ascii(extract_json_string(metadata_json, "audioFile").value_or(""));
-    const std::string jacket_file = trim_ascii(extract_json_string(metadata_json, "jacketFile").value_or(""));
+    const std::string audio_file = trim_ascii(json::extract_string(metadata_json, "audioFile").value_or(""));
+    const std::string jacket_file = trim_ascii(json::extract_string(metadata_json, "jacketFile").value_or(""));
     if (audio_file.empty()) {
         result.message = "Downloaded song metadata did not include audioFile.";
         return result;
@@ -366,9 +302,15 @@ void start_download(state& state) {
     state.download_progress = std::make_shared<download_progress_state>();
     ui::push_notice(state.notices, "Downloading song...", ui::notice_tone::info, 1.8f);
     const std::shared_ptr<download_progress_state> progress = state.download_progress;
-    state.download_future = std::async(std::launch::async, [selected, server_url, progress]() {
-        return download_song_package(selected, server_url, progress);
-    });
+    std::promise<download_song_result> promise;
+    state.download_future = promise.get_future();
+    std::thread([promise = std::move(promise), selected, server_url, progress]() mutable {
+        try {
+            promise.set_value(download_song_package(selected, server_url, progress));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
 }
 
 bool poll_download(state& state) {
@@ -379,7 +321,16 @@ bool poll_download(state& state) {
         return false;
     }
 
-    download_song_result result = state.download_future.get();
+    download_song_result result;
+    try {
+        result = state.download_future.get();
+    } catch (const std::exception& ex) {
+        result.success = false;
+        result.message = ex.what();
+    } catch (...) {
+        result.success = false;
+        result.message = "Song download failed.";
+    }
     state.download_in_progress = false;
     state.download_progress.reset();
 
