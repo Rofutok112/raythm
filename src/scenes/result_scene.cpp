@@ -89,10 +89,10 @@ result_scene::result_scene(scene_manager& manager, result_data result, bool rank
 }
 
 void result_scene::on_enter() {
-    if (ranking_enabled_) {
-        const ranking_service::local_submit_result local_result =
-            ranking_service::submit_local_result_detailed(chart_, result_);
+    const ranking_service::local_submit_result local_result =
+        ranking_service::submit_local_result_detailed(chart_, result_);
 
+    if (ranking_enabled_) {
         if (ranking_service::should_attempt_online_submit(local_result)) {
             online_submit_status_message_ = "Submitting online ranking...";
             online_submit_status_is_error_ = false;

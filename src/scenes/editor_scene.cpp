@@ -22,6 +22,7 @@
 #include "play_scene.h"
 #include "scene_common.h"
 #include "scene_manager.h"
+#include "settings_scene.h"
 #include "song_select/song_select_navigation.h"
 #include "theme.h"
 #include "ui_clip.h"
@@ -145,6 +146,11 @@ void editor_scene::update(float dt) {
         return;
     }
 
+    if (!has_blocking_modal() && ui::is_clicked(layout::kSettingsButtonRect)) {
+        manager_.change_scene(std::make_unique<settings_scene>(manager_, song_, build_resume_state()));
+        return;
+    }
+
     const editor_shortcut_result shortcut_result = editor_runtime_controller::handle_shortcuts({
         *state_,
         make_sync_context(),
@@ -236,6 +242,7 @@ void editor_scene::draw() {
     ui::draw_panel(layout::kHeaderRect);
 
     ui::draw_button_colored(layout::kBackButtonRect, "BACK", 20, t.row, t.row_hover, t.text);
+    ui::draw_button_colored(layout::kSettingsButtonRect, "SETTINGS", 18, t.row, t.row_hover, t.text);
 
     const editor_left_panel_view_result left_panel = editor_left_panel_view::draw({
         song_.meta.title.c_str(),

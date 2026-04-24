@@ -15,6 +15,7 @@ struct play_update_context {
     bool window_focused = true;
     bool bgm_loaded = false;
     std::optional<double> bgm_audio_time_ms;
+    bool input_already_updated = false;
     bool pause_resume_clicked = false;
     bool pause_restart_clicked = false;
     bool pause_song_select_clicked = false;
@@ -26,6 +27,7 @@ struct play_update_result {
     play_navigation_request navigation;
     bool request_play_bgm = false;
     bool request_pause_bgm = false;
+    bool request_fade_out_bgm = false;
     int hitsound_count = 0;
 };
 

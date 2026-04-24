@@ -98,7 +98,9 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
 
     if (state.intro_playing) {
         state.intro_timer = std::max(0.0f, state.intro_timer - context.dt);
-        state.input_handler.update(state.current_ms);
+        if (!context.input_already_updated) {
+            state.input_handler.update(state.current_ms);
+        }
         if (context.draw_window.has_value()) {
             draw_queue.update_visible_window(state.judge_system.note_states(), static_cast<float>(state.lane_speed),
                                              context.draw_window->judgement_z, context.draw_window->lane_start_z,
@@ -116,7 +118,9 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
 
     const double advanced_ms = state.current_ms + static_cast<double>(context.dt) * 1000.0;
     state.current_ms = context.bgm_audio_time_ms.value_or(advanced_ms);
-    state.input_handler.update(state.current_ms);
+    if (!context.input_already_updated) {
+        state.input_handler.update(state.current_ms);
+    }
     state.judge_system.update(state.current_ms, state.input_handler);
     const std::vector<judge_event>& judge_events = state.judge_system.get_judge_events();
     state.last_judge = state.judge_system.get_last_judge();
@@ -165,7 +169,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         state.final_result = state.score_system.get_result_data();
         state.result_transition_playing = true;
         state.result_transition_timer = 0.0f;
-        result.request_pause_bgm = true;
+        result.request_fade_out_bgm = true;
         return result;
     }
 
@@ -173,6 +177,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         state.final_result = state.score_system.get_result_data();
         state.result_transition_playing = true;
         state.result_transition_timer = 0.0f;
+        result.request_fade_out_bgm = true;
     } else if (context.backspace_pressed) {
         result.navigation = {play_navigation_target::song_select};
     }

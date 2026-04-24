@@ -29,6 +29,7 @@ public:
     bool load_bgm(const std::string& file_path);
     void play_bgm(bool restart = true);
     void pause_bgm();
+    void fade_out_bgm(unsigned int duration_ms);
     void stop_bgm();
     void set_bgm_volume(float volume);
     void seek_bgm(double seconds);
@@ -82,6 +83,7 @@ private:
     static audio_clock_snapshot get_voice_clock(unsigned long handle);
     static void play_voice(unsigned long handle, bool restart);
     static void pause_voice(unsigned long handle);
+    static void fade_out_voice(unsigned long handle, unsigned int duration_ms);
     static void stop_voice(unsigned long handle);
     static void set_voice_position_seconds(unsigned long handle, double seconds);
     static void free_voice(unsigned long& handle);

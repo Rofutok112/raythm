@@ -237,6 +237,9 @@ void play_scene::update(float dt) {
     if (result.request_pause_bgm) {
         audio_manager::instance().pause_bgm();
     }
+    if (result.request_fade_out_bgm) {
+        audio_manager::instance().fade_out_bgm(180);
+    }
     if (result.request_play_bgm && audio_manager::instance().is_bgm_loaded()) {
         audio_manager::instance().play_bgm(false);
     }
