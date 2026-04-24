@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace file_dialog {
 
@@ -13,8 +14,14 @@ std::string open_image_file();
 // Open a file dialog for selecting an .rchart file. Returns empty string if cancelled.
 std::string open_chart_package_file();
 
+// Open a file dialog for selecting one or more .rchart files. Returns empty vector if cancelled.
+std::vector<std::string> open_chart_package_files();
+
 // Open a file dialog for selecting an .rpack file. Returns empty string if cancelled.
 std::string open_song_package_file();
+
+// Open a file dialog for selecting one or more .rpack files. Returns empty vector if cancelled.
+std::vector<std::string> open_song_package_files();
 
 // Open a file dialog for selecting an .rmv file. Returns empty string if cancelled.
 std::string open_mv_script_file();

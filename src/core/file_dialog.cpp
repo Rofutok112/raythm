@@ -16,6 +16,7 @@
 #include <commdlg.h>
 #include <filesystem>
 #include <string>
+#include <vector>
 #endif
 
 namespace file_dialog {
@@ -70,6 +71,47 @@ std::string open_file_dialog(const wchar_t* filter, const wchar_t* title) {
     return {};
 }
 
+std::vector<std::string> open_file_dialog_multi(const wchar_t* filter, const wchar_t* title) {
+    fullscreen_dialog_guard fullscreen_guard;
+    std::vector<wchar_t> buffer(32768, L'\0');
+
+    OPENFILENAMEW ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = static_cast<HWND>(window_dialog_support::native_window_handle());
+    ofn.lpstrFilter = filter;
+    ofn.lpstrFile = buffer.data();
+    ofn.nMaxFile = static_cast<DWORD>(buffer.size());
+    ofn.lpstrTitle = title;
+    ofn.Flags = OFN_ALLOWMULTISELECT | OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+    if (ofn.hwndOwner != nullptr) {
+        SetForegroundWindow(ofn.hwndOwner);
+    }
+
+    if (GetOpenFileNameW(&ofn) == 0) {
+        return {};
+    }
+
+    std::vector<std::wstring> parts;
+    for (const wchar_t* cursor = buffer.data(); *cursor != L'\0'; cursor += std::wcslen(cursor) + 1) {
+        parts.emplace_back(cursor);
+    }
+    if (parts.empty()) {
+        return {};
+    }
+    if (parts.size() == 1) {
+        return {path_utils::to_utf8(std::filesystem::path(parts.front()))};
+    }
+
+    std::vector<std::string> paths;
+    paths.reserve(parts.size() - 1);
+    const std::filesystem::path directory(parts.front());
+    for (size_t index = 1; index < parts.size(); ++index) {
+        paths.push_back(path_utils::to_utf8(directory / parts[index]));
+    }
+    return paths;
+}
+
 std::string save_file_dialog(const wchar_t* filter, const wchar_t* title,
                              const wchar_t* default_extension,
                              const std::string& default_file_name) {
@@ -119,10 +161,22 @@ std::string open_chart_package_file() {
         L"Import Chart Package");
 }
 
+std::vector<std::string> open_chart_package_files() {
+    return open_file_dialog_multi(
+        L"raythm Chart Package (*.rchart)\0*.rchart\0All Files (*.*)\0*.*\0",
+        L"Import Chart Packages");
+}
+
 std::string open_song_package_file() {
     return open_file_dialog(
         L"raythm Song Package (*.rpack)\0*.rpack\0All Files (*.*)\0*.*\0",
         L"Import Song Package");
+}
+
+std::vector<std::string> open_song_package_files() {
+    return open_file_dialog_multi(
+        L"raythm Song Package (*.rpack)\0*.rpack\0All Files (*.*)\0*.*\0",
+        L"Import Song Packages");
 }
 
 std::string open_mv_script_file() {
@@ -169,7 +223,9 @@ bool confirm_yes_no(const std::string& title, const std::string& message) {
 std::string open_audio_file() { return {}; }
 std::string open_image_file() { return {}; }
 std::string open_chart_package_file() { return {}; }
+std::vector<std::string> open_chart_package_files() { return {}; }
 std::string open_song_package_file() { return {}; }
+std::vector<std::string> open_song_package_files() { return {}; }
 std::string open_mv_script_file() { return {}; }
 std::string save_chart_package_file(const std::string&) { return {}; }
 std::string save_song_package_file(const std::string&) { return {}; }

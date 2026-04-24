@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <system_error>
+#include <vector>
 
 #include "core/file_dialog.h"
 #include "core/path_utils.h"
@@ -66,9 +67,9 @@ void apply_context_menu_command(scene_manager& manager, state& state,
     case context_menu_command::import_song:
         close_context_menu(state);
         {
-            const std::string source_path = file_dialog::open_song_package_file();
-            if (!source_path.empty()) {
-                transfer_controller.start_song_import_prepare(state, source_path);
+            const std::vector<std::string> source_paths = file_dialog::open_song_package_files();
+            if (!source_paths.empty()) {
+                transfer_controller.start_song_import_prepare(state, source_paths);
                 queue_status_message(state, transfer_controller.busy_label(), false);
             }
         }
@@ -93,11 +94,11 @@ void apply_context_menu_command(scene_manager& manager, state& state,
     {
         close_context_menu(state);
         transfer_result result;
-        if (const auto request = prepare_chart_import(state, result); request.has_value()) {
-            if (request->overwrite_existing) {
-                open_overwrite_chart_confirmation(*request);
+        if (const auto batch = prepare_chart_imports(state, result); batch.has_value()) {
+            if (batch->overwrite_count > 0) {
+                open_overwrite_chart_confirmation(batch->requests);
             } else {
-                apply_transfer_result(import_chart_package(*request));
+                apply_transfer_result(import_chart_packages(batch->requests));
             }
         } else {
             apply_transfer_result(result);
@@ -250,15 +251,15 @@ void apply_confirmation_command(state& state,
                                              state.confirmation_dialog.chart_index));
         } else if (state.confirmation_dialog.action == pending_confirmation_action::overwrite_song_import) {
             state.confirmation_dialog = {};
-            if (transfer_controller.pending_song_import_request().has_value()) {
-                song_import_request request = *transfer_controller.pending_song_import_request();
-                transfer_controller.start_song_import(request);
+            if (!transfer_controller.pending_song_import_requests().empty()) {
+                std::vector<song_import_request> requests = transfer_controller.pending_song_import_requests();
+                transfer_controller.start_song_imports(std::move(requests));
                 queue_status_message(state, transfer_controller.busy_label(), false);
             }
         } else if (state.confirmation_dialog.action == pending_confirmation_action::overwrite_chart_import) {
             state.confirmation_dialog = {};
-            if (transfer_controller.pending_chart_import_request().has_value()) {
-                apply_transfer_result(import_chart_package(*transfer_controller.pending_chart_import_request()));
+            if (!transfer_controller.pending_chart_import_requests().empty()) {
+                apply_transfer_result(import_chart_packages(transfer_controller.pending_chart_import_requests()));
                 transfer_controller.clear_pending_chart_import_request();
             }
         }
