@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 
@@ -57,6 +58,10 @@ chart_data make_hard_chart() {
     return data;
 }
 
+bool approx(float actual, float expected, float tolerance = 0.05f) {
+    return std::fabs(actual - expected) <= tolerance;
+}
+
 }  // namespace
 
 int main() {
@@ -72,6 +77,29 @@ int main() {
     }
     if (hard_level <= easy_level) {
         std::cerr << "Expected hard chart level to exceed easy chart level\n";
+        return EXIT_FAILURE;
+    }
+
+    const float normal_sample = chart_difficulty::level_from_rating(3837.7f);
+    const float hard_sample = chart_difficulty::level_from_rating(18741.8f);
+    const float prism_sample = chart_difficulty::level_from_rating(44933.6f);
+    const float ray_sample = chart_difficulty::level_from_rating(130846.7f);
+
+    if (!approx(normal_sample, 4.3f) ||
+        !approx(hard_sample, 6.3f) ||
+        !approx(prism_sample, 7.5f) ||
+        !approx(ray_sample, 8.9f)) {
+        std::cerr << "Expected known raw ratings to map into the calibrated display range\n";
+        return EXIT_FAILURE;
+    }
+    if (ray_sample - normal_sample < 4.0f) {
+        std::cerr << "Expected display levels to keep enough separation across known charts\n";
+        return EXIT_FAILURE;
+    }
+    if (chart_difficulty::level_from_rating(100.0f) >= chart_difficulty::level_from_rating(1000.0f) ||
+        chart_difficulty::level_from_rating(1000.0f) >= chart_difficulty::level_from_rating(10000.0f) ||
+        chart_difficulty::level_from_rating(10000.0f) >= chart_difficulty::level_from_rating(100000.0f)) {
+        std::cerr << "Expected calibrated display levels to stay monotonic across rating decades\n";
         return EXIT_FAILURE;
     }
 

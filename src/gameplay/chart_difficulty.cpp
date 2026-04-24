@@ -440,13 +440,18 @@ float calculate_rating(const chart_data& data) {
     return kScale * static_cast<float>(std::pow(weighted_sum / total_weight_ms, 1.0 / kPeakPower));
 }
 
-float calculate_level(const chart_data& data) {
-    const float raw_rating = calculate_rating(data);
+float level_from_rating(float raw_rating) {
     if (raw_rating <= 0.0f) {
         return 0.0f;
     }
-    const float normalized = 0.5f * std::log10(1.0f + raw_rating);
-    return std::max(0.1f, std::round(normalized * 10.0f) / 10.0f);
+
+    const float calibrated = 3.0f * std::log10(raw_rating) - 6.5f;
+    const float rounded = std::round(calibrated * 10.0f) / 10.0f;
+    return std::clamp(rounded, 0.1f, 15.0f);
+}
+
+float calculate_level(const chart_data& data) {
+    return level_from_rating(calculate_rating(data));
 }
 
 }  // namespace chart_difficulty
