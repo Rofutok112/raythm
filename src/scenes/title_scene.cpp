@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdio>
 #include <ctime>
+#include <exception>
 #include <future>
 #include <memory>
 #include <string>
@@ -150,7 +151,7 @@ void title_scene::enter_play_mode() {
     mode_ = hub_mode::play;
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
-    title_play_session::sync_media(play_state_, audio_controller_.preview());
+    sync_play_media();
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
 }
 
@@ -166,7 +167,7 @@ void title_scene::enter_create_mode() {
     mode_ = hub_mode::create;
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
-    title_play_session::sync_media(play_state_, audio_controller_.preview());
+    title_play_session::sync_preview(play_state_, audio_controller_.preview());
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
 }
 
@@ -215,10 +216,11 @@ void title_scene::poll_play_catalog_reload() {
         play_state_.load_errors = {ex.what()};
     }
     play_catalog_loading_ = false;
-    const bool should_sync_media =
-        play_catalog_sync_media_on_apply_ || mode_ == hub_mode::play || mode_ == hub_mode::create;
+    const bool should_sync_media = play_catalog_sync_media_on_apply_ || mode_ == hub_mode::play;
     if (should_sync_media) {
-        title_play_session::sync_media(play_state_, audio_controller_.preview());
+        sync_play_media();
+    } else if (mode_ == hub_mode::create) {
+        title_play_session::sync_preview(play_state_, audio_controller_.preview());
     }
     play_catalog_sync_media_on_apply_ = false;
 
@@ -235,6 +237,118 @@ void title_scene::poll_play_catalog_reload() {
     queued_play_catalog_sync_media_on_apply_ = false;
 }
 
+void title_scene::sync_play_media() {
+    title_play_session::sync_preview(play_state_, audio_controller_.preview());
+    request_play_ranking_reload();
+}
+
+void title_scene::request_play_ranking_reload() {
+    if (play_ranking_loading_) {
+        ++play_ranking_generation_;
+        play_ranking_reload_pending_ = true;
+        if (play_state_.ranking_panel.selected_source == ranking_service::source::online) {
+            play_state_.ranking_panel.listing = {};
+            play_state_.ranking_panel.listing.ranking_source = play_state_.ranking_panel.selected_source;
+            play_state_.ranking_panel.listing.available = false;
+            play_state_.ranking_panel.listing.message = "Loading online rankings...";
+        }
+        return;
+    }
+
+    const auto filtered = song_select::filtered_charts_for_selected_song(play_state_);
+    const song_select::chart_option* chart = song_select::selected_chart_for(play_state_, filtered);
+    const std::string chart_id = chart != nullptr ? chart->meta.chart_id : "";
+    const ranking_service::source source = play_state_.ranking_panel.selected_source;
+
+    ++play_ranking_generation_;
+    play_ranking_pending_generation_ = play_ranking_generation_;
+    play_state_.ranking_panel.source_dropdown_open = false;
+    play_state_.ranking_panel.scroll_y = 0.0f;
+    play_state_.ranking_panel.scroll_y_target = 0.0f;
+    play_state_.ranking_panel.scrollbar_dragging = false;
+    play_state_.ranking_panel.scrollbar_drag_offset = 0.0f;
+
+    if (source == ranking_service::source::online) {
+        play_state_.ranking_panel.listing = {};
+        play_state_.ranking_panel.listing.ranking_source = source;
+        play_state_.ranking_panel.listing.available = false;
+        play_state_.ranking_panel.listing.message = "Loading online rankings...";
+    }
+
+    play_ranking_loading_ = true;
+    std::promise<ranking_service::listing> promise;
+    play_ranking_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), chart_id, source]() mutable {
+        try {
+            promise.set_value(ranking_service::load_chart_ranking(chart_id, source, 50));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
+}
+
+void title_scene::poll_play_ranking_reload() {
+    if (!play_ranking_loading_) {
+        return;
+    }
+    if (play_ranking_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    ranking_service::listing listing;
+    try {
+        listing = play_ranking_future_.get();
+    } catch (const std::exception& ex) {
+        listing.available = false;
+        listing.message = ex.what();
+        listing.ranking_source = play_state_.ranking_panel.selected_source;
+    }
+    play_ranking_loading_ = false;
+    const bool stale = play_ranking_pending_generation_ != play_ranking_generation_;
+    if (!stale) {
+        play_state_.ranking_panel.listing = std::move(listing);
+        play_state_.ranking_panel.reveal_anim = 0.0f;
+    }
+
+    if (play_ranking_reload_pending_) {
+        play_ranking_reload_pending_ = false;
+        request_play_ranking_reload();
+        return;
+    }
+}
+
+void title_scene::request_scoring_ruleset_warm(bool force_refresh) {
+    if (scoring_ruleset_loading_) {
+        return;
+    }
+
+    scoring_ruleset_loading_ = true;
+    std::promise<bool> promise;
+    scoring_ruleset_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), force_refresh]() mutable {
+        try {
+            promise.set_value(ranking_service::warm_scoring_ruleset_cache(force_refresh));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
+}
+
+void title_scene::poll_scoring_ruleset_warm() {
+    if (!scoring_ruleset_loading_) {
+        return;
+    }
+    if (scoring_ruleset_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    try {
+        scoring_ruleset_future_.get();
+    } catch (...) {
+    }
+    scoring_ruleset_loading_ = false;
+}
+
 void title_scene::start_song_upload(const song_select::song_entry& song) {
     if (create_upload_in_progress_) {
         ui::push_notice(play_state_.notices, "Upload already in progress.", ui::notice_tone::info, 1.8f);
@@ -243,9 +357,15 @@ void title_scene::start_song_upload(const song_select::song_entry& song) {
 
     create_upload_in_progress_ = true;
     ui::push_notice(play_state_.notices, "Uploading song...", ui::notice_tone::info, 1.8f);
-    create_upload_future_ = std::async(std::launch::async, [song]() {
-        return title_create_upload::upload_song(song);
-    });
+    std::promise<title_create_upload::upload_result> promise;
+    create_upload_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), song]() mutable {
+        try {
+            promise.set_value(title_create_upload::upload_song(song));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
 }
 
 void title_scene::start_chart_upload(const song_select::song_entry& song,
@@ -257,9 +377,15 @@ void title_scene::start_chart_upload(const song_select::song_entry& song,
 
     create_upload_in_progress_ = true;
     ui::push_notice(play_state_.notices, "Uploading chart...", ui::notice_tone::info, 1.8f);
-    create_upload_future_ = std::async(std::launch::async, [song, chart]() {
-        return title_create_upload::upload_chart(song, chart);
-    });
+    std::promise<title_create_upload::upload_result> promise;
+    create_upload_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), song, chart]() mutable {
+        try {
+            promise.set_value(title_create_upload::upload_chart(song, chart));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
 }
 
 void title_scene::poll_create_upload() {
@@ -270,7 +396,16 @@ void title_scene::poll_create_upload() {
         return;
     }
 
-    const title_create_upload::upload_result result = create_upload_future_.get();
+    title_create_upload::upload_result result;
+    try {
+        result = create_upload_future_.get();
+    } catch (const std::exception& ex) {
+        result.success = false;
+        result.message = ex.what();
+    } catch (...) {
+        result.success = false;
+        result.message = "Upload failed.";
+    }
     create_upload_in_progress_ = false;
     song_select::queue_status_message(play_state_, result.message, !result.success);
     if (result.success && result.should_refresh_online_catalog) {
@@ -313,11 +448,11 @@ void title_scene::update_play_mode(float dt) {
         return;
     }
     if (result.song_selection_changed) {
-        title_play_session::sync_media(play_state_, audio_controller_.preview());
+        sync_play_media();
         return;
     }
     if (result.chart_selection_changed || result.ranking_source_changed) {
-        title_play_session::reload_ranking(play_state_);
+        request_play_ranking_reload();
         return;
     }
 }
@@ -340,7 +475,7 @@ void title_scene::update_create_mode(float dt) {
         return;
     }
     if (result.song_selection_changed) {
-        title_play_session::sync_media(play_state_, audio_controller_.preview());
+        title_play_session::sync_preview(play_state_, audio_controller_.preview());
         return;
     }
     if (result.chart_selection_changed) {
@@ -441,6 +576,8 @@ void title_scene::update_common_animation(float dt) {
     auth_overlay::poll_restore(auth_controller_, play_state_.auth, play_state_.login_dialog);
     auth_overlay::poll_request(auth_controller_, play_state_.auth, play_state_.login_dialog);
     poll_play_catalog_reload();
+    poll_play_ranking_reload();
+    poll_scoring_ruleset_warm();
     poll_create_upload();
     title_online_view::poll_song_page(online_state_);
     title_online_view::poll_chart_page(online_state_);
@@ -631,6 +768,10 @@ void title_scene::on_enter() {
     audio_controller_.on_enter();
     song_select::reset_for_enter(play_state_);
     play_catalog_loading_ = false;
+    play_ranking_loading_ = false;
+    play_ranking_reload_pending_ = false;
+    play_ranking_generation_ = 0;
+    play_ranking_pending_generation_ = 0;
     play_catalog_reload_pending_ = false;
     play_catalog_sync_media_on_apply_ = false;
     queued_play_catalog_sync_media_on_apply_ = false;
@@ -640,7 +781,8 @@ void title_scene::on_enter() {
     queued_play_catalog_chart_id_.clear();
     play_state_.ranking_panel.selected_source = ranking_service::source::local;
     auth_overlay::refresh_auth_state(play_state_.auth);
-    title_play_session::warm_scoring_ruleset();
+    scoring_ruleset_loading_ = false;
+    request_scoring_ruleset_warm(false);
     play_state_.recent_result_offset = recent_result_offset_;
     if (play_intro_fade_) {
         intro_fade_.restart(scene_fade::direction::in, 1.0f, 1.0f);

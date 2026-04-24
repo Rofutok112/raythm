@@ -1,8 +1,12 @@
 #include "song_select_scene.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <exception>
 #include <filesystem>
+#include <future>
+#include <thread>
 #include <utility>
 
 #include "core/app_paths.h"
@@ -59,6 +63,10 @@ void song_select_scene::on_enter() {
     if (state_.auth.logged_in) {
         auth_overlay::start_restore(auth_controller_, state_.login_dialog);
     }
+    catalog_loading_ = false;
+    catalog_reload_pending_ = false;
+    pending_catalog_song_id_.clear();
+    pending_catalog_chart_id_.clear();
     reload_song_library(preferred_song_id_, preferred_chart_id_);
 }
 
@@ -72,8 +80,54 @@ void song_select_scene::on_exit() {
 
 void song_select_scene::reload_song_library(const std::string& preferred_song_id,
                                             const std::string& preferred_chart_id) {
-    song_select::apply_catalog(state_, song_select::load_catalog(), preferred_song_id, preferred_chart_id);
+    if (catalog_loading_) {
+        catalog_reload_pending_ = true;
+        pending_catalog_song_id_ = preferred_song_id;
+        pending_catalog_chart_id_ = preferred_chart_id;
+        state_.catalog_loading = true;
+        return;
+    }
+
+    preferred_song_id_ = preferred_song_id;
+    preferred_chart_id_ = preferred_chart_id;
+    catalog_loading_ = true;
+    state_.catalog_loading = true;
+    std::promise<song_select::catalog_data> promise;
+    catalog_future_ = promise.get_future();
+    std::thread([promise = std::move(promise)]() mutable {
+        try {
+            promise.set_value(song_select::load_catalog());
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
+}
+
+void song_select_scene::poll_song_library_reload() {
+    if (!catalog_loading_) {
+        return;
+    }
+    if (catalog_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    try {
+        song_select::apply_catalog(state_, catalog_future_.get(), preferred_song_id_, preferred_chart_id_);
+    } catch (const std::exception& ex) {
+        song_select::apply_catalog(state_, {}, preferred_song_id_, preferred_chart_id_);
+        state_.load_errors = {ex.what()};
+    }
+    catalog_loading_ = false;
     sync_selected_song_media();
+
+    if (!catalog_reload_pending_) {
+        return;
+    }
+
+    catalog_reload_pending_ = false;
+    reload_song_library(pending_catalog_song_id_, pending_catalog_chart_id_);
+    pending_catalog_song_id_.clear();
+    pending_catalog_chart_id_.clear();
 }
 
 void song_select_scene::sync_selected_song_media() {
@@ -82,16 +136,74 @@ void song_select_scene::sync_selected_song_media() {
 }
 
 void song_select_scene::reload_selected_chart_ranking() {
+    if (ranking_loading_) {
+        ++ranking_generation_;
+        ranking_reload_pending_ = true;
+        if (state_.ranking_panel.selected_source == ranking_service::source::online) {
+            state_.ranking_panel.listing = {};
+            state_.ranking_panel.listing.ranking_source = state_.ranking_panel.selected_source;
+            state_.ranking_panel.listing.available = false;
+            state_.ranking_panel.listing.message = "Loading online rankings...";
+        }
+        return;
+    }
+
     const auto filtered = song_select::filtered_charts_for_selected_song(state_);
     const song_select::chart_option* chart = song_select::selected_chart_for(state_, filtered);
     const std::string chart_id = chart != nullptr ? chart->meta.chart_id : "";
-    state_.ranking_panel.listing =
-        ranking_service::load_chart_ranking(chart_id, state_.ranking_panel.selected_source, 50);
+    const ranking_service::source source = state_.ranking_panel.selected_source;
+    ++ranking_generation_;
+    ranking_pending_generation_ = ranking_generation_;
     state_.ranking_panel.source_dropdown_open = false;
     state_.ranking_panel.scroll_y = 0.0f;
     state_.ranking_panel.scroll_y_target = 0.0f;
     state_.ranking_panel.scrollbar_dragging = false;
     state_.ranking_panel.scrollbar_drag_offset = 0.0f;
+    if (source == ranking_service::source::online) {
+        state_.ranking_panel.listing = {};
+        state_.ranking_panel.listing.ranking_source = source;
+        state_.ranking_panel.listing.available = false;
+        state_.ranking_panel.listing.message = "Loading online rankings...";
+    }
+
+    ranking_loading_ = true;
+    std::promise<ranking_service::listing> promise;
+    ranking_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), chart_id, source]() mutable {
+        try {
+            promise.set_value(ranking_service::load_chart_ranking(chart_id, source, 50));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
+}
+
+void song_select_scene::poll_selected_chart_ranking() {
+    if (!ranking_loading_) {
+        return;
+    }
+    if (ranking_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    ranking_service::listing listing;
+    try {
+        listing = ranking_future_.get();
+    } catch (const std::exception& ex) {
+        listing.available = false;
+        listing.message = ex.what();
+        listing.ranking_source = state_.ranking_panel.selected_source;
+    }
+    ranking_loading_ = false;
+    const bool stale = ranking_pending_generation_ != ranking_generation_;
+    if (!stale) {
+        state_.ranking_panel.listing = std::move(listing);
+    }
+
+    if (ranking_reload_pending_) {
+        ranking_reload_pending_ = false;
+        reload_selected_chart_ranking();
+    }
 }
 
 void song_select_scene::refresh_auth_state() {
@@ -246,7 +358,6 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
             const auto filtered = song_select::filtered_charts_for_selected_song(state_);
             const song_select::chart_option* chart = song_select::selected_chart_for(state_, filtered);
             if (song != nullptr && chart != nullptr) {
-                ranking_service::refresh_scoring_ruleset_cache_for_chart_start(chart->meta, true);
                 manager_.change_scene(song_select::make_play_scene(manager_, *song, *chart));
             }
         } else {
@@ -306,6 +417,8 @@ void song_select_scene::update(float dt) {
 
     preview_controller_.update(dt, song_select::selected_song(state_));
     song_select::tick_animations(state_, dt);
+    poll_song_library_reload();
+    poll_selected_chart_ranking();
     if (const auto restore_result = auth_overlay::poll_restore(auth_controller_, state_.auth, state_.login_dialog);
         restore_result.should_show_notice) {
         song_select::queue_status_message(state_, restore_result.notice_message, restore_result.notice_is_error);
@@ -505,7 +618,6 @@ void song_select_scene::update(float dt) {
         if (song != nullptr && chart != nullptr) {
             if (IsKeyPressed(KEY_ENTER)) {
                 song_select::close_context_menu(state_);
-                ranking_service::refresh_scoring_ruleset_cache_for_chart_start(chart->meta, true);
                 manager_.change_scene(song_select::make_play_scene(manager_, *song, *chart));
                 return;
             }

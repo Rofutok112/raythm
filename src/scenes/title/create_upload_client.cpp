@@ -77,6 +77,7 @@ struct multipart_file {
 struct upload_request_result {
     bool success = false;
     bool not_found = false;
+    bool unauthorized = false;
     bool updated_existing = false;
     std::string message;
     std::string remote_song_id;
@@ -801,6 +802,11 @@ upload_request_result parse_song_upload_response(const http_response& response,
         result.message = parse_error_message(response, "Song not found.");
         return result;
     }
+    if (response.status_code == 401) {
+        result.unauthorized = true;
+        result.message = parse_error_message(response, "Log in before uploading community content.");
+        return result;
+    }
     if (response.status_code < 200 || response.status_code >= 300) {
         result.message = parse_error_message(response, "Song upload failed.");
         return result;
@@ -839,6 +845,11 @@ upload_request_result parse_chart_upload_response(const http_response& response,
         result.message = parse_error_message(response, "Chart target was not found.");
         return result;
     }
+    if (response.status_code == 401) {
+        result.unauthorized = true;
+        result.message = parse_error_message(response, "Log in before uploading community content.");
+        return result;
+    }
     if (response.status_code < 200 || response.status_code >= 300) {
         result.message = parse_error_message(response, "Chart upload failed.");
         return result;
@@ -874,6 +885,23 @@ std::optional<auth::session> require_saved_session(std::string& error_message) {
         .access_token = session->access_token,
         .refresh_token = session->refresh_token,
         .user = session->user,
+    };
+}
+
+std::optional<auth::session> restore_upload_session(std::string& error_message) {
+    const auth::operation_result restored = auth::restore_saved_session();
+    if (!restored.success || !restored.session_data.has_value()) {
+        error_message = restored.message.empty()
+            ? "Log in before uploading community content."
+            : restored.message;
+        return std::nullopt;
+    }
+
+    return auth::session{
+        .server_url = auth::normalize_server_url(restored.session_data->server_url),
+        .access_token = restored.session_data->access_token,
+        .refresh_token = restored.session_data->refresh_token,
+        .user = restored.session_data->user,
     };
 }
 
@@ -1140,7 +1168,7 @@ upload_result upload_song(const song_select::song_entry& song) {
         result.message = std::move(error_message);
         return result;
     }
-    const auth::session& session = *session_opt;
+    auth::session session = *session_opt;
 
     upload_mapping_store store = load_upload_mappings();
     const std::optional<std::string> existing_remote_song_id =
@@ -1148,10 +1176,30 @@ upload_result upload_song(const song_select::song_entry& song) {
 
     upload_request_result request_result =
         send_song_upload_request(session, song, existing_remote_song_id);
+    if (request_result.unauthorized) {
+        std::string restore_error;
+        const std::optional<auth::session> restored = restore_upload_session(restore_error);
+        if (!restored.has_value()) {
+            result.message = std::move(restore_error);
+            return result;
+        }
+        session = *restored;
+        request_result = send_song_upload_request(session, song, existing_remote_song_id);
+    }
     if (request_result.not_found && existing_remote_song_id.has_value()) {
         remove_song_mapping(store, session.server_url, song.song.meta.song_id);
         save_upload_mappings(store);
         request_result = send_song_upload_request(session, song, std::nullopt);
+        if (request_result.unauthorized) {
+            std::string restore_error;
+            const std::optional<auth::session> restored = restore_upload_session(restore_error);
+            if (!restored.has_value()) {
+                result.message = std::move(restore_error);
+                return result;
+            }
+            session = *restored;
+            request_result = send_song_upload_request(session, song, std::nullopt);
+        }
     }
 
     result.success = request_result.success;
@@ -1181,7 +1229,7 @@ upload_result upload_chart(const song_select::song_entry& song,
         result.message = std::move(error_message);
         return result;
     }
-    const auth::session& session = *session_opt;
+    auth::session session = *session_opt;
 
     upload_mapping_store store = load_upload_mappings();
     const std::optional<std::string> remote_song_id = find_remote_song_id(session, store, song);
@@ -1194,11 +1242,32 @@ upload_result upload_chart(const song_select::song_entry& song,
         find_chart_mapping(store, session.server_url, chart.meta.chart_id);
     upload_request_result request_result =
         send_chart_upload_request(session, song, chart, *remote_song_id, existing_remote_chart_id);
+    if (request_result.unauthorized) {
+        std::string restore_error;
+        const std::optional<auth::session> restored = restore_upload_session(restore_error);
+        if (!restored.has_value()) {
+            result.message = std::move(restore_error);
+            return result;
+        }
+        session = *restored;
+        request_result = send_chart_upload_request(session, song, chart, *remote_song_id, existing_remote_chart_id);
+    }
     if (request_result.not_found && existing_remote_chart_id.has_value()) {
         remove_chart_mapping(store, session.server_url, chart.meta.chart_id);
         save_upload_mappings(store);
         request_result =
             send_chart_upload_request(session, song, chart, *remote_song_id, std::nullopt);
+        if (request_result.unauthorized) {
+            std::string restore_error;
+            const std::optional<auth::session> restored = restore_upload_session(restore_error);
+            if (!restored.has_value()) {
+                result.message = std::move(restore_error);
+                return result;
+            }
+            session = *restored;
+            request_result =
+                send_chart_upload_request(session, song, chart, *remote_song_id, std::nullopt);
+        }
     }
 
     result.success = request_result.success;

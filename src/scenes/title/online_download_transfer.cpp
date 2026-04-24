@@ -3,12 +3,15 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <exception>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -366,9 +369,15 @@ void start_download(state& state) {
     state.download_progress = std::make_shared<download_progress_state>();
     ui::push_notice(state.notices, "Downloading song...", ui::notice_tone::info, 1.8f);
     const std::shared_ptr<download_progress_state> progress = state.download_progress;
-    state.download_future = std::async(std::launch::async, [selected, server_url, progress]() {
-        return download_song_package(selected, server_url, progress);
-    });
+    std::promise<download_song_result> promise;
+    state.download_future = promise.get_future();
+    std::thread([promise = std::move(promise), selected, server_url, progress]() mutable {
+        try {
+            promise.set_value(download_song_package(selected, server_url, progress));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
 }
 
 bool poll_download(state& state) {
@@ -379,7 +388,16 @@ bool poll_download(state& state) {
         return false;
     }
 
-    download_song_result result = state.download_future.get();
+    download_song_result result;
+    try {
+        result = state.download_future.get();
+    } catch (const std::exception& ex) {
+        result.success = false;
+        result.message = ex.what();
+    } catch (...) {
+        result.success = false;
+        result.message = "Song download failed.";
+    }
     state.download_in_progress = false;
     state.download_progress.reset();
 

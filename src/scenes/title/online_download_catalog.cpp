@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -462,9 +463,15 @@ void reload_catalog(state& state) {
     state.owned_loading = false;
     state.owned_loaded_once = false;
     state.jackets.clear();
-    state.catalog_future = std::async(std::launch::async, []() {
-        return load_catalog_result();
-    });
+    std::promise<catalog_load_result> promise;
+    state.catalog_future = promise.get_future();
+    std::thread([promise = std::move(promise)]() mutable {
+        try {
+            promise.set_value(load_catalog_result());
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
 }
 
 bool poll_catalog(state& state) {
@@ -475,7 +482,16 @@ bool poll_catalog(state& state) {
         return false;
     }
 
-    catalog_load_result result = state.catalog_future.get();
+    catalog_load_result result;
+    try {
+        result = state.catalog_future.get();
+    } catch (const std::exception& ex) {
+        result.catalog_request_failed = true;
+        result.catalog_status_message = ex.what();
+    } catch (...) {
+        result.catalog_request_failed = true;
+        result.catalog_status_message = "Failed to load online catalog.";
+    }
     state.catalog_loading = false;
     state.catalog_loaded_once = true;
     state.catalog_server_url = std::move(result.catalog_server_url);
@@ -511,9 +527,15 @@ void request_next_song_page(state& state, catalog_mode mode) {
     state.song_page_mode = mode;
     const int page = next_page_ref(state, mode);
     const std::string server_url = state.catalog_server_url;
-    state.song_page_future = std::async(std::launch::async, [mode, page, server_url]() {
-        return fetch_remote_song_page(mode, page, kSongPageSize, server_url);
-    });
+    std::promise<remote_song_page_fetch_result> promise;
+    state.song_page_future = promise.get_future();
+    std::thread([promise = std::move(promise), mode, page, server_url]() mutable {
+        try {
+            promise.set_value(fetch_remote_song_page(mode, page, kSongPageSize, server_url));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
 }
 
 bool poll_song_page(state& state) {
@@ -524,7 +546,16 @@ bool poll_song_page(state& state) {
         return false;
     }
 
-    const remote_song_page_fetch_result page_result = state.song_page_future.get();
+    remote_song_page_fetch_result page_result;
+    try {
+        page_result = state.song_page_future.get();
+    } catch (const std::exception& ex) {
+        page_result.success = false;
+        page_result.error_message = ex.what();
+    } catch (...) {
+        page_result.success = false;
+        page_result.error_message = "Failed to load more songs.";
+    }
     state.song_page_loading = false;
     if (!page_result.success) {
         state.catalog_status_message = page_result.error_message;
@@ -569,9 +600,16 @@ void request_charts_for_selected_song(state& state) {
     state.chart_page_song_id = song->song.song.meta.song_id;
     const std::string server_url = state.catalog_server_url;
     const int page = song->next_chart_page;
-    state.chart_page_future = std::async(std::launch::async, [server_url, page, song_id = state.chart_page_song_id]() {
-        return fetch_remote_chart_page(server_url, song_id, page, kChartPageSize);
-    });
+    std::promise<remote_chart_page_fetch_result> promise;
+    state.chart_page_future = promise.get_future();
+    const std::string song_id = state.chart_page_song_id;
+    std::thread([promise = std::move(promise), server_url, page, song_id]() mutable {
+        try {
+            promise.set_value(fetch_remote_chart_page(server_url, song_id, page, kChartPageSize));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
 }
 
 bool poll_chart_page(state& state) {
@@ -582,7 +620,12 @@ bool poll_chart_page(state& state) {
         return false;
     }
 
-    const remote_chart_page_fetch_result page_result = state.chart_page_future.get();
+    remote_chart_page_fetch_result page_result;
+    try {
+        page_result = state.chart_page_future.get();
+    } catch (...) {
+        page_result.success = false;
+    }
     state.chart_page_loading = false;
     song_entry_state* song = find_song_state(songs_for_mode(state, state.chart_page_mode), state.chart_page_song_id);
     if (song == nullptr) {
