@@ -8,6 +8,7 @@
 #include <iostream>
 #include <string>
 
+#include "chart_difficulty.h"
 #include "chart_parser.h"
 #include "chart_serializer.h"
 
@@ -128,6 +129,7 @@ int main() {
     bool ok = true;
 
     ok = content.find("offset=-35") != std::string::npos && ok;
+    ok = content.find("level=9.0") == std::string::npos && ok;
     ok = expect_contains_in_order(content, "meter,0,4/4", "bpm,960,180.5") && ok;
     ok = expect_contains_in_order(content, "tap,480,0", "hold,480,2,840") && ok;
 
@@ -141,7 +143,8 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    const chart_data expected = normalized_chart(source);
+    chart_data expected = normalized_chart(source);
+    chart_difficulty::apply_auto_level(expected);
     if (!equal_chart_data(expected, *reparsed.data)) {
         std::cerr << "Round-trip chart data mismatch\n";
         ok = false;

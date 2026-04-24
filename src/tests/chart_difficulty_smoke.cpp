@@ -168,6 +168,15 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    chart_data legacy_level = hard;
+    legacy_level.meta.level = 55.0f;
+    chart_difficulty::apply_auto_level(legacy_level);
+    if (legacy_level.meta.level == 55.0f ||
+        !approx(legacy_level.meta.level, chart_difficulty::calculate_level(hard))) {
+        std::cerr << "Expected legacy rchart level metadata to be replaced with auto level\n";
+        return EXIT_FAILURE;
+    }
+
     const float same_hand_hold = chart_difficulty::calculate_rating(make_hold_conflict_chart(true));
     const float opposite_hand_hold = chart_difficulty::calculate_rating(make_hold_conflict_chart(false));
     if (same_hand_hold <= opposite_hand_hold * 1.08f) {

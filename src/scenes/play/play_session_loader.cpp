@@ -6,6 +6,7 @@
 #include "app_paths.h"
 #include "audio_manager.h"
 #include "audio_waveform.h"
+#include "chart_difficulty.h"
 #include "game_settings.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
@@ -112,6 +113,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
         return state;
     }
 
+    chart_difficulty::apply_auto_level(*state.chart_data);
     state.chart_data = play_chart_filter::prepare_chart_for_playback(*state.chart_data, state.start_tick);
 
     state.input_handler = input_handler(g_settings.keys);

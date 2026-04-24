@@ -7,6 +7,7 @@
 #include <limits>
 #include <sstream>
 
+#include "chart_difficulty.h"
 #include "path_utils.h"
 #include <vector>
 
@@ -56,7 +57,7 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
     output << "chartId=" << data.meta.chart_id << '\n';
     output << "keyCount=" << data.meta.key_count << '\n';
     output << "difficulty=" << data.meta.difficulty << '\n';
-    output << "level=" << format_level(data.meta.level) << '\n';
+    output << "level=" << format_level(chart_difficulty::calculate_level(data)) << '\n';
     output << "chartAuthor=" << data.meta.chart_author << '\n';
     output << "formatVersion=" << data.meta.format_version << '\n';
     output << "resolution=" << data.meta.resolution << '\n';

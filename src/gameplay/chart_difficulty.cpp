@@ -668,4 +668,13 @@ float calculate_level(const chart_data& data) {
     return level_from_rating(calculate_rating(data));
 }
 
+chart_data with_auto_level(chart_data data) {
+    apply_auto_level(data);
+    return data;
+}
+
+void apply_auto_level(chart_data& data) {
+    data.meta.level = calculate_level(data);
+}
+
 }  // namespace chart_difficulty
