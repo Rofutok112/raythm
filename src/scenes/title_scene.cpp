@@ -118,6 +118,15 @@ bool select_local_song(song_select::state& state, const std::string& song_id) {
     return false;
 }
 
+bool consume_startup_level_calculation() {
+    static bool consumed = false;
+    if (consumed) {
+        return false;
+    }
+    consumed = true;
+    return true;
+}
+
 }  // namespace
 
 title_scene::title_scene(scene_manager& manager,
@@ -900,6 +909,16 @@ title_audio_policy::hub_mode title_scene::current_audio_mode() const {
 }
 
 void title_scene::on_enter() {
+    const bool calculate_startup_levels = consume_startup_level_calculation();
+    song_select::catalog_data startup_catalog;
+    try {
+        startup_catalog = song_select::load_catalog(calculate_startup_levels);
+    } catch (const std::exception& ex) {
+        startup_catalog.load_errors = {ex.what()};
+    } catch (...) {
+        startup_catalog.load_errors = {"Failed to load song catalog."};
+    }
+
     audio_controller_.configure(kTitleIntroPath, kTitleLoopPath);
     audio_controller_.on_enter();
     song_select::reset_for_enter(play_state_);
@@ -937,10 +956,10 @@ void title_scene::on_enter() {
     play_entry_origin_rect_ = {};
     play_state_.login_dialog.open = false;
     title_online_view::reload_catalog(online_state_);
-    request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
-                                mode_ == hub_mode::play || mode_ == hub_mode::create);
+    song_select::apply_catalog(play_state_, std::move(startup_catalog), preferred_song_id_, preferred_chart_id_);
     if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
         play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
+        sync_play_media();
     }
     if (play_state_.auth.logged_in) {
         auth_overlay::start_restore(auth_controller_, play_state_.login_dialog);

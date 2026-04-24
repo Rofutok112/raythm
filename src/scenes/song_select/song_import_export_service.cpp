@@ -23,6 +23,7 @@
 #endif
 
 #include "app_paths.h"
+#include "chart_level_cache.h"
 #include "chart_parser.h"
 #include "chart_serializer.h"
 #include "file_dialog.h"
@@ -375,6 +376,7 @@ transfer_result import_chart_package(const chart_import_request& request) {
         result.message = "Failed to save the imported chart.";
         return result;
     }
+    chart_level_cache::calculate_and_store(path_utils::to_utf8(destination_path), request.chart);
 
     result.success = true;
     result.reload_catalog = true;
@@ -567,6 +569,35 @@ transfer_result import_song_package(const song_import_request& request) {
         !copy_file_into_directory(jacket_source, destination_root, path_utils::from_utf8(request.imported_song.meta.jacket_file))) {
         result.message = "Failed to import the song package.";
         return result;
+    }
+    if (!request.imported_song.chart_paths.empty()) {
+        const fs::path charts_destination = destination_root / "charts";
+        std::error_code chart_ec;
+        fs::create_directories(charts_destination, chart_ec);
+        if (chart_ec) {
+            result.message = "Failed to import the song package charts.";
+            return result;
+        }
+
+        for (const std::string& chart_path_utf8 : request.imported_song.chart_paths) {
+            const chart_parse_result parsed_chart = chart_parser::parse(chart_path_utf8);
+            if (!parsed_chart.success || !parsed_chart.data.has_value()) {
+                result.message = "Failed to read a chart from the song package.";
+                return result;
+            }
+
+            const fs::path source_chart_path = path_utils::from_utf8(chart_path_utf8);
+            const fs::path chart_file_name = source_chart_path.filename().empty()
+                ? path_utils::from_utf8(sanitize_file_stem(parsed_chart.data->meta.chart_id, "chart") + ".rchart")
+                : source_chart_path.filename();
+            const fs::path destination_chart_path = charts_destination / chart_file_name;
+            const std::string destination_chart_utf8 = path_utils::to_utf8(destination_chart_path);
+            if (!chart_serializer::serialize(*parsed_chart.data, destination_chart_utf8)) {
+                result.message = "Failed to import the song package charts.";
+                return result;
+            }
+            chart_level_cache::calculate_and_store(destination_chart_utf8, *parsed_chart.data);
+        }
     }
 
     result.success = true;

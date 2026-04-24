@@ -121,6 +121,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/chart_parser.h
         src/gameplay/chart_difficulty.cpp
         src/gameplay/chart_difficulty.h
+        src/gameplay/chart_level_cache.cpp
+        src/gameplay/chart_level_cache.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
         src/models/data_models.h
@@ -425,10 +427,6 @@ add_executable(editor_meter_map_smoke
 add_executable(song_loader_smoke
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
-        src/gameplay/chart_difficulty.cpp
-        src/gameplay/chart_difficulty.h
-        src/gameplay/timing_engine.cpp
-        src/gameplay/timing_engine.h
         src/models/data_models.h
         src/gameplay/song_loader.cpp
         src/gameplay/song_loader.h

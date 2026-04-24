@@ -2,11 +2,10 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <unordered_map>
 #include <system_error>
 
 #include "app_paths.h"
-#include "chart_difficulty.h"
+#include "chart_level_cache.h"
 #include "mv/mv_storage.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
@@ -40,33 +39,6 @@ bool is_within_root(const std::filesystem::path& path, const std::filesystem::pa
 
 bool is_chart_file_path(const std::filesystem::path& path) {
     return path.extension() == ".rchart";
-}
-
-struct chart_level_cache_entry {
-    std::filesystem::file_time_type write_time{};
-    float level = 0.0f;
-};
-
-float cached_chart_level(const std::string& chart_path, const chart_data& chart) {
-    static std::unordered_map<std::string, chart_level_cache_entry> cache;
-
-    std::error_code ec;
-    const std::filesystem::path path = path_utils::from_utf8(chart_path);
-    const auto write_time = std::filesystem::last_write_time(path, ec);
-    if (ec) {
-        return chart_difficulty::calculate_level(chart);
-    }
-
-    if (const auto it = cache.find(chart_path); it != cache.end() && it->second.write_time == write_time) {
-        return it->second.level;
-    }
-
-    const float level = chart_difficulty::calculate_level(chart);
-    cache[chart_path] = chart_level_cache_entry{
-        .write_time = write_time,
-        .level = level,
-    };
-    return level;
 }
 
 std::optional<rank> load_best_local_rank(const std::string& chart_id) {
@@ -109,7 +81,7 @@ std::pair<float, float> collect_bpm_range(const chart_data& chart) {
 
 namespace song_select {
 
-catalog_data load_catalog() {
+catalog_data load_catalog(bool calculate_missing_levels) {
     catalog_data catalog;
     const player_chart_offset_map chart_offsets = load_player_chart_offsets();
 
@@ -134,7 +106,12 @@ catalog_data load_catalog() {
             }
 
             chart_meta meta = parse_result.data->meta;
-            meta.level = cached_chart_level(chart_path, *parse_result.data);
+            if (calculate_missing_levels) {
+                meta.level = chart_level_cache::get_or_calculate(chart_path, *parse_result.data);
+            } else if (const std::optional<float> cached_level = chart_level_cache::find_level(chart_path);
+                       cached_level.has_value()) {
+                meta.level = *cached_level;
+            }
             const auto [min_bpm, max_bpm] = collect_bpm_range(*parse_result.data);
 
             entry.charts.push_back({

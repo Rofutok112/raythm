@@ -4,7 +4,6 @@
 #include <iostream>
 #include <string>
 
-#include "chart_difficulty.h"
 #include "song_loader.h"
 
 namespace {
@@ -104,10 +103,8 @@ int main() {
         }
         ok = false;
     } else {
-        const float expected_level = chart_difficulty::calculate_level(*chart_result.data);
-        if (chart_result.data->meta.level == 55.0f ||
-            chart_result.data->meta.level != expected_level) {
-            std::cerr << "Expected loaded chart level to be normalized to auto level\n";
+        if (chart_result.data->meta.level != 0.0f) {
+            std::cerr << "Expected legacy chart level metadata to be ignored by the loader\n";
             ok = false;
         }
     }
@@ -131,11 +128,6 @@ int main() {
                 std::cerr << "Expected deferred chart load to succeed\n";
                 ok = false;
             } else {
-                const float expected_level = chart_difficulty::calculate_level(*loaded_chart.data);
-                if (loaded_chart.data->meta.level != expected_level) {
-                    std::cerr << "Expected loaded chart level to be normalized to auto level\n";
-                    ok = false;
-                }
             }
         }
     }

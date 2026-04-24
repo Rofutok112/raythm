@@ -138,11 +138,13 @@ play_scene::play_scene(scene_manager& manager, int key_count) : scene(manager) {
     request_.key_count = key_count;
 }
 
-play_scene::play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count)
+play_scene::play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
+                       float chart_level)
     : scene(manager) {
     request_.key_count = key_count;
     request_.song_data = std::move(song);
     request_.selected_chart_path = std::move(chart_path);
+    request_.selected_chart_level = chart_level;
 }
 
 play_scene::play_scene(scene_manager& manager, song_data song, chart_data chart, int start_tick,

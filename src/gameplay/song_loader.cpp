@@ -9,7 +9,6 @@
 #include <sstream>
 #include <string_view>
 
-#include "chart_difficulty.h"
 #include "path_utils.h"
 
 namespace {
@@ -374,11 +373,7 @@ song_load_result song_loader::load_directory(const std::string& song_dir_utf8) {
 }
 
 chart_parse_result song_loader::load_chart(const std::string& path) {
-    chart_parse_result result = chart_parser::parse(path);
-    if (result.success && result.data.has_value()) {
-        chart_difficulty::apply_auto_level(*result.data);
-    }
-    return result;
+    return chart_parser::parse(path);
 }
 
 void song_loader::attach_external_charts(const std::string& charts_dir, std::vector<song_data>& songs) {
