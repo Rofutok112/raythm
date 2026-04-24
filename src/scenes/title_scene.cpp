@@ -10,12 +10,17 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 
+#include "core/file_dialog.h"
 #include "raylib.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select/song_catalog_service.h"
+#include "song_select/song_import_export_service.h"
+#include "song_select/song_select_command_controller.h"
 #include "song_select/song_select_confirmation_dialog.h"
+#include "song_select/song_select_detail_view.h"
 #include "song_select/song_select_layout.h"
 #include "song_select/song_select_login_dialog.h"
 #include "song_select/song_select_navigation.h"
@@ -432,7 +437,101 @@ void title_scene::apply_play_delete_result(const song_select::delete_result& res
     song_select::queue_status_message(play_state_, result.message, false);
 }
 
+void title_scene::apply_play_transfer_result(const song_select::transfer_result& result) {
+    if (result.cancelled) {
+        return;
+    }
+    if (!result.success) {
+        song_select::queue_status_message(play_state_, result.message, true);
+        return;
+    }
+
+    if (result.reload_catalog) {
+        preferred_song_id_ = result.preferred_song_id;
+        preferred_chart_id_ = result.preferred_chart_id;
+        title_online_view::reload_catalog(online_state_);
+        request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
+                                    mode_ == hub_mode::play || mode_ == hub_mode::create);
+    }
+    song_select::queue_status_message(play_state_, result.message, false);
+}
+
+void title_scene::open_overwrite_song_confirmation(song_select::song_import_request request) {
+    transfer_controller_.set_pending_song_import_request(std::move(request));
+    song_select::open_confirmation_dialog(
+        play_state_, song_select::pending_confirmation_action::overwrite_song_import,
+        "Overwrite Song",
+        "A user song with the same song ID already exists. Overwrite it?",
+        "",
+        "OVERWRITE");
+}
+
+void title_scene::open_overwrite_chart_confirmation(song_select::chart_import_request request) {
+    transfer_controller_.set_pending_chart_import_request(std::move(request));
+    song_select::open_confirmation_dialog(
+        play_state_, song_select::pending_confirmation_action::overwrite_chart_import,
+        "Overwrite Chart",
+        "A user chart with the same chart ID already exists. Overwrite it?",
+        "",
+        "OVERWRITE");
+}
+
+void title_scene::poll_play_transfer() {
+    if (const auto prepared = transfer_controller_.poll_song_import_prepare(); prepared.has_value()) {
+        if (!prepared->request.has_value()) {
+            apply_play_transfer_result(prepared->transfer);
+        } else if (prepared->request->overwrite_existing) {
+            open_overwrite_song_confirmation(*prepared->request);
+        } else {
+            transfer_controller_.start_song_import(*prepared->request);
+            song_select::queue_status_message(play_state_, transfer_controller_.busy_label(), false);
+        }
+    }
+    if (const auto result = transfer_controller_.poll_background_transfer(); result.has_value()) {
+        apply_play_transfer_result(*result);
+    }
+}
+
+void title_scene::start_song_import() {
+    const std::string source_path = file_dialog::open_song_package_file();
+    if (source_path.empty()) {
+        return;
+    }
+    transfer_controller_.start_song_import_prepare(play_state_, source_path);
+    song_select::queue_status_message(play_state_, transfer_controller_.busy_label(), false);
+}
+
+void title_scene::start_chart_import() {
+    song_select::transfer_result result;
+    if (const auto request = song_select::prepare_chart_import(play_state_, result); request.has_value()) {
+        if (request->overwrite_existing) {
+            open_overwrite_chart_confirmation(*request);
+        } else {
+            apply_play_transfer_result(song_select::import_chart_package(*request));
+        }
+    } else {
+        apply_play_transfer_result(result);
+    }
+}
+
+void title_scene::start_song_export() {
+    const int song_index = play_state_.selected_song_index;
+    if (const auto request = song_select::prepare_song_export(play_state_, song_index); request.has_value()) {
+        transfer_controller_.start_song_export(*request);
+        song_select::queue_status_message(play_state_, transfer_controller_.busy_label(), false);
+    }
+}
+
+void title_scene::start_chart_export() {
+    apply_play_transfer_result(
+        song_select::export_chart_package(play_state_, play_state_.selected_song_index, play_state_.difficulty_index));
+}
+
 void title_scene::update_play_mode(float dt) {
+    if (transfer_controller_.busy()) {
+        return;
+    }
+
     const title_play_view::update_result result =
         title_play_view::update(play_state_, title_play_view::mode::play, play_view_anim_, play_entry_origin_rect_, dt);
 
@@ -464,9 +563,13 @@ void title_scene::update_create_mode(float dt) {
         result.create_song_requested ||
         result.edit_song_requested ||
         result.upload_song_requested ||
+        result.import_song_requested ||
+        result.export_song_requested ||
         result.create_chart_requested ||
         result.edit_chart_requested ||
         result.upload_chart_requested ||
+        result.import_chart_requested ||
+        result.export_chart_requested ||
         result.edit_mv_requested ||
         result.manage_library_requested;
 
@@ -485,6 +588,10 @@ void title_scene::update_create_mode(float dt) {
         ui::push_notice(play_state_.notices, "Wait for the current upload to finish.", ui::notice_tone::info, 1.8f);
         return;
     }
+    if (transfer_controller_.busy() && create_action_requested) {
+        ui::push_notice(play_state_.notices, "Wait for the current transfer to finish.", ui::notice_tone::info, 1.8f);
+        return;
+    }
 
     const song_select::song_entry* song = song_select::selected_song(play_state_);
     const auto filtered = song_select::filtered_charts_for_selected_song(play_state_);
@@ -496,6 +603,18 @@ void title_scene::update_create_mode(float dt) {
     }
     if (result.edit_song_requested && song != nullptr) {
         manager_.change_scene(song_select::make_edit_song_scene(manager_, *song));
+        return;
+    }
+    if (result.import_song_requested) {
+        start_song_import();
+        return;
+    }
+    if (result.export_song_requested) {
+        if (song == nullptr) {
+            song_select::queue_status_message(play_state_, "Select a song to export.", true);
+        } else {
+            start_song_export();
+        }
         return;
     }
     if (result.upload_song_requested) {
@@ -512,6 +631,22 @@ void title_scene::update_create_mode(float dt) {
     }
     if (result.edit_chart_requested && song != nullptr && chart != nullptr) {
         manager_.change_scene(song_select::make_edit_chart_scene(manager_, *song, *chart));
+        return;
+    }
+    if (result.import_chart_requested) {
+        if (song == nullptr) {
+            song_select::queue_status_message(play_state_, "Select a song before importing a chart.", true);
+        } else {
+            start_chart_import();
+        }
+        return;
+    }
+    if (result.export_chart_requested) {
+        if (song == nullptr || chart == nullptr) {
+            song_select::queue_status_message(play_state_, "Select a chart to export.", true);
+        } else {
+            start_chart_export();
+        }
         return;
     }
     if (result.upload_chart_requested) {
@@ -576,6 +711,7 @@ void title_scene::update_common_animation(float dt) {
     auth_overlay::poll_restore(auth_controller_, play_state_.auth, play_state_.login_dialog);
     auth_overlay::poll_request(auth_controller_, play_state_.auth, play_state_.login_dialog);
     poll_play_catalog_reload();
+    poll_play_transfer();
     poll_play_ranking_reload();
     poll_scoring_ruleset_warm();
     poll_create_upload();
@@ -814,6 +950,7 @@ void title_scene::on_enter() {
 
 void title_scene::on_exit() {
     play_state_.login_dialog.open = false;
+    transfer_controller_.on_exit();
     title_online_view::on_exit(online_state_);
     audio_controller_.on_exit();
 }
@@ -852,6 +989,17 @@ void title_scene::update(float dt) {
         if (quit_fade_.complete()) {
             CloseWindow();
         }
+        return;
+    }
+
+    if (play_state_.confirmation_dialog.open && IsKeyPressed(KEY_ESCAPE)) {
+        transfer_controller_.clear_pending_song_import_request(true);
+        transfer_controller_.clear_pending_chart_import_request();
+        play_state_.confirmation_dialog = {};
+        return;
+    }
+
+    if (transfer_controller_.busy()) {
         return;
     }
 
@@ -943,13 +1091,14 @@ void title_scene::draw() {
         account_chip_rect.height
     };
     if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
-        const song_select::confirmation_command command = song_select::draw_confirmation_dialog(play_state_);
-        if (command == song_select::confirmation_command::confirm &&
-            play_state_.confirmation_dialog.action == song_select::pending_confirmation_action::delete_song) {
-            apply_play_delete_result(
-                song_select::delete_song(play_state_, play_state_.confirmation_dialog.song_index));
-        } else if (command == song_select::confirmation_command::cancel) {
-            play_state_.confirmation_dialog = {};
+        if (transfer_controller_.busy()) {
+            song_select::draw_busy_overlay(transfer_controller_.busy_label());
+        } else {
+            const song_select::confirmation_command command = song_select::draw_confirmation_dialog(play_state_);
+            song_select::commands::apply_confirmation_command(
+                play_state_, audio_controller_.preview(), transfer_controller_, command,
+                [this](const song_select::delete_result& result) { apply_play_delete_result(result); },
+                [this](const song_select::transfer_result& result) { apply_play_transfer_result(result); });
         }
     }
     const song_select::login_dialog_command login_command =

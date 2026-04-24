@@ -33,7 +33,62 @@ constexpr Rectangle kPlayRankingSourceOnlineRect = {1126.0f, 98.0f, 90.0f, 34.0f
 constexpr Rectangle kPlayRankingListRect = {878.0f, 150.0f, 338.0f, 468.0f};
 constexpr float kCreateToolButtonHeight = 48.0f;
 constexpr float kCreateToolButtonGap = 8.0f;
+constexpr float kCreateToolColumnGap = 8.0f;
 constexpr int kPlaySongContextMenuItemCount = 1;
+
+enum class create_tool_action {
+    create_song,
+    edit_song,
+    import_song,
+    export_song,
+    upload_song,
+    create_chart,
+    edit_chart,
+    import_chart,
+    export_chart,
+    upload_chart,
+    edit_mv,
+    manage_library,
+};
+
+struct create_tool_entry {
+    const char* title;
+    const char* detail;
+    create_tool_action action;
+};
+
+constexpr create_tool_entry kCreateToolEntries[] = {
+    {"NEW SONG", "Create package.", create_tool_action::create_song},
+    {"EDIT SONG", "Edit metadata.", create_tool_action::edit_song},
+    {"IMPORT SONG", "Load .rpack.", create_tool_action::import_song},
+    {"EXPORT SONG", "Save .rpack.", create_tool_action::export_song},
+    {"UPLOAD SONG", "Publish song.", create_tool_action::upload_song},
+    {"NEW CHART", "Add chart.", create_tool_action::create_chart},
+    {"EDIT CHART", "Open editor.", create_tool_action::edit_chart},
+    {"IMPORT CHART", "Load .rchart.", create_tool_action::import_chart},
+    {"EXPORT CHART", "Save .rchart.", create_tool_action::export_chart},
+    {"UPLOAD CHART", "Publish chart.", create_tool_action::upload_chart},
+    {"MV EDITOR", "Edit MV.", create_tool_action::edit_mv},
+    {"LEGACY", "Classic tools.", create_tool_action::manage_library},
+};
+
+constexpr int kCreateToolColumnCount = 2;
+constexpr int kCreateToolEntryCount =
+    static_cast<int>(sizeof(kCreateToolEntries) / sizeof(kCreateToolEntries[0]));
+
+Rectangle create_tool_rect(Rectangle list_rect, int index) {
+    const int column = index % kCreateToolColumnCount;
+    const int row = index / kCreateToolColumnCount;
+    const float width =
+        (list_rect.width - kCreateToolColumnGap * static_cast<float>(kCreateToolColumnCount - 1)) /
+        static_cast<float>(kCreateToolColumnCount);
+    return {
+        list_rect.x + static_cast<float>(column) * (width + kCreateToolColumnGap),
+        list_rect.y + static_cast<float>(row) * (kCreateToolButtonHeight + kCreateToolButtonGap),
+        width,
+        kCreateToolButtonHeight,
+    };
+}
 
 Rectangle delete_song_menu_item_rect(Rectangle menu_rect) {
     return {
@@ -175,24 +230,26 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
         }
     } else if (left_pressed) {
         const Rectangle list_rect = current.ranking_list_rect;
-        const Rectangle tools[] = {
-            {list_rect.x, list_rect.y, list_rect.width, kCreateToolButtonHeight},
-            {list_rect.x, list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * 1.0f, list_rect.width, kCreateToolButtonHeight},
-            {list_rect.x, list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * 2.0f, list_rect.width, kCreateToolButtonHeight},
-            {list_rect.x, list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * 3.0f, list_rect.width, kCreateToolButtonHeight},
-            {list_rect.x, list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * 4.0f, list_rect.width, kCreateToolButtonHeight},
-            {list_rect.x, list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * 5.0f, list_rect.width, kCreateToolButtonHeight},
-            {list_rect.x, list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * 6.0f, list_rect.width, kCreateToolButtonHeight},
-            {list_rect.x, list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * 7.0f, list_rect.width, kCreateToolButtonHeight},
-        };
-        if (CheckCollisionPointRec(mouse, tools[0])) { result.create_song_requested = true; return result; }
-        if (CheckCollisionPointRec(mouse, tools[1])) { result.edit_song_requested = true; return result; }
-        if (CheckCollisionPointRec(mouse, tools[2])) { result.upload_song_requested = true; return result; }
-        if (CheckCollisionPointRec(mouse, tools[3])) { result.create_chart_requested = true; return result; }
-        if (CheckCollisionPointRec(mouse, tools[4])) { result.edit_chart_requested = true; return result; }
-        if (CheckCollisionPointRec(mouse, tools[5])) { result.upload_chart_requested = true; return result; }
-        if (CheckCollisionPointRec(mouse, tools[6])) { result.edit_mv_requested = true; return result; }
-        if (CheckCollisionPointRec(mouse, tools[7])) { result.manage_library_requested = true; return result; }
+        for (int i = 0; i < kCreateToolEntryCount; ++i) {
+            if (!CheckCollisionPointRec(mouse, create_tool_rect(list_rect, i))) {
+                continue;
+            }
+            switch (kCreateToolEntries[i].action) {
+            case create_tool_action::create_song: result.create_song_requested = true; break;
+            case create_tool_action::edit_song: result.edit_song_requested = true; break;
+            case create_tool_action::import_song: result.import_song_requested = true; break;
+            case create_tool_action::export_song: result.export_song_requested = true; break;
+            case create_tool_action::upload_song: result.upload_song_requested = true; break;
+            case create_tool_action::create_chart: result.create_chart_requested = true; break;
+            case create_tool_action::edit_chart: result.edit_chart_requested = true; break;
+            case create_tool_action::import_chart: result.import_chart_requested = true; break;
+            case create_tool_action::export_chart: result.export_chart_requested = true; break;
+            case create_tool_action::upload_chart: result.upload_chart_requested = true; break;
+            case create_tool_action::edit_mv: result.edit_mv_requested = true; break;
+            case create_tool_action::manage_library: result.manage_library_requested = true; break;
+            }
+            return result;
+        }
     }
 
     if (left_pressed) {
@@ -395,32 +452,17 @@ void draw(const song_select::state& state,
         });
     } else {
         ui::draw_text_in_rect("CREATE TOOLS", 18, current.ranking_header_rect, with_alpha(t.text, alpha), ui::text_align::left);
-        const struct tool_entry { const char* title; const char* detail; } entries[] = {
-            {"NEW SONG", "Start a new song package."},
-            {"EDIT SONG", "Edit selected song metadata."},
-            {"UPLOAD SONG", "Publish selected song to Community."},
-            {"NEW CHART", "Open editor for a new chart."},
-            {"EDIT CHART", "Open selected chart in editor."},
-            {"UPLOAD CHART", "Publish selected chart to Community."},
-            {"MV EDITOR", "Open MV editor for song."},
-            {"MANAGE", "Import / export with legacy tools."},
-        };
-        for (int i = 0; i < 8; ++i) {
-            const Rectangle rect = {
-                current.ranking_list_rect.x,
-                current.ranking_list_rect.y + (kCreateToolButtonHeight + kCreateToolButtonGap) * static_cast<float>(i),
-                current.ranking_list_rect.width,
-                kCreateToolButtonHeight
-            };
+        for (int i = 0; i < kCreateToolEntryCount; ++i) {
+            const Rectangle rect = create_tool_rect(current.ranking_list_rect, i);
             const bool hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), rect);
             const unsigned char row_alpha = hovered ? hover_row_alpha : normal_row_alpha;
             DrawRectangleRec(rect, with_alpha(button_base, row_alpha));
             DrawRectangleLinesEx(rect, 1.2f, with_alpha(t.border, row_alpha));
-            ui::draw_text_in_rect(entries[i].title, 18,
-                                  {rect.x + 14.0f, rect.y + 6.0f, rect.width - 28.0f, 20.0f},
+            ui::draw_text_in_rect(kCreateToolEntries[i].title, 14,
+                                  {rect.x + 10.0f, rect.y + 6.0f, rect.width - 20.0f, 18.0f},
                                   with_alpha(t.text, alpha), ui::text_align::left);
-            ui::draw_text_in_rect(entries[i].detail, 12,
-                                  {rect.x + 14.0f, rect.y + 26.0f, rect.width - 28.0f, 16.0f},
+            ui::draw_text_in_rect(kCreateToolEntries[i].detail, 11,
+                                  {rect.x + 10.0f, rect.y + 27.0f, rect.width - 20.0f, 15.0f},
                                   with_alpha(t.text_muted, alpha), ui::text_align::left);
         }
     }
