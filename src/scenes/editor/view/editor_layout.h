@@ -21,6 +21,9 @@ inline constexpr Rectangle kRightPanelRect = ui::place(kScreenRect, 248.0f, 620.
 inline constexpr Rectangle kBackButtonRect = ui::place(kHeaderRect, 120.0f, 34.0f,
                                                        ui::anchor::center_left, ui::anchor::center_left,
                                                        {16.0f, 0.0f});
+inline constexpr Rectangle kSettingsButtonRect = ui::place(kHeaderRect, 128.0f, 34.0f,
+                                                           ui::anchor::center_left, ui::anchor::center_left,
+                                                           {150.0f, 0.0f});
 
 inline constexpr Rectangle kHeaderToolsRect = ui::place(kHeaderRect, 168.0f, 34.0f,
                                                         ui::anchor::center_right, ui::anchor::center_right,

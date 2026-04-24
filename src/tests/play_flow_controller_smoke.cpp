@@ -117,7 +117,7 @@ int main() {
         context.bgm_audio_time_ms = 700.0;
 
         const play_update_result result = play_flow_controller::update(state, draw_queue, context);
-        if (!state.result_transition_playing || !result.request_pause_bgm || state.final_result.judge_counts[4] != 1) {
+        if (!state.result_transition_playing || !result.request_fade_out_bgm || state.final_result.judge_counts[4] != 1) {
             std::cerr << "Result skip flow failed\n";
             return EXIT_FAILURE;
         }
@@ -204,6 +204,7 @@ int main() {
         play_update_context context;
         context.dt = 0.0f;
         context.bgm_audio_time_ms = 500.0;
+        context.input_already_updated = true;
         context.play_hitsound_immediately = [&immediate_hitsound_count]() {
             ++immediate_hitsound_count;
         };

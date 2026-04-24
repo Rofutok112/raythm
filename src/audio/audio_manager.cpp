@@ -175,11 +175,16 @@ bool audio_manager::load_bgm(const std::string& file_path) {
 }
 
 void audio_manager::play_bgm(bool restart) {
+    apply_bgm_volume();
     play_voice(bgm_handle_, restart);
 }
 
 void audio_manager::pause_bgm() {
     pause_voice(bgm_handle_);
+}
+
+void audio_manager::fade_out_bgm(unsigned int duration_ms) {
+    fade_out_voice(bgm_handle_, duration_ms);
 }
 
 void audio_manager::stop_bgm() {
@@ -508,6 +513,12 @@ void audio_manager::play_voice(unsigned long handle, bool restart) {
 void audio_manager::pause_voice(unsigned long handle) {
     if (handle != 0) {
         BASS_ChannelPause(handle);
+    }
+}
+
+void audio_manager::fade_out_voice(unsigned long handle, unsigned int duration_ms) {
+    if (handle != 0) {
+        BASS_ChannelSlideAttribute(handle, BASS_ATTRIB_VOL, 0.0f, duration_ms);
     }
 }
 

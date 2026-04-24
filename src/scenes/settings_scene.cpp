@@ -1,7 +1,9 @@
 #include "settings_scene.h"
 
 #include <memory>
+#include <utility>
 
+#include "editor_scene.h"
 #include "raylib.h"
 #include "scene_manager.h"
 #include "settings_io.h"
@@ -18,6 +20,12 @@ settings_scene::settings_scene(scene_manager& manager, return_target target)
       audio_page_(g_settings, runtime_applier_),
       video_page_(g_settings, runtime_applier_),
       key_config_page_(g_settings) {
+}
+
+settings_scene::settings_scene(scene_manager& manager, song_data editor_song, editor_resume_state editor_resume)
+    : settings_scene(manager, return_target::editor) {
+    editor_song_ = std::move(editor_song);
+    editor_resume_ = std::make_shared<editor_resume_state>(std::move(editor_resume));
 }
 
 void settings_scene::on_enter() {
@@ -41,6 +49,9 @@ void settings_scene::update(float dt) {
         save_settings(g_settings);
         if (return_target_ == return_target::song_select) {
             manager_.change_scene(song_select::make_seamless_song_select_scene(manager_));
+        } else if (return_target_ == return_target::editor && editor_song_.has_value() && editor_resume_) {
+            manager_.change_scene(std::make_unique<editor_scene>(
+                manager_, std::move(*editor_song_), std::move(*editor_resume_)));
         } else {
             manager_.change_scene(song_select::make_title_scene(manager_));
         }
