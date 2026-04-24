@@ -72,10 +72,10 @@ constexpr float kWeightOverlap = 1.20f;
 constexpr float kWeightPattern = 1.40f;
 constexpr float kWeightBalance = 0.35f;
 constexpr float kWeightStamina = 0.5f;
-constexpr float kWeightChord = 0.85f;
-constexpr float kWeightHand = 0.70f;
-constexpr float kWeightHoldConflict = 0.95f;
-constexpr float kWeightRead = 1.20f;
+constexpr float kWeightChord = 0.28f;
+constexpr float kWeightHand = 0.34f;
+constexpr float kWeightHoldConflict = 0.42f;
+constexpr float kWeightRead = 1.10f;
 
 // 各要素の非線形補正。大きいほど、その要素の「高い値」を強調しやすい。
 constexpr float kGammaDensity = 1.50f;
@@ -104,8 +104,8 @@ constexpr float kCouplingHoldJump = 0.22f;
 constexpr float kCouplingOverlapJump = 0.16f;
 constexpr float kCouplingStaminaStream = 0.14f;
 constexpr float kCouplingReadOverlap = 0.10f;
-constexpr float kCouplingChordJump = 0.08f;
-constexpr float kCouplingHandHold = 0.12f;
+constexpr float kCouplingChordJump = 0.025f;
+constexpr float kCouplingHandHold = 0.035f;
 
 template <typename Predicate>
 std::vector<const note_event*> collect_events_near(const std::vector<note_event>& events,
@@ -357,7 +357,7 @@ float local_chord_factor(const std::vector<note_event>& events, double center_ms
             const float spread = static_cast<float>(max_lane - min_lane) / static_cast<float>(key_count - 1);
             const float one_hand_bias =
                 static_cast<float>(std::max(hands[0], hands[1])) / static_cast<float>(count);
-            sum += std::pow(static_cast<float>(count), kGammaChord) * (1.0f + 0.35f * spread + 0.45f * one_hand_bias);
+            sum += std::pow(static_cast<float>(count), kGammaChord) * (1.0f + 0.25f * spread + 0.30f * one_hand_bias);
         }
         i = j;
     }
@@ -404,7 +404,9 @@ float local_hold_responsibility_conflict_factor(const std::vector<note_event>& e
                     std::abs(nearby.time_ms - event.time_ms) > 140.0) {
                     continue;
                 }
-                sum += 1.35f / static_cast<float>(std::abs(nearby.time_ms - event.time_ms) / 1000.0 + kTimeEpsilonSeconds);
+                const float urgency =
+                    1.0f / static_cast<float>(std::abs(nearby.time_ms - event.time_ms) / 1000.0 + kTimeEpsilonSeconds);
+                sum += 0.45f * std::min(urgency, 8.0f);
             }
             continue;
         }
@@ -414,7 +416,7 @@ float local_hold_responsibility_conflict_factor(const std::vector<note_event>& e
         }
         const int same_hand_holds = active_hold_count_for_hand_at(holds, event.time_ms, hand, key_count);
         if (same_hand_holds > 0) {
-            sum += std::pow(1.0f + static_cast<float>(same_hand_holds), kGammaHoldConflict);
+            sum += 0.65f * std::pow(1.0f + static_cast<float>(same_hand_holds), kGammaHoldConflict);
         }
     }
 
@@ -501,9 +503,9 @@ float local_pattern_factor(const std::vector<transition_sample>& transitions,
     return 0.45f * irregularity +
            0.90f * (jack_count == 0 ? 0.0f : jack_sum / static_cast<float>(jack_count)) +
            0.60f * burst +
-           0.22f * trill +
-           0.16f * stair +
-           0.18f * anchor;
+           0.16f * trill +
+           0.10f * stair +
+           0.12f * anchor;
 }
 
 float local_balance_factor(const std::vector<note_event>& events, double center_ms, int key_count) {
