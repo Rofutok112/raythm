@@ -102,13 +102,21 @@ struct auth_state {
     bool email_verified = false;
 };
 
+enum class login_dialog_mode {
+    login,
+    signup,
+};
+
 struct login_dialog_state {
     bool open = false;
+    login_dialog_mode mode = login_dialog_mode::login;
     float open_anim = 0.0f;
     std::string status_message;
     bool status_message_is_error = false;
+    ui::text_input_state display_name_input;
     ui::text_input_state email_input;
     ui::text_input_state password_input;
+    ui::text_input_state password_confirmation_input;
 };
 
 struct state {

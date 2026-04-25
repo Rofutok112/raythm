@@ -245,16 +245,18 @@ inline size_t text_input_cursor_from_mouse(const std::string& value, float local
     return codepoint_count;
 }
 
-inline void update_text_input_scroll(text_input_state& state, float viewport_width, int font_size) {
+inline void update_text_input_scroll(text_input_state& state, float viewport_width, int font_size,
+                                     const std::string* visual_value = nullptr) {
     if (!state.active) {
         state.scroll_x = 0.0f;
         return;
     }
 
-    const float cursor_x = text_input_prefix_width(state.value, state.cursor, font_size);
+    const std::string& measured_value = visual_value != nullptr ? *visual_value : state.value;
+    const float cursor_x = text_input_prefix_width(measured_value, state.cursor, font_size);
     const float padding = 8.0f;
     const float max_scroll = std::max(0.0f,
-                                      measure_text_size(state.value, static_cast<float>(font_size)).x -
+                                      measure_text_size(measured_value, static_cast<float>(font_size)).x -
                                           viewport_width + padding);
 
     if (cursor_x - state.scroll_x < padding) {
@@ -295,9 +297,16 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
                                          draw_layer layer = draw_layer::base,
                                          int font_size = 16, size_t max_length = 32,
                                          text_input_filter filter = default_text_input_filter,
-                                         float label_width = 84.0f) {
+                                         float label_width = 84.0f,
+                                         bool obscure_value = false) {
     text_input_result result;
     clamp_text_input_state(state);
+    const auto visual_value_for_state = [&]() {
+        if (!obscure_value || state.value.empty()) {
+            return state.value;
+        }
+        return std::string(utf8_codepoint_count(state.value), '*');
+    };
 
     const auto apply_default_if_empty = [&]() {
         if (default_value != nullptr && state.value.empty()) {
@@ -344,7 +353,7 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
 
         if (CheckCollisionPointRec(GetMousePosition(), input_rect)) {
             const float local_x = GetMousePosition().x - text_rect.x + state.scroll_x;
-            state.cursor = text_input_cursor_from_mouse(state.value, local_x, font_size);
+            state.cursor = text_input_cursor_from_mouse(visual_value_for_state(), local_x, font_size);
             clear_text_input_selection(state);
             state.mouse_selecting = true;
         } else {
@@ -362,7 +371,7 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
     if (state.active && state.mouse_selecting && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
         const Vector2 mouse = GetMousePosition();
         const float local_x = mouse.x - text_rect.x + state.scroll_x;
-        const size_t mouse_cursor = text_input_cursor_from_mouse(state.value, local_x, font_size);
+        const size_t mouse_cursor = text_input_cursor_from_mouse(visual_value_for_state(), local_x, font_size);
         state.cursor = mouse_cursor;
         state.has_selection = state.cursor != state.selection_anchor;
     }
@@ -467,17 +476,18 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
         }
     }
 
-    update_text_input_scroll(state, text_rect.width, font_size);
-
     draw_rect_f(input_rect, state.active ? with_alpha(g_theme->panel, 255) : with_alpha(g_theme->section, 255));
     draw_rect_lines(input_rect, 1.5f, state.active ? g_theme->border_active : g_theme->border_light);
     draw_text_in_rect(label, font_size, label_rect,
                       state.active ? g_theme->text : g_theme->text_secondary, text_align::left);
 
-    std::string display_value = state.value;
+    std::string display_value = visual_value_for_state();
     if (display_value.empty() && !state.active && placeholder != nullptr) {
         display_value = placeholder;
     }
+    const std::string scroll_visual_value = visual_value_for_state();
+    update_text_input_scroll(state, text_rect.width, font_size,
+                             obscure_value ? &scroll_visual_value : nullptr);
 
     const Color text_color = state.value.empty() && !state.active ? g_theme->text_hint : g_theme->text;
     const float layout_font_size = text_layout_font_size(static_cast<float>(font_size));
@@ -496,22 +506,22 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
         if (state.has_selection) {
             const auto [selection_start, selection_end] = text_input_selection_range(state);
             const float selection_x = text_rect.x +
-                                      text_input_prefix_width(state.value, selection_start, font_size) -
+                                      text_input_prefix_width(display_value, selection_start, font_size) -
                                       state.scroll_x;
             const float selection_end_x = text_rect.x +
-                                          text_input_prefix_width(state.value, selection_end, font_size) -
+                                          text_input_prefix_width(display_value, selection_end, font_size) -
                                           state.scroll_x;
             draw_rect_span({selection_x, input_rect.y + kTextInputSelectionInsetY,
                             selection_end_x - selection_x, input_rect.height - kTextInputSelectionInsetTotalY},
                            with_alpha(g_theme->row_selected, 255));
         }
 
-        draw_text_f(state.value.c_str(), text_rect.x - state.scroll_x, text_y, font_size, g_theme->text);
+        draw_text_f(display_value.c_str(), text_rect.x - state.scroll_x, text_y, font_size, g_theme->text);
 
         const double blink = GetTime() * 1.6;
         if (std::fmod(blink, 1.0) < 0.6) {
             const float cursor_x = text_rect.x +
-                                   text_input_prefix_width(state.value, state.cursor, font_size) -
+                                   text_input_prefix_width(display_value, state.cursor, font_size) -
                                    state.scroll_x;
             draw_rect_span({cursor_x, input_rect.y + kTextInputSelectionInsetY, kTextInputCursorWidth,
                             input_rect.height - kTextInputSelectionInsetTotalY},

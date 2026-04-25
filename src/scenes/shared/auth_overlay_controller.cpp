@@ -6,13 +6,7 @@
 #include <thread>
 #include <utility>
 
-#include "core/window_dialog_support.h"
-
 namespace {
-
-std::string register_web_url() {
-    return auth::normalize_server_url(auth::kDefaultServerUrl) + "/register";
-}
 
 template <typename Fn>
 std::future<auth::operation_result> start_auth_task(Fn task) {
@@ -60,20 +54,13 @@ void start_request(controller& controller_state,
         return;
     }
 
-    if (command == song_select::login_dialog_command::open_register_web) {
-        const bool opened = window_dialog_support::open_url(register_web_url());
-        dialog_state.status_message = opened
-            ? "Opened the account page in your browser."
-            : "Failed to open the account page.";
-        dialog_state.status_message_is_error = !opened;
-        return;
-    }
-
     controller_state.request_active = true;
     dialog_state.status_message_is_error = false;
     const std::string server_url = auth::kDefaultServerUrl;
+    const std::string display_name = dialog_state.display_name_input.value;
     const std::string email = dialog_state.email_input.value;
     const std::string password = dialog_state.password_input.value;
+    const std::string password_confirmation = dialog_state.password_confirmation_input.value;
 
     switch (command) {
     case song_select::login_dialog_command::request_restore:
@@ -88,13 +75,30 @@ void start_request(controller& controller_state,
             return auth::login_user(server_url, email, password);
         });
         break;
+    case song_select::login_dialog_command::request_register:
+        if (display_name.empty() || email.empty() || password.empty()) {
+            controller_state.request_active = false;
+            dialog_state.status_message = "Name, email, and password are required.";
+            dialog_state.status_message_is_error = true;
+            break;
+        }
+        if (password != password_confirmation) {
+            controller_state.request_active = false;
+            dialog_state.status_message = "Passwords do not match.";
+            dialog_state.status_message_is_error = true;
+            break;
+        }
+        dialog_state.status_message = "Creating account...";
+        controller_state.request_future = start_auth_task([server_url, email, display_name, password]() {
+            return auth::register_user(server_url, email, display_name, password);
+        });
+        break;
     case song_select::login_dialog_command::request_logout:
         dialog_state.status_message = "Logging out...";
         controller_state.request_future = start_auth_task([]() {
             return auth::logout_saved_session();
         });
         break;
-    case song_select::login_dialog_command::open_register_web:
     case song_select::login_dialog_command::none:
     case song_select::login_dialog_command::close:
         controller_state.request_active = false;
@@ -148,6 +152,7 @@ poll_result poll_request(controller& controller_state,
     const auth::operation_result result = controller_state.request_future.get();
     refresh_auth_state(auth_state);
     dialog_state.password_input.value.clear();
+    dialog_state.password_confirmation_input.value.clear();
     dialog_state.status_message = result.message;
     dialog_state.status_message_is_error = !result.success;
 

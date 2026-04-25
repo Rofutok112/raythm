@@ -10,7 +10,7 @@ enum class login_dialog_command {
     close,
     request_restore,
     request_login,
-    open_register_web,
+    request_register,
     request_logout,
 };
 
