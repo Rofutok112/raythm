@@ -98,6 +98,10 @@ std::filesystem::path auth_session_path() {
     return app_data_root() / "auth_session.json";
 }
 
+std::filesystem::path auth_device_path() {
+    return app_data_root() / "auth_device.json";
+}
+
 std::filesystem::path upload_mapping_path() {
     return app_data_root() / "upload_mappings.txt";
 }

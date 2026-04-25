@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "data_models.h"
+#include "network/auth_client.h"
 #include "ranking_service.h"
 #include "raylib.h"
 #include "shared/scene_fade.h"
@@ -105,18 +106,20 @@ struct auth_state {
 enum class login_dialog_mode {
     login,
     signup,
+    verify,
 };
 
 struct login_dialog_state {
     bool open = false;
     login_dialog_mode mode = login_dialog_mode::login;
     float open_anim = 0.0f;
-    std::string status_message;
-    bool status_message_is_error = false;
+    auth::verification_purpose verification = auth::verification_purpose::none;
+    std::string verification_email;
     ui::text_input_state display_name_input;
     ui::text_input_state email_input;
     ui::text_input_state password_input;
     ui::text_input_state password_confirmation_input;
+    ui::text_input_state verification_code_input;
 };
 
 struct state {

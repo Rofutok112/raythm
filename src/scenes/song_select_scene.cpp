@@ -423,10 +423,7 @@ void song_select_scene::update(float dt) {
     song_select::tick_animations(state_, dt);
     poll_song_library_reload();
     poll_selected_chart_ranking();
-    if (const auto restore_result = auth_overlay::poll_restore(auth_controller_, state_.auth, state_.login_dialog);
-        restore_result.should_show_notice) {
-        song_select::queue_status_message(state_, restore_result.notice_message, restore_result.notice_is_error);
-    }
+    auth_overlay::poll_restore(auth_controller_, state_.auth, state_.login_dialog);
     auth_overlay::poll_request(auth_controller_, state_.auth, state_.login_dialog);
     if (const auto prepared = transfer_controller_.poll_song_import_prepare(); prepared.has_value()) {
         if (prepared->requests.empty()) {

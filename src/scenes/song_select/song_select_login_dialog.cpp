@@ -10,18 +10,19 @@
 namespace {
 
 constexpr float kDialogWidth = 540.0f;
-constexpr float kLoginDialogHeight = 462.0f;
-constexpr float kSignupDialogHeight = 594.0f;
-constexpr float kAccountDialogHeight = 387.0f;
+constexpr float kLoginDialogHeight = 360.0f;
+constexpr float kSignupDialogHeight = 510.0f;
+constexpr float kVerifyDialogHeight = 396.0f;
+constexpr float kAccountDialogHeight = 360.0f;
 constexpr float kDialogOffsetY = 27.0f;
 constexpr float kDialogPaddingX = 27.0f;
 constexpr float kTitleHeight = 39.0f;
 constexpr float kSubtitleHeight = 27.0f;
-constexpr float kHeaderTop = 27.0f;
-constexpr float kHeaderGap = 9.0f;
-constexpr float kTabTop = 105.0f;
+constexpr float kHeaderTop = 24.0f;
+constexpr float kHeaderGap = 6.0f;
+constexpr float kTabTop = 96.0f;
 constexpr float kTabHeight = 42.0f;
-constexpr float kBodyTop = 168.0f;
+constexpr float kBodyTop = 150.0f;
 constexpr float kRowHeight = 54.0f;
 constexpr float kRowGap = 12.0f;
 constexpr float kButtonHeight = 54.0f;
@@ -29,7 +30,6 @@ constexpr float kButtonGap = 12.0f;
 constexpr float kPrimaryButtonWidth = 192.0f;
 constexpr float kScreenEdgeMargin = 18.0f;
 constexpr float kOpenAnimOffsetY = 27.0f;
-constexpr float kFooterMarginBottom = 27.0f;
 constexpr float kSignedInLineHeight = 33.0f;
 constexpr float kDisplayNameOffsetY = 42.0f;
 constexpr float kDisplayNameHeight = 30.0f;
@@ -38,17 +38,14 @@ constexpr float kEmailLineHeight = 24.0f;
 constexpr float kVerifyOffsetY = 111.0f;
 constexpr float kVerifyLineHeight = 24.0f;
 constexpr float kAccountButtonWidth = 138.0f;
-constexpr float kStatusOffsetAboveFooter = 42.0f;
-constexpr float kStatusLineHeight = 30.0f;
 constexpr float kTextInputLabelWidth = 135.0f;
-constexpr float kFormMessageGap = 18.0f;
-constexpr float kMessageHeight = 27.0f;
-constexpr float kLoginButtonOffsetY = 42.0f;
+constexpr float kVerifyButtonWidth = 168.0f;
 
 Rectangle dialog_rect_for(const song_select::state& state) {
     const float dialog_height = state.auth.logged_in ? kAccountDialogHeight
         : (state.login_dialog.mode == song_select::login_dialog_mode::signup ? kSignupDialogHeight
-                                                                             : kLoginDialogHeight);
+           : (state.login_dialog.mode == song_select::login_dialog_mode::verify ? kVerifyDialogHeight
+                                                                                : kLoginDialogHeight));
     Rectangle rect = {
         song_select::layout::kLoginButtonRect.x + song_select::layout::kLoginButtonRect.width - kDialogWidth,
         song_select::layout::kLoginButtonRect.y + song_select::layout::kLoginButtonRect.height + kDialogOffsetY,
@@ -70,7 +67,8 @@ Rectangle dialog_rect_for(const song_select::auth_state& auth_state,
                           Rectangle screen_rect) {
     const float dialog_height = auth_state.logged_in ? kAccountDialogHeight
         : (dialog_state.mode == song_select::login_dialog_mode::signup ? kSignupDialogHeight
-                                                                       : kLoginDialogHeight);
+           : (dialog_state.mode == song_select::login_dialog_mode::verify ? kVerifyDialogHeight
+                                                                          : kLoginDialogHeight));
     Rectangle rect = {
         anchor_rect.x + anchor_rect.width - kDialogWidth,
         anchor_rect.y + anchor_rect.height + kDialogOffsetY,
@@ -97,6 +95,10 @@ bool printable_filter(int codepoint, const std::string&) {
     return codepoint >= 32 && codepoint != 127;
 }
 
+float centered_footer_button_y(const Rectangle& dialog_rect, float content_bottom) {
+    return content_bottom + (dialog_rect.y + dialog_rect.height - content_bottom - kButtonHeight) * 0.5f;
+}
+
 void deactivate_input(ui::text_input_state& input) {
     input.active = false;
     input.has_selection = false;
@@ -116,6 +118,7 @@ void deactivate_form_inputs(song_select::login_dialog_state& dialog_state) {
     deactivate_input(dialog_state.email_input);
     deactivate_input(dialog_state.password_input);
     deactivate_input(dialog_state.password_confirmation_input);
+    deactivate_input(dialog_state.verification_code_input);
 }
 
 void focus_input(song_select::login_dialog_state& dialog_state, ui::text_input_state& input) {
@@ -143,6 +146,12 @@ void focus_relative_input(song_select::login_dialog_state& dialog_state, bool si
         ? 0
         : (active_index + direction + count) % count;
     focus_input(dialog_state, *inputs[static_cast<size_t>(next_index)]);
+}
+
+const char* verification_title(auth::verification_purpose purpose) {
+    return purpose == auth::verification_purpose::login_verification
+        ? "Confirm login"
+        : "Verify email";
 }
 
 ui::button_state draw_tab(Rectangle rect, const char* label, bool selected, ui::draw_layer layer) {
@@ -179,12 +188,11 @@ void open_login_dialog(login_dialog_state& dialog_state, const auth::session_sum
         dialog_state.mode = login_dialog_mode::login;
     }
     dialog_state.open_anim = 0.0f;
-    dialog_state.status_message.clear();
-    dialog_state.status_message_is_error = false;
     dialog_state.email_input.value = summary.email;
     dialog_state.display_name_input.value.clear();
     dialog_state.password_input.value.clear();
     dialog_state.password_confirmation_input.value.clear();
+    dialog_state.verification_code_input.value.clear();
     deactivate_form_inputs(dialog_state);
 }
 
@@ -204,7 +212,6 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
     const Rectangle dialog_rect = dialog_rect_for(auth_state, dialog_state, anchor_rect, screen_rect);
     const float form_x = dialog_rect.x + kDialogPaddingX;
     const float form_width = dialog_rect.width - kDialogPaddingX * 2.0f;
-    const float footer_y = dialog_rect.y + dialog_rect.height - kFooterMarginBottom - kButtonHeight;
 
     ui::draw_panel(dialog_rect);
     ui::draw_text_in_rect("Account", 24,
@@ -227,7 +234,10 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
         const Rectangle verify_rect = {
             form_x, dialog_rect.y + kBodyTop + kVerifyOffsetY, form_width, kVerifyLineHeight
         };
-        const Rectangle button_row = {form_x, footer_y, form_width, kButtonHeight};
+        const Rectangle button_row = {
+            form_x, centered_footer_button_y(dialog_rect, verify_rect.y + verify_rect.height),
+            form_width, kButtonHeight
+        };
         const Rectangle logout_rect = {
             button_row.x + button_row.width - kAccountButtonWidth, button_row.y, kAccountButtonWidth, kButtonHeight
         };
@@ -254,18 +264,51 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
                               auth_state.email_verified ? theme.success : theme.error,
                               ui::text_align::left);
 
-        if (!dialog_state.status_message.empty()) {
-            ui::draw_text_in_rect(dialog_state.status_message.c_str(), 13,
-                                  {form_x, footer_y - kStatusOffsetAboveFooter, form_width, kStatusLineHeight},
-                                  dialog_state.status_message_is_error ? theme.error : theme.success,
-                                  ui::text_align::left);
-        }
-
         if (draw_dialog_button(refresh_rect, "REFRESH", 14, layer, !request_active).clicked) {
             return login_dialog_command::request_restore;
         }
         if (draw_dialog_button(logout_rect, "LOGOUT", 14, layer, !request_active).clicked) {
             return login_dialog_command::request_logout;
+        }
+        return login_dialog_command::none;
+    }
+
+    if (dialog_state.mode == login_dialog_mode::verify) {
+        const Rectangle title_rect = {form_x, dialog_rect.y + kBodyTop, form_width, 30.0f};
+        const Rectangle email_rect = {form_x, title_rect.y + 34.0f, form_width, 24.0f};
+        const Rectangle code_rect = {form_x, email_rect.y + 42.0f, form_width, kRowHeight};
+        const Rectangle button_row = {
+            form_x, centered_footer_button_y(dialog_rect, code_rect.y + code_rect.height),
+            form_width, kButtonHeight
+        };
+        const Rectangle verify_rect = {
+            button_row.x + button_row.width - kVerifyButtonWidth,
+            button_row.y,
+            kVerifyButtonWidth,
+            kButtonHeight
+        };
+        const Rectangle resend_rect = {
+            verify_rect.x - kVerifyButtonWidth - kButtonGap,
+            button_row.y,
+            kVerifyButtonWidth,
+            kButtonHeight
+        };
+
+        ui::draw_text_in_rect(verification_title(dialog_state.verification), 20,
+                              title_rect, theme.text, ui::text_align::left);
+        ui::draw_text_in_rect(dialog_state.verification_email.c_str(), 14,
+                              email_rect, theme.text_muted, ui::text_align::left);
+        const ui::text_input_result code_result = ui::draw_text_input(
+            code_rect, dialog_state.verification_code_input, "Code", "6 digit code",
+            nullptr, layer, 15, 12, printable_filter, kTextInputLabelWidth);
+
+        if (draw_dialog_button(resend_rect, "RESEND", 15, layer, !request_active).clicked) {
+            return login_dialog_command::request_resend_code;
+        }
+        if ((draw_dialog_button(verify_rect, "VERIFY", 15, layer, !request_active).clicked ||
+             code_result.submitted) &&
+            !request_active) {
+            return login_dialog_command::request_verify;
         }
         return login_dialog_command::none;
     }
@@ -278,12 +321,10 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
 
     if (draw_tab(login_tab, "LOGIN", !signup, layer).clicked && !request_active) {
         dialog_state.mode = login_dialog_mode::login;
-        dialog_state.status_message.clear();
         deactivate_form_inputs(dialog_state);
     }
     if (draw_tab(signup_tab, "SIGN UP", signup, layer).clicked && !request_active) {
         dialog_state.mode = login_dialog_mode::signup;
-        dialog_state.status_message.clear();
         deactivate_form_inputs(dialog_state);
     }
 
@@ -318,18 +359,13 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
                              IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? -1 : 1);
     }
 
-    const float action_top =
-        dialog_rect.y + kBodyTop + static_cast<float>(row) * (kRowHeight + kRowGap) + kFormMessageGap;
-    const Rectangle message_rect = {form_x, action_top, form_width, kMessageHeight};
-    const Rectangle login_button_row = {form_x, action_top + kLoginButtonOffsetY, form_width, kButtonHeight};
+    const Rectangle last_input_rect = make_row(dialog_rect, row - 1);
+    const Rectangle login_button_row = {
+        form_x, centered_footer_button_y(dialog_rect, last_input_rect.y + last_input_rect.height),
+        form_width, kButtonHeight
+    };
     const Rectangle primary_rect = ui::place(login_button_row, kPrimaryButtonWidth, kButtonHeight,
                                              ui::anchor::center, ui::anchor::center);
-
-    if (!dialog_state.status_message.empty()) {
-        ui::draw_text_in_rect(dialog_state.status_message.c_str(), 16, message_rect,
-                              dialog_state.status_message_is_error ? theme.error : theme.success,
-                              ui::text_align::left);
-    }
 
     const char* primary_label = signup ? "SIGN UP" : "LOGIN";
     if ((draw_dialog_button(primary_rect, primary_label, 16, layer, !request_active).clicked || submitted) &&
