@@ -942,7 +942,7 @@ void title_scene::on_enter() {
     play_state_.ranking_panel.selected_source = ranking_service::source::local;
     auth_overlay::refresh_auth_state(play_state_.auth);
     scoring_ruleset_loading_ = false;
-    request_scoring_ruleset_warm(false);
+    request_scoring_ruleset_warm(true);
     play_state_.recent_result_offset = recent_result_offset_;
     if (play_intro_fade_) {
         intro_fade_.restart(scene_fade::direction::in, 1.0f, 1.0f);

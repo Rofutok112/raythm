@@ -12,6 +12,7 @@
 #include "player_note_offsets.h"
 #include "play_chart_filter.h"
 #include "play_speed_compensation.h"
+#include "ranking_service.h"
 
 namespace {
 
@@ -137,6 +138,9 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.timing_engine.init(state.chart_data->timing_events, state.chart_data->meta.resolution, effective_offset_ms);
     state.start_ms = std::max(0.0, state.timing_engine.tick_to_ms(state.start_tick));
     state.judge_system.init(state.chart_data->notes, state.timing_engine);
+    if (!state.editor_resume_state.has_value()) {
+        ranking_service::refresh_scoring_ruleset_cache_for_chart_start(state.chart_data->meta, false);
+    }
     state.score_system.init(calculate_total_judge_points(*state.chart_data));
     state.gauge = gauge{};
 

@@ -20,15 +20,6 @@ size_t judge_index(judge_result result) {
     return 4;
 }
 
-double combo_score_multiplier(int combo, int total_notes) {
-    if (total_notes <= 0) {
-        return 1.0;
-    }
-
-    const double progress = std::clamp(static_cast<double>(combo) / static_cast<double>(total_notes), 0.0, 1.0);
-    return progress * progress;
-}
-
 double max_raw_score_for_total_notes(const scoring_ruleset_runtime::ruleset& ruleset, int total_notes) {
     if (total_notes <= 0) {
         return 0.0;
@@ -38,7 +29,7 @@ double max_raw_score_for_total_notes(const scoring_ruleset_runtime::ruleset& rul
     for (int combo = 1; combo <= total_notes; ++combo) {
         max_score += static_cast<double>(
             scoring_ruleset_runtime::judge_value_for(ruleset, judge_result::perfect)) *
-            combo_score_multiplier(combo, total_notes);
+            scoring_ruleset_runtime::score_multiplier_for(ruleset, combo, total_notes);
     }
     return max_score;
 }
@@ -85,7 +76,8 @@ void score_system::on_judge(const judge_event& event) {
     }
 
     const int raw = scoring_ruleset_runtime::judge_value_for(ruleset_, event.result);
-    raw_score_ += static_cast<double>(raw) * combo_score_multiplier(combo_, total_notes_);
+    raw_score_ += static_cast<double>(raw) *
+                  scoring_ruleset_runtime::score_multiplier_for(ruleset_, combo_, total_notes_);
 }
 
 int score_system::get_score() const {
@@ -124,6 +116,8 @@ result_data score_system::get_result_data() const {
     result.is_all_perfect = judged_notes_ > 0 &&
                             judge_counts_[judge_index(judge_result::perfect)] == judged_notes_;
     result.accuracy = get_live_accuracy();
+    result.scoring_ruleset_version = ruleset_.ruleset_version;
+    result.scoring_accepted_input = ruleset_.accepted_input;
     result.note_results = note_results_;
 
     result.clear_rank = scoring_ruleset_runtime::compute_rank_for(ruleset_, result.accuracy, result.is_full_combo);
