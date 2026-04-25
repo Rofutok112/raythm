@@ -1038,6 +1038,11 @@ upload_request_result send_chart_upload_request(const auth::session& session,
 upload_result upload_song(const song_select::song_entry& song) {
     upload_result result;
 
+    if (song.status != content_status::local) {
+        result.message = "Only Local songs can be uploaded.";
+        return result;
+    }
+
     std::string error_message;
     const std::optional<auth::session> session_opt = require_saved_session(error_message);
     if (!session_opt.has_value()) {
@@ -1098,6 +1103,11 @@ upload_result upload_song(const song_select::song_entry& song) {
 upload_result upload_chart(const song_select::song_entry& song,
                            const song_select::chart_option& chart) {
     upload_result result;
+
+    if (song.status != content_status::local || chart.status != content_status::local) {
+        result.message = "Only Local charts from Local songs can be uploaded.";
+        return result;
+    }
 
     std::string error_message;
     const std::optional<auth::session> session_opt = require_saved_session(error_message);

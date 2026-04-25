@@ -93,6 +93,10 @@ const char* account_status_for(const song_select::auth_state& auth_state) {
     return auth_state.email_verified ? "Verified profile" : "Manage account";
 }
 
+bool can_upload_content(content_status status) {
+    return status == content_status::local;
+}
+
 const song_select::song_entry* selected_audio_song(title_scene::hub_mode mode,
                                                    const song_select::state& play_state,
                                                    const title_online_view::state& online_state) {
@@ -634,6 +638,8 @@ void title_scene::update_create_mode(float dt) {
     if (result.upload_song_requested) {
         if (song == nullptr) {
             song_select::queue_status_message(play_state_, "Select a song to upload.", true);
+        } else if (!can_upload_content(song->status)) {
+            ui::notify("Only Local songs can be uploaded.", ui::notice_tone::error, 2.8f);
         } else {
             start_song_upload(*song);
         }
@@ -666,6 +672,8 @@ void title_scene::update_create_mode(float dt) {
     if (result.upload_chart_requested) {
         if (song == nullptr || chart == nullptr) {
             song_select::queue_status_message(play_state_, "Select a chart to upload.", true);
+        } else if (!can_upload_content(song->status) || !can_upload_content(chart->status)) {
+            ui::notify("Only Local charts from Local songs can be uploaded.", ui::notice_tone::error, 2.8f);
         } else {
             start_chart_upload(*song, *chart);
         }
