@@ -29,10 +29,19 @@ struct session_summary {
     bool email_verified = false;
 };
 
+enum class verification_purpose {
+    none,
+    email_verification,
+    login_verification,
+};
+
 struct operation_result {
     bool success = false;
     std::string message;
     std::optional<session> session_data;
+    bool verification_required = false;
+    verification_purpose verification = verification_purpose::none;
+    std::string verification_email;
 };
 
 std::string normalize_server_url(const std::string& server_url);
@@ -49,6 +58,15 @@ operation_result register_user(const std::string& server_url,
 operation_result login_user(const std::string& server_url,
                             const std::string& email,
                             const std::string& password);
+operation_result verify_email_code(const std::string& server_url,
+                                   const std::string& email,
+                                   const std::string& code);
+operation_result verify_login_code(const std::string& server_url,
+                                   const std::string& email,
+                                   const std::string& code);
+operation_result resend_verification_code(const std::string& server_url,
+                                          const std::string& email,
+                                          verification_purpose purpose);
 operation_result restore_saved_session();
 operation_result logout_saved_session();
 

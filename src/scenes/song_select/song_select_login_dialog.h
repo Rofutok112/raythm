@@ -11,6 +11,8 @@ enum class login_dialog_command {
     request_restore,
     request_login,
     request_register,
+    request_verify,
+    request_resend_code,
     request_logout,
 };
 

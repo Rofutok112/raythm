@@ -95,6 +95,38 @@ std::optional<auth::session> parse_auth_session_response(const std::string& body
     };
 }
 
+auth::verification_purpose parse_verification_purpose(const std::string& value) {
+    if (value == "email_verification") {
+        return auth::verification_purpose::email_verification;
+    }
+    if (value == "login_verification") {
+        return auth::verification_purpose::login_verification;
+    }
+    return auth::verification_purpose::none;
+}
+
+std::optional<auth::operation_result> parse_verification_required_response(const std::string& body) {
+    if (!json::extract_bool(body, "verificationRequired").value_or(false)) {
+        return std::nullopt;
+    }
+
+    const std::string purpose_text =
+        json::extract_string(body, "verificationPurpose").value_or("email_verification");
+    const auth::verification_purpose purpose = parse_verification_purpose(purpose_text);
+    if (purpose == auth::verification_purpose::none) {
+        return std::nullopt;
+    }
+
+    return auth::operation_result{
+        .success = false,
+        .message = json::extract_string(body, "message").value_or("Verification code required."),
+        .session_data = std::nullopt,
+        .verification_required = true,
+        .verification = purpose,
+        .verification_email = json::extract_string(body, "email").value_or(""),
+    };
+}
+
 std::optional<auth::public_user> parse_me_response(const std::string& body) {
     const std::optional<std::string> user_object = json::extract_object(body, "user");
     if (!user_object.has_value()) {
@@ -126,6 +158,46 @@ bool write_session_file(const auth::session& session_data) {
     output << "    \"displayName\": \"" << json::escape_string(session_data.user.display_name) << "\",\n";
     output << "    \"emailVerified\": " << (session_data.user.email_verified ? "true" : "false") << "\n";
     output << "  }\n";
+    output << "}\n";
+    return output.good();
+}
+
+std::optional<std::string> read_trusted_device_token(const std::string& server_url, const std::string& email) {
+    const std::string content = read_file(app_paths::auth_device_path());
+    if (content.empty()) {
+        return std::nullopt;
+    }
+
+    const std::optional<std::string> stored_server_url = json::extract_string(content, "serverUrl");
+    const std::optional<std::string> stored_email = json::extract_string(content, "email");
+    const std::optional<std::string> device_token = json::extract_string(content, "trustedDeviceToken");
+    if (!stored_server_url.has_value() || !stored_email.has_value() || !device_token.has_value()) {
+        return std::nullopt;
+    }
+
+    if (auth::normalize_server_url(*stored_server_url) != auth::normalize_server_url(server_url) ||
+        json::trim(*stored_email) != json::trim(email)) {
+        return std::nullopt;
+    }
+
+    return *device_token;
+}
+
+bool write_trusted_device_token(const std::string& server_url, const std::string& email, const std::string& token) {
+    if (token.empty()) {
+        return true;
+    }
+
+    app_paths::ensure_directories();
+    std::ofstream output(app_paths::auth_device_path(), std::ios::binary | std::ios::trunc);
+    if (!output.is_open()) {
+        return false;
+    }
+
+    output << "{\n";
+    output << "  \"serverUrl\": \"" << json::escape_string(auth::normalize_server_url(server_url)) << "\",\n";
+    output << "  \"email\": \"" << json::escape_string(json::trim(email)) << "\",\n";
+    output << "  \"trustedDeviceToken\": \"" << json::escape_string(token) << "\"\n";
     output << "}\n";
     return output.good();
 }
@@ -321,7 +393,8 @@ auth::operation_result finish_with_session(auth::operation_result result, const 
 
 auth::operation_result parse_auth_response(const http_response& response,
                                            const std::string& server_url,
-                                           std::string success_message) {
+                                           std::string success_message,
+                                           const std::string& email_for_device = {}) {
     if (!response.error_message.empty()) {
         return {
             .success = false,
@@ -336,6 +409,11 @@ auth::operation_result parse_auth_response(const http_response& response,
             .message = parse_error_message(response.body, "Authentication request failed."),
             .session_data = std::nullopt,
         };
+    }
+
+    if (const std::optional<auth::operation_result> verification = parse_verification_required_response(response.body);
+        verification.has_value()) {
+        return *verification;
     }
 
     const std::optional<auth::session> session_data =
@@ -354,6 +432,13 @@ auth::operation_result parse_auth_response(const http_response& response,
             .message = "Authentication succeeded, but the local session could not be saved.",
             .session_data = std::nullopt,
         };
+    }
+
+    if (const std::optional<std::string> trusted_device_token =
+            json::extract_string(response.body, "trustedDeviceToken");
+        trusted_device_token.has_value()) {
+        const std::string device_email = email_for_device.empty() ? session_data->user.email : email_for_device;
+        write_trusted_device_token(server_url, device_email, *trusted_device_token);
     }
 
     return finish_with_session({
@@ -463,7 +548,7 @@ operation_result register_user(const std::string& server_url,
             {"User-Agent", "raythm/0.1"},
         });
 
-    return parse_auth_response(response, normalized_server_url, "Account created successfully.");
+    return parse_auth_response(response, normalized_server_url, "Account created successfully.", json::trim(email));
 }
 
 operation_result login_user(const std::string& server_url,
@@ -478,10 +563,15 @@ operation_result login_user(const std::string& server_url,
         };
     }
 
+    const std::optional<std::string> trusted_device_token =
+        read_trusted_device_token(normalized_server_url, json::trim(email));
     const std::string body =
         "{"
         "\"email\":\"" + json::escape_string(json::trim(email)) + "\","
         "\"password\":\"" + json::escape_string(password) + "\""
+        + (trusted_device_token.has_value()
+               ? ",\"deviceToken\":\"" + json::escape_string(*trusted_device_token) + "\""
+               : "") +
         "}";
 
     const http_response response = send_request(
@@ -494,7 +584,97 @@ operation_result login_user(const std::string& server_url,
             {"User-Agent", "raythm/0.1"},
         });
 
-    return parse_auth_response(response, normalized_server_url, "Logged in successfully.");
+    return parse_auth_response(response, normalized_server_url, "Logged in successfully.", json::trim(email));
+}
+
+operation_result verify_email_code(const std::string& server_url,
+                                   const std::string& email,
+                                   const std::string& code) {
+    const std::string normalized_server_url = normalize_server_url(server_url);
+    const std::string body =
+        "{"
+        "\"email\":\"" + json::escape_string(json::trim(email)) + "\","
+        "\"code\":\"" + json::escape_string(json::trim(code)) + "\""
+        "}";
+
+    const http_response response = send_request(
+        "POST",
+        build_auth_url(normalized_server_url, "/auth/verify-email"),
+        body,
+        {
+            {"Accept", "application/json"},
+            {"Content-Type", "application/json"},
+            {"User-Agent", "raythm/0.1"},
+        });
+
+    return parse_auth_response(response, normalized_server_url, "Email verified.", json::trim(email));
+}
+
+operation_result verify_login_code(const std::string& server_url,
+                                   const std::string& email,
+                                   const std::string& code) {
+    const std::string normalized_server_url = normalize_server_url(server_url);
+    const std::string body =
+        "{"
+        "\"email\":\"" + json::escape_string(json::trim(email)) + "\","
+        "\"code\":\"" + json::escape_string(json::trim(code)) + "\""
+        "}";
+
+    const http_response response = send_request(
+        "POST",
+        build_auth_url(normalized_server_url, "/auth/verify-login"),
+        body,
+        {
+            {"Accept", "application/json"},
+            {"Content-Type", "application/json"},
+            {"User-Agent", "raythm/0.1"},
+        });
+
+    return parse_auth_response(response, normalized_server_url, "Login verified.", json::trim(email));
+}
+
+operation_result resend_verification_code(const std::string& server_url,
+                                          const std::string& email,
+                                          verification_purpose purpose) {
+    const std::string normalized_server_url = normalize_server_url(server_url);
+    const char* purpose_text = purpose == verification_purpose::login_verification
+        ? "login_verification"
+        : "email_verification";
+    const std::string body =
+        "{"
+        "\"email\":\"" + json::escape_string(json::trim(email)) + "\","
+        "\"purpose\":\"" + purpose_text + "\""
+        "}";
+
+    const http_response response = send_request(
+        "POST",
+        build_auth_url(normalized_server_url, "/auth/resend-code"),
+        body,
+        {
+            {"Accept", "application/json"},
+            {"Content-Type", "application/json"},
+            {"User-Agent", "raythm/0.1"},
+        });
+
+    if (!response.error_message.empty()) {
+        return {
+            .success = false,
+            .message = response.error_message,
+            .session_data = std::nullopt,
+        };
+    }
+    if (response.status_code < 200 || response.status_code >= 300) {
+        return {
+            .success = false,
+            .message = parse_error_message(response.body, "Failed to resend code."),
+            .session_data = std::nullopt,
+        };
+    }
+    return {
+        .success = true,
+        .message = parse_error_message(response.body, "Verification code sent."),
+        .session_data = std::nullopt,
+    };
 }
 
 operation_result restore_saved_session() {

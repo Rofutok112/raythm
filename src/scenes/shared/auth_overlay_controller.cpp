@@ -61,6 +61,9 @@ void start_request(controller& controller_state,
     const std::string email = dialog_state.email_input.value;
     const std::string password = dialog_state.password_input.value;
     const std::string password_confirmation = dialog_state.password_confirmation_input.value;
+    const std::string verification_email = dialog_state.verification_email;
+    const std::string verification_code = dialog_state.verification_code_input.value;
+    const auth::verification_purpose verification = dialog_state.verification;
 
     switch (command) {
     case song_select::login_dialog_command::request_restore:
@@ -91,6 +94,33 @@ void start_request(controller& controller_state,
         dialog_state.status_message = "Creating account...";
         controller_state.request_future = start_auth_task([server_url, email, display_name, password]() {
             return auth::register_user(server_url, email, display_name, password);
+        });
+        break;
+    case song_select::login_dialog_command::request_verify:
+        if (verification_email.empty() || verification_code.empty()) {
+            controller_state.request_active = false;
+            dialog_state.status_message = "Verification code is required.";
+            dialog_state.status_message_is_error = true;
+            break;
+        }
+        dialog_state.status_message = "Verifying code...";
+        controller_state.request_future = start_auth_task([server_url, verification_email, verification_code, verification]() {
+            if (verification == auth::verification_purpose::login_verification) {
+                return auth::verify_login_code(server_url, verification_email, verification_code);
+            }
+            return auth::verify_email_code(server_url, verification_email, verification_code);
+        });
+        break;
+    case song_select::login_dialog_command::request_resend_code:
+        if (verification_email.empty() || verification == auth::verification_purpose::none) {
+            controller_state.request_active = false;
+            dialog_state.status_message = "No verification request is active.";
+            dialog_state.status_message_is_error = true;
+            break;
+        }
+        dialog_state.status_message = "Resending code...";
+        controller_state.request_future = start_auth_task([server_url, verification_email, verification]() {
+            return auth::resend_verification_code(server_url, verification_email, verification);
         });
         break;
     case song_select::login_dialog_command::request_logout:
@@ -153,6 +183,23 @@ poll_result poll_request(controller& controller_state,
     refresh_auth_state(auth_state);
     dialog_state.password_input.value.clear();
     dialog_state.password_confirmation_input.value.clear();
+    if (result.verification_required) {
+        dialog_state.mode = song_select::login_dialog_mode::verify;
+        dialog_state.verification = result.verification;
+        dialog_state.verification_email = result.verification_email.empty()
+            ? dialog_state.email_input.value
+            : result.verification_email;
+        dialog_state.verification_code_input.value.clear();
+        dialog_state.status_message = result.message;
+        dialog_state.status_message_is_error = false;
+        return {};
+    }
+    if (result.success) {
+        dialog_state.mode = song_select::login_dialog_mode::login;
+        dialog_state.verification = auth::verification_purpose::none;
+        dialog_state.verification_email.clear();
+        dialog_state.verification_code_input.value.clear();
+    }
     dialog_state.status_message = result.message;
     dialog_state.status_message_is_error = !result.success;
 
