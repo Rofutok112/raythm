@@ -197,5 +197,7 @@ struct result_data {
     bool failed = false;
     bool is_full_combo = false;
     bool is_all_perfect = false;
+    std::string scoring_ruleset_version;
+    std::string scoring_accepted_input = "note_results_v1";
     std::vector<note_result_entry> note_results;
 };

@@ -28,11 +28,8 @@
 
 namespace {
 
-constexpr std::string_view kFileHeaderV1 = "RAYTHM_LOCAL_RANKING_V1";
-constexpr std::string_view kFileHeaderV2 = "RAYTHM_LOCAL_RANKING_V2";
-constexpr std::string_view kFileHeaderV3 = "RAYTHM_LOCAL_RANKING_V3";
-constexpr std::string_view kFileHeaderV4 = "RAYTHM_LOCAL_RANKING_V4";
-constexpr std::string_view kFileHeaderV5 = "RAYTHM_LOCAL_RANKING_V5";
+constexpr char kLocalRankingFileHeader[] = "RAYTHM_LOCAL_RANKING_V6";
+constexpr char kAuthoritativeAcceptedInput[] = "note_results_v1";
 constexpr wchar_t kEntropyLabel[] = L"raythm-local-ranking";
 
 std::string trim(std::string_view value) {
@@ -199,6 +196,8 @@ std::optional<std::vector<note_result_entry>> parse_note_results(std::string_vie
 struct stored_local_record {
     std::string recorded_at;
     std::string player_display_name;
+    std::string scoring_ruleset_version;
+    std::string scoring_accepted_input = std::string(kAuthoritativeAcceptedInput);
     std::vector<note_result_entry> note_results;
     std::optional<ranking_service::entry> legacy_entry;
 };
@@ -230,7 +229,7 @@ ranking_service::entry resolve_record_entry(const stored_local_record& record,
 
 std::string serialize_records(const std::vector<stored_local_record>& records) {
     std::ostringstream out;
-    out << kFileHeaderV5 << '\n';
+    out << kLocalRankingFileHeader << '\n';
     for (const stored_local_record& record : records) {
         if (record.legacy_entry.has_value()) {
             const ranking_service::entry& entry = *record.legacy_entry;
@@ -248,6 +247,8 @@ std::string serialize_records(const std::vector<stored_local_record>& records) {
         out << "record" << '\t'
             << record.recorded_at << '\t'
             << sanitize_player_display_name(record.player_display_name) << '\t'
+            << record.scoring_ruleset_version << '\t'
+            << record.scoring_accepted_input << '\t'
             << serialize_note_results(record.note_results) << '\n';
     }
     return out.str();
@@ -261,7 +262,7 @@ std::vector<stored_local_record> parse_records(const std::string& content) {
         return records;
     }
     const std::string header = trim(line);
-    if (header != kFileHeaderV5) {
+    if (header != kLocalRankingFileHeader) {
         return records;
     }
 
@@ -286,10 +287,15 @@ std::vector<stored_local_record> parse_records(const std::string& content) {
             const std::string kind = trim(kind_token);
 
             if (kind == "record") {
+                std::string ruleset_version_token, accepted_input_token;
                 std::string note_results_token;
-                if (!std::getline(row, note_results_token)) {
+                if (!std::getline(row, ruleset_version_token, '\t') ||
+                    !std::getline(row, accepted_input_token, '\t') ||
+                    !std::getline(row, note_results_token)) {
                     continue;
                 }
+                record.scoring_ruleset_version = trim(ruleset_version_token);
+                record.scoring_accepted_input = trim(accepted_input_token);
                 const std::optional<std::vector<note_result_entry>> note_results =
                     parse_note_results(note_results_token);
                 if (!note_results.has_value()) {
@@ -327,6 +333,21 @@ std::vector<stored_local_record> parse_records(const std::string& content) {
     }
 
     return records;
+}
+
+bool is_authoritative_local_record(const stored_local_record& record) {
+    return !record.legacy_entry.has_value() &&
+           !record.note_results.empty() &&
+           !record.scoring_ruleset_version.empty() &&
+           record.scoring_accepted_input == kAuthoritativeAcceptedInput;
+}
+
+void retain_authoritative_local_records(std::vector<stored_local_record>& records) {
+    records.erase(
+        std::remove_if(records.begin(), records.end(), [](const stored_local_record& record) {
+            return !is_authoritative_local_record(record);
+        }),
+        records.end());
 }
 
 bool ranking_entry_better(const ranking_service::entry& left, const ranking_service::entry& right) {
@@ -855,6 +876,9 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
     const scoring_ruleset_runtime::ruleset ruleset = scoring_ruleset_runtime::current_ruleset();
     result.entries.reserve(records.size());
     for (const stored_local_record& record : records) {
+        if (!is_authoritative_local_record(record)) {
+            continue;
+        }
         result.entries.push_back(resolve_record_entry(record, ruleset));
     }
     std::sort(result.entries.begin(), result.entries.end(), ranking_entry_better);
@@ -881,6 +905,8 @@ local_submit_result submit_local_result_detailed(const chart_meta& chart, const 
     }
 
     std::vector<stored_local_record> records = load_local_records(chart.chart_id);
+    retain_authoritative_local_records(records);
+
     const scoring_ruleset_runtime::ruleset ruleset = scoring_ruleset_runtime::current_ruleset();
     std::vector<entry> entries;
     entries.reserve(records.size());
@@ -891,28 +917,23 @@ local_submit_result submit_local_result_detailed(const chart_meta& chart, const 
 
     const std::string recorded_at = current_timestamp_utc();
     const std::string player_display_name = current_local_player_display_name();
-    stored_local_record new_record{
-        .recorded_at = recorded_at,
-        .player_display_name = player_display_name,
-    };
-    entry new_entry;
-    if (!result.note_results.empty()) {
-        new_record.note_results = result.note_results;
-        new_entry = resolve_record_entry(new_record, ruleset);
-    } else {
-        new_entry = entry{
-            .placement = 0,
-            .player_display_name = player_display_name,
-            .accuracy = result.accuracy,
-            .is_full_combo = result.is_full_combo,
-            .max_combo = result.max_combo,
-            .score = result.score,
-            .recorded_at = recorded_at,
-            .verified = false,
-            .resolved_clear_rank = result.clear_rank,
-        };
-        new_record.legacy_entry = new_entry;
+    if (result.note_results.empty()) {
+        return submission;
     }
+
+    stored_local_record new_record;
+    new_record.recorded_at = recorded_at;
+    new_record.player_display_name = player_display_name;
+    new_record.scoring_ruleset_version =
+        result.scoring_ruleset_version.empty()
+            ? ruleset.ruleset_version
+            : result.scoring_ruleset_version;
+    new_record.scoring_accepted_input =
+        result.scoring_accepted_input.empty()
+            ? std::string(kAuthoritativeAcceptedInput)
+            : result.scoring_accepted_input;
+    new_record.note_results = result.note_results;
+    entry new_entry = resolve_record_entry(new_record, ruleset);
 
     submission.best_updated =
         entries.empty() || ranking_entry_better(new_entry, entries.front());
@@ -1016,8 +1037,26 @@ online_submit_result submit_online_result(const song_data& song,
     }
 
     if (!ruleset->active ||
-        ruleset->accepted_input != "note_results_v1") {
+        ruleset->accepted_input != kAuthoritativeAcceptedInput) {
         submission.message = "The server does not accept this ranking submission format.";
+        return submission;
+    }
+
+    const std::string submission_ruleset_version =
+        result.scoring_ruleset_version.empty()
+            ? ruleset->ruleset_version
+            : result.scoring_ruleset_version;
+    const std::string submission_input_format =
+        result.scoring_accepted_input.empty()
+            ? std::string(kAuthoritativeAcceptedInput)
+            : result.scoring_accepted_input;
+    if (submission_input_format != ruleset->accepted_input) {
+        submission.message = "The score input format changed. Start the chart again to submit online ranking.";
+        return submission;
+    }
+    if (submission_ruleset_version != ruleset->ruleset_version) {
+        fetch_and_cache_scoring_ruleset(stored->server_url);
+        submission.message = "The scoring ruleset changed. Start the chart again to submit online ranking.";
         return submission;
     }
 
@@ -1030,7 +1069,7 @@ online_submit_result submit_online_result(const song_data& song,
             chart.chart_id,
             result,
             recorded_at,
-            ruleset->ruleset_version);
+            submission_ruleset_version);
 
     if (request.unauthorized) {
         const auth::operation_result restored = auth::restore_saved_session();
@@ -1048,7 +1087,7 @@ online_submit_result submit_online_result(const song_data& song,
             chart.chart_id,
             result,
             recorded_at,
-            ruleset->ruleset_version);
+            submission_ruleset_version);
     }
 
     submission.success = request.success;

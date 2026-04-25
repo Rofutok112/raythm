@@ -5,6 +5,9 @@
 
 namespace {
 
+constexpr double kComboLightBaseWeight = 0.75;
+constexpr double kComboLightProgressWeight = 0.25;
+
 size_t judge_index(judge_result result) {
     switch (result) {
         case judge_result::perfect: return 0;
@@ -60,6 +63,18 @@ int judge_value_for(const ruleset& ruleset_data, judge_result result) {
     return ruleset_data.judge_values[judge_index(result)];
 }
 
+double score_multiplier_for(const ruleset& ruleset_data, int combo, int total_notes) {
+    if (total_notes <= 0) {
+        return 1.0;
+    }
+
+    const double progress = std::clamp(static_cast<double>(combo) / static_cast<double>(total_notes), 0.0, 1.0);
+    if (ruleset_data.score_model == "combo-light-v1") {
+        return kComboLightBaseWeight + progress * progress * kComboLightProgressWeight;
+    }
+    return progress * progress;
+}
+
 rank compute_rank_for(const ruleset& ruleset_data, float accuracy, bool is_full_combo) {
     for (const rank_threshold& threshold : ruleset_data.rank_thresholds) {
         if (accuracy < threshold.min_accuracy) {
@@ -86,17 +101,10 @@ computed_result compute_result_for(const ruleset& ruleset_data,
     double raw_score = 0.0;
     const int total_notes = static_cast<int>(note_results.size());
 
-    auto combo_score_multiplier = [total_notes](int combo_value) {
-        if (total_notes <= 0) {
-            return 1.0;
-        }
-        const double progress = std::clamp(static_cast<double>(combo_value) / static_cast<double>(total_notes), 0.0, 1.0);
-        return progress * progress;
-    };
-
     double max_raw_score = 0.0;
     for (int max_combo_index = 1; max_combo_index <= total_notes; ++max_combo_index) {
-        max_raw_score += static_cast<double>(perfect_value) * combo_score_multiplier(max_combo_index);
+        max_raw_score += static_cast<double>(perfect_value) *
+                         score_multiplier_for(ruleset_data, max_combo_index, total_notes);
     }
 
     double earned_achievement_points = 0.0;
@@ -112,7 +120,8 @@ computed_result compute_result_for(const ruleset& ruleset_data,
         }
 
         const int judge_value = judge_value_for(ruleset_data, note_result.result);
-        raw_score += static_cast<double>(judge_value) * combo_score_multiplier(combo);
+        raw_score += static_cast<double>(judge_value) *
+                     score_multiplier_for(ruleset_data, combo, total_notes);
         if (note_result.result != judge_result::miss) {
             earned_achievement_points += static_cast<double>(judge_value);
         }

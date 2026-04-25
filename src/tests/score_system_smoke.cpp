@@ -49,6 +49,46 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    scoring_ruleset_runtime::ruleset custom_ruleset = scoring_ruleset_runtime::make_default_ruleset();
+    custom_ruleset.ruleset_version = "smoke-ruleset";
+    custom_ruleset.max_score = 123456;
+    scoring_ruleset_runtime::apply_server_ruleset(custom_ruleset);
+    score_system ruleset_score;
+    ruleset_score.init(1);
+    ruleset_score.on_judge({judge_result::perfect, 0.0, 0});
+    const result_data ruleset_result = ruleset_score.get_result_data();
+    if (ruleset_result.scoring_ruleset_version != "smoke-ruleset" ||
+        ruleset_result.scoring_accepted_input != "note_results_v1" ||
+        ruleset_result.score != 123456) {
+        std::cerr << "Score result should retain the ruleset used during play\n";
+        return EXIT_FAILURE;
+    }
+    scoring_ruleset_runtime::apply_server_ruleset(scoring_ruleset_runtime::make_default_ruleset());
+
+    score_system combo_heavy_score;
+    combo_heavy_score.init(4);
+    combo_heavy_score.on_judge({judge_result::perfect, 0.0, 0});
+    combo_heavy_score.on_judge({judge_result::miss, 0.0, 0});
+    combo_heavy_score.on_judge({judge_result::perfect, 0.0, 0});
+    combo_heavy_score.on_judge({judge_result::perfect, 0.0, 0});
+    const int combo_heavy_result_score = combo_heavy_score.get_score();
+
+    scoring_ruleset_runtime::ruleset combo_light_ruleset = scoring_ruleset_runtime::make_default_ruleset();
+    combo_light_ruleset.score_model = "combo-light-v1";
+    combo_light_ruleset.ruleset_version = "combo-light-smoke";
+    scoring_ruleset_runtime::apply_server_ruleset(combo_light_ruleset);
+    score_system combo_light_score;
+    combo_light_score.init(4);
+    combo_light_score.on_judge({judge_result::perfect, 0.0, 0});
+    combo_light_score.on_judge({judge_result::miss, 0.0, 0});
+    combo_light_score.on_judge({judge_result::perfect, 0.0, 0});
+    combo_light_score.on_judge({judge_result::perfect, 0.0, 0});
+    if (combo_light_score.get_score() <= combo_heavy_result_score) {
+        std::cerr << "Combo-light score model should reduce the combo break penalty\n";
+        return EXIT_FAILURE;
+    }
+    scoring_ruleset_runtime::apply_server_ruleset(scoring_ruleset_runtime::make_default_ruleset());
+
     gauge life_gauge;
     life_gauge.on_judge(judge_result::perfect);
     life_gauge.on_judge(judge_result::great);

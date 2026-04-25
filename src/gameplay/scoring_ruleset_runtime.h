@@ -38,6 +38,7 @@ ruleset current_ruleset();
 void apply_server_ruleset(const ruleset& ruleset_data);
 
 int judge_value_for(const ruleset& ruleset_data, judge_result result);
+double score_multiplier_for(const ruleset& ruleset_data, int combo, int total_notes);
 rank compute_rank_for(const ruleset& ruleset_data, float accuracy, bool is_full_combo);
 computed_result compute_result_for(const ruleset& ruleset_data,
                                    const std::vector<note_result_entry>& note_results);
