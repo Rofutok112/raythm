@@ -6,6 +6,8 @@
 #include <thread>
 #include <utility>
 
+#include "ui_notice.h"
+
 namespace {
 
 template <typename Fn>
@@ -26,6 +28,13 @@ std::future<auth::operation_result> start_auth_task(Fn task) {
         promise.set_value(std::move(result));
     }).detach();
     return future;
+}
+
+void notify_auth(std::string message, ui::notice_tone tone) {
+    if (message.empty()) {
+        return;
+    }
+    ui::notify(std::move(message), tone, tone == ui::notice_tone::error ? 3.2f : 2.2f);
 }
 
 }  // namespace
@@ -55,7 +64,6 @@ void start_request(controller& controller_state,
     }
 
     controller_state.request_active = true;
-    dialog_state.status_message_is_error = false;
     const std::string server_url = auth::kDefaultServerUrl;
     const std::string display_name = dialog_state.display_name_input.value;
     const std::string email = dialog_state.email_input.value;
@@ -67,13 +75,13 @@ void start_request(controller& controller_state,
 
     switch (command) {
     case song_select::login_dialog_command::request_restore:
-        dialog_state.status_message = "Restoring session...";
+        notify_auth("Restoring session...", ui::notice_tone::info);
         controller_state.request_future = start_auth_task([]() {
             return auth::restore_saved_session();
         });
         break;
     case song_select::login_dialog_command::request_login:
-        dialog_state.status_message = "Connecting to raythm-Server...";
+        notify_auth("Connecting to raythm-Server...", ui::notice_tone::info);
         controller_state.request_future = start_auth_task([server_url, email, password]() {
             return auth::login_user(server_url, email, password);
         });
@@ -81,17 +89,15 @@ void start_request(controller& controller_state,
     case song_select::login_dialog_command::request_register:
         if (display_name.empty() || email.empty() || password.empty()) {
             controller_state.request_active = false;
-            dialog_state.status_message = "Name, email, and password are required.";
-            dialog_state.status_message_is_error = true;
+            notify_auth("Name, email, and password are required.", ui::notice_tone::error);
             break;
         }
         if (password != password_confirmation) {
             controller_state.request_active = false;
-            dialog_state.status_message = "Passwords do not match.";
-            dialog_state.status_message_is_error = true;
+            notify_auth("Passwords do not match.", ui::notice_tone::error);
             break;
         }
-        dialog_state.status_message = "Creating account...";
+        notify_auth("Creating account...", ui::notice_tone::info);
         controller_state.request_future = start_auth_task([server_url, email, display_name, password]() {
             return auth::register_user(server_url, email, display_name, password);
         });
@@ -99,11 +105,10 @@ void start_request(controller& controller_state,
     case song_select::login_dialog_command::request_verify:
         if (verification_email.empty() || verification_code.empty()) {
             controller_state.request_active = false;
-            dialog_state.status_message = "Verification code is required.";
-            dialog_state.status_message_is_error = true;
+            notify_auth("Verification code is required.", ui::notice_tone::error);
             break;
         }
-        dialog_state.status_message = "Verifying code...";
+        notify_auth("Verifying code...", ui::notice_tone::info);
         controller_state.request_future = start_auth_task([server_url, verification_email, verification_code, verification]() {
             if (verification == auth::verification_purpose::login_verification) {
                 return auth::verify_login_code(server_url, verification_email, verification_code);
@@ -114,17 +119,16 @@ void start_request(controller& controller_state,
     case song_select::login_dialog_command::request_resend_code:
         if (verification_email.empty() || verification == auth::verification_purpose::none) {
             controller_state.request_active = false;
-            dialog_state.status_message = "No verification request is active.";
-            dialog_state.status_message_is_error = true;
+            notify_auth("No verification request is active.", ui::notice_tone::error);
             break;
         }
-        dialog_state.status_message = "Resending code...";
+        notify_auth("Resending code...", ui::notice_tone::info);
         controller_state.request_future = start_auth_task([server_url, verification_email, verification]() {
             return auth::resend_verification_code(server_url, verification_email, verification);
         });
         break;
     case song_select::login_dialog_command::request_logout:
-        dialog_state.status_message = "Logging out...";
+        notify_auth("Logging out...", ui::notice_tone::info);
         controller_state.request_future = start_auth_task([]() {
             return auth::logout_saved_session();
         });
@@ -136,15 +140,15 @@ void start_request(controller& controller_state,
     }
 }
 
-poll_result poll_restore(controller& controller_state,
-                         song_select::auth_state& auth_state,
-                         song_select::login_dialog_state& dialog_state) {
+void poll_restore(controller& controller_state,
+                  song_select::auth_state& auth_state,
+                  song_select::login_dialog_state&) {
     if (!controller_state.restore_active) {
-        return {};
+        return;
     }
 
     if (controller_state.restore_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
-        return {};
+        return;
     }
 
     controller_state.restore_active = false;
@@ -152,30 +156,19 @@ poll_result poll_restore(controller& controller_state,
     refresh_auth_state(auth_state);
 
     if (!result.success) {
-        if (dialog_state.open) {
-            dialog_state.status_message = result.message;
-            dialog_state.status_message_is_error = true;
-        } else {
-            return {
-                true,
-                true,
-                result.message,
-            };
-        }
+        notify_auth(result.message, ui::notice_tone::error);
     }
-
-    return {};
 }
 
-poll_result poll_request(controller& controller_state,
-                         song_select::auth_state& auth_state,
-                         song_select::login_dialog_state& dialog_state) {
+void poll_request(controller& controller_state,
+                  song_select::auth_state& auth_state,
+                  song_select::login_dialog_state& dialog_state) {
     if (!controller_state.request_active) {
-        return {};
+        return;
     }
 
     if (controller_state.request_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
-        return {};
+        return;
     }
 
     controller_state.request_active = false;
@@ -190,9 +183,8 @@ poll_result poll_request(controller& controller_state,
             ? dialog_state.email_input.value
             : result.verification_email;
         dialog_state.verification_code_input.value.clear();
-        dialog_state.status_message = result.message;
-        dialog_state.status_message_is_error = false;
-        return {};
+        notify_auth(result.message, ui::notice_tone::info);
+        return;
     }
     if (result.success) {
         dialog_state.mode = song_select::login_dialog_mode::login;
@@ -200,12 +192,10 @@ poll_result poll_request(controller& controller_state,
         dialog_state.verification_email.clear();
         dialog_state.verification_code_input.value.clear();
     }
-    dialog_state.status_message = result.message;
-    dialog_state.status_message_is_error = !result.success;
+    notify_auth(result.message, result.success ? ui::notice_tone::success : ui::notice_tone::error);
 
     const auth::session_summary summary = auth::load_session_summary();
     dialog_state.email_input.value = summary.email;
-    return {};
 }
 
 }  // namespace auth_overlay

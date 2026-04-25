@@ -113,8 +113,6 @@ struct login_dialog_state {
     bool open = false;
     login_dialog_mode mode = login_dialog_mode::login;
     float open_anim = 0.0f;
-    std::string status_message;
-    bool status_message_is_error = false;
     auth::verification_purpose verification = auth::verification_purpose::none;
     std::string verification_email;
     ui::text_input_state display_name_input;

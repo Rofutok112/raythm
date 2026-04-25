@@ -1,7 +1,6 @@
 #pragma once
 
 #include <future>
-#include <string>
 
 #include "network/auth_client.h"
 #include "song_select/song_select_login_dialog.h"
@@ -16,22 +15,16 @@ struct controller {
     bool request_active = false;
 };
 
-struct poll_result {
-    bool should_show_notice = false;
-    bool notice_is_error = false;
-    std::string notice_message;
-};
-
 void refresh_auth_state(song_select::auth_state& auth_state);
 void start_restore(controller& controller_state, song_select::login_dialog_state& dialog_state);
 void start_request(controller& controller_state,
                    song_select::login_dialog_state& dialog_state,
                    song_select::login_dialog_command command);
-poll_result poll_restore(controller& controller_state,
-                         song_select::auth_state& auth_state,
-                         song_select::login_dialog_state& dialog_state);
-poll_result poll_request(controller& controller_state,
-                         song_select::auth_state& auth_state,
-                         song_select::login_dialog_state& dialog_state);
+void poll_restore(controller& controller_state,
+                  song_select::auth_state& auth_state,
+                  song_select::login_dialog_state& dialog_state);
+void poll_request(controller& controller_state,
+                  song_select::auth_state& auth_state,
+                  song_select::login_dialog_state& dialog_state);
 
 }  // namespace auth_overlay

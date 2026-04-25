@@ -39,12 +39,7 @@ constexpr float kEmailLineHeight = 24.0f;
 constexpr float kVerifyOffsetY = 111.0f;
 constexpr float kVerifyLineHeight = 24.0f;
 constexpr float kAccountButtonWidth = 138.0f;
-constexpr float kStatusOffsetAboveFooter = 42.0f;
-constexpr float kStatusLineHeight = 30.0f;
 constexpr float kTextInputLabelWidth = 135.0f;
-constexpr float kFormMessageGap = 18.0f;
-constexpr float kMessageHeight = 27.0f;
-constexpr float kLoginButtonOffsetY = 42.0f;
 constexpr float kVerifyButtonWidth = 168.0f;
 
 Rectangle dialog_rect_for(const song_select::state& state) {
@@ -190,8 +185,6 @@ void open_login_dialog(login_dialog_state& dialog_state, const auth::session_sum
         dialog_state.mode = login_dialog_mode::login;
     }
     dialog_state.open_anim = 0.0f;
-    dialog_state.status_message.clear();
-    dialog_state.status_message_is_error = false;
     dialog_state.email_input.value = summary.email;
     dialog_state.display_name_input.value.clear();
     dialog_state.password_input.value.clear();
@@ -266,13 +259,6 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
                               auth_state.email_verified ? theme.success : theme.error,
                               ui::text_align::left);
 
-        if (!dialog_state.status_message.empty()) {
-            ui::draw_text_in_rect(dialog_state.status_message.c_str(), 13,
-                                  {form_x, footer_y - kStatusOffsetAboveFooter, form_width, kStatusLineHeight},
-                                  dialog_state.status_message_is_error ? theme.error : theme.success,
-                                  ui::text_align::left);
-        }
-
         if (draw_dialog_button(refresh_rect, "REFRESH", 14, layer, !request_active).clicked) {
             return login_dialog_command::request_restore;
         }
@@ -286,9 +272,7 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
         const Rectangle title_rect = {form_x, dialog_rect.y + kBodyTop, form_width, 30.0f};
         const Rectangle email_rect = {form_x, title_rect.y + 34.0f, form_width, 24.0f};
         const Rectangle code_rect = {form_x, email_rect.y + 42.0f, form_width, kRowHeight};
-        const Rectangle message_rect = {form_x, code_rect.y + code_rect.height + kFormMessageGap,
-                                        form_width, kMessageHeight};
-        const Rectangle button_row = {form_x, message_rect.y + kLoginButtonOffsetY, form_width, kButtonHeight};
+        const Rectangle button_row = {form_x, footer_y, form_width, kButtonHeight};
         const Rectangle verify_rect = {
             button_row.x + button_row.width - kVerifyButtonWidth,
             button_row.y,
@@ -310,12 +294,6 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
             code_rect, dialog_state.verification_code_input, "Code", "6 digit code",
             nullptr, layer, 15, 12, printable_filter, kTextInputLabelWidth);
 
-        if (!dialog_state.status_message.empty()) {
-            ui::draw_text_in_rect(dialog_state.status_message.c_str(), 16, message_rect,
-                                  dialog_state.status_message_is_error ? theme.error : theme.success,
-                                  ui::text_align::left);
-        }
-
         if (draw_dialog_button(resend_rect, "RESEND", 15, layer, !request_active).clicked) {
             return login_dialog_command::request_resend_code;
         }
@@ -335,12 +313,10 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
 
     if (draw_tab(login_tab, "LOGIN", !signup, layer).clicked && !request_active) {
         dialog_state.mode = login_dialog_mode::login;
-        dialog_state.status_message.clear();
         deactivate_form_inputs(dialog_state);
     }
     if (draw_tab(signup_tab, "SIGN UP", signup, layer).clicked && !request_active) {
         dialog_state.mode = login_dialog_mode::signup;
-        dialog_state.status_message.clear();
         deactivate_form_inputs(dialog_state);
     }
 
@@ -375,18 +351,9 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
                              IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? -1 : 1);
     }
 
-    const float action_top =
-        dialog_rect.y + kBodyTop + static_cast<float>(row) * (kRowHeight + kRowGap) + kFormMessageGap;
-    const Rectangle message_rect = {form_x, action_top, form_width, kMessageHeight};
-    const Rectangle login_button_row = {form_x, action_top + kLoginButtonOffsetY, form_width, kButtonHeight};
+    const Rectangle login_button_row = {form_x, footer_y, form_width, kButtonHeight};
     const Rectangle primary_rect = ui::place(login_button_row, kPrimaryButtonWidth, kButtonHeight,
                                              ui::anchor::center, ui::anchor::center);
-
-    if (!dialog_state.status_message.empty()) {
-        ui::draw_text_in_rect(dialog_state.status_message.c_str(), 16, message_rect,
-                              dialog_state.status_message_is_error ? theme.error : theme.success,
-                              ui::text_align::left);
-    }
 
     const char* primary_label = signup ? "SIGN UP" : "LOGIN";
     if ((draw_dialog_button(primary_rect, primary_label, 16, layer, !request_active).clicked || submitted) &&
