@@ -13,7 +13,7 @@ constexpr float kDialogWidth = 540.0f;
 constexpr float kLoginDialogHeight = 360.0f;
 constexpr float kSignupDialogHeight = 510.0f;
 constexpr float kVerifyDialogHeight = 396.0f;
-constexpr float kAccountDialogHeight = 360.0f;
+constexpr float kAccountDialogHeight = 468.0f;
 constexpr float kDialogOffsetY = 27.0f;
 constexpr float kDialogPaddingX = 27.0f;
 constexpr float kTitleHeight = 39.0f;
@@ -37,6 +37,9 @@ constexpr float kEmailOffsetY = 78.0f;
 constexpr float kEmailLineHeight = 24.0f;
 constexpr float kVerifyOffsetY = 111.0f;
 constexpr float kVerifyLineHeight = 24.0f;
+constexpr float kDeleteHintOffsetY = 147.0f;
+constexpr float kDeleteHintHeight = 24.0f;
+constexpr float kDeletePasswordOffsetY = 183.0f;
 constexpr float kAccountButtonWidth = 138.0f;
 constexpr float kTextInputLabelWidth = 135.0f;
 constexpr float kVerifyButtonWidth = 168.0f;
@@ -234,8 +237,14 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
         const Rectangle verify_rect = {
             form_x, dialog_rect.y + kBodyTop + kVerifyOffsetY, form_width, kVerifyLineHeight
         };
+        const Rectangle delete_hint_rect = {
+            form_x, dialog_rect.y + kBodyTop + kDeleteHintOffsetY, form_width, kDeleteHintHeight
+        };
+        const Rectangle delete_password_rect = {
+            form_x, dialog_rect.y + kBodyTop + kDeletePasswordOffsetY, form_width, kRowHeight
+        };
         const Rectangle button_row = {
-            form_x, centered_footer_button_y(dialog_rect, verify_rect.y + verify_rect.height),
+            form_x, centered_footer_button_y(dialog_rect, delete_password_rect.y + delete_password_rect.height),
             form_width, kButtonHeight
         };
         const Rectangle logout_rect = {
@@ -243,6 +252,9 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
         };
         const Rectangle refresh_rect = {
             logout_rect.x - kAccountButtonWidth - kButtonGap, button_row.y, kAccountButtonWidth, kButtonHeight
+        };
+        const Rectangle delete_rect = {
+            refresh_rect.x - kAccountButtonWidth - kButtonGap, button_row.y, kAccountButtonWidth, kButtonHeight
         };
 
         ui::draw_text_in_rect("Signed in", 20, signed_in_rect, theme.success, ui::text_align::left);
@@ -263,7 +275,17 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
                               verify_rect,
                               auth_state.email_verified ? theme.success : theme.error,
                               ui::text_align::left);
+        ui::draw_text_in_rect("Enter password to delete this account.", 13,
+                              delete_hint_rect, theme.text_muted, ui::text_align::left);
+        const ui::text_input_result delete_password_result = ui::draw_text_input(
+            delete_password_rect, dialog_state.password_input, "Pass", "Password",
+            nullptr, layer, 15, 64, printable_filter, kTextInputLabelWidth, true);
 
+        if ((draw_dialog_button(delete_rect, "DELETE", 14, layer, !request_active).clicked ||
+             delete_password_result.submitted) &&
+            !request_active) {
+            return login_dialog_command::request_delete_account;
+        }
         if (draw_dialog_button(refresh_rect, "REFRESH", 14, layer, !request_active).clicked) {
             return login_dialog_command::request_restore;
         }

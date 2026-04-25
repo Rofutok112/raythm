@@ -14,6 +14,7 @@ enum class login_dialog_command {
     request_verify,
     request_resend_code,
     request_logout,
+    request_delete_account,
 };
 
 void open_login_dialog(login_dialog_state& dialog_state, const auth::session_summary& summary);

@@ -517,6 +517,11 @@ void clear_saved_session() {
     fs::remove(app_paths::auth_session_path(), ec);
 }
 
+void clear_trusted_device_file() {
+    std::error_code ec;
+    fs::remove(app_paths::auth_device_path(), ec);
+}
+
 operation_result register_user(const std::string& server_url,
                                const std::string& email,
                                const std::string& display_name,
@@ -839,6 +844,79 @@ operation_result logout_saved_session() {
     return {
         .success = true,
         .message = "Logged out successfully.",
+        .session_data = std::nullopt,
+    };
+}
+
+operation_result delete_saved_account(const std::string& password) {
+    if (json::trim(password).empty()) {
+        return {
+            .success = false,
+            .message = "Password is required to delete the account.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    std::optional<session> stored = load_saved_session();
+    if (!stored.has_value()) {
+        clear_saved_session();
+        clear_trusted_device_file();
+        return {
+            .success = true,
+            .message = "Account session was already cleared.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    const std::string body =
+        "{"
+        "\"password\":\"" + json::escape_string(password) + "\""
+        "}";
+
+    auto send_delete = [&](const session& session_data) {
+        return send_request(
+            "DELETE",
+            build_auth_url(session_data.server_url, "/me"),
+            body,
+            {
+                {"Accept", "application/json"},
+                {"Authorization", "Bearer " + session_data.access_token},
+                {"Content-Type", "application/json"},
+                {"User-Agent", "raythm/0.1"},
+            });
+    };
+
+    http_response response = send_delete(*stored);
+    if (response.error_message.empty() && response.status_code == 401) {
+        const operation_result restored = restore_saved_session();
+        if (restored.success && restored.session_data.has_value()) {
+            stored = restored.session_data;
+            response = send_delete(*stored);
+        }
+    }
+
+    if (!response.error_message.empty()) {
+        return {
+            .success = false,
+            .message = response.error_message,
+            .session_data = std::nullopt,
+        };
+    }
+
+    if (response.status_code != 204 &&
+        (response.status_code < 200 || response.status_code >= 300)) {
+        return {
+            .success = false,
+            .message = parse_error_message(response.body, "Failed to delete account."),
+            .session_data = std::nullopt,
+        };
+    }
+
+    clear_saved_session();
+    clear_trusted_device_file();
+    return {
+        .success = true,
+        .message = "Account deleted.",
         .session_data = std::nullopt,
     };
 }

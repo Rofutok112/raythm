@@ -69,5 +69,6 @@ operation_result resend_verification_code(const std::string& server_url,
                                           verification_purpose purpose);
 operation_result restore_saved_session();
 operation_result logout_saved_session();
+operation_result delete_saved_account(const std::string& password);
 
 }  // namespace auth
