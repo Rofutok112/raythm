@@ -230,6 +230,26 @@ bool audio_manager::get_bgm_fft256(std::array<float, 128>& spectrum) const {
                                BASS_DATA_FFT256 | BASS_DATA_FFT_REMOVEDC) != static_cast<DWORD>(-1);
 }
 
+bool audio_manager::get_bgm_fft1024(std::array<float, 512>& spectrum) const {
+    spectrum.fill(0.0f);
+    if (!is_voice_loaded(bgm_handle_)) {
+        return false;
+    }
+
+    return BASS_ChannelGetData(bgm_handle_, spectrum.data(),
+                               BASS_DATA_FFT1024 | BASS_DATA_FFT_REMOVEDC) != static_cast<DWORD>(-1);
+}
+
+bool audio_manager::get_bgm_fft4096(std::array<float, 2048>& spectrum) const {
+    spectrum.fill(0.0f);
+    if (!is_voice_loaded(bgm_handle_)) {
+        return false;
+    }
+
+    return BASS_ChannelGetData(bgm_handle_, spectrum.data(),
+                               BASS_DATA_FFT4096 | BASS_DATA_FFT_REMOVEDC) != static_cast<DWORD>(-1);
+}
+
 bool audio_manager::get_bgm_oscilloscope256(std::array<float, 256>& samples) const {
     samples.fill(0.0f);
     if (!is_voice_loaded(bgm_handle_)) {
@@ -265,6 +285,10 @@ bool audio_manager::get_bgm_oscilloscope256(std::array<float, 256>& samples) con
         samples[frame] = std::clamp(mono / static_cast<float>(channels), -1.0f, 1.0f);
     }
     return true;
+}
+
+double audio_manager::get_bgm_sample_rate_hz() const {
+    return get_voice_sample_rate_hz(bgm_handle_);
 }
 
 double audio_manager::get_output_latency_seconds() const {
@@ -342,6 +366,30 @@ bool audio_manager::get_preview_fft256(std::array<float, 128>& spectrum) const {
 
     return BASS_ChannelGetData(preview_handle_, spectrum.data(),
                                BASS_DATA_FFT256 | BASS_DATA_FFT_REMOVEDC) != static_cast<DWORD>(-1);
+}
+
+bool audio_manager::get_preview_fft1024(std::array<float, 512>& spectrum) const {
+    spectrum.fill(0.0f);
+    if (!is_voice_loaded(preview_handle_)) {
+        return false;
+    }
+
+    return BASS_ChannelGetData(preview_handle_, spectrum.data(),
+                               BASS_DATA_FFT1024 | BASS_DATA_FFT_REMOVEDC) != static_cast<DWORD>(-1);
+}
+
+bool audio_manager::get_preview_fft4096(std::array<float, 2048>& spectrum) const {
+    spectrum.fill(0.0f);
+    if (!is_voice_loaded(preview_handle_)) {
+        return false;
+    }
+
+    return BASS_ChannelGetData(preview_handle_, spectrum.data(),
+                               BASS_DATA_FFT4096 | BASS_DATA_FFT_REMOVEDC) != static_cast<DWORD>(-1);
+}
+
+double audio_manager::get_preview_sample_rate_hz() const {
+    return get_voice_sample_rate_hz(preview_handle_);
 }
 
 int audio_manager::play_se(const std::string& file_path, float volume) {
@@ -486,6 +534,18 @@ double audio_manager::get_voice_length_seconds(unsigned long handle) {
         return 0.0;
     }
     return BASS_ChannelBytes2Seconds(handle, length);
+}
+
+double audio_manager::get_voice_sample_rate_hz(unsigned long handle) {
+    if (handle == 0) {
+        return 44100.0;
+    }
+
+    BASS_CHANNELINFO info = {};
+    if (BASS_ChannelGetInfo(handle, &info) == FALSE || info.freq == 0) {
+        return 44100.0;
+    }
+    return static_cast<double>(info.freq);
 }
 
 audio_clock_snapshot audio_manager::get_voice_clock(unsigned long handle) {

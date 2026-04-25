@@ -39,7 +39,10 @@ public:
     double get_bgm_length_seconds() const;
     audio_clock_snapshot get_bgm_clock() const;
     bool get_bgm_fft256(std::array<float, 128>& spectrum) const;
+    bool get_bgm_fft1024(std::array<float, 512>& spectrum) const;
+    bool get_bgm_fft4096(std::array<float, 2048>& spectrum) const;
     bool get_bgm_oscilloscope256(std::array<float, 256>& samples) const;
+    double get_bgm_sample_rate_hz() const;
     double get_output_latency_seconds() const;
     double get_output_buffer_seconds() const;
 
@@ -55,6 +58,9 @@ public:
     double get_preview_position_seconds() const;
     double get_preview_length_seconds() const;
     bool get_preview_fft256(std::array<float, 128>& spectrum) const;
+    bool get_preview_fft1024(std::array<float, 512>& spectrum) const;
+    bool get_preview_fft4096(std::array<float, 2048>& spectrum) const;
+    double get_preview_sample_rate_hz() const;
 
     bool preload_se(const std::string& file_path);
     int play_se(const std::string& file_path, float volume = 1.0f);
@@ -81,6 +87,7 @@ private:
     static double get_voice_position_seconds(unsigned long handle);
     static double get_voice_length_seconds(unsigned long handle);
     static audio_clock_snapshot get_voice_clock(unsigned long handle);
+    static double get_voice_sample_rate_hz(unsigned long handle);
     static void play_voice(unsigned long handle, bool restart);
     static void pause_voice(unsigned long handle);
     static void fade_out_voice(unsigned long handle, unsigned int duration_ms);

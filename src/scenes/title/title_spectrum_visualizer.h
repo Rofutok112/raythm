@@ -17,9 +17,8 @@ public:
     void draw(const Rectangle& rect, float alpha_scale = 1.0f) const;
 
 private:
+    std::array<float, kBarCount> smoothed_levels_ = {};
     std::array<float, kBarCount> bars_ = {};
     std::array<float, kBarCount> peaks_ = {};
     std::array<float, kBarCount> peak_velocities_ = {};
-    std::array<float, kBarCount> peak_hold_timers_ = {};
-    float dynamic_peak_ = 0.12f;
 };
