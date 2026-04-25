@@ -106,6 +106,10 @@ std::filesystem::path scoring_ruleset_cache_path() {
     return app_data_root() / "scoring_ruleset_cache.txt";
 }
 
+std::filesystem::path source_verification_cache_path() {
+    return app_data_root() / "source_verification_cache.txt";
+}
+
 std::filesystem::path mvs_root() {
     return app_data_root() / "mvs";
 }

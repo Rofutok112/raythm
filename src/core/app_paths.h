@@ -50,6 +50,9 @@ std::filesystem::path upload_mapping_path();
 // AppData/Local/raythm/scoring_ruleset_cache.txt
 std::filesystem::path scoring_ruleset_cache_path();
 
+// AppData/Local/raythm/source_verification_cache.txt
+std::filesystem::path source_verification_cache_path();
+
 // AppData/Local/raythm/mvs/
 std::filesystem::path mvs_root();
 

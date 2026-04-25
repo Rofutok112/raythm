@@ -100,6 +100,15 @@ struct chart_data {
     std::vector<note_data> notes;
 };
 
+enum class content_status {
+    local,
+    official,
+    community,
+    update,
+    modified,
+    checking,
+};
+
 // 譜面パーサーの結果。
 struct chart_parse_result {
     bool success = false;

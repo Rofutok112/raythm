@@ -300,7 +300,7 @@ void start_download(state& state) {
     const song_entry_state selected = *song;
     const std::string server_url = state.catalog_server_url;
     state.download_progress = std::make_shared<download_progress_state>();
-    ui::push_notice(state.notices, "Downloading song...", ui::notice_tone::info, 1.8f);
+    ui::notify("Downloading song...", ui::notice_tone::info, 1.8f);
     const std::shared_ptr<download_progress_state> progress = state.download_progress;
     std::promise<download_song_result> promise;
     state.download_future = promise.get_future();
@@ -338,12 +338,11 @@ bool poll_download(state& state) {
         mark_song_downloaded(state.official_songs, result.song_id);
         mark_song_downloaded(state.community_songs, result.song_id);
         mark_song_downloaded(state.owned_songs, result.song_id);
-        ui::push_notice(state.notices, result.message, ui::notice_tone::success, 2.4f);
+        ui::notify(result.message, ui::notice_tone::success, 2.4f);
         reload_catalog(state);
     } else {
-        ui::push_notice(state.notices,
-                        result.message.empty() ? "Song download failed." : result.message,
-                        ui::notice_tone::error, 3.2f);
+        ui::notify(result.message.empty() ? "Song download failed." : result.message,
+                   ui::notice_tone::error, 3.2f);
     }
     return true;
 }

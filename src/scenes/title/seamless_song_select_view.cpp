@@ -489,10 +489,6 @@ void draw(const song_select::state& state,
                                  song_select::layout::kContextMenuItemSpacing);
     }
 
-    ui::draw_notice_queue_bottom_right(state.notices,
-                                       {0.0f, 0.0f,
-                                        static_cast<float>(kScreenWidth),
-                                        static_cast<float>(kScreenHeight)});
 }
 
 }  // namespace title_play_view

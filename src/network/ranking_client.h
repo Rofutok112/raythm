@@ -47,6 +47,7 @@ struct scoring_ruleset_operation_result {
 struct official_manifest {
     bool available = false;
     std::string message;
+    std::string content_source;
     std::string chart_id;
     std::string song_id;
     std::string song_json_sha256;
@@ -55,10 +56,26 @@ struct official_manifest {
     std::string chart_sha256;
 };
 
+struct song_manifest {
+    bool available = false;
+    std::string message;
+    std::string content_source;
+    std::string song_id;
+    std::string song_json_sha256;
+    std::string audio_sha256;
+    std::string jacket_sha256;
+};
+
 struct manifest_operation_result {
     bool success = false;
     std::string message;
     std::optional<official_manifest> manifest;
+};
+
+struct song_manifest_operation_result {
+    bool success = false;
+    std::string message;
+    std::optional<song_manifest> manifest;
 };
 
 operation_result fetch_chart_ranking(const std::string& server_url,
@@ -77,5 +94,8 @@ scoring_ruleset_operation_result fetch_scoring_ruleset(const std::string& server
 
 manifest_operation_result fetch_official_chart_manifest(const std::string& server_url,
                                                         const std::string& chart_id);
+
+song_manifest_operation_result fetch_song_manifest(const std::string& server_url,
+                                                   const std::string& song_id);
 
 }  // namespace ranking_client

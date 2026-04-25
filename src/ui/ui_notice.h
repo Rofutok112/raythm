@@ -46,6 +46,19 @@ inline void push_notice(notice_queue& queue, std::string message, notice_tone to
     });
 }
 
+inline notice_queue& global_notice_queue() {
+    static notice_queue queue;
+    return queue;
+}
+
+inline void notify(std::string message, notice_tone tone = notice_tone::info, float lifetime_seconds = 2.0f) {
+    push_notice(global_notice_queue(), std::move(message), tone, lifetime_seconds);
+}
+
+inline void clear_global_notices() {
+    clear_notices(global_notice_queue());
+}
+
 inline void tick_notices(notice_queue& queue, float dt) {
     for (notice_entry& notice : queue.items) {
         notice.remaining_seconds = std::max(0.0f, notice.remaining_seconds - dt);
@@ -53,6 +66,10 @@ inline void tick_notices(notice_queue& queue, float dt) {
     std::erase_if(queue.items, [](const notice_entry& notice) {
         return notice.remaining_seconds <= 0.0f;
     });
+}
+
+inline void tick_global_notices(float dt) {
+    tick_notices(global_notice_queue(), dt);
 }
 
 inline Color notice_color(notice_tone tone) {
@@ -120,6 +137,10 @@ inline void draw_notice_queue_bottom_right(const notice_queue& queue, Rectangle 
 
         bottom_y = rect.y - vertical_gap;
     }
+}
+
+inline void draw_global_notices(Rectangle bounds) {
+    draw_notice_queue_bottom_right(global_notice_queue(), bounds);
 }
 
 }  // namespace ui

@@ -5,6 +5,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "shared/content_status_badge.h"
 
 namespace {
 
@@ -49,9 +50,10 @@ void draw_song_row(const song_select::song_entry& song, float item_y, bool is_se
     const Rectangle row_rect = {song_select::layout::kSongListRect.x + 14.0f, item_y - 8.0f,
                                 song_select::layout::kSongListRect.width - 28.0f, 44.0f};
     const float text_x = song_select::layout::kSongListRect.x + 30.0f;
-    const float list_text_max_w = song_select::layout::kSongListRect.width - 70.0f;
+    const float list_text_max_w = song_select::layout::kSongListRect.width - 180.0f;
     const Rectangle title_clip_rect = {text_x, item_y - 3.0f, list_text_max_w, 24.0f};
     const Rectangle artist_clip_rect = {text_x, item_y + 19.0f, list_text_max_w, 16.0f};
+    const Rectangle status_rect = {row_rect.x + row_rect.width - 118.0f, item_y - 1.0f, 96.0f, 18.0f};
 
     if (ui::is_hovered(row_rect, song_select::layout::kSceneLayer) || is_selected) {
         const ui::row_state row_state = ui::draw_selectable_row(row_rect, is_selected, 0.0f);
@@ -62,6 +64,7 @@ void draw_song_row(const song_select::song_entry& song, float item_y, bool is_se
                       24, is_selected ? theme.text : theme.text_secondary, now);
     draw_marquee_text(song.song.meta.artist.c_str(), artist_clip_rect,
                       16, theme.text_muted, now);
+    content_status_badge::draw(status_rect, song.status, 255, 10);
 }
 
 void draw_chart_rows(const song_select::state& state,
@@ -94,6 +97,8 @@ void draw_chart_rows(const song_select::state& state,
         ui::draw_text_in_rect(TextFormat("Lv.%.1f", chart.meta.level), 17, level_rect,
                               child_selected ? theme.text_secondary : theme.text_muted, ui::text_align::left);
         draw_marquee_text(chart.meta.chart_author.c_str(), author_rect, 14, theme.text_muted, now);
+        content_status_badge::draw({rank_rect.x - 96.0f, baseline_y - 1.0f, 90.0f, 18.0f},
+                                   chart.status, 255, 9);
         if (chart.best_local_rank.has_value()) {
             ui::draw_rect_f(rank_rect, theme.section);
             ui::draw_rect_lines(rank_rect, 1.5f, theme.border_light);

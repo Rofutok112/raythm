@@ -4,6 +4,7 @@
 #include <string>
 
 #include "scene_common.h"
+#include "shared/content_status_badge.h"
 #include "song_select/song_select_layout.h"
 #include "theme.h"
 #include "ui_draw.h"
@@ -128,7 +129,11 @@ void draw_song_details(const state& state, const preview_controller& preview_con
     const float detail_max_width = layout::kDetailColumnWidth;
     const double now = GetTime();
     draw_marquee_text(song->song.meta.title.c_str(), detail_x + content_offset_x, layout::kJacketRect.y + 4.0f, 40,
-                      with_alpha(theme.text, content_alpha), detail_max_width, now);
+                      with_alpha(theme.text, content_alpha), detail_max_width - 118.0f, now);
+    content_status_badge::draw(
+        {detail_x + detail_max_width - 108.0f + content_offset_x,
+         layout::kJacketRect.y + 13.0f, 100.0f, 24.0f},
+        song->status, content_alpha, 12);
     draw_marquee_text(song->song.meta.artist.c_str(), detail_x + content_offset_x, layout::kJacketRect.y + 56.0f, 28,
                       with_alpha(theme.text_secondary, content_alpha), detail_max_width, now);
     ui::draw_text_f(TextFormat("BPM %.0f", song->song.meta.base_bpm), detail_x + content_offset_x,
@@ -144,12 +149,15 @@ void draw_song_details(const state& state, const preview_controller& preview_con
                         with_alpha(key_mode_color(selected_chart->meta.key_count), chart_alpha));
         draw_marquee_text(difficulty_label.c_str(), difficulty_x, key_y, 28,
                           with_alpha(theme.text, chart_alpha), difficulty_width, now);
-        draw_marquee_text(selected_chart->meta.chart_author.c_str(), key_x, layout::kJacketRect.y + 162.0f, 20,
+        content_status_badge::draw(
+            {difficulty_x, layout::kJacketRect.y + 158.0f, 100.0f, 22.0f},
+            selected_chart->status, chart_alpha, 11);
+        draw_marquee_text(selected_chart->meta.chart_author.c_str(), key_x, layout::kJacketRect.y + 194.0f, 20,
                           with_alpha(theme.text_muted, chart_alpha), detail_max_width - 94.0f, now);
         if (selected_chart->best_local_rank.has_value()) {
             const Rectangle rank_rect = {
                 detail_x + detail_max_width - 74.0f + content_offset_x + chart_offset_x,
-                layout::kJacketRect.y + 156.0f,
+                layout::kJacketRect.y + 190.0f,
                 64.0f,
                 28.0f
             };
@@ -191,10 +199,6 @@ void draw_song_details(const state& state, const preview_controller& preview_con
         has_recent_result ? with_alpha(theme.row, chart_alpha) : with_alpha(theme.row, 170),
         has_recent_result ? with_alpha(theme.row_hover, chart_alpha) : with_alpha(theme.row, 170),
         has_recent_result ? with_alpha(theme.text, chart_alpha) : with_alpha(theme.text_muted, 210));
-}
-
-void draw_status_message(const state& state) {
-    ui::draw_notice_queue_bottom_right(state.notices, layout::kScreenRect);
 }
 
 void draw_busy_overlay(const std::string& message) {
