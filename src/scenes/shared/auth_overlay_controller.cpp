@@ -133,6 +133,17 @@ void start_request(controller& controller_state,
             return auth::logout_saved_session();
         });
         break;
+    case song_select::login_dialog_command::request_delete_account:
+        if (password.empty()) {
+            controller_state.request_active = false;
+            notify_auth("Password is required to delete the account.", ui::notice_tone::error);
+            break;
+        }
+        notify_auth("Deleting account...", ui::notice_tone::info);
+        controller_state.request_future = start_auth_task([password]() {
+            return auth::delete_saved_account(password);
+        });
+        break;
     case song_select::login_dialog_command::none:
     case song_select::login_dialog_command::close:
         controller_state.request_active = false;
