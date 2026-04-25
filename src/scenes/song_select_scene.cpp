@@ -660,7 +660,6 @@ void song_select_scene::draw() {
 
     if (state_.songs.empty()) {
         song_select::draw_empty_state(state_);
-        song_select::draw_status_message(state_);
         if (transfer_controller_.busy()) {
             song_select::draw_busy_overlay(transfer_controller_.busy_label());
         }
@@ -697,7 +696,6 @@ void song_select_scene::draw() {
         !transfer_controller_.busy();
     const song_select::ranking_panel_result ranking_result =
         song_select::draw_ranking_panel(state_, ranking_source_dropdown_interactive);
-    song_select::draw_status_message(state_);
     if (transfer_controller_.busy()) {
         song_select::draw_busy_overlay(transfer_controller_.busy_label());
     }

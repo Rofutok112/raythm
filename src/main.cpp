@@ -7,6 +7,7 @@
 #include "settings_io.h"
 #include "theme.h"
 #include "ui/ui_font.h"
+#include "ui/ui_notice.h"
 #include "virtual_screen.h"
 #include "platform/windows_app_icon.h"
 #include "platform/windows_input_source.h"
@@ -62,9 +63,16 @@ int main() {
         const float dt = GetFrameTime();
         audio_manager::instance().update();
         manager.update(dt);
+        ui::tick_global_notices(dt);
 
         BeginDrawing();
         manager.draw();
+        ui::draw_global_notices({
+            0.0f,
+            0.0f,
+            static_cast<float>(GetScreenWidth()),
+            static_cast<float>(GetScreenHeight())
+        });
         EndDrawing();
     }
 

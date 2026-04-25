@@ -1,5 +1,6 @@
 #include "title/online_download_internal.h"
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 
@@ -32,6 +33,15 @@ int selected_song_display_index(const state& state) {
         return -1;
     }
     return static_cast<int>(it - indices.begin());
+}
+
+bool has_update(const song_entry_state& song) {
+    if (song.update_available) {
+        return true;
+    }
+    return std::any_of(song.charts.begin(), song.charts.end(), [](const chart_entry_state& chart) {
+        return chart.update_available;
+    });
 }
 
 ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_state& state,
@@ -372,102 +382,102 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
 
     Rectangle source_jacket_rect = current.hero_jacket_rect;
     bool selected_card_drawn = false;
-    ui::scoped_clip_rect song_clip(current.song_grid_rect);
-    if (indices.empty() && grid_alpha > 0) {
-        const Rectangle placeholder = {
-            current.song_grid_rect.x + 96.0f,
-            current.song_grid_rect.y + current.song_grid_rect.height * 0.5f - 42.0f,
-            current.song_grid_rect.width - 192.0f,
-            84.0f,
-        };
-        ui::draw_rect_f(placeholder, with_alpha(button_base, static_cast<unsigned char>(selected_row_alpha * grid_fade_t)));
-        ui::draw_rect_lines(placeholder, 1.5f, with_alpha(t.border_light, grid_alpha));
-        const char* empty_title = loading
-            ? "Loading..."
-            : (state.mode == catalog_mode::owned && state.owned_loading)
-                ? "Syncing owned songs..."
-            : (state.catalog_request_failed ? "Could not reach raythm-Server." : "No songs found.");
-        ui::draw_text_in_rect(empty_title,
-                              26, {placeholder.x, placeholder.y + 8.0f, placeholder.width, 28.0f},
-                              with_alpha(t.text, grid_alpha), ui::text_align::center);
-        if (!loading && state.catalog_request_failed) {
-            const std::string detail = !state.catalog_status_message.empty()
-                ? state.catalog_status_message
-                : "Check the server URL and confirm raythm-Server is running.";
-            ui::draw_text_in_rect(detail.c_str(),
-                                  14, {placeholder.x + 20.0f, placeholder.y + 42.0f, placeholder.width - 40.0f, 16.0f},
-                                  with_alpha(t.text_muted, grid_alpha), ui::text_align::center);
-            if (!state.catalog_server_url.empty()) {
-                const std::string server_label = "Tried: " + state.catalog_server_url;
-                ui::draw_text_in_rect(server_label.c_str(),
-                                      12, {placeholder.x + 20.0f, placeholder.y + 58.0f, placeholder.width - 40.0f, 14.0f},
-                                      with_alpha(t.text_hint, grid_alpha), ui::text_align::center);
+    {
+        ui::scoped_clip_rect song_clip(current.song_grid_rect);
+        if (indices.empty() && grid_alpha > 0) {
+            const Rectangle placeholder = {
+                current.song_grid_rect.x + 96.0f,
+                current.song_grid_rect.y + current.song_grid_rect.height * 0.5f - 42.0f,
+                current.song_grid_rect.width - 192.0f,
+                84.0f,
+            };
+            ui::draw_rect_f(placeholder, with_alpha(button_base, static_cast<unsigned char>(selected_row_alpha * grid_fade_t)));
+            ui::draw_rect_lines(placeholder, 1.5f, with_alpha(t.border_light, grid_alpha));
+            const char* empty_title = loading
+                ? "Loading..."
+                : (state.mode == catalog_mode::owned && state.owned_loading)
+                    ? "Syncing owned songs..."
+                : (state.catalog_request_failed ? "Could not reach raythm-Server." : "No songs found.");
+            ui::draw_text_in_rect(empty_title,
+                                  26, {placeholder.x, placeholder.y + 8.0f, placeholder.width, 28.0f},
+                                  with_alpha(t.text, grid_alpha), ui::text_align::center);
+            if (!loading && state.catalog_request_failed) {
+                const std::string detail = !state.catalog_status_message.empty()
+                    ? state.catalog_status_message
+                    : "Check the server URL and confirm raythm-Server is running.";
+                ui::draw_text_in_rect(detail.c_str(),
+                                      14, {placeholder.x + 20.0f, placeholder.y + 42.0f, placeholder.width - 40.0f, 16.0f},
+                                      with_alpha(t.text_muted, grid_alpha), ui::text_align::center);
+                if (!state.catalog_server_url.empty()) {
+                    const std::string server_label = "Tried: " + state.catalog_server_url;
+                    ui::draw_text_in_rect(server_label.c_str(),
+                                          12, {placeholder.x + 20.0f, placeholder.y + 58.0f, placeholder.width - 40.0f, 14.0f},
+                                          with_alpha(t.text_hint, grid_alpha), ui::text_align::center);
+                }
             }
         }
-    }
 
-    for (int display_index = 0; display_index < static_cast<int>(indices.size()); ++display_index) {
-        const int song_index = indices[static_cast<size_t>(display_index)];
-        const song_entry_state& song = songs[static_cast<size_t>(song_index)];
-        const Rectangle card = detail::song_row_rect(current.song_grid_rect, display_index, state.song_scroll_y);
-        if (card.y + card.height < current.song_grid_rect.y - 4.0f ||
-            card.y > current.song_grid_rect.y + current.song_grid_rect.height + 4.0f) {
-            continue;
-        }
-
-        const bool selected = song_index == detail::selected_song_index_ref(state);
-        const bool hovered = ui::is_hovered(card);
-        const unsigned char row_alpha = static_cast<unsigned char>((selected ? selected_row_alpha
-            : hovered ? hover_row_alpha
-                      : normal_row_alpha) * grid_fade_t);
-        ui::draw_rect_f(card, with_alpha(selected ? button_selected : button_base, row_alpha));
-        ui::draw_rect_lines(card, 1.15f,
-                            with_alpha(selected ? t.border_active : t.border_light, grid_alpha));
-
-        const Rectangle jacket_rect = song_card_jacket_rect(card);
-        if (selected) {
-            source_jacket_rect = jacket_rect;
-            selected_card_drawn = true;
-        }
-        const bool hide_selected_jacket = selected && detail_t > 0.001f;
-        if (!hide_selected_jacket) {
-            if (const Texture2D* jacket = state.jackets.get(song.song.song)) {
-                DrawTexturePro(*jacket,
-                               {0.0f, 0.0f, static_cast<float>(jacket->width), static_cast<float>(jacket->height)},
-                               jacket_rect, {0.0f, 0.0f}, 0.0f, with_alpha(WHITE, grid_alpha));
-            } else {
-                const float selected_placeholder_t = selected
-                    ? tween::smoothstep(tween::remap_clamped(detail_t, 0.12f, 0.0f))
-                    : 1.0f;
-                const unsigned char placeholder_alpha =
-                    static_cast<unsigned char>(static_cast<float>(grid_alpha) * selected_placeholder_t);
-                ui::draw_rect_f(jacket_rect, with_alpha(t.bg_alt, row_alpha));
-                ui::draw_text_in_rect("JACKET", 18, jacket_rect, with_alpha(t.text_muted, placeholder_alpha),
-                                      ui::text_align::center);
+        for (int display_index = 0; display_index < static_cast<int>(indices.size()); ++display_index) {
+            const int song_index = indices[static_cast<size_t>(display_index)];
+            const song_entry_state& song = songs[static_cast<size_t>(song_index)];
+            const Rectangle card = detail::song_row_rect(current.song_grid_rect, display_index, state.song_scroll_y);
+            if (card.y + card.height < current.song_grid_rect.y - 4.0f ||
+                card.y > current.song_grid_rect.y + current.song_grid_rect.height + 4.0f) {
+                continue;
             }
-            ui::draw_rect_lines(jacket_rect, 1.0f, with_alpha(t.border_image, grid_alpha));
-        }
 
-        const std::string badge_label = detail::song_status_label(song);
-        if (!badge_label.empty()) {
-            const Rectangle badge_rect = {card.x + card.width - 90.0f, card.y + 12.0f, 72.0f, 18.0f};
-            ui::draw_text_in_rect(badge_label.c_str(), 12, badge_rect,
-                                  with_alpha(detail::song_status_color(song), grid_alpha), ui::text_align::right);
-        }
+            const bool selected = song_index == detail::selected_song_index_ref(state);
+            const bool hovered = ui::is_hovered(card);
+            const unsigned char row_alpha = static_cast<unsigned char>((selected ? selected_row_alpha
+                : hovered ? hover_row_alpha
+                          : normal_row_alpha) * grid_fade_t);
+            ui::draw_rect_f(card, with_alpha(selected ? button_selected : button_base, row_alpha));
+            ui::draw_rect_lines(card, 1.15f,
+                                with_alpha(selected ? t.border_active : t.border_light, grid_alpha));
 
-        draw_marquee_text(song.song.song.meta.title.c_str(),
-                          {card.x + 14.0f, card.y + 154.0f, card.width - 28.0f, 30.0f},
-                          18, with_alpha(t.text, grid_alpha), now);
-        draw_marquee_text(song.song.song.meta.artist.c_str(),
-                          {card.x + 14.0f, card.y + 184.0f, card.width - 28.0f, 22.0f},
-                          13, with_alpha(t.text_muted, grid_alpha), now);
+            const Rectangle jacket_rect = song_card_jacket_rect(card);
+            if (selected) {
+                source_jacket_rect = jacket_rect;
+                selected_card_drawn = true;
+            }
+            const bool hide_selected_jacket = selected && detail_t > 0.001f;
+            if (!hide_selected_jacket) {
+                if (const Texture2D* jacket = state.jackets.get(song.song.song)) {
+                    DrawTexturePro(*jacket,
+                                   {0.0f, 0.0f, static_cast<float>(jacket->width), static_cast<float>(jacket->height)},
+                                   jacket_rect, {0.0f, 0.0f}, 0.0f, with_alpha(WHITE, grid_alpha));
+                } else {
+                    const float selected_placeholder_t = selected
+                        ? tween::smoothstep(tween::remap_clamped(detail_t, 0.12f, 0.0f))
+                        : 1.0f;
+                    const unsigned char placeholder_alpha =
+                        static_cast<unsigned char>(static_cast<float>(grid_alpha) * selected_placeholder_t);
+                    ui::draw_rect_f(jacket_rect, with_alpha(t.bg_alt, row_alpha));
+                    ui::draw_text_in_rect("JACKET", 18, jacket_rect, with_alpha(t.text_muted, placeholder_alpha),
+                                          ui::text_align::center);
+                }
+                ui::draw_rect_lines(jacket_rect, 1.0f, with_alpha(t.border_image, grid_alpha));
+            }
+
+            const std::string badge_label = detail::song_status_label(song);
+            if (!badge_label.empty()) {
+                const Rectangle badge_rect = {card.x + card.width - 90.0f, card.y + 12.0f, 72.0f, 18.0f};
+                ui::draw_text_in_rect(badge_label.c_str(), 12, badge_rect,
+                                      with_alpha(detail::song_status_color(song), grid_alpha), ui::text_align::right);
+            }
+
+            draw_marquee_text(song.song.song.meta.title.c_str(),
+                              {card.x + 14.0f, card.y + 154.0f, card.width - 28.0f, 30.0f},
+                              18, with_alpha(t.text, grid_alpha), now);
+            draw_marquee_text(song.song.song.meta.artist.c_str(),
+                              {card.x + 14.0f, card.y + 184.0f, card.width - 28.0f, 22.0f},
+                              13, with_alpha(t.text_muted, grid_alpha), now);
+        }
     }
 
     const song_entry_state* song = selected_song(state);
     const chart_entry_state* chart = selected_chart(state);
     if (song == nullptr) {
-        ui::draw_notice_queue_bottom_right(state.notices,
-                                           {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)});
         return;
     }
 
@@ -508,8 +518,6 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     }
 
     if (detail_alpha == 0) {
-        ui::draw_notice_queue_bottom_right(state.notices,
-                                           {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)});
         return;
     }
 
@@ -552,7 +560,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     const bool download_ready = song->charts_loaded || (song->installed && !song->update_available);
     const char* primary_label = state.download_in_progress ? "DOWNLOADING..."
         : (!download_ready ? "LOADING CHARTS..."
-                           : (needs_download(*song) ? "DOWNLOAD SONG" : "OPEN LOCAL"));
+                           : (needs_download(*song) ? (has_update(*song) ? "UPDATE" : "DOWNLOAD SONG") : "OPEN LOCAL"));
     if (state.download_in_progress && state.download_progress) {
         const int total_steps = std::max(1, state.download_progress->total_steps.load());
         const int completed_steps = std::clamp(state.download_progress->completed_steps.load(), 0, total_steps);
@@ -652,9 +660,6 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             {card.x + card.width * 0.45f, card.y + 64.0f, card.width * 0.55f - 14.0f, 14.0f},
             with_alpha(t.text_muted, detail_alpha), ui::text_align::right);
     }
-
-    ui::draw_notice_queue_bottom_right(state.notices,
-                                       {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)});
 }
 
 }  // namespace title_online_view

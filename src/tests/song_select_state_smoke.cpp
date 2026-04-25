@@ -5,6 +5,7 @@
 
 #include "song_select/song_select_layout.h"
 #include "song_select/song_select_state.h"
+#include "ui_notice.h"
 
 namespace {
 
@@ -45,7 +46,8 @@ int main() {
     assert(state.scroll_y == 0.0f);
     assert(state.scroll_y_target == 0.0f);
     assert(std::fabs(song_select::layout::kLoginButtonRect.y - song_select::layout::kSettingsButtonRect.y) < 0.01f);
-    assert(std::fabs(song_select::layout::kLoginButtonRect.x + song_select::layout::kLoginButtonRect.width + 10.0f -
+    assert(std::fabs(song_select::layout::kLoginButtonRect.x + song_select::layout::kLoginButtonRect.width +
+                     song_select::layout::kButtonGap -
                      song_select::layout::kSettingsButtonRect.x) < 0.01f);
 
     const float expected_height = song_select::layout::kSongListTopPadding +
@@ -53,16 +55,17 @@ int main() {
                                   song_select::layout::kRowHeight;
     assert(std::fabs(song_select::content_height(state) - expected_height) < 0.01f);
 
+    ui::clear_global_notices();
     song_select::queue_status_message(state, "First notice", true);
     song_select::queue_status_message(state, "Second notice", false);
-    assert(state.notices.items.size() == 2);
-    assert(state.notices.items.front().message == "First notice");
-    assert(state.notices.items.back().message == "Second notice");
+    assert(ui::global_notice_queue().items.size() == 2);
+    assert(ui::global_notice_queue().items.front().message == "First notice");
+    assert(ui::global_notice_queue().items.back().message == "Second notice");
 
-    song_select::tick_animations(state, 1.0f);
-    assert(state.notices.items.size() == 2);
-    song_select::tick_animations(state, 1.0f);
-    assert(state.notices.items.empty());
+    ui::tick_global_notices(1.0f);
+    assert(ui::global_notice_queue().items.size() == 2);
+    ui::tick_global_notices(1.0f);
+    assert(ui::global_notice_queue().items.empty());
 
     const bool changed = song_select::apply_song_selection(state, 1, 3);
     assert(changed);

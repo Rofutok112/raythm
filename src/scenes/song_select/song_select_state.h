@@ -8,7 +8,6 @@
 #include "ranking_service.h"
 #include "raylib.h"
 #include "shared/scene_fade.h"
-#include "ui_notice.h"
 #include "ui_text_input.h"
 
 namespace song_select {
@@ -16,6 +15,7 @@ namespace song_select {
 struct chart_option {
     std::string path;
     chart_meta meta;
+    content_status status = content_status::local;
     int local_note_offset_ms = 0;
     std::optional<rank> best_local_rank;
     int note_count = 0;
@@ -25,6 +25,7 @@ struct chart_option {
 
 struct song_entry {
     song_data song;
+    content_status status = content_status::local;
     std::vector<chart_option> charts;
 };
 
@@ -128,7 +129,6 @@ struct state {
     float scrollbar_drag_offset = 0.0f;
     context_menu_state context_menu;
     confirmation_dialog_state confirmation_dialog;
-    ui::notice_queue notices;
     std::optional<recent_result_offset> recent_result_offset;
     ranking_panel_state ranking_panel;
     auth_state auth;

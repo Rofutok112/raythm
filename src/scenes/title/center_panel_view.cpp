@@ -8,6 +8,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "shared/content_status_badge.h"
 
 namespace {
 
@@ -25,12 +26,13 @@ constexpr float kArtistOffsetY = 72.0f;
 constexpr float kArtistHeight = 33.0f;
 constexpr float kChartDifficultyOffsetY = 6.0f;
 constexpr float kChartDifficultyHeight = 30.0f;
-constexpr float kChartNotesOffsetY = 48.0f;
-constexpr float kChartNotesHeight = 27.0f;
-constexpr float kChartBpmOffsetY = 81.0f;
-constexpr float kChartBpmHeight = 27.0f;
-constexpr float kChartAuthorOffsetY = 114.0f;
-constexpr float kChartAuthorHeight = 24.0f;
+constexpr float kChartStatusOffsetY = 39.0f;
+constexpr float kChartNotesOffsetY = 72.0f;
+constexpr float kChartNotesHeight = 24.0f;
+constexpr float kChartBpmOffsetY = 96.0f;
+constexpr float kChartBpmHeight = 24.0f;
+constexpr float kChartAuthorOffsetY = 120.0f;
+constexpr float kChartAuthorHeight = 21.0f;
 constexpr float kClipSlack = 6.0f;
 constexpr float kChartRowBorderWidth = 1.5f;
 constexpr float kChartTextPaddingX = 18.0f;
@@ -45,6 +47,9 @@ constexpr float kChartBadgeWidth = 39.0f;
 constexpr float kChartBadgeHeight = 24.0f;
 constexpr float kChartRankOffsetY = 45.0f;
 constexpr float kChartRankHeight = 21.0f;
+constexpr float kStatusBadgeWidth = 108.0f;
+constexpr float kStatusBadgeHeight = 24.0f;
+constexpr float kChartStatusWidth = 96.0f;
 
 const char* rank_label(rank value) {
     switch (value) {
@@ -178,6 +183,12 @@ void draw(const song_select::state& state,
         config.main_column_rect.width - kHeaderPaddingX * 2.0f,
         kTitleHeight
     };
+    const Rectangle song_title_text_rect = {
+        title_rect.x,
+        title_rect.y,
+        title_rect.width - kStatusBadgeWidth - 8.0f,
+        title_rect.height,
+    };
     const Rectangle artist_rect = {
         config.main_column_rect.x + kHeaderPaddingX,
         config.main_column_rect.y + kArtistOffsetY,
@@ -185,8 +196,12 @@ void draw(const song_select::state& state,
         kArtistHeight
     };
     draw_marquee_text(song->song.meta.title.c_str(),
-                      title_rect,
+                      song_title_text_rect,
                       28, with_alpha(t.text, config.alpha), config.now);
+    content_status_badge::draw(
+        {title_rect.x + title_rect.width - kStatusBadgeWidth, title_rect.y + 8.0f,
+         kStatusBadgeWidth, kStatusBadgeHeight},
+        song->status, config.alpha, 12);
     draw_marquee_text(song->song.meta.artist.c_str(),
                       artist_rect,
                       18, with_alpha(t.text_secondary, config.alpha), config.now);
@@ -196,6 +211,11 @@ void draw(const song_select::state& state,
                               {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartDifficultyOffsetY,
                                config.chart_detail_rect.width, kChartDifficultyHeight},
                               with_alpha(t.text, config.alpha), ui::text_align::left);
+        content_status_badge::draw(
+            {config.chart_detail_rect.x,
+             config.chart_detail_rect.y + kChartStatusOffsetY,
+             kStatusBadgeWidth, kStatusBadgeHeight},
+            chart->status, config.alpha, 12);
         ui::draw_text_in_rect(TextFormat("%s   %d Notes", key_mode_label(chart->meta.key_count).c_str(),
                                          chart->note_count),
                               14,
@@ -233,8 +253,13 @@ void draw(const song_select::state& state,
             with_alpha(t.border_light, static_cast<unsigned char>(130.0f * config.play_t)));
         ui::draw_text_in_rect(item.meta.difficulty.c_str(), 16,
                               {row.x + kChartTextPaddingX, row.y + kChartTitleOffsetY,
-                               row.width - kChartRightReserved, kChartTitleHeight},
+                               row.width - kChartRightReserved - kChartStatusWidth, kChartTitleHeight},
                               with_alpha(t.text, config.alpha), ui::text_align::left);
+        content_status_badge::draw(
+                              {row.x + row.width - kChartRightReserved - kChartStatusWidth,
+                               row.y + kChartTitleOffsetY + 1.0f,
+                               kChartStatusWidth, kStatusBadgeHeight},
+                              item.status, config.alpha, 10);
         ui::draw_text_in_rect(TextFormat("Lv.%.1f", item.meta.level), 13,
                               {row.x + kChartTextPaddingX, row.y + kChartLevelOffsetY,
                                row.width - kChartRightReserved, kChartLevelHeight},

@@ -11,7 +11,6 @@
 #include "song_select/song_preview_controller.h"
 #include "song_select/song_select_state.h"
 #include "title/online_download_remote_client.h"
-#include "ui_notice.h"
 #include "ui_text_input.h"
 
 namespace title_online_view {
@@ -119,7 +118,6 @@ struct state {
     float chart_scroll_y = 0.0f;
     float chart_scroll_y_target = 0.0f;
     ui::text_input_state search_input;
-    ui::notice_queue notices;
     jacket_cache jackets;
     std::future<catalog_load_result> catalog_future;
     std::future<remote_song_page_fetch_result> song_page_future;

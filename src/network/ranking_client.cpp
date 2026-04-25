@@ -296,7 +296,15 @@ std::string build_submit_ranking_url(const std::string& server_url, const std::s
     return server_url + "/charts/" + chart_id + "/rankings";
 }
 
-std::string build_manifest_url(const std::string& server_url, const std::string& chart_id) {
+std::string build_chart_manifest_url(const std::string& server_url, const std::string& chart_id) {
+    return server_url + "/charts/" + chart_id + "/manifest";
+}
+
+std::string build_song_manifest_url(const std::string& server_url, const std::string& song_id) {
+    return server_url + "/songs/" + song_id + "/manifest";
+}
+
+std::string build_official_manifest_url(const std::string& server_url, const std::string& chart_id) {
     return server_url + "/charts/" + chart_id + "/official-manifest";
 }
 
@@ -363,12 +371,33 @@ std::optional<ranking_client::official_manifest> parse_official_manifest_respons
     return ranking_client::official_manifest{
         .available = *available,
         .message = json::extract_string(body, "message").value_or(""),
+        .content_source = json::extract_string(body, "content_source").value_or(
+            json::extract_string(body, "contentSource").value_or(*available ? "official" : "")),
         .chart_id = *chart_id,
         .song_id = *song_id,
         .song_json_sha256 = json::extract_string(body, "song_json_sha256").value_or(""),
         .audio_sha256 = json::extract_string(body, "audio_sha256").value_or(""),
         .jacket_sha256 = json::extract_string(body, "jacket_sha256").value_or(""),
         .chart_sha256 = json::extract_string(body, "chart_sha256").value_or(""),
+    };
+}
+
+std::optional<ranking_client::song_manifest> parse_song_manifest_response(const std::string& body) {
+    const auto available = json::extract_bool(body, "available");
+    const auto song_id = json::extract_string(body, "song_id");
+    if (!available.has_value() || !song_id.has_value()) {
+        return std::nullopt;
+    }
+
+    return ranking_client::song_manifest{
+        .available = *available,
+        .message = json::extract_string(body, "message").value_or(""),
+        .content_source = json::extract_string(body, "content_source").value_or(
+            json::extract_string(body, "contentSource").value_or("")),
+        .song_id = *song_id,
+        .song_json_sha256 = json::extract_string(body, "song_json_sha256").value_or(""),
+        .audio_sha256 = json::extract_string(body, "audio_sha256").value_or(""),
+        .jacket_sha256 = json::extract_string(body, "jacket_sha256").value_or(""),
     };
 }
 
@@ -657,9 +686,9 @@ manifest_operation_result fetch_official_chart_manifest(const std::string& serve
         };
     }
 
-    const http_response response = send_request(
+    http_response response = send_request(
         "GET",
-        build_manifest_url(server_url, chart_id),
+        build_chart_manifest_url(server_url, chart_id),
         {
             {"Accept", "application/json"},
             {"User-Agent", "raythm/0.1"},
@@ -671,6 +700,34 @@ manifest_operation_result fetch_official_chart_manifest(const std::string& serve
             .message = response.error_message,
             .manifest = std::nullopt,
         };
+    }
+
+    if (response.status_code == 404) {
+        response = send_request(
+            "GET",
+            build_official_manifest_url(server_url, chart_id),
+            {
+                {"Accept", "application/json"},
+                {"User-Agent", "raythm/0.1"},
+            });
+        if (!response.error_message.empty()) {
+            return {
+                .success = false,
+                .message = response.error_message,
+                .manifest = std::nullopt,
+            };
+        }
+        if (response.status_code == 404) {
+            return {
+                .success = true,
+                .message = "Manifest not found.",
+                .manifest = official_manifest{
+                    .available = false,
+                    .message = "Manifest not found.",
+                    .chart_id = chart_id,
+                },
+            };
+        }
     }
 
     if (response.status_code < 200 || response.status_code >= 300) {
@@ -686,6 +743,68 @@ manifest_operation_result fetch_official_chart_manifest(const std::string& serve
         return {
             .success = false,
             .message = "Server returned an unexpected official manifest response.",
+            .manifest = std::nullopt,
+        };
+    }
+
+    return {
+        .success = true,
+        .message = manifest->message,
+        .manifest = manifest,
+    };
+}
+
+song_manifest_operation_result fetch_song_manifest(const std::string& server_url,
+                                                   const std::string& song_id) {
+    if (server_url.empty()) {
+        return {
+            .success = false,
+            .message = "No server URL is configured.",
+            .manifest = std::nullopt,
+        };
+    }
+
+    const http_response response = send_request(
+        "GET",
+        build_song_manifest_url(server_url, song_id),
+        {
+            {"Accept", "application/json"},
+            {"User-Agent", "raythm/0.1"},
+        });
+
+    if (!response.error_message.empty()) {
+        return {
+            .success = false,
+            .message = response.error_message,
+            .manifest = std::nullopt,
+        };
+    }
+
+    if (response.status_code == 404) {
+        return {
+            .success = true,
+            .message = "Song manifest not found.",
+            .manifest = song_manifest{
+                .available = false,
+                .message = "Song manifest not found.",
+                .song_id = song_id,
+            },
+        };
+    }
+
+    if (response.status_code < 200 || response.status_code >= 300) {
+        return {
+            .success = false,
+            .message = json::extract_string(response.body, "message").value_or("Failed to fetch song manifest."),
+            .manifest = std::nullopt,
+        };
+    }
+
+    const std::optional<song_manifest> manifest = parse_song_manifest_response(response.body);
+    if (!manifest.has_value()) {
+        return {
+            .success = false,
+            .message = "Server returned an unexpected song manifest response.",
             .manifest = std::nullopt,
         };
     }

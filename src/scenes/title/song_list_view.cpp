@@ -5,6 +5,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "shared/content_status_badge.h"
 
 namespace {
 
@@ -21,6 +22,9 @@ constexpr float kTitleOffsetY = 15.0f;
 constexpr float kTitleHeight = 36.0f;
 constexpr float kArtistOffsetY = 60.0f;
 constexpr float kArtistHeight = 27.0f;
+constexpr float kStatusBadgeWidth = 96.0f;
+constexpr float kStatusBadgeHeight = 24.0f;
+constexpr float kStatusBadgeInset = 15.0f;
 
 }  // namespace
 
@@ -90,14 +94,21 @@ void draw(const song_select::state& state, const draw_config& config) {
         ui::draw_rect_lines(
             row, kRowBorderWidth,
             with_alpha(t.border_light, static_cast<unsigned char>(130.0f * config.play_t)));
+        const Rectangle badge_rect = {
+            row.x + row.width - kStatusBadgeWidth - kStatusBadgeInset,
+            row.y + kStatusBadgeInset,
+            kStatusBadgeWidth,
+            kStatusBadgeHeight,
+        };
         draw_marquee_text(song.song.meta.title.c_str(),
                           {row.x + kTextPaddingX, row.y + kTitleOffsetY,
-                           row.width - kTextPaddingX * 2.0f, kTitleHeight},
+                           row.width - kTextPaddingX * 2.0f - kStatusBadgeWidth, kTitleHeight},
                           20, with_alpha(t.text, config.alpha), config.now);
         draw_marquee_text(song.song.meta.artist.c_str(),
                           {row.x + kTextPaddingX, row.y + kArtistOffsetY,
-                           row.width - kTextPaddingX * 2.0f, kArtistHeight},
+                           row.width - kTextPaddingX * 2.0f - kStatusBadgeWidth, kArtistHeight},
                           14, with_alpha(t.text_muted, config.alpha), config.now);
+        content_status_badge::draw(badge_rect, song.status, config.alpha, 12);
     }
 }
 

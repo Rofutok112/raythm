@@ -366,12 +366,12 @@ void title_scene::poll_scoring_ruleset_warm() {
 
 void title_scene::start_song_upload(const song_select::song_entry& song) {
     if (create_upload_in_progress_) {
-        ui::push_notice(play_state_.notices, "Upload already in progress.", ui::notice_tone::info, 1.8f);
+        ui::notify("Upload already in progress.", ui::notice_tone::info, 1.8f);
         return;
     }
 
     create_upload_in_progress_ = true;
-    ui::push_notice(play_state_.notices, "Uploading song...", ui::notice_tone::info, 1.8f);
+    ui::notify("Uploading song...", ui::notice_tone::info, 1.8f);
     std::promise<title_create_upload::upload_result> promise;
     create_upload_future_ = promise.get_future();
     std::thread([promise = std::move(promise), song]() mutable {
@@ -386,12 +386,12 @@ void title_scene::start_song_upload(const song_select::song_entry& song) {
 void title_scene::start_chart_upload(const song_select::song_entry& song,
                                      const song_select::chart_option& chart) {
     if (create_upload_in_progress_) {
-        ui::push_notice(play_state_.notices, "Upload already in progress.", ui::notice_tone::info, 1.8f);
+        ui::notify("Upload already in progress.", ui::notice_tone::info, 1.8f);
         return;
     }
 
     create_upload_in_progress_ = true;
-    ui::push_notice(play_state_.notices, "Uploading chart...", ui::notice_tone::info, 1.8f);
+    ui::notify("Uploading chart...", ui::notice_tone::info, 1.8f);
     std::promise<title_create_upload::upload_result> promise;
     create_upload_future_ = promise.get_future();
     std::thread([promise = std::move(promise), song, chart]() mutable {
@@ -599,11 +599,11 @@ void title_scene::update_create_mode(float dt) {
         return;
     }
     if (create_upload_in_progress_ && create_action_requested) {
-        ui::push_notice(play_state_.notices, "Wait for the current upload to finish.", ui::notice_tone::info, 1.8f);
+        ui::notify("Wait for the current upload to finish.", ui::notice_tone::info, 1.8f);
         return;
     }
     if (transfer_controller_.busy() && create_action_requested) {
-        ui::push_notice(play_state_.notices, "Wait for the current transfer to finish.", ui::notice_tone::info, 1.8f);
+        ui::notify("Wait for the current transfer to finish.", ui::notice_tone::info, 1.8f);
         return;
     }
 
@@ -687,7 +687,6 @@ void title_scene::update_create_mode(float dt) {
 }
 
 void title_scene::update_online_mode(float dt) {
-    ui::tick_notices(online_state_.notices, dt);
     const title_online_view::update_result result =
         title_online_view::update(online_state_, play_view_anim_, play_entry_origin_rect_, dt);
 

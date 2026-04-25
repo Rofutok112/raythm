@@ -5,6 +5,7 @@
 
 #include "song_select/song_select_layout.h"
 #include "tween.h"
+#include "ui_notice.h"
 
 namespace song_select {
 
@@ -58,7 +59,6 @@ void reset_for_enter(state& state) {
     state.scrollbar_drag_offset = 0.0f;
     state.context_menu = {};
     state.confirmation_dialog = {};
-    ui::clear_notices(state.notices);
     state.recent_result_offset.reset();
     state.ranking_panel = {};
     state.login_dialog = {};
@@ -73,7 +73,6 @@ void tick_animations(state& state, float dt) {
     } else {
         state.login_dialog.open_anim = 0.0f;
     }
-    ui::tick_notices(state.notices, dt);
     state.scene_fade_in.update(dt);
 }
 
@@ -189,8 +188,8 @@ void close_context_menu(state& state) {
 }
 
 void queue_status_message(state& state, std::string message, bool is_error) {
-    ui::push_notice(state.notices, std::move(message),
-                    is_error ? ui::notice_tone::error : ui::notice_tone::success);
+    (void)state;
+    ui::notify(std::move(message), is_error ? ui::notice_tone::error : ui::notice_tone::success);
 }
 
 float expanded_row_height(const state& state, int song_index) {
