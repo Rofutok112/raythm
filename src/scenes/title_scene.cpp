@@ -1077,7 +1077,7 @@ void title_scene::draw() {
     const Rectangle screen_rect = title_layout::screen_rect();
     const Rectangle spectrum_rect = title_layout::spectrum_rect();
     const Rectangle account_chip_rect = title_layout::account_chip_rect();
-    virtual_screen::begin();
+    virtual_screen::begin_ui();
     ClearBackground(t.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
     ui::begin_draw_queue();

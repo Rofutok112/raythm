@@ -50,8 +50,8 @@ struct context_input {
     int key_count = 4;
 
     // screen
-    float screen_w = 1280;
-    float screen_h = 720;
+    float screen_w = 1920;
+    float screen_h = 1080;
 };
 
 // Build the ctx mv_object from context_input.

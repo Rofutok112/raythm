@@ -19,21 +19,36 @@
 namespace title_play_view {
 namespace {
 
-constexpr Rectangle kPlayBackButtonRect = {48.0f, 38.0f, 98.0f, 38.0f};
-constexpr Rectangle kPlaySongColumnRect = {66.0f, 108.0f, 338.0f, 504.0f};
-constexpr Rectangle kPlayMainColumnRect = {438.0f, 100.0f, 402.0f, 520.0f};
-constexpr Rectangle kPlayRankingColumnRect = {878.0f, 102.0f, 338.0f, 516.0f};
-constexpr Rectangle kPlayJacketRect = {456.0f, 182.0f, 188.0f, 188.0f};
-constexpr Rectangle kPlayChartDetailRect = {668.0f, 182.0f, 172.0f, 90.0f};
-constexpr Rectangle kPlayMetaRect = {456.0f, 388.0f, 384.0f, 60.0f};
-constexpr Rectangle kPlayChartButtonsRect = {456.0f, 400.0f, 384.0f, 218.0f};
-constexpr Rectangle kPlayRankingHeaderRect = {878.0f, 102.0f, 338.0f, 36.0f};
-constexpr Rectangle kPlayRankingSourceLocalRect = {1034.0f, 98.0f, 86.0f, 34.0f};
-constexpr Rectangle kPlayRankingSourceOnlineRect = {1126.0f, 98.0f, 90.0f, 34.0f};
-constexpr Rectangle kPlayRankingListRect = {878.0f, 150.0f, 338.0f, 468.0f};
-constexpr float kCreateToolButtonHeight = 48.0f;
-constexpr float kCreateToolButtonGap = 8.0f;
-constexpr float kCreateToolColumnGap = 8.0f;
+constexpr Rectangle kPlayBackButtonRect = {72.0f, 57.0f, 147.0f, 57.0f};
+constexpr Rectangle kPlaySongColumnRect = {99.0f, 162.0f, 507.0f, 756.0f};
+constexpr Rectangle kPlayMainColumnRect = {657.0f, 150.0f, 603.0f, 780.0f};
+constexpr Rectangle kPlayRankingColumnRect = {1317.0f, 153.0f, 507.0f, 774.0f};
+constexpr Rectangle kPlayJacketRect = {684.0f, 273.0f, 282.0f, 282.0f};
+constexpr Rectangle kPlayChartDetailRect = {1002.0f, 273.0f, 258.0f, 135.0f};
+constexpr Rectangle kPlayMetaRect = {684.0f, 582.0f, 576.0f, 90.0f};
+constexpr Rectangle kPlayChartButtonsRect = {684.0f, 600.0f, 576.0f, 327.0f};
+constexpr Rectangle kPlayRankingHeaderRect = {1317.0f, 153.0f, 507.0f, 54.0f};
+constexpr Rectangle kPlayRankingSourceLocalRect = {1551.0f, 147.0f, 129.0f, 51.0f};
+constexpr Rectangle kPlayRankingSourceOnlineRect = {1689.0f, 147.0f, 135.0f, 51.0f};
+constexpr Rectangle kPlayRankingListRect = {1317.0f, 225.0f, 507.0f, 702.0f};
+constexpr float kCreateToolButtonHeight = 72.0f;
+constexpr float kCreateToolButtonGap = 12.0f;
+constexpr float kCreateToolColumnGap = 12.0f;
+constexpr float kDeleteMenuInset = 9.0f;
+constexpr Rectangle kFallbackOriginRect = {840.0f, 564.0f, 240.0f, 90.0f};
+constexpr Vector2 kSeedSongOffset = {-495.0f, 33.0f};
+constexpr Vector2 kSeedMainOffset = {0.0f, 9.0f};
+constexpr Vector2 kSeedRankingOffset = {495.0f, 39.0f};
+constexpr Vector2 kSeedBackOffset = {-642.0f, -291.0f};
+constexpr Vector2 kSeedJacketOffset = {-102.0f, -39.0f};
+constexpr Vector2 kSeedMetaOffset = {15.0f, 138.0f};
+constexpr Vector2 kSeedChartDetailOffset = {228.0f, -15.0f};
+constexpr Vector2 kSeedChartButtonsOffset = {81.0f, 240.0f};
+constexpr Vector2 kSeedRankingHeaderOffset = {522.0f, -276.0f};
+constexpr Vector2 kSeedRankingSourceLocalOffset = {627.0f, -285.0f};
+constexpr Vector2 kSeedRankingSourceOnlineOffset = {768.0f, -285.0f};
+constexpr Vector2 kSeedRankingListOffset = {522.0f, 30.0f};
+constexpr float kWheelScrollStep = 63.0f;
 constexpr int kPlaySongContextMenuItemCount = 1;
 
 enum class create_tool_action {
@@ -92,9 +107,9 @@ Rectangle create_tool_rect(Rectangle list_rect, int index) {
 
 Rectangle delete_song_menu_item_rect(Rectangle menu_rect) {
     return {
-        menu_rect.x + 6.0f,
-        menu_rect.y + 6.0f,
-        menu_rect.width - 12.0f,
+        menu_rect.x + kDeleteMenuInset,
+        menu_rect.y + kDeleteMenuInset,
+        menu_rect.width - kDeleteMenuInset * 2.0f,
         song_select::layout::kContextMenuItemHeight
     };
 }
@@ -115,12 +130,7 @@ Rectangle centered_scaled_rect(Rectangle anchor, Rectangle target, float scale, 
 }
 
 Rectangle fallback_origin_rect() {
-    return {
-        static_cast<float>(kScreenWidth) * 0.5f - 80.0f,
-        376.0f,
-        160.0f,
-        60.0f,
-    };
+    return kFallbackOriginRect;
 }
 
 Rectangle resolve_origin_rect(Rectangle origin_rect) {
@@ -132,18 +142,18 @@ layout make_layout(float anim_t, Rectangle origin_rect) {
     const float t = tween::ease_out_cubic(anim_t);
     const Rectangle origin = resolve_origin_rect(origin_rect);
 
-    const Rectangle seed_song = centered_scaled_rect(origin, kPlaySongColumnRect, 0.68f, {-330.0f, 22.0f});
-    const Rectangle seed_main = centered_scaled_rect(origin, kPlayMainColumnRect, 0.74f, {0.0f, 6.0f});
-    const Rectangle seed_ranking = centered_scaled_rect(origin, kPlayRankingColumnRect, 0.68f, {330.0f, 26.0f});
-    const Rectangle seed_back = centered_scaled_rect(origin, kPlayBackButtonRect, 0.9f, {-428.0f, -194.0f});
-    const Rectangle seed_jacket = centered_scaled_rect(origin, kPlayJacketRect, 0.82f, {-68.0f, -26.0f});
-    const Rectangle seed_meta = centered_scaled_rect(origin, kPlayMetaRect, 0.8f, {10.0f, 92.0f});
-    const Rectangle seed_chart_detail = centered_scaled_rect(origin, kPlayChartDetailRect, 0.76f, {152.0f, -10.0f});
-    const Rectangle seed_chart_buttons = centered_scaled_rect(origin, kPlayChartButtonsRect, 0.88f, {54.0f, 160.0f});
-    const Rectangle seed_ranking_header = centered_scaled_rect(origin, kPlayRankingHeaderRect, 0.7f, {348.0f, -184.0f});
-    const Rectangle seed_ranking_source_local = centered_scaled_rect(origin, kPlayRankingSourceLocalRect, 0.8f, {418.0f, -190.0f});
-    const Rectangle seed_ranking_source_online = centered_scaled_rect(origin, kPlayRankingSourceOnlineRect, 0.8f, {512.0f, -190.0f});
-    const Rectangle seed_ranking_list = centered_scaled_rect(origin, kPlayRankingListRect, 0.7f, {348.0f, 20.0f});
+    const Rectangle seed_song = centered_scaled_rect(origin, kPlaySongColumnRect, 0.68f, kSeedSongOffset);
+    const Rectangle seed_main = centered_scaled_rect(origin, kPlayMainColumnRect, 0.74f, kSeedMainOffset);
+    const Rectangle seed_ranking = centered_scaled_rect(origin, kPlayRankingColumnRect, 0.68f, kSeedRankingOffset);
+    const Rectangle seed_back = centered_scaled_rect(origin, kPlayBackButtonRect, 0.9f, kSeedBackOffset);
+    const Rectangle seed_jacket = centered_scaled_rect(origin, kPlayJacketRect, 0.82f, kSeedJacketOffset);
+    const Rectangle seed_meta = centered_scaled_rect(origin, kPlayMetaRect, 0.8f, kSeedMetaOffset);
+    const Rectangle seed_chart_detail = centered_scaled_rect(origin, kPlayChartDetailRect, 0.76f, kSeedChartDetailOffset);
+    const Rectangle seed_chart_buttons = centered_scaled_rect(origin, kPlayChartButtonsRect, 0.88f, kSeedChartButtonsOffset);
+    const Rectangle seed_ranking_header = centered_scaled_rect(origin, kPlayRankingHeaderRect, 0.7f, kSeedRankingHeaderOffset);
+    const Rectangle seed_ranking_source_local = centered_scaled_rect(origin, kPlayRankingSourceLocalRect, 0.8f, kSeedRankingSourceLocalOffset);
+    const Rectangle seed_ranking_source_online = centered_scaled_rect(origin, kPlayRankingSourceOnlineRect, 0.8f, kSeedRankingSourceOnlineOffset);
+    const Rectangle seed_ranking_list = centered_scaled_rect(origin, kPlayRankingListRect, 0.7f, kSeedRankingListOffset);
 
     return {
         tween::lerp(seed_back, kPlayBackButtonRect, t),
@@ -328,11 +338,11 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
     }
 
     if (CheckCollisionPointRec(mouse, current.song_column) && wheel != 0.0f) {
-        state.scroll_y_target -= wheel * 42.0f;
+        state.scroll_y_target -= wheel * kWheelScrollStep;
     } else if (CheckCollisionPointRec(mouse, current.chart_buttons_rect) && wheel != 0.0f) {
-        state.chart_scroll_y_target -= wheel * 42.0f;
+        state.chart_scroll_y_target -= wheel * kWheelScrollStep;
     } else if (view_mode == mode::play && CheckCollisionPointRec(mouse, current.ranking_list_rect) && wheel != 0.0f) {
-        state.ranking_panel.scroll_y_target -= wheel * 42.0f;
+        state.ranking_panel.scroll_y_target -= wheel * kWheelScrollStep;
     }
 
     state.scroll_y_target = std::clamp(
@@ -388,12 +398,12 @@ void draw(const song_select::state& state,
     ui::draw_button_colored(current.back_rect, "HOME", 16,
                             with_alpha(button_base, normal_row_alpha), with_alpha(button_hover, hover_row_alpha), with_alpha(t.text, alpha), 1.5f);
 
-    DrawLineEx({current.song_column.x + current.song_column.width + 22.0f, current.song_column.y + 18.0f},
-               {current.song_column.x + current.song_column.width + 22.0f, current.song_column.y + current.song_column.height - 18.0f},
-               1.2f, with_alpha(t.border_light, static_cast<unsigned char>(170.0f * play_t)));
-    DrawLineEx({current.ranking_column.x - 24.0f, current.ranking_column.y + 24.0f},
-               {current.ranking_column.x - 24.0f, current.ranking_column.y + current.ranking_column.height - 20.0f},
-               1.2f, with_alpha(t.border_light, static_cast<unsigned char>(170.0f * play_t)));
+    ui::draw_line_ex({current.song_column.x + current.song_column.width + 22.0f, current.song_column.y + 18.0f},
+                     {current.song_column.x + current.song_column.width + 22.0f, current.song_column.y + current.song_column.height - 18.0f},
+                     1.2f, with_alpha(t.border_light, static_cast<unsigned char>(170.0f * play_t)));
+    ui::draw_line_ex({current.ranking_column.x - 24.0f, current.ranking_column.y + 24.0f},
+                     {current.ranking_column.x - 24.0f, current.ranking_column.y + current.ranking_column.height - 20.0f},
+                     1.2f, with_alpha(t.border_light, static_cast<unsigned char>(170.0f * play_t)));
 
     if (!hide_unloaded_content) {
         title_song_list_view::draw(state, {
@@ -456,8 +466,8 @@ void draw(const song_select::state& state,
             const Rectangle rect = create_tool_rect(current.ranking_list_rect, i);
             const bool hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), rect);
             const unsigned char row_alpha = hovered ? hover_row_alpha : normal_row_alpha;
-            DrawRectangleRec(rect, with_alpha(button_base, row_alpha));
-            DrawRectangleLinesEx(rect, 1.2f, with_alpha(t.border, row_alpha));
+            ui::draw_rect_f(rect, with_alpha(button_base, row_alpha));
+            ui::draw_rect_lines(rect, 1.2f, with_alpha(t.border, row_alpha));
             ui::draw_text_in_rect(kCreateToolEntries[i].title, 14,
                                   {rect.x + 10.0f, rect.y + 6.0f, rect.width - 20.0f, 18.0f},
                                   with_alpha(t.text, alpha), ui::text_align::left);

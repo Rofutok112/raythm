@@ -10,11 +10,21 @@
 
 namespace {
 
-constexpr float kHomeButtonWidth = 232.0f;
-constexpr float kHomeButtonHeight = 78.0f;
-constexpr float kHomeButtonGap = 18.0f;
-constexpr float kHomeButtonRowY = 376.0f;
-constexpr float kHomeButtonIntroOffsetY = 24.0f;
+constexpr float kHomeButtonWidth = 348.0f;
+constexpr float kHomeButtonHeight = 117.0f;
+constexpr float kHomeButtonGap = 27.0f;
+constexpr float kHomeButtonRowY = 564.0f;
+constexpr float kHomeButtonIntroOffsetY = 36.0f;
+constexpr float kPlayTransitionOffsetY = 51.0f;
+constexpr float kButtonBorderWidth = 2.7f;
+constexpr float kTitlePaddingX = 21.0f;
+constexpr float kTitleOffsetY = 18.0f;
+constexpr float kTitleHeight = 36.0f;
+constexpr float kDetailPaddingX = 24.0f;
+constexpr float kDetailOffsetY = 63.0f;
+constexpr float kDetailHeight = 27.0f;
+constexpr float kStatusOffsetY = 33.0f;
+constexpr float kStatusHeight = 27.0f;
 
 constexpr std::array<title_home_view::entry, 4> kHomeEntries = {{
     {"PLAY", "Solo song select.", true, title_home_view::action::play},
@@ -65,7 +75,7 @@ void draw(float menu_anim_t, float play_anim_t, int selected_index, std::string_
     for (int index = 0; index < static_cast<int>(kHomeEntries.size()); ++index) {
         const entry& current = kHomeEntries[static_cast<std::size_t>(index)];
         const Rectangle raw_rect = button_rect(index, menu_anim_t);
-        const Rectangle rect = translate_rect(raw_rect, 0.0f, -34.0f * play_anim_t);
+        const Rectangle rect = translate_rect(raw_rect, 0.0f, -kPlayTransitionOffsetY * play_anim_t);
         const bool selected = index == selected_index;
         const float button_fade = (1.0f - play_anim_t) * menu_t;
         const Color button_base = t.row_soft;
@@ -85,22 +95,24 @@ void draw(float menu_anim_t, float play_anim_t, int selected_index, std::string_
         if (button_fade <= 0.01f) {
             continue;
         }
-        DrawRectangleRec(rect, bg);
-        DrawRectangleLinesEx(rect, 1.8f, border);
+        ui::draw_rect_f(rect, bg);
+        ui::draw_rect_lines(rect, kButtonBorderWidth, border);
         ui::draw_text_in_rect(current.label, 24,
-                              {rect.x + 14.0f, rect.y + 12.0f, rect.width - 28.0f, 24.0f},
+                              {rect.x + kTitlePaddingX, rect.y + kTitleOffsetY,
+                               rect.width - kTitlePaddingX * 2.0f, kTitleHeight},
                               with_alpha(current.enabled ? t.text : t.text_muted, static_cast<unsigned char>(255.0f * button_fade)),
                               ui::text_align::center);
         ui::draw_text_in_rect(current.detail, 13,
-                              {rect.x + 16.0f, rect.y + 42.0f, rect.width - 32.0f, 18.0f},
+                              {rect.x + kDetailPaddingX, rect.y + kDetailOffsetY,
+                               rect.width - kDetailPaddingX * 2.0f, kDetailHeight},
                               with_alpha(current.enabled ? t.text_muted : t.text_hint, static_cast<unsigned char>(220.0f * button_fade)),
                               ui::text_align::center);
     }
 
     if (!status_message.empty() && (1.0f - play_anim_t) > 0.01f) {
         ui::draw_text_in_rect(status_message.data(), 16,
-                              {0.0f, kHomeButtonRowY + kHomeButtonHeight + 22.0f,
-                               static_cast<float>(kScreenWidth), 18.0f},
+                              {0.0f, kHomeButtonRowY + kHomeButtonHeight + kStatusOffsetY,
+                               static_cast<float>(kScreenWidth), kStatusHeight},
                               with_alpha(t.text_muted, static_cast<unsigned char>(230.0f * menu_t * (1.0f - play_anim_t))),
                               ui::text_align::center);
     }

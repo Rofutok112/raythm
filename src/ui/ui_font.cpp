@@ -10,6 +10,7 @@
 
 #include "core/app_paths.h"
 #include "core/path_utils.h"
+#include "virtual_screen.h"
 
 namespace ui {
 
@@ -18,6 +19,7 @@ namespace {
 constexpr int kFontBaseSize = 48;
 constexpr float kCustomFontSizeScale = 0.8f;
 constexpr float kCustomFontSpacingOffset = 2.0f;
+constexpr float kUiAuthoringScale1080p = 1920.0f / 1280.0f;
 
 std::string g_font_path;
 Font g_font = {};
@@ -29,6 +31,18 @@ float snap_custom_font_size(float font_size) {
 }
 
 float snap_custom_coordinate(float value) {
+    return std::round(value);
+}
+
+float current_ui_authoring_scale() {
+    return virtual_screen::current_render_scale() > 1.0f ? kUiAuthoringScale1080p : 1.0f;
+}
+
+float snap_default_font_size(float font_size) {
+    return std::max(1.0f, std::round(font_size));
+}
+
+float snap_default_coordinate(float value) {
     return std::round(value);
 }
 
@@ -141,11 +155,16 @@ Font text_font_for_text(const char* text) {
     return GetFontDefault();
 }
 
+float text_layout_font_size(float font_size) {
+    return font_size * current_ui_authoring_scale();
+}
+
 float text_font_size_for_text(const char* text, float font_size) {
+    const float scaled_font_size = text_layout_font_size(font_size);
     if (g_font_loaded && contains_non_ascii_bytes(text)) {
-        return snap_custom_font_size(font_size * kCustomFontSizeScale);
+        return snap_custom_font_size(scaled_font_size * kCustomFontSizeScale);
     }
-    return font_size;
+    return snap_default_font_size(scaled_font_size);
 }
 
 float text_spacing_for_text(const char* text, float font_size, float spacing) {
@@ -154,12 +173,12 @@ float text_spacing_for_text(const char* text, float font_size, float spacing) {
     }
 
     if (spacing != 0.0f) {
-        return spacing;
+        return snap_default_font_size(text_layout_font_size(spacing));
     }
 
     const Font font = text_font_for_text(text);
     if (font.texture.id == GetFontDefault().texture.id && font.baseSize > 0) {
-        return font_size / static_cast<float>(font.baseSize);
+        return snap_default_font_size(font_size) / static_cast<float>(font.baseSize);
     }
     return 0.0f;
 }
@@ -210,7 +229,7 @@ void draw_text_auto(const char* text, Vector2 position, float font_size, float s
     const bool uses_custom_font = g_font_loaded && contains_non_ascii_bytes(text);
     const Vector2 draw_position = uses_custom_font
                                       ? Vector2{snap_custom_coordinate(position.x), snap_custom_coordinate(position.y)}
-                                      : position;
+                                      : Vector2{snap_default_coordinate(position.x), snap_default_coordinate(position.y)};
     DrawTextEx(text_font_for_text(text), text, draw_position, adjusted_font_size,
                text_spacing_for_text(text, adjusted_font_size, spacing), color);
 }

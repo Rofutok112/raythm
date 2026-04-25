@@ -6,6 +6,7 @@
 #include <cmath>
 
 #include "audio_manager.h"
+#include "ui_coord.h"
 
 namespace {
 
@@ -176,8 +177,8 @@ void title_spectrum_visualizer::draw(const Rectangle& rect, float alpha_scale) c
         (rect.width - gap * static_cast<float>(kBarCount - 1)) / static_cast<float>(kBarCount);
     const float baseline = rect.y + rect.height;
     const float max_height = rect.height * 1.0f;
-    const float block_height = 5.0f;
-    const float block_gap = 2.0f;
+    const float block_height = 8.0f;
+    const float block_gap = 4.0f;
     const float block_step = block_height + block_gap;
     const Color base_low = with_alpha_scale({107, 33, 168, 255}, clamped_alpha * (128.0f / 255.0f));
     const Color base_mid = with_alpha_scale({168, 85, 247, 255}, clamped_alpha * (178.0f / 255.0f));
@@ -199,13 +200,13 @@ void title_spectrum_visualizer::draw(const Rectangle& rect, float alpha_scale) c
                         color_t < 0.6f
                             ? lerp_color(base_low, base_mid, color_t / 0.6f)
                             : lerp_color(base_mid, base_top, (color_t - 0.6f) / 0.4f);
-                    DrawRectangleRec({x, block_top, bar_width, segment_height}, block_color);
+                    ui::draw_rect_f({x, block_top, bar_width, segment_height}, block_color);
                 }
             }
         }
 
         const float peak_y = baseline - std::clamp(peaks_[static_cast<size_t>(i)], 0.0f, 1.0f) * max_height - 2.0f;
-        DrawRectangleRec({x, peak_y - 1.0f, bar_width, 4.0f}, peak_glow);
-        DrawRectangleRec({x, peak_y, bar_width, 2.0f}, peak_color);
+        ui::draw_rect_f({x, peak_y - 1.0f, bar_width, 4.0f}, peak_glow);
+        ui::draw_rect_f({x, peak_y, bar_width, 2.0f}, peak_color);
     }
 }

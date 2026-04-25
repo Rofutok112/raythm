@@ -81,6 +81,6 @@ void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Col
 }
 
 void draw_marquee_text(const char* text, float x, float y, int font_size, Color color, float max_width, double time) {
-    draw_marquee_text(text, {x, y, max_width, static_cast<float>(font_size)},
+    draw_marquee_text(text, {x, y, max_width, ui::text_layout_font_size(static_cast<float>(font_size))},
                       font_size, color, time);
 }

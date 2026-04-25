@@ -7,23 +7,42 @@
 
 namespace {
 
-constexpr float kDialogWidth = 360.0f;
-constexpr float kLoginDialogHeight = 308.0f;
-constexpr float kAccountDialogHeight = 258.0f;
-constexpr float kDialogOffsetY = 18.0f;
-constexpr float kDialogPaddingX = 18.0f;
-constexpr float kTitleHeight = 26.0f;
-constexpr float kSubtitleHeight = 18.0f;
-constexpr float kHeaderTop = 18.0f;
-constexpr float kHeaderGap = 6.0f;
-constexpr float kBodyTop = 86.0f;
-constexpr float kRowHeight = 36.0f;
-constexpr float kRowGap = 8.0f;
-constexpr float kButtonHeight = 36.0f;
-constexpr float kButtonGap = 8.0f;
-constexpr float kPrimaryButtonWidth = 128.0f;
-constexpr float kSecondaryButtonWidth = 164.0f;
-constexpr float kHelperTextHeight = 18.0f;
+constexpr float kDialogWidth = 540.0f;
+constexpr float kLoginDialogHeight = 462.0f;
+constexpr float kAccountDialogHeight = 387.0f;
+constexpr float kDialogOffsetY = 27.0f;
+constexpr float kDialogPaddingX = 27.0f;
+constexpr float kTitleHeight = 39.0f;
+constexpr float kSubtitleHeight = 27.0f;
+constexpr float kHeaderTop = 27.0f;
+constexpr float kHeaderGap = 9.0f;
+constexpr float kBodyTop = 129.0f;
+constexpr float kRowHeight = 54.0f;
+constexpr float kRowGap = 12.0f;
+constexpr float kButtonHeight = 54.0f;
+constexpr float kButtonGap = 12.0f;
+constexpr float kPrimaryButtonWidth = 192.0f;
+constexpr float kSecondaryButtonWidth = 246.0f;
+constexpr float kHelperTextHeight = 27.0f;
+constexpr float kScreenEdgeMargin = 18.0f;
+constexpr float kOpenAnimOffsetY = 27.0f;
+constexpr float kFooterMarginBottom = 27.0f;
+constexpr float kSignedInLineHeight = 33.0f;
+constexpr float kDisplayNameOffsetY = 42.0f;
+constexpr float kDisplayNameHeight = 30.0f;
+constexpr float kEmailOffsetY = 78.0f;
+constexpr float kEmailLineHeight = 24.0f;
+constexpr float kVerifyOffsetY = 111.0f;
+constexpr float kVerifyLineHeight = 24.0f;
+constexpr float kAccountButtonWidth = 138.0f;
+constexpr float kStatusOffsetAboveFooter = 42.0f;
+constexpr float kStatusLineHeight = 30.0f;
+constexpr float kTextInputLabelWidth = 135.0f;
+constexpr float kLoginActionTop = 249.0f;
+constexpr float kMessageHeight = 27.0f;
+constexpr float kLoginButtonOffsetY = 42.0f;
+constexpr float kHelperOffsetY = 108.0f;
+constexpr float kWebButtonOffsetY = 141.0f;
 
 Rectangle dialog_rect_for(const song_select::state& state) {
     const float dialog_height = state.auth.logged_in
@@ -35,10 +54,12 @@ Rectangle dialog_rect_for(const song_select::state& state) {
         kDialogWidth,
         dialog_height
     };
-    rect.x = std::clamp(rect.x, 12.0f, song_select::layout::kScreenRect.width - rect.width - 12.0f);
-    rect.y = std::clamp(rect.y, 12.0f, song_select::layout::kScreenRect.height - rect.height - 12.0f);
+    rect.x = std::clamp(rect.x, kScreenEdgeMargin,
+                        song_select::layout::kScreenRect.width - rect.width - kScreenEdgeMargin);
+    rect.y = std::clamp(rect.y, kScreenEdgeMargin,
+                        song_select::layout::kScreenRect.height - rect.height - kScreenEdgeMargin);
     const float anim_t = tween::ease_out_cubic(state.login_dialog.open_anim);
-    rect.y -= (1.0f - anim_t) * 18.0f;
+    rect.y -= (1.0f - anim_t) * kOpenAnimOffsetY;
     return rect;
 }
 
@@ -55,10 +76,10 @@ Rectangle dialog_rect_for(const song_select::auth_state& auth_state,
         kDialogWidth,
         dialog_height
     };
-    rect.x = std::clamp(rect.x, 12.0f, screen_rect.width - rect.width - 12.0f);
-    rect.y = std::clamp(rect.y, 12.0f, screen_rect.height - rect.height - 12.0f);
+    rect.x = std::clamp(rect.x, kScreenEdgeMargin, screen_rect.width - rect.width - kScreenEdgeMargin);
+    rect.y = std::clamp(rect.y, kScreenEdgeMargin, screen_rect.height - rect.height - kScreenEdgeMargin);
     const float anim_t = tween::ease_out_cubic(dialog_state.open_anim);
-    rect.y -= (1.0f - anim_t) * 18.0f;
+    rect.y -= (1.0f - anim_t) * kOpenAnimOffsetY;
     return rect;
 }
 
@@ -104,7 +125,7 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
     const Rectangle dialog_rect = dialog_rect_for(auth_state, dialog_state, anchor_rect, screen_rect);
     const float form_x = dialog_rect.x + kDialogPaddingX;
     const float form_width = dialog_rect.width - kDialogPaddingX * 2.0f;
-    const float footer_y = dialog_rect.y + dialog_rect.height - 18.0f - kButtonHeight;
+    const float footer_y = dialog_rect.y + dialog_rect.height - kFooterMarginBottom - kButtonHeight;
 
     ui::draw_panel(dialog_rect);
     ui::draw_text_in_rect("Account", 24,
@@ -117,14 +138,23 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
                           theme.text_secondary, ui::text_align::left);
 
     if (auth_state.logged_in) {
-        const Rectangle signed_in_rect = {form_x, dialog_rect.y + kBodyTop, form_width, 22.0f};
-        const Rectangle display_name_rect = {form_x, dialog_rect.y + kBodyTop + 28.0f, form_width, 20.0f};
-        const Rectangle email_rect = {form_x, dialog_rect.y + kBodyTop + 52.0f, form_width, 16.0f};
-        const Rectangle verify_rect = {form_x, dialog_rect.y + kBodyTop + 74.0f, form_width, 16.0f};
+        const Rectangle signed_in_rect = {form_x, dialog_rect.y + kBodyTop, form_width, kSignedInLineHeight};
+        const Rectangle display_name_rect = {
+            form_x, dialog_rect.y + kBodyTop + kDisplayNameOffsetY, form_width, kDisplayNameHeight
+        };
+        const Rectangle email_rect = {
+            form_x, dialog_rect.y + kBodyTop + kEmailOffsetY, form_width, kEmailLineHeight
+        };
+        const Rectangle verify_rect = {
+            form_x, dialog_rect.y + kBodyTop + kVerifyOffsetY, form_width, kVerifyLineHeight
+        };
         const Rectangle button_row = {form_x, footer_y, form_width, kButtonHeight};
-        constexpr float kButtonWidth = 92.0f;
-        const Rectangle logout_rect = {button_row.x + button_row.width - kButtonWidth, button_row.y, kButtonWidth, kButtonHeight};
-        const Rectangle refresh_rect = {logout_rect.x - kButtonWidth - kButtonGap, button_row.y, kButtonWidth, kButtonHeight};
+        const Rectangle logout_rect = {
+            button_row.x + button_row.width - kAccountButtonWidth, button_row.y, kAccountButtonWidth, kButtonHeight
+        };
+        const Rectangle refresh_rect = {
+            logout_rect.x - kAccountButtonWidth - kButtonGap, button_row.y, kAccountButtonWidth, kButtonHeight
+        };
 
         ui::draw_text_in_rect("Signed in", 20, signed_in_rect, theme.success, ui::text_align::left);
         ui::draw_text_in_rect(auth_state.display_name.empty() ? auth_state.email.c_str() : auth_state.display_name.c_str(),
@@ -147,7 +177,7 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
 
         if (!dialog_state.status_message.empty()) {
             ui::draw_text_in_rect(dialog_state.status_message.c_str(), 13,
-                                  {form_x, footer_y - 28.0f, form_width, 20.0f},
+                                  {form_x, footer_y - kStatusOffsetAboveFooter, form_width, kStatusLineHeight},
                                   dialog_state.status_message_is_error ? theme.error : theme.success,
                                   ui::text_align::left);
         }
@@ -164,17 +194,17 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
     int row = 0;
     const ui::text_input_result email_result = ui::draw_text_input(
         make_row(dialog_rect, row++), dialog_state.email_input, "Email", "name@example.com",
-        nullptr, layer, 15, 64, printable_filter, 90.0f);
+        nullptr, layer, 15, 64, printable_filter, kTextInputLabelWidth);
 
     const ui::text_input_result password_result = ui::draw_text_input(
-        make_row(dialog_rect, row++), dialog_state.password_input, "Pass", "At least 8 characters",
-        nullptr, layer, 15, 64, printable_filter, 90.0f);
+        make_row(dialog_rect, row++), dialog_state.password_input, "Pass", "Password",
+        nullptr, layer, 15, 64, printable_filter, kTextInputLabelWidth);
 
-    const float action_top = dialog_rect.y + 166.0f;
-    const Rectangle message_rect = {form_x, action_top, form_width, 18.0f};
-    const Rectangle login_button_row = {form_x, action_top + 28.0f, form_width, kButtonHeight};
-    const Rectangle helper_rect = {form_x, action_top + 72.0f, form_width, kHelperTextHeight};
-    const Rectangle web_button_row = {form_x, action_top + 94.0f, form_width, kButtonHeight};
+    const float action_top = dialog_rect.y + kLoginActionTop;
+    const Rectangle message_rect = {form_x, action_top, form_width, kMessageHeight};
+    const Rectangle login_button_row = {form_x, action_top + kLoginButtonOffsetY, form_width, kButtonHeight};
+    const Rectangle helper_rect = {form_x, action_top + kHelperOffsetY, form_width, kHelperTextHeight};
+    const Rectangle web_button_row = {form_x, action_top + kWebButtonOffsetY, form_width, kButtonHeight};
     const Rectangle primary_rect = ui::place(login_button_row, kPrimaryButtonWidth, kButtonHeight,
                                              ui::anchor::center, ui::anchor::center);
     const Rectangle web_button_rect = ui::place(web_button_row, kSecondaryButtonWidth, kButtonHeight,

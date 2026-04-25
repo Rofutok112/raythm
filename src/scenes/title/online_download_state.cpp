@@ -12,9 +12,9 @@
 namespace title_online_view {
 namespace {
 
-constexpr float kSongCardHeight = 164.0f;
+constexpr float kSongCardHeight = 256.0f;
 constexpr float kSongGridGapX = 18.0f;
-constexpr float kSongGridGapY = 18.0f;
+constexpr float kSongGridGapY = 19.0f;
 constexpr float kChartCardHeight = 92.0f;
 constexpr float kChartGridGapX = 22.0f;
 constexpr float kChartGridGapY = 18.0f;

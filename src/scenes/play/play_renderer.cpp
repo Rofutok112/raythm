@@ -1,6 +1,7 @@
 #include "play_renderer.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "game_settings.h"
 #include "scene_common.h"
@@ -12,46 +13,47 @@ namespace {
 constexpr float kLaneGap = 0.2f;
 constexpr float kJudgeLineGlowHeight = 0.04f;
 constexpr float kResultFadeMaxAlpha = 0.65f;
+constexpr float kUiFontScale = 1.5f;
 constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
-constexpr Rectangle kPausePanelRect = ui::center(kScreenRect, 420.0f, 320.0f);
-constexpr Rectangle kPauseTitleRect = {kPausePanelRect.x, kPausePanelRect.y, kPausePanelRect.width, 64.0f};
+constexpr Rectangle kPausePanelRect = ui::center(kScreenRect, 630.0f, 480.0f);
+constexpr Rectangle kPauseTitleRect = {kPausePanelRect.x, kPausePanelRect.y, kPausePanelRect.width, 96.0f};
 constexpr Rectangle kPauseButtonArea = {
-    kPausePanelRect.x + 40.0f,
-    kPausePanelRect.y + 88.0f,
-    340.0f,
-    3.0f * 42.0f + 2.0f * 16.0f
+    kPausePanelRect.x + 60.0f,
+    kPausePanelRect.y + 132.0f,
+    510.0f,
+    3.0f * 63.0f + 2.0f * 24.0f
 };
 constexpr Rectangle kPauseHintRect = {
-    kPausePanelRect.x + 24.0f,
-    kPausePanelRect.y + kPausePanelRect.height - 50.0f,
-    kPausePanelRect.width - 48.0f,
-    30.0f
+    kPausePanelRect.x + 36.0f,
+    kPausePanelRect.y + kPausePanelRect.height - 75.0f,
+    kPausePanelRect.width - 72.0f,
+    45.0f
 };
-constexpr Rectangle kScoreRect = ui::place(kScreenRect, 400.0f, 60.0f,
+constexpr Rectangle kScoreRect = ui::place(kScreenRect, 600.0f, 90.0f,
                                            ui::anchor::top_left, ui::anchor::top_left,
-                                           {48.0f, 34.0f});
-constexpr Rectangle kTimeRect = ui::place(kScreenRect, 200.0f, 30.0f,
+                                           Vector2{72.0f, 51.0f});
+constexpr Rectangle kTimeRect = ui::place(kScreenRect, 300.0f, 45.0f,
                                           ui::anchor::top_center, ui::anchor::top_center,
-                                          {0.0f, 34.0f});
-constexpr Rectangle kFpsRect = ui::place(kScreenRect, 120.0f, 20.0f,
+                                          Vector2{0.0f, 51.0f});
+constexpr Rectangle kFpsRect = ui::place(kScreenRect, 180.0f, 30.0f,
                                          ui::anchor::bottom_right, ui::anchor::bottom_right,
-                                         {-10.0f, 0.0f});
-constexpr Rectangle kHealthLabelRect = ui::place(kScreenRect, 100.0f, 24.0f,
+                                         Vector2{-15.0f, 0.0f});
+constexpr Rectangle kHealthLabelRect = ui::place(kScreenRect, 150.0f, 36.0f,
                                                  ui::anchor::top_right, ui::anchor::top_right,
-                                                 {-48.0f, 34.0f});
-constexpr Rectangle kHealthBarRect = ui::place(kScreenRect, 260.0f, 24.0f,
+                                                 Vector2{-72.0f, 51.0f});
+constexpr Rectangle kHealthBarRect = ui::place(kScreenRect, 390.0f, 36.0f,
                                                ui::anchor::top_right, ui::anchor::top_right,
-                                               {-48.0f, 58.0f});
-constexpr Rectangle kComboNumberRect = ui::place(kScreenRect, 300.0f, 86.0f,
+                                               Vector2{-72.0f, 87.0f});
+constexpr Rectangle kComboNumberRect = ui::place(kScreenRect, 450.0f, 129.0f,
                                                  ui::anchor::center, ui::anchor::center,
-                                                 {0.0f, -80.0f});
-constexpr Rectangle kComboLabelRect = ui::place(kScreenRect, 200.0f, 24.0f,
+                                                 Vector2{0.0f, -120.0f});
+constexpr Rectangle kComboLabelRect = ui::place(kScreenRect, 300.0f, 36.0f,
                                                 ui::anchor::center, ui::anchor::center,
                                                 {0.0f, 0.0f});
-constexpr Rectangle kJudgeFeedbackRect = ui::place(kScreenRect, 320.0f, 42.0f,
+constexpr Rectangle kJudgeFeedbackRect = ui::place(kScreenRect, 480.0f, 63.0f,
                                                    ui::anchor::center, ui::anchor::center,
-                                                   {0.0f, 34.0f});
-constexpr Rectangle kFailureTextRect = ui::place(kScreenRect, 360.0f, 44.0f,
+                                                   Vector2{0.0f, 51.0f});
+constexpr Rectangle kFailureTextRect = ui::place(kScreenRect, 540.0f, 66.0f,
                                                  ui::anchor::center, ui::anchor::center);
 constexpr float kTapNoteBaseLength = 0.78f;
 constexpr float kJudgeLineY = 0.40f;
@@ -64,6 +66,10 @@ float lane_center_x(int lane, int key_count) {
     const float left = -total_width * 0.5f + g_settings.lane_width * 0.5f;
     const int visual_lane = key_count - 1 - lane;
     return left + visual_lane * (g_settings.lane_width + kLaneGap);
+}
+
+int ui_font(int font_size) {
+    return static_cast<int>(std::lround(static_cast<float>(font_size) * kUiFontScale));
 }
 
 void draw_note_plane(float center_x, float y, float center_z, float width, float length, Color fill) {
@@ -95,15 +101,15 @@ const char* judge_text(judge_result result) {
 void draw_hud(const play_session_state& state) {
     const result_data result = state.score_system.get_result_data();
     const float live_accuracy = state.score_system.get_live_accuracy();
-    ui::enqueue_text_in_rect(TextFormat("SCORE %07d", result.score), 30,
+    ui::enqueue_text_in_rect(TextFormat("SCORE %07d", result.score), ui_font(30),
                              kScoreRect, g_theme->hud_score, ui::text_align::left);
 
-    ui::enqueue_text_in_rect(TextFormat("FPS: %d", GetFPS()), 20,
+    ui::enqueue_text_in_rect(TextFormat("FPS: %d", GetFPS()), ui_font(20),
                              kFpsRect, g_theme->hud_fps, ui::text_align::right);
-    ui::enqueue_text_in_rect(TextFormat("%.2f%%", live_accuracy), 30,
+    ui::enqueue_text_in_rect(TextFormat("%.2f%%", live_accuracy), ui_font(30),
                              kTimeRect, g_theme->hud_time);
 
-    ui::enqueue_text_in_rect("HEALTH", 24, kHealthLabelRect,
+    ui::enqueue_text_in_rect("HEALTH", ui_font(24), kHealthLabelRect,
                              g_theme->hud_health_label, ui::text_align::right);
     const float gauge_ratio = state.gauge.get_value() / 100.0f;
     const Color gauge_color = state.gauge.get_value() >= 70.0f ? g_theme->health_high : g_theme->health_low;
@@ -113,25 +119,25 @@ void draw_hud(const play_session_state& state) {
     });
 
     if (state.combo_display > 0) {
-        ui::enqueue_text_in_rect(TextFormat("%03d", state.combo_display), 86,
+        ui::enqueue_text_in_rect(TextFormat("%03d", state.combo_display), ui_font(86),
                                  kComboNumberRect, g_theme->hud_combo);
-        ui::enqueue_text_in_rect("COMBO", 24, kComboLabelRect, g_theme->hud_combo);
+        ui::enqueue_text_in_rect("COMBO", ui_font(24), kComboLabelRect, g_theme->hud_combo);
     }
 }
 
 void draw_pause_overlay() {
     ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
     ui::enqueue_panel(kPausePanelRect, ui::draw_layer::modal);
-    ui::enqueue_text_in_rect("PAUSED", 42, kPauseTitleRect, g_theme->text,
+    ui::enqueue_text_in_rect("PAUSED", ui_font(42), kPauseTitleRect, g_theme->text,
                              ui::text_align::center, ui::draw_layer::modal);
 
     const std::array<Rectangle, 3> buttons = play_renderer::pause_button_rects();
     const char* labels[] = {"RESUME", "RESTART", "SONG SELECT"};
     for (int i = 0; i < 3; ++i) {
-        ui::enqueue_button(buttons[static_cast<size_t>(i)], labels[i], 24, ui::draw_layer::modal);
+        ui::enqueue_button(buttons[static_cast<size_t>(i)], labels[i], ui_font(24), ui::draw_layer::modal);
     }
 
-    ui::enqueue_text_in_rect("ESC: Resume", 20, kPauseHintRect, g_theme->text_muted,
+    ui::enqueue_text_in_rect("ESC: Resume", ui_font(20), kPauseHintRect, g_theme->text_muted,
                              ui::text_align::left, ui::draw_layer::modal);
 }
 
@@ -142,7 +148,7 @@ void draw_judge_feedback(const play_session_state& state) {
 
     const Color color = Fade(judge_color(state.display_judge->result),
                              std::min(state.judge_feedback_timer / 1.0f, 1.0f));
-    ui::enqueue_text_in_rect(judge_text(state.display_judge->result), 42, kJudgeFeedbackRect, color);
+    ui::enqueue_text_in_rect(judge_text(state.display_judge->result), ui_font(42), kJudgeFeedbackRect, color);
 }
 
 void draw_intro_overlay(const play_session_state& state) {
@@ -156,7 +162,7 @@ void draw_failure_overlay(const play_session_state& state) {
     const float fade_progress = std::clamp(elapsed / play_session_constants::kFailureFadeDurationSeconds, 0.0f, 0.7f);
     const unsigned char alpha = static_cast<unsigned char>(fade_progress * 255.0f);
     ui::enqueue_fullscreen_overlay({0, 0, 0, alpha}, ui::draw_layer::overlay);
-    ui::enqueue_text_in_rect("FAILED...", 44, kFailureTextRect,
+    ui::enqueue_text_in_rect("FAILED...", ui_font(44), kFailureTextRect,
                              Fade(g_theme->hud_failure_text, std::min(fade_progress * 1.15f, 1.0f)),
                              ui::text_align::center, ui::draw_layer::modal);
 }
@@ -177,16 +183,16 @@ Rectangle pause_panel_rect() {
 
 std::array<Rectangle, 3> pause_button_rects() {
     std::array<Rectangle, 3> buttons = {};
-    ui::vstack(kPauseButtonArea, 42.0f, 16.0f, buttons);
+    ui::vstack(kPauseButtonArea, 63.0f, 24.0f, buttons);
     return buttons;
 }
 
 void draw_status(const play_session_state& state) {
     ClearBackground(g_theme->bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, g_theme->bg, g_theme->bg_alt);
-    DrawText("Play", 96, 90, 44, g_theme->error);
-    DrawText(state.status_text.c_str(), 96, 170, 28, g_theme->text);
-    DrawText("ESC: Back to Song Select", 96, 225, 22, g_theme->text_hint);
+    ui::draw_text_f("Play", 144.0f, 135.0f, ui_font(44), g_theme->error);
+    ui::draw_text_f(state.status_text.c_str(), 144.0f, 255.0f, ui_font(28), g_theme->text);
+    ui::draw_text_f("ESC: Back to Song Select", 144.0f, 337.5f, ui_font(22), g_theme->text_hint);
 }
 
 void draw_world_background() {

@@ -14,23 +14,25 @@
 
 namespace {
 
-constexpr float kHeaderHeight = 48.0f;
-constexpr float kPadding = 16.0f;
-constexpr float kBackButtonWidth = 100.0f;
-constexpr float kBackButtonHeight = 30.0f;
-constexpr float kMetadataButtonWidth = 152.0f;
-constexpr float kMetadataModalWidth = 360.0f;
-constexpr float kMetadataModalHeight = 208.0f;
-constexpr float kMetadataModalOffsetY = 18.0f;
-constexpr float kMetadataModalPaddingX = 18.0f;
-constexpr float kMetadataHeaderTop = 18.0f;
-constexpr float kMetadataTitleHeight = 26.0f;
-constexpr float kMetadataSubtitleHeight = 18.0f;
-constexpr float kMetadataHeaderGap = 6.0f;
-constexpr float kMetadataBodyTop = 78.0f;
-constexpr float kMetadataRowHeight = 36.0f;
-constexpr float kMetadataRowGap = 8.0f;
-constexpr float kMetadataButtonHeight = 36.0f;
+constexpr float kHeaderHeight = 72.0f;
+constexpr float kPadding = 24.0f;
+constexpr float kBackButtonWidth = 150.0f;
+constexpr float kBackButtonHeight = 45.0f;
+constexpr float kMetadataButtonWidth = 228.0f;
+constexpr float kMetadataModalWidth = 540.0f;
+constexpr float kMetadataModalHeight = 312.0f;
+constexpr float kMetadataModalOffsetY = 27.0f;
+constexpr float kMetadataModalPaddingX = 27.0f;
+constexpr float kMetadataHeaderTop = 27.0f;
+constexpr float kMetadataTitleHeight = 39.0f;
+constexpr float kMetadataSubtitleHeight = 27.0f;
+constexpr float kMetadataHeaderGap = 9.0f;
+constexpr float kMetadataBodyTop = 117.0f;
+constexpr float kMetadataRowHeight = 54.0f;
+constexpr float kMetadataRowGap = 12.0f;
+constexpr float kMetadataModalScreenMargin = 18.0f;
+constexpr float kMetadataModalOpenOffsetY = 27.0f;
+constexpr float kMetadataInputLabelWidth = 180.0f;
 
 bool wide_text_filter(int codepoint, const std::string&) {
     return codepoint >= 32;
@@ -45,7 +47,7 @@ Rectangle metadata_button_rect() {
         kPadding,
         (kHeaderHeight - kBackButtonHeight) * 0.5f,
         kMetadataButtonWidth,
-        30.0f
+        kBackButtonHeight
     };
 }
 
@@ -56,10 +58,12 @@ Rectangle metadata_modal_rect(float open_anim = 1.0f) {
         kMetadataModalWidth,
         kMetadataModalHeight
     };
-    rect.x = std::clamp(rect.x, 12.0f, static_cast<float>(kScreenWidth) - rect.width - 12.0f);
-    rect.y = std::clamp(rect.y, 12.0f, static_cast<float>(kScreenHeight) - rect.height - 12.0f);
+    rect.x = std::clamp(rect.x, kMetadataModalScreenMargin,
+                        static_cast<float>(kScreenWidth) - rect.width - kMetadataModalScreenMargin);
+    rect.y = std::clamp(rect.y, kMetadataModalScreenMargin,
+                        static_cast<float>(kScreenHeight) - rect.height - kMetadataModalScreenMargin);
     const float anim_t = tween::ease_out_cubic(open_anim);
-    rect.y -= (1.0f - anim_t) * 18.0f;
+    rect.y -= (1.0f - anim_t) * kMetadataModalOpenOffsetY;
     return rect;
 }
 
@@ -139,7 +143,7 @@ void mv_editor_scene::update(float dt) {
 }
 
 void mv_editor_scene::draw() {
-    virtual_screen::begin();
+    virtual_screen::begin_ui();
     ClearBackground(g_theme->bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, g_theme->bg, g_theme->bg_alt);
     ui::begin_draw_queue();
@@ -150,8 +154,8 @@ void mv_editor_scene::draw() {
 
     // Header
     Rectangle header = {0, 0, static_cast<float>(kScreenWidth), kHeaderHeight};
-    DrawRectangleRec(header, g_theme->section);
-    DrawRectangleLinesEx(header, 1.0f, g_theme->border_light);
+    ui::draw_rect_f(header, g_theme->section);
+    ui::draw_rect_lines(header, 1.5f, g_theme->border_light);
 
     Rectangle back_btn = {
         static_cast<float>(kScreenWidth) - kBackButtonWidth - kPadding,
@@ -199,13 +203,13 @@ void mv_editor_scene::draw() {
             modal.x + kMetadataModalPaddingX,
             modal.y + kMetadataBodyTop,
             modal.width - kMetadataModalPaddingX * 2.0f,
-            modal.height - kMetadataBodyTop - 18.0f
+            modal.height - kMetadataBodyTop - kMetadataModalPaddingX
         };
         const Rectangle name_rect = {body.x, body.y, body.width, kMetadataRowHeight};
         const Rectangle author_rect = {body.x, body.y + kMetadataRowHeight + kMetadataRowGap,
                                        body.width, kMetadataRowHeight};
-        DrawRectangleRec({0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)},
-                         with_alpha(g_theme->pause_overlay, static_cast<unsigned char>(180.0f + anim_t * 40.0f)));
+        ui::draw_rect_f({0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)},
+                        with_alpha(g_theme->pause_overlay, static_cast<unsigned char>(180.0f + anim_t * 40.0f)));
         ui::draw_panel(modal);
         ui::draw_text_in_rect("MV Metadata", 28,
                               {modal.x + kMetadataModalPaddingX, modal.y + kMetadataHeaderTop,
@@ -219,10 +223,10 @@ void mv_editor_scene::draw() {
 
         const auto name_result = ui::draw_text_input(name_rect, name_input_, "MV Name", "Untitled MV",
                                                      nullptr, ui::draw_layer::modal, 16, 128,
-                                                     wide_text_filter, 120.0f);
+                                                     wide_text_filter, kMetadataInputLabelWidth);
         const auto author_result = ui::draw_text_input(author_rect, author_input_, "Author", "Author name",
                                                        nullptr, ui::draw_layer::modal, 16, 128,
-                                                       wide_text_filter, 120.0f);
+                                                       wide_text_filter, kMetadataInputLabelWidth);
         if (name_result.changed || author_result.changed) {
             dirty_ = true;
         }

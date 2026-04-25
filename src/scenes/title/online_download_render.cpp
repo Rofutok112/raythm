@@ -15,10 +15,10 @@ namespace title_online_view {
 namespace {
 
 Rectangle song_card_jacket_rect(Rectangle card) {
-    const float jacket_size = std::min(card.width - 34.0f, 92.0f);
+    const float jacket_size = std::min(card.width - 34.0f, 120.0f);
     return {
         card.x + (card.width - jacket_size) * 0.5f,
-        card.y + 16.0f,
+        card.y + 18.0f,
         jacket_size,
         jacket_size,
     };
@@ -53,17 +53,18 @@ ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_stat
     const unsigned char row_alpha = state.active ? selected_row_alpha
         : hovered ? hover_row_alpha
                   : normal_row_alpha;
-    DrawRectangleRec(visual, with_alpha(state.active ? button_selected : button_base, row_alpha));
-    DrawRectangleLinesEx(visual, 1.2f,
-                         with_alpha(state.active ? t.border_active : t.border_light, alpha));
+    ui::draw_rect_f(visual, with_alpha(state.active ? button_selected : button_base, row_alpha));
+    ui::draw_rect_lines(visual, 1.2f,
+                        with_alpha(state.active ? t.border_active : t.border_light, alpha));
 
     const Rectangle content_rect = ui::inset(visual, ui::edge_insets::symmetric(0.0f, 14.0f));
-    constexpr float kLabelWidth = 82.0f;
+    constexpr float kLabelWidth = 108.0f;
+    constexpr float kLabelGap = 14.0f;
     const Rectangle label_rect = {content_rect.x, content_rect.y, kLabelWidth, content_rect.height};
     const Rectangle text_rect = {
-        content_rect.x + kLabelWidth,
+        content_rect.x + kLabelWidth + kLabelGap,
         content_rect.y,
-        std::max(0.0f, content_rect.width - kLabelWidth),
+        std::max(0.0f, content_rect.width - kLabelWidth - kLabelGap),
         content_rect.height,
     };
 
@@ -210,19 +211,18 @@ ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_stat
     }
 
     const Color text_color = with_alpha(state.value.empty() && !state.active ? t.text_hint : t.text, alpha);
-    const float text_y = text_rect.y + (text_rect.height - static_cast<float>(font_size)) * 0.5f + 1.5f;
-    const float selection_y = text_y - 1.0f;
-    const float selection_height = static_cast<float>(font_size) + 4.0f;
-    const float cursor_y = text_y + 1.0f;
-    const float cursor_height = std::max(12.0f, static_cast<float>(font_size) - 3.0f);
+    const float layout_font_size = ui::text_layout_font_size(static_cast<float>(font_size));
+    const float text_y = text_rect.y + (text_rect.height - layout_font_size) * 0.5f + 2.0f;
+    const float selection_y = text_rect.y + 7.0f;
+    const float selection_height = text_rect.height - 14.0f;
+    const float cursor_y = text_rect.y + 8.0f;
+    const float cursor_height = text_rect.height - 16.0f;
 
     if (!state.active && !state.value.empty()) {
         draw_marquee_text(display_value.c_str(), text_rect.x, text_y, font_size, text_color,
                           text_rect.width, GetTime());
     } else if (!state.active) {
-        ui::draw_text_in_rect(display_value.c_str(), font_size,
-                              {text_rect.x, text_rect.y + 1.5f, text_rect.width, text_rect.height},
-                              text_color, ui::text_align::left);
+        ui::draw_text_f(display_value.c_str(), text_rect.x, text_y, font_size, text_color);
     } else {
         ui::begin_scissor_rect(text_rect);
 
@@ -269,8 +269,8 @@ void draw_transport_toggle_button(Rectangle rect, bool playing, unsigned char al
         const float total_width = bar_width * 2.0f + gap;
         const float x = visual.x + (visual.width - total_width) * 0.5f;
         const float y = visual.y + (visual.height - bar_height) * 0.5f;
-        DrawRectangleRec({x, y, bar_width, bar_height}, icon);
-        DrawRectangleRec({x + bar_width + gap, y, bar_width, bar_height}, icon);
+        ui::draw_rect_f({x, y, bar_width, bar_height}, icon);
+        ui::draw_rect_f({x + bar_width + gap, y, bar_width, bar_height}, icon);
     } else {
         const float tri_width = 18.0f;
         const float tri_height = 20.0f;
@@ -353,8 +353,8 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                            normal_row_alpha, hover_row_alpha, selected_row_alpha,
                            alpha);
 
-    DrawRectangleRec(current.content_rect, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha / 2)));
-    DrawRectangleLinesEx(current.content_rect, 1.2f, with_alpha(t.border_light, alpha));
+    ui::draw_rect_f(current.content_rect, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha / 2)));
+    ui::draw_rect_lines(current.content_rect, 1.2f, with_alpha(t.border_light, alpha));
     ui::draw_text_in_rect(caption, 17,
                           {current.content_rect.x + 12.0f, current.content_rect.y + 6.0f,
                            current.content_rect.width * 0.52f, 20.0f},
@@ -380,8 +380,8 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             current.song_grid_rect.width - 192.0f,
             84.0f,
         };
-        DrawRectangleRec(placeholder, with_alpha(button_base, static_cast<unsigned char>(selected_row_alpha * grid_fade_t)));
-        DrawRectangleLinesEx(placeholder, 1.5f, with_alpha(t.border_light, grid_alpha));
+        ui::draw_rect_f(placeholder, with_alpha(button_base, static_cast<unsigned char>(selected_row_alpha * grid_fade_t)));
+        ui::draw_rect_lines(placeholder, 1.5f, with_alpha(t.border_light, grid_alpha));
         const char* empty_title = loading
             ? "Loading..."
             : (state.mode == catalog_mode::owned && state.owned_loading)
@@ -420,9 +420,9 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         const unsigned char row_alpha = static_cast<unsigned char>((selected ? selected_row_alpha
             : hovered ? hover_row_alpha
                       : normal_row_alpha) * grid_fade_t);
-        DrawRectangleRec(card, with_alpha(selected ? button_selected : button_base, row_alpha));
-        DrawRectangleLinesEx(card, 1.15f,
-                             with_alpha(selected ? t.border_active : t.border_light, grid_alpha));
+        ui::draw_rect_f(card, with_alpha(selected ? button_selected : button_base, row_alpha));
+        ui::draw_rect_lines(card, 1.15f,
+                            with_alpha(selected ? t.border_active : t.border_light, grid_alpha));
 
         const Rectangle jacket_rect = song_card_jacket_rect(card);
         if (selected) {
@@ -441,11 +441,11 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                     : 1.0f;
                 const unsigned char placeholder_alpha =
                     static_cast<unsigned char>(static_cast<float>(grid_alpha) * selected_placeholder_t);
-                DrawRectangleRec(jacket_rect, with_alpha(t.bg_alt, row_alpha));
+                ui::draw_rect_f(jacket_rect, with_alpha(t.bg_alt, row_alpha));
                 ui::draw_text_in_rect("JACKET", 18, jacket_rect, with_alpha(t.text_muted, placeholder_alpha),
                                       ui::text_align::center);
             }
-            DrawRectangleLinesEx(jacket_rect, 1.0f, with_alpha(t.border_image, grid_alpha));
+            ui::draw_rect_lines(jacket_rect, 1.0f, with_alpha(t.border_image, grid_alpha));
         }
 
         const std::string badge_label = detail::song_status_label(song);
@@ -456,10 +456,10 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         }
 
         draw_marquee_text(song.song.song.meta.title.c_str(),
-                          {card.x + 14.0f, card.y + 118.0f, card.width - 28.0f, 18.0f},
+                          {card.x + 14.0f, card.y + 154.0f, card.width - 28.0f, 30.0f},
                           18, with_alpha(t.text, grid_alpha), now);
         draw_marquee_text(song.song.song.meta.artist.c_str(),
-                          {card.x + 14.0f, card.y + 138.0f, card.width - 28.0f, 16.0f},
+                          {card.x + 14.0f, card.y + 184.0f, card.width - 28.0f, 22.0f},
                           13, with_alpha(t.text_muted, grid_alpha), now);
     }
 
@@ -483,9 +483,9 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
 
     const float detail_left_right = current.detail_left_rect.x + current.detail_left_rect.width;
     const float separator_x = detail_left_right + (current.detail_right_rect.x - detail_left_right) * 0.5f;
-    DrawLineEx({separator_x, current.detail_left_rect.y + 8.0f},
-               {separator_x, current.detail_left_rect.y + current.detail_left_rect.height - 8.0f},
-               1.4f, with_alpha(t.border_light, static_cast<unsigned char>(170.0f * detail_content_t)));
+    ui::draw_line_ex({separator_x, current.detail_left_rect.y + 8.0f},
+                     {separator_x, current.detail_left_rect.y + current.detail_left_rect.height - 8.0f},
+                     1.4f, with_alpha(t.border_light, static_cast<unsigned char>(170.0f * detail_content_t)));
 
     if (detail_t > 0.001f) {
         if (const Texture2D* hero_jacket = state.jackets.get(song->song.song)) {
@@ -498,13 +498,13 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                 : tween::smoothstep(tween::remap_clamped(detail_t, 0.90f, 1.0f));
             const unsigned char placeholder_alpha =
                 static_cast<unsigned char>(static_cast<float>(alpha) * hero_placeholder_t);
-            DrawRectangleRec(animated_jacket_rect, with_alpha(t.bg_alt, selected_row_alpha));
+            ui::draw_rect_f(animated_jacket_rect, with_alpha(t.bg_alt, selected_row_alpha));
             if (placeholder_alpha > 0) {
                 ui::draw_text_in_rect("JACKET", 26, animated_jacket_rect,
                                       with_alpha(t.text_muted, placeholder_alpha), ui::text_align::center);
             }
         }
-        DrawRectangleLinesEx(animated_jacket_rect, 1.5f, with_alpha(t.border_image, alpha));
+        ui::draw_rect_lines(animated_jacket_rect, 1.5f, with_alpha(t.border_image, alpha));
     }
 
     if (detail_alpha == 0) {
@@ -517,13 +517,13 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         current.detail_left_rect.x + 12.0f,
         current.hero_jacket_rect.y + current.hero_jacket_rect.height + 12.0f,
         current.detail_left_rect.width - 24.0f,
-        28.0f
+        42.0f
     };
     const Rectangle artist_rect = {
         title_rect.x,
-        title_rect.y + 32.0f,
+        title_rect.y + 40.0f,
         title_rect.width,
-        18.0f
+        27.0f
     };
     draw_marquee_text(song->song.song.meta.title.c_str(), title_rect, 28, with_alpha(t.text, detail_alpha), now);
     draw_marquee_text(song->song.song.meta.artist.c_str(), artist_rect, 17,
@@ -534,11 +534,11 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     const double preview_position = audio.get_preview_position_seconds();
     const float preview_ratio =
         preview_length > 0.0 ? std::clamp(static_cast<float>(preview_position / preview_length), 0.0f, 1.0f) : 0.0f;
-    DrawRectangleRec(current.preview_bar_rect, with_alpha(t.bg_alt, static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
-    DrawRectangleRec({current.preview_bar_rect.x, current.preview_bar_rect.y,
-                      current.preview_bar_rect.width * preview_ratio, current.preview_bar_rect.height},
-                     with_alpha(t.accent, detail_alpha));
-    DrawRectangleLinesEx(current.preview_bar_rect, 1.0f, with_alpha(t.border_light, detail_alpha));
+    ui::draw_rect_f(current.preview_bar_rect, with_alpha(t.bg_alt, static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
+    ui::draw_rect_f({current.preview_bar_rect.x, current.preview_bar_rect.y,
+                     current.preview_bar_rect.width * preview_ratio, current.preview_bar_rect.height},
+                    with_alpha(t.accent, detail_alpha));
+    ui::draw_rect_lines(current.preview_bar_rect, 1.0f, with_alpha(t.border_light, detail_alpha));
     ui::draw_text_in_rect(
         TextFormat("%s / %s",
                    detail::format_time_label(preview_position).c_str(),
@@ -572,11 +572,11 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             current.primary_action_rect.width,
             8.0f,
         };
-        DrawRectangleRec(progress_rect,
-                         with_alpha(t.bg_alt, static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
-        DrawRectangleRec({progress_rect.x, progress_rect.y, progress_rect.width * progress_ratio, progress_rect.height},
-                         with_alpha(t.accent, detail_alpha));
-        DrawRectangleLinesEx(progress_rect, 1.0f, with_alpha(t.border_light, detail_alpha));
+        ui::draw_rect_f(progress_rect,
+                        with_alpha(t.bg_alt, static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
+        ui::draw_rect_f({progress_rect.x, progress_rect.y, progress_rect.width * progress_ratio, progress_rect.height},
+                        with_alpha(t.accent, detail_alpha));
+        ui::draw_rect_lines(progress_rect, 1.0f, with_alpha(t.border_light, detail_alpha));
         ui::draw_text_in_rect(TextFormat("%d%%", static_cast<int>(std::round(progress_ratio * 100.0f))),
                               12,
                               {progress_rect.x, progress_rect.y - 16.0f, progress_rect.width, 14.0f},
@@ -589,10 +589,6 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                                        download_ready ? hover_row_alpha : hover_row_alpha),
                             with_alpha(download_ready ? t.text : t.text_secondary, detail_alpha), 1.5f);
 
-    ui::draw_text_in_rect("CHARTS", 19,
-                          {current.chart_list_rect.x, current.chart_list_rect.y - 28.0f,
-                           current.chart_list_rect.width * 0.45f, 18.0f},
-                          with_alpha(t.text, detail_alpha), ui::text_align::left);
     ui::draw_text_in_rect(TextFormat("%d items", static_cast<int>(song->charts.size())), 14,
                           {current.chart_list_rect.x + current.chart_list_rect.width * 0.46f, current.chart_list_rect.y - 26.0f,
                            current.chart_list_rect.width * 0.54f, 16.0f},
@@ -606,8 +602,8 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             current.chart_list_rect.width - 128.0f,
             72.0f,
         };
-        DrawRectangleRec(placeholder, with_alpha(button_base, static_cast<unsigned char>(selected_row_alpha * detail_content_t)));
-        DrawRectangleLinesEx(placeholder, 1.5f, with_alpha(t.border_light, detail_alpha));
+        ui::draw_rect_f(placeholder, with_alpha(button_base, static_cast<unsigned char>(selected_row_alpha * detail_content_t)));
+        ui::draw_rect_lines(placeholder, 1.5f, with_alpha(t.border_light, detail_alpha));
         const char* chart_empty = song->charts_loading ? "Loading charts..."
             : (song->charts_failed ? "Could not load charts."
                                    : "No charts found.");
@@ -627,9 +623,9 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         const unsigned char row_alpha = static_cast<unsigned char>((selected ? selected_row_alpha
             : hovered ? hover_row_alpha
                       : normal_row_alpha) * detail_content_t);
-        DrawRectangleRec(card, with_alpha(selected ? button_selected : button_base, row_alpha));
-        DrawRectangleLinesEx(card, 1.0f,
-                             with_alpha(selected ? t.border_active : t.border_light, detail_alpha));
+        ui::draw_rect_f(card, with_alpha(selected ? button_selected : button_base, row_alpha));
+        ui::draw_rect_lines(card, 1.0f,
+                            with_alpha(selected ? t.border_active : t.border_light, detail_alpha));
 
         ui::draw_text_in_rect(
             TextFormat("%s  %s", detail::key_mode_label(item.chart.meta.key_count).c_str(),

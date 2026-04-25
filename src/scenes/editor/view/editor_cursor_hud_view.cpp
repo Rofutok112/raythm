@@ -15,8 +15,8 @@ void editor_cursor_hud_view::draw(const editor_cursor_hud_view_model& model) {
 
     const auto& t = *g_theme;
     const Rectangle hud_rect = layout::cursor_hud_rect();
-    DrawRectangleRec(hud_rect, with_alpha(t.panel, 240));
-    DrawRectangleLinesEx(hud_rect, 1.5f, t.border);
+    ui::draw_rect_f(hud_rect, with_alpha(t.panel, 240));
+    ui::draw_rect_lines(hud_rect, 1.5f, t.border);
     ui::draw_text_f(TextFormat("bar %d:%d   beat %.2f   snap %d", model.measure, model.beat_index, model.beat, model.snapped_tick),
                     hud_rect.x + 12.0f, hud_rect.y + 8.0f, 18, t.text);
 }

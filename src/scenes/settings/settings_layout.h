@@ -22,10 +22,41 @@ struct page_descriptor {
 
 inline constexpr ui::draw_layer kLayer = ui::draw_layer::base;
 inline constexpr int kPageCount = 4;
-inline constexpr float kSliderLeftInset = 218.0f;
-inline constexpr float kSliderRightInset = 42.0f;
-inline constexpr float kSliderTopOffset = 26.0f;
-inline constexpr float kArrowButtonSize = 34.0f;
+inline constexpr float kSliderLeftInset = 327.0f;
+inline constexpr float kSliderRightInset = 63.0f;
+inline constexpr float kSliderTopOffset = 39.0f;
+inline constexpr float kArrowButtonSize = 51.0f;
+inline constexpr float kSidebarWidth = 384.0f;
+inline constexpr float kPanelHeight = 990.0f;
+inline constexpr Vector2 kSidebarOffset = {36.0f, 66.0f};
+inline constexpr float kContentWidth = 1434.0f;
+inline constexpr Vector2 kContentOffset = {450.0f, 66.0f};
+inline constexpr float kSidebarItemWidth = 312.0f;
+inline constexpr float kSidebarHeaderHeight = 93.0f;
+inline constexpr Vector2 kSidebarHeaderOffset = {33.0f, 39.0f};
+inline constexpr float kSidebarHintHeight = 36.0f;
+inline constexpr Vector2 kSidebarHintOffset = {36.0f, 528.0f};
+inline constexpr float kTabRowHeight = 63.0f;
+inline constexpr float kTabRowGap = 12.0f;
+inline constexpr Vector2 kTabAreaOffset = {0.0f, 228.0f};
+inline constexpr float kBackHeight = 63.0f;
+inline constexpr Vector2 kBackOffset = {0.0f, -57.0f};
+inline constexpr float kContentHeaderWidth = 840.0f;
+inline constexpr float kContentHeaderHeight = 90.0f;
+inline constexpr Vector2 kContentHeaderOffset = {45.0f, 45.0f};
+inline constexpr float kRowWidth = 1335.0f;
+inline constexpr float kRowHeight = 72.0f;
+inline constexpr float kRowOffsetX = 45.0f;
+inline constexpr float kKeyModeHeight = 96.0f;
+inline constexpr float kSliderLabelWidth = 300.0f;
+inline constexpr float kSliderThickness = 27.0f;
+inline constexpr float kRowContentPaddingX = 27.0f;
+inline constexpr float kArrowGap = 15.0f;
+inline constexpr float kDoubleArrowExtraGap = 45.0f;
+inline constexpr float kKeySlotWidth = 840.0f;
+inline constexpr float kKeySlotHeight = 72.0f;
+inline constexpr float kKeySlotStartY = 321.0f;
+inline constexpr float kKeySlotStepY = 93.0f;
 
 inline constexpr std::array<page_descriptor, kPageCount> kPageDescriptors = {{
     {"Gameplay", "Gameplay", "Play feel and lane settings"},
@@ -35,47 +66,40 @@ inline constexpr std::array<page_descriptor, kPageCount> kPageDescriptors = {{
 }};
 
 inline const Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
-inline const Rectangle kSidebarRect = ui::place(kScreenRect, 256.0f, 660.0f,
-                                                ui::anchor::top_left, ui::anchor::top_left,
-                                                {24.0f, 44.0f});
-inline const Rectangle kContentRect = ui::place(kScreenRect, 956.0f, 660.0f,
-                                                ui::anchor::top_left, ui::anchor::top_left,
-                                                {300.0f, 44.0f});
-inline const Rectangle kSidebarHeaderRect = ui::place(kSidebarRect, 208.0f, 62.0f,
-                                                      ui::anchor::top_left, ui::anchor::top_left,
-                                                      {22.0f, 26.0f});
-inline const Rectangle kSidebarHintRect = ui::place(kSidebarRect, 208.0f, 24.0f,
-                                                    ui::anchor::top_left, ui::anchor::top_left,
-                                                    {24.0f, 352.0f});
-inline const Rectangle kTabArea = ui::place(kSidebarRect, 208.0f, 4.0f * 42.0f + 3.0f * 8.0f,
-                                            ui::anchor::top_center, ui::anchor::top_center,
-                                            {0.0f, 152.0f});
-inline const Rectangle kBackRect = ui::place(kSidebarRect, 208.0f, 42.0f,
-                                             ui::anchor::bottom_center, ui::anchor::bottom_center,
-                                             {0.0f, -38.0f});
-inline const Rectangle kContentHeaderRect = ui::place(kContentRect, 560.0f, 60.0f,
-                                                      ui::anchor::top_left, ui::anchor::top_left,
-                                                      {30.0f, 30.0f});
+inline const Rectangle kSidebarRect = ui::place(kScreenRect, kSidebarWidth, kPanelHeight,
+                                                ui::anchor::top_left, ui::anchor::top_left, kSidebarOffset);
+inline const Rectangle kContentRect = ui::place(kScreenRect, kContentWidth, kPanelHeight,
+                                                ui::anchor::top_left, ui::anchor::top_left, kContentOffset);
+inline const Rectangle kSidebarHeaderRect = ui::place(kSidebarRect, kSidebarItemWidth, kSidebarHeaderHeight,
+                                                      ui::anchor::top_left, ui::anchor::top_left, kSidebarHeaderOffset);
+inline const Rectangle kSidebarHintRect = ui::place(kSidebarRect, kSidebarItemWidth, kSidebarHintHeight,
+                                                    ui::anchor::top_left, ui::anchor::top_left, kSidebarHintOffset);
+inline const Rectangle kTabArea = ui::place(kSidebarRect, kSidebarItemWidth, 4.0f * kTabRowHeight + 3.0f * kTabRowGap,
+                                            ui::anchor::top_center, ui::anchor::top_center, kTabAreaOffset);
+inline const Rectangle kBackRect = ui::place(kSidebarRect, kSidebarItemWidth, kBackHeight,
+                                             ui::anchor::bottom_center, ui::anchor::bottom_center, kBackOffset);
+inline const Rectangle kContentHeaderRect = ui::place(kContentRect, kContentHeaderWidth, kContentHeaderHeight,
+                                                      ui::anchor::top_left, ui::anchor::top_left, kContentHeaderOffset);
 inline const std::array<Rectangle, 8> kGeneralRows = {{
-    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 116.0f}),
-    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 176.0f}),
-    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 236.0f}),
-    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 336.0f}),
-    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 396.0f}),
-    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 496.0f}),
-    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 556.0f}),
-    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 616.0f}),
+    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 174.0f}),
+    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 264.0f}),
+    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 354.0f}),
+    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 504.0f}),
+    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 594.0f}),
+    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 744.0f}),
+    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 834.0f}),
+    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 924.0f}),
 }};
 inline const std::array<Rectangle, 5> kGameplayRows = {{
     kGeneralRows[0],
     kGeneralRows[1],
     kGeneralRows[2],
-    ui::place(kContentRect, 890.0f, 48.0f, ui::anchor::top_left, ui::anchor::top_left, {30.0f, 296.0f}),
+    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 444.0f}),
     kGeneralRows[4],
 }};
-inline const Rectangle kKeyModeRect = ui::place(kContentRect, 890.0f, 64.0f,
+inline const Rectangle kKeyModeRect = ui::place(kContentRect, kRowWidth, kKeyModeHeight,
                                                 ui::anchor::top_left, ui::anchor::top_left,
-                                                {30.0f, 126.0f});
+                                                Vector2{kRowOffsetX, 189.0f});
 
 inline float clamp01(float value) {
     return std::clamp(value, 0.0f, 1.0f);
@@ -86,53 +110,53 @@ inline const page_descriptor& page_descriptor_for(page_id page) {
 }
 
 inline Rectangle slider_track_rect(const Rectangle& row_rect) {
-    return ui::make_slider_layout(row_rect, kSliderLeftInset, kSliderRightInset, 200.0f, 18.0f, kSliderTopOffset).track_rect;
+    return ui::make_slider_layout(row_rect, kSliderLeftInset, kSliderRightInset, kSliderLabelWidth, kSliderThickness, kSliderTopOffset).track_rect;
 }
 
 inline Rectangle arrow_left_rect(const Rectangle& row_rect) {
-    const Rectangle content = ui::inset(row_rect, ui::edge_insets::symmetric(0.0f, 18.0f));
-    const ui::rect_pair columns = ui::split_columns(content, 200.0f);
-    const Rectangle button_pair_area = ui::place(columns.second, kArrowButtonSize * 2.0f + 10.0f, kArrowButtonSize,
+    const Rectangle content = ui::inset(row_rect, ui::edge_insets::symmetric(0.0f, kRowContentPaddingX));
+    const ui::rect_pair columns = ui::split_columns(content, kSliderLabelWidth);
+    const Rectangle button_pair_area = ui::place(columns.second, kArrowButtonSize * 2.0f + kArrowGap, kArrowButtonSize,
                                                  ui::anchor::center_right, ui::anchor::center_right);
     return {button_pair_area.x, button_pair_area.y, kArrowButtonSize, kArrowButtonSize};
 }
 
 inline Rectangle arrow_right_rect(const Rectangle& row_rect) {
     const Rectangle left = arrow_left_rect(row_rect);
-    return {left.x + kArrowButtonSize + 10.0f, left.y, kArrowButtonSize, kArrowButtonSize};
+    return {left.x + kArrowButtonSize + kArrowGap, left.y, kArrowButtonSize, kArrowButtonSize};
 }
 
 inline Rectangle double_arrow_left_rect(const Rectangle& row_rect) {
-    const Rectangle content = ui::inset(row_rect, ui::edge_insets::symmetric(0.0f, 18.0f));
-    const ui::rect_pair columns = ui::split_columns(content, 200.0f);
-    const Rectangle button_pair_area = ui::place(columns.second, kArrowButtonSize * 4.0f + 30.0f, kArrowButtonSize,
+    const Rectangle content = ui::inset(row_rect, ui::edge_insets::symmetric(0.0f, kRowContentPaddingX));
+    const ui::rect_pair columns = ui::split_columns(content, kSliderLabelWidth);
+    const Rectangle button_pair_area = ui::place(columns.second, kArrowButtonSize * 4.0f + kDoubleArrowExtraGap, kArrowButtonSize,
                                                  ui::anchor::center_right, ui::anchor::center_right);
     return {button_pair_area.x, button_pair_area.y, kArrowButtonSize, kArrowButtonSize};
 }
 
 inline Rectangle single_arrow_left_rect(const Rectangle& row_rect) {
     const Rectangle left = double_arrow_left_rect(row_rect);
-    return {left.x + kArrowButtonSize + 10.0f, left.y, kArrowButtonSize, kArrowButtonSize};
+    return {left.x + kArrowButtonSize + kArrowGap, left.y, kArrowButtonSize, kArrowButtonSize};
 }
 
 inline Rectangle single_arrow_right_rect(const Rectangle& row_rect) {
     const Rectangle left = single_arrow_left_rect(row_rect);
-    return {left.x + kArrowButtonSize + 10.0f, left.y, kArrowButtonSize, kArrowButtonSize};
+    return {left.x + kArrowButtonSize + kArrowGap, left.y, kArrowButtonSize, kArrowButtonSize};
 }
 
 inline Rectangle double_arrow_right_rect(const Rectangle& row_rect) {
     const Rectangle left = single_arrow_right_rect(row_rect);
-    return {left.x + kArrowButtonSize + 10.0f, left.y, kArrowButtonSize, kArrowButtonSize};
+    return {left.x + kArrowButtonSize + kArrowGap, left.y, kArrowButtonSize, kArrowButtonSize};
 }
 
 inline Rectangle key_slot_rect(int index) {
-    return ui::place(kContentRect, 560.0f, 48.0f,
+    return ui::place(kContentRect, kKeySlotWidth, kKeySlotHeight,
                      ui::anchor::top_left, ui::anchor::top_left,
-                     {30.0f, 214.0f + static_cast<float>(index) * 62.0f});
+                     Vector2{kRowOffsetX, kKeySlotStartY + static_cast<float>(index) * kKeySlotStepY});
 }
 
 inline void build_tab_rects(std::span<Rectangle> out) {
-    ui::vstack(kTabArea, 42.0f, 8.0f, out);
+    ui::vstack(kTabArea, kTabRowHeight, kTabRowGap, out);
 }
 
 inline float slider_ratio_from_mouse(const Rectangle& row_rect) {

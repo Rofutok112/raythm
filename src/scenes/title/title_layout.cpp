@@ -5,42 +5,58 @@
 
 namespace title_layout {
 
+namespace {
+
+constexpr float kClosedHeaderWidth = 1290.0f;
+constexpr float kClosedHeaderHeight = 273.0f;
+constexpr Vector2 kClosedHeaderOffset = {0.0f, -81.0f};
+constexpr float kOpenHeaderWidth = 1140.0f;
+constexpr float kOpenHeaderHeight = 255.0f;
+constexpr Vector2 kOpenHeaderOffset = {108.0f, 126.0f};
+constexpr float kPlayHeaderY = 78.0f;
+constexpr float kSpectrumHeight = 498.0f;
+constexpr float kAccountChipWidth = 396.0f;
+constexpr float kAccountChipHeight = 87.0f;
+constexpr Vector2 kAccountChipOffset = {-42.0f, 30.0f};
+
+}  // namespace
+
 Rectangle screen_rect() {
     return {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
 }
 
 Rectangle closed_header_rect() {
-    return ui::place(screen_rect(), 860.0f, 182.0f,
+    return ui::place(screen_rect(), kClosedHeaderWidth, kClosedHeaderHeight,
                      ui::anchor::center, ui::anchor::center,
-                     {0.0f, -54.0f});
+                     kClosedHeaderOffset);
 }
 
 Rectangle open_header_rect() {
-    return ui::place(screen_rect(), 760.0f, 170.0f,
+    return ui::place(screen_rect(), kOpenHeaderWidth, kOpenHeaderHeight,
                      ui::anchor::top_left, ui::anchor::top_left,
-                     {72.0f, 84.0f});
+                     kOpenHeaderOffset);
 }
 
 Rectangle play_header_rect() {
     const Rectangle open = open_header_rect();
     return {
         open.x,
-        52.0f,
+        kPlayHeaderY,
         open.width,
         open.height
     };
 }
 
 Rectangle spectrum_rect() {
-    return ui::place(screen_rect(), static_cast<float>(kScreenWidth), 332.0f,
+    return ui::place(screen_rect(), static_cast<float>(kScreenWidth), kSpectrumHeight,
                      ui::anchor::bottom_center, ui::anchor::bottom_center,
                      {0.0f, 0.0f});
 }
 
 Rectangle account_chip_rect() {
-    return ui::place(screen_rect(), 264.0f, 58.0f,
+    return ui::place(screen_rect(), kAccountChipWidth, kAccountChipHeight,
                      ui::anchor::top_right, ui::anchor::top_right,
-                     {-28.0f, 20.0f});
+                     kAccountChipOffset);
 }
 
 }  // namespace title_layout

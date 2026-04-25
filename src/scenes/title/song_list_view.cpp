@@ -8,8 +8,19 @@
 
 namespace {
 
-constexpr float kSongRowHeight = 68.0f;
-constexpr float kSongRowGap = 10.0f;
+constexpr float kSongRowHeight = 102.0f;
+constexpr float kSongRowGap = 15.0f;
+constexpr float kScrollPadding = 36.0f;
+constexpr float kInitialRowOffsetY = 18.0f;
+constexpr float kSongCountOffsetY = 36.0f;
+constexpr float kSongCountHeight = 27.0f;
+constexpr float kClipSlack = 6.0f;
+constexpr float kRowBorderWidth = 1.5f;
+constexpr float kTextPaddingX = 21.0f;
+constexpr float kTitleOffsetY = 15.0f;
+constexpr float kTitleHeight = 36.0f;
+constexpr float kArtistOffsetY = 60.0f;
+constexpr float kArtistHeight = 27.0f;
 
 }  // namespace
 
@@ -23,13 +34,13 @@ float content_height(int count) {
 }
 
 float max_scroll(Rectangle area, int count) {
-    return std::max(0.0f, content_height(count) - area.height + 24.0f);
+    return std::max(0.0f, content_height(count) - area.height + kScrollPadding);
 }
 
 Rectangle row_rect(Rectangle area, int index, float scroll_y) {
     return {
         area.x,
-        area.y + 12.0f + static_cast<float>(index) * (kSongRowHeight + kSongRowGap) - scroll_y,
+        area.y + kInitialRowOffsetY + static_cast<float>(index) * (kSongRowHeight + kSongRowGap) - scroll_y,
         area.width,
         kSongRowHeight
     };
@@ -56,15 +67,16 @@ void draw(const song_select::state& state, const draw_config& config) {
     }
 
     ui::draw_text_in_rect(TextFormat("%d songs", static_cast<int>(state.songs.size())), 16,
-                          {config.column_rect.x, config.column_rect.y - 24.0f, config.column_rect.width, 18.0f},
+                          {config.column_rect.x, config.column_rect.y - kSongCountOffsetY,
+                           config.column_rect.width, kSongCountHeight},
                           with_alpha(t.text_muted, config.alpha), ui::text_align::left);
 
     ui::scoped_clip_rect clip(config.column_rect);
     for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
         const song_select::song_entry& song = state.songs[static_cast<size_t>(i)];
         const Rectangle row = row_rect(config.column_rect, i, state.scroll_y);
-        if (row.y + row.height < config.column_rect.y - 4.0f ||
-            row.y > config.column_rect.y + config.column_rect.height + 4.0f) {
+        if (row.y + row.height < config.column_rect.y - kClipSlack ||
+            row.y > config.column_rect.y + config.column_rect.height + kClipSlack) {
             continue;
         }
 
@@ -74,15 +86,17 @@ void draw(const song_select::state& state, const draw_config& config) {
             : hovered ? config.hover_row_alpha
                       : config.normal_row_alpha;
 
-        DrawRectangleRec(row, with_alpha(selected ? config.button_selected : config.button_base, row_alpha));
-        DrawRectangleLinesEx(
-            row, 1.0f,
+        ui::draw_rect_f(row, with_alpha(selected ? config.button_selected : config.button_base, row_alpha));
+        ui::draw_rect_lines(
+            row, kRowBorderWidth,
             with_alpha(t.border_light, static_cast<unsigned char>(130.0f * config.play_t)));
         draw_marquee_text(song.song.meta.title.c_str(),
-                          {row.x + 14.0f, row.y + 10.0f, row.width - 26.0f, 22.0f},
+                          {row.x + kTextPaddingX, row.y + kTitleOffsetY,
+                           row.width - kTextPaddingX * 2.0f, kTitleHeight},
                           20, with_alpha(t.text, config.alpha), config.now);
         draw_marquee_text(song.song.meta.artist.c_str(),
-                          {row.x + 14.0f, row.y + 38.0f, row.width - 26.0f, 16.0f},
+                          {row.x + kTextPaddingX, row.y + kArtistOffsetY,
+                           row.width - kTextPaddingX * 2.0f, kArtistHeight},
                           14, with_alpha(t.text_muted, config.alpha), config.now);
     }
 }

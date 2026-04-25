@@ -80,7 +80,7 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
     const Rectangle content = model.metrics.content_rect();
     const Rectangle track = model.metrics.scrollbar_track_rect();
 
-    DrawRectangleRec(ui::inset(model.metrics.panel_rect, 10.0f), t.section);
+    ui::draw_rect_f(ui::inset(model.metrics.panel_rect, 10.0f), t.section);
     {
         ui::scoped_clip_rect clip_scope(content);
 
@@ -107,8 +107,8 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
 
         for (int lane = 0; lane < std::max(1, model.metrics.key_count); ++lane) {
             const Rectangle rect = model.metrics.lane_rect(lane);
-            DrawRectangleRec(rect, lane % 2 == 0 ? with_alpha(t.row, 20) : with_alpha(t.section, 20));
-            DrawRectangleLinesEx(rect, 1.0f, with_alpha(t.border_light, 180));
+            ui::draw_rect_f(rect, lane % 2 == 0 ? with_alpha(t.row, 20) : with_alpha(t.section, 20));
+            ui::draw_rect_lines(rect, 1.0f, with_alpha(t.border_light, 180));
             ui::draw_text_in_rect(TextFormat("L%d", lane + 1), 16,
                                   {rect.x, model.metrics.panel_rect.y + 4.0f, rect.width, 20.0f},
                                   t.text_hint);
@@ -146,11 +146,11 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             if (info.has_body) {
                 DrawRectangleRounded(info.body_rect, 0.4f, 6, hold_fill);
                 DrawRectangleRounded(info.tail_rect, 0.4f, 6, selected ? with_alpha(t.row_active, 230) : with_alpha(t.accent, 220));
-                DrawRectangleLinesEx(info.tail_rect, 1.5f, outline);
+                ui::draw_rect_lines(info.tail_rect, 1.5f, outline);
             }
 
             DrawRectangleRounded(info.head_rect, 0.3f, 6, head_fill);
-            DrawRectangleLinesEx(info.head_rect, 1.5f, outline);
+            ui::draw_rect_lines(info.head_rect, 1.5f, outline);
         }
 
         if (model.preview_note.has_value()) {
@@ -160,10 +160,10 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             if (info.has_body) {
                 DrawRectangleRounded(info.body_rect, 0.4f, 6, fill);
                 DrawRectangleRounded(info.tail_rect, 0.4f, 6, fill);
-                DrawRectangleLinesEx(info.tail_rect, 1.5f, outline);
+                ui::draw_rect_lines(info.tail_rect, 1.5f, outline);
             }
             DrawRectangleRounded(info.head_rect, 0.3f, 6, fill);
-            DrawRectangleLinesEx(info.head_rect, 1.5f, outline);
+            ui::draw_rect_lines(info.head_rect, 1.5f, outline);
         }
 
         if (model.playback_tick.has_value()) {
@@ -175,5 +175,5 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
 
     ui::draw_scrollbar(track, model.content_height_pixels, model.scroll_offset_pixels,
                        t.scrollbar_track, t.scrollbar_thumb, 40.0f);
-    DrawRectangleLinesEx(model.metrics.panel_rect, 2.0f, t.border);
+    ui::draw_rect_lines(model.metrics.panel_rect, 2.0f, t.border);
 }

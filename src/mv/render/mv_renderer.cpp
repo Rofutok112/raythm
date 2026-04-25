@@ -7,6 +7,7 @@
 #include <cmath>
 
 #include "ui/ui_font.h"
+#include "scenes/scene_common.h"
 
 namespace mv {
 
@@ -102,7 +103,7 @@ void draw_node(const pulse_ring_node& n) {
 
 void draw_node(const background_node& n) {
     Color col = to_raylib(n.fill, n.opacity);
-    DrawRectangle(0, 0, 1280, 720, col);
+    DrawRectangle(0, 0, kScreenWidth, kScreenHeight, col);
 }
 
 } // anonymous namespace
@@ -110,7 +111,7 @@ void draw_node(const background_node& n) {
 void render_scene(const scene& sc) {
     // Clear with scene clear color if alpha > 0
     if (sc.clear_color.a > 0) {
-        DrawRectangle(0, 0, 1280, 720,
+        DrawRectangle(0, 0, kScreenWidth, kScreenHeight,
                       to_raylib(sc.clear_color));
     }
 

@@ -5,22 +5,38 @@
 #include "scene_common.h"
 #include "title/title_layout.h"
 #include "tween.h"
+#include "ui_layout.h"
 
 namespace title_online_view {
 namespace {
 
-constexpr Rectangle kBackRect = {48.0f, 38.0f, 98.0f, 38.0f};
-constexpr Rectangle kOfficialTabRect = {186.0f, 40.0f, 128.0f, 38.0f};
-constexpr Rectangle kCommunityTabRect = {322.0f, 40.0f, 146.0f, 38.0f};
-constexpr Rectangle kOwnedTabRect = {476.0f, 40.0f, 108.0f, 38.0f};
-constexpr Rectangle kContentRect = {60.0f, 98.0f, 1160.0f, 568.0f};
-constexpr Rectangle kDetailLeftRect = {72.0f, 108.0f, 336.0f, 548.0f};
-constexpr Rectangle kDetailRightRect = {470.0f, 108.0f, 738.0f, 548.0f};
-constexpr Rectangle kHeroJacketRect = {92.0f, 174.0f, 270.0f, 270.0f};
-constexpr Rectangle kPreviewBarRect = {92.0f, 505.0f, 270.0f, 8.0f};
-constexpr Rectangle kPreviewPlayRect = {92.0f, 529.0f, 126.0f, 40.0f};
-constexpr Rectangle kPrimaryActionRect = {92.0f, 577.0f, 126.0f, 40.0f};
-constexpr Rectangle kChartListRect = {500.0f, 136.0f, 680.0f, 488.0f};
+constexpr Rectangle kBackRect = {72.0f, 57.0f, 147.0f, 57.0f};
+constexpr Rectangle kOfficialTabRect = {279.0f, 60.0f, 192.0f, 57.0f};
+constexpr Rectangle kCommunityTabRect = {483.0f, 60.0f, 219.0f, 57.0f};
+constexpr Rectangle kOwnedTabRect = {714.0f, 60.0f, 162.0f, 57.0f};
+constexpr Rectangle kContentRect = {90.0f, 147.0f, 1740.0f, 852.0f};
+constexpr Rectangle kDetailLeftRect = {108.0f, 162.0f, 504.0f, 822.0f};
+constexpr Rectangle kDetailRightRect = {705.0f, 162.0f, 1107.0f, 822.0f};
+constexpr Rectangle kHeroJacketRect = {138.0f, 261.0f, 405.0f, 405.0f};
+constexpr Rectangle kPreviewBarRect = {138.0f, 757.5f, 405.0f, 12.0f};
+constexpr Rectangle kPreviewPlayRect = {138.0f, 793.5f, 189.0f, 60.0f};
+constexpr Rectangle kPrimaryActionRect = {138.0f, 865.5f, 189.0f, 60.0f};
+constexpr Rectangle kChartListRect = {750.0f, 204.0f, 1020.0f, 732.0f};
+constexpr Rectangle kFallbackOriginRect = {1140.0f, 564.0f, 240.0f, 90.0f};
+constexpr float kSearchLeftGap = 36.0f;
+constexpr float kSearchRightGap = 27.0f;
+constexpr float kSearchY = 60.0f;
+constexpr float kSearchMinWidth = 330.0f;
+constexpr float kSearchHeight = 57.0f;
+constexpr Vector2 kSeedBackOffset = {-672.0f, -297.0f};
+constexpr Vector2 kSeedOfficialTabOffset = {-414.0f, -291.0f};
+constexpr Vector2 kSeedCommunityTabOffset = {-198.0f, -291.0f};
+constexpr Vector2 kSeedOwnedTabOffset = {18.0f, -291.0f};
+constexpr Vector2 kSeedSearchOffset = {477.0f, -288.0f};
+constexpr Vector2 kSeedContentOffset = {144.0f, 72.0f};
+constexpr Vector2 kSeedDetailLeftOffset = {-357.0f, 99.0f};
+constexpr Vector2 kSeedDetailRightOffset = {279.0f, 99.0f};
+constexpr Vector2 kSeedChartListOffset = {297.0f, 66.0f};
 
 constexpr float kPreviewBarBottomInset = (kContentRect.y + kContentRect.height) - kPreviewBarRect.y;
 constexpr float kPreviewButtonBottomInset = (kContentRect.y + kContentRect.height) - kPreviewPlayRect.y;
@@ -42,12 +58,7 @@ Rectangle centered_scaled_rect(Rectangle anchor, Rectangle target, float scale, 
 }
 
 Rectangle fallback_origin_rect() {
-    return {
-        static_cast<float>(kScreenWidth) * 0.5f + 120.0f,
-        376.0f,
-        160.0f,
-        60.0f,
-    };
+    return kFallbackOriginRect;
 }
 
 Rectangle resolve_origin_rect(Rectangle origin_rect) {
@@ -89,13 +100,13 @@ Rectangle left_pane_full_width_button_rect(Rectangle content_rect,
 
 Rectangle browse_search_rect() {
     const Rectangle account_rect = title_layout::account_chip_rect();
-    const float left = kOwnedTabRect.x + kOwnedTabRect.width + 24.0f;
-    const float right = account_rect.x - 18.0f;
+    const float left = kOwnedTabRect.x + kOwnedTabRect.width + kSearchLeftGap;
+    const float right = account_rect.x - kSearchRightGap;
     return {
         left,
-        40.0f,
-        std::max(220.0f, right - left),
-        38.0f,
+        kSearchY,
+        std::max(kSearchMinWidth, right - left),
+        kSearchHeight,
     };
 }
 
@@ -106,15 +117,15 @@ layout make_layout(float anim_t, Rectangle origin_rect) {
     const Rectangle origin = resolve_origin_rect(origin_rect);
     const Rectangle search_rect = browse_search_rect();
 
-    const Rectangle seed_back = centered_scaled_rect(origin, kBackRect, 0.9f, {-448.0f, -198.0f});
-    const Rectangle seed_official_tab = centered_scaled_rect(origin, kOfficialTabRect, 0.84f, {-276.0f, -194.0f});
-    const Rectangle seed_community_tab = centered_scaled_rect(origin, kCommunityTabRect, 0.84f, {-132.0f, -194.0f});
-    const Rectangle seed_owned_tab = centered_scaled_rect(origin, kOwnedTabRect, 0.84f, {12.0f, -194.0f});
-    const Rectangle seed_search = centered_scaled_rect(origin, search_rect, 0.86f, {318.0f, -192.0f});
-    const Rectangle seed_content = centered_scaled_rect(origin, kContentRect, 0.84f, {96.0f, 48.0f});
-    const Rectangle seed_detail_left = centered_scaled_rect(origin, kDetailLeftRect, 0.78f, {-238.0f, 66.0f});
-    const Rectangle seed_detail_right = centered_scaled_rect(origin, kDetailRightRect, 0.8f, {186.0f, 66.0f});
-    const Rectangle seed_chart_list = centered_scaled_rect(origin, kChartListRect, 0.84f, {198.0f, 44.0f});
+    const Rectangle seed_back = centered_scaled_rect(origin, kBackRect, 0.9f, kSeedBackOffset);
+    const Rectangle seed_official_tab = centered_scaled_rect(origin, kOfficialTabRect, 0.84f, kSeedOfficialTabOffset);
+    const Rectangle seed_community_tab = centered_scaled_rect(origin, kCommunityTabRect, 0.84f, kSeedCommunityTabOffset);
+    const Rectangle seed_owned_tab = centered_scaled_rect(origin, kOwnedTabRect, 0.84f, kSeedOwnedTabOffset);
+    const Rectangle seed_search = centered_scaled_rect(origin, search_rect, 0.86f, kSeedSearchOffset);
+    const Rectangle seed_content = centered_scaled_rect(origin, kContentRect, 0.84f, kSeedContentOffset);
+    const Rectangle seed_detail_left = centered_scaled_rect(origin, kDetailLeftRect, 0.78f, kSeedDetailLeftOffset);
+    const Rectangle seed_detail_right = centered_scaled_rect(origin, kDetailRightRect, 0.8f, kSeedDetailRightOffset);
+    const Rectangle seed_chart_list = centered_scaled_rect(origin, kChartListRect, 0.84f, kSeedChartListOffset);
     const Rectangle current_content = tween::lerp(seed_content, kContentRect, t);
     const Rectangle current_detail_left = tween::lerp(seed_detail_left, kDetailLeftRect, t);
     const Rectangle current_detail_right = tween::lerp(seed_detail_right, kDetailRightRect, t);

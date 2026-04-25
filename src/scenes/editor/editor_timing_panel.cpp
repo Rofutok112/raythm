@@ -73,8 +73,8 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
             content_rect.height - 8.0f
         };
 
-        DrawRectangleRec(input_rect, with_alpha(t.section, 255));
-        DrawRectangleLinesEx(input_rect, 1.5f, state.bar_pick_mode ? t.accent : t.border_light);
+        ui::draw_rect_f(input_rect, with_alpha(t.section, 255));
+        ui::draw_rect_lines(input_rect, 1.5f, state.bar_pick_mode ? t.accent : t.border_light);
         ui::draw_text_in_rect(label, 16, label_rect,
                               selected ? t.text : t.text_secondary, ui::text_align::left);
 

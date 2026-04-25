@@ -13,6 +13,7 @@ namespace ui {
 // 水平方向は align に従い、垂直方向は中央揃え。
 inline Vector2 text_position(const char* text, int font_size, Rectangle rect,
                              text_align align = text_align::center) {
+    const float layout_font_size = text_layout_font_size(static_cast<float>(font_size));
     const float text_width = measure_text_size(text, static_cast<float>(font_size), 0.0f).x;
     float x;
     switch (align) {
@@ -26,7 +27,7 @@ inline Vector2 text_position(const char* text, int font_size, Rectangle rect,
             x = rect.x + rect.width - text_width;
             break;
     }
-    const float y = rect.y + (rect.height - static_cast<float>(font_size)) * 0.5f;
+    const float y = rect.y + (rect.height - layout_font_size) * 0.5f;
     return {x, y};
 }
 

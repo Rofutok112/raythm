@@ -15,7 +15,8 @@ namespace ui {
 
 namespace {
 
-constexpr float kGutterPadding = 6.0f;
+constexpr float kEditorUiScale = 1.5f;
+constexpr float kGutterPadding = 9.0f;
 constexpr float kScrollbarWidth = 8.0f;
 constexpr float kTextPadLeft = 4.0f;
 constexpr size_t kMaxUndoSnapshots = 100;
@@ -403,7 +404,7 @@ bool draw_color_picker(Rectangle picker_rect, text_editor_state& state, text_edi
         draw_text_auto(TextFormat("%c", channel_labels[channel]),
                        {row_rect.x, row_rect.y + 4.0f}, 13.0f, 0.5f, g_theme->text_secondary);
 
-        DrawRectangleRec(track_rect, g_theme->slider_track);
+        draw_rect_f(track_rect, g_theme->slider_track);
         const float ratio = static_cast<float>(*channel_ptrs[channel]) / 255.0f;
         draw_rect_f(track_rect.x, track_rect.y, track_rect.width * ratio, track_rect.height, channel_colors[channel]);
         const float knob_x = track_rect.x + track_rect.width * ratio;
@@ -447,7 +448,7 @@ void draw_squiggly_line(float x0, float x1, float y, Color color) {
         float nx = std::min(x + wave_width * 0.5f, x1);
         float y0 = y;
         float y1 = y + ((static_cast<int>((x - x0) / (wave_width * 0.5f)) % 2 == 0) ? wave_height : -wave_height);
-        DrawLineEx({x, y0}, {nx, y1}, 1.5f, color);
+        draw_line_ex({x, y0}, {nx, y1}, 1.5f, color);
         x = nx;
     }
 }
@@ -688,13 +689,14 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
                                     text_editor_completer completer) {
     text_editor_result result;
     bool should_ensure_cursor_visible = false;
-    const float line_height = static_cast<float>(style.font_size) + style.line_spacing;
-    const float gutter_width = measure_text_width("000", style) + kGutterPadding * 2;
+    const float scaled_line_spacing = style.line_spacing * kEditorUiScale;
+    const float line_height = text_layout_font_size(static_cast<float>(style.font_size)) + scaled_line_spacing;
+    const float gutter_width = measure_text_width("000", style) + kGutterPadding * 2.0f;
     constexpr int kMaxCompletionItems = 8;
-    constexpr float kCompletionRowHeight = 26.0f;
-    constexpr float kCompletionPadX = 8.0f;
-    constexpr float kCompletionMinWidth = 180.0f;
-    constexpr float kCompletionOffsetX = 18.0f;
+    constexpr float kCompletionRowHeight = 39.0f;
+    constexpr float kCompletionPadX = 12.0f;
+    constexpr float kCompletionMinWidth = 270.0f;
+    constexpr float kCompletionOffsetX = 27.0f;
     const float completion_font_size = static_cast<float>(std::max(style.font_size - 2, 12));
     const float completion_letter_spacing = std::max(style.letter_spacing, 1.0f);
 
@@ -1112,12 +1114,12 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
     begin_scissor_rect(rect);
 
     // Background
-    DrawRectangleRec(rect, g_theme->section);
-    DrawRectangleLinesEx(rect, 1.5f, state.active ? g_theme->border_active : g_theme->border_light);
+    draw_rect_f(rect, g_theme->section);
+    draw_rect_lines(rect, 1.5f, state.active ? g_theme->border_active : g_theme->border_light);
 
     // Gutter background
     Rectangle gutter_bg = {rect.x + 1.5f, rect.y + 1.5f, gutter_width - 1.5f, rect.height - 3.0f};
-    DrawRectangleRec(gutter_bg, with_alpha(g_theme->panel, 200));
+    draw_rect_f(gutter_bg, with_alpha(g_theme->panel, 200));
 
     // Visible line range
     int first_visible = std::max(0, static_cast<int>(state.scroll_offset / line_height));
@@ -1148,9 +1150,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
                 x1 += measure_text_width(" ", style);  // extend past line end
             }
             if (x1 > x0) {
-                DrawRectangle(static_cast<int>(x0), static_cast<int>(y),
-                              static_cast<int>(x1 - x0), static_cast<int>(line_height),
-                              Color{60, 120, 220, 80});
+                draw_rect_f({x0, y, x1 - x0, line_height}, Color{60, 120, 220, 80});
             }
         }
 
@@ -1227,8 +1227,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
             float cursor_x = text_rect.x + kTextPadLeft +
                             measure_line_prefix_width(cur_line, state.cursor_col, style, highlighter);
             float cursor_y = rect.y + state.cursor_line * line_height - state.scroll_offset;
-            DrawRectangle(static_cast<int>(cursor_x), static_cast<int>(cursor_y + 1),
-                          2, static_cast<int>(line_height - 2), g_theme->text);
+            draw_rect_f({cursor_x, cursor_y + 1.0f, 2.0f, line_height - 2.0f}, g_theme->text);
         }
     }
 
@@ -1263,8 +1262,8 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
             menu_rect.y = rect.y + 4.0f;
         }
 
-        DrawRectangleRec(menu_rect, with_alpha(g_theme->panel, 245));
-        DrawRectangleLinesEx(menu_rect, 1.0f, g_theme->border_light);
+        draw_rect_f(menu_rect, with_alpha(g_theme->panel, 245));
+        draw_rect_lines(menu_rect, 1.0f, g_theme->border_light);
 
         for (int i = 0; i < visible_items; ++i) {
             Rectangle item_rect = {
@@ -1275,9 +1274,9 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
             };
             const bool hovered_item = CheckCollisionPointRec(mouse, item_rect);
             const bool selected_item = i == state.completion_index;
-            DrawRectangleRec(item_rect,
-                             selected_item ? g_theme->row_selected :
-                             (hovered_item ? g_theme->row_hover : BLANK));
+            draw_rect_f(item_rect,
+                        selected_item ? g_theme->row_selected :
+                        (hovered_item ? g_theme->row_hover : BLANK));
             draw_text_auto(completion.items[static_cast<size_t>(i)].label.c_str(),
                            {item_rect.x + kCompletionPadX, item_rect.y + 4.0f},
                            completion_font_size, completion_letter_spacing,

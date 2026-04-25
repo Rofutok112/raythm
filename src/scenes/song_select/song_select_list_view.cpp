@@ -95,8 +95,8 @@ void draw_chart_rows(const song_select::state& state,
                               child_selected ? theme.text_secondary : theme.text_muted, ui::text_align::left);
         draw_marquee_text(chart.meta.chart_author.c_str(), author_rect, 14, theme.text_muted, now);
         if (chart.best_local_rank.has_value()) {
-            DrawRectangleRec(rank_rect, theme.section);
-            DrawRectangleLinesEx(rank_rect, 1.5f, theme.border_light);
+            ui::draw_rect_f(rank_rect, theme.section);
+            ui::draw_rect_lines(rank_rect, 1.5f, theme.border_light);
             ui::draw_text_in_rect(rank_label(*chart.best_local_rank), 14, rank_rect,
                                   rank_color(*chart.best_local_rank), ui::text_align::center);
         } else {

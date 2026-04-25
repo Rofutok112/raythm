@@ -63,7 +63,7 @@ struct spectrum_bar_node {
 };
 
 struct beat_grid_node {
-    float x = 0, y = 0, w = 1280, h = 720;
+    float x = 0, y = 0, w = 1920, h = 1080;
     color stroke{255, 255, 255, 60};
     float thickness = 1.0f;
     float beat_phase = 0; // 0..1, fraction within current beat
@@ -71,7 +71,7 @@ struct beat_grid_node {
 };
 
 struct pulse_ring_node {
-    float cx = 640, cy = 360, radius = 100;
+    float cx = 960, cy = 540, radius = 100;
     color stroke{255, 255, 255, 255};
     float thickness = 3.0f;
     float beat_phase = 0; // drives expansion/fade
