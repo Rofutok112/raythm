@@ -10,19 +10,19 @@
 namespace {
 
 constexpr float kDialogWidth = 540.0f;
-constexpr float kLoginDialogHeight = 462.0f;
-constexpr float kSignupDialogHeight = 594.0f;
-constexpr float kVerifyDialogHeight = 462.0f;
-constexpr float kAccountDialogHeight = 387.0f;
+constexpr float kLoginDialogHeight = 360.0f;
+constexpr float kSignupDialogHeight = 510.0f;
+constexpr float kVerifyDialogHeight = 396.0f;
+constexpr float kAccountDialogHeight = 360.0f;
 constexpr float kDialogOffsetY = 27.0f;
 constexpr float kDialogPaddingX = 27.0f;
 constexpr float kTitleHeight = 39.0f;
 constexpr float kSubtitleHeight = 27.0f;
-constexpr float kHeaderTop = 27.0f;
-constexpr float kHeaderGap = 9.0f;
-constexpr float kTabTop = 105.0f;
+constexpr float kHeaderTop = 24.0f;
+constexpr float kHeaderGap = 6.0f;
+constexpr float kTabTop = 96.0f;
 constexpr float kTabHeight = 42.0f;
-constexpr float kBodyTop = 168.0f;
+constexpr float kBodyTop = 150.0f;
 constexpr float kRowHeight = 54.0f;
 constexpr float kRowGap = 12.0f;
 constexpr float kButtonHeight = 54.0f;
