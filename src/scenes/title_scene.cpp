@@ -1,5 +1,6 @@
 #include "title_scene.h"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <chrono>
@@ -19,6 +20,7 @@
 #include "scene_manager.h"
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_import_export_service.h"
+#include "song_select/song_select_last_played.h"
 #include "song_select/song_select_command_controller.h"
 #include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_detail_view.h"
@@ -432,6 +434,176 @@ void title_scene::poll_create_upload() {
     }
 }
 
+void title_scene::open_profile() {
+    title_profile_view::open(profile_state_);
+    request_profile_reload();
+}
+
+void title_scene::request_profile_reload() {
+    if (profile_state_.loading) {
+        return;
+    }
+
+    profile_state_.loading = true;
+    std::promise<title_profile_view::load_result> promise;
+    profile_load_future_ = promise.get_future();
+    std::thread([promise = std::move(promise)]() mutable {
+        try {
+            title_profile_view::load_result loaded;
+            loaded.uploads = auth::fetch_my_community_uploads();
+            loaded.rankings = auth::fetch_my_profile_rankings();
+
+            auto to_activity_item = [](const auth::profile_ranking_record& record) {
+                title_profile_view::activity_item item;
+                item.song_title = record.song_title;
+                item.artist = record.artist;
+                item.difficulty_name = record.difficulty_name;
+                item.local_summary = "Score " + std::to_string(record.score);
+                item.online_summary = "Online #" + std::to_string(record.placement) +
+                                      " / " + std::to_string(record.score);
+                return item;
+            };
+
+            if (loaded.rankings.success) {
+                for (const auth::profile_ranking_record& record : loaded.rankings.recent_records) {
+                    loaded.activity.push_back(to_activity_item(record));
+                }
+                for (const auth::profile_ranking_record& record : loaded.rankings.first_place_records) {
+                    loaded.first_place_records.push_back(to_activity_item(record));
+                }
+            }
+
+            promise.set_value(std::move(loaded));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
+}
+
+void title_scene::poll_profile() {
+    if (profile_state_.loading &&
+        profile_load_future_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        title_profile_view::load_result loaded;
+        try {
+            loaded = profile_load_future_.get();
+        } catch (const std::exception& ex) {
+            loaded.uploads = {
+                .success = false,
+                .message = ex.what(),
+            };
+        } catch (...) {
+            loaded.uploads = {
+                .success = false,
+                .message = "Failed to load profile.",
+            };
+        }
+        profile_state_.uploads = std::move(loaded.uploads);
+        profile_state_.rankings = std::move(loaded.rankings);
+        profile_state_.activity = std::move(loaded.activity);
+        profile_state_.first_place_records = std::move(loaded.first_place_records);
+        profile_state_.loading = false;
+        profile_state_.loaded_once = true;
+        title_profile_view::clamp_scroll(profile_state_);
+        if (!profile_state_.uploads.success) {
+            ui::notify(profile_state_.uploads.message, ui::notice_tone::error, 3.0f);
+        } else if (!profile_state_.rankings.success) {
+            ui::notify(profile_state_.rankings.message, ui::notice_tone::error, 3.0f);
+        }
+    }
+
+    if (!profile_state_.deleting ||
+        profile_delete_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    auth::operation_result result;
+    try {
+        result = profile_delete_future_.get();
+    } catch (const std::exception& ex) {
+        result.success = false;
+        result.message = ex.what();
+    } catch (...) {
+        result.success = false;
+        result.message = "Delete failed.";
+    }
+    profile_state_.deleting = false;
+    profile_state_.pending_delete = title_profile_view::delete_target::none;
+    profile_state_.pending_id.clear();
+    profile_state_.pending_label.clear();
+    ui::notify(result.message, result.success ? ui::notice_tone::success : ui::notice_tone::error, 3.0f);
+    if (result.success) {
+        title_online_view::reload_catalog(online_state_);
+        request_play_catalog_reload("", "", mode_ == hub_mode::play || mode_ == hub_mode::create);
+        request_profile_reload();
+    }
+}
+
+void title_scene::start_profile_delete_song(std::string song_id) {
+    if (profile_state_.deleting) {
+        return;
+    }
+
+    profile_state_.deleting = true;
+    std::promise<auth::operation_result> promise;
+    profile_delete_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), song_id = std::move(song_id)]() mutable {
+        try {
+            promise.set_value(auth::delete_community_song_upload(song_id));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
+}
+
+void title_scene::start_profile_delete_chart(std::string chart_id) {
+    if (profile_state_.deleting) {
+        return;
+    }
+
+    profile_state_.deleting = true;
+    std::promise<auth::operation_result> promise;
+    profile_delete_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), chart_id = std::move(chart_id)]() mutable {
+        try {
+            promise.set_value(auth::delete_community_chart_upload(chart_id));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
+}
+
+bool title_scene::handle_profile_input() {
+    const title_profile_view::command command =
+        title_profile_view::update(profile_state_, auth_controller_.request_active);
+    switch (command.type) {
+    case title_profile_view::command_type::delete_account:
+        if (command.password.empty()) {
+            ui::notify("Password is required to delete the account.", ui::notice_tone::error, 2.8f);
+        } else {
+            play_state_.login_dialog.password_input.value = command.password;
+            auth_overlay::start_request(auth_controller_, play_state_.login_dialog,
+                                        song_select::login_dialog_command::request_delete_account);
+            title_profile_view::close(profile_state_);
+        }
+        return true;
+    case title_profile_view::command_type::delete_song:
+        start_profile_delete_song(command.id);
+        return true;
+    case title_profile_view::command_type::delete_chart:
+        start_profile_delete_chart(command.id);
+        return true;
+    case title_profile_view::command_type::close:
+        return true;
+    case title_profile_view::command_type::none:
+        return profile_state_.open;
+    }
+    return profile_state_.open;
+}
+
+void title_scene::draw_profile_modal() {
+    title_profile_view::draw(profile_state_, play_state_.auth, auth_controller_.request_active, kTitleModalLayer);
+}
+
 void title_scene::apply_play_delete_result(const song_select::delete_result& result) {
     play_state_.confirmation_dialog = {};
     if (!result.success) {
@@ -736,9 +908,13 @@ void title_scene::update_common_animation(float dt) {
     poll_play_ranking_reload();
     poll_scoring_ruleset_warm();
     poll_create_upload();
+    poll_profile();
     title_online_view::poll_song_page(online_state_);
     title_online_view::poll_chart_page(online_state_);
     title_online_view::poll_owned(online_state_);
+    if (profile_state_.open && !play_state_.auth.logged_in) {
+        title_profile_view::close(profile_state_);
+    }
     if (title_online_view::poll_download(online_state_)) {
         preferred_song_id_ = title_online_view::selected_song_id(online_state_);
         preferred_chart_id_.clear();
@@ -759,6 +935,18 @@ void title_scene::update_common_animation(float dt) {
         play_state_.login_dialog.open_anim = tween::advance(play_state_.login_dialog.open_anim, dt, 8.0f);
     } else {
         play_state_.login_dialog.open_anim = 0.0f;
+    }
+
+    if (profile_state_.open && profile_state_.closing) {
+        profile_state_.open_anim = tween::retreat(profile_state_.open_anim, dt, 8.0f);
+        if (profile_state_.open_anim <= 0.0f) {
+            profile_state_.open = false;
+            profile_state_.closing = false;
+        }
+    } else if (profile_state_.open) {
+        profile_state_.open_anim = tween::advance(profile_state_.open_anim, dt, 8.0f);
+    } else {
+        profile_state_.open_anim = 0.0f;
     }
 
     const float target_anim = mode_ == hub_mode::title ? 0.0f : 1.0f;
@@ -949,6 +1137,7 @@ void title_scene::on_enter() {
     play_state_.ranking_panel.selected_source = ranking_service::source::local;
     auth_overlay::refresh_auth_state(play_state_.auth);
     scoring_ruleset_loading_ = false;
+    profile_state_ = {};
     request_scoring_ruleset_warm(true);
     play_state_.recent_result_offset = recent_result_offset_;
     if (play_intro_fade_) {
@@ -981,6 +1170,7 @@ void title_scene::on_enter() {
 
 void title_scene::on_exit() {
     play_state_.login_dialog.open = false;
+    title_profile_view::close(profile_state_);
     transfer_controller_.on_exit();
     title_online_view::on_exit(online_state_);
     audio_controller_.on_exit();
@@ -994,6 +1184,9 @@ void title_scene::update(float dt) {
     }
     if (play_state_.confirmation_dialog.open) {
         ui::register_hit_region(song_select::layout::kConfirmDialogRect, song_select::layout::kModalLayer);
+    }
+    if (profile_state_.open) {
+        ui::register_hit_region(title_profile_view::bounds(), kTitleModalLayer);
     }
     update_common_animation(dt);
 
@@ -1031,6 +1224,10 @@ void title_scene::update(float dt) {
     }
 
     if (transfer_controller_.busy()) {
+        return;
+    }
+
+    if (handle_profile_input()) {
         return;
     }
 
@@ -1132,12 +1329,16 @@ void title_scene::draw() {
                 [this](const song_select::transfer_result& result) { apply_play_transfer_result(result); });
         }
     }
+    draw_profile_modal();
     const song_select::login_dialog_command login_command =
         song_select::draw_login_dialog(play_state_.auth, play_state_.login_dialog,
                                        account_dialog_anchor, screen_rect,
                                        auth_controller_.request_active, kTitleModalLayer);
     if (login_command == song_select::login_dialog_command::close) {
         play_state_.login_dialog.open = false;
+    } else if (login_command == song_select::login_dialog_command::request_profile) {
+        play_state_.login_dialog.open = false;
+        open_profile();
     } else if (login_command != song_select::login_dialog_command::none) {
         auth_overlay::start_request(auth_controller_, play_state_.login_dialog, login_command);
     }

@@ -13,6 +13,7 @@ enum class login_dialog_command {
     request_register,
     request_verify,
     request_resend_code,
+    request_profile,
     request_logout,
     request_delete_account,
 };

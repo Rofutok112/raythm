@@ -1,6 +1,7 @@
 #pragma once
 
 #include "scene.h"
+#include "network/auth_client.h"
 #include "ranking_service.h"
 #include "shared/auth_overlay_controller.h"
 #include "song_select/song_catalog_service.h"
@@ -9,6 +10,7 @@
 #include "song_select/song_transfer_controller.h"
 #include "title/create_upload_client.h"
 #include "title/online_download_view.h"
+#include "title/profile_view.h"
 #include "title/title_audio_controller.h"
 #include <future>
 #include <optional>
@@ -81,6 +83,13 @@ private:
     void start_chart_upload(const song_select::song_entry& song,
                             const song_select::chart_option& chart);
     void poll_create_upload();
+    void open_profile();
+    void request_profile_reload();
+    void poll_profile();
+    bool handle_profile_input();
+    void draw_profile_modal();
+    void start_profile_delete_song(std::string song_id);
+    void start_profile_delete_chart(std::string chart_id);
     void update_home_pointer_suppression();
     bool handle_title_input(bool left_click_for_home, bool right_click_for_home);
     bool handle_home_input();
@@ -122,6 +131,9 @@ private:
     int play_ranking_pending_generation_ = 0;
     std::future<bool> scoring_ruleset_future_;
     bool scoring_ruleset_loading_ = false;
+    title_profile_view::state profile_state_;
+    std::future<title_profile_view::load_result> profile_load_future_;
+    std::future<auth::operation_result> profile_delete_future_;
     bool play_catalog_reload_pending_ = false;
     bool play_catalog_sync_media_on_apply_ = false;
     bool queued_play_catalog_sync_media_on_apply_ = false;

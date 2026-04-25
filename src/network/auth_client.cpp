@@ -136,6 +136,95 @@ std::optional<auth::public_user> parse_me_response(const std::string& body) {
     return parse_user_object(*user_object);
 }
 
+std::optional<auth::community_song_upload> parse_community_song_upload(const std::string& object,
+                                                                        const std::string& user_id) {
+    const std::optional<std::string> uploader_object = json::extract_object(object, "uploader");
+    if (!uploader_object.has_value() || json::extract_string(*uploader_object, "id").value_or("") != user_id) {
+        return std::nullopt;
+    }
+
+    const std::optional<std::string> id = json::extract_string(object, "id");
+    const std::optional<std::string> title = json::extract_string(object, "title");
+    if (!id.has_value() || !title.has_value()) {
+        return std::nullopt;
+    }
+
+    return auth::community_song_upload{
+        .id = *id,
+        .title = *title,
+        .artist = json::extract_string(object, "artist").value_or(""),
+        .visibility = json::extract_string(object, "visibility").value_or("public"),
+    };
+}
+
+std::optional<auth::community_chart_upload> parse_community_chart_upload(const std::string& object,
+                                                                          const std::string& user_id) {
+    const std::optional<std::string> uploader_object = json::extract_object(object, "uploader");
+    if (!uploader_object.has_value() || json::extract_string(*uploader_object, "id").value_or("") != user_id) {
+        return std::nullopt;
+    }
+
+    const std::optional<std::string> id = json::extract_string(object, "id");
+    if (!id.has_value()) {
+        return std::nullopt;
+    }
+
+    const std::optional<std::string> song_object = json::extract_object(object, "song");
+    return auth::community_chart_upload{
+        .id = *id,
+        .song_id = json::extract_string(object, "songId").value_or(""),
+        .song_title = song_object.has_value() ? json::extract_string(*song_object, "title").value_or("") : "",
+        .difficulty_name = json::extract_string(object, "difficultyName").value_or(""),
+        .chart_author = json::extract_string(object, "chartAuthor").value_or(""),
+        .visibility = json::extract_string(object, "visibility").value_or("public"),
+    };
+}
+
+std::optional<auth::profile_ranking_record> parse_profile_ranking_record(const std::string& object) {
+    const std::optional<std::string> chart_id = json::extract_string(object, "chart_id");
+    const std::optional<std::string> song_id = json::extract_string(object, "song_id");
+    const std::optional<std::string> song_title = json::extract_string(object, "song_title");
+    const std::optional<std::string> difficulty_name = json::extract_string(object, "difficulty_name");
+    const std::optional<int> score = json::extract_int(object, "score");
+    const std::optional<int> placement = json::extract_int(object, "placement");
+    if (!chart_id.has_value() || !song_id.has_value() || !song_title.has_value() ||
+        !difficulty_name.has_value() || !score.has_value() || !placement.has_value()) {
+        return std::nullopt;
+    }
+
+    return auth::profile_ranking_record{
+        .chart_id = *chart_id,
+        .song_id = *song_id,
+        .song_title = *song_title,
+        .artist = json::extract_string(object, "artist").value_or(""),
+        .difficulty_name = *difficulty_name,
+        .chart_author = json::extract_string(object, "chart_author").value_or(""),
+        .clear_rank = json::extract_string(object, "clear_rank").value_or(""),
+        .recorded_at = json::extract_string(object, "recorded_at").value_or(""),
+        .submitted_at = json::extract_string(object, "submitted_at").value_or(""),
+        .score = *score,
+        .placement = *placement,
+        .max_combo = json::extract_int(object, "max_combo").value_or(0),
+        .accuracy = json::extract_float(object, "accuracy").value_or(0.0f),
+        .is_full_combo = json::extract_bool(object, "is_full_combo").value_or(false),
+    };
+}
+
+void parse_profile_ranking_array(const std::string& body,
+                                 const char* key,
+                                 std::vector<auth::profile_ranking_record>& output) {
+    const std::optional<std::string> array = json::extract_array(body, key);
+    if (!array.has_value()) {
+        return;
+    }
+
+    for (const std::string& object : json::extract_objects_from_array(*array)) {
+        if (const auto record = parse_profile_ranking_record(object); record.has_value()) {
+            output.push_back(*record);
+        }
+    }
+}
+
 std::string parse_error_message(const std::string& body, std::string fallback) {
     const std::optional<std::string> message = json::extract_string(body, "message");
     return message.value_or(std::move(fallback));
@@ -389,6 +478,22 @@ std::string build_auth_url(const std::string& server_url, std::string_view path)
 auth::operation_result finish_with_session(auth::operation_result result, const auth::session& session_data) {
     result.session_data = session_data;
     return result;
+}
+
+http_response send_authenticated_request(const auth::session& session_data,
+                                         const std::string& method,
+                                         std::string_view path,
+                                         const std::string& body = {}) {
+    std::vector<std::pair<std::string, std::string>> headers = {
+        {"Accept", "application/json"},
+        {"Authorization", "Bearer " + session_data.access_token},
+        {"User-Agent", "raythm/0.1"},
+    };
+    if (!body.empty()) {
+        headers.emplace_back("Content-Type", "application/json");
+    }
+
+    return send_request(method, build_auth_url(session_data.server_url, path), body, headers);
 }
 
 auth::operation_result parse_auth_response(const http_response& response,
@@ -917,6 +1022,223 @@ operation_result delete_saved_account(const std::string& password) {
     return {
         .success = true,
         .message = "Account deleted.",
+        .session_data = std::nullopt,
+    };
+}
+
+my_uploads_result fetch_my_community_uploads() {
+    my_uploads_result result;
+    std::optional<session> stored = load_saved_session();
+    if (!stored.has_value()) {
+        result.message = "Login required.";
+        return result;
+    }
+
+    auto fetch_page = [&](const session& session_data, std::string_view path) {
+        return send_authenticated_request(session_data, "GET", path);
+    };
+
+    auto refresh_session = [&]() -> bool {
+        const operation_result restored = restore_saved_session();
+        if (!restored.success || !restored.session_data.has_value()) {
+            result.message = restored.message.empty() ? "Saved session expired." : restored.message;
+            return false;
+        }
+        stored = restored.session_data;
+        return true;
+    };
+
+    constexpr int kPageSize = 50;
+    for (int page = 1; page <= 20; ++page) {
+        const std::string path =
+            "/songs?includeMine=true&contentSource=community&page=" + std::to_string(page) +
+            "&pageSize=" + std::to_string(kPageSize);
+        http_response response = fetch_page(*stored, path);
+        if (response.error_message.empty() && response.status_code == 401 && refresh_session()) {
+            response = fetch_page(*stored, path);
+        }
+        if (!response.error_message.empty()) {
+            result.message = response.error_message;
+            return result;
+        }
+        if (response.status_code < 200 || response.status_code >= 300) {
+            result.message = parse_error_message(response.body, "Failed to load uploaded songs.");
+            return result;
+        }
+
+        const std::optional<std::string> items = json::extract_array(response.body, "items");
+        if (!items.has_value()) {
+            result.message = "Server returned an unexpected songs response.";
+            return result;
+        }
+        const std::vector<std::string> objects = json::extract_objects_from_array(*items);
+        for (const std::string& object : objects) {
+            if (const auto song = parse_community_song_upload(object, stored->user.id); song.has_value()) {
+                result.songs.push_back(*song);
+            }
+        }
+        if (static_cast<int>(objects.size()) < kPageSize) {
+            break;
+        }
+    }
+
+    for (int page = 1; page <= 20; ++page) {
+        const std::string path =
+            "/charts?includeMine=true&contentSource=community&page=" + std::to_string(page) +
+            "&pageSize=" + std::to_string(kPageSize);
+        http_response response = fetch_page(*stored, path);
+        if (response.error_message.empty() && response.status_code == 401 && refresh_session()) {
+            response = fetch_page(*stored, path);
+        }
+        if (!response.error_message.empty()) {
+            result.message = response.error_message;
+            return result;
+        }
+        if (response.status_code < 200 || response.status_code >= 300) {
+            result.message = parse_error_message(response.body, "Failed to load uploaded charts.");
+            return result;
+        }
+
+        const std::optional<std::string> items = json::extract_array(response.body, "items");
+        if (!items.has_value()) {
+            result.message = "Server returned an unexpected charts response.";
+            return result;
+        }
+        const std::vector<std::string> objects = json::extract_objects_from_array(*items);
+        for (const std::string& object : objects) {
+            if (const auto chart = parse_community_chart_upload(object, stored->user.id); chart.has_value()) {
+                result.charts.push_back(*chart);
+            }
+        }
+        if (static_cast<int>(objects.size()) < kPageSize) {
+            break;
+        }
+    }
+
+    result.success = true;
+    result.message = "Uploaded content loaded.";
+    return result;
+}
+
+profile_rankings_result fetch_my_profile_rankings() {
+    profile_rankings_result result;
+    std::optional<session> stored = load_saved_session();
+    if (!stored.has_value()) {
+        result.message = "Login required.";
+        return result;
+    }
+
+    auto send_profile_request = [&](const session& session_data) {
+        return send_authenticated_request(session_data, "GET", "/me/profile/rankings?limit=20");
+    };
+
+    http_response response = send_profile_request(*stored);
+    if (response.error_message.empty() && response.status_code == 401) {
+        const operation_result restored = restore_saved_session();
+        if (restored.success && restored.session_data.has_value()) {
+            stored = restored.session_data;
+            response = send_profile_request(*stored);
+        }
+    }
+
+    if (!response.error_message.empty()) {
+        result.message = response.error_message;
+        return result;
+    }
+    if (response.status_code < 200 || response.status_code >= 300) {
+        result.message = parse_error_message(response.body, "Failed to load profile rankings.");
+        return result;
+    }
+
+    parse_profile_ranking_array(response.body, "recent_records", result.recent_records);
+    parse_profile_ranking_array(response.body, "first_place_records", result.first_place_records);
+    result.success = true;
+    result.message = "Profile rankings loaded.";
+    return result;
+}
+
+operation_result delete_community_song_upload(const std::string& song_id) {
+    std::optional<session> stored = load_saved_session();
+    if (!stored.has_value()) {
+        return {
+            .success = false,
+            .message = "Login required.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    auto send_delete = [&](const session& session_data) {
+        return send_authenticated_request(session_data, "DELETE", "/songs/" + song_id);
+    };
+
+    http_response response = send_delete(*stored);
+    if (response.error_message.empty() && response.status_code == 401) {
+        const operation_result restored = restore_saved_session();
+        if (restored.success && restored.session_data.has_value()) {
+            stored = restored.session_data;
+            response = send_delete(*stored);
+        }
+    }
+    if (!response.error_message.empty()) {
+        return {
+            .success = false,
+            .message = response.error_message,
+            .session_data = std::nullopt,
+        };
+    }
+    if (response.status_code != 204 && (response.status_code < 200 || response.status_code >= 300)) {
+        return {
+            .success = false,
+            .message = parse_error_message(response.body, "Failed to delete uploaded song."),
+            .session_data = std::nullopt,
+        };
+    }
+    return {
+        .success = true,
+        .message = "Uploaded song deleted.",
+        .session_data = std::nullopt,
+    };
+}
+
+operation_result delete_community_chart_upload(const std::string& chart_id) {
+    std::optional<session> stored = load_saved_session();
+    if (!stored.has_value()) {
+        return {
+            .success = false,
+            .message = "Login required.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    auto send_delete = [&](const session& session_data) {
+        return send_authenticated_request(session_data, "DELETE", "/charts/" + chart_id);
+    };
+
+    http_response response = send_delete(*stored);
+    if (response.error_message.empty() && response.status_code == 401) {
+        const operation_result restored = restore_saved_session();
+        if (restored.success && restored.session_data.has_value()) {
+            stored = restored.session_data;
+            response = send_delete(*stored);
+        }
+    }
+    if (!response.error_message.empty()) {
+        return {
+            .success = false,
+            .message = response.error_message,
+            .session_data = std::nullopt,
+        };
+    }
+    if (response.status_code != 204 && (response.status_code < 200 || response.status_code >= 300)) {
+        return {
+            .success = false,
+            .message = parse_error_message(response.body, "Failed to delete uploaded chart."),
+            .session_data = std::nullopt,
+        };
+    }
+    return {
+        .success = true,
+        .message = "Uploaded chart deleted.",
         .session_data = std::nullopt,
     };
 }

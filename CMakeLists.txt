@@ -184,6 +184,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_layout.h
         src/scenes/title/play_session_controller.cpp
         src/scenes/title/play_session_controller.h
+        src/scenes/title/profile_view.cpp
+        src/scenes/title/profile_view.h
         src/scenes/title/title_header_view.cpp
         src/scenes/title/title_header_view.h
         src/scenes/title/create_upload_client.cpp
