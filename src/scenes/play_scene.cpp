@@ -310,7 +310,7 @@ bool play_scene::get_lane_view_bounds(const Camera3D& camera, float& lane_start_
 
 void play_scene::draw() {
     if (!state_.initialized) {
-        virtual_screen::begin();
+        virtual_screen::begin_ui();
         play_renderer::draw_status(state_);
         virtual_screen::end();
 

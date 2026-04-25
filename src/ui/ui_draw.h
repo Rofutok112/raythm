@@ -74,16 +74,16 @@ inline void draw_button_visual(Rectangle rect, bool hovered, bool pressed, const
                                float border_width) {
     const Rectangle visual = pressed ? inset(rect, 1.5f) : rect;
     const Color fill = lerp_color(bg, bg_hover, hovered ? 1.0f : 0.0f);
-    DrawRectangleRec(visual, fill);
-    DrawRectangleLinesEx(visual, border_width, with_alpha(g_theme->border, fill.a));
+    draw_rect_f(visual, fill);
+    draw_rect_lines(visual, border_width, with_alpha(g_theme->border, fill.a));
     draw_text_in_rect(label, font_size, visual, text_color);
 }
 
 inline void draw_row_visual(Rectangle rect, bool hovered, bool pressed, Color bg, Color bg_hover,
                             Color border_color, float border_width) {
     const Rectangle visual = pressed ? inset(rect, 1.5f) : rect;
-    DrawRectangleRec(visual, lerp_color(bg, bg_hover, hovered ? 1.0f : 0.0f));
-    DrawRectangleLinesEx(visual, border_width, border_color);
+    draw_rect_f(visual, lerp_color(bg, bg_hover, hovered ? 1.0f : 0.0f));
+    draw_rect_lines(visual, border_width, border_color);
 }
 
 }  // namespace detail
@@ -223,8 +223,8 @@ inline row_state enqueue_row(Rectangle rect, Color bg, Color bg_hover, Color bor
 
 // メインパネル（panel 背景 + border ボーダー、2px）。
 inline void draw_panel(Rectangle rect) {
-    DrawRectangleRec(rect, g_theme->panel);
-    DrawRectangleLinesEx(rect, 2.0f, g_theme->border);
+    draw_rect_f(rect, g_theme->panel);
+    draw_rect_lines(rect, 2.0f, g_theme->border);
 }
 
 inline void enqueue_panel(Rectangle rect, draw_layer layer = draw_layer::base) {
@@ -235,8 +235,8 @@ inline void enqueue_panel(Rectangle rect, draw_layer layer = draw_layer::base) {
 
 // セクションパネル（section 背景 + border_light ボーダー、1.5px）。
 inline void draw_section(Rectangle rect) {
-    DrawRectangleRec(rect, g_theme->section);
-    DrawRectangleLinesEx(rect, 1.5f, g_theme->border_light);
+    draw_rect_f(rect, g_theme->section);
+    draw_rect_lines(rect, 1.5f, g_theme->border_light);
 }
 
 inline void enqueue_section(Rectangle rect, draw_layer layer = draw_layer::base) {
@@ -544,13 +544,13 @@ inline context_menu_state enqueue_context_menu(Rectangle menu_rect,
                 const Rectangle text_rect = inset(draw_item_rect, edge_insets::symmetric(0.0f, 12.0f));
                 draw_text_in_rect(item_labels[static_cast<size_t>(i)].c_str(), std::max(12, font_size - 2),
                                   text_rect, g_theme->text_muted, text_align::left);
-                DrawLineEx({draw_item_rect.x + 10.0f, draw_item_rect.y + draw_item_rect.height - 3.0f},
-                           {draw_item_rect.x + draw_item_rect.width - 10.0f, draw_item_rect.y + draw_item_rect.height - 3.0f},
-                           1.0f, g_theme->border_light);
+                draw_line_ex({draw_item_rect.x + 10.0f, draw_item_rect.y + draw_item_rect.height - 3.0f},
+                             {draw_item_rect.x + draw_item_rect.width - 10.0f, draw_item_rect.y + draw_item_rect.height - 3.0f},
+                             1.0f, g_theme->border_light);
             } else if (kind == context_menu_item::kind::separator) {
-                DrawLineEx({draw_item_rect.x + 8.0f, draw_item_rect.y + draw_item_rect.height * 0.5f},
-                           {draw_item_rect.x + draw_item_rect.width - 8.0f, draw_item_rect.y + draw_item_rect.height * 0.5f},
-                           1.0f, g_theme->border_light);
+                draw_line_ex({draw_item_rect.x + 8.0f, draw_item_rect.y + draw_item_rect.height * 0.5f},
+                             {draw_item_rect.x + draw_item_rect.width - 8.0f, draw_item_rect.y + draw_item_rect.height * 0.5f},
+                             1.0f, g_theme->border_light);
             } else {
                 detail::draw_row_visual(draw_item_rect, state.hovered, state.pressed,
                                         enabled ? g_theme->row : with_alpha(g_theme->row, 180),
@@ -583,8 +583,8 @@ inline void draw_header_block(Rectangle rect, const char* title, const char* sub
 inline void draw_progress_bar(Rectangle rect, float ratio,
                               Color bg, Color fill, Color border_color,
                               float border_width = 3.0f, float bar_inset = 4.0f) {
-    DrawRectangleRec(rect, bg);
-    DrawRectangleLinesEx(rect, border_width, border_color);
+    draw_rect_f(rect, bg);
+    draw_rect_lines(rect, border_width, border_color);
 
     if (ratio > 0.0f) {
         const Rectangle fill_area = inset(rect, bar_inset);
@@ -619,8 +619,8 @@ inline float draw_slider(Rectangle row_rect, const char* label, const char* valu
                          float ratio, float track_left, float track_width,
                          int font_size = 22, float track_top_offset = 26.0f) {
     // 行背景
-    DrawRectangleRec(row_rect, g_theme->row);
-    DrawRectangleLinesEx(row_rect, 2.0f, g_theme->border);
+    draw_rect_f(row_rect, g_theme->row);
+    draw_rect_lines(row_rect, 2.0f, g_theme->border);
 
     // ラベル（左寄せ）
     const Rectangle label_rect = {row_rect.x + 18.0f, row_rect.y, 200.0f, row_rect.height};
@@ -629,7 +629,7 @@ inline float draw_slider(Rectangle row_rect, const char* label, const char* valu
     // トラック
     const Rectangle track = {track_left, row_rect.y + track_top_offset, track_width, 6.0f};
     const float clamped = std::clamp(ratio, 0.0f, 1.0f);
-    DrawRectangleRec(track, g_theme->slider_track);
+    draw_rect_f(track, g_theme->slider_track);
     draw_rect_f(track.x, track.y, track.width * clamped, track.height, g_theme->slider_fill);
 
     // つまみ
@@ -653,15 +653,15 @@ inline float draw_slider(Rectangle row_rect, const char* label, const char* valu
 inline float draw_slider(Rectangle row_rect, const char* label, const char* value_text,
                          float ratio, float track_left, float track_width, draw_layer layer,
                          int font_size = 22, float track_top_offset = 26.0f) {
-    DrawRectangleRec(row_rect, g_theme->row);
-    DrawRectangleLinesEx(row_rect, 2.0f, g_theme->border);
+    draw_rect_f(row_rect, g_theme->row);
+    draw_rect_lines(row_rect, 2.0f, g_theme->border);
 
     const Rectangle label_rect = {row_rect.x + 18.0f, row_rect.y, 200.0f, row_rect.height};
     draw_text_in_rect(label, font_size, label_rect, g_theme->text, text_align::left);
 
     const Rectangle track = {track_left, row_rect.y + track_top_offset, track_width, 6.0f};
     const float clamped = std::clamp(ratio, 0.0f, 1.0f);
-    DrawRectangleRec(track, g_theme->slider_track);
+    draw_rect_f(track, g_theme->slider_track);
     draw_rect_f(track.x, track.y, track.width * clamped, track.height, g_theme->slider_fill);
 
     const float knob_x = track.x + track.width * clamped;
@@ -688,7 +688,7 @@ inline float draw_slider_relative(Rectangle row_rect, const char* label, const c
     const float clamped = std::clamp(ratio, 0.0f, 1.0f);
 
     draw_text_in_rect(label, font_size, layout.label_rect, g_theme->text, text_align::left);
-    DrawRectangleRec(layout.track_rect, g_theme->slider_track);
+    draw_rect_f(layout.track_rect, g_theme->slider_track);
     draw_rect_f(layout.track_rect.x, layout.track_rect.y,
                 layout.track_rect.width * clamped, layout.track_rect.height, g_theme->slider_fill);
 
@@ -718,7 +718,7 @@ inline float draw_slider_relative(Rectangle row_rect, const char* label, const c
     const float clamped = std::clamp(ratio, 0.0f, 1.0f);
 
     draw_text_in_rect(label, font_size, layout.label_rect, g_theme->text, text_align::left);
-    DrawRectangleRec(layout.track_rect, g_theme->slider_track);
+    draw_rect_f(layout.track_rect, g_theme->slider_track);
     draw_rect_f(layout.track_rect.x, layout.track_rect.y,
                 layout.track_rect.width * clamped, layout.track_rect.height, g_theme->slider_fill);
 
@@ -740,8 +740,8 @@ inline void draw_scrollbar(Rectangle track_rect, float content_height, float scr
         return;
     }
 
-    DrawRectangleRec(track_rect, track_color);
-    DrawRectangleRec(metrics.thumb_rect, thumb_color);
+    draw_rect_f(track_rect, track_color);
+    draw_rect_f(metrics.thumb_rect, thumb_color);
 }
 
 inline scrollbar_interaction update_vertical_scrollbar(Rectangle track_rect, float content_height, float scroll_offset,
@@ -828,7 +828,7 @@ inline scrollbar_interaction update_vertical_scrollbar(Rectangle track_rect, flo
 
 // 画面全体を覆う半透明オーバーレイ。ポーズ画面やフェードイン/アウトに使用する。
 inline void draw_fullscreen_overlay(Color color) {
-    DrawRectangle(0, 0, 1280, 720, color);
+    DrawRectangle(0, 0, kScreenWidth, kScreenHeight, color);
 }
 
 inline void enqueue_fullscreen_overlay(Color color, draw_layer layer = draw_layer::overlay) {

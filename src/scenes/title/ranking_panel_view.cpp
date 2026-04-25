@@ -15,7 +15,35 @@
 
 namespace {
 
-constexpr float kRankingRowHeight = 58.0f;
+constexpr float kRankingRowHeight = 90.0f;
+constexpr float kScrollPadding = 12.0f;
+constexpr float kEmptyMessageOffsetY = 60.0f;
+constexpr float kEmptyMessageHeight = 42.0f;
+constexpr float kRowGap = 6.0f;
+constexpr float kRevealOffsetX = 66.0f;
+constexpr float kClipSlack = 6.0f;
+constexpr float kRowBorderWidth = 1.5f;
+constexpr float kTopLineOffsetY = 12.0f;
+constexpr float kStatLabelOffsetY = 40.5f;
+constexpr float kStatValueOffsetY = 54.0f;
+constexpr float kPlacementOffsetX = 12.0f;
+constexpr float kPlacementOffsetY = 9.0f;
+constexpr float kPlacementWidth = 66.0f;
+constexpr float kPlacementVerticalInset = 18.0f;
+constexpr float kRankRightInset = 72.0f;
+constexpr float kRankOffsetY = 13.5f;
+constexpr float kRankWidth = 60.0f;
+constexpr float kRankVerticalInset = 27.0f;
+constexpr float kScoreOffsetFromRank = 144.0f;
+constexpr float kScoreOffsetY = 19.5f;
+constexpr float kScoreWidth = 126.0f;
+constexpr float kScoreHeight = 39.0f;
+constexpr float kDetailsOffsetX = 96.0f;
+constexpr float kDetailsScoreGap = 4.5f;
+constexpr float kTimeWidth = 33.0f;
+constexpr float kNameTimeGap = 1.5f;
+constexpr float kStatColumnGap = 27.0f;
+constexpr float kComboMaxWidth = 114.0f;
 
 const char* rank_label(rank value) {
     switch (value) {
@@ -121,7 +149,7 @@ float content_height(const ranking_service::listing& listing) {
 }
 
 float max_scroll(Rectangle list_rect, const ranking_service::listing& listing) {
-    return std::max(0.0f, content_height(listing) - list_rect.height + 8.0f);
+    return std::max(0.0f, content_height(listing) - list_rect.height + kScrollPadding);
 }
 
 std::optional<ranking_service::source> hit_test_source(const draw_config& config, Vector2 point) {
@@ -159,7 +187,8 @@ void draw(const song_select::ranking_panel_state& panel, const draw_config& conf
             ? std::string("No ") + (panel.selected_source == ranking_service::source::local ? "local" : "online") + " entries yet."
             : panel.listing.message;
         ui::draw_text_in_rect(message.c_str(), 20,
-                              {config.list_rect.x, config.list_rect.y + 40.0f, config.list_rect.width, 28.0f},
+                              {config.list_rect.x, config.list_rect.y + kEmptyMessageOffsetY,
+                               config.list_rect.width, kEmptyMessageHeight},
                               with_alpha(t.text_muted, config.alpha), ui::text_align::left);
         return;
     }
@@ -176,53 +205,113 @@ void draw(const song_select::ranking_panel_state& panel, const draw_config& conf
             config.list_rect.x,
             base_y + static_cast<float>(i) * kRankingRowHeight,
             config.list_rect.width,
-            kRankingRowHeight - 4.0f
+            kRankingRowHeight - kRowGap
         };
         const Rectangle row = {
-            base_row.x + (1.0f - row_reveal_t) * 44.0f,
+            base_row.x + (1.0f - row_reveal_t) * kRevealOffsetX,
             base_row.y,
             base_row.width,
             base_row.height
         };
-        if (row.y + row.height < config.list_rect.y - 4.0f || row.y > config.list_rect.y + config.list_rect.height + 4.0f) {
+        if (row.y + row.height < config.list_rect.y - kClipSlack ||
+            row.y > config.list_rect.y + config.list_rect.height + kClipSlack) {
             continue;
         }
 
         const unsigned char row_alpha = static_cast<unsigned char>(config.normal_row_alpha * row_reveal_t);
         const unsigned char content_alpha = static_cast<unsigned char>(config.alpha * row_reveal_t);
-        DrawRectangleRec(row, with_alpha(config.button_base, row_alpha));
-        DrawRectangleLinesEx(row, 1.0f, with_alpha(t.border_light, static_cast<unsigned char>(130.0f * config.play_t * row_reveal_t)));
+        ui::draw_rect_f(row, with_alpha(config.button_base, row_alpha));
+        ui::draw_rect_lines(row, kRowBorderWidth,
+                            with_alpha(t.border_light,
+                                       static_cast<unsigned char>(130.0f * config.play_t * row_reveal_t)));
 
-        const Rectangle placement_rect = {row.x + 4.0f, row.y + 7.0f, 46.0f, row.height - 14.0f};
-        const Rectangle rank_rect = {row.x + row.width - 34.0f, row.y + 7.0f, 24.0f, row.height - 14.0f};
-        const Rectangle score_rect = {row.x + row.width - 148.0f, row.y + 17.0f, 104.0f, 24.0f};
-        const Rectangle middle_rect = {
-            row.x + 56.0f,
-            row.y + 6.0f,
-            score_rect.x - (row.x + 56.0f) - 8.0f,
-            row.height - 12.0f
+        constexpr int kNameFontSize = 13;
+        constexpr int kTimeFontSize = 12;
+        constexpr int kStatLabelFontSize = 10;
+        constexpr int kStatValueFontSize = 12;
+        const float top_line_y = row.y + kTopLineOffsetY;
+        const float stat_label_y = row.y + kStatLabelOffsetY;
+        const float stat_value_y = row.y + kStatValueOffsetY;
+        const Rectangle placement_rect = {
+            row.x + kPlacementOffsetX,
+            row.y + kPlacementOffsetY,
+            kPlacementWidth,
+            row.height - kPlacementVerticalInset
         };
-        const Rectangle time_rect = {score_rect.x - 22.0f, middle_rect.y + 1.0f, 16.0f, 14.0f};
-        const Rectangle name_rect = {middle_rect.x, middle_rect.y, time_rect.x - middle_rect.x - 6.0f, 18.0f};
+        const Rectangle rank_rect = {
+            row.x + row.width - kRankRightInset,
+            row.y + kRankOffsetY,
+            kRankWidth,
+            row.height - kRankVerticalInset
+        };
+        const Rectangle score_rect = {
+            rank_rect.x - kScoreOffsetFromRank,
+            row.y + kScoreOffsetY,
+            kScoreWidth,
+            kScoreHeight
+        };
+        const float details_x = row.x + kDetailsOffsetX;
+        const float details_right = std::max(details_x, score_rect.x - kDetailsScoreGap);
+        const Rectangle time_rect = {
+            details_right - kTimeWidth,
+            top_line_y,
+            kTimeWidth,
+            ui::text_layout_font_size(static_cast<float>(kTimeFontSize))
+        };
+        const Rectangle name_rect = {
+            details_x,
+            top_line_y,
+            std::max(0.0f, time_rect.x - details_x - kNameTimeGap),
+            ui::text_layout_font_size(static_cast<float>(kNameFontSize))
+        };
+        const float combo_width = std::min(kComboMaxWidth,
+                                           std::max(0.0f, (details_right - details_x - kStatColumnGap) * 0.5f));
+        const float accuracy_x = details_x + combo_width + kStatColumnGap;
+        const float accuracy_width = std::max(0.0f, details_right - accuracy_x);
+        const Rectangle combo_label_rect = {
+            details_x,
+            stat_label_y,
+            combo_width,
+            ui::text_layout_font_size(static_cast<float>(kStatLabelFontSize))
+        };
+        const Rectangle combo_value_rect = {
+            details_x,
+            stat_value_y,
+            combo_width,
+            ui::text_layout_font_size(static_cast<float>(kStatValueFontSize))
+        };
+        const Rectangle accuracy_label_rect = {
+            accuracy_x,
+            stat_label_y,
+            accuracy_width,
+            ui::text_layout_font_size(static_cast<float>(kStatLabelFontSize))
+        };
+        const Rectangle accuracy_value_rect = {
+            accuracy_x,
+            stat_value_y,
+            accuracy_width,
+            ui::text_layout_font_size(static_cast<float>(kStatValueFontSize))
+        };
 
         ui::draw_text_in_rect(TextFormat("#%d", i + 1), 18, placement_rect,
                               with_alpha(t.text_secondary, content_alpha), ui::text_align::center);
         draw_marquee_text(entry.player_display_name.empty() ? "Unknown Player" : entry.player_display_name.c_str(),
-                          name_rect, 15, with_alpha(t.text, content_alpha), GetTime());
-        ui::draw_text_in_rect(format_relative_recorded_at(entry.recorded_at).c_str(), 12,
+                          name_rect, kNameFontSize, with_alpha(t.text, content_alpha), GetTime());
+        ui::draw_text_in_rect(format_relative_recorded_at(entry.recorded_at).c_str(), kTimeFontSize,
                               time_rect,
                               with_alpha(t.text_muted, content_alpha), ui::text_align::right);
-        ui::draw_text_in_rect("Max Combo", 11,
-                              {middle_rect.x, middle_rect.y + 20.0f, 78.0f, 12.0f},
+        ui::draw_text_in_rect("Max Combo", kStatLabelFontSize,
+                              combo_label_rect,
                               with_alpha(t.text_muted, content_alpha), ui::text_align::left);
-        ui::draw_text_in_rect(TextFormat("%dx", entry.max_combo), 13,
-                              {middle_rect.x, middle_rect.y + 31.0f, 78.0f, 14.0f},
-                              with_alpha(entry.is_full_combo ? t.success : t.text, content_alpha), ui::text_align::left);
-        ui::draw_text_in_rect("Accuracy", 11,
-                              {middle_rect.x + 94.0f, middle_rect.y + 20.0f, middle_rect.width - 94.0f, 12.0f},
+        ui::draw_text_in_rect(TextFormat("%dx", entry.max_combo), kStatValueFontSize,
+                              combo_value_rect,
+                              with_alpha(entry.is_full_combo ? t.success : t.text, content_alpha),
+                              ui::text_align::left);
+        ui::draw_text_in_rect("Accuracy", kStatLabelFontSize,
+                              accuracy_label_rect,
                               with_alpha(t.text_muted, content_alpha), ui::text_align::left);
-        ui::draw_text_in_rect(TextFormat("%.2f%%", entry.accuracy), 13,
-                              {middle_rect.x + 94.0f, middle_rect.y + 31.0f, middle_rect.width - 94.0f, 14.0f},
+        ui::draw_text_in_rect(TextFormat("%.2f%%", entry.accuracy), kStatValueFontSize,
+                              accuracy_value_rect,
                               with_alpha(t.text, content_alpha), ui::text_align::left);
         ui::draw_text_in_rect(format_score(entry.score).c_str(), 18,
                               score_rect,

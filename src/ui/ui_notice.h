@@ -80,16 +80,17 @@ inline unsigned char notice_alpha(const notice_entry& notice) {
 }
 
 inline void draw_notice_queue_bottom_right(const notice_queue& queue, Rectangle bounds,
-                                           float right_margin = 24.0f, float bottom_margin = 16.0f,
-                                           float max_width = 460.0f, float min_width = 140.0f,
-                                           float vertical_gap = 10.0f) {
+                                           float right_margin = 36.0f, float bottom_margin = 24.0f,
+                                           float max_width = 690.0f, float min_width = 210.0f,
+                                           float vertical_gap = 15.0f) {
     if (queue.items.empty()) {
         return;
     }
 
-    constexpr float kHorizontalPadding = 12.0f;
-    constexpr float kVerticalPadding = 6.0f;
+    constexpr float kHorizontalPadding = 18.0f;
+    constexpr float kVerticalPadding = 10.5f;
     constexpr int kFontSize = 18;
+    const float line_height = text_layout_font_size(static_cast<float>(kFontSize));
     float bottom_y = bounds.y + bounds.height - bottom_margin;
 
     for (auto it = queue.items.rbegin(); it != queue.items.rend(); ++it) {
@@ -98,7 +99,8 @@ inline void draw_notice_queue_bottom_right(const notice_queue& queue, Rectangle 
         const unsigned char alpha = notice_alpha(notice);
         const Vector2 measured = measure_text_size(notice.message, static_cast<float>(kFontSize));
         const float width = std::clamp(measured.x + kHorizontalPadding * 2.0f, min_width, max_width);
-        const float height = std::max(30.0f, measured.y + kVerticalPadding * 2.0f);
+        const float height = std::max(45.0f,
+                                      std::max(measured.y, line_height) + kVerticalPadding * 2.0f);
         const Rectangle rect = {
             bounds.x + bounds.width - right_margin - width,
             bottom_y - height,
@@ -110,8 +112,8 @@ inline void draw_notice_queue_bottom_right(const notice_queue& queue, Rectangle 
         const Color border = with_alpha(lerp_color(g_theme->border, tone, 0.45f), alpha);
         const Color text_color = with_alpha(tone, alpha);
 
-        DrawRectangleRec(rect, background);
-        DrawRectangleLinesEx(rect, 2.0f, border);
+        draw_rect_f(rect, background);
+        draw_rect_lines(rect, 2.0f, border);
         draw_text_in_rect(notice.message.c_str(), kFontSize,
                           inset(rect, edge_insets::symmetric(kVerticalPadding, kHorizontalPadding)),
                           text_color, text_align::right);

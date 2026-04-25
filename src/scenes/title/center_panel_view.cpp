@@ -11,8 +11,40 @@
 
 namespace {
 
-constexpr float kChartButtonHeight = 54.0f;
-constexpr float kChartButtonGap = 8.0f;
+constexpr float kChartButtonHeight = 81.0f;
+constexpr float kChartButtonGap = 12.0f;
+constexpr float kEmptyMessageOffsetY = 180.0f;
+constexpr float kEmptyMessageHeight = 60.0f;
+constexpr float kJacketFramePadding = 12.0f;
+constexpr float kJacketInnerPadding = 3.0f;
+constexpr float kJacketBorderWidth = 2.25f;
+constexpr float kHeaderPaddingX = 18.0f;
+constexpr float kTitleOffsetY = 18.0f;
+constexpr float kTitleHeight = 45.0f;
+constexpr float kArtistOffsetY = 72.0f;
+constexpr float kArtistHeight = 33.0f;
+constexpr float kChartDifficultyOffsetY = 6.0f;
+constexpr float kChartDifficultyHeight = 30.0f;
+constexpr float kChartNotesOffsetY = 48.0f;
+constexpr float kChartNotesHeight = 27.0f;
+constexpr float kChartBpmOffsetY = 81.0f;
+constexpr float kChartBpmHeight = 27.0f;
+constexpr float kChartAuthorOffsetY = 114.0f;
+constexpr float kChartAuthorHeight = 24.0f;
+constexpr float kClipSlack = 6.0f;
+constexpr float kChartRowBorderWidth = 1.5f;
+constexpr float kChartTextPaddingX = 18.0f;
+constexpr float kChartRightReserved = 84.0f;
+constexpr float kChartTitleOffsetY = 13.5f;
+constexpr float kChartTitleHeight = 27.0f;
+constexpr float kChartLevelOffsetY = 45.0f;
+constexpr float kChartLevelHeight = 24.0f;
+constexpr float kChartBadgeRightInset = 57.0f;
+constexpr float kChartBadgeOffsetY = 15.0f;
+constexpr float kChartBadgeWidth = 39.0f;
+constexpr float kChartBadgeHeight = 24.0f;
+constexpr float kChartRankOffsetY = 45.0f;
+constexpr float kChartRankHeight = 21.0f;
 
 const char* rank_label(rank value) {
     switch (value) {
@@ -109,27 +141,27 @@ void draw(const song_select::state& state,
             return;
         }
         ui::draw_text_in_rect("No songs found yet.", 34,
-                              {config.main_column_rect.x, config.main_column_rect.y + 120.0f,
-                               config.main_column_rect.width, 40.0f},
+                              {config.main_column_rect.x, config.main_column_rect.y + kEmptyMessageOffsetY,
+                               config.main_column_rect.width, kEmptyMessageHeight},
                               with_alpha(t.text, config.alpha));
         return;
     }
 
     const Rectangle jacket_frame = {
-        config.jacket_rect.x - 8.0f,
-        config.jacket_rect.y - 8.0f,
-        config.jacket_rect.width + 16.0f,
-        config.jacket_rect.height + 16.0f
+        config.jacket_rect.x - kJacketFramePadding,
+        config.jacket_rect.y - kJacketFramePadding,
+        config.jacket_rect.width + kJacketFramePadding * 2.0f,
+        config.jacket_rect.height + kJacketFramePadding * 2.0f
     };
     const Rectangle jacket_inner = {
-        config.jacket_rect.x + 2.0f,
-        config.jacket_rect.y + 2.0f,
-        config.jacket_rect.width - 4.0f,
-        config.jacket_rect.height - 4.0f
+        config.jacket_rect.x + kJacketInnerPadding,
+        config.jacket_rect.y + kJacketInnerPadding,
+        config.jacket_rect.width - kJacketInnerPadding * 2.0f,
+        config.jacket_rect.height - kJacketInnerPadding * 2.0f
     };
 
-    DrawRectangleLinesEx(jacket_frame, 1.5f,
-                         with_alpha(t.border_image, static_cast<unsigned char>(190.0f * config.play_t)));
+    ui::draw_rect_lines(jacket_frame, kJacketBorderWidth,
+                        with_alpha(t.border_image, static_cast<unsigned char>(190.0f * config.play_t)));
     if (preview_controller.jacket_loaded()) {
         const Texture2D& jacket = preview_controller.jacket_texture();
         DrawTexturePro(jacket,
@@ -141,16 +173,16 @@ void draw(const song_select::state& state,
     }
 
     const Rectangle title_rect = {
-        config.main_column_rect.x + 12.0f,
-        config.main_column_rect.y + 14.0f,
-        config.main_column_rect.width - 24.0f,
-        26.0f
+        config.main_column_rect.x + kHeaderPaddingX,
+        config.main_column_rect.y + kTitleOffsetY,
+        config.main_column_rect.width - kHeaderPaddingX * 2.0f,
+        kTitleHeight
     };
     const Rectangle artist_rect = {
-        config.main_column_rect.x + 12.0f,
-        config.main_column_rect.y + 46.0f,
-        config.main_column_rect.width - 24.0f,
-        20.0f
+        config.main_column_rect.x + kHeaderPaddingX,
+        config.main_column_rect.y + kArtistOffsetY,
+        config.main_column_rect.width - kHeaderPaddingX * 2.0f,
+        kArtistHeight
     };
     draw_marquee_text(song->song.meta.title.c_str(),
                       title_rect,
@@ -161,23 +193,23 @@ void draw(const song_select::state& state,
     if (chart != nullptr) {
         ui::draw_text_in_rect(TextFormat("%s  Lv.%.1f", chart->meta.difficulty.c_str(), chart->meta.level),
                               18,
-                              {config.chart_detail_rect.x, config.chart_detail_rect.y + 4.0f,
-                               config.chart_detail_rect.width, 18.0f},
+                              {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartDifficultyOffsetY,
+                               config.chart_detail_rect.width, kChartDifficultyHeight},
                               with_alpha(t.text, config.alpha), ui::text_align::left);
         ui::draw_text_in_rect(TextFormat("%s   %d Notes", key_mode_label(chart->meta.key_count).c_str(),
                                          chart->note_count),
                               14,
-                              {config.chart_detail_rect.x, config.chart_detail_rect.y + 32.0f,
-                               config.chart_detail_rect.width, 16.0f},
+                              {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartNotesOffsetY,
+                               config.chart_detail_rect.width, kChartNotesHeight},
                               with_alpha(t.text_secondary, config.alpha), ui::text_align::left);
         ui::draw_text_in_rect(TextFormat("BPM %s", format_bpm_range(chart->min_bpm, chart->max_bpm).c_str()),
                               14,
-                              {config.chart_detail_rect.x, config.chart_detail_rect.y + 54.0f,
-                               config.chart_detail_rect.width, 16.0f},
+                              {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartBpmOffsetY,
+                               config.chart_detail_rect.width, kChartBpmHeight},
                               with_alpha(t.text_muted, config.alpha), ui::text_align::left);
         draw_marquee_text(chart->meta.chart_author.c_str(),
-                          {config.chart_detail_rect.x, config.chart_detail_rect.y + 76.0f,
-                           config.chart_detail_rect.width, 14.0f},
+                          {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartAuthorOffsetY,
+                           config.chart_detail_rect.width, kChartAuthorHeight},
                           14, with_alpha(t.text_muted, config.alpha), config.now);
     }
 
@@ -185,8 +217,8 @@ void draw(const song_select::state& state,
     for (int i = 0; i < static_cast<int>(filtered.size()); ++i) {
         const song_select::chart_option& item = *filtered[static_cast<size_t>(i)];
         const Rectangle row = chart_button_rect(config.chart_buttons_rect, i, state.chart_scroll_y);
-        if (row.y + row.height < config.chart_buttons_rect.y - 4.0f ||
-            row.y > config.chart_buttons_rect.y + config.chart_buttons_rect.height + 4.0f) {
+        if (row.y + row.height < config.chart_buttons_rect.y - kClipSlack ||
+            row.y > config.chart_buttons_rect.y + config.chart_buttons_rect.height + kClipSlack) {
             continue;
         }
 
@@ -195,22 +227,26 @@ void draw(const song_select::state& state,
         const unsigned char row_alpha = selected ? config.selected_row_alpha
             : hovered ? config.hover_row_alpha
                       : config.normal_row_alpha;
-        DrawRectangleRec(row, with_alpha(selected ? config.button_selected : config.button_base, row_alpha));
-        DrawRectangleLinesEx(
-            row, 1.0f,
+        ui::draw_rect_f(row, with_alpha(selected ? config.button_selected : config.button_base, row_alpha));
+        ui::draw_rect_lines(
+            row, kChartRowBorderWidth,
             with_alpha(t.border_light, static_cast<unsigned char>(130.0f * config.play_t)));
         ui::draw_text_in_rect(item.meta.difficulty.c_str(), 16,
-                              {row.x + 12.0f, row.y + 9.0f, row.width - 56.0f, 16.0f},
+                              {row.x + kChartTextPaddingX, row.y + kChartTitleOffsetY,
+                               row.width - kChartRightReserved, kChartTitleHeight},
                               with_alpha(t.text, config.alpha), ui::text_align::left);
         ui::draw_text_in_rect(TextFormat("Lv.%.1f", item.meta.level), 13,
-                              {row.x + 12.0f, row.y + 28.0f, row.width - 56.0f, 14.0f},
+                              {row.x + kChartTextPaddingX, row.y + kChartLevelOffsetY,
+                               row.width - kChartRightReserved, kChartLevelHeight},
                               with_alpha(t.text_muted, config.alpha), ui::text_align::left);
         ui::draw_text_in_rect(key_mode_label(item.meta.key_count).c_str(), 13,
-                              {row.x + row.width - 34.0f, row.y + 10.0f, 22.0f, 14.0f},
+                              {row.x + row.width - kChartBadgeRightInset, row.y + kChartBadgeOffsetY,
+                               kChartBadgeWidth, kChartBadgeHeight},
                               with_alpha(key_mode_color(item.meta.key_count), config.alpha), ui::text_align::right);
         if (item.best_local_rank.has_value()) {
             ui::draw_text_in_rect(rank_label(*item.best_local_rank), 12,
-                                  {row.x + row.width - 34.0f, row.y + 28.0f, 22.0f, 12.0f},
+                                  {row.x + row.width - kChartBadgeRightInset, row.y + kChartRankOffsetY,
+                                   kChartBadgeWidth, kChartRankHeight},
                                   with_alpha(rank_color(*item.best_local_rank), config.alpha), ui::text_align::right);
         }
     }

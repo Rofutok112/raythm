@@ -191,8 +191,8 @@ void draw_ranking_row(const ranking_service::entry& entry, float y, float offset
     const Rectangle recorded_at_rect = {content.x + 350.0f, content.y + 20.0f, 92.0f, 16.0f};
     const Rectangle score_rect = {content.x + 446.0f, content.y, content.width - 446.0f, content.height};
 
-    DrawRectangleRec(rank_rect, with_alpha(theme.section, alpha));
-    DrawRectangleLinesEx(rank_rect, 1.5f, with_alpha(theme.border_light, alpha));
+    ui::draw_rect_f(rank_rect, with_alpha(theme.section, alpha));
+    ui::draw_rect_lines(rank_rect, 1.5f, with_alpha(theme.border_light, alpha));
 
     ui::draw_text_in_rect(TextFormat("%02d", entry.placement), 18, placement_rect, with_alpha(theme.text, alpha), ui::text_align::center);
     ui::draw_text_in_rect(rank_label(entry.clear_rank()), 17, rank_rect, with_alpha(rank_color(entry.clear_rank()), alpha), ui::text_align::center);

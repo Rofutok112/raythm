@@ -122,7 +122,7 @@ void draw_song_details(const state& state, const preview_controller& preview_con
     } else {
         ui::draw_text_in_rect("JACKET", 30, layout::kJacketRect, with_alpha(theme.text_muted, content_alpha));
     }
-    DrawRectangleLinesEx(layout::kJacketRect, 2.0f, theme.border_image);
+    ui::draw_rect_lines(layout::kJacketRect, 2.0f, theme.border_image);
 
     const float detail_x = layout::kDetailColumnX;
     const float detail_max_width = layout::kDetailColumnWidth;
@@ -153,8 +153,8 @@ void draw_song_details(const state& state, const preview_controller& preview_con
                 64.0f,
                 28.0f
             };
-            DrawRectangleRec(rank_rect, with_alpha(theme.section, chart_alpha));
-            DrawRectangleLinesEx(rank_rect, 1.5f, with_alpha(theme.border_light, chart_alpha));
+            ui::draw_rect_f(rank_rect, with_alpha(theme.section, chart_alpha));
+            ui::draw_rect_lines(rank_rect, 1.5f, with_alpha(theme.border_light, chart_alpha));
             ui::draw_text_in_rect(rank_label(*selected_chart->best_local_rank), 18, rank_rect,
                                   with_alpha(rank_color(*selected_chart->best_local_rank), chart_alpha), ui::text_align::center);
         }

@@ -11,6 +11,11 @@
 
 namespace ui {
 
+inline constexpr float kTextInputBaselineNudge = 2.25f;
+inline constexpr float kTextInputSelectionInsetY = 7.5f;
+inline constexpr float kTextInputSelectionInsetTotalY = 15.0f;
+inline constexpr float kTextInputCursorWidth = 2.25f;
+
 using text_input_filter = bool (*)(int codepoint, const std::string& current_value);
 
 struct text_input_state {
@@ -464,8 +469,8 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
 
     update_text_input_scroll(state, text_rect.width, font_size);
 
-    DrawRectangleRec(input_rect, state.active ? with_alpha(g_theme->panel, 255) : with_alpha(g_theme->section, 255));
-    DrawRectangleLinesEx(input_rect, 1.5f, state.active ? g_theme->border_active : g_theme->border_light);
+    draw_rect_f(input_rect, state.active ? with_alpha(g_theme->panel, 255) : with_alpha(g_theme->section, 255));
+    draw_rect_lines(input_rect, 1.5f, state.active ? g_theme->border_active : g_theme->border_light);
     draw_text_in_rect(label, font_size, label_rect,
                       state.active ? g_theme->text : g_theme->text_secondary, text_align::left);
 
@@ -475,14 +480,15 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
     }
 
     const Color text_color = state.value.empty() && !state.active ? g_theme->text_hint : g_theme->text;
-    const float text_y = text_rect.y + (text_rect.height - static_cast<float>(font_size)) * 0.5f + 1.5f;
+    const float layout_font_size = text_layout_font_size(static_cast<float>(font_size));
+    const float text_y = text_rect.y + (text_rect.height - layout_font_size) * 0.5f + kTextInputBaselineNudge;
 
     if (!state.active && !state.value.empty()) {
         draw_marquee_text(display_value.c_str(), text_rect.x, text_y, font_size, text_color,
                           text_rect.width, GetTime());
     } else if (!state.active) {
         draw_text_in_rect(display_value.c_str(), font_size,
-                          {text_rect.x, text_rect.y + 1.5f, text_rect.width, text_rect.height},
+                          {text_rect.x, text_rect.y + kTextInputBaselineNudge, text_rect.width, text_rect.height},
                           text_color, text_align::left);
     } else {
         begin_scissor_rect(input_rect);
@@ -495,8 +501,8 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
             const float selection_end_x = text_rect.x +
                                           text_input_prefix_width(state.value, selection_end, font_size) -
                                           state.scroll_x;
-            draw_rect_span({selection_x, input_rect.y + 5.0f,
-                            selection_end_x - selection_x, input_rect.height - 10.0f},
+            draw_rect_span({selection_x, input_rect.y + kTextInputSelectionInsetY,
+                            selection_end_x - selection_x, input_rect.height - kTextInputSelectionInsetTotalY},
                            with_alpha(g_theme->row_selected, 255));
         }
 
@@ -507,7 +513,8 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
             const float cursor_x = text_rect.x +
                                    text_input_prefix_width(state.value, state.cursor, font_size) -
                                    state.scroll_x;
-            draw_rect_span({cursor_x, input_rect.y + 5.0f, 1.5f, input_rect.height - 10.0f},
+            draw_rect_span({cursor_x, input_rect.y + kTextInputSelectionInsetY, kTextInputCursorWidth,
+                            input_rect.height - kTextInputSelectionInsetTotalY},
                            g_theme->text);
         }
 

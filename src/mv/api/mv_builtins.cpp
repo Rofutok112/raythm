@@ -358,8 +358,8 @@ beat_grid_node extract_beat_grid(const std::shared_ptr<mv_object>& obj) {
     beat_grid_node n;
     n.x = static_cast<float>(as_number(obj->get_attr("x")));
     n.y = static_cast<float>(as_number(obj->get_attr("y")));
-    n.w = static_cast<float>(as_number(obj->get_attr("w"), 1280));
-    n.h = static_cast<float>(as_number(obj->get_attr("h"), 720));
+    n.w = static_cast<float>(as_number(obj->get_attr("w"), 1920));
+    n.h = static_cast<float>(as_number(obj->get_attr("h"), 1080));
     n.thickness = static_cast<float>(as_number(obj->get_attr("thickness"), 1));
     n.beat_phase = static_cast<float>(as_number(obj->get_attr("beat_phase")));
     n.opacity = static_cast<float>(as_number(obj->get_attr("opacity"), 1.0));
@@ -380,8 +380,8 @@ beat_grid_node extract_beat_grid(const std::shared_ptr<mv_object>& obj) {
 
 pulse_ring_node extract_pulse_ring(const std::shared_ptr<mv_object>& obj) {
     pulse_ring_node n;
-    n.cx = static_cast<float>(as_number(obj->get_attr("cx"), 640));
-    n.cy = static_cast<float>(as_number(obj->get_attr("cy"), 360));
+    n.cx = static_cast<float>(as_number(obj->get_attr("cx"), 960));
+    n.cy = static_cast<float>(as_number(obj->get_attr("cy"), 540));
     n.radius = static_cast<float>(as_number(obj->get_attr("radius"), 100));
     n.thickness = static_cast<float>(as_number(obj->get_attr("thickness"), 3));
     n.beat_phase = static_cast<float>(as_number(obj->get_attr("beat_phase")));
