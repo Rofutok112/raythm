@@ -30,7 +30,6 @@ constexpr float kButtonGap = 12.0f;
 constexpr float kPrimaryButtonWidth = 192.0f;
 constexpr float kScreenEdgeMargin = 18.0f;
 constexpr float kOpenAnimOffsetY = 27.0f;
-constexpr float kFooterMarginBottom = 27.0f;
 constexpr float kSignedInLineHeight = 33.0f;
 constexpr float kDisplayNameOffsetY = 42.0f;
 constexpr float kDisplayNameHeight = 30.0f;
@@ -94,6 +93,10 @@ Rectangle make_row(const Rectangle& dialog_rect, int index) {
 
 bool printable_filter(int codepoint, const std::string&) {
     return codepoint >= 32 && codepoint != 127;
+}
+
+float centered_footer_button_y(const Rectangle& dialog_rect, float content_bottom) {
+    return content_bottom + (dialog_rect.y + dialog_rect.height - content_bottom - kButtonHeight) * 0.5f;
 }
 
 void deactivate_input(ui::text_input_state& input) {
@@ -209,7 +212,6 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
     const Rectangle dialog_rect = dialog_rect_for(auth_state, dialog_state, anchor_rect, screen_rect);
     const float form_x = dialog_rect.x + kDialogPaddingX;
     const float form_width = dialog_rect.width - kDialogPaddingX * 2.0f;
-    const float footer_y = dialog_rect.y + dialog_rect.height - kFooterMarginBottom - kButtonHeight;
 
     ui::draw_panel(dialog_rect);
     ui::draw_text_in_rect("Account", 24,
@@ -232,7 +234,10 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
         const Rectangle verify_rect = {
             form_x, dialog_rect.y + kBodyTop + kVerifyOffsetY, form_width, kVerifyLineHeight
         };
-        const Rectangle button_row = {form_x, footer_y, form_width, kButtonHeight};
+        const Rectangle button_row = {
+            form_x, centered_footer_button_y(dialog_rect, verify_rect.y + verify_rect.height),
+            form_width, kButtonHeight
+        };
         const Rectangle logout_rect = {
             button_row.x + button_row.width - kAccountButtonWidth, button_row.y, kAccountButtonWidth, kButtonHeight
         };
@@ -272,7 +277,10 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
         const Rectangle title_rect = {form_x, dialog_rect.y + kBodyTop, form_width, 30.0f};
         const Rectangle email_rect = {form_x, title_rect.y + 34.0f, form_width, 24.0f};
         const Rectangle code_rect = {form_x, email_rect.y + 42.0f, form_width, kRowHeight};
-        const Rectangle button_row = {form_x, footer_y, form_width, kButtonHeight};
+        const Rectangle button_row = {
+            form_x, centered_footer_button_y(dialog_rect, code_rect.y + code_rect.height),
+            form_width, kButtonHeight
+        };
         const Rectangle verify_rect = {
             button_row.x + button_row.width - kVerifyButtonWidth,
             button_row.y,
@@ -351,7 +359,11 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
                              IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT) ? -1 : 1);
     }
 
-    const Rectangle login_button_row = {form_x, footer_y, form_width, kButtonHeight};
+    const Rectangle last_input_rect = make_row(dialog_rect, row - 1);
+    const Rectangle login_button_row = {
+        form_x, centered_footer_button_y(dialog_rect, last_input_rect.y + last_input_rect.height),
+        form_width, kButtonHeight
+    };
     const Rectangle primary_rect = ui::place(login_button_row, kPrimaryButtonWidth, kButtonHeight,
                                              ui::anchor::center, ui::anchor::center);
 
