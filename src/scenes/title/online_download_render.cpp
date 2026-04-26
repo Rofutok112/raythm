@@ -35,15 +35,6 @@ int selected_song_display_index(const state& state) {
     return static_cast<int>(it - indices.begin());
 }
 
-bool has_update(const song_entry_state& song) {
-    if (song.update_available) {
-        return true;
-    }
-    return std::any_of(song.charts.begin(), song.charts.end(), [](const chart_entry_state& chart) {
-        return chart.update_available;
-    });
-}
-
 ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_state& state,
                                              const char* label, const char* placeholder,
                                              int font_size, size_t max_length,
@@ -581,10 +572,8 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
 
     draw_transport_toggle_button(current.preview_play_rect, audio.is_preview_playing(), detail_alpha);
 
-    const bool download_ready = song->charts_loaded || (song->installed && !song->update_available);
     const char* primary_label = state.download_in_progress ? "DOWNLOADING..."
-        : (!download_ready ? "LOADING CHARTS..."
-                           : (needs_download(*song) ? (has_update(*song) ? "UPDATE" : "DOWNLOAD SONG") : "OPEN LOCAL"));
+        : (needs_download(*song) ? (song->update_available ? "UPDATE SONG" : "DOWNLOAD SONG") : "OPEN LOCAL");
     if (state.download_in_progress && state.download_progress) {
         const int total_steps = std::max(1, state.download_progress->total_steps.load());
         const int completed_steps = std::clamp(state.download_progress->completed_steps.load(), 0, total_steps);
@@ -615,11 +604,9 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                               with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
     }
     ui::draw_button_colored(current.primary_action_rect, primary_label, 15,
-                            with_alpha(download_ready ? button_selected : button_base,
-                                       download_ready ? selected_row_alpha : normal_row_alpha),
-                            with_alpha(download_ready ? button_selected : button_hover,
-                                       download_ready ? hover_row_alpha : hover_row_alpha),
-                            with_alpha(download_ready ? t.text : t.text_secondary, detail_alpha), 1.5f);
+                            with_alpha(button_selected, selected_row_alpha),
+                            with_alpha(button_selected, hover_row_alpha),
+                            with_alpha(t.text, detail_alpha), 1.5f);
 
     ui::draw_text_in_rect(TextFormat("%d items", static_cast<int>(song->charts.size())), 14,
                           {current.chart_list_rect.x + current.chart_list_rect.width * 0.46f, current.chart_list_rect.y - 26.0f,

@@ -296,7 +296,7 @@ std::string chart_status_label(const chart_entry_state& chart) {
 }
 
 bool can_download_chart(const song_entry_state& song, const chart_entry_state& chart) {
-    return song.installed && !song.update_available && (!chart.installed || chart.update_available);
+    return song.installed && (!chart.installed || chart.update_available);
 }
 
 const char* catalog_caption(const state& state, const std::vector<song_entry_state>& songs) {

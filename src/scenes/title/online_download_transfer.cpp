@@ -17,18 +17,12 @@
 #include "app_paths.h"
 #include "network/json_helpers.h"
 #include "path_utils.h"
-#include "song_loader.h"
 #include "title/online_download_remote_client.h"
 #include "ui_notice.h"
 
 namespace title_online_view {
 namespace {
 namespace json = network::json;
-
-struct staged_chart_file {
-    std::string chart_id;
-    std::vector<unsigned char> bytes;
-};
 
 std::string trim_ascii(std::string_view value) {
     size_t start = 0;
@@ -67,41 +61,6 @@ bool write_binary_file(const std::filesystem::path& path,
     return true;
 }
 
-void remove_existing_local_charts_for_song(const std::string& song_id) {
-    if (song_id.empty()) {
-        return;
-    }
-
-    const std::filesystem::path charts_root = app_paths::charts_root();
-    if (!std::filesystem::exists(charts_root) || !std::filesystem::is_directory(charts_root)) {
-        return;
-    }
-
-    std::error_code ec;
-    for (const auto& entry : std::filesystem::directory_iterator(charts_root, ec)) {
-        if (ec) {
-            return;
-        }
-        if (!entry.is_regular_file() || entry.path().extension() != ".rchart") {
-            continue;
-        }
-
-        const chart_parse_result parse_result = song_loader::load_chart(path_utils::to_utf8(entry.path()));
-        if (!parse_result.success || !parse_result.data.has_value()) {
-            continue;
-        }
-
-        if (parse_result.data->meta.song_id != song_id) {
-            continue;
-        }
-
-        std::filesystem::remove(entry.path(), ec);
-        if (ec) {
-            return;
-        }
-    }
-}
-
 void mark_song_downloaded(std::vector<song_entry_state>& songs, const std::string& song_id) {
     for (song_entry_state& song : songs) {
         if (song.song.song.meta.song_id != song_id) {
@@ -113,10 +72,6 @@ void mark_song_downloaded(std::vector<song_entry_state>& songs, const std::strin
         song.charts_loaded = true;
         song.charts_loading = false;
         song.charts_has_more = false;
-        for (chart_entry_state& chart : song.charts) {
-            chart.installed = true;
-            chart.update_available = false;
-        }
     }
 }
 
@@ -200,8 +155,7 @@ download_song_result download_song_package(const song_entry_state song,
         return result;
     }
 
-    const int total_steps =
-        2 + (jacket_file.empty() ? 0 : 1) + static_cast<int>(song.charts.size());
+    const int total_steps = 2 + (jacket_file.empty() ? 0 : 1);
     if (progress) {
         progress->total_steps.store(total_steps);
         progress->completed_steps.store(1);
@@ -231,31 +185,6 @@ download_song_result download_song_package(const song_entry_state song,
         finish_step();
     }
 
-    std::vector<staged_chart_file> staged_charts;
-    staged_charts.reserve(song.charts.size());
-    for (const chart_entry_state& chart_entry : song.charts) {
-        if (chart_entry.chart.meta.chart_id.empty()) {
-            result.message = "A remote chart is missing chart_id.";
-            return result;
-        }
-
-        const std::string chart_url = make_absolute_remote_url(
-            server_url, "/charts/" + chart_entry.chart.meta.chart_id + "/file");
-        const remote_binary_fetch_result chart_fetch = begin_step(chart_url);
-        if (!chart_fetch.success || chart_fetch.bytes.empty()) {
-            result.message = chart_fetch.error_message.empty()
-                ? "Failed to download a chart file."
-                : chart_fetch.error_message;
-            return result;
-        }
-        finish_step();
-
-        staged_chart_file staged_chart;
-        staged_chart.chart_id = chart_entry.chart.meta.chart_id;
-        staged_chart.bytes = chart_fetch.bytes;
-        staged_charts.push_back(std::move(staged_chart));
-    }
-
     app_paths::ensure_directories();
     const std::filesystem::path song_dir = app_paths::song_dir(result.song_id);
     const std::filesystem::path song_json_path = song_dir / "song.json";
@@ -267,8 +196,6 @@ download_song_result download_song_package(const song_entry_state song,
     std::filesystem::remove_all(song_dir, ec);
     ec.clear();
 
-    remove_existing_local_charts_for_song(result.song_id);
-
     if (!write_binary_file(song_json_path, metadata_fetch.bytes, error_message) ||
         !write_binary_file(audio_path, audio_fetch.bytes, error_message)) {
         result.message = error_message;
@@ -278,13 +205,6 @@ download_song_result download_song_package(const song_entry_state song,
     if (!jacket_file.empty() && !write_binary_file(jacket_path, jacket_bytes, error_message)) {
         result.message = error_message;
         return result;
-    }
-
-    for (const staged_chart_file& chart : staged_charts) {
-        if (!write_binary_file(app_paths::chart_path(chart.chart_id), chart.bytes, error_message)) {
-            result.message = error_message;
-            return result;
-        }
     }
 
     result.success = true;
@@ -354,13 +274,7 @@ download_song_result download_chart_file(const song_entry_state song,
 }  // namespace
 
 bool needs_download(const song_entry_state& song) {
-    if (!song.installed || song.update_available) {
-        return true;
-    }
-
-    return std::any_of(song.charts.begin(), song.charts.end(), [](const chart_entry_state& chart) {
-        return !chart.installed || chart.update_available;
-    });
+    return !song.installed || song.update_available;
 }
 
 void start_download(state& state) {
@@ -369,7 +283,7 @@ void start_download(state& state) {
     }
 
     const song_entry_state* song = selected_song(state);
-    if (song == nullptr || !needs_download(*song) || !song->charts_loaded) {
+    if (song == nullptr || !needs_download(*song)) {
         return;
     }
 
@@ -402,10 +316,6 @@ void start_chart_download(state& state) {
     }
     if (!song->installed) {
         ui::notify("Download the song first.", ui::notice_tone::error, 2.6f);
-        return;
-    }
-    if (song->update_available) {
-        ui::notify("Update the song first.", ui::notice_tone::error, 2.6f);
         return;
     }
     if (chart->installed && !chart->update_available) {

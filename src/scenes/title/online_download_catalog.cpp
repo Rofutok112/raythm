@@ -103,7 +103,7 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
         state_entry.charts.push_back({
             chart,
             true,
-            state_entry.update_available,
+            false,
         });
     }
     return state_entry;
@@ -163,7 +163,7 @@ void append_chart_page(song_entry_state& song_state,
                 0.0f,
             },
             local_chart_installed,
-            song_state.update_available,
+            false,
         });
     }
 
