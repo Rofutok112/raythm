@@ -230,6 +230,14 @@ std::string parse_error_message(const std::string& body, std::string fallback) {
     return message.value_or(std::move(fallback));
 }
 
+std::string migrate_legacy_server_url(const std::string& server_url) {
+    const std::string normalized = auth::normalize_server_url(server_url);
+    if (normalized == auth::normalize_server_url(auth::kLegacyLanServerUrl)) {
+        return auth::normalize_server_url(auth::kDefaultServerUrl);
+    }
+    return normalized;
+}
+
 bool write_session_file(const auth::session& session_data) {
     app_paths::ensure_directories();
     std::ofstream output(app_paths::auth_session_path(), std::ios::binary | std::ios::trunc);
@@ -238,7 +246,7 @@ bool write_session_file(const auth::session& session_data) {
     }
 
     output << "{\n";
-    output << "  \"serverUrl\": \"" << json::escape_string(session_data.server_url) << "\",\n";
+    output << "  \"serverUrl\": \"" << json::escape_string(migrate_legacy_server_url(session_data.server_url)) << "\",\n";
     output << "  \"accessToken\": \"" << json::escape_string(session_data.access_token) << "\",\n";
     output << "  \"refreshToken\": \"" << json::escape_string(session_data.refresh_token) << "\",\n";
     output << "  \"user\": {\n";
@@ -264,7 +272,7 @@ std::optional<std::string> read_trusted_device_token(const std::string& server_u
         return std::nullopt;
     }
 
-    if (auth::normalize_server_url(*stored_server_url) != auth::normalize_server_url(server_url) ||
+    if (migrate_legacy_server_url(*stored_server_url) != migrate_legacy_server_url(server_url) ||
         json::trim(*stored_email) != json::trim(email)) {
         return std::nullopt;
     }
@@ -284,7 +292,7 @@ bool write_trusted_device_token(const std::string& server_url, const std::string
     }
 
     output << "{\n";
-    output << "  \"serverUrl\": \"" << json::escape_string(auth::normalize_server_url(server_url)) << "\",\n";
+    output << "  \"serverUrl\": \"" << json::escape_string(migrate_legacy_server_url(server_url)) << "\",\n";
     output << "  \"email\": \"" << json::escape_string(json::trim(email)) << "\",\n";
     output << "  \"trustedDeviceToken\": \"" << json::escape_string(token) << "\"\n";
     output << "}\n";
@@ -584,12 +592,16 @@ std::optional<session> load_saved_session() {
         return std::nullopt;
     }
 
-    return session{
-        .server_url = normalize_server_url(*server_url),
+    session loaded{
+        .server_url = migrate_legacy_server_url(*server_url),
         .access_token = *access_token,
         .refresh_token = *refresh_token,
         .user = *user,
     };
+    if (loaded.server_url != normalize_server_url(*server_url)) {
+        write_session_file(loaded);
+    }
+    return loaded;
 }
 
 session_summary load_session_summary() {
