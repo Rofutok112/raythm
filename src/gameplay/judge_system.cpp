@@ -203,6 +203,13 @@ void judge_system::resolve_auto_misses(double current_ms) {
             state.progress = note_progress_state::completed;
             state.result = judge_result::miss;
             emit_judge(judge_result::miss, offset_ms, state.note_ref.lane, state.head_event_index);
+            if (state.note_ref.type == note_type::hold) {
+                judge_emit_options options;
+                options.play_hitsound = false;
+                options.show_feedback = false;
+                emit_judge(judge_result::miss, current_ms - state.end_target_ms, state.note_ref.lane,
+                           state.tail_event_index, options);
+            }
             ++head_index;
         }
     }
