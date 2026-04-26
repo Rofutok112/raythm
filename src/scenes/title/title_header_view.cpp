@@ -34,6 +34,7 @@ constexpr float kAccountArrowRightInset = 36.0f;
 constexpr float kAccountArrowOffsetY = 18.0f;
 constexpr float kAccountArrowWidth = 18.0f;
 constexpr float kAccountArrowHeight = 36.0f;
+constexpr float kSettingsBorderWidth = 3.0f;
 
 }  // namespace
 
@@ -92,6 +93,16 @@ void draw(const draw_config& config) {
     }
 
     const unsigned char account_alpha = static_cast<unsigned char>(255.0f * std::max(config.menu_t, config.play_t));
+    const bool settings_hovered = ui::is_hovered(config.settings_chip_rect);
+    const bool settings_pressed = ui::is_pressed(config.settings_chip_rect);
+    const Rectangle settings_visual = settings_pressed ? ui::inset(config.settings_chip_rect, 1.5f)
+                                                       : config.settings_chip_rect;
+    const Color settings_bg = settings_hovered ? t.row_hover : t.panel;
+    ui::draw_rect_f(settings_visual, with_alpha(settings_bg, account_alpha));
+    ui::draw_rect_lines(settings_visual, kSettingsBorderWidth, with_alpha(t.border, account_alpha));
+    ui::draw_text_in_rect("SET", 18, settings_visual,
+                          with_alpha(t.text, account_alpha), ui::text_align::center);
+
     ui::draw_rect_f(config.account_chip_rect, with_alpha(t.panel, account_alpha));
     ui::draw_rect_lines(config.account_chip_rect, kAccountBorderWidth, with_alpha(t.border, account_alpha));
     const Rectangle avatar_rect = {config.account_chip_rect.x + kAvatarOffsetX,

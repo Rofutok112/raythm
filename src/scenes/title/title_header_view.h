@@ -9,6 +9,7 @@ namespace title_header_view {
 struct draw_config {
     Rectangle closed_header_rect;
     Rectangle open_header_rect;
+    Rectangle settings_chip_rect;
     Rectangle account_chip_rect;
     float menu_t = 0.0f;
     float play_t = 0.0f;
