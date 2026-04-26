@@ -6,6 +6,8 @@
 #include "shared/auth_overlay_controller.h"
 #include "song_select/song_catalog_service.h"
 #include "shared/scene_fade.h"
+#include "settings/settings_layout.h"
+#include "settings/settings_pages.h"
 #include "song_select/song_select_state.h"
 #include "song_select/song_transfer_controller.h"
 #include "title/create_upload_client.h"
@@ -26,6 +28,7 @@ public:
         play,
         online,
         create,
+        settings,
     };
 
     enum class transition_target {
@@ -55,9 +58,12 @@ private:
     void enter_play_mode();
     void enter_online_mode();
     void enter_create_mode();
+    void enter_settings_mode();
+    void close_settings_mode();
     void update_play_mode(float dt);
     void update_online_mode(float dt);
     void update_create_mode(float dt);
+    void update_settings_mode(float dt);
     void update_common_animation(float dt);
     void apply_play_delete_result(const song_select::delete_result& result);
     void apply_play_transfer_result(const song_select::transfer_result& result);
@@ -69,6 +75,7 @@ private:
     void start_song_export();
     void start_chart_export();
     bool handle_account_input();
+    bool handle_settings_button_input();
     bool handle_login_dialog_input();
     void request_play_catalog_reload(std::string preferred_song_id = "",
                                      std::string preferred_chart_id = "",
@@ -90,9 +97,15 @@ private:
     void draw_profile_modal();
     void start_profile_delete_song(std::string song_id);
     void start_profile_delete_chart(std::string chart_id);
-    void update_home_pointer_suppression();
+    bool update_home_pointer_suppression();
+    void update_settings_view_animation(float dt);
     bool handle_title_input(bool left_click_for_home, bool right_click_for_home);
-    bool handle_home_input();
+    bool handle_home_input(bool suppress_pointer_this_frame);
+    void update_current_settings_page();
+    void draw_settings_view() const;
+    void draw_current_settings_page() const;
+    void change_settings_page(settings::page_id next_page);
+    [[nodiscard]] bool current_settings_page_blocks_navigation() const;
     void update_title_quit(float dt);
     [[nodiscard]] title_audio_policy::hub_mode current_audio_mode() const;
 
@@ -113,11 +126,20 @@ private:
     bool start_in_create_view_ = false;
     bool suppress_home_pointer_until_release_ = false;
     hub_mode mode_ = hub_mode::title;
+    hub_mode settings_return_mode_ = hub_mode::home;
     float home_menu_anim_ = 0.0f;
     int home_menu_selected_index_ = 0;
     std::string home_status_message_;
     float play_view_anim_ = 0.0f;
     Rectangle play_entry_origin_rect_{};
+    float settings_view_anim_ = 0.0f;
+    bool settings_view_closing_ = false;
+    settings::page_id current_settings_page_ = settings::page_id::gameplay;
+    settings_runtime_applier settings_runtime_applier_;
+    settings_gameplay_page settings_gameplay_page_;
+    settings_audio_page settings_audio_page_;
+    settings_video_page settings_video_page_;
+    settings_key_config_page settings_key_config_page_;
     song_select::state play_state_;
     std::future<song_select::catalog_data> play_catalog_future_;
     bool play_catalog_loading_ = false;

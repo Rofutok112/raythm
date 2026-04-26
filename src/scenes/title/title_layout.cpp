@@ -18,6 +18,8 @@ constexpr float kSpectrumHeight = 498.0f;
 constexpr float kAccountChipWidth = 396.0f;
 constexpr float kAccountChipHeight = 87.0f;
 constexpr Vector2 kAccountChipOffset = {-42.0f, 30.0f};
+constexpr float kSettingsChipSize = 87.0f;
+constexpr float kSettingsChipGap = 18.0f;
 
 }  // namespace
 
@@ -51,6 +53,16 @@ Rectangle spectrum_rect() {
     return ui::place(screen_rect(), static_cast<float>(kScreenWidth), kSpectrumHeight,
                      ui::anchor::bottom_center, ui::anchor::bottom_center,
                      {0.0f, 0.0f});
+}
+
+Rectangle settings_chip_rect() {
+    const Rectangle account = account_chip_rect();
+    return {
+        account.x - kSettingsChipGap - kSettingsChipSize,
+        account.y,
+        kSettingsChipSize,
+        kSettingsChipSize
+    };
 }
 
 Rectangle account_chip_rect() {

@@ -16,8 +16,10 @@
 
 #include "core/file_dialog.h"
 #include "raylib.h"
+#include "rlgl.h"
 #include "scene_common.h"
 #include "scene_manager.h"
+#include "settings_io.h"
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_import_export_service.h"
 #include "song_select/song_select_last_played.h"
@@ -47,7 +49,55 @@ constexpr const char* kTitleLoopPath = "assets/audio/title_loop.mp3";
 constexpr float kHomeAnimSpeed = 6.5f;
 constexpr float kAccountChipInteractiveThreshold = 0.2f;
 constexpr float kPlayViewAnimSpeed = 6.0f;
+constexpr float kSettingsViewAnimSpeed = 7.5f;
+constexpr float kSettingsViewSlideOffsetY = 36.0f;
+constexpr unsigned char kSettingsPanelAlpha = 205;
+constexpr unsigned char kSettingsSectionAlpha = 190;
+constexpr unsigned char kSettingsRowAlpha = 178;
+constexpr unsigned char kSettingsRowHoverAlpha = 212;
+constexpr unsigned char kSettingsRowSelectedAlpha = 218;
+constexpr unsigned char kSettingsBorderAlpha = 210;
 constexpr ui::draw_layer kTitleModalLayer = ui::draw_layer::modal;
+
+Color fade_alpha(Color color, float fade) {
+    const float alpha = static_cast<float>(color.a) * std::clamp(fade, 0.0f, 1.0f);
+    return with_alpha(color, static_cast<unsigned char>(std::clamp(alpha, 0.0f, 255.0f)));
+}
+
+Color cap_alpha(Color color, unsigned char alpha, float fade) {
+    const float capped = static_cast<float>(alpha) * std::clamp(fade, 0.0f, 1.0f);
+    return with_alpha(color, static_cast<unsigned char>(std::clamp(capped, 0.0f, 255.0f)));
+}
+
+ui_theme make_settings_overlay_theme(const ui_theme& source, float fade) {
+    ui_theme theme = source;
+    theme.panel = cap_alpha(source.panel, kSettingsPanelAlpha, fade);
+    theme.section = cap_alpha(source.section, kSettingsSectionAlpha, fade);
+    theme.row = cap_alpha(source.row, kSettingsRowAlpha, fade);
+    theme.row_hover = cap_alpha(source.row_hover, kSettingsRowHoverAlpha, fade);
+    theme.row_selected = cap_alpha(source.row_selected, kSettingsRowSelectedAlpha, fade);
+    theme.row_selected_hover = cap_alpha(source.row_selected_hover, kSettingsRowSelectedAlpha, fade);
+    theme.row_active = cap_alpha(source.row_active, kSettingsRowSelectedAlpha, fade);
+    theme.row_list_hover = cap_alpha(source.row_list_hover, kSettingsRowHoverAlpha, fade);
+    theme.row_soft = cap_alpha(source.row_soft, source.row_soft_alpha, fade);
+    theme.row_soft_hover = cap_alpha(source.row_soft_hover, source.row_soft_hover_alpha, fade);
+    theme.row_soft_selected = cap_alpha(source.row_soft_selected, source.row_soft_selected_alpha, fade);
+    theme.row_soft_selected_hover = cap_alpha(source.row_soft_selected_hover, source.row_soft_selected_hover_alpha, fade);
+    theme.border = cap_alpha(source.border, kSettingsBorderAlpha, fade);
+    theme.border_light = cap_alpha(source.border_light, kSettingsBorderAlpha, fade);
+    theme.border_active = fade_alpha(source.border_active, fade);
+    theme.text = fade_alpha(source.text, fade);
+    theme.text_secondary = fade_alpha(source.text_secondary, fade);
+    theme.text_muted = fade_alpha(source.text_muted, fade);
+    theme.text_dim = fade_alpha(source.text_dim, fade);
+    theme.text_hint = fade_alpha(source.text_hint, fade);
+    theme.slider_track = cap_alpha(source.slider_track, kSettingsRowAlpha, fade);
+    theme.slider_fill = fade_alpha(source.slider_fill, fade);
+    theme.slider_knob = fade_alpha(source.slider_knob, fade);
+    theme.scrollbar_track = cap_alpha(source.scrollbar_track, kSettingsRowAlpha, fade);
+    theme.scrollbar_thumb = fade_alpha(source.scrollbar_thumb, fade);
+    return theme;
+}
 
 std::string make_avatar_label(const auth::session_summary& summary) {
     const std::string source = summary.logged_in
@@ -97,6 +147,10 @@ const char* account_status_for(const song_select::auth_state& auth_state) {
 
 bool can_upload_content(content_status status) {
     return status == content_status::local;
+}
+
+title_scene::hub_mode content_mode_for_settings(title_scene::hub_mode mode, title_scene::hub_mode return_mode) {
+    return mode == title_scene::hub_mode::settings ? return_mode : mode;
 }
 
 const song_select::song_entry* selected_audio_song(title_scene::hub_mode mode,
@@ -151,7 +205,11 @@ title_scene::title_scene(scene_manager& manager,
     preferred_chart_id_(std::move(preferred_chart_id)),
     recent_result_offset_(std::move(recent_result_offset)),
     start_in_play_view_(start_in_play_view),
-    start_in_create_view_(start_in_create_view) {
+    start_in_create_view_(start_in_create_view),
+    settings_gameplay_page_(g_settings),
+    settings_audio_page_(g_settings, settings_runtime_applier_),
+    settings_video_page_(g_settings, settings_runtime_applier_),
+    settings_key_config_page_(g_settings) {
 }
 
 void title_scene::enter_title_mode() {
@@ -190,6 +248,31 @@ void title_scene::enter_create_mode() {
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
     title_play_session::sync_preview(play_state_, audio_controller_.preview());
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
+}
+
+void title_scene::enter_settings_mode() {
+    settings_return_mode_ = mode_ == hub_mode::settings ? settings_return_mode_ : mode_;
+    mode_ = hub_mode::settings;
+    settings_view_anim_ = 0.0f;
+    settings_view_closing_ = false;
+    home_status_message_.clear();
+    play_state_.login_dialog.open = false;
+    title_profile_view::close(profile_state_);
+    current_settings_page_ = settings::page_id::gameplay;
+    settings_gameplay_page_.reset_interaction();
+    settings_audio_page_.reset_interaction();
+    settings_video_page_.reset_interaction();
+    settings_key_config_page_.reset();
+    audio_controller_.update(current_audio_mode(), song_select::selected_song(play_state_), 0.0f);
+}
+
+void title_scene::close_settings_mode() {
+    if (settings_view_closing_) {
+        return;
+    }
+    save_settings(g_settings);
+    settings_key_config_page_.clear_selection();
+    settings_view_closing_ = true;
 }
 
 void title_scene::request_play_catalog_reload(std::string preferred_song_id,
@@ -915,13 +998,15 @@ void title_scene::update_common_animation(float dt) {
     if (profile_state_.open && !play_state_.auth.logged_in) {
         title_profile_view::close(profile_state_);
     }
+    const hub_mode content_mode = content_mode_for_settings(mode_, settings_return_mode_);
+
     if (title_online_view::poll_download(online_state_)) {
         preferred_song_id_ = title_online_view::selected_song_id(online_state_);
         preferred_chart_id_.clear();
         request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
-                                    mode_ == hub_mode::play || mode_ == hub_mode::create);
+                                    content_mode == hub_mode::play || content_mode == hub_mode::create);
     }
-    if (title_online_view::poll_catalog(online_state_) && mode_ == hub_mode::online) {
+    if (title_online_view::poll_catalog(online_state_) && content_mode == hub_mode::online) {
         audio_controller_.preview().select_song(title_online_view::preview_song(online_state_));
     }
 
@@ -949,20 +1034,27 @@ void title_scene::update_common_animation(float dt) {
         profile_state_.open_anim = 0.0f;
     }
 
-    const float target_anim = mode_ == hub_mode::title ? 0.0f : 1.0f;
+    update_settings_view_animation(dt);
+
+    const float target_anim = content_mode == hub_mode::title ? 0.0f : 1.0f;
     home_menu_anim_ = tween::damp(home_menu_anim_, target_anim, dt, kHomeAnimSpeed, 0.002f);
 
     const float target_play_anim =
-        (mode_ == hub_mode::play || mode_ == hub_mode::online || mode_ == hub_mode::create) ? 1.0f : 0.0f;
+        (content_mode == hub_mode::play || content_mode == hub_mode::online || content_mode == hub_mode::create)
+            ? 1.0f
+            : 0.0f;
     play_view_anim_ = tween::damp(play_view_anim_, target_play_anim, dt, kPlayViewAnimSpeed, 0.002f);
 
-    if (play_view_anim_ > 0.0f && (mode_ == hub_mode::play || mode_ == hub_mode::create)) {
+    if (play_view_anim_ > 0.0f && (content_mode == hub_mode::play || content_mode == hub_mode::create)) {
         song_select::tick_animations(play_state_, dt);
     }
-    audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), dt);
+    audio_controller_.update(current_audio_mode(), selected_audio_song(content_mode, play_state_, online_state_), dt);
 }
 
 bool title_scene::handle_account_input() {
+    if (mode_ == hub_mode::settings) {
+        return false;
+    }
     const Rectangle account_chip_rect = title_layout::account_chip_rect();
     if (home_menu_anim_ < kAccountChipInteractiveThreshold || !ui::is_clicked(account_chip_rect)) {
         return false;
@@ -973,6 +1065,17 @@ bool title_scene::handle_account_input() {
         song_select::open_login_dialog(play_state_.login_dialog, auth::load_session_summary());
         auth_overlay::refresh_auth_state(play_state_.auth);
     }
+    return true;
+}
+
+bool title_scene::handle_settings_button_input() {
+    if (mode_ == hub_mode::settings || home_menu_anim_ < kAccountChipInteractiveThreshold) {
+        return false;
+    }
+    if (!ui::is_clicked(title_layout::settings_chip_rect())) {
+        return false;
+    }
+    enter_settings_mode();
     return true;
 }
 
@@ -987,11 +1090,30 @@ bool title_scene::handle_login_dialog_input() {
     return true;
 }
 
-void title_scene::update_home_pointer_suppression() {
-    if (suppress_home_pointer_until_release_ &&
-        !IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
-        !IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
-        suppress_home_pointer_until_release_ = false;
+bool title_scene::update_home_pointer_suppression() {
+    if (!suppress_home_pointer_until_release_) {
+        return false;
+    }
+
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+        return true;
+    }
+
+    suppress_home_pointer_until_release_ = false;
+    return true;
+}
+
+void title_scene::update_settings_view_animation(float dt) {
+    if (mode_ != hub_mode::settings) {
+        settings_view_anim_ = 0.0f;
+        settings_view_closing_ = false;
+        return;
+    }
+
+    if (settings_view_closing_) {
+        settings_view_anim_ = tween::retreat(settings_view_anim_, dt, kSettingsViewAnimSpeed);
+    } else {
+        settings_view_anim_ = tween::advance(settings_view_anim_, dt, kSettingsViewAnimSpeed);
     }
 }
 
@@ -1006,7 +1128,7 @@ bool title_scene::handle_title_input(bool left_click_for_home, bool right_click_
     return false;
 }
 
-bool title_scene::handle_home_input() {
+bool title_scene::handle_home_input(bool suppress_pointer_this_frame) {
     if (mode_ == hub_mode::title) {
         return false;
     }
@@ -1019,7 +1141,7 @@ bool title_scene::handle_home_input() {
         return true;
     }
 
-    if (!suppress_home_pointer_until_release_) {
+    if (!suppress_pointer_this_frame) {
         for (int index = 0; index < static_cast<int>(title_home_view::entry_count()); ++index) {
             const Rectangle rect = title_home_view::button_rect(index, home_menu_anim_);
             if (ui::is_hovered(rect)) {
@@ -1066,6 +1188,93 @@ bool title_scene::handle_home_input() {
     return false;
 }
 
+void title_scene::update_settings_mode(float dt) {
+    if (settings_view_closing_) {
+        if (settings_view_anim_ <= 0.0f) {
+            const hub_mode return_mode = settings_return_mode_;
+            settings_view_closing_ = false;
+            switch (return_mode) {
+                case hub_mode::title:
+                    enter_title_mode();
+                    break;
+                case hub_mode::play:
+                    enter_play_mode();
+                    break;
+                case hub_mode::online:
+                    enter_online_mode();
+                    break;
+                case hub_mode::create:
+                    enter_create_mode();
+                    break;
+                case hub_mode::home:
+                case hub_mode::settings:
+                    enter_home_mode();
+                    break;
+            }
+        }
+        return;
+    }
+
+    settings_key_config_page_.tick(dt);
+
+    if (settings_view_anim_ < 0.95f) {
+        return;
+    }
+
+    if (current_settings_page_blocks_navigation()) {
+        update_current_settings_page();
+        return;
+    }
+
+    if (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) ||
+        ui::is_clicked(settings::kBackRect, settings::kLayer)) {
+        close_settings_mode();
+        return;
+    }
+
+    Rectangle tabs[settings::kPageCount];
+    settings::build_tab_rects(tabs);
+    for (int i = 0; i < settings::kPageCount; ++i) {
+        if (ui::is_clicked(tabs[i], settings::kLayer)) {
+            change_settings_page(static_cast<settings::page_id>(i));
+            break;
+        }
+    }
+
+    update_current_settings_page();
+}
+
+void title_scene::update_current_settings_page() {
+    switch (current_settings_page_) {
+        case settings::page_id::gameplay:
+            settings_gameplay_page_.update();
+            break;
+        case settings::page_id::audio:
+            settings_audio_page_.update();
+            break;
+        case settings::page_id::video:
+            settings_video_page_.update();
+            break;
+        case settings::page_id::key_config:
+            settings_key_config_page_.update();
+            break;
+    }
+}
+
+void title_scene::change_settings_page(settings::page_id next_page) {
+    settings_gameplay_page_.reset_interaction();
+    settings_audio_page_.reset_interaction();
+    settings_video_page_.reset_interaction();
+    if (current_settings_page_ == settings::page_id::key_config && next_page != settings::page_id::key_config) {
+        settings_key_config_page_.clear_selection();
+    }
+    current_settings_page_ = next_page;
+}
+
+bool title_scene::current_settings_page_blocks_navigation() const {
+    return current_settings_page_ == settings::page_id::key_config && settings_key_config_page_.blocks_navigation();
+}
+
 void title_scene::update_title_quit(float dt) {
     if (mode_ == hub_mode::title && IsKeyDown(KEY_ESCAPE)) {
         esc_hold_t_ += dt;
@@ -1101,11 +1310,13 @@ void title_scene::start_transition(transition_target target) {
 }
 
 title_audio_policy::hub_mode title_scene::current_audio_mode() const {
-    return mode_ == hub_mode::title ? title_audio_policy::hub_mode::title :
-           mode_ == hub_mode::home ? title_audio_policy::hub_mode::home :
-           mode_ == hub_mode::play ? title_audio_policy::hub_mode::play :
-           mode_ == hub_mode::online ? title_audio_policy::hub_mode::online :
-                                     title_audio_policy::hub_mode::create;
+    const hub_mode mode = content_mode_for_settings(mode_, settings_return_mode_);
+    return mode == hub_mode::title ? title_audio_policy::hub_mode::title :
+           mode == hub_mode::home ? title_audio_policy::hub_mode::home :
+           mode == hub_mode::play ? title_audio_policy::hub_mode::play :
+           mode == hub_mode::online ? title_audio_policy::hub_mode::online :
+           mode == hub_mode::create ? title_audio_policy::hub_mode::create :
+                                  title_audio_policy::hub_mode::home;
 }
 
 void title_scene::on_enter() {
@@ -1150,11 +1361,17 @@ void title_scene::on_enter() {
     mode_ = start_in_create_view_ ? hub_mode::create
         : (start_in_play_view_ ? hub_mode::play : (start_with_home_open_ ? hub_mode::home : hub_mode::title));
     suppress_home_pointer_until_release_ = false;
+    settings_return_mode_ = hub_mode::home;
     home_menu_anim_ = mode_ == hub_mode::title ? 0.0f : 1.0f;
     home_menu_selected_index_ = 0;
     home_status_message_.clear();
     play_view_anim_ = (mode_ == hub_mode::play || mode_ == hub_mode::online || mode_ == hub_mode::create) ? 1.0f : 0.0f;
     play_entry_origin_rect_ = {};
+    current_settings_page_ = settings::page_id::gameplay;
+    settings_gameplay_page_.reset_interaction();
+    settings_audio_page_.reset_interaction();
+    settings_video_page_.reset_interaction();
+    settings_key_config_page_.reset();
     play_state_.login_dialog.open = false;
     title_online_view::reload_catalog(online_state_);
     song_select::apply_catalog(play_state_, std::move(startup_catalog), preferred_song_id_, preferred_chart_id_);
@@ -1169,6 +1386,9 @@ void title_scene::on_enter() {
 }
 
 void title_scene::on_exit() {
+    if (mode_ == hub_mode::settings) {
+        save_settings(g_settings);
+    }
     play_state_.login_dialog.open = false;
     title_profile_view::close(profile_state_);
     transfer_controller_.on_exit();
@@ -1231,7 +1451,9 @@ void title_scene::update(float dt) {
         return;
     }
 
-    if (handle_account_input()) {
+    const bool suppress_home_pointer_this_frame = update_home_pointer_suppression();
+
+    if (!suppress_home_pointer_this_frame && handle_account_input()) {
         return;
     }
 
@@ -1239,14 +1461,20 @@ void title_scene::update(float dt) {
         return;
     }
 
-    update_home_pointer_suppression();
+    if (!suppress_home_pointer_this_frame && handle_settings_button_input()) {
+        return;
+    }
 
     const Rectangle account_chip_rect = title_layout::account_chip_rect();
+    const Rectangle settings_chip_rect = title_layout::settings_chip_rect();
     const bool account_hovered =
         home_menu_anim_ >= kAccountChipInteractiveThreshold && ui::is_hovered(account_chip_rect);
+    const bool settings_hovered =
+        home_menu_anim_ >= kAccountChipInteractiveThreshold && ui::is_hovered(settings_chip_rect);
     const bool left_click_for_home =
         IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-        !account_hovered;
+        !account_hovered &&
+        !settings_hovered;
     const bool right_click_for_home = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
 
     if (handle_title_input(left_click_for_home, right_click_for_home)) {
@@ -1265,12 +1493,77 @@ void title_scene::update(float dt) {
         update_create_mode(dt);
         return;
     }
+    if (mode_ == hub_mode::settings) {
+        update_settings_mode(dt);
+        return;
+    }
 
-    if (handle_home_input()) {
+    if (handle_home_input(suppress_home_pointer_this_frame)) {
         return;
     }
 
     update_title_quit(dt);
+}
+
+void title_scene::draw_settings_view() const {
+    const float eased = tween::ease_out_cubic(settings_view_anim_);
+    const float slide_y = (1.0f - eased) * kSettingsViewSlideOffsetY;
+    const ui_theme* previous_theme = g_theme;
+    ui_theme overlay_theme = make_settings_overlay_theme(*previous_theme, eased);
+    g_theme = &overlay_theme;
+    const auto& t = *g_theme;
+
+    rlPushMatrix();
+    rlTranslatef(0.0f, slide_y, 0.0f);
+
+    ui::draw_panel(settings::kSidebarRect);
+    ui::draw_panel(settings::kContentRect);
+
+    ui::draw_header_block(settings::kSidebarHeaderRect, "SETTINGS", "Saved on back");
+
+    Rectangle tabs[settings::kPageCount];
+    settings::build_tab_rects(tabs);
+    for (int i = 0; i < settings::kPageCount; ++i) {
+        const settings::page_descriptor& descriptor =
+            settings::page_descriptor_for(static_cast<settings::page_id>(i));
+        if (static_cast<int>(current_settings_page_) == i) {
+            ui::draw_button_colored(tabs[i], descriptor.navigation_label, 22,
+                                    t.row_selected, t.row_active, t.text);
+        } else {
+            ui::draw_button_colored(tabs[i], descriptor.navigation_label, 22,
+                                    t.row, t.row_hover, t.text_secondary);
+        }
+    }
+
+    draw_marquee_text("ESC or right click goes back", settings::kSidebarHintRect.x,
+                      settings::kSidebarHintRect.y, 20, t.text_muted,
+                      settings::kSidebarHintRect.width, GetTime());
+    ui::draw_button(settings::kBackRect, "BACK", 22);
+
+    const settings::page_descriptor& descriptor = settings::page_descriptor_for(current_settings_page_);
+    ui::draw_header_block(settings::kContentHeaderRect, descriptor.title, descriptor.subtitle);
+
+    draw_current_settings_page();
+
+    rlPopMatrix();
+    g_theme = previous_theme;
+}
+
+void title_scene::draw_current_settings_page() const {
+    switch (current_settings_page_) {
+        case settings::page_id::gameplay:
+            settings_gameplay_page_.draw();
+            break;
+        case settings::page_id::audio:
+            settings_audio_page_.draw();
+            break;
+        case settings::page_id::video:
+            settings_video_page_.draw();
+            break;
+        case settings::page_id::key_config:
+            settings_key_config_page_.draw();
+            break;
+    }
 }
 
 // タイトルと、そこから展開する Home 導線を描画する。
@@ -1280,6 +1573,7 @@ void title_scene::draw() {
     const float play_t = tween::ease_out_cubic(play_view_anim_);
     const Rectangle screen_rect = title_layout::screen_rect();
     const Rectangle spectrum_rect = title_layout::spectrum_rect();
+    const Rectangle settings_chip_rect = title_layout::settings_chip_rect();
     const Rectangle account_chip_rect = title_layout::account_chip_rect();
     virtual_screen::begin_ui();
     ClearBackground(t.bg);
@@ -1287,28 +1581,32 @@ void title_scene::draw() {
     ui::begin_draw_queue();
     const float spectrum_alpha = tween::lerp(1.0f, 0.5f, play_t);
     audio_controller_.draw_spectrum(spectrum_rect, spectrum_alpha);
-    title_header_view::draw({
-        .closed_header_rect = title_layout::closed_header_rect(),
-        .open_header_rect = title_layout::open_header_rect(),
-        .account_chip_rect = account_chip_rect,
-        .menu_t = menu_t,
-        .play_t = play_t,
-        .account_name = account_name_for(play_state_.auth),
-        .account_status = account_status_for(play_state_.auth),
-        .avatar_label = make_avatar_label(play_state_.auth),
-        .logged_in = play_state_.auth.logged_in,
-        .email_verified = play_state_.auth.email_verified,
-        .now = GetTime(),
-    });
+    if (mode_ != hub_mode::settings) {
+        title_header_view::draw({
+            .closed_header_rect = title_layout::closed_header_rect(),
+            .open_header_rect = title_layout::open_header_rect(),
+            .settings_chip_rect = settings_chip_rect,
+            .account_chip_rect = account_chip_rect,
+            .menu_t = menu_t,
+            .play_t = play_t,
+            .account_name = account_name_for(play_state_.auth),
+            .account_status = account_status_for(play_state_.auth),
+            .avatar_label = make_avatar_label(play_state_.auth),
+            .logged_in = play_state_.auth.logged_in,
+            .email_verified = play_state_.auth.email_verified,
+            .now = GetTime(),
+        });
 
-    title_home_view::draw(home_menu_anim_, play_view_anim_, home_menu_selected_index_, home_status_message_);
+        title_home_view::draw(home_menu_anim_, play_view_anim_, home_menu_selected_index_, home_status_message_);
+    }
 
-    if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
+    if (mode_ == hub_mode::settings) {
+        draw_settings_view();
+    } else if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
         title_play_view::draw(play_state_, audio_controller_.preview(),
                               mode_ == hub_mode::create ? title_play_view::mode::create : title_play_view::mode::play,
                               play_view_anim_, play_entry_origin_rect_);
-    }
-    if (mode_ == hub_mode::online) {
+    } else if (mode_ == hub_mode::online) {
         title_online_view::draw(online_state_, play_view_anim_, play_entry_origin_rect_);
     }
 
