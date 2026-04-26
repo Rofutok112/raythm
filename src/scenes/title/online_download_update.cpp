@@ -84,6 +84,30 @@ bool handle_chart_click(state& state,
         return false;
     }
 
+    const song_entry_state* song = selected_song(state);
+    if (song == nullptr || !CheckCollisionPointRec(mouse, chart_list_rect)) {
+        return false;
+    }
+
+    if (!state.download_in_progress) {
+        for (int index = 0; index < static_cast<int>(song->charts.size()); ++index) {
+            const chart_entry_state& chart = song->charts[static_cast<size_t>(index)];
+            const Rectangle card = detail::chart_row_rect(chart_list_rect, index, state.chart_scroll_y);
+            if (!detail::can_download_chart(*song, chart) ||
+                !CheckCollisionPointRec(mouse, detail::chart_download_icon_rect(card))) {
+                continue;
+            }
+
+            int& selected_chart_index = detail::selected_chart_index_ref(state);
+            if (selected_chart_index != index) {
+                selected_chart_index = index;
+                result.chart_selection_changed = true;
+            }
+            result.action = requested_action::download_chart;
+            return true;
+        }
+    }
+
     const int clicked_chart = detail::hit_test_chart_list(state, chart_list_rect, mouse);
     if (clicked_chart < 0) {
         return false;

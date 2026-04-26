@@ -25,6 +25,7 @@ enum class requested_action {
     none,
     primary,
     open_local,
+    download_chart,
     restart_preview,
     stop_preview,
 };
@@ -63,6 +64,8 @@ struct download_song_result {
     bool success = false;
     std::string message;
     std::string song_id;
+    std::string chart_id;
+    bool chart_only = false;
 };
 
 struct download_progress_state {
@@ -180,6 +183,7 @@ bool poll_owned(state& state);
 void request_next_song_page(state& state, catalog_mode mode);
 void request_charts_for_selected_song(state& state);
 void start_download(state& state);
+void start_chart_download(state& state);
 bool poll_download(state& state);
 void mark_song_removed(state& state, const std::string& song_id);
 void on_enter(state& state, song_select::preview_controller& preview_controller);

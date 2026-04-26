@@ -120,6 +120,24 @@ void mark_song_downloaded(std::vector<song_entry_state>& songs, const std::strin
     }
 }
 
+void mark_chart_downloaded(std::vector<song_entry_state>& songs,
+                           const std::string& song_id,
+                           const std::string& chart_id) {
+    for (song_entry_state& song : songs) {
+        if (song.song.song.meta.song_id != song_id) {
+            continue;
+        }
+
+        song.installed = true;
+        for (chart_entry_state& chart : song.charts) {
+            if (chart.chart.meta.chart_id == chart_id) {
+                chart.installed = true;
+                chart.update_available = false;
+            }
+        }
+    }
+}
+
 void mark_song_not_installed(std::vector<song_entry_state>& songs, const std::string& song_id) {
     for (song_entry_state& song : songs) {
         if (song.song.song.meta.song_id != song_id) {
@@ -274,6 +292,65 @@ download_song_result download_song_package(const song_entry_state song,
     return result;
 }
 
+download_song_result download_chart_file(const song_entry_state song,
+                                         const chart_entry_state chart,
+                                         const std::string& server_url,
+                                         const std::shared_ptr<download_progress_state>& progress) {
+    download_song_result result;
+    result.song_id = song.song.song.meta.song_id;
+    result.chart_id = chart.chart.meta.chart_id;
+    result.chart_only = true;
+
+    if (server_url.empty() || result.song_id.empty() || result.chart_id.empty()) {
+        result.message = "Missing chart download information.";
+        return result;
+    }
+    if (!song.installed) {
+        result.message = "Download the song first.";
+        return result;
+    }
+
+    if (progress) {
+        progress->total_steps.store(1);
+        progress->completed_steps.store(0);
+        progress->current_bytes.store(0);
+        progress->current_total_bytes.store(0);
+    }
+
+    const std::string chart_url =
+        make_absolute_remote_url(server_url, "/charts/" + result.chart_id + "/file");
+    const remote_binary_fetch_result chart_fetch =
+        fetch_remote_binary(chart_url, [progress](size_t bytes_received, size_t total_bytes) {
+            if (!progress) {
+                return;
+            }
+            progress->current_bytes.store(bytes_received);
+            progress->current_total_bytes.store(total_bytes);
+        });
+    if (!chart_fetch.success || chart_fetch.bytes.empty()) {
+        result.message = chart_fetch.error_message.empty()
+            ? "Failed to download the chart file."
+            : chart_fetch.error_message;
+        return result;
+    }
+    if (progress) {
+        progress->completed_steps.store(1);
+        progress->current_bytes.store(0);
+        progress->current_total_bytes.store(0);
+    }
+
+    app_paths::ensure_directories();
+    std::string error_message;
+    if (!write_binary_file(app_paths::chart_path(result.chart_id), chart_fetch.bytes, error_message)) {
+        result.message = error_message;
+        return result;
+    }
+
+    result.success = true;
+    result.message = "Chart downloaded.";
+    return result;
+}
+
 }  // namespace
 
 bool needs_download(const song_entry_state& song) {
@@ -313,6 +390,46 @@ void start_download(state& state) {
     }).detach();
 }
 
+void start_chart_download(state& state) {
+    if (state.download_in_progress) {
+        return;
+    }
+
+    const song_entry_state* song = selected_song(state);
+    const chart_entry_state* chart = selected_chart(state);
+    if (song == nullptr || chart == nullptr) {
+        return;
+    }
+    if (!song->installed) {
+        ui::notify("Download the song first.", ui::notice_tone::error, 2.6f);
+        return;
+    }
+    if (song->update_available) {
+        ui::notify("Update the song first.", ui::notice_tone::error, 2.6f);
+        return;
+    }
+    if (chart->installed && !chart->update_available) {
+        return;
+    }
+
+    state.download_in_progress = true;
+    const song_entry_state selected_song = *song;
+    const chart_entry_state selected_chart = *chart;
+    const std::string server_url = state.catalog_server_url;
+    state.download_progress = std::make_shared<download_progress_state>();
+    ui::notify("Downloading chart...", ui::notice_tone::info, 1.8f);
+    const std::shared_ptr<download_progress_state> progress = state.download_progress;
+    std::promise<download_song_result> promise;
+    state.download_future = promise.get_future();
+    std::thread([promise = std::move(promise), selected_song, selected_chart, server_url, progress]() mutable {
+        try {
+            promise.set_value(download_chart_file(selected_song, selected_chart, server_url, progress));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
+}
+
 bool poll_download(state& state) {
     if (!state.download_in_progress) {
         return false;
@@ -329,19 +446,25 @@ bool poll_download(state& state) {
         result.message = ex.what();
     } catch (...) {
         result.success = false;
-        result.message = "Song download failed.";
+        result.message = "Download failed.";
     }
     state.download_in_progress = false;
     state.download_progress.reset();
 
     if (result.success) {
-        mark_song_downloaded(state.official_songs, result.song_id);
-        mark_song_downloaded(state.community_songs, result.song_id);
-        mark_song_downloaded(state.owned_songs, result.song_id);
+        if (result.chart_only) {
+            mark_chart_downloaded(state.official_songs, result.song_id, result.chart_id);
+            mark_chart_downloaded(state.community_songs, result.song_id, result.chart_id);
+            mark_chart_downloaded(state.owned_songs, result.song_id, result.chart_id);
+        } else {
+            mark_song_downloaded(state.official_songs, result.song_id);
+            mark_song_downloaded(state.community_songs, result.song_id);
+            mark_song_downloaded(state.owned_songs, result.song_id);
+        }
         ui::notify(result.message, ui::notice_tone::success, 2.4f);
         reload_catalog(state);
     } else {
-        ui::notify(result.message.empty() ? "Song download failed." : result.message,
+        ui::notify(result.message.empty() ? "Download failed." : result.message,
                    ui::notice_tone::error, 3.2f);
     }
     return true;

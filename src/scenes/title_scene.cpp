@@ -965,6 +965,10 @@ void title_scene::update_online_mode(float dt) {
         title_online_view::start_download(online_state_);
         return;
     }
+    if (result.action == title_online_view::requested_action::download_chart) {
+        title_online_view::start_chart_download(online_state_);
+        return;
+    }
     if (result.action == title_online_view::requested_action::restart_preview) {
         audio_controller_.preview().resume(title_online_view::preview_song(online_state_));
         return;

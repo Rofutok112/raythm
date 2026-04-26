@@ -202,6 +202,15 @@ Rectangle chart_row_rect(Rectangle area, int index, float scroll_y) {
     };
 }
 
+Rectangle chart_download_icon_rect(Rectangle chart_card) {
+    return {
+        chart_card.x + chart_card.width - 46.0f,
+        chart_card.y + 12.0f,
+        30.0f,
+        26.0f,
+    };
+}
+
 Rectangle song_list_viewport(Rectangle content_rect) {
     return {
         content_rect.x + 12.0f,
@@ -284,6 +293,10 @@ std::string chart_status_label(const chart_entry_state& chart) {
         return "GET";
     }
     return "";
+}
+
+bool can_download_chart(const song_entry_state& song, const chart_entry_state& chart) {
+    return song.installed && !song.update_available && (!chart.installed || chart.update_available);
 }
 
 const char* catalog_caption(const state& state, const std::vector<song_entry_state>& songs) {

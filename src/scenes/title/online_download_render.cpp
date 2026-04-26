@@ -293,6 +293,30 @@ void draw_transport_toggle_button(Rectangle rect, bool playing, unsigned char al
     }
 }
 
+void draw_download_icon_button(Rectangle rect, bool update, unsigned char alpha) {
+    const auto& t = *g_theme;
+    const bool hovered = ui::is_hovered(rect);
+    const bool pressed = ui::is_pressed(rect);
+    const Rectangle visual = pressed ? ui::inset(rect, 1.2f) : rect;
+    const Color tone = update ? t.accent : t.success;
+    const Color fill = with_alpha(lerp_color(t.section, tone, hovered ? 0.18f : 0.10f),
+                                  static_cast<unsigned char>(hovered ? alpha : alpha * 0.82f));
+    const Color stroke = with_alpha(tone, alpha);
+    ui::draw_rect_f(visual, fill);
+    ui::draw_rect_lines(visual, 1.2f, stroke);
+
+    const float cx = visual.x + visual.width * 0.5f;
+    const float top = visual.y + 6.0f;
+    const float mid = visual.y + 14.0f;
+    const float bottom = visual.y + visual.height - 7.0f;
+    DrawLineEx({cx, top}, {cx, mid}, 2.0f, stroke);
+    DrawTriangle({cx - 6.0f, mid - 1.0f},
+                 {cx + 6.0f, mid - 1.0f},
+                 {cx, mid + 6.0f},
+                 stroke);
+    DrawLineEx({cx - 8.0f, bottom}, {cx + 8.0f, bottom}, 2.0f, stroke);
+}
+
 }  // namespace
 
 void draw(state& state, float anim_t, Rectangle origin_rect) {
@@ -642,11 +666,19 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             {card.x + 14.0f, card.y + 12.0f, card.width - 110.0f, 18.0f},
             with_alpha(detail::key_mode_color(item.chart.meta.key_count), detail_alpha), ui::text_align::left);
         const std::string chart_badge = detail::chart_status_label(item);
+        const bool can_download_chart = !state.download_in_progress && detail::can_download_chart(*song, item);
+        const float badge_right_padding = can_download_chart ? 54.0f : 14.0f;
         if (!chart_badge.empty()) {
             ui::draw_text_in_rect(chart_badge.c_str(), 12,
-                                  {card.x + card.width - 86.0f, card.y + 14.0f, 72.0f, 14.0f},
+                                  {card.x + card.width - badge_right_padding - 72.0f,
+                                   card.y + 14.0f, 72.0f, 14.0f},
                                   with_alpha(item.update_available ? t.accent : t.text_muted, detail_alpha),
                                   ui::text_align::right);
+        }
+        if (can_download_chart) {
+            draw_download_icon_button(detail::chart_download_icon_rect(card),
+                                      item.update_available,
+                                      detail_alpha);
         }
         ui::draw_text_in_rect(TextFormat("Lv.%.1f", item.chart.meta.level), 20,
                               {card.x + 14.0f, card.y + 38.0f, 96.0f, 22.0f},
