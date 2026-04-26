@@ -48,7 +48,6 @@ struct chart_meta {
     int format_version = 0;
     int resolution = 0;
     int offset = 0;
-    bool is_public = false;
 };
 
 // タイミングイベントの種類。

@@ -361,7 +361,7 @@ bool ranking_entry_better(const ranking_service::entry& left, const ranking_serv
 }
 
 bool chart_obviously_eligible_for_online_ranking(const chart_meta& chart) {
-    return !chart.chart_id.empty() && chart.is_public;
+    return !chart.chart_id.empty();
 }
 
 std::optional<auth::session> load_online_session_for_ruleset() {

@@ -247,8 +247,6 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
             }
         } else if (key == "songId") {
             meta.song_id = value;
-        } else if (key == "isPublic") {
-            meta.is_public = (value == "true");
         }
     }
 

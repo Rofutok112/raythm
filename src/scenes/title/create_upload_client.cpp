@@ -1008,7 +1008,7 @@ upload_request_result send_chart_upload_request(const auth::session& session,
     }
 
     std::vector<multipart_field> fields;
-    fields.push_back({"visibility", chart.meta.is_public ? "public" : "private"});
+    fields.push_back({"visibility", "public"});
 
     std::vector<unsigned char> chart_bytes(rewritten_chart->begin(), rewritten_chart->end());
     std::vector<multipart_file> files;
