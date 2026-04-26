@@ -50,6 +50,7 @@ constexpr Vector2 kSeedRankingSourceOnlineOffset = {768.0f, -285.0f};
 constexpr Vector2 kSeedRankingListOffset = {522.0f, 30.0f};
 constexpr float kWheelScrollStep = 63.0f;
 constexpr int kPlaySongContextMenuItemCount = 1;
+constexpr int kPlayChartContextMenuItemCount = 1;
 
 enum class create_tool_action {
     create_song,
@@ -105,7 +106,7 @@ Rectangle create_tool_rect(Rectangle list_rect, int index) {
     };
 }
 
-Rectangle delete_song_menu_item_rect(Rectangle menu_rect) {
+Rectangle delete_menu_item_rect(Rectangle menu_rect) {
     return {
         menu_rect.x + kDeleteMenuInset,
         menu_rect.y + kDeleteMenuInset,
@@ -185,6 +186,10 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
         view_mode == mode::play &&
         state.context_menu.open &&
         state.context_menu.target == song_select::context_menu_target::song;
+    const bool play_chart_menu_open =
+        view_mode == mode::play &&
+        state.context_menu.open &&
+        state.context_menu.target == song_select::context_menu_target::chart;
 
     if (state.confirmation_dialog.open) {
         if (IsKeyPressed(KEY_ESCAPE)) {
@@ -193,17 +198,25 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
         return result;
     }
 
-    if (play_song_menu_open) {
+    if (play_song_menu_open || play_chart_menu_open) {
         if (IsKeyPressed(KEY_ESCAPE)) {
             song_select::close_context_menu(state);
             return result;
         }
-        if (left_pressed && CheckCollisionPointRec(mouse, delete_song_menu_item_rect(state.context_menu.rect))) {
+        if (left_pressed && CheckCollisionPointRec(mouse, delete_menu_item_rect(state.context_menu.rect))) {
+            const bool deleting_chart = state.context_menu.target == song_select::context_menu_target::chart;
             song_select::open_confirmation_dialog(
-                state, song_select::pending_confirmation_action::delete_song,
-                "", "", "", "DELETE", state.context_menu.song_index, -1);
+                state,
+                deleting_chart ? song_select::pending_confirmation_action::delete_chart
+                               : song_select::pending_confirmation_action::delete_song,
+                "", "", "", "DELETE", state.context_menu.song_index,
+                deleting_chart ? state.context_menu.chart_index : -1);
             song_select::close_context_menu(state);
-            result.delete_song_requested = true;
+            if (deleting_chart) {
+                result.delete_chart_requested = true;
+            } else {
+                result.delete_song_requested = true;
+            }
             return result;
         }
         if ((left_pressed || right_pressed) && !CheckCollisionPointRec(mouse, state.context_menu.rect)) {
@@ -274,6 +287,27 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
                 state.chart_change_anim_t = 1.0f;
                 result.chart_selection_changed = true;
             }
+            return result;
+        }
+    }
+
+    if (right_pressed && view_mode == mode::play && !state.songs.empty()) {
+        const int clicked_chart =
+            title_center_view::hit_test_chart(current.chart_buttons_rect, state.chart_scroll_y, mouse,
+                                              static_cast<int>(filtered.size()));
+        if (clicked_chart >= 0) {
+            if (state.difficulty_index != clicked_chart) {
+                state.difficulty_index = clicked_chart;
+                state.chart_change_anim_t = 1.0f;
+                result.chart_selection_changed = true;
+            }
+            state.context_menu.open = true;
+            state.context_menu.target = song_select::context_menu_target::chart;
+            state.context_menu.section = song_select::context_menu_section::chart;
+            state.context_menu.song_index = state.selected_song_index;
+            state.context_menu.chart_index = clicked_chart;
+            state.context_menu.rect = song_select::layout::make_context_menu_rect(
+                mouse, kPlayChartContextMenuItemCount);
             return result;
         }
     }
@@ -479,9 +513,13 @@ void draw(const song_select::state& state,
 
     if (view_mode == mode::play &&
         state.context_menu.open &&
-        state.context_menu.target == song_select::context_menu_target::song) {
+        (state.context_menu.target == song_select::context_menu_target::song ||
+         state.context_menu.target == song_select::context_menu_target::chart)) {
         const ui::context_menu_item items[] = {
-            {"DELETE SONG", true, ui::context_menu_item::kind::action},
+            {state.context_menu.target == song_select::context_menu_target::chart
+                 ? "DELETE CHART"
+                 : "DELETE SONG",
+             true, ui::context_menu_item::kind::action},
         };
         ui::enqueue_context_menu(state.context_menu.rect, items,
                                  song_select::layout::kContextMenuLayer, 16,

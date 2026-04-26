@@ -815,6 +815,9 @@ void title_scene::update_play_mode(float dt) {
     if (result.delete_song_requested) {
         return;
     }
+    if (result.delete_chart_requested) {
+        return;
+    }
     if (result.play_requested) {
         title_play_session::start_selected_chart(manager_, play_state_, audio_controller_.preview());
         return;
