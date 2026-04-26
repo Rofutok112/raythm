@@ -92,6 +92,7 @@ std::vector<std::string> resolve_server_urls() {
     }
 
     push_candidate_server_url(urls, auth::kDefaultServerUrl);
+    push_candidate_server_url(urls, auth::kLanServerUrl);
     push_candidate_server_url(urls, "http://127.0.0.1:3000");
     push_candidate_server_url(urls, "http://localhost:3000");
     push_candidate_server_url(urls, "http://127.0.0.1");
