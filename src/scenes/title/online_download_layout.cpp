@@ -26,7 +26,6 @@ constexpr Rectangle kFallbackOriginRect = {1140.0f, 564.0f, 240.0f, 90.0f};
 constexpr float kSearchLeftGap = 36.0f;
 constexpr float kSearchRightGap = 27.0f;
 constexpr float kSearchY = 60.0f;
-constexpr float kSearchMinWidth = 330.0f;
 constexpr float kSearchHeight = 57.0f;
 constexpr Vector2 kSeedBackOffset = {-672.0f, -297.0f};
 constexpr Vector2 kSeedOfficialTabOffset = {-414.0f, -291.0f};
@@ -99,13 +98,13 @@ Rectangle left_pane_full_width_button_rect(Rectangle content_rect,
 }
 
 Rectangle browse_search_rect() {
-    const Rectangle account_rect = title_layout::account_chip_rect();
+    const Rectangle refresh_rect = title_layout::refresh_chip_rect();
     const float left = kOwnedTabRect.x + kOwnedTabRect.width + kSearchLeftGap;
-    const float right = account_rect.x - kSearchRightGap;
+    const float right = refresh_rect.x - kSearchRightGap;
     return {
         left,
         kSearchY,
-        std::max(kSearchMinWidth, right - left),
+        std::max(0.0f, right - left),
         kSearchHeight,
     };
 }

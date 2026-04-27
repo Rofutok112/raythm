@@ -20,6 +20,8 @@ constexpr float kAccountChipHeight = 87.0f;
 constexpr Vector2 kAccountChipOffset = {-42.0f, 30.0f};
 constexpr float kSettingsChipSize = 87.0f;
 constexpr float kSettingsChipGap = 18.0f;
+constexpr float kRefreshChipSize = 87.0f;
+constexpr float kRefreshChipGap = 18.0f;
 
 }  // namespace
 
@@ -62,6 +64,16 @@ Rectangle settings_chip_rect() {
         account.y,
         kSettingsChipSize,
         kSettingsChipSize
+    };
+}
+
+Rectangle refresh_chip_rect() {
+    const Rectangle settings = settings_chip_rect();
+    return {
+        settings.x - kRefreshChipGap - kRefreshChipSize,
+        settings.y,
+        kRefreshChipSize,
+        kRefreshChipSize
     };
 }
 
