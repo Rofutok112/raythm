@@ -34,7 +34,7 @@ constexpr Rectangle kPlayRankingListRect = {1317.0f, 225.0f, 507.0f, 702.0f};
 constexpr float kCreateToolButtonHeight = 72.0f;
 constexpr float kCreateToolButtonGap = 12.0f;
 constexpr float kCreateToolColumnGap = 12.0f;
-constexpr float kDeleteMenuInset = 9.0f;
+constexpr float kContextMenuInnerPadding = 6.0f;
 constexpr Rectangle kFallbackOriginRect = {840.0f, 564.0f, 240.0f, 90.0f};
 constexpr Vector2 kSeedSongOffset = {-495.0f, 33.0f};
 constexpr Vector2 kSeedMainOffset = {0.0f, 9.0f};
@@ -106,13 +106,44 @@ Rectangle create_tool_rect(Rectangle list_rect, int index) {
     };
 }
 
-Rectangle delete_menu_item_rect(Rectangle menu_rect) {
+Rectangle context_menu_item_rect(Rectangle menu_rect, int index = 0) {
     return {
-        menu_rect.x + kDeleteMenuInset,
-        menu_rect.y + kDeleteMenuInset,
-        menu_rect.width - kDeleteMenuInset * 2.0f,
+        menu_rect.x + kContextMenuInnerPadding,
+        menu_rect.y + kContextMenuInnerPadding +
+            static_cast<float>(index) *
+                (song_select::layout::kContextMenuItemHeight + song_select::layout::kContextMenuItemSpacing),
+        menu_rect.width - kContextMenuInnerPadding * 2.0f,
         song_select::layout::kContextMenuItemHeight
     };
+}
+
+void enqueue_delete_context_menu(Rectangle menu_rect, const char* label) {
+    const auto& t = *g_theme;
+    const Rectangle item_rect = context_menu_item_rect(menu_rect);
+    const bool hovered = ui::is_hovered(item_rect, song_select::layout::kContextMenuLayer);
+    const bool pressed = ui::is_pressed(item_rect, song_select::layout::kContextMenuLayer);
+    const Rectangle visual = pressed ? ui::inset(item_rect, 1.5f) : item_rect;
+    const Color bg = hovered ? t.row_hover : t.row;
+    const Color fill = with_alpha(lerp_color(bg, t.error, hovered ? 0.16f : 0.08f), 228);
+    const Color border = with_alpha(lerp_color(t.border, t.error, 0.35f), 220);
+    const std::string label_copy = label != nullptr ? label : "";
+
+    ui::enqueue_draw_command(song_select::layout::kContextMenuLayer,
+                             [menu_rect, item_rect, visual, fill, border, label_copy]() {
+        ui::draw_section(menu_rect);
+        ui::draw_rect_f(visual, fill);
+        ui::draw_rect_lines(visual, 1.5f, border);
+        const Rectangle accent = {
+            visual.x + 10.0f,
+            visual.y + 9.0f,
+            4.0f,
+            std::max(0.0f, visual.height - 18.0f),
+        };
+        ui::draw_rect_f(accent, with_alpha(g_theme->error, 220));
+        ui::draw_text_in_rect(label_copy.c_str(), 16,
+                              {visual.x + 24.0f, visual.y, visual.width - 34.0f, visual.height},
+                              g_theme->text, ui::text_align::left);
+    });
 }
 
 Rectangle centered_scaled_rect(Rectangle anchor, Rectangle target, float scale, Vector2 offset = {0.0f, 0.0f}) {
@@ -203,7 +234,7 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
             song_select::close_context_menu(state);
             return result;
         }
-        if (left_pressed && CheckCollisionPointRec(mouse, delete_menu_item_rect(state.context_menu.rect))) {
+        if (left_pressed && CheckCollisionPointRec(mouse, context_menu_item_rect(state.context_menu.rect))) {
             const bool deleting_chart = state.context_menu.target == song_select::context_menu_target::chart;
             song_select::open_confirmation_dialog(
                 state,
@@ -515,16 +546,11 @@ void draw(const song_select::state& state,
         state.context_menu.open &&
         (state.context_menu.target == song_select::context_menu_target::song ||
          state.context_menu.target == song_select::context_menu_target::chart)) {
-        const ui::context_menu_item items[] = {
-            {state.context_menu.target == song_select::context_menu_target::chart
-                 ? "DELETE CHART"
-                 : "DELETE SONG",
-             true, ui::context_menu_item::kind::action},
-        };
-        ui::enqueue_context_menu(state.context_menu.rect, items,
-                                 song_select::layout::kContextMenuLayer, 16,
-                                 song_select::layout::kContextMenuItemHeight,
-                                 song_select::layout::kContextMenuItemSpacing);
+        enqueue_delete_context_menu(
+            state.context_menu.rect,
+            state.context_menu.target == song_select::context_menu_target::chart
+                ? "DELETE CHART"
+                : "DELETE SONG");
     }
 
 }

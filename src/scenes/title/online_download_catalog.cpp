@@ -245,6 +245,85 @@ bool& has_more_ref(state& state, catalog_mode mode) {
     return mode == catalog_mode::community ? state.community_has_more : state.official_has_more;
 }
 
+void clear_reload_restore(state& state) {
+    state.reload_preserve_view = false;
+    state.reload_restore_detail_open = false;
+    state.reload_restore_mode = state.mode;
+    state.reload_restore_song_id.clear();
+    state.reload_restore_chart_id.clear();
+}
+
+void capture_reload_restore(state& state, bool preserve_view) {
+    clear_reload_restore(state);
+    if (!preserve_view) {
+        return;
+    }
+
+    state.reload_preserve_view = true;
+    state.reload_restore_mode = state.mode;
+    state.reload_restore_detail_open = state.detail_open;
+    if (const song_entry_state* song = selected_song(state); song != nullptr) {
+        state.reload_restore_song_id = song->song.song.meta.song_id;
+    }
+    if (const chart_entry_state* chart = selected_chart(state); chart != nullptr) {
+        state.reload_restore_chart_id = chart->chart.meta.chart_id;
+    }
+}
+
+void apply_reload_restore(state& state) {
+    if (!state.reload_preserve_view) {
+        return;
+    }
+
+    state.mode = state.reload_restore_mode;
+    auto& songs = songs_for_mode(state, state.mode);
+    if (songs.empty()) {
+        state.detail_open = false;
+        clear_reload_restore(state);
+        return;
+    }
+
+    if (!state.reload_restore_song_id.empty()) {
+        const auto song_it = std::find_if(songs.begin(), songs.end(), [&](const song_entry_state& song) {
+            return song.song.song.meta.song_id == state.reload_restore_song_id;
+        });
+        if (song_it != songs.end()) {
+            detail::selected_song_index_ref(state) = static_cast<int>(song_it - songs.begin());
+        }
+    }
+
+    detail::ensure_selection_valid(state);
+
+    if (!state.reload_restore_detail_open) {
+        clear_reload_restore(state);
+        return;
+    }
+
+    state.detail_open = true;
+    const song_entry_state* song = selected_song(state);
+    if (song == nullptr) {
+        state.detail_open = false;
+        clear_reload_restore(state);
+        return;
+    }
+
+    if (!state.reload_restore_chart_id.empty() && !song->charts.empty()) {
+        const auto chart_it = std::find_if(song->charts.begin(), song->charts.end(),
+                                           [&](const chart_entry_state& chart) {
+            return chart.chart.meta.chart_id == state.reload_restore_chart_id;
+        });
+        if (chart_it != song->charts.end()) {
+            detail::selected_chart_index_ref(state) = static_cast<int>(chart_it - song->charts.begin());
+            state.reload_restore_chart_id.clear();
+        }
+    }
+
+    if (state.reload_restore_chart_id.empty() ||
+        (song->charts_loaded && !song->charts_loading && !song->charts_has_more)) {
+        clear_reload_restore(state);
+    }
+}
+
 jacket_cache::pending_texture load_local_texture_bytes(const std::filesystem::path& path) {
     jacket_cache::pending_texture result;
     std::ifstream input(path, std::ios::binary);
@@ -486,32 +565,35 @@ void jacket_cache::clear() {
     entries_.clear();
 }
 
-void reload_catalog(state& state) {
+void reload_catalog(state& state, bool preserve_view) {
     if (state.catalog_loading) {
         return;
     }
 
+    capture_reload_restore(state, preserve_view);
     state.catalog_loading = true;
     state.catalog_request_failed = false;
     state.catalog_status_message.clear();
-    state.official_songs.clear();
-    state.community_songs.clear();
-    state.owned_songs.clear();
-    state.local_songs.clear();
     state.official_next_page = 2;
     state.community_next_page = 2;
     state.official_has_more = false;
     state.community_has_more = false;
-    state.song_scroll_y = 0.0f;
-    state.song_scroll_y_target = 0.0f;
-    state.chart_scroll_y = 0.0f;
-    state.chart_scroll_y_target = 0.0f;
-    state.detail_open = false;
     state.song_page_loading = false;
     state.chart_page_loading = false;
     state.owned_loading = false;
     state.owned_loaded_once = false;
-    state.jackets.clear();
+    if (!preserve_view) {
+        state.official_songs.clear();
+        state.community_songs.clear();
+        state.owned_songs.clear();
+        state.local_songs.clear();
+        state.song_scroll_y = 0.0f;
+        state.song_scroll_y_target = 0.0f;
+        state.chart_scroll_y = 0.0f;
+        state.chart_scroll_y_target = 0.0f;
+        state.detail_open = false;
+        state.jackets.clear();
+    }
     std::promise<catalog_load_result> promise;
     state.catalog_future = promise.get_future();
     std::thread([promise = std::move(promise)]() mutable {
@@ -553,13 +635,14 @@ bool poll_catalog(state& state) {
     state.official_has_more = result.official_has_more;
     state.community_has_more = result.community_has_more;
 
-    if (state.official_songs.empty() && !state.community_songs.empty()) {
+    if (state.official_songs.empty() && !state.community_songs.empty() && !state.reload_preserve_view) {
         state.mode = catalog_mode::community;
-    } else if (state.community_songs.empty() && !state.official_songs.empty()) {
+    } else if (state.community_songs.empty() && !state.official_songs.empty() && !state.reload_preserve_view) {
         state.mode = catalog_mode::official;
     }
 
     detail::ensure_selection_valid(state);
+    apply_reload_restore(state);
     start_owned_reload(state);
     return true;
 }
@@ -626,6 +709,7 @@ bool poll_song_page(state& state) {
         next_page_ref(state, state.song_page_mode) += 1;
     }
     detail::ensure_selection_valid(state);
+    apply_reload_restore(state);
     return true;
 }
 
@@ -699,6 +783,7 @@ bool poll_chart_page(state& state) {
         song->next_chart_page += 1;
     }
     detail::ensure_selection_valid(state);
+    apply_reload_restore(state);
     return true;
 }
 
@@ -718,6 +803,7 @@ bool poll_owned(state& state) {
         state.owned_songs.clear();
     }
     detail::ensure_selection_valid(state);
+    apply_reload_restore(state);
     return true;
 }
 

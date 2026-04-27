@@ -400,7 +400,7 @@ bool poll_download(state& state) {
             mark_song_downloaded(state.owned_songs, result.song_id);
         }
         ui::notify(result.message, ui::notice_tone::success, 2.4f);
-        reload_catalog(state);
+        reload_catalog(state, true);
     } else {
         ui::notify(result.message.empty() ? "Download failed." : result.message,
                    ui::notice_tone::error, 3.2f);

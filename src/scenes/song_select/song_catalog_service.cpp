@@ -616,6 +616,45 @@ content_status combine_song_and_chart_status(content_status song_status, content
     return chart_status;
 }
 
+int source_sort_bucket(content_status status) {
+    switch (status) {
+    case content_status::official:
+        return 0;
+    case content_status::community:
+        return 1;
+    case content_status::update:
+    case content_status::modified:
+    case content_status::checking:
+    case content_status::local:
+        return 2;
+    }
+    return 2;
+}
+
+bool song_source_less(const song_select::song_entry& left, const song_select::song_entry& right) {
+    const int left_bucket = source_sort_bucket(left.status);
+    const int right_bucket = source_sort_bucket(right.status);
+    if (left_bucket != right_bucket) {
+        return left_bucket < right_bucket;
+    }
+    return left.song.meta.title < right.song.meta.title;
+}
+
+bool chart_source_less(const song_select::chart_option& left, const song_select::chart_option& right) {
+    const int left_bucket = source_sort_bucket(left.status);
+    const int right_bucket = source_sort_bucket(right.status);
+    if (left_bucket != right_bucket) {
+        return left_bucket < right_bucket;
+    }
+    if (left.meta.key_count != right.meta.key_count) {
+        return left.meta.key_count < right.meta.key_count;
+    }
+    if (left.meta.level != right.meta.level) {
+        return left.meta.level < right.meta.level;
+    }
+    return left.meta.difficulty < right.meta.difficulty;
+}
+
 std::pair<float, float> collect_bpm_range(const chart_data& chart) {
     float min_bpm = 0.0f;
     float max_bpm = 0.0f;
@@ -656,10 +695,6 @@ catalog_data load_catalog(bool calculate_missing_levels) {
     std::vector<song_data> all_songs = load_result.songs;
     song_loader::attach_external_charts(path_utils::to_utf8(app_paths::charts_root()), all_songs);
 
-    std::sort(all_songs.begin(), all_songs.end(), [](const song_data& left, const song_data& right) {
-        return left.meta.title < right.meta.title;
-    });
-
     catalog.songs.reserve(all_songs.size());
     for (const song_data& song : all_songs) {
         song_entry entry;
@@ -697,21 +732,14 @@ catalog_data load_catalog(bool calculate_missing_levels) {
             entry.charts.push_back(std::move(option));
         }
 
-        std::sort(entry.charts.begin(), entry.charts.end(), [](const chart_option& left, const chart_option& right) {
-            if (left.meta.key_count != right.meta.key_count) {
-                return left.meta.key_count < right.meta.key_count;
-            }
-            if (left.meta.level != right.meta.level) {
-                return left.meta.level < right.meta.level;
-            }
-            return left.meta.difficulty < right.meta.difficulty;
-        });
-
         entry.status = combine_song_and_chart_status(
             verify_song_content_source(song, manifest_server_url, verification_cache, manifest_server_reachable),
             aggregate_song_status(entry.charts));
+        std::sort(entry.charts.begin(), entry.charts.end(), chart_source_less);
         catalog.songs.push_back(std::move(entry));
     }
+
+    std::sort(catalog.songs.begin(), catalog.songs.end(), song_source_less);
 
     save_verification_cache(verification_cache);
     return catalog;
