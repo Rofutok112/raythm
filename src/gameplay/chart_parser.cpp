@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <optional>
@@ -167,6 +168,9 @@ chart_parse_result chart_parser::parse(const std::string& file_path) {
 
     chart_data data;
     data.meta = parse_metadata(sections["Metadata"], errors);
+    if (data.meta.chart_id.empty()) {
+        data.meta.chart_id = path_utils::to_utf8(path_utils::from_utf8(file_path).stem());
+    }
     data.timing_events = parse_timing(sections["Timing"], errors);
     data.notes = parse_notes(sections["Notes"], errors);
 
@@ -250,8 +254,7 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
         }
     }
 
-    const std::array<std::string, 6> required_fields = {
-        "chartId",
+    const std::array<std::string, 5> required_fields = {
         "keyCount",
         "difficulty",
         "chartAuthor",

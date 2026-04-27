@@ -277,13 +277,16 @@ void title_scene::close_settings_mode() {
 
 void title_scene::request_play_catalog_reload(std::string preferred_song_id,
                                               std::string preferred_chart_id,
-                                              bool sync_media_on_apply) {
+                                              bool sync_media_on_apply,
+                                              bool calculate_missing_levels) {
     if (play_catalog_loading_) {
         play_catalog_reload_pending_ = true;
         queued_play_catalog_song_id_ = std::move(preferred_song_id);
         queued_play_catalog_chart_id_ = std::move(preferred_chart_id);
         queued_play_catalog_sync_media_on_apply_ =
             queued_play_catalog_sync_media_on_apply_ || sync_media_on_apply;
+        queued_play_catalog_calculate_missing_levels_ =
+            queued_play_catalog_calculate_missing_levels_ || calculate_missing_levels;
         play_state_.catalog_loading = true;
         return;
     }
@@ -291,13 +294,14 @@ void title_scene::request_play_catalog_reload(std::string preferred_song_id,
     play_catalog_song_id_ = std::move(preferred_song_id);
     play_catalog_chart_id_ = std::move(preferred_chart_id);
     play_catalog_sync_media_on_apply_ = sync_media_on_apply;
+    play_catalog_calculate_missing_levels_ = calculate_missing_levels;
     play_catalog_loading_ = true;
     play_state_.catalog_loading = true;
     std::promise<song_select::catalog_data> promise;
     play_catalog_future_ = promise.get_future();
-    std::thread([promise = std::move(promise)]() mutable {
+    std::thread([promise = std::move(promise), calculate_missing_levels]() mutable {
         try {
-            promise.set_value(song_select::load_catalog());
+            promise.set_value(song_select::load_catalog(calculate_missing_levels));
         } catch (...) {
             promise.set_exception(std::current_exception());
         }
@@ -327,6 +331,7 @@ void title_scene::poll_play_catalog_reload() {
         title_play_session::sync_preview(play_state_, audio_controller_.preview());
     }
     play_catalog_sync_media_on_apply_ = false;
+    play_catalog_calculate_missing_levels_ = false;
 
     if (!play_catalog_reload_pending_) {
         return;
@@ -335,10 +340,12 @@ void title_scene::poll_play_catalog_reload() {
     play_catalog_reload_pending_ = false;
     request_play_catalog_reload(queued_play_catalog_song_id_,
                                 queued_play_catalog_chart_id_,
-                                queued_play_catalog_sync_media_on_apply_);
+                                queued_play_catalog_sync_media_on_apply_,
+                                queued_play_catalog_calculate_missing_levels_);
     queued_play_catalog_song_id_.clear();
     queued_play_catalog_chart_id_.clear();
     queued_play_catalog_sync_media_on_apply_ = false;
+    queued_play_catalog_calculate_missing_levels_ = false;
 }
 
 void title_scene::sync_play_media() {
@@ -815,6 +822,9 @@ void title_scene::update_play_mode(float dt) {
     if (result.delete_song_requested) {
         return;
     }
+    if (result.delete_chart_requested) {
+        return;
+    }
     if (result.play_requested) {
         title_play_session::start_selected_chart(manager_, play_state_, audio_controller_.preview());
         return;
@@ -1008,7 +1018,8 @@ void title_scene::update_common_animation(float dt) {
         preferred_song_id_ = title_online_view::selected_song_id(online_state_);
         preferred_chart_id_.clear();
         request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
-                                    content_mode == hub_mode::play || content_mode == hub_mode::create);
+                                    content_mode == hub_mode::play || content_mode == hub_mode::create,
+                                    true);
     }
     if (title_online_view::poll_catalog(online_state_) && content_mode == hub_mode::online) {
         audio_controller_.preview().select_song(title_online_view::preview_song(online_state_));
@@ -1345,6 +1356,8 @@ void title_scene::on_enter() {
     play_catalog_reload_pending_ = false;
     play_catalog_sync_media_on_apply_ = false;
     queued_play_catalog_sync_media_on_apply_ = false;
+    play_catalog_calculate_missing_levels_ = false;
+    queued_play_catalog_calculate_missing_levels_ = false;
     play_catalog_song_id_.clear();
     play_catalog_chart_id_.clear();
     queued_play_catalog_song_id_.clear();

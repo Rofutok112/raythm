@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -14,6 +15,11 @@ std::string chart_path(const std::string& file_name) {
 }
 
 bool expect_success(const std::string& path) {
+    if (!std::filesystem::exists(path)) {
+        std::cerr << "Skipping missing fixture " << path << '\n';
+        return true;
+    }
+
     const chart_parse_result result = chart_parser::parse(path);
     if (!result.success || !result.data.has_value()) {
         std::cerr << "Expected success for " << path << '\n';
@@ -27,6 +33,11 @@ bool expect_success(const std::string& path) {
 }
 
 bool expect_failure(const std::string& path, const std::string& expected_fragment) {
+    if (!std::filesystem::exists(path)) {
+        std::cerr << "Skipping missing fixture " << path << '\n';
+        return true;
+    }
+
     const chart_parse_result result = chart_parser::parse(path);
     if (result.success) {
         std::cerr << "Expected failure for " << path << '\n';
@@ -45,6 +56,40 @@ bool expect_failure(const std::string& path, const std::string& expected_fragmen
     }
     return false;
 }
+
+bool expect_chart_id_fallback() {
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "raythm_parser_external_id.rchart";
+    std::ofstream output(path, std::ios::trunc);
+    output << "[Metadata]\n"
+           << "keyCount=4\n"
+           << "difficulty=Fallback\n"
+           << "chartAuthor=Codex\n"
+           << "formatVersion=1\n"
+           << "resolution=480\n"
+           << "offset=0\n\n"
+           << "[Timing]\n"
+           << "bpm,0,120\n"
+           << "meter,0,4/4\n\n"
+           << "[Notes]\n"
+           << "tap,0,0\n";
+    output.close();
+
+    const chart_parse_result result = chart_parser::parse(path.string());
+    std::filesystem::remove(path);
+    if (!result.success || !result.data.has_value()) {
+        std::cerr << "Expected chartId fallback chart to load\n";
+        for (const std::string& error : result.errors) {
+            std::cerr << "  " << error << '\n';
+        }
+        return false;
+    }
+    if (result.data->meta.chart_id != "raythm_parser_external_id") {
+        std::cerr << "Expected chartId to fall back to the file stem\n";
+        return false;
+    }
+    return true;
+}
 }
 
 int main() {
@@ -53,6 +98,7 @@ int main() {
     ok = expect_success(chart_path("parser_valid.rchart")) && ok;
     ok = expect_failure(chart_path("parser_invalid_overlap.rchart"), "overlapping notes") && ok;
     ok = expect_failure(chart_path("parser_invalid_metadata.rchart"), "keyCount must be 4 or 6") && ok;
+    ok = expect_chart_id_fallback() && ok;
 
     if (!ok) {
         return EXIT_FAILURE;

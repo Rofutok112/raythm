@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string_view>
 
+#include "chart_identity_store.h"
 #include "path_utils.h"
 
 namespace {
@@ -169,7 +170,9 @@ std::optional<float> parse_float(const std::string& value) {
     }
 }
 
-std::optional<song_meta> parse_song_meta(const fs::path& song_json_path, std::vector<std::string>& errors) {
+std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
+                                         const std::string& fallback_song_id,
+                                         std::vector<std::string>& errors) {
     const std::string content = read_file(song_json_path);
     if (content.empty()) {
         errors.push_back("Failed to read song metadata file: " + path_utils::to_utf8(song_json_path));
@@ -190,7 +193,7 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path, std::ve
     const std::optional<std::string> song_version = extract_json_number_token(content, "songVersion");
 
     if (!song_id.has_value()) {
-        errors.push_back("Missing required field songId in " + path_utils::to_utf8(song_json_path));
+        meta.song_id = fallback_song_id;
     } else {
         meta.song_id = *song_id;
     }
@@ -307,7 +310,8 @@ song_load_result song_loader::load_all(const std::string& songs_dir) {
         }
 
         std::vector<std::string> song_errors;
-        const std::optional<song_meta> meta = parse_song_meta(song_json_path, song_errors);
+        const std::optional<song_meta> meta =
+            parse_song_meta(song_json_path, path_utils::to_utf8(song_dir.filename()), song_errors);
         if (!meta.has_value()) {
             result.errors.insert(result.errors.end(), song_errors.begin(), song_errors.end());
             continue;
@@ -350,7 +354,8 @@ song_load_result song_loader::load_directory(const std::string& song_dir_utf8) {
     }
 
     std::vector<std::string> song_errors;
-    const std::optional<song_meta> meta = parse_song_meta(song_json_path, song_errors);
+    const std::optional<song_meta> meta =
+        parse_song_meta(song_json_path, path_utils::to_utf8(song_dir.filename()), song_errors);
     if (!meta.has_value()) {
         result.errors = std::move(song_errors);
         return result;
@@ -389,7 +394,10 @@ void song_loader::attach_external_charts(const std::string& charts_dir, std::vec
             continue;
         }
 
-        const std::string& song_id = parse_result.data->meta.song_id;
+        std::string song_id = parse_result.data->meta.song_id;
+        if (song_id.empty()) {
+            song_id = chart_identity::find_song_id(parse_result.data->meta.chart_id).value_or("");
+        }
         if (song_id.empty()) {
             continue;
         }

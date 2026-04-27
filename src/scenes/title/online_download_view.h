@@ -32,6 +32,7 @@ enum class requested_action {
 
 struct chart_entry_state {
     song_select::chart_option chart;
+    std::string installed_local_chart_id;
     bool installed = false;
     bool update_available = false;
 };
@@ -39,6 +40,7 @@ struct chart_entry_state {
 struct song_entry_state {
     song_select::song_entry song;
     std::vector<chart_entry_state> charts;
+    std::string installed_local_song_id;
     bool installed = false;
     bool update_available = false;
     bool charts_loaded = false;
@@ -147,6 +149,11 @@ struct state {
     bool catalog_request_failed = false;
     bool detail_open = false;
     float detail_transition = 0.0f;
+    bool reload_preserve_view = false;
+    bool reload_restore_detail_open = false;
+    catalog_mode reload_restore_mode = catalog_mode::official;
+    std::string reload_restore_song_id;
+    std::string reload_restore_chart_id;
 };
 
 struct layout {
@@ -175,7 +182,7 @@ struct update_result {
     requested_action action = requested_action::none;
 };
 
-void reload_catalog(state& state);
+void reload_catalog(state& state, bool preserve_view = false);
 bool poll_catalog(state& state);
 bool poll_song_page(state& state);
 bool poll_chart_page(state& state);

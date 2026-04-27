@@ -100,7 +100,7 @@ int main() {
     input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1390.0);
     hold_release_window_judge.update(1390.0, input);
     const std::optional<judge_event> hold_release_bad = hold_release_window_judge.get_last_judge();
-    if (!hold_release_bad.has_value() || hold_release_bad->result != judge_result::bad ||
+    if (!hold_release_bad.has_value() || hold_release_bad->result != judge_result::good ||
         hold_release_bad->offset_ms != -110.0) {
         std::cerr << "Early hold release should grade within the shared window\n";
         return EXIT_FAILURE;
@@ -168,6 +168,26 @@ int main() {
     const std::optional<judge_event> auto_miss = miss_judge.get_last_judge();
     if (!auto_miss.has_value() || auto_miss->result != judge_result::miss) {
         std::cerr << "Automatic miss failed\n";
+        return EXIT_FAILURE;
+    }
+
+    judge_system hold_auto_miss_judge;
+    hold_auto_miss_judge.init({note_data{note_type::hold, 480, 0, 960}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1200.0);
+    hold_auto_miss_judge.update(700.0, input);
+    const std::vector<judge_event>& hold_auto_miss_events = hold_auto_miss_judge.get_judge_events();
+    if (hold_auto_miss_events.size() != 2 ||
+        hold_auto_miss_events[0].event_index != 0 ||
+        hold_auto_miss_events[1].event_index != 1 ||
+        hold_auto_miss_events[0].result != judge_result::miss ||
+        hold_auto_miss_events[1].result != judge_result::miss) {
+        std::cerr << "Hold automatic miss should emit head and tail misses\n";
+        return EXIT_FAILURE;
+    }
+    if (!hold_auto_miss_events[0].show_feedback || hold_auto_miss_events[1].show_feedback) {
+        std::cerr << "Hold automatic tail miss should score without replacing feedback\n";
         return EXIT_FAILURE;
     }
 

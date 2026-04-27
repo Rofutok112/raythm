@@ -11,11 +11,11 @@
 #include <utility>
 #include <vector>
 
-#include "app_paths.h"
 #include "network/auth_client.h"
 #include "network/json_helpers.h"
 #include "path_utils.h"
 #include "title/online_download_remote_client.h"
+#include "title/upload_mapping_store.h"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -43,25 +43,6 @@ struct http_response {
     int status_code = 0;
     std::string body;
     std::string error_message;
-};
-
-struct song_mapping_entry {
-    std::string server_url;
-    std::string local_song_id;
-    std::string remote_song_id;
-};
-
-struct chart_mapping_entry {
-    std::string server_url;
-    std::string local_chart_id;
-    std::string local_song_id;
-    std::string remote_chart_id;
-    std::string remote_song_id;
-};
-
-struct upload_mapping_store {
-    std::vector<song_mapping_entry> songs;
-    std::vector<chart_mapping_entry> charts;
 };
 
 struct multipart_field {
@@ -114,28 +95,6 @@ std::string trim_ascii(std::string_view value) {
     return std::string(value.substr(start, end - start));
 }
 
-std::string strip_trailing_cr(std::string value) {
-    while (!value.empty() && (value.back() == '\r' || value.back() == '\n')) {
-        value.pop_back();
-    }
-    return value;
-}
-
-std::vector<std::string> split_tab_fields(const std::string& line) {
-    std::vector<std::string> fields;
-    size_t start = 0;
-    while (start <= line.size()) {
-        const size_t end = line.find('\t', start);
-        if (end == std::string::npos) {
-            fields.push_back(line.substr(start));
-            break;
-        }
-        fields.push_back(line.substr(start, end - start));
-        start = end + 1;
-    }
-    return fields;
-}
-
 std::string escape_multipart_header_value(const std::string& value) {
     std::string result;
     result.reserve(value.size());
@@ -159,185 +118,6 @@ std::string parse_error_message(const http_response& response, std::string fallb
     return fallback;
 }
 
-upload_mapping_store load_upload_mappings() {
-    upload_mapping_store store;
-
-    std::ifstream input(app_paths::upload_mapping_path(), std::ios::binary);
-    if (!input.is_open()) {
-        return store;
-    }
-
-    enum class section {
-        none,
-        songs,
-        charts,
-    };
-
-    section current_section = section::none;
-    std::string line;
-    while (std::getline(input, line)) {
-        line = strip_trailing_cr(line);
-        if (line.empty() || line[0] == '#') {
-            continue;
-        }
-        if (line == "[songs]") {
-            current_section = section::songs;
-            continue;
-        }
-        if (line == "[charts]") {
-            current_section = section::charts;
-            continue;
-        }
-
-        const std::vector<std::string> fields = split_tab_fields(line);
-        if (current_section == section::songs && fields.size() >= 3) {
-            store.songs.push_back(song_mapping_entry{
-                .server_url = fields[0],
-                .local_song_id = fields[1],
-                .remote_song_id = fields[2],
-            });
-        } else if (current_section == section::charts && fields.size() >= 5) {
-            store.charts.push_back(chart_mapping_entry{
-                .server_url = fields[0],
-                .local_chart_id = fields[1],
-                .local_song_id = fields[2],
-                .remote_chart_id = fields[3],
-                .remote_song_id = fields[4],
-            });
-        }
-    }
-
-    return store;
-}
-
-bool save_upload_mappings(const upload_mapping_store& store) {
-    app_paths::ensure_directories();
-
-    std::ofstream output(app_paths::upload_mapping_path(), std::ios::binary | std::ios::trunc);
-    if (!output.is_open()) {
-        return false;
-    }
-
-    output << "# raythm upload mappings v1\n";
-    output << "[songs]\n";
-    for (const song_mapping_entry& entry : store.songs) {
-        output << entry.server_url << '\t'
-               << entry.local_song_id << '\t'
-               << entry.remote_song_id << '\n';
-    }
-    output << "[charts]\n";
-    for (const chart_mapping_entry& entry : store.charts) {
-        output << entry.server_url << '\t'
-               << entry.local_chart_id << '\t'
-               << entry.local_song_id << '\t'
-               << entry.remote_chart_id << '\t'
-               << entry.remote_song_id << '\n';
-    }
-
-    return output.good();
-}
-
-std::optional<std::string> find_song_mapping(const upload_mapping_store& store,
-                                             const std::string& server_url,
-                                             const std::string& local_song_id) {
-    for (const song_mapping_entry& entry : store.songs) {
-        if (entry.server_url == server_url && entry.local_song_id == local_song_id) {
-            return entry.remote_song_id;
-        }
-    }
-    return std::nullopt;
-}
-
-std::optional<std::string> find_chart_mapping(const upload_mapping_store& store,
-                                              const std::string& server_url,
-                                              const std::string& local_chart_id) {
-    for (const chart_mapping_entry& entry : store.charts) {
-        if (entry.server_url == server_url && entry.local_chart_id == local_chart_id) {
-            return entry.remote_chart_id;
-        }
-    }
-    return std::nullopt;
-}
-
-void remove_chart_mapping(upload_mapping_store& store,
-                          const std::string& server_url,
-                          const std::string& local_chart_id) {
-    std::erase_if(store.charts, [&](const chart_mapping_entry& entry) {
-        return entry.server_url == server_url && entry.local_chart_id == local_chart_id;
-    });
-}
-
-void remove_song_mapping(upload_mapping_store& store,
-                         const std::string& server_url,
-                         const std::string& local_song_id) {
-    std::erase_if(store.songs, [&](const song_mapping_entry& entry) {
-        return entry.server_url == server_url && entry.local_song_id == local_song_id;
-    });
-    std::erase_if(store.charts, [&](const chart_mapping_entry& entry) {
-        return entry.server_url == server_url && entry.local_song_id == local_song_id;
-    });
-}
-
-void store_song_mapping(upload_mapping_store& store,
-                        const std::string& server_url,
-                        const std::string& local_song_id,
-                        const std::string& remote_song_id) {
-    if (local_song_id.empty() || remote_song_id.empty()) {
-        return;
-    }
-
-    bool found = false;
-    for (song_mapping_entry& entry : store.songs) {
-        if (entry.server_url == server_url && entry.local_song_id == local_song_id) {
-            found = true;
-            if (entry.remote_song_id != remote_song_id) {
-                entry.remote_song_id = remote_song_id;
-                std::erase_if(store.charts, [&](const chart_mapping_entry& chart_entry) {
-                    return chart_entry.server_url == server_url &&
-                           chart_entry.local_song_id == local_song_id;
-                });
-            }
-            break;
-        }
-    }
-
-    if (!found) {
-        store.songs.push_back(song_mapping_entry{
-            .server_url = server_url,
-            .local_song_id = local_song_id,
-            .remote_song_id = remote_song_id,
-        });
-    }
-}
-
-void store_chart_mapping(upload_mapping_store& store,
-                         const std::string& server_url,
-                         const std::string& local_chart_id,
-                         const std::string& local_song_id,
-                         const std::string& remote_chart_id,
-                         const std::string& remote_song_id) {
-    if (local_chart_id.empty() || remote_chart_id.empty()) {
-        return;
-    }
-
-    for (chart_mapping_entry& entry : store.charts) {
-        if (entry.server_url == server_url && entry.local_chart_id == local_chart_id) {
-            entry.local_song_id = local_song_id;
-            entry.remote_chart_id = remote_chart_id;
-            entry.remote_song_id = remote_song_id;
-            return;
-        }
-    }
-
-    store.charts.push_back(chart_mapping_entry{
-        .server_url = server_url,
-        .local_chart_id = local_chart_id,
-        .local_song_id = local_song_id,
-        .remote_chart_id = remote_chart_id,
-        .remote_song_id = remote_song_id,
-    });
-}
-
 bool read_binary_file(const fs::path& path,
                       std::vector<unsigned char>& bytes,
                       std::string& error_message) {
@@ -353,26 +133,6 @@ bool read_binary_file(const fs::path& path,
         return false;
     }
 
-    return true;
-}
-
-bool read_text_file(const fs::path& path,
-                    std::string& content,
-                    std::string& error_message) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input.is_open()) {
-        error_message = "Failed to open a local chart file for upload.";
-        return false;
-    }
-
-    std::ostringstream buffer;
-    buffer << input.rdbuf();
-    if (!input.good() && !input.eof()) {
-        error_message = "Failed to read a local chart file for upload.";
-        return false;
-    }
-
-    content = buffer.str();
     return true;
 }
 
@@ -683,6 +443,10 @@ upload_request_result parse_song_upload_response(const http_response& response,
         result.message = parse_error_message(response, "Log in before uploading community content.");
         return result;
     }
+    if (response.status_code == 409) {
+        result.message = parse_error_message(response, "Song ID already exists on the server.");
+        return result;
+    }
     if (response.status_code < 200 || response.status_code >= 300) {
         result.message = parse_error_message(response, "Song upload failed.");
         return result;
@@ -724,6 +488,10 @@ upload_request_result parse_chart_upload_response(const http_response& response,
     if (response.status_code == 401) {
         result.unauthorized = true;
         result.message = parse_error_message(response, "Log in before uploading community content.");
+        return result;
+    }
+    if (response.status_code == 409) {
+        result.message = parse_error_message(response, "Chart ID already exists on the server.");
         return result;
     }
     if (response.status_code < 200 || response.status_code >= 300) {
@@ -816,6 +584,7 @@ upload_request_result send_song_upload_request(const auth::session& session,
     }
 
     std::vector<multipart_field> fields;
+    fields.push_back({"songId", meta.song_id});
     fields.push_back({"title", meta.title});
     fields.push_back({"artist", meta.artist});
     {
@@ -861,10 +630,10 @@ upload_request_result send_song_upload_request(const auth::session& session,
     return parse_song_upload_response(response, remote_song_id.has_value());
 }
 
-std::optional<std::string> find_remote_song_id(const auth::session& session,
-                                               upload_mapping_store& store,
-                                               const song_select::song_entry& song) {
-    if (const std::optional<std::string> mapped = find_song_mapping(
+std::optional<std::string> resolve_remote_song_id_for_chart_upload(const auth::session& session,
+                                                                   title_upload_mapping::store& store,
+                                                                   const song_select::song_entry& song) {
+    if (const std::optional<std::string> mapped = title_upload_mapping::find_remote_song_id(
             store, session.server_url, song.song.meta.song_id);
         mapped.has_value()) {
         return mapped;
@@ -880,108 +649,53 @@ std::optional<std::string> find_remote_song_id(const auth::session& session,
         return std::nullopt;
     }
 
-    store_song_mapping(store, session.server_url, song.song.meta.song_id, lookup.song.id);
+    title_upload_mapping::put_song(store, session.server_url, song.song.meta.song_id, lookup.song.id,
+                                   title_upload_mapping::mapping_origin::linked);
     return lookup.song.id;
 }
 
-std::optional<std::string> rewrite_chart_song_id(const std::string& content,
-                                                 const std::string& remote_song_id,
-                                                 std::string& error_message) {
-    if (remote_song_id.empty()) {
-        error_message = "Chart upload is missing a remote song ID.";
+std::optional<bool> remote_song_exists_for_local_id(const auth::session& session,
+                                                    const song_select::song_entry& song) {
+    if (song.song.meta.song_id.empty()) {
+        return false;
+    }
+
+    const title_online_view::remote_song_lookup_result lookup =
+        title_online_view::fetch_remote_song_by_id(song.song.meta.song_id, session.server_url);
+    if (!lookup.success && !lookup.not_found) {
         return std::nullopt;
     }
+    return lookup.success && !lookup.not_found && !lookup.song.id.empty();
+}
 
-    std::vector<std::string> lines;
-    {
-        std::string normalized = content;
-        size_t position = 0;
-        while ((position = normalized.find("\r\n", position)) != std::string::npos) {
-            normalized.replace(position, 2, "\n");
-        }
-
-        std::istringstream stream(normalized);
-        std::string line;
-        while (std::getline(stream, line)) {
-            lines.push_back(line);
-        }
+std::optional<bool> remote_chart_exists_for_local_id(const auth::session& session,
+                                                     const std::string& remote_song_id,
+                                                     const song_select::chart_option& chart) {
+    if (remote_song_id.empty() || chart.meta.chart_id.empty()) {
+        return false;
     }
 
-    int metadata_header_index = -1;
-    int metadata_end_index = static_cast<int>(lines.size());
-    for (int index = 0; index < static_cast<int>(lines.size()); ++index) {
-        const std::string trimmed = trim_ascii(lines[static_cast<size_t>(index)]);
-        if (metadata_header_index < 0) {
-            if (trimmed == "[Metadata]") {
-                metadata_header_index = index;
-            }
-            continue;
+    constexpr int kChartLookupPageSize = 50;
+    int page = 1;
+    while (true) {
+        const title_online_view::remote_chart_page_fetch_result page_result =
+            title_online_view::fetch_remote_chart_page(session.server_url, remote_song_id, page, kChartLookupPageSize);
+        if (!page_result.success) {
+            return std::nullopt;
         }
-        if (!trimmed.empty() && trimmed.front() == '[' && trimmed.back() == ']') {
-            metadata_end_index = index;
-            break;
+        const auto found = std::find_if(page_result.charts.begin(), page_result.charts.end(),
+                                        [&](const title_online_view::remote_chart_payload& remote_chart) {
+                                            return remote_chart.id == chart.meta.chart_id;
+                                        });
+        if (found != page_result.charts.end()) {
+            return true;
         }
-    }
-
-    if (metadata_header_index < 0) {
-        error_message = "Selected chart does not contain a [Metadata] section.";
-        return std::nullopt;
-    }
-
-    std::vector<std::string> ordered_keys;
-    std::vector<std::pair<std::string, std::string>> metadata_values;
-    auto find_metadata = [&](const std::string& key) {
-        return std::find_if(metadata_values.begin(), metadata_values.end(), [&](const auto& entry) {
-            return entry.first == key;
-        });
-    };
-
-    for (int index = metadata_header_index + 1; index < metadata_end_index; ++index) {
-        const std::string& line = lines[static_cast<size_t>(index)];
-        const size_t separator = line.find('=');
-        if (separator == std::string::npos) {
-            continue;
+        if (page_result.charts.empty() ||
+            page * kChartLookupPageSize >= page_result.total) {
+            return false;
         }
-
-        const std::string key = trim_ascii(line.substr(0, separator));
-        const std::string value = trim_ascii(line.substr(separator + 1));
-        if (key.empty()) {
-            continue;
-        }
-
-        if (find_metadata(key) == metadata_values.end()) {
-            ordered_keys.push_back(key);
-            metadata_values.emplace_back(key, value);
-        }
+        ++page;
     }
-
-    auto song_id_entry = find_metadata("songId");
-    if (song_id_entry == metadata_values.end()) {
-        ordered_keys.push_back("songId");
-        metadata_values.emplace_back("songId", remote_song_id);
-    } else {
-        song_id_entry->second = remote_song_id;
-    }
-
-    std::ostringstream rebuilt;
-    for (int index = 0; index <= metadata_header_index; ++index) {
-        rebuilt << lines[static_cast<size_t>(index)] << '\n';
-    }
-    for (const std::string& key : ordered_keys) {
-        const auto entry = find_metadata(key);
-        if (entry == metadata_values.end()) {
-            continue;
-        }
-        rebuilt << entry->first << '=' << entry->second << '\n';
-    }
-    for (int index = metadata_end_index; index < static_cast<int>(lines.size()); ++index) {
-        rebuilt << lines[static_cast<size_t>(index)];
-        if (index + 1 < static_cast<int>(lines.size())) {
-            rebuilt << '\n';
-        }
-    }
-
-    return rebuilt.str();
 }
 
 upload_request_result send_chart_upload_request(const auth::session& session,
@@ -997,20 +711,16 @@ upload_request_result send_chart_upload_request(const auth::session& session,
         return result;
     }
 
-    std::string chart_content;
-    if (!read_text_file(chart_path, chart_content, result.message)) {
-        return result;
-    }
-
-    std::optional<std::string> rewritten_chart = rewrite_chart_song_id(chart_content, remote_song_id, result.message);
-    if (!rewritten_chart.has_value()) {
+    std::vector<unsigned char> chart_bytes;
+    if (!read_binary_file(chart_path, chart_bytes, result.message)) {
         return result;
     }
 
     std::vector<multipart_field> fields;
+    fields.push_back({"chartId", chart.meta.chart_id});
+    fields.push_back({"songId", remote_song_id});
     fields.push_back({"visibility", "public"});
 
-    std::vector<unsigned char> chart_bytes(rewritten_chart->begin(), rewritten_chart->end());
     std::vector<multipart_file> files;
     files.push_back({
         .name = "chart",
@@ -1038,11 +748,6 @@ upload_request_result send_chart_upload_request(const auth::session& session,
 upload_result upload_song(const song_select::song_entry& song) {
     upload_result result;
 
-    if (song.status != content_status::local) {
-        result.message = "Only Local songs can be uploaded.";
-        return result;
-    }
-
     std::string error_message;
     const std::optional<auth::session> session_opt = require_saved_session(error_message);
     if (!session_opt.has_value()) {
@@ -1051,9 +756,28 @@ upload_result upload_song(const song_select::song_entry& song) {
     }
     auth::session session = *session_opt;
 
-    upload_mapping_store store = load_upload_mappings();
+    title_upload_mapping::store store = title_upload_mapping::load();
     const std::optional<std::string> existing_remote_song_id =
-        find_song_mapping(store, session.server_url, song.song.meta.song_id);
+        title_upload_mapping::find_remote_song_id(store, session.server_url, song.song.meta.song_id);
+    const std::optional<title_upload_mapping::mapping_origin> existing_song_origin =
+        title_upload_mapping::find_song_origin(store, session.server_url, song.song.meta.song_id);
+    if (existing_remote_song_id.has_value() &&
+        existing_song_origin.value_or(title_upload_mapping::mapping_origin::owned_upload) !=
+            title_upload_mapping::mapping_origin::owned_upload) {
+        result.message = "This song is linked to online content but was not uploaded from this client.";
+        return result;
+    }
+    if (!existing_remote_song_id.has_value()) {
+        const std::optional<bool> remote_exists = remote_song_exists_for_local_id(session, song);
+        if (!remote_exists.has_value()) {
+            result.message = "Could not verify whether this song already exists on the server.";
+            return result;
+        }
+        if (*remote_exists) {
+            result.message = "This song already exists on the server. Downloaded Community/Official songs cannot be uploaded again.";
+            return result;
+        }
+    }
 
     upload_request_result request_result =
         send_song_upload_request(session, song, existing_remote_song_id);
@@ -1068,8 +792,8 @@ upload_result upload_song(const song_select::song_entry& song) {
         request_result = send_song_upload_request(session, song, existing_remote_song_id);
     }
     if (request_result.not_found && existing_remote_song_id.has_value()) {
-        remove_song_mapping(store, session.server_url, song.song.meta.song_id);
-        save_upload_mappings(store);
+        title_upload_mapping::remove_song(store, session.server_url, song.song.meta.song_id);
+        title_upload_mapping::save(store);
         request_result = send_song_upload_request(session, song, std::nullopt);
         if (request_result.unauthorized) {
             std::string restore_error;
@@ -1090,8 +814,9 @@ upload_result upload_song(const song_select::song_entry& song) {
         return result;
     }
 
-    store_song_mapping(store, session.server_url, song.song.meta.song_id, request_result.remote_song_id);
-    if (!save_upload_mappings(store)) {
+    title_upload_mapping::put_song(store, session.server_url, song.song.meta.song_id, request_result.remote_song_id,
+                                   title_upload_mapping::mapping_origin::owned_upload);
+    if (!title_upload_mapping::save(store)) {
         result.message += " Local upload mapping was not saved.";
     } else if (!request_result.updated_existing) {
         result.message += " Charts for this song can now be uploaded.";
@@ -1104,11 +829,6 @@ upload_result upload_chart(const song_select::song_entry& song,
                            const song_select::chart_option& chart) {
     upload_result result;
 
-    if (song.status != content_status::local || chart.status != content_status::local) {
-        result.message = "Only Local charts from Local songs can be uploaded.";
-        return result;
-    }
-
     std::string error_message;
     const std::optional<auth::session> session_opt = require_saved_session(error_message);
     if (!session_opt.has_value()) {
@@ -1117,17 +837,41 @@ upload_result upload_chart(const song_select::song_entry& song,
     }
     auth::session session = *session_opt;
 
-    upload_mapping_store store = load_upload_mappings();
-    const std::optional<std::string> remote_song_id = find_remote_song_id(session, store, song);
+    title_upload_mapping::store store = title_upload_mapping::load();
+    const std::optional<std::string> remote_song_id = resolve_remote_song_id_for_chart_upload(session, store, song);
     if (!remote_song_id.has_value()) {
         result.message = "Upload the song first so the server can assign a song ID.";
         return result;
     }
 
     const std::optional<std::string> existing_remote_chart_id =
-        find_chart_mapping(store, session.server_url, chart.meta.chart_id);
+        title_upload_mapping::find_remote_chart_id(store, session.server_url, chart.meta.chart_id);
+    const std::optional<title_upload_mapping::mapping_origin> existing_chart_origin =
+        title_upload_mapping::find_chart_origin(store, session.server_url, chart.meta.chart_id);
+    const std::optional<std::string> updatable_remote_chart_id =
+        existing_chart_origin.value_or(title_upload_mapping::mapping_origin::owned_upload) ==
+            title_upload_mapping::mapping_origin::owned_upload
+        ? existing_remote_chart_id
+        : std::nullopt;
+    if (!existing_remote_chart_id.has_value()) {
+        const std::optional<bool> remote_chart_exists =
+            remote_chart_exists_for_local_id(session, *remote_song_id, chart);
+        if (!remote_chart_exists.has_value()) {
+            result.message = "Could not verify whether this chart already exists on the server.";
+            return result;
+        }
+        if (*remote_chart_exists) {
+            result.message = "This chart already exists on the server. Downloaded Community/Official charts cannot be uploaded again.";
+            return result;
+        }
+    }
+    if (existing_remote_chart_id.has_value() && !updatable_remote_chart_id.has_value()) {
+        result.message = "This chart is linked to online content but was not uploaded from this client.";
+        return result;
+    }
+
     upload_request_result request_result =
-        send_chart_upload_request(session, song, chart, *remote_song_id, existing_remote_chart_id);
+        send_chart_upload_request(session, song, chart, *remote_song_id, updatable_remote_chart_id);
     if (request_result.unauthorized) {
         std::string restore_error;
         const std::optional<auth::session> restored = restore_upload_session(restore_error);
@@ -1136,11 +880,11 @@ upload_result upload_chart(const song_select::song_entry& song,
             return result;
         }
         session = *restored;
-        request_result = send_chart_upload_request(session, song, chart, *remote_song_id, existing_remote_chart_id);
+        request_result = send_chart_upload_request(session, song, chart, *remote_song_id, updatable_remote_chart_id);
     }
     if (request_result.not_found && existing_remote_chart_id.has_value()) {
-        remove_chart_mapping(store, session.server_url, chart.meta.chart_id);
-        save_upload_mappings(store);
+        title_upload_mapping::remove_chart(store, session.server_url, chart.meta.chart_id);
+        title_upload_mapping::save(store);
         request_result =
             send_chart_upload_request(session, song, chart, *remote_song_id, std::nullopt);
         if (request_result.unauthorized) {
@@ -1163,10 +907,14 @@ upload_result upload_chart(const song_select::song_entry& song,
         return result;
     }
 
-    store_song_mapping(store, session.server_url, song.song.meta.song_id, *remote_song_id);
-    store_chart_mapping(store, session.server_url, chart.meta.chart_id, song.song.meta.song_id,
-                        request_result.remote_chart_id, *remote_song_id);
-    if (!save_upload_mappings(store)) {
+    if (!title_upload_mapping::find_song_origin(store, session.server_url, song.song.meta.song_id).has_value()) {
+        title_upload_mapping::put_song(store, session.server_url, song.song.meta.song_id, *remote_song_id,
+                                       title_upload_mapping::mapping_origin::linked);
+    }
+    title_upload_mapping::put_chart(store, session.server_url, chart.meta.chart_id, song.song.meta.song_id,
+                                    request_result.remote_chart_id, *remote_song_id,
+                                    title_upload_mapping::mapping_origin::owned_upload);
+    if (!title_upload_mapping::save(store)) {
         result.message += " Local upload mapping was not saved.";
     }
 

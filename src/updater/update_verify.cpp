@@ -8,6 +8,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 
 namespace {
 
@@ -184,6 +185,14 @@ std::optional<std::string> compute_sha256_hex(const std::filesystem::path& file_
             sha256_update(state, reinterpret_cast<const std::uint8_t*>(buffer.data()), static_cast<std::size_t>(bytes_read));
         }
     }
+    return sha256_finish(state);
+}
+
+std::string compute_sha256_hex(std::string_view content) {
+    sha256_state state;
+    sha256_update(state,
+                  reinterpret_cast<const std::uint8_t*>(content.data()),
+                  content.size());
     return sha256_finish(state);
 }
 
