@@ -348,6 +348,21 @@ void title_scene::poll_play_catalog_reload() {
     queued_play_catalog_calculate_missing_levels_ = false;
 }
 
+void title_scene::capture_current_play_selection() {
+    const song_select::song_entry* song = song_select::selected_song(play_state_);
+    if (song == nullptr) {
+        return;
+    }
+
+    preferred_song_id_ = song->song.meta.song_id;
+    const auto filtered = song_select::filtered_charts_for_selected_song(play_state_);
+    if (const song_select::chart_option* chart = song_select::selected_chart_for(play_state_, filtered)) {
+        preferred_chart_id_ = chart->meta.chart_id;
+    } else {
+        preferred_chart_id_.clear();
+    }
+}
+
 void title_scene::sync_play_media() {
     title_play_session::sync_preview(play_state_, audio_controller_.preview());
     request_play_ranking_reload();
@@ -520,7 +535,11 @@ void title_scene::poll_create_upload() {
     create_upload_in_progress_ = false;
     song_select::queue_status_message(play_state_, result.message, !result.success);
     if (result.success && result.should_refresh_online_catalog) {
-        title_online_view::reload_catalog(online_state_);
+        capture_current_play_selection();
+        title_online_view::reload_catalog(online_state_, true);
+        request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
+                                    mode_ == hub_mode::play || mode_ == hub_mode::create,
+                                    true);
     }
 }
 
@@ -1094,6 +1113,23 @@ bool title_scene::handle_settings_button_input() {
     return true;
 }
 
+bool title_scene::handle_refresh_button_input() {
+    if (mode_ == hub_mode::settings || home_menu_anim_ < kAccountChipInteractiveThreshold) {
+        return false;
+    }
+    if (!ui::is_clicked(title_layout::refresh_chip_rect())) {
+        return false;
+    }
+
+    capture_current_play_selection();
+    title_online_view::reload_catalog(online_state_, true);
+    request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
+                                mode_ == hub_mode::play || mode_ == hub_mode::create,
+                                true);
+    ui::notify("Refreshing catalog...", ui::notice_tone::info, 1.8f);
+    return true;
+}
+
 bool title_scene::handle_login_dialog_input() {
     if (!play_state_.login_dialog.open) {
         return false;
@@ -1478,19 +1514,27 @@ void title_scene::update(float dt) {
         return;
     }
 
+    if (!suppress_home_pointer_this_frame && handle_refresh_button_input()) {
+        return;
+    }
+
     if (!suppress_home_pointer_this_frame && handle_settings_button_input()) {
         return;
     }
 
     const Rectangle account_chip_rect = title_layout::account_chip_rect();
+    const Rectangle refresh_chip_rect = title_layout::refresh_chip_rect();
     const Rectangle settings_chip_rect = title_layout::settings_chip_rect();
     const bool account_hovered =
         home_menu_anim_ >= kAccountChipInteractiveThreshold && ui::is_hovered(account_chip_rect);
+    const bool refresh_hovered =
+        home_menu_anim_ >= kAccountChipInteractiveThreshold && ui::is_hovered(refresh_chip_rect);
     const bool settings_hovered =
         home_menu_anim_ >= kAccountChipInteractiveThreshold && ui::is_hovered(settings_chip_rect);
     const bool left_click_for_home =
         IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
         !account_hovered &&
+        !refresh_hovered &&
         !settings_hovered;
     const bool right_click_for_home = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
 
@@ -1591,6 +1635,7 @@ void title_scene::draw() {
     const Rectangle screen_rect = title_layout::screen_rect();
     const Rectangle spectrum_rect = title_layout::spectrum_rect();
     const Rectangle settings_chip_rect = title_layout::settings_chip_rect();
+    const Rectangle refresh_chip_rect = title_layout::refresh_chip_rect();
     const Rectangle account_chip_rect = title_layout::account_chip_rect();
     virtual_screen::begin_ui();
     ClearBackground(t.bg);
@@ -1602,6 +1647,7 @@ void title_scene::draw() {
         title_header_view::draw({
             .closed_header_rect = title_layout::closed_header_rect(),
             .open_header_rect = title_layout::open_header_rect(),
+            .refresh_chip_rect = refresh_chip_rect,
             .settings_chip_rect = settings_chip_rect,
             .account_chip_rect = account_chip_rect,
             .menu_t = menu_t,

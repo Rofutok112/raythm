@@ -55,17 +55,19 @@ ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_stat
         : hovered ? hover_row_alpha
                   : normal_row_alpha;
     ui::draw_rect_f(visual, with_alpha(state.active ? button_selected : button_base, row_alpha));
-    ui::draw_rect_lines(visual, 1.2f,
+    const Rectangle border_rect = ui::inset(visual, 1.0f);
+    ui::draw_rect_lines(border_rect, 1.2f,
                         with_alpha(state.active ? t.border_active : t.border_light, alpha));
 
     const Rectangle content_rect = ui::inset(visual, ui::edge_insets::symmetric(0.0f, 14.0f));
     constexpr float kLabelWidth = 108.0f;
     constexpr float kLabelGap = 14.0f;
+    const bool show_label = !state.active && state.value.empty();
     const Rectangle label_rect = {content_rect.x, content_rect.y, kLabelWidth, content_rect.height};
     const Rectangle text_rect = {
-        content_rect.x + kLabelWidth + kLabelGap,
+        show_label ? content_rect.x + kLabelWidth + kLabelGap : content_rect.x,
         content_rect.y,
-        std::max(0.0f, content_rect.width - kLabelWidth - kLabelGap),
+        show_label ? std::max(0.0f, content_rect.width - kLabelWidth - kLabelGap) : content_rect.width,
         content_rect.height,
     };
 
@@ -203,8 +205,10 @@ ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_stat
 
     ui::update_text_input_scroll(state, text_rect.width - 8.0f, font_size);
 
-    ui::draw_text_in_rect(label, font_size, label_rect,
-                          with_alpha(state.active ? t.text : t.text_secondary, alpha), ui::text_align::left);
+    if (show_label) {
+        ui::draw_text_in_rect(label, font_size, label_rect,
+                              with_alpha(t.text_secondary, alpha), ui::text_align::left);
+    }
 
     std::string display_value = state.value;
     if (display_value.empty() && !state.active && placeholder != nullptr) {

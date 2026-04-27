@@ -76,12 +76,14 @@ private:
     void start_chart_export();
     bool handle_account_input();
     bool handle_settings_button_input();
+    bool handle_refresh_button_input();
     bool handle_login_dialog_input();
     void request_play_catalog_reload(std::string preferred_song_id = "",
                                      std::string preferred_chart_id = "",
                                      bool sync_media_on_apply = false,
                                      bool calculate_missing_levels = false);
     void poll_play_catalog_reload();
+    void capture_current_play_selection();
     void sync_play_media();
     void request_play_ranking_reload();
     void poll_play_ranking_reload();
