@@ -44,7 +44,7 @@ struct scoring_ruleset_operation_result {
     std::optional<scoring_ruleset> ruleset;
 };
 
-struct official_manifest {
+struct chart_manifest {
     bool available = false;
     std::string message;
     std::string content_source;
@@ -72,7 +72,7 @@ struct song_manifest {
 struct manifest_operation_result {
     bool success = false;
     std::string message;
-    std::optional<official_manifest> manifest;
+    std::optional<chart_manifest> manifest;
 };
 
 struct song_manifest_operation_result {
@@ -95,8 +95,8 @@ submit_operation_result submit_chart_ranking(const std::string& server_url,
 
 scoring_ruleset_operation_result fetch_scoring_ruleset(const std::string& server_url);
 
-manifest_operation_result fetch_official_chart_manifest(const std::string& server_url,
-                                                        const std::string& chart_id);
+manifest_operation_result fetch_chart_manifest(const std::string& server_url,
+                                               const std::string& chart_id);
 
 song_manifest_operation_result fetch_song_manifest(const std::string& server_url,
                                                    const std::string& song_id);

@@ -360,7 +360,7 @@ std::optional<ranking_client::submit_response> parse_submit_response(const std::
     return response;
 }
 
-std::optional<ranking_client::official_manifest> parse_official_manifest_response(const std::string& body) {
+std::optional<ranking_client::chart_manifest> parse_chart_manifest_response(const std::string& body) {
     const auto available = json::extract_bool(body, "available");
     const auto chart_id = json::extract_string(body, "chart_id");
     const auto song_id = json::extract_string(body, "song_id");
@@ -368,11 +368,11 @@ std::optional<ranking_client::official_manifest> parse_official_manifest_respons
         return std::nullopt;
     }
 
-    return ranking_client::official_manifest{
+    return ranking_client::chart_manifest{
         .available = *available,
         .message = json::extract_string(body, "message").value_or(""),
         .content_source = json::extract_string(body, "content_source").value_or(
-            json::extract_string(body, "contentSource").value_or(*available ? "official" : "")),
+            json::extract_string(body, "contentSource").value_or("")),
         .chart_id = *chart_id,
         .song_id = *song_id,
         .song_json_sha256 = json::extract_string(body, "song_json_sha256").value_or(""),
@@ -682,8 +682,8 @@ scoring_ruleset_operation_result fetch_scoring_ruleset(const std::string& server
     };
 }
 
-manifest_operation_result fetch_official_chart_manifest(const std::string& server_url,
-                                                        const std::string& chart_id) {
+manifest_operation_result fetch_chart_manifest(const std::string& server_url,
+                                               const std::string& chart_id) {
     if (server_url.empty()) {
         return {
             .success = false,
@@ -727,7 +727,7 @@ manifest_operation_result fetch_official_chart_manifest(const std::string& serve
             return {
                 .success = true,
                 .message = "Manifest not found.",
-                .manifest = official_manifest{
+                .manifest = chart_manifest{
                     .available = false,
                     .message = "Manifest not found.",
                     .chart_id = chart_id,
@@ -739,16 +739,16 @@ manifest_operation_result fetch_official_chart_manifest(const std::string& serve
     if (response.status_code < 200 || response.status_code >= 300) {
         return {
             .success = false,
-            .message = json::extract_string(response.body, "message").value_or("Failed to fetch official manifest."),
+            .message = json::extract_string(response.body, "message").value_or("Failed to fetch chart manifest."),
             .manifest = std::nullopt,
         };
     }
 
-    const std::optional<official_manifest> manifest = parse_official_manifest_response(response.body);
+    const std::optional<chart_manifest> manifest = parse_chart_manifest_response(response.body);
     if (!manifest.has_value()) {
         return {
             .success = false,
-            .message = "Server returned an unexpected official manifest response.",
+            .message = "Server returned an unexpected chart manifest response.",
             .manifest = std::nullopt,
         };
     }

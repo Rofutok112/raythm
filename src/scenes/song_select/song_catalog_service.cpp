@@ -167,7 +167,7 @@ struct content_hashes {
     std::string chart_fingerprint;
 };
 
-content_hashes manifest_hashes(const ranking_client::official_manifest& manifest) {
+content_hashes manifest_hashes(const ranking_client::chart_manifest& manifest) {
     return {
         manifest.song_json_sha256,
         manifest.song_json_fingerprint,
@@ -515,7 +515,7 @@ content_status verify_chart_content_source(const song_data& song,
     const std::string remote_song_id = expected_remote_song_id(server_url, song.meta.song_id);
     const std::string remote_chart_id = expected_remote_chart_id(server_url, chart.meta.chart_id);
     const ranking_client::manifest_operation_result request =
-        ranking_client::fetch_official_chart_manifest(server_url, remote_chart_id);
+        ranking_client::fetch_chart_manifest(server_url, remote_chart_id);
     if (!request.success) {
         server_reachable = false;
         return cached_status_for(cached, signature);
@@ -524,7 +524,7 @@ content_status verify_chart_content_source(const song_data& song,
         return cached_status_for(cached, signature);
     }
 
-    const ranking_client::official_manifest& manifest = *request.manifest;
+    const ranking_client::chart_manifest& manifest = *request.manifest;
     if (manifest.chart_id != remote_chart_id ||
         manifest.song_id != remote_song_id) {
         return content_status::local;

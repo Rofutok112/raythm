@@ -358,7 +358,7 @@ std::vector<song_entry_state> load_owned_songs(const std::vector<song_select::so
 }
 
 catalog_load_result load_catalog_result() {
-    const song_select::catalog_data local_catalog = song_select::load_catalog();
+    const song_select::catalog_data local_catalog = song_select::load_catalog(true);
 
     const remote_song_page_fetch_result official_page =
         fetch_remote_song_page(catalog_mode::official, 1, kInitialSongPageSize);

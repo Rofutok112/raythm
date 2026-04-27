@@ -79,7 +79,8 @@ private:
     bool handle_login_dialog_input();
     void request_play_catalog_reload(std::string preferred_song_id = "",
                                      std::string preferred_chart_id = "",
-                                     bool sync_media_on_apply = false);
+                                     bool sync_media_on_apply = false,
+                                     bool calculate_missing_levels = false);
     void poll_play_catalog_reload();
     void sync_play_media();
     void request_play_ranking_reload();
@@ -159,6 +160,8 @@ private:
     bool play_catalog_reload_pending_ = false;
     bool play_catalog_sync_media_on_apply_ = false;
     bool queued_play_catalog_sync_media_on_apply_ = false;
+    bool play_catalog_calculate_missing_levels_ = false;
+    bool queued_play_catalog_calculate_missing_levels_ = false;
     std::string play_catalog_song_id_;
     std::string play_catalog_chart_id_;
     std::string queued_play_catalog_song_id_;

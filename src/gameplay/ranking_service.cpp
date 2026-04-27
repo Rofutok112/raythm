@@ -598,7 +598,7 @@ std::string expected_remote_chart_id(const std::string& server_url,
         .value_or(local_chart_id);
 }
 
-struct local_official_hashes {
+struct local_manifest_hashes {
     std::string song_json_sha256;
     std::string song_json_fingerprint;
     std::string audio_sha256;
@@ -618,14 +618,14 @@ verification_result compare_hash(const std::string& label,
     if (local_hash.empty() || server_hash.empty()) {
         return {
             .success = false,
-            .message = "Official chart verification is missing required hash data.",
+            .message = "Online chart verification is missing required hash data.",
         };
     }
 
     if (lowercase(local_hash) != lowercase(server_hash)) {
         return {
             .success = false,
-            .message = "Official chart verification failed for " + label + ".",
+            .message = "Online chart verification failed for " + label + ".",
         };
     }
 
@@ -635,7 +635,7 @@ verification_result compare_hash(const std::string& label,
     };
 }
 
-std::optional<local_official_hashes> compute_local_official_hashes(const song_data& song,
+std::optional<local_manifest_hashes> compute_local_manifest_hashes(const song_data& song,
                                                                    const std::string& chart_path,
                                                                    std::string& error_message) {
     const std::filesystem::path song_dir = path_utils::from_utf8(song.directory);
@@ -646,42 +646,42 @@ std::optional<local_official_hashes> compute_local_official_hashes(const song_da
 
     const std::optional<std::string> song_json_sha256 = updater::compute_sha256_hex(song_json_path);
     if (!song_json_sha256.has_value()) {
-        error_message = "Failed to hash local song.json for Official verification.";
+        error_message = "Failed to hash local song.json for online verification.";
         return std::nullopt;
     }
     const std::optional<std::string> song_json_fingerprint_sha256 =
         song_fingerprint::compute_sha256_hex(song_json_path);
     if (!song_json_fingerprint_sha256.has_value()) {
-        error_message = "Failed to fingerprint local song.json for Official verification.";
+        error_message = "Failed to fingerprint local song.json for online verification.";
         return std::nullopt;
     }
 
     const std::optional<std::string> audio_sha256 = updater::compute_sha256_hex(audio_path);
     if (!audio_sha256.has_value()) {
-        error_message = "Failed to hash local audio for Official verification.";
+        error_message = "Failed to hash local audio for online verification.";
         return std::nullopt;
     }
 
     const std::optional<std::string> jacket_sha256 = updater::compute_sha256_hex(jacket_path);
     if (!jacket_sha256.has_value()) {
-        error_message = "Failed to hash local jacket for Official verification.";
+        error_message = "Failed to hash local jacket for online verification.";
         return std::nullopt;
     }
 
     const std::optional<std::string> chart_sha256 = updater::compute_sha256_hex(local_chart_path);
     if (!chart_sha256.has_value()) {
-        error_message = "Failed to hash local chart for Official verification.";
+        error_message = "Failed to hash local chart for online verification.";
         return std::nullopt;
     }
 
     const std::optional<std::string> chart_fingerprint_sha256 =
         chart_fingerprint::compute_sha256_hex(local_chart_path);
     if (!chart_fingerprint_sha256.has_value()) {
-        error_message = "Failed to fingerprint local chart for Official verification.";
+        error_message = "Failed to fingerprint local chart for online verification.";
         return std::nullopt;
     }
 
-    return local_official_hashes{
+    return local_manifest_hashes{
         .song_json_sha256 = *song_json_sha256,
         .song_json_fingerprint = *song_json_fingerprint_sha256,
         .audio_sha256 = *audio_sha256,
@@ -691,29 +691,29 @@ std::optional<local_official_hashes> compute_local_official_hashes(const song_da
     };
 }
 
-verification_result verify_official_manifest(const song_data& song,
-                                             const std::string& chart_path,
-                                             const chart_meta& chart,
-                                             const std::string& server_url) {
+verification_result verify_chart_manifest(const song_data& song,
+                                          const std::string& chart_path,
+                                          const chart_meta& chart,
+                                          const std::string& server_url) {
     const std::string remote_song_id = expected_remote_song_id(server_url, song.meta.song_id);
     const std::string remote_chart_id = expected_remote_chart_id(server_url, chart.chart_id);
     const ranking_client::manifest_operation_result manifest_result =
-        ranking_client::fetch_official_chart_manifest(server_url, remote_chart_id);
+        ranking_client::fetch_chart_manifest(server_url, remote_chart_id);
     if (!manifest_result.success || !manifest_result.manifest.has_value()) {
         return {
             .success = false,
             .message = manifest_result.message.empty()
-                ? "Failed to fetch Official verification manifest."
+                ? "Failed to fetch online verification manifest."
                 : manifest_result.message,
         };
     }
 
-    const ranking_client::official_manifest& manifest = *manifest_result.manifest;
+    const ranking_client::chart_manifest& manifest = *manifest_result.manifest;
     if (!manifest.available) {
         return {
             .success = false,
             .message = manifest.message.empty()
-                ? "This chart is not eligible for Official ranking verification."
+                ? "This chart is not eligible for online ranking verification."
                 : manifest.message,
         };
     }
@@ -722,13 +722,13 @@ verification_result verify_official_manifest(const song_data& song,
         manifest.song_id != remote_song_id) {
         return {
             .success = false,
-            .message = "Official chart verification failed because the manifest IDs do not match local content.",
+            .message = "Online chart verification failed because the manifest IDs do not match local content.",
         };
     }
 
     std::string hash_error;
-    const std::optional<local_official_hashes> local_hashes =
-        compute_local_official_hashes(song, chart_path, hash_error);
+    const std::optional<local_manifest_hashes> local_hashes =
+        compute_local_manifest_hashes(song, chart_path, hash_error);
     if (!local_hashes.has_value()) {
         return {
             .success = false,
@@ -1068,7 +1068,7 @@ online_submit_result submit_online_result(const song_data& song,
     }
 
     const verification_result verification =
-        verify_official_manifest(song, chart_path, chart, stored->server_url);
+        verify_chart_manifest(song, chart_path, chart, stored->server_url);
     if (!verification.success) {
         submission.message = verification.message;
         return submission;
