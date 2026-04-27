@@ -127,7 +127,7 @@ store parse_plaintext(const std::string& content) {
                 .server_url = fields[0],
                 .local_song_id = fields[1],
                 .remote_song_id = fields[2],
-                .origin = fields.size() >= 4 ? parse_origin(fields[3]) : mapping_origin::linked,
+                .origin = fields.size() >= 4 ? parse_origin(fields[3]) : mapping_origin::owned_upload,
             });
         } else if (current_section == section::charts && fields.size() >= 5) {
             mappings.charts.push_back(chart_mapping_entry{
@@ -136,7 +136,7 @@ store parse_plaintext(const std::string& content) {
                 .local_song_id = fields[2],
                 .remote_chart_id = fields[3],
                 .remote_song_id = fields[4],
-                .origin = fields.size() >= 6 ? parse_origin(fields[5]) : mapping_origin::linked,
+                .origin = fields.size() >= 6 ? parse_origin(fields[5]) : mapping_origin::owned_upload,
             });
         }
     }

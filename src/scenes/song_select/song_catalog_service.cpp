@@ -128,6 +128,13 @@ std::string expected_remote_song_id(const std::string& server_url,
         .value_or(local_song_id);
 }
 
+std::string expected_remote_chart_id(const std::string& server_url,
+                                     const std::string& local_chart_id) {
+    const title_upload_mapping::store mappings = title_upload_mapping::load();
+    return title_upload_mapping::find_remote_chart_id(mappings, server_url, local_chart_id)
+        .value_or(local_chart_id);
+}
+
 std::string file_signature(const std::filesystem::path& path) {
     std::error_code ec;
     if (!std::filesystem::exists(path, ec) || !std::filesystem::is_regular_file(path, ec)) {
@@ -421,8 +428,9 @@ content_status verify_song_content_source(const song_data& song,
         return cached_status_for(cached, signature);
     }
 
+    const std::string remote_song_id = expected_remote_song_id(server_url, song.meta.song_id);
     const ranking_client::song_manifest_operation_result request =
-        ranking_client::fetch_song_manifest(server_url, song.meta.song_id);
+        ranking_client::fetch_song_manifest(server_url, remote_song_id);
     if (!request.success) {
         server_reachable = false;
         return cached_status_for(cached, signature);
@@ -432,7 +440,7 @@ content_status verify_song_content_source(const song_data& song,
     }
 
     const ranking_client::song_manifest& manifest = *request.manifest;
-    if (manifest.song_id != expected_remote_song_id(server_url, song.meta.song_id)) {
+    if (manifest.song_id != remote_song_id) {
         return content_status::local;
     }
 
@@ -504,8 +512,10 @@ content_status verify_chart_content_source(const song_data& song,
         return cached_status_for(cached, signature);
     }
 
+    const std::string remote_song_id = expected_remote_song_id(server_url, song.meta.song_id);
+    const std::string remote_chart_id = expected_remote_chart_id(server_url, chart.meta.chart_id);
     const ranking_client::manifest_operation_result request =
-        ranking_client::fetch_official_chart_manifest(server_url, chart.meta.chart_id);
+        ranking_client::fetch_official_chart_manifest(server_url, remote_chart_id);
     if (!request.success) {
         server_reachable = false;
         return cached_status_for(cached, signature);
@@ -515,8 +525,8 @@ content_status verify_chart_content_source(const song_data& song,
     }
 
     const ranking_client::official_manifest& manifest = *request.manifest;
-    if (manifest.chart_id != chart.meta.chart_id ||
-        manifest.song_id != expected_remote_song_id(server_url, song.meta.song_id)) {
+    if (manifest.chart_id != remote_chart_id ||
+        manifest.song_id != remote_song_id) {
         return content_status::local;
     }
 

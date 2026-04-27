@@ -591,6 +591,13 @@ std::string expected_remote_song_id(const std::string& server_url,
         .value_or(local_song_id);
 }
 
+std::string expected_remote_chart_id(const std::string& server_url,
+                                     const std::string& local_chart_id) {
+    const title_upload_mapping::store mappings = title_upload_mapping::load();
+    return title_upload_mapping::find_remote_chart_id(mappings, server_url, local_chart_id)
+        .value_or(local_chart_id);
+}
+
 struct local_official_hashes {
     std::string song_json_sha256;
     std::string song_json_fingerprint;
@@ -688,8 +695,10 @@ verification_result verify_official_manifest(const song_data& song,
                                              const std::string& chart_path,
                                              const chart_meta& chart,
                                              const std::string& server_url) {
+    const std::string remote_song_id = expected_remote_song_id(server_url, song.meta.song_id);
+    const std::string remote_chart_id = expected_remote_chart_id(server_url, chart.chart_id);
     const ranking_client::manifest_operation_result manifest_result =
-        ranking_client::fetch_official_chart_manifest(server_url, chart.chart_id);
+        ranking_client::fetch_official_chart_manifest(server_url, remote_chart_id);
     if (!manifest_result.success || !manifest_result.manifest.has_value()) {
         return {
             .success = false,
@@ -709,8 +718,8 @@ verification_result verify_official_manifest(const song_data& song,
         };
     }
 
-    if (manifest.chart_id != chart.chart_id ||
-        manifest.song_id != expected_remote_song_id(server_url, song.meta.song_id)) {
+    if (manifest.chart_id != remote_chart_id ||
+        manifest.song_id != remote_song_id) {
         return {
             .success = false,
             .message = "Official chart verification failed because the manifest IDs do not match local content.",
@@ -1106,7 +1115,7 @@ online_submit_result submit_online_result(const song_data& song,
         ranking_client::submit_chart_ranking(
             stored->server_url,
             stored->access_token,
-            chart.chart_id,
+            expected_remote_chart_id(stored->server_url, chart.chart_id),
             result,
             recorded_at,
             submission_ruleset_version);
@@ -1124,7 +1133,7 @@ online_submit_result submit_online_result(const song_data& song,
         request = ranking_client::submit_chart_ranking(
             restored.session_data->server_url,
             restored.session_data->access_token,
-            chart.chart_id,
+            expected_remote_chart_id(restored.session_data->server_url, chart.chart_id),
             result,
             recorded_at,
             submission_ruleset_version);

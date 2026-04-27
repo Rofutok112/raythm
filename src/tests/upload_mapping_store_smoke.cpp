@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -72,6 +73,29 @@ int main() {
     if (title_upload_mapping::find_chart_origin(loaded, "https://server.example", "local-chart") !=
         std::optional<title_upload_mapping::mapping_origin>(title_upload_mapping::mapping_origin::owned_upload)) {
         std::cerr << "chart mapping origin missing\n";
+        return 1;
+    }
+
+    fs::remove_all(temp_root, ec);
+    fs::create_directories(app_paths::app_data_root(), ec);
+    {
+        std::ofstream legacy(app_paths::upload_mapping_path(), std::ios::binary | std::ios::trunc);
+        legacy << "# raythm upload mappings v1\n"
+               << "[songs]\n"
+               << "https://server.example\tlegacy-local-song\tlegacy-remote-song\n"
+               << "[charts]\n"
+               << "https://server.example\tlegacy-local-chart\tlegacy-local-song\tlegacy-remote-chart\tlegacy-remote-song\n";
+    }
+
+    const title_upload_mapping::store legacy_loaded = title_upload_mapping::load();
+    if (title_upload_mapping::find_song_origin(legacy_loaded, "https://server.example", "legacy-local-song") !=
+        std::optional<title_upload_mapping::mapping_origin>(title_upload_mapping::mapping_origin::owned_upload)) {
+        std::cerr << "legacy song mapping should migrate as owned upload\n";
+        return 1;
+    }
+    if (title_upload_mapping::find_chart_origin(legacy_loaded, "https://server.example", "legacy-local-chart") !=
+        std::optional<title_upload_mapping::mapping_origin>(title_upload_mapping::mapping_origin::owned_upload)) {
+        std::cerr << "legacy chart mapping should migrate as owned upload\n";
         return 1;
     }
 

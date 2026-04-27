@@ -270,21 +270,25 @@ download_song_result download_chart_file(const song_entry_state song,
         progress->current_total_bytes.store(0);
     }
 
+    const std::string local_chart_id = chart.installed_local_chart_id.empty()
+        ? result.chart_id
+        : chart.installed_local_chart_id;
+
     std::string error_message;
     app_paths::ensure_directories();
-    if (!write_binary_file(app_paths::chart_path(result.chart_id), chart_fetch.bytes, error_message)) {
+    if (!write_binary_file(app_paths::chart_path(local_chart_id), chart_fetch.bytes, error_message)) {
         result.message = error_message;
         return result;
     }
-    chart_identity::put(result.chart_id, local_song_id);
+    chart_identity::put(local_chart_id, local_song_id);
 
-    if (local_song_id != result.song_id || chart.installed_local_chart_id != result.chart_id) {
+    if (local_song_id != result.song_id || local_chart_id != result.chart_id) {
         title_upload_mapping::store mappings = title_upload_mapping::load();
         if (!title_upload_mapping::find_song_origin(mappings, server_url, local_song_id).has_value()) {
             title_upload_mapping::put_song(mappings, server_url, local_song_id, result.song_id,
                                            title_upload_mapping::mapping_origin::downloaded);
         }
-        title_upload_mapping::put_chart(mappings, server_url, result.chart_id, local_song_id,
+        title_upload_mapping::put_chart(mappings, server_url, local_chart_id, local_song_id,
                                         result.chart_id, result.song_id,
                                         title_upload_mapping::mapping_origin::downloaded);
         title_upload_mapping::save(mappings);
