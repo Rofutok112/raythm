@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -15,9 +16,11 @@
 #include <vector>
 
 #include "app_paths.h"
+#include "chart_identity_store.h"
 #include "network/json_helpers.h"
 #include "path_utils.h"
 #include "title/online_download_remote_client.h"
+#include "title/upload_mapping_store.h"
 #include "ui_notice.h"
 
 namespace title_online_view {
@@ -207,6 +210,11 @@ download_song_result download_song_package(const song_entry_state song,
         return result;
     }
 
+    title_upload_mapping::store mappings = title_upload_mapping::load();
+    title_upload_mapping::put_song(mappings, server_url, result.song_id, result.song_id,
+                                   title_upload_mapping::mapping_origin::downloaded);
+    title_upload_mapping::save(mappings);
+
     result.success = true;
     result.message = "Song downloaded.";
     return result;
@@ -220,8 +228,11 @@ download_song_result download_chart_file(const song_entry_state song,
     result.song_id = song.song.song.meta.song_id;
     result.chart_id = chart.chart.meta.chart_id;
     result.chart_only = true;
+    const std::string local_song_id = !song.installed_local_song_id.empty()
+        ? song.installed_local_song_id
+        : song.song.song.meta.song_id;
 
-    if (server_url.empty() || result.song_id.empty() || result.chart_id.empty()) {
+    if (server_url.empty() || result.song_id.empty() || result.chart_id.empty() || local_song_id.empty()) {
         result.message = "Missing chart download information.";
         return result;
     }
@@ -259,11 +270,28 @@ download_song_result download_chart_file(const song_entry_state song,
         progress->current_total_bytes.store(0);
     }
 
-    app_paths::ensure_directories();
+    const std::string local_chart_id = chart.installed_local_chart_id.empty()
+        ? result.chart_id
+        : chart.installed_local_chart_id;
+
     std::string error_message;
-    if (!write_binary_file(app_paths::chart_path(result.chart_id), chart_fetch.bytes, error_message)) {
+    app_paths::ensure_directories();
+    if (!write_binary_file(app_paths::chart_path(local_chart_id), chart_fetch.bytes, error_message)) {
         result.message = error_message;
         return result;
+    }
+    chart_identity::put(local_chart_id, local_song_id);
+
+    if (local_song_id != result.song_id || local_chart_id != result.chart_id) {
+        title_upload_mapping::store mappings = title_upload_mapping::load();
+        if (!title_upload_mapping::find_song_origin(mappings, server_url, local_song_id).has_value()) {
+            title_upload_mapping::put_song(mappings, server_url, local_song_id, result.song_id,
+                                           title_upload_mapping::mapping_origin::downloaded);
+        }
+        title_upload_mapping::put_chart(mappings, server_url, local_chart_id, local_song_id,
+                                        result.chart_id, result.song_id,
+                                        title_upload_mapping::mapping_origin::downloaded);
+        title_upload_mapping::save(mappings);
     }
 
     result.success = true;

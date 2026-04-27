@@ -15,10 +15,13 @@
 #include <vector>
 
 #include "app_paths.h"
+#include "chart_fingerprint.h"
 #include "network/auth_client.h"
 #include "network/ranking_client.h"
 #include "path_utils.h"
 #include "scoring_ruleset_runtime.h"
+#include "song_fingerprint.h"
+#include "title/upload_mapping_store.h"
 #include "updater/update_verify.h"
 
 #ifdef _WIN32
@@ -581,11 +584,27 @@ std::string lowercase(std::string value) {
     return value;
 }
 
+std::string expected_remote_song_id(const std::string& server_url,
+                                    const std::string& local_song_id) {
+    const title_upload_mapping::store mappings = title_upload_mapping::load();
+    return title_upload_mapping::find_remote_song_id(mappings, server_url, local_song_id)
+        .value_or(local_song_id);
+}
+
+std::string expected_remote_chart_id(const std::string& server_url,
+                                     const std::string& local_chart_id) {
+    const title_upload_mapping::store mappings = title_upload_mapping::load();
+    return title_upload_mapping::find_remote_chart_id(mappings, server_url, local_chart_id)
+        .value_or(local_chart_id);
+}
+
 struct local_official_hashes {
     std::string song_json_sha256;
+    std::string song_json_fingerprint;
     std::string audio_sha256;
     std::string jacket_sha256;
     std::string chart_sha256;
+    std::string chart_fingerprint;
 };
 
 struct verification_result {
@@ -630,6 +649,12 @@ std::optional<local_official_hashes> compute_local_official_hashes(const song_da
         error_message = "Failed to hash local song.json for Official verification.";
         return std::nullopt;
     }
+    const std::optional<std::string> song_json_fingerprint_sha256 =
+        song_fingerprint::compute_sha256_hex(song_json_path);
+    if (!song_json_fingerprint_sha256.has_value()) {
+        error_message = "Failed to fingerprint local song.json for Official verification.";
+        return std::nullopt;
+    }
 
     const std::optional<std::string> audio_sha256 = updater::compute_sha256_hex(audio_path);
     if (!audio_sha256.has_value()) {
@@ -649,11 +674,20 @@ std::optional<local_official_hashes> compute_local_official_hashes(const song_da
         return std::nullopt;
     }
 
+    const std::optional<std::string> chart_fingerprint_sha256 =
+        chart_fingerprint::compute_sha256_hex(local_chart_path);
+    if (!chart_fingerprint_sha256.has_value()) {
+        error_message = "Failed to fingerprint local chart for Official verification.";
+        return std::nullopt;
+    }
+
     return local_official_hashes{
         .song_json_sha256 = *song_json_sha256,
+        .song_json_fingerprint = *song_json_fingerprint_sha256,
         .audio_sha256 = *audio_sha256,
         .jacket_sha256 = *jacket_sha256,
         .chart_sha256 = *chart_sha256,
+        .chart_fingerprint = *chart_fingerprint_sha256,
     };
 }
 
@@ -661,8 +695,10 @@ verification_result verify_official_manifest(const song_data& song,
                                              const std::string& chart_path,
                                              const chart_meta& chart,
                                              const std::string& server_url) {
+    const std::string remote_song_id = expected_remote_song_id(server_url, song.meta.song_id);
+    const std::string remote_chart_id = expected_remote_chart_id(server_url, chart.chart_id);
     const ranking_client::manifest_operation_result manifest_result =
-        ranking_client::fetch_official_chart_manifest(server_url, chart.chart_id);
+        ranking_client::fetch_official_chart_manifest(server_url, remote_chart_id);
     if (!manifest_result.success || !manifest_result.manifest.has_value()) {
         return {
             .success = false,
@@ -682,7 +718,8 @@ verification_result verify_official_manifest(const song_data& song,
         };
     }
 
-    if (manifest.chart_id != chart.chart_id || manifest.song_id != song.meta.song_id) {
+    if (manifest.chart_id != remote_chart_id ||
+        manifest.song_id != remote_song_id) {
         return {
             .success = false,
             .message = "Official chart verification failed because the manifest IDs do not match local content.",
@@ -700,10 +737,22 @@ verification_result verify_official_manifest(const song_data& song,
     }
 
     for (const verification_result& result : {
-             compare_hash("song.json", local_hashes->song_json_sha256, manifest.song_json_sha256),
+             compare_hash("song.json",
+                          manifest.song_json_fingerprint.empty()
+                              ? local_hashes->song_json_sha256
+                              : local_hashes->song_json_fingerprint,
+                          manifest.song_json_fingerprint.empty()
+                              ? manifest.song_json_sha256
+                              : manifest.song_json_fingerprint),
              compare_hash("audio", local_hashes->audio_sha256, manifest.audio_sha256),
              compare_hash("jacket", local_hashes->jacket_sha256, manifest.jacket_sha256),
-             compare_hash("chart", local_hashes->chart_sha256, manifest.chart_sha256),
+             compare_hash("chart",
+                          manifest.chart_fingerprint.empty()
+                              ? local_hashes->chart_sha256
+                              : local_hashes->chart_fingerprint,
+                          manifest.chart_fingerprint.empty()
+                              ? manifest.chart_sha256
+                              : manifest.chart_fingerprint),
          }) {
         if (!result.success) {
             return result;
@@ -1066,7 +1115,7 @@ online_submit_result submit_online_result(const song_data& song,
         ranking_client::submit_chart_ranking(
             stored->server_url,
             stored->access_token,
-            chart.chart_id,
+            expected_remote_chart_id(stored->server_url, chart.chart_id),
             result,
             recorded_at,
             submission_ruleset_version);
@@ -1084,7 +1133,7 @@ online_submit_result submit_online_result(const song_data& song,
         request = ranking_client::submit_chart_ranking(
             restored.session_data->server_url,
             restored.session_data->access_token,
-            chart.chart_id,
+            expected_remote_chart_id(restored.session_data->server_url, chart.chart_id),
             result,
             recorded_at,
             submission_ruleset_version);

@@ -3,10 +3,12 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace updater {
 
 std::optional<std::string> compute_sha256_hex(const std::filesystem::path& file_path);
+std::string compute_sha256_hex(std::string_view content);
 std::optional<std::string> parse_sha256sums_for_file(const std::string& checksums_content, const std::string& file_name);
 bool verify_sha256_checksum(const std::filesystem::path& file_path, const std::filesystem::path& checksums_path);
 

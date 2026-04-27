@@ -376,9 +376,13 @@ std::optional<ranking_client::official_manifest> parse_official_manifest_respons
         .chart_id = *chart_id,
         .song_id = *song_id,
         .song_json_sha256 = json::extract_string(body, "song_json_sha256").value_or(""),
+        .song_json_fingerprint = json::extract_string(body, "song_json_fingerprint").value_or(
+            json::extract_string(body, "songJsonFingerprint").value_or("")),
         .audio_sha256 = json::extract_string(body, "audio_sha256").value_or(""),
         .jacket_sha256 = json::extract_string(body, "jacket_sha256").value_or(""),
         .chart_sha256 = json::extract_string(body, "chart_sha256").value_or(""),
+        .chart_fingerprint = json::extract_string(body, "chart_fingerprint").value_or(
+            json::extract_string(body, "chartFingerprint").value_or("")),
     };
 }
 
@@ -396,6 +400,8 @@ std::optional<ranking_client::song_manifest> parse_song_manifest_response(const 
             json::extract_string(body, "contentSource").value_or("")),
         .song_id = *song_id,
         .song_json_sha256 = json::extract_string(body, "song_json_sha256").value_or(""),
+        .song_json_fingerprint = json::extract_string(body, "song_json_fingerprint").value_or(
+            json::extract_string(body, "songJsonFingerprint").value_or("")),
         .audio_sha256 = json::extract_string(body, "audio_sha256").value_or(""),
         .jacket_sha256 = json::extract_string(body, "jacket_sha256").value_or(""),
     };

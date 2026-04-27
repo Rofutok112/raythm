@@ -47,16 +47,12 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
     }
 
     output << "[Metadata]\n";
-    output << "chartId=" << data.meta.chart_id << '\n';
     output << "keyCount=" << data.meta.key_count << '\n';
     output << "difficulty=" << data.meta.difficulty << '\n';
     output << "chartAuthor=" << data.meta.chart_author << '\n';
     output << "formatVersion=" << data.meta.format_version << '\n';
     output << "resolution=" << data.meta.resolution << '\n';
     output << "offset=" << data.meta.offset << '\n';
-    if (!data.meta.song_id.empty()) {
-        output << "songId=" << data.meta.song_id << '\n';
-    }
     output << '\n';
 
     std::vector<timing_event> sorted_timing = data.timing_events;

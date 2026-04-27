@@ -32,6 +32,7 @@ enum class requested_action {
 
 struct chart_entry_state {
     song_select::chart_option chart;
+    std::string installed_local_chart_id;
     bool installed = false;
     bool update_available = false;
 };
@@ -39,6 +40,7 @@ struct chart_entry_state {
 struct song_entry_state {
     song_select::song_entry song;
     std::vector<chart_entry_state> charts;
+    std::string installed_local_song_id;
     bool installed = false;
     bool update_available = false;
     bool charts_loaded = false;
