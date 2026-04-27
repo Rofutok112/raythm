@@ -385,7 +385,13 @@ bool can_open_local(const state& state) {
 
 std::string selected_song_id(const state& state) {
     const song_entry_state* song = selected_song(state);
-    return song != nullptr ? song->song.song.meta.song_id : "";
+    if (song == nullptr) {
+        return "";
+    }
+    if (song->installed && !song->installed_local_song_id.empty()) {
+        return song->installed_local_song_id;
+    }
+    return song->song.song.meta.song_id;
 }
 
 }  // namespace title_online_view

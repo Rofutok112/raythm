@@ -9,7 +9,9 @@
 #include <string>
 
 #include "chart_parser.h"
+#include "chart_fingerprint.h"
 #include "chart_serializer.h"
+#include "updater/update_verify.h"
 
 namespace {
 bool almost_equal(float left, float right) {
@@ -95,7 +97,7 @@ int main() {
         std::filesystem::temp_directory_path() / "raythm_chart_serializer_smoke.rchart";
 
     chart_data source;
-    source.meta.chart_id = "serializer-smoke";
+    source.meta.chart_id = output_path.stem().string();
     source.meta.key_count = 4;
     source.meta.difficulty = "Hyper";
     source.meta.level = 9;
@@ -127,9 +129,22 @@ int main() {
     bool ok = true;
 
     ok = content.find("offset=-35") != std::string::npos && ok;
+    ok = content.find("chartId=") == std::string::npos && ok;
+    ok = content.find("songId=") == std::string::npos && ok;
     ok = content.find("level=") == std::string::npos && ok;
     ok = expect_contains_in_order(content, "meter,0,4/4", "bpm,960,180.5") && ok;
     ok = expect_contains_in_order(content, "tap,480,0", "hold,480,2,840") && ok;
+
+    const std::string content_with_ids =
+        "[Metadata]\nchartId=online-chart\nsongId=online-song\n" +
+        content.substr(content.find("keyCount="));
+    const std::string content_with_other_ids =
+        "[Metadata]\nchartId=other-chart\nsongId=other-song\n" +
+        content.substr(content.find("keyCount="));
+    const std::string fingerprint_with_ids = chart_fingerprint::build(content_with_ids);
+    const std::string fingerprint_with_other_ids = chart_fingerprint::build(content_with_other_ids);
+    ok = updater::compute_sha256_hex(std::string_view(fingerprint_with_ids)) ==
+         updater::compute_sha256_hex(std::string_view(fingerprint_with_other_ids)) && ok;
 
     const chart_parse_result reparsed = chart_parser::parse(output_path.string());
     if (!reparsed.success || !reparsed.data.has_value()) {

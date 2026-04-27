@@ -56,6 +56,9 @@ std::filesystem::path scoring_ruleset_cache_path();
 // AppData/Local/raythm/source_verification_cache.txt
 std::filesystem::path source_verification_cache_path();
 
+// AppData/Local/raythm/chart_identity_index.txt
+std::filesystem::path chart_identity_index_path();
+
 // AppData/Local/raythm/mvs/
 std::filesystem::path mvs_root();
 

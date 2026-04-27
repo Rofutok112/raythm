@@ -114,6 +114,10 @@ std::filesystem::path source_verification_cache_path() {
     return app_data_root() / "source_verification_cache.txt";
 }
 
+std::filesystem::path chart_identity_index_path() {
+    return app_data_root() / "chart_identity_index.txt";
+}
+
 std::filesystem::path mvs_root() {
     return app_data_root() / "mvs";
 }

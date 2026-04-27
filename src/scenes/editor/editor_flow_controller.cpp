@@ -5,6 +5,7 @@
 #include <filesystem>
 
 #include "app_paths.h"
+#include "chart_identity_store.h"
 #include "chart_serializer.h"
 #include "path_utils.h"
 
@@ -104,6 +105,7 @@ bool save_to_path(const editor_flow_context& context, const std::string& file_pa
     }
 
     const std::string saved_path = path_utils::to_utf8(path);
+    chart_identity::put(context.chart_for_save->meta.chart_id, context.chart_for_save->meta.song_id);
     context.state->mark_saved(saved_path);
     context.save_dialog->error.clear();
     result.saved_chart_path = saved_path;

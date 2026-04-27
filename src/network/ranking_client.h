@@ -51,9 +51,11 @@ struct official_manifest {
     std::string chart_id;
     std::string song_id;
     std::string song_json_sha256;
+    std::string song_json_fingerprint;
     std::string audio_sha256;
     std::string jacket_sha256;
     std::string chart_sha256;
+    std::string chart_fingerprint;
 };
 
 struct song_manifest {
@@ -62,6 +64,7 @@ struct song_manifest {
     std::string content_source;
     std::string song_id;
     std::string song_json_sha256;
+    std::string song_json_fingerprint;
     std::string audio_sha256;
     std::string jacket_sha256;
 };
