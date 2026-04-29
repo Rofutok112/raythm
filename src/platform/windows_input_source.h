@@ -21,6 +21,10 @@ public:
     bool is_available() const;
     double current_time_ms() const;
 
+    void begin_frame();
+    void request_text_input();
+    void end_frame();
+
     std::vector<native_key_event> drain_events();
 
     void enable_test_mode();

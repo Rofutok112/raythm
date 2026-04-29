@@ -104,6 +104,8 @@ public:
 
         queued_events_.clear();
         test_mode_ = false;
+        ime_text_input_allowed_ = false;
+        ime_requested_this_frame_ = false;
     }
 
     bool is_available() const {
@@ -124,6 +126,37 @@ public:
 #endif
 
         return test_current_time_ms_;
+    }
+
+    void begin_frame() {
+        std::scoped_lock lock(mutex_);
+        ime_requested_this_frame_ = false;
+        if (!ime_text_input_allowed_) {
+            close_ime_locked();
+        }
+    }
+
+    void request_text_input() {
+        std::scoped_lock lock(mutex_);
+        ime_requested_this_frame_ = true;
+        ime_text_input_allowed_ = true;
+    }
+
+    void end_frame() {
+        std::scoped_lock lock(mutex_);
+        const bool allow_text_input = ime_requested_this_frame_;
+        ime_requested_this_frame_ = false;
+        if (ime_text_input_allowed_ == allow_text_input) {
+            if (!allow_text_input) {
+                close_ime_locked();
+            }
+            return;
+        }
+
+        ime_text_input_allowed_ = allow_text_input;
+        if (!ime_text_input_allowed_) {
+            close_ime_locked();
+        }
     }
 
     std::vector<native_key_event> drain_events() {
@@ -178,6 +211,49 @@ public:
 
 private:
 #ifdef _WIN32
+    using imm_get_context_fn = HIMC(WINAPI*)(HWND);
+    using imm_release_context_fn = BOOL(WINAPI*)(HWND, HIMC);
+    using imm_set_open_status_fn = BOOL(WINAPI*)(HIMC, BOOL);
+
+    void load_ime_functions_locked() {
+        if (ime_load_attempted_) {
+            return;
+        }
+        ime_load_attempted_ = true;
+        imm32_ = LoadLibraryW(L"imm32.dll");
+        if (imm32_ == nullptr) {
+            return;
+        }
+
+        imm_get_context_ = reinterpret_cast<imm_get_context_fn>(GetProcAddress(imm32_, "ImmGetContext"));
+        imm_release_context_ = reinterpret_cast<imm_release_context_fn>(GetProcAddress(imm32_, "ImmReleaseContext"));
+        imm_set_open_status_ = reinterpret_cast<imm_set_open_status_fn>(GetProcAddress(imm32_, "ImmSetOpenStatus"));
+        if (imm_get_context_ == nullptr || imm_release_context_ == nullptr || imm_set_open_status_ == nullptr) {
+            imm_get_context_ = nullptr;
+            imm_release_context_ = nullptr;
+            imm_set_open_status_ = nullptr;
+        }
+    }
+
+    void close_ime_locked() {
+        if (!installed_ || hwnd_ == nullptr) {
+            return;
+        }
+
+        load_ime_functions_locked();
+        if (imm_get_context_ == nullptr || imm_release_context_ == nullptr || imm_set_open_status_ == nullptr) {
+            return;
+        }
+
+        HIMC context = imm_get_context_(hwnd_);
+        if (context == nullptr) {
+            return;
+        }
+
+        imm_set_open_status_(context, FALSE);
+        imm_release_context_(hwnd_, context);
+    }
+
     bool try_capture_event(UINT message, WPARAM w_param, LPARAM l_param) {
         std::scoped_lock lock(mutex_);
         if (!installed_) {
@@ -275,6 +351,14 @@ private:
     WNDPROC previous_wnd_proc_ = nullptr;
     long long qpc_frequency_ = 0;
     long long qpc_origin_ = 0;
+    HMODULE imm32_ = nullptr;
+    imm_get_context_fn imm_get_context_ = nullptr;
+    imm_release_context_fn imm_release_context_ = nullptr;
+    imm_set_open_status_fn imm_set_open_status_ = nullptr;
+    bool ime_load_attempted_ = false;
+#else
+    void close_ime_locked() {
+    }
 #endif
 
     mutable std::mutex mutex_;
@@ -282,6 +366,8 @@ private:
     std::uint64_t sequence_ = 0;
     bool test_mode_ = false;
     bool installed_ = false;
+    bool ime_text_input_allowed_ = false;
+    bool ime_requested_this_frame_ = false;
     double test_current_time_ms_ = 0.0;
 };
 
@@ -306,6 +392,18 @@ bool windows_input_source::is_available() const {
 
 double windows_input_source::current_time_ms() const {
     return windows_input_source_state::instance().current_time_ms();
+}
+
+void windows_input_source::begin_frame() {
+    windows_input_source_state::instance().begin_frame();
+}
+
+void windows_input_source::request_text_input() {
+    windows_input_source_state::instance().request_text_input();
+}
+
+void windows_input_source::end_frame() {
+    windows_input_source_state::instance().end_frame();
 }
 
 std::vector<native_key_event> windows_input_source::drain_events() {
