@@ -1,4 +1,5 @@
 #include "app_paths.h"
+#include "title/local_content_index.h"
 #include "title/upload_mapping_store.h"
 
 #include <cstdlib>
@@ -96,6 +97,72 @@ int main() {
     if (title_upload_mapping::find_chart_origin(legacy_loaded, "https://server.example", "legacy-local-chart") !=
         std::optional<title_upload_mapping::mapping_origin>(title_upload_mapping::mapping_origin::owned_upload)) {
         std::cerr << "legacy chart mapping should migrate as owned upload\n";
+        return 1;
+    }
+
+    local_content_index::put_song_binding({
+        .server_url = "https://server.example",
+        .local_song_id = "facade-local-song",
+        .remote_song_id = "facade-remote-song",
+        .origin = local_content_index::online_origin::downloaded,
+    });
+    local_content_index::put_song_binding({
+        .server_url = "https://mirror.example",
+        .local_song_id = "facade-local-song",
+        .remote_song_id = "mirror-remote-song",
+        .origin = local_content_index::online_origin::linked,
+    });
+    local_content_index::put_chart_binding({
+        .server_url = "https://server.example",
+        .local_chart_id = "facade-local-chart",
+        .local_song_id = "facade-local-song",
+        .remote_chart_id = "facade-remote-chart",
+        .remote_song_id = "facade-remote-song",
+        .origin = local_content_index::online_origin::downloaded,
+    });
+    local_content_index::put_chart_binding({
+        .server_url = "https://mirror.example",
+        .local_chart_id = "facade-local-chart",
+        .local_song_id = "facade-local-song",
+        .remote_chart_id = "mirror-remote-chart",
+        .remote_song_id = "mirror-remote-song",
+        .origin = local_content_index::online_origin::linked,
+    });
+    local_content_index::link_chart_to_song("facade-local-chart", "facade-local-song");
+
+    const std::optional<local_content_index::online_song_binding> facade_song =
+        local_content_index::find_song_by_local("https://server.example", "facade-local-song");
+    if (!facade_song.has_value() || facade_song->remote_song_id != "facade-remote-song" ||
+        facade_song->origin != local_content_index::online_origin::downloaded) {
+        std::cerr << "facade song mapping missing\n";
+        return 1;
+    }
+
+    const std::optional<local_content_index::online_chart_binding> facade_chart =
+        local_content_index::find_chart_by_remote("https://server.example", "facade-remote-chart");
+    if (!facade_chart.has_value() || facade_chart->local_chart_id != "facade-local-chart" ||
+        facade_chart->remote_song_id != "facade-remote-song") {
+        std::cerr << "facade chart mapping missing\n";
+        return 1;
+    }
+
+    if (local_content_index::linked_song_for_chart("facade-local-chart") !=
+        std::optional<std::string>("facade-local-song")) {
+        std::cerr << "facade chart identity missing\n";
+        return 1;
+    }
+
+    local_content_index::remove_chart_bindings("facade-local-chart");
+    if (local_content_index::find_chart_by_local("https://server.example", "facade-local-chart").has_value() ||
+        local_content_index::find_chart_by_local("https://mirror.example", "facade-local-chart").has_value()) {
+        std::cerr << "facade chart mapping should be removed from all servers\n";
+        return 1;
+    }
+
+    local_content_index::remove_song_bindings("facade-local-song");
+    if (local_content_index::find_song_by_local("https://server.example", "facade-local-song").has_value() ||
+        local_content_index::find_song_by_local("https://mirror.example", "facade-local-song").has_value()) {
+        std::cerr << "facade song mapping should be removed from all servers\n";
         return 1;
     }
 

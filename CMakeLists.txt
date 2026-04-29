@@ -37,6 +37,25 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(raylib)
 
+FetchContent_Declare(
+        sqlite3_amalgamation
+        URL https://www.sqlite.org/2026/sqlite-amalgamation-3530000.zip
+        URL_HASH SHA3_256=c2325c53b3b41761469f91cfb078e96882ac5d85bac10c11b0bd8f253b031e5b
+)
+if(POLICY CMP0169)
+    cmake_policy(PUSH)
+    cmake_policy(SET CMP0169 OLD)
+endif()
+FetchContent_GetProperties(sqlite3_amalgamation)
+if(NOT sqlite3_amalgamation_POPULATED)
+    FetchContent_Populate(sqlite3_amalgamation)
+endif()
+if(POLICY CMP0169)
+    cmake_policy(POP)
+endif()
+add_library(sqlite3 STATIC "${sqlite3_amalgamation_SOURCE_DIR}/sqlite3.c")
+target_include_directories(sqlite3 PUBLIC "${sqlite3_amalgamation_SOURCE_DIR}")
+
 if(WIN32)
     if(NOT EXISTS "${RAYTHM_APP_ICON_PNG}")
         message(FATAL_ERROR "Missing required Windows app icon: ${RAYTHM_APP_ICON_PNG}")
@@ -160,6 +179,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/updater/update_verify.h
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/local_sqlite.cpp
+        src/core/local_sqlite.h
         src/core/file_dialog.cpp
         src/core/file_dialog.h
         src/core/window_dialog_support.cpp
@@ -196,6 +217,10 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_header_view.h
         src/scenes/title/create_upload_client.cpp
         src/scenes/title/create_upload_client.h
+        src/scenes/title/local_content_database.cpp
+        src/scenes/title/local_content_database.h
+        src/scenes/title/local_content_index.cpp
+        src/scenes/title/local_content_index.h
         src/scenes/title/upload_mapping_store.cpp
         src/scenes/title/upload_mapping_store.h
         src/scenes/title/online_download_internal.h
@@ -226,6 +251,10 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_create_scene.h
         src/scenes/song_select/song_catalog_service.cpp
         src/scenes/song_select/song_catalog_service.h
+        src/scenes/song_select/content_verification_cache_database.cpp
+        src/scenes/song_select/content_verification_cache_database.h
+        src/scenes/song_select/local_catalog_database.cpp
+        src/scenes/song_select/local_catalog_database.h
         src/scenes/song_select/song_select_confirmation_dialog.cpp
         src/scenes/song_select/song_select_confirmation_dialog.h
         src/scenes/song_select/song_import_export_service.cpp
@@ -445,6 +474,8 @@ add_executable(song_loader_smoke
         src/models/data_models.h
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/local_sqlite.cpp
+        src/core/local_sqlite.h
         src/core/path_utils.h
         src/gameplay/chart_identity_store.cpp
         src/gameplay/chart_identity_store.h
@@ -477,9 +508,31 @@ add_executable(settings_io_smoke
 add_executable(upload_mapping_store_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/local_sqlite.cpp
+        src/core/local_sqlite.h
+        src/scenes/title/local_content_database.cpp
+        src/scenes/title/local_content_database.h
+        src/scenes/title/local_content_index.cpp
+        src/scenes/title/local_content_index.h
+        src/gameplay/chart_identity_store.cpp
+        src/gameplay/chart_identity_store.h
         src/scenes/title/upload_mapping_store.cpp
         src/scenes/title/upload_mapping_store.h
         src/tests/upload_mapping_store_smoke.cpp)
+
+add_executable(local_catalog_database_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/local_sqlite.cpp
+        src/core/local_sqlite.h
+        src/scenes/song_select/local_catalog_database.cpp
+        src/scenes/song_select/local_catalog_database.h
+        src/scenes/song_select/song_select_state.cpp
+        src/scenes/song_select/song_select_state.h
+        src/scenes/shared/scene_fade.cpp
+        src/scenes/shared/scene_fade.h
+        src/models/data_models.h
+        src/tests/local_catalog_database_smoke.cpp)
 
 add_executable(mv_storage_smoke
         src/core/app_paths.cpp
@@ -525,6 +578,14 @@ add_executable(score_system_smoke
 add_executable(ranking_service_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/local_sqlite.cpp
+        src/core/local_sqlite.h
+        src/scenes/title/local_content_database.cpp
+        src/scenes/title/local_content_database.h
+        src/scenes/title/local_content_index.cpp
+        src/scenes/title/local_content_index.h
+        src/gameplay/chart_identity_store.cpp
+        src/gameplay/chart_identity_store.h
         src/models/data_models.h
         src/gameplay/chart_fingerprint.cpp
         src/gameplay/chart_fingerprint.h
@@ -601,6 +662,8 @@ add_executable(editor_transport_controller_smoke
 add_executable(editor_flow_controller_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/local_sqlite.cpp
+        src/core/local_sqlite.h
         src/core/path_utils.h
         src/scenes/editor/editor_command.h
         src/scenes/editor/editor_meter_map.cpp
@@ -775,6 +838,7 @@ target_include_directories(song_loader_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(song_select_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(settings_io_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(upload_mapping_store_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+target_include_directories(local_catalog_database_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(input_handler_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(timing_engine_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(judge_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
@@ -793,18 +857,20 @@ target_include_directories(mv_lang_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(mv_api_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(mv_runtime_benchmark_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
 target_include_directories(mv_storage_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_link_libraries(raythm PRIVATE raylib ${RAYTHM_BASS_IMPORT_LIB} comdlg32 crypt32 winhttp)
+target_link_libraries(raythm PRIVATE raylib sqlite3 ${RAYTHM_BASS_IMPORT_LIB} comdlg32 crypt32 winhttp)
 target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)
 target_link_libraries(update_version_smoke PRIVATE winhttp)
-target_link_libraries(upload_mapping_store_smoke PRIVATE crypt32)
+target_link_libraries(song_loader_smoke PRIVATE sqlite3)
+target_link_libraries(upload_mapping_store_smoke PRIVATE sqlite3 crypt32)
+target_link_libraries(local_catalog_database_smoke PRIVATE sqlite3 raylib)
 target_link_libraries(song_select_state_smoke PRIVATE raylib)
 target_link_libraries(settings_io_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
-target_link_libraries(ranking_service_smoke PRIVATE crypt32 winhttp)
+target_link_libraries(ranking_service_smoke PRIVATE sqlite3 crypt32 winhttp)
 target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
-target_link_libraries(editor_flow_controller_smoke PRIVATE raylib)
+target_link_libraries(editor_flow_controller_smoke PRIVATE raylib sqlite3)
 target_link_libraries(editor_timeline_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_panel_controller_smoke PRIVATE raylib)
 target_link_libraries(audio_manager_smoke PRIVATE ${RAYTHM_BASS_IMPORT_LIB})

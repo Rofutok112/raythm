@@ -151,8 +151,6 @@ std::string format_number(double value) {
 std::string canonical_string(std::string_view content) {
     const std::optional<std::string> base_bpm = extract_json_number_token(content, "baseBpm");
     const std::optional<std::string> preview_start_ms = extract_json_number_token(content, "previewStartMs");
-    const std::optional<std::string> chorus_start_seconds = extract_json_number_token(content, "chorusStartSeconds");
-    const std::optional<std::string> preview_start_seconds = extract_json_number_token(content, "previewStartSeconds");
     const std::optional<std::string> song_version = extract_json_number_token(content, "songVersion");
 
     std::string preview_ms = "0";
@@ -161,16 +159,6 @@ std::string canonical_string(std::string_view content) {
             preview_ms = std::to_string(*parsed);
         } else {
             preview_ms = *preview_start_ms;
-        }
-    } else {
-        const std::optional<std::string> seconds =
-            chorus_start_seconds.has_value() ? chorus_start_seconds : preview_start_seconds;
-        if (seconds.has_value()) {
-            if (const std::optional<double> parsed = parse_number(*seconds)) {
-                preview_ms = std::to_string(static_cast<int>(*parsed * 1000.0));
-            } else {
-                preview_ms = *seconds;
-            }
         }
     }
 

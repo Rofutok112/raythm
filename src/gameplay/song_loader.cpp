@@ -187,8 +187,6 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
     const std::optional<std::string> audio_file = extract_json_string(content, "audioFile");
     const std::optional<std::string> jacket_file = extract_json_string(content, "jacketFile");
     const std::optional<std::string> difficulty_bpm = extract_json_number_token(content, "baseBpm");
-    const std::optional<std::string> preview_start_seconds = extract_json_number_token(content, "chorusStartSeconds");
-    const std::optional<std::string> preview_start_seconds_fallback = extract_json_number_token(content, "previewStartSeconds");
     const std::optional<std::string> preview_start_ms = extract_json_number_token(content, "previewStartMs");
     const std::optional<std::string> song_version = extract_json_number_token(content, "songVersion");
 
@@ -233,17 +231,7 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
         }
     }
 
-    const std::optional<std::string> preview_seconds_token =
-        preview_start_seconds.has_value() ? preview_start_seconds : preview_start_seconds_fallback;
-    if (preview_seconds_token.has_value()) {
-        const std::optional<float> parsed = parse_float(*preview_seconds_token);
-        if (!parsed.has_value()) {
-            errors.push_back("chorusStartSeconds must be a number in " + path_utils::to_utf8(song_json_path));
-        } else {
-            meta.preview_start_seconds = *parsed;
-            meta.preview_start_ms = static_cast<int>(*parsed * 1000.0f);
-        }
-    } else if (preview_start_ms.has_value()) {
+    if (preview_start_ms.has_value()) {
         const std::optional<int> parsed = parse_int(*preview_start_ms);
         if (!parsed.has_value()) {
             errors.push_back("previewStartMs must be an integer in " + path_utils::to_utf8(song_json_path));
@@ -252,7 +240,7 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
             meta.preview_start_seconds = static_cast<float>(*parsed) / 1000.0f;
         }
     } else {
-        errors.push_back("Missing required field chorusStartSeconds in " + path_utils::to_utf8(song_json_path));
+        errors.push_back("Missing required field previewStartMs in " + path_utils::to_utf8(song_json_path));
     }
 
     const std::optional<std::string> sns_youtube = extract_json_string(content, "snsYoutube");

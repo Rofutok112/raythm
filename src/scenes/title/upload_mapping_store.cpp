@@ -72,6 +72,16 @@ mapping_origin parse_origin(const std::string& value) {
     return mapping_origin::owned_upload;
 }
 
+mapping_origin merge_origin(mapping_origin current, mapping_origin incoming) {
+    if (current == mapping_origin::owned_upload) {
+        return current;
+    }
+    if (current == mapping_origin::downloaded && incoming == mapping_origin::linked) {
+        return current;
+    }
+    return incoming;
+}
+
 std::string serialize_plaintext(const store& mappings) {
     std::ostringstream output;
     output << kHeader << '\n';
@@ -355,7 +365,7 @@ void put_song(store& mappings,
                            chart_entry.local_song_id == local_song_id;
                 });
             }
-            entry.origin = origin;
+            entry.origin = merge_origin(entry.origin, origin);
             break;
         }
     }
@@ -386,7 +396,7 @@ void put_chart(store& mappings,
             entry.local_song_id = local_song_id;
             entry.remote_chart_id = remote_chart_id;
             entry.remote_song_id = remote_song_id;
-            entry.origin = origin;
+            entry.origin = merge_origin(entry.origin, origin);
             return;
         }
     }
