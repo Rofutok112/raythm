@@ -32,12 +32,11 @@ jobs:
             mingw-w64-ucrt-x86_64-toolchain
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-nsis
 
-      - name: Install NSIS
-        shell: powershell
-        run: |
-          choco install nsis --no-progress -y
-          "${env:ProgramFiles(x86)}\NSIS" >> $env:GITHUB_PATH
+      - name: Verify NSIS
+        shell: msys2 {0}
+        run: makensis -VERSION
 
       - name: Compute release metadata
         id: meta
