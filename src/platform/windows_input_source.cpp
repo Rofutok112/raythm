@@ -131,9 +131,6 @@ public:
     void begin_frame() {
         std::scoped_lock lock(mutex_);
         ime_requested_this_frame_ = false;
-        if (!ime_text_input_allowed_) {
-            close_ime_locked();
-        }
     }
 
     void request_text_input() {
@@ -143,19 +140,17 @@ public:
     }
 
     void end_frame() {
-        std::scoped_lock lock(mutex_);
-        const bool allow_text_input = ime_requested_this_frame_;
-        ime_requested_this_frame_ = false;
-        if (ime_text_input_allowed_ == allow_text_input) {
-            if (!allow_text_input) {
-                close_ime_locked();
-            }
-            return;
+        bool should_close_ime = false;
+        {
+            std::scoped_lock lock(mutex_);
+            const bool allow_text_input = ime_requested_this_frame_;
+            ime_requested_this_frame_ = false;
+            ime_text_input_allowed_ = allow_text_input;
+            should_close_ime = !allow_text_input;
         }
 
-        ime_text_input_allowed_ = allow_text_input;
-        if (!ime_text_input_allowed_) {
-            close_ime_locked();
+        if (should_close_ime) {
+            close_ime();
         }
     }
 
@@ -215,43 +210,60 @@ private:
     using imm_release_context_fn = BOOL(WINAPI*)(HWND, HIMC);
     using imm_set_open_status_fn = BOOL(WINAPI*)(HIMC, BOOL);
 
-    void load_ime_functions_locked() {
-        if (ime_load_attempted_) {
-            return;
-        }
-        ime_load_attempted_ = true;
-        imm32_ = LoadLibraryW(L"imm32.dll");
-        if (imm32_ == nullptr) {
-            return;
-        }
+    struct ime_functions {
+        HMODULE module = nullptr;
+        imm_get_context_fn get_context = nullptr;
+        imm_release_context_fn release_context = nullptr;
+        imm_set_open_status_fn set_open_status = nullptr;
+        bool available = false;
+    };
 
-        imm_get_context_ = reinterpret_cast<imm_get_context_fn>(GetProcAddress(imm32_, "ImmGetContext"));
-        imm_release_context_ = reinterpret_cast<imm_release_context_fn>(GetProcAddress(imm32_, "ImmReleaseContext"));
-        imm_set_open_status_ = reinterpret_cast<imm_set_open_status_fn>(GetProcAddress(imm32_, "ImmSetOpenStatus"));
-        if (imm_get_context_ == nullptr || imm_release_context_ == nullptr || imm_set_open_status_ == nullptr) {
-            imm_get_context_ = nullptr;
-            imm_release_context_ = nullptr;
-            imm_set_open_status_ = nullptr;
-        }
+    static const ime_functions& loaded_ime_functions() {
+        static const ime_functions functions = [] {
+            ime_functions loaded;
+            loaded.module = LoadLibraryW(L"imm32.dll");
+            if (loaded.module == nullptr) {
+                return loaded;
+            }
+
+            loaded.get_context =
+                reinterpret_cast<imm_get_context_fn>(GetProcAddress(loaded.module, "ImmGetContext"));
+            loaded.release_context =
+                reinterpret_cast<imm_release_context_fn>(GetProcAddress(loaded.module, "ImmReleaseContext"));
+            loaded.set_open_status =
+                reinterpret_cast<imm_set_open_status_fn>(GetProcAddress(loaded.module, "ImmSetOpenStatus"));
+            loaded.available =
+                loaded.get_context != nullptr &&
+                loaded.release_context != nullptr &&
+                loaded.set_open_status != nullptr;
+            return loaded;
+        }();
+        return functions;
     }
 
-    void close_ime_locked() {
-        if (!installed_ || hwnd_ == nullptr) {
+    void close_ime() {
+        HWND hwnd = nullptr;
+        {
+            std::scoped_lock lock(mutex_);
+            if (!installed_ || hwnd_ == nullptr) {
+                return;
+            }
+            hwnd = hwnd_;
+        }
+
+        // ImmSetOpenStatus may dispatch window messages. Never hold mutex_ here.
+        const ime_functions& functions = loaded_ime_functions();
+        if (!functions.available) {
             return;
         }
 
-        load_ime_functions_locked();
-        if (imm_get_context_ == nullptr || imm_release_context_ == nullptr || imm_set_open_status_ == nullptr) {
-            return;
-        }
-
-        HIMC context = imm_get_context_(hwnd_);
+        HIMC context = functions.get_context(hwnd);
         if (context == nullptr) {
             return;
         }
 
-        imm_set_open_status_(context, FALSE);
-        imm_release_context_(hwnd_, context);
+        functions.set_open_status(context, FALSE);
+        functions.release_context(hwnd, context);
     }
 
     bool try_capture_event(UINT message, WPARAM w_param, LPARAM l_param) {
@@ -351,13 +363,8 @@ private:
     WNDPROC previous_wnd_proc_ = nullptr;
     long long qpc_frequency_ = 0;
     long long qpc_origin_ = 0;
-    HMODULE imm32_ = nullptr;
-    imm_get_context_fn imm_get_context_ = nullptr;
-    imm_release_context_fn imm_release_context_ = nullptr;
-    imm_set_open_status_fn imm_set_open_status_ = nullptr;
-    bool ime_load_attempted_ = false;
 #else
-    void close_ime_locked() {
+    void close_ime() {
     }
 #endif
 
