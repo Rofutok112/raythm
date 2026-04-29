@@ -85,6 +85,26 @@ std::filesystem::path write_temp_song_without_embedded_id() {
     return song_dir;
 }
 
+std::filesystem::path write_temp_song_with_legacy_preview_fields() {
+    const std::filesystem::path song_dir =
+        std::filesystem::temp_directory_path() / "raythm_song_loader_legacy_preview";
+    std::error_code ec;
+    std::filesystem::remove_all(song_dir, ec);
+    std::filesystem::create_directories(song_dir);
+    std::ofstream output(song_dir / "song.json", std::ios::trunc);
+    output << "{\n"
+           << "  \"title\": \"Preview Priority Song\",\n"
+           << "  \"artist\": \"Codex\",\n"
+           << "  \"baseBpm\": 120,\n"
+           << "  \"audioFile\": \"audio.ogg\",\n"
+           << "  \"jacketFile\": \"jacket.png\",\n"
+           << "  \"chorusStartSeconds\": 9,\n"
+           << "  \"previewStartSeconds\": 8,\n"
+           << "  \"songVersion\": 1\n"
+           << "}\n";
+    return song_dir;
+}
+
 std::filesystem::path write_external_chart_without_song_id() {
     const std::filesystem::path charts_dir =
         std::filesystem::temp_directory_path() / "raythm_song_loader_external_charts";
@@ -180,6 +200,15 @@ int main() {
         ok = false;
     }
     std::filesystem::remove_all(temp_song);
+
+    const std::filesystem::path legacy_preview_song = write_temp_song_with_legacy_preview_fields();
+    const song_load_result legacy_preview_result = song_loader::load_directory(legacy_preview_song.string());
+    if (!legacy_preview_result.songs.empty() ||
+        legacy_preview_result.errors.empty()) {
+        std::cerr << "Expected legacy preview fields without previewStartMs to be rejected\n";
+        ok = false;
+    }
+    std::filesystem::remove_all(legacy_preview_song);
 
     const std::filesystem::path written_song_dir =
         std::filesystem::temp_directory_path() / "raythm_song_writer_external_id";

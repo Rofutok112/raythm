@@ -21,7 +21,7 @@
 #include "path_utils.h"
 #include "scoring_ruleset_runtime.h"
 #include "song_fingerprint.h"
-#include "title/upload_mapping_store.h"
+#include "title/local_content_index.h"
 #include "updater/update_verify.h"
 
 #ifdef _WIN32
@@ -586,16 +586,16 @@ std::string lowercase(std::string value) {
 
 std::string expected_remote_song_id(const std::string& server_url,
                                     const std::string& local_song_id) {
-    const title_upload_mapping::store mappings = title_upload_mapping::load();
-    return title_upload_mapping::find_remote_song_id(mappings, server_url, local_song_id)
-        .value_or(local_song_id);
+    const std::optional<local_content_index::online_song_binding> binding =
+        local_content_index::find_song_by_local(server_url, local_song_id);
+    return binding.has_value() ? binding->remote_song_id : local_song_id;
 }
 
 std::string expected_remote_chart_id(const std::string& server_url,
                                      const std::string& local_chart_id) {
-    const title_upload_mapping::store mappings = title_upload_mapping::load();
-    return title_upload_mapping::find_remote_chart_id(mappings, server_url, local_chart_id)
-        .value_or(local_chart_id);
+    const std::optional<local_content_index::online_chart_binding> binding =
+        local_content_index::find_chart_by_local(server_url, local_chart_id);
+    return binding.has_value() ? binding->remote_chart_id : local_chart_id;
 }
 
 struct local_manifest_hashes {
@@ -887,8 +887,9 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
             return result;
         }
 
+        const std::string remote_chart_id = expected_remote_chart_id(stored->server_url, chart_id);
         ranking_client::operation_result online_result =
-            ranking_client::fetch_chart_ranking(stored->server_url, stored->access_token, chart_id, limit);
+            ranking_client::fetch_chart_ranking(stored->server_url, stored->access_token, remote_chart_id, limit);
 
         if (online_result.unauthorized) {
             const auth::operation_result restored = auth::restore_saved_session();
@@ -903,7 +904,7 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
             online_result = ranking_client::fetch_chart_ranking(
                 restored.session_data->server_url,
                 restored.session_data->access_token,
-                chart_id,
+                expected_remote_chart_id(restored.session_data->server_url, chart_id),
                 limit);
         }
 

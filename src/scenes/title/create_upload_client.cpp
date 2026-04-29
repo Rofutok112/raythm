@@ -14,8 +14,7 @@
 #include "network/auth_client.h"
 #include "network/json_helpers.h"
 #include "path_utils.h"
-#include "title/online_download_remote_client.h"
-#include "title/upload_mapping_store.h"
+#include "title/local_content_index.h"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -584,7 +583,6 @@ upload_request_result send_song_upload_request(const auth::session& session,
     }
 
     std::vector<multipart_field> fields;
-    fields.push_back({"songId", meta.song_id});
     fields.push_back({"title", meta.title});
     fields.push_back({"artist", meta.artist});
     {
@@ -631,71 +629,10 @@ upload_request_result send_song_upload_request(const auth::session& session,
 }
 
 std::optional<std::string> resolve_remote_song_id_for_chart_upload(const auth::session& session,
-                                                                   title_upload_mapping::store& store,
                                                                    const song_select::song_entry& song) {
-    if (const std::optional<std::string> mapped = title_upload_mapping::find_remote_song_id(
-            store, session.server_url, song.song.meta.song_id);
-        mapped.has_value()) {
-        return mapped;
-    }
-
-    if (song.song.meta.song_id.empty()) {
-        return std::nullopt;
-    }
-
-    const title_online_view::remote_song_lookup_result lookup =
-        title_online_view::fetch_remote_song_by_id(song.song.meta.song_id, session.server_url);
-    if (!lookup.success || lookup.not_found || lookup.song.id.empty()) {
-        return std::nullopt;
-    }
-
-    title_upload_mapping::put_song(store, session.server_url, song.song.meta.song_id, lookup.song.id,
-                                   title_upload_mapping::mapping_origin::linked);
-    return lookup.song.id;
-}
-
-std::optional<bool> remote_song_exists_for_local_id(const auth::session& session,
-                                                    const song_select::song_entry& song) {
-    if (song.song.meta.song_id.empty()) {
-        return false;
-    }
-
-    const title_online_view::remote_song_lookup_result lookup =
-        title_online_view::fetch_remote_song_by_id(song.song.meta.song_id, session.server_url);
-    if (!lookup.success && !lookup.not_found) {
-        return std::nullopt;
-    }
-    return lookup.success && !lookup.not_found && !lookup.song.id.empty();
-}
-
-std::optional<bool> remote_chart_exists_for_local_id(const auth::session& session,
-                                                     const std::string& remote_song_id,
-                                                     const song_select::chart_option& chart) {
-    if (remote_song_id.empty() || chart.meta.chart_id.empty()) {
-        return false;
-    }
-
-    constexpr int kChartLookupPageSize = 50;
-    int page = 1;
-    while (true) {
-        const title_online_view::remote_chart_page_fetch_result page_result =
-            title_online_view::fetch_remote_chart_page(session.server_url, remote_song_id, page, kChartLookupPageSize);
-        if (!page_result.success) {
-            return std::nullopt;
-        }
-        const auto found = std::find_if(page_result.charts.begin(), page_result.charts.end(),
-                                        [&](const title_online_view::remote_chart_payload& remote_chart) {
-                                            return remote_chart.id == chart.meta.chart_id;
-                                        });
-        if (found != page_result.charts.end()) {
-            return true;
-        }
-        if (page_result.charts.empty() ||
-            page * kChartLookupPageSize >= page_result.total) {
-            return false;
-        }
-        ++page;
-    }
+    const std::optional<local_content_index::online_song_binding> binding =
+        local_content_index::find_song_by_local(session.server_url, song.song.meta.song_id);
+    return binding.has_value() ? std::optional<std::string>(binding->remote_song_id) : std::nullopt;
 }
 
 upload_request_result send_chart_upload_request(const auth::session& session,
@@ -717,7 +654,6 @@ upload_request_result send_chart_upload_request(const auth::session& session,
     }
 
     std::vector<multipart_field> fields;
-    fields.push_back({"chartId", chart.meta.chart_id});
     fields.push_back({"songId", remote_song_id});
     fields.push_back({"visibility", "public"});
 
@@ -756,29 +692,17 @@ upload_result upload_song(const song_select::song_entry& song) {
     }
     auth::session session = *session_opt;
 
-    title_upload_mapping::store store = title_upload_mapping::load();
+    const std::optional<local_content_index::online_song_binding> existing_song_binding =
+        local_content_index::find_song_by_local(session.server_url, song.song.meta.song_id);
     const std::optional<std::string> existing_remote_song_id =
-        title_upload_mapping::find_remote_song_id(store, session.server_url, song.song.meta.song_id);
-    const std::optional<title_upload_mapping::mapping_origin> existing_song_origin =
-        title_upload_mapping::find_song_origin(store, session.server_url, song.song.meta.song_id);
-    if (existing_remote_song_id.has_value() &&
-        existing_song_origin.value_or(title_upload_mapping::mapping_origin::owned_upload) !=
-            title_upload_mapping::mapping_origin::owned_upload) {
+        existing_song_binding.has_value()
+            ? std::optional<std::string>(existing_song_binding->remote_song_id)
+            : std::nullopt;
+    if (existing_song_binding.has_value() &&
+        existing_song_binding->origin != local_content_index::online_origin::owned_upload) {
         result.message = "This song is linked to online content but was not uploaded from this client.";
         return result;
     }
-    if (!existing_remote_song_id.has_value()) {
-        const std::optional<bool> remote_exists = remote_song_exists_for_local_id(session, song);
-        if (!remote_exists.has_value()) {
-            result.message = "Could not verify whether this song already exists on the server.";
-            return result;
-        }
-        if (*remote_exists) {
-            result.message = "This song already exists on the server. Downloaded Community/Official songs cannot be uploaded again.";
-            return result;
-        }
-    }
-
     upload_request_result request_result =
         send_song_upload_request(session, song, existing_remote_song_id);
     if (request_result.unauthorized) {
@@ -792,8 +716,7 @@ upload_result upload_song(const song_select::song_entry& song) {
         request_result = send_song_upload_request(session, song, existing_remote_song_id);
     }
     if (request_result.not_found && existing_remote_song_id.has_value()) {
-        title_upload_mapping::remove_song(store, session.server_url, song.song.meta.song_id);
-        title_upload_mapping::save(store);
+        local_content_index::remove_song_binding(session.server_url, song.song.meta.song_id);
         request_result = send_song_upload_request(session, song, std::nullopt);
         if (request_result.unauthorized) {
             std::string restore_error;
@@ -814,11 +737,13 @@ upload_result upload_song(const song_select::song_entry& song) {
         return result;
     }
 
-    title_upload_mapping::put_song(store, session.server_url, song.song.meta.song_id, request_result.remote_song_id,
-                                   title_upload_mapping::mapping_origin::owned_upload);
-    if (!title_upload_mapping::save(store)) {
-        result.message += " Local upload mapping was not saved.";
-    } else if (!request_result.updated_existing) {
+    local_content_index::put_song_binding({
+        .server_url = session.server_url,
+        .local_song_id = song.song.meta.song_id,
+        .remote_song_id = request_result.remote_song_id,
+        .origin = local_content_index::online_origin::owned_upload,
+    });
+    if (!request_result.updated_existing) {
         result.message += " Charts for this song can now be uploaded.";
     }
 
@@ -837,34 +762,23 @@ upload_result upload_chart(const song_select::song_entry& song,
     }
     auth::session session = *session_opt;
 
-    title_upload_mapping::store store = title_upload_mapping::load();
-    const std::optional<std::string> remote_song_id = resolve_remote_song_id_for_chart_upload(session, store, song);
+    const std::optional<std::string> remote_song_id = resolve_remote_song_id_for_chart_upload(session, song);
     if (!remote_song_id.has_value()) {
         result.message = "Upload the song first so the server can assign a song ID.";
         return result;
     }
 
+    const std::optional<local_content_index::online_chart_binding> existing_chart_binding =
+        local_content_index::find_chart_by_local(session.server_url, chart.meta.chart_id);
     const std::optional<std::string> existing_remote_chart_id =
-        title_upload_mapping::find_remote_chart_id(store, session.server_url, chart.meta.chart_id);
-    const std::optional<title_upload_mapping::mapping_origin> existing_chart_origin =
-        title_upload_mapping::find_chart_origin(store, session.server_url, chart.meta.chart_id);
+        existing_chart_binding.has_value()
+            ? std::optional<std::string>(existing_chart_binding->remote_chart_id)
+            : std::nullopt;
     const std::optional<std::string> updatable_remote_chart_id =
-        existing_chart_origin.value_or(title_upload_mapping::mapping_origin::owned_upload) ==
-            title_upload_mapping::mapping_origin::owned_upload
+        (!existing_chart_binding.has_value() ||
+         existing_chart_binding->origin == local_content_index::online_origin::owned_upload)
         ? existing_remote_chart_id
         : std::nullopt;
-    if (!existing_remote_chart_id.has_value()) {
-        const std::optional<bool> remote_chart_exists =
-            remote_chart_exists_for_local_id(session, *remote_song_id, chart);
-        if (!remote_chart_exists.has_value()) {
-            result.message = "Could not verify whether this chart already exists on the server.";
-            return result;
-        }
-        if (*remote_chart_exists) {
-            result.message = "This chart already exists on the server. Downloaded Community/Official charts cannot be uploaded again.";
-            return result;
-        }
-    }
     if (existing_remote_chart_id.has_value() && !updatable_remote_chart_id.has_value()) {
         result.message = "This chart is linked to online content but was not uploaded from this client.";
         return result;
@@ -883,8 +797,7 @@ upload_result upload_chart(const song_select::song_entry& song,
         request_result = send_chart_upload_request(session, song, chart, *remote_song_id, updatable_remote_chart_id);
     }
     if (request_result.not_found && existing_remote_chart_id.has_value()) {
-        title_upload_mapping::remove_chart(store, session.server_url, chart.meta.chart_id);
-        title_upload_mapping::save(store);
+        local_content_index::remove_chart_binding(session.server_url, chart.meta.chart_id);
         request_result =
             send_chart_upload_request(session, song, chart, *remote_song_id, std::nullopt);
         if (request_result.unauthorized) {
@@ -907,16 +820,22 @@ upload_result upload_chart(const song_select::song_entry& song,
         return result;
     }
 
-    if (!title_upload_mapping::find_song_origin(store, session.server_url, song.song.meta.song_id).has_value()) {
-        title_upload_mapping::put_song(store, session.server_url, song.song.meta.song_id, *remote_song_id,
-                                       title_upload_mapping::mapping_origin::linked);
+    if (!local_content_index::find_song_by_local(session.server_url, song.song.meta.song_id).has_value()) {
+        local_content_index::put_song_binding({
+            .server_url = session.server_url,
+            .local_song_id = song.song.meta.song_id,
+            .remote_song_id = *remote_song_id,
+            .origin = local_content_index::online_origin::linked,
+        });
     }
-    title_upload_mapping::put_chart(store, session.server_url, chart.meta.chart_id, song.song.meta.song_id,
-                                    request_result.remote_chart_id, *remote_song_id,
-                                    title_upload_mapping::mapping_origin::owned_upload);
-    if (!title_upload_mapping::save(store)) {
-        result.message += " Local upload mapping was not saved.";
-    }
+    local_content_index::put_chart_binding({
+        .server_url = session.server_url,
+        .local_chart_id = chart.meta.chart_id,
+        .local_song_id = song.song.meta.song_id,
+        .remote_chart_id = request_result.remote_chart_id,
+        .remote_song_id = *remote_song_id,
+        .origin = local_content_index::online_origin::owned_upload,
+    });
 
     return result;
 }
