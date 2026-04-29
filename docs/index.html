@@ -383,6 +383,7 @@
 
   let audioCtx, analyser, source;
   let started = false;
+  let spectrumAnimating = false;
 
   function resize() {
     canvas.width  = window.innerWidth;
@@ -411,6 +412,11 @@
     source = audioCtx.createMediaElementSource(audio);
     source.connect(analyser);
     audio.play();
+
+    if (!spectrumAnimating) {
+      spectrumAnimating = true;
+      drawSpectrum();
+    }
   }
 
   document.addEventListener('click', startAudio, { once: true });
@@ -421,6 +427,7 @@
   const peakVel   = new Float32Array(BAR_COUNT).fill(0);
 
   function drawSpectrum() {
+    if (!spectrumAnimating) return;
     requestAnimationFrame(drawSpectrum);
 
     const W = canvas.width;
@@ -471,7 +478,6 @@
       ctx2d.fillRect(x, py, barW, 2);
     }
   }
-  drawSpectrum();
 </script>
 </body>
 </html>

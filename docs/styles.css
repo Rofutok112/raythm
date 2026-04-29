@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
-
 :root {
   color-scheme: dark;
   --bg: #0d0d0d;
@@ -31,7 +29,7 @@ html {
   min-height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: "Share Tech Mono", "Yu Gothic", Meiryo, monospace;
+  font-family: Consolas, "Cascadia Mono", "Yu Gothic", Meiryo, monospace;
   line-height: 1.78;
 }
 
@@ -39,24 +37,13 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    linear-gradient(90deg, rgba(168, 85, 247, 0.08) 0 1px, transparent 1px 72px),
-    linear-gradient(180deg, rgba(216, 180, 254, 0.04) 0 1px, transparent 1px 72px),
+    linear-gradient(90deg, rgba(168, 85, 247, 0.045) 0 1px, transparent 1px 96px),
+    linear-gradient(180deg, rgba(216, 180, 254, 0.026) 0 1px, transparent 1px 96px),
     linear-gradient(180deg, #0d0d0d 0%, #111116 48%, #0d0d0d 100%);
 }
 
 body::before {
-  content: "";
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 3px,
-    rgba(0, 0, 0, 0.12) 3px,
-    rgba(0, 0, 0, 0.12) 4px
-  );
+  content: none;
 }
 
 a {
@@ -75,7 +62,6 @@ a:hover {
   z-index: 20;
   border-bottom: 1px solid var(--border);
   background: rgba(13, 13, 13, 0.88);
-  backdrop-filter: blur(8px);
 }
 
 .nav {
@@ -150,8 +136,7 @@ a:hover {
 .content {
   border: 1px solid var(--border);
   background: var(--panel);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
-  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
 }
 
 .terminal-titlebar {
@@ -269,17 +254,14 @@ h1 span {
   height: 10px;
   margin-top: 0.7em;
   background: var(--accent);
-  box-shadow: 0 0 18px rgba(168, 85, 247, 0.85);
 }
 
 .status-list li:nth-child(2) .status-mark {
   background: var(--success);
-  box-shadow: 0 0 18px rgba(40, 180, 130, 0.75);
 }
 
 .status-list li:nth-child(3) .status-mark {
   background: var(--slow);
-  box-shadow: 0 0 18px rgba(240, 150, 70, 0.72);
 }
 
 .content {
