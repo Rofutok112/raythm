@@ -93,6 +93,8 @@ public:
     }
 
     void shutdown() {
+        set_ime_context_enabled(true);
+
         std::scoped_lock lock(mutex_);
 
 #ifdef _WIN32
@@ -142,11 +144,11 @@ public:
             std::scoped_lock lock(mutex_);
             ime_requested_this_frame_ = true;
             should_enable_ime = !ime_context_enabled_;
-            ime_context_enabled_ = true;
         }
 
-        if (should_enable_ime) {
-            set_ime_context_enabled(true);
+        if (should_enable_ime && set_ime_context_enabled(true)) {
+            std::scoped_lock lock(mutex_);
+            ime_context_enabled_ = true;
         }
     }
 
@@ -157,13 +159,11 @@ public:
             const bool allow_text_input = ime_requested_this_frame_;
             ime_requested_this_frame_ = false;
             should_disable_ime = !allow_text_input && ime_context_enabled_;
-            if (should_disable_ime) {
-                ime_context_enabled_ = false;
-            }
         }
 
-        if (should_disable_ime) {
-            set_ime_context_enabled(false);
+        if (should_disable_ime && set_ime_context_enabled(false)) {
+            std::scoped_lock lock(mutex_);
+            ime_context_enabled_ = false;
         }
     }
 
@@ -219,15 +219,11 @@ public:
 
 private:
 #ifdef _WIN32
-    using imm_get_context_fn = HIMC(WINAPI*)(HWND);
     using imm_associate_context_fn = HIMC(WINAPI*)(HWND, HIMC);
-    using imm_release_context_fn = BOOL(WINAPI*)(HWND, HIMC);
 
     struct ime_functions {
         HMODULE module = nullptr;
-        imm_get_context_fn get_context = nullptr;
         imm_associate_context_fn associate_context = nullptr;
-        imm_release_context_fn release_context = nullptr;
         bool available = false;
     };
 
@@ -239,28 +235,21 @@ private:
                 return loaded;
             }
 
-            loaded.get_context =
-                reinterpret_cast<imm_get_context_fn>(GetProcAddress(loaded.module, "ImmGetContext"));
             loaded.associate_context =
                 reinterpret_cast<imm_associate_context_fn>(GetProcAddress(loaded.module, "ImmAssociateContext"));
-            loaded.release_context =
-                reinterpret_cast<imm_release_context_fn>(GetProcAddress(loaded.module, "ImmReleaseContext"));
-            loaded.available =
-                loaded.get_context != nullptr &&
-                loaded.associate_context != nullptr &&
-                loaded.release_context != nullptr;
+            loaded.available = loaded.associate_context != nullptr;
             return loaded;
         }();
         return functions;
     }
 
-    void set_ime_context_enabled(bool enabled) {
+    bool set_ime_context_enabled(bool enabled) {
         HWND hwnd = nullptr;
         HIMC restore_context = nullptr;
         {
             std::scoped_lock lock(mutex_);
             if (!installed_ || hwnd_ == nullptr) {
-                return;
+                return false;
             }
             hwnd = hwnd_;
             restore_context = saved_ime_context_;
@@ -269,12 +258,12 @@ private:
         // IME APIs may dispatch window messages. Never hold mutex_ while calling them.
         const ime_functions& functions = loaded_ime_functions();
         if (!functions.available) {
-            return;
+            return false;
         }
 
         if (enabled) {
             if (restore_context == nullptr) {
-                return;
+                return false;
             }
 
             HIMC previous_context = functions.associate_context(hwnd, restore_context);
@@ -284,12 +273,7 @@ private:
                     saved_ime_context_ = previous_context;
                 }
             }
-            return;
-        }
-
-        HIMC current_context = functions.get_context(hwnd);
-        if (current_context != nullptr) {
-            functions.release_context(hwnd, current_context);
+            return true;
         }
 
         HIMC previous_context = functions.associate_context(hwnd, nullptr);
@@ -297,6 +281,7 @@ private:
             std::scoped_lock lock(mutex_);
             saved_ime_context_ = previous_context;
         }
+        return true;
     }
 
     bool try_capture_event(UINT message, WPARAM w_param, LPARAM l_param) {
@@ -398,7 +383,8 @@ private:
     long long qpc_origin_ = 0;
     HIMC saved_ime_context_ = nullptr;
 #else
-    void set_ime_context_enabled(bool) {
+    bool set_ime_context_enabled(bool) {
+        return false;
     }
 #endif
 
