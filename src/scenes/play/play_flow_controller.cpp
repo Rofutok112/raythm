@@ -1,6 +1,7 @@
 #include "play_flow_controller.h"
 
 #include <algorithm>
+#include <cstddef>
 
 namespace {
 
@@ -15,12 +16,45 @@ bool is_no_fail_playtest(const play_session_state& state) {
     return state.editor_resume_state.has_value();
 }
 
+void update_visual_effect_timers(play_session_state& state, float dt) {
+    state.judge_feedback_timer = std::max(0.0f, state.judge_feedback_timer - dt);
+    for (lane_judge_effect& effect : state.lane_judge_effects) {
+        effect.timer = std::max(0.0f, effect.timer - dt);
+    }
+}
+
+void update_lane_hold_dimming(play_session_state& state, float dt) {
+    constexpr float kAttackPerSecond = 26.0f;
+    constexpr float kReleasePerSecond = 18.0f;
+
+    for (int lane = 0; lane < state.key_count; ++lane) {
+        float& amount = state.lane_hold_dim_amounts[static_cast<std::size_t>(lane)];
+        const float target = state.input_handler.is_lane_held(lane) ? 1.0f : 0.0f;
+        const float step = dt * (target > amount ? kAttackPerSecond : kReleasePerSecond);
+        if (target > amount) {
+            amount = std::min(target, amount + step);
+        } else {
+            amount = std::max(target, amount - step);
+        }
+    }
+}
+
+void trigger_lane_judge_effect(play_session_state& state, const judge_event& event) {
+    if (event.result == judge_result::miss || event.lane < 0 || event.lane >= state.key_count) {
+        return;
+    }
+
+    lane_judge_effect& effect = state.lane_judge_effects[static_cast<std::size_t>(event.lane)];
+    effect.result = event.result;
+    effect.timer = play_session_constants::kLaneJudgeEffectDurationSeconds;
+}
+
 }  // namespace
 
 play_update_result play_flow_controller::update(play_session_state& state, play_note_draw_queue& draw_queue,
                                                 const play_update_context& context) {
     play_update_result result;
-    state.judge_feedback_timer = std::max(0.0f, state.judge_feedback_timer - context.dt);
+    update_visual_effect_timers(state, context.dt);
 
     if (!state.initialized) {
         if (context.escape_pressed) {
@@ -101,6 +135,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         if (!context.input_already_updated) {
             state.input_handler.update(state.current_ms);
         }
+        update_lane_hold_dimming(state, context.dt);
         if (context.draw_window.has_value()) {
             draw_queue.update_visible_window(state.judge_system.note_states(), static_cast<float>(state.lane_speed),
                                              context.draw_window->judgement_z, context.draw_window->lane_start_z,
@@ -121,6 +156,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
     if (!context.input_already_updated) {
         state.input_handler.update(state.current_ms);
     }
+    update_lane_hold_dimming(state, context.dt);
     state.judge_system.update(state.current_ms, state.input_handler);
     const std::vector<judge_event>& judge_events = state.judge_system.get_judge_events();
     state.last_judge = state.judge_system.get_last_judge();
@@ -139,6 +175,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         if (event.show_feedback) {
             state.display_judge = event;
             state.judge_feedback_timer = 1.0f;
+            trigger_lane_judge_effect(state, event);
         }
     }
     state.combo_display = state.score_system.get_combo();

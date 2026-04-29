@@ -169,6 +169,8 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.status_text.clear();
     state.last_judge.reset();
     state.display_judge.reset();
+    state.lane_hold_dim_amounts.fill(0.0f);
+    state.lane_judge_effects.fill(lane_judge_effect{});
     state.final_result = {};
     state.judge_feedback_timer = 0.0f;
     state.intro_playing = true;
