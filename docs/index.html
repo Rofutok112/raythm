@@ -1,51 +1,477 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>raythm</title>
-  <meta name="description" content="raythm のサポートページです。">
-  <link rel="stylesheet" href="./styles.css">
-  <link rel="icon" href="./assets/raythm-icon.png">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0d0d;
+      --bg2:       #141414;
+      --bg3:       #1c1c1c;
+      --border:    #2a2a2a;
+      --green:     #a855f7;
+      --green-dim: #6b21a8;
+      --white:     #e8e8e8;
+      --gray:      #666;
+      --accent:    #d8b4fe;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--white);
+      font-family: 'Share Tech Mono', 'Courier New', monospace;
+    }
+
+    /* scanline overlay */
+    body::before {
+      content: '';
+      pointer-events: none;
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        transparent 3px,
+        rgba(0,0,0,0.08) 3px,
+        rgba(0,0,0,0.08) 4px
+      );
+      z-index: 999;
+    }
+
+    /* ── spectrum canvas ── */
+    #spectrum {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ── click-to-start overlay ── */
+    #start-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 900;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 32px;
+      cursor: pointer;
+    }
+
+    #start-hint {
+      font-family: 'Share Tech Mono', 'Courier New', monospace;
+      font-size: 11px;
+      color: var(--gray);
+      letter-spacing: .1em;
+      animation: blink 1.4s step-end infinite;
+    }
+
+    #start-overlay.hidden { display: none; }
+
+    /* ── layout ── */
+    .page {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      gap: 0;
+    }
+
+    /* ── terminal window ── */
+    .window {
+      width: 100%;
+      max-width: 680px;
+      border: 1px solid var(--border);
+      background: rgba(20, 20, 20, 0.88);
+      backdrop-filter: blur(6px);
+    }
+
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--gray);
+      user-select: none;
+    }
+
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+    .dot.r { background: #e05252; }
+    .dot.y { background: #d4aa3c; }
+    .dot.g { background: var(--green-dim); }
+
+    .titlebar-name {
+      margin-left: auto;
+      margin-right: auto;
+      letter-spacing: .05em;
+    }
+
+    .body {
+      padding: 36px 40px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    /* ── logo / title ── */
+    .logo-block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .logo {
+      font-size: clamp(36px, 8vw, 56px);
+      font-weight: normal;
+      color: var(--accent);
+      letter-spacing: .12em;
+      line-height: 1;
+    }
+
+    .logo span {
+      color: var(--green);
+    }
+
+    .tagline {
+      font-size: 12px;
+      color: var(--gray);
+      letter-spacing: .08em;
+    }
+
+    /* ── divider ── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── info block ── */
+    .info {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .info-row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .info-key {
+      color: var(--green);
+      min-width: 120px;
+    }
+
+    .info-val {
+      color: var(--white);
+    }
+
+    .info-val.loading {
+      color: var(--gray);
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+
+    /* ── download button ── */
+    .dl-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .dl-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 14px 24px;
+      background: var(--green);
+      color: #0d0d0d;
+      font-family: inherit;
+      font-size: 15px;
+      letter-spacing: .1em;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: background .1s, transform .08s;
+    }
+
+    .dl-btn:hover  { background: var(--accent); }
+    .dl-btn:active { transform: translateY(1px); }
+
+    .dl-btn.disabled {
+      background: var(--bg3);
+      color: var(--gray);
+      cursor: default;
+      pointer-events: none;
+    }
+
+    .dl-icon { font-size: 18px; }
+
+    .dl-sub {
+      font-size: 11px;
+      color: var(--gray);
+      text-align: center;
+      letter-spacing: .05em;
+    }
+
+    /* ── footer ── */
+    .footer {
+      position: relative;
+      z-index: 1;
+      margin-top: 24px;
+      font-size: 11px;
+      color: var(--gray);
+      letter-spacing: .06em;
+      display: flex;
+      gap: 24px;
+    }
+
+    .footer a {
+      color: var(--gray);
+      text-decoration: none;
+    }
+    .footer a:hover { color: var(--green); }
+
+    /* ── error ── */
+    .error { color: #e05252; font-size: 12px; display: none; }
+  </style>
 </head>
 <body>
-  <header class="site-header">
-    <nav class="nav" aria-label="Main navigation">
-      <a class="brand" href="./">
-        <img src="./assets/raythm-icon.png" alt="">
-        <span>raythm</span>
-      </a>
-      <div class="nav-links">
-        <a href="./privacy-policy/">プライバシーポリシー</a>
-        <a href="https://github.com/Rofutok112/raythm">GitHub</a>
-      </div>
-    </nav>
-  </header>
 
-  <main>
-    <section class="hero">
-      <div>
-        <p class="eyebrow">Rhythm game project</p>
-        <h1>raythm</h1>
-        <p class="lead">raylib を使ったリズムゲームです。オンラインランキング、コミュニティ投稿、楽曲ダウンロード機能を含みます。</p>
-        <div class="cta-row">
-          <a class="button" href="./privacy-policy/">プライバシーポリシーを見る</a>
-          <a class="button secondary" href="https://github.com/Rofutok112/raythm">リポジトリを見る</a>
+<canvas id="spectrum"></canvas>
+
+<div id="start-overlay">
+  <span id="start-hint">&gt; click anywhere to start audio</span>
+</div>
+
+<main class="page">
+
+  <div class="window">
+    <div class="titlebar">
+      <div class="dot r"></div>
+      <div class="dot y"></div>
+      <div class="dot g"></div>
+      <span class="titlebar-name">raythm.exe</span>
+    </div>
+
+    <div class="body">
+
+      <div class="logo-block">
+        <div class="logo">ray<span>thm</span></div>
+        <div class="tagline">&gt; rhythm game / windows x64</div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="info">
+        <div class="info-row">
+          <span class="info-key">version</span>
+          <span class="info-val loading" id="val-version">loading...</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">build date</span>
+          <span class="info-val loading" id="val-date">loading...</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">file size</span>
+          <span class="info-val loading" id="val-size">loading...</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">platform</span>
+          <span class="info-val">Windows x64</span>
         </div>
       </div>
-      <aside class="hero-panel" aria-label="raythm feature summary">
-        <img src="./assets/raythm-icon.png" alt="">
-        <ul class="status-list">
-          <li><span class="status-mark"></span><span>アカウント登録とメール認証に対応</span></li>
-          <li><span class="status-mark"></span><span>公式譜面のオンラインランキングを送信</span></li>
-          <li><span class="status-mark"></span><span>コミュニティ楽曲・譜面の投稿と削除に対応</span></li>
-        </ul>
-      </aside>
-    </section>
-  </main>
 
-  <footer class="site-footer">
-    <span>&copy; 2026 raythm project.</span>
+      <div class="dl-wrap">
+        <a class="dl-btn disabled" id="dl-btn" href="#" download>
+          <span class="dl-icon">&#9660;</span>
+          <span id="dl-label">DOWNLOAD</span>
+        </a>
+        <div class="dl-sub" id="dl-sub">&nbsp;</div>
+        <div class="error" id="error-msg"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer class="footer">
+    <a href="https://github.com/Rofutok112/raythm" target="_blank">&gt; github</a>
+    <a href="https://github.com/Rofutok112/raythm/releases" target="_blank">&gt; all releases</a>
+    <a href="https://github.com/Rofutok112/raythm/issues" target="_blank">&gt; issues</a>
+    <a href="privacy-policy/">&gt; privacy policy</a>
   </footer>
+
+</main>
+
+<script>
+  // ── GitHub release fetch ──────────────────────────────────────
+  const API = 'https://api.github.com/repos/Rofutok112/raythm/releases';
+
+  function fmtSize(bytes) { return (bytes / 1024 / 1024).toFixed(1) + ' MB'; }
+  function fmtDate(iso)   { return new Date(iso).toISOString().slice(0, 10); }
+  function extractVersion(name) {
+    const m = name.match(/raythm-([0-9.]+)-windows/);
+    return m ? m[1] : name;
+  }
+
+  async function loadRelease() {
+    try {
+      const res = await fetch(API + '?per_page=20');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const releases = await res.json();
+
+      let asset = null, release = null;
+      for (const r of releases) {
+        asset = r.assets.find(a => a.name.includes('windows') && a.name.endsWith('.exe'));
+        if (asset) { release = r; break; }
+      }
+      if (!asset) throw new Error('Windows build not found');
+
+      document.getElementById('val-version').textContent = extractVersion(asset.name);
+      document.getElementById('val-version').classList.remove('loading');
+      document.getElementById('val-date').textContent = fmtDate(asset.updated_at);
+      document.getElementById('val-date').classList.remove('loading');
+      document.getElementById('val-size').textContent = fmtSize(asset.size);
+      document.getElementById('val-size').classList.remove('loading');
+
+      const btn = document.getElementById('dl-btn');
+      btn.href = asset.browser_download_url;
+      btn.classList.remove('disabled');
+      document.getElementById('dl-label').textContent = 'DOWNLOAD  ' + asset.name;
+      document.getElementById('dl-sub').textContent = '↳ ' + release.name;
+    } catch (e) {
+      ['val-version','val-date','val-size'].forEach(id => {
+        const el = document.getElementById(id);
+        el.textContent = 'N/A';
+        el.classList.remove('loading');
+      });
+      const err = document.getElementById('error-msg');
+      err.style.display = 'block';
+      err.textContent = '> error: ' + e.message;
+    }
+  }
+  loadRelease();
+
+  // ── Audio + Spectrum ──────────────────────────────────────────
+  const canvas   = document.getElementById('spectrum');
+  const ctx2d    = canvas.getContext('2d');
+  const overlay  = document.getElementById('start-overlay');
+
+  let audioCtx, analyser, source;
+  let started = false;
+
+  function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  async function startAudio() {
+    if (started) return;
+    started = true;
+    overlay.classList.add('hidden');
+
+    audioCtx = new AudioContext();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.82;
+
+    const gainNode = audioCtx.createGain();
+    gainNode.gain.value = 0.05;
+    analyser.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    const audio = new Audio('audio/main_theme.mp3');
+    audio.loop = true;
+    source = audioCtx.createMediaElementSource(audio);
+    source.connect(analyser);
+    audio.play();
+  }
+
+  document.addEventListener('click', startAudio, { once: true });
+
+  // ── Spectrum renderer ─────────────────────────────────────────
+  const BAR_COUNT = 64;
+  const peaks     = new Float32Array(BAR_COUNT).fill(0);
+  const peakVel   = new Float32Array(BAR_COUNT).fill(0);
+
+  function drawSpectrum() {
+    requestAnimationFrame(drawSpectrum);
+
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx2d.clearRect(0, 0, W, H);
+
+    if (!analyser) return;
+
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(buf);
+
+    const step     = Math.floor(buf.length / BAR_COUNT);
+    const gap      = 3;
+    const barW     = (W / BAR_COUNT) - gap;
+    const maxH     = H * 0.55;
+
+    for (let i = 0; i < BAR_COUNT; i++) {
+      // average a small bucket for smoother response
+      let sum = 0;
+      for (let j = 0; j < step; j++) sum += buf[i * step + j];
+      const norm  = (sum / step) / 255;
+      const barH  = norm * maxH;
+
+      const x = i * (barW + gap);
+      const y = H - barH;
+
+      // gradient: dim purple at base → bright accent at top
+      const grad = ctx2d.createLinearGradient(0, H, 0, H - maxH);
+      grad.addColorStop(0,   'rgba(107, 33, 168, 0.5)');
+      grad.addColorStop(0.6, 'rgba(168, 85, 247, 0.7)');
+      grad.addColorStop(1,   'rgba(216, 180, 254, 0.9)');
+
+      ctx2d.fillStyle = grad;
+      ctx2d.fillRect(x, y, barW, barH);
+
+      // peak dot
+      if (barH > peaks[i]) {
+        peaks[i]   = barH;
+        peakVel[i] = 0;
+      } else {
+        peakVel[i] += 0.3;
+        peaks[i]   -= peakVel[i];
+        if (peaks[i] < 0) peaks[i] = 0;
+      }
+
+      const py = H - peaks[i] - 2;
+      ctx2d.fillStyle = 'rgba(216, 180, 254, 0.6)';
+      ctx2d.fillRect(x, py, barW, 2);
+    }
+  }
+  drawSpectrum();
+</script>
 </body>
 </html>
