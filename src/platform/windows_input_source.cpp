@@ -82,6 +82,9 @@ public:
         qpc_origin_ = origin.QuadPart;
         queued_events_.clear();
         sequence_ = 0;
+        ime_context_enabled_ = true;
+        ime_requested_this_frame_ = false;
+        saved_ime_context_ = nullptr;
 #else
         (void)native_window_handle;
 #endif
@@ -90,6 +93,8 @@ public:
     }
 
     void shutdown() {
+        set_ime_context_enabled(true);
+
         std::scoped_lock lock(mutex_);
 
 #ifdef _WIN32
@@ -104,6 +109,8 @@ public:
 
         queued_events_.clear();
         test_mode_ = false;
+        ime_context_enabled_ = true;
+        ime_requested_this_frame_ = false;
     }
 
     bool is_available() const {
@@ -124,6 +131,40 @@ public:
 #endif
 
         return test_current_time_ms_;
+    }
+
+    void begin_frame() {
+        std::scoped_lock lock(mutex_);
+        ime_requested_this_frame_ = false;
+    }
+
+    void request_text_input() {
+        bool should_enable_ime = false;
+        {
+            std::scoped_lock lock(mutex_);
+            ime_requested_this_frame_ = true;
+            should_enable_ime = !ime_context_enabled_;
+        }
+
+        if (should_enable_ime && set_ime_context_enabled(true)) {
+            std::scoped_lock lock(mutex_);
+            ime_context_enabled_ = true;
+        }
+    }
+
+    void end_frame() {
+        bool should_disable_ime = false;
+        {
+            std::scoped_lock lock(mutex_);
+            const bool allow_text_input = ime_requested_this_frame_;
+            ime_requested_this_frame_ = false;
+            should_disable_ime = !allow_text_input && ime_context_enabled_;
+        }
+
+        if (should_disable_ime && set_ime_context_enabled(false)) {
+            std::scoped_lock lock(mutex_);
+            ime_context_enabled_ = false;
+        }
     }
 
     std::vector<native_key_event> drain_events() {
@@ -178,6 +219,71 @@ public:
 
 private:
 #ifdef _WIN32
+    using imm_associate_context_fn = HIMC(WINAPI*)(HWND, HIMC);
+
+    struct ime_functions {
+        HMODULE module = nullptr;
+        imm_associate_context_fn associate_context = nullptr;
+        bool available = false;
+    };
+
+    static const ime_functions& loaded_ime_functions() {
+        static const ime_functions functions = [] {
+            ime_functions loaded;
+            loaded.module = LoadLibraryW(L"imm32.dll");
+            if (loaded.module == nullptr) {
+                return loaded;
+            }
+
+            loaded.associate_context =
+                reinterpret_cast<imm_associate_context_fn>(GetProcAddress(loaded.module, "ImmAssociateContext"));
+            loaded.available = loaded.associate_context != nullptr;
+            return loaded;
+        }();
+        return functions;
+    }
+
+    bool set_ime_context_enabled(bool enabled) {
+        HWND hwnd = nullptr;
+        HIMC restore_context = nullptr;
+        {
+            std::scoped_lock lock(mutex_);
+            if (!installed_ || hwnd_ == nullptr) {
+                return false;
+            }
+            hwnd = hwnd_;
+            restore_context = saved_ime_context_;
+        }
+
+        // IME APIs may dispatch window messages. Never hold mutex_ while calling them.
+        const ime_functions& functions = loaded_ime_functions();
+        if (!functions.available) {
+            return false;
+        }
+
+        if (enabled) {
+            if (restore_context == nullptr) {
+                return false;
+            }
+
+            HIMC previous_context = functions.associate_context(hwnd, restore_context);
+            {
+                std::scoped_lock lock(mutex_);
+                if (previous_context != nullptr && previous_context != restore_context) {
+                    saved_ime_context_ = previous_context;
+                }
+            }
+            return true;
+        }
+
+        HIMC previous_context = functions.associate_context(hwnd, nullptr);
+        if (previous_context != nullptr) {
+            std::scoped_lock lock(mutex_);
+            saved_ime_context_ = previous_context;
+        }
+        return true;
+    }
+
     bool try_capture_event(UINT message, WPARAM w_param, LPARAM l_param) {
         std::scoped_lock lock(mutex_);
         if (!installed_) {
@@ -275,6 +381,11 @@ private:
     WNDPROC previous_wnd_proc_ = nullptr;
     long long qpc_frequency_ = 0;
     long long qpc_origin_ = 0;
+    HIMC saved_ime_context_ = nullptr;
+#else
+    bool set_ime_context_enabled(bool) {
+        return false;
+    }
 #endif
 
     mutable std::mutex mutex_;
@@ -282,6 +393,8 @@ private:
     std::uint64_t sequence_ = 0;
     bool test_mode_ = false;
     bool installed_ = false;
+    bool ime_context_enabled_ = true;
+    bool ime_requested_this_frame_ = false;
     double test_current_time_ms_ = 0.0;
 };
 
@@ -306,6 +419,18 @@ bool windows_input_source::is_available() const {
 
 double windows_input_source::current_time_ms() const {
     return windows_input_source_state::instance().current_time_ms();
+}
+
+void windows_input_source::begin_frame() {
+    windows_input_source_state::instance().begin_frame();
+}
+
+void windows_input_source::request_text_input() {
+    windows_input_source_state::instance().request_text_input();
+}
+
+void windows_input_source::end_frame() {
+    windows_input_source_state::instance().end_frame();
 }
 
 std::vector<native_key_event> windows_input_source::drain_events() {

@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <sstream>
 
+#include "platform/windows_input_source.h"
 #include "ui_font.h"
 #include "ui_coord.h"
 #include "ui_layout.h"
@@ -807,6 +808,8 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
 
     // Keyboard input
     if (state.active) {
+        windows_input_source::instance().request_text_input();
+
         const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
         const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
         const bool has_completion = !completion.items.empty();

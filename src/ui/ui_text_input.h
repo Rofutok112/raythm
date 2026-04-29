@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 
+#include "platform/windows_input_source.h"
 #include "raylib.h"
 #include "ui_draw.h"
 
@@ -381,6 +382,8 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
     }
 
     if (state.active) {
+        windows_input_source::instance().request_text_input();
+
         const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
         const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
 

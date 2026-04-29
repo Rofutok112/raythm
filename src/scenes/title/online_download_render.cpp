@@ -5,6 +5,7 @@
 #include <string>
 
 #include "audio_manager.h"
+#include "platform/windows_input_source.h"
 #include "scene_common.h"
 #include "tween.h"
 #include "title/title_layout.h"
@@ -107,6 +108,8 @@ ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_stat
     }
 
     if (state.active) {
+        windows_input_source::instance().request_text_input();
+
         const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
         const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
 

@@ -40,6 +40,7 @@ int main() {
     bool was_window_focused = IsWindowFocused();
 
     while (!WindowShouldClose()) {
+        windows_input_source::instance().begin_frame();
         if (applied_target_fps != g_settings.target_fps) {
             SetTargetFPS(g_settings.target_fps);
             applied_target_fps = g_settings.target_fps;
@@ -74,6 +75,7 @@ int main() {
             static_cast<float>(GetScreenHeight())
         });
         EndDrawing();
+        windows_input_source::instance().end_frame();
     }
 
     save_settings(g_settings);
