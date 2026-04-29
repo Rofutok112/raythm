@@ -584,7 +584,6 @@ upload_request_result send_song_upload_request(const auth::session& session,
     }
 
     std::vector<multipart_field> fields;
-    fields.push_back({"songId", meta.song_id});
     fields.push_back({"title", meta.title});
     fields.push_back({"artist", meta.artist});
     {
@@ -654,50 +653,6 @@ std::optional<std::string> resolve_remote_song_id_for_chart_upload(const auth::s
     return lookup.song.id;
 }
 
-std::optional<bool> remote_song_exists_for_local_id(const auth::session& session,
-                                                    const song_select::song_entry& song) {
-    if (song.song.meta.song_id.empty()) {
-        return false;
-    }
-
-    const title_online_view::remote_song_lookup_result lookup =
-        title_online_view::fetch_remote_song_by_id(song.song.meta.song_id, session.server_url);
-    if (!lookup.success && !lookup.not_found) {
-        return std::nullopt;
-    }
-    return lookup.success && !lookup.not_found && !lookup.song.id.empty();
-}
-
-std::optional<bool> remote_chart_exists_for_local_id(const auth::session& session,
-                                                     const std::string& remote_song_id,
-                                                     const song_select::chart_option& chart) {
-    if (remote_song_id.empty() || chart.meta.chart_id.empty()) {
-        return false;
-    }
-
-    constexpr int kChartLookupPageSize = 50;
-    int page = 1;
-    while (true) {
-        const title_online_view::remote_chart_page_fetch_result page_result =
-            title_online_view::fetch_remote_chart_page(session.server_url, remote_song_id, page, kChartLookupPageSize);
-        if (!page_result.success) {
-            return std::nullopt;
-        }
-        const auto found = std::find_if(page_result.charts.begin(), page_result.charts.end(),
-                                        [&](const title_online_view::remote_chart_payload& remote_chart) {
-                                            return remote_chart.id == chart.meta.chart_id;
-                                        });
-        if (found != page_result.charts.end()) {
-            return true;
-        }
-        if (page_result.charts.empty() ||
-            page * kChartLookupPageSize >= page_result.total) {
-            return false;
-        }
-        ++page;
-    }
-}
-
 upload_request_result send_chart_upload_request(const auth::session& session,
                                                 const song_select::song_entry& song,
                                                 const song_select::chart_option& chart,
@@ -717,7 +672,6 @@ upload_request_result send_chart_upload_request(const auth::session& session,
     }
 
     std::vector<multipart_field> fields;
-    fields.push_back({"chartId", chart.meta.chart_id});
     fields.push_back({"songId", remote_song_id});
     fields.push_back({"visibility", "public"});
 
@@ -767,18 +721,6 @@ upload_result upload_song(const song_select::song_entry& song) {
         result.message = "This song is linked to online content but was not uploaded from this client.";
         return result;
     }
-    if (!existing_remote_song_id.has_value()) {
-        const std::optional<bool> remote_exists = remote_song_exists_for_local_id(session, song);
-        if (!remote_exists.has_value()) {
-            result.message = "Could not verify whether this song already exists on the server.";
-            return result;
-        }
-        if (*remote_exists) {
-            result.message = "This song already exists on the server. Downloaded Community/Official songs cannot be uploaded again.";
-            return result;
-        }
-    }
-
     upload_request_result request_result =
         send_song_upload_request(session, song, existing_remote_song_id);
     if (request_result.unauthorized) {
@@ -853,18 +795,6 @@ upload_result upload_chart(const song_select::song_entry& song,
             title_upload_mapping::mapping_origin::owned_upload
         ? existing_remote_chart_id
         : std::nullopt;
-    if (!existing_remote_chart_id.has_value()) {
-        const std::optional<bool> remote_chart_exists =
-            remote_chart_exists_for_local_id(session, *remote_song_id, chart);
-        if (!remote_chart_exists.has_value()) {
-            result.message = "Could not verify whether this chart already exists on the server.";
-            return result;
-        }
-        if (*remote_chart_exists) {
-            result.message = "This chart already exists on the server. Downloaded Community/Official charts cannot be uploaded again.";
-            return result;
-        }
-    }
     if (existing_remote_chart_id.has_value() && !updatable_remote_chart_id.has_value()) {
         result.message = "This chart is linked to online content but was not uploaded from this client.";
         return result;

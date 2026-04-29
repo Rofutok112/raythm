@@ -94,6 +94,29 @@ void draw_to_screen(bool use_alpha) {
     const Rectangle source = {0.0f, 0.0f, source_w, -source_h};
     const Rectangle dest = {offset_x, offset_y, dest_w, dest_h};
 
+    if (!use_alpha) {
+        if (offset_y > 0.0f) {
+            DrawTexturePro(target.texture,
+                           {0.0f, 0.0f, source_w, -1.0f},
+                           {0.0f, 0.0f, screen_w, offset_y},
+                           {0.0f, 0.0f}, 0.0f, WHITE);
+            DrawTexturePro(target.texture,
+                           {0.0f, source_h - 1.0f, source_w, -1.0f},
+                           {0.0f, offset_y + dest_h, screen_w, screen_h - offset_y - dest_h},
+                           {0.0f, 0.0f}, 0.0f, WHITE);
+        }
+        if (offset_x > 0.0f) {
+            DrawTexturePro(target.texture,
+                           {0.0f, 0.0f, 1.0f, -source_h},
+                           {0.0f, offset_y, offset_x, dest_h},
+                           {0.0f, 0.0f}, 0.0f, WHITE);
+            DrawTexturePro(target.texture,
+                           {source_w - 1.0f, 0.0f, 1.0f, -source_h},
+                           {offset_x + dest_w, offset_y, screen_w - offset_x - dest_w, dest_h},
+                           {0.0f, 0.0f}, 0.0f, WHITE);
+        }
+    }
+
     const Color tint = use_alpha ? WHITE : WHITE;
     DrawTexturePro(target.texture, source, dest, {0.0f, 0.0f}, 0.0f, tint);
 }
