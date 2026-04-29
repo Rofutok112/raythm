@@ -233,8 +233,7 @@ void editor_scene::draw() {
     virtual_screen::begin_ui();
     rebuild_hit_regions();
     ui::begin_draw_queue();
-    ClearBackground(t.bg);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
+    draw_scene_background(t);
 
     ui::draw_panel(layout::kLeftPanelRect);
     ui::draw_panel(layout::kTimelineRect);

@@ -208,8 +208,7 @@ void result_scene::poll_online_submit() {
 void result_scene::draw() {
     const auto& t = *g_theme;
     virtual_screen::begin_ui();
-    ClearBackground(t.bg);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
+    draw_scene_background(t);
 
     ui::draw_panel(kMainPanel);
 
