@@ -38,10 +38,10 @@ int main() {
     play_note_draw_queue draw_queue;
 
     std::vector<note_state> note_states = {
-        {note_data{note_type::tap, 0, 0, 0}, 1000.0, 1000.0, note_progress_state::pending, judge_result::miss},
-        {note_data{note_type::tap, 0, 0, 0}, 1200.0, 1200.0, note_progress_state::pending, judge_result::miss},
-        {note_data{note_type::hold, 0, 1, 480}, 1300.0, 1500.0, note_progress_state::pending, judge_result::miss},
-        {note_data{note_type::tap, 0, 1, 0}, 900.0, 900.0, note_progress_state::pending, judge_result::miss},
+        {.note_ref = note_data{note_type::tap, 0, 0, 0}, .target_ms = 1000.0, .end_target_ms = 1000.0},
+        {.note_ref = note_data{note_type::tap, 0, 0, 0}, .target_ms = 1200.0, .end_target_ms = 1200.0},
+        {.note_ref = note_data{note_type::hold, 0, 1, 480}, .target_ms = 1300.0, .end_target_ms = 1500.0},
+        {.note_ref = note_data{note_type::tap, 0, 1, 0}, .target_ms = 900.0, .end_target_ms = 900.0},
     };
 
     draw_queue.init_from_note_states(4, note_states);

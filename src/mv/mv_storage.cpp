@@ -82,6 +82,46 @@ std::string read_file(const fs::path& path) {
     return content;
 }
 
+std::optional<std::string> try_read_file(const fs::path& path) {
+    if (!fs::exists(path) || !fs::is_regular_file(path)) {
+        return std::nullopt;
+    }
+
+    FILE* file = open_file_read_binary(path);
+    if (file == nullptr) {
+        return std::nullopt;
+    }
+
+    std::string content;
+    if (std::fseek(file, 0, SEEK_END) != 0) {
+        std::fclose(file);
+        return std::nullopt;
+    }
+
+    const long size = std::ftell(file);
+    if (size < 0) {
+        std::fclose(file);
+        return std::nullopt;
+    }
+
+    if (std::fseek(file, 0, SEEK_SET) != 0) {
+        std::fclose(file);
+        return std::nullopt;
+    }
+
+    content.resize(static_cast<size_t>(size));
+    if (size > 0) {
+        const size_t read = std::fread(content.data(), 1, static_cast<size_t>(size), file);
+        if (read != static_cast<size_t>(size)) {
+            std::fclose(file);
+            return std::nullopt;
+        }
+    }
+
+    std::fclose(file);
+    return content;
+}
+
 bool write_file(const fs::path& path, const std::string& content) {
     if (path.has_parent_path()) {
         std::error_code ec;
@@ -269,20 +309,20 @@ bool save_script(const mv_package& package, const std::string& script) {
 
 bool import_script(const mv_package& package, const std::string& source_path_utf8) {
     const fs::path source_path = path_utils::from_utf8(source_path_utf8);
-    const std::string script = read_file(source_path);
-    if (script.empty() && !std::filesystem::exists(source_path)) {
+    const std::optional<std::string> script = try_read_file(source_path);
+    if (!script.has_value()) {
         return false;
     }
-    return save_script(package, script);
+    return save_script(package, *script);
 }
 
 bool export_script(const mv_package& package, const std::string& destination_path_utf8) {
     const fs::path destination_path = path_utils::from_utf8(destination_path_utf8);
-    const std::string script = load_script(package);
-    if (script.empty() && !std::filesystem::exists(script_path(package))) {
+    const std::optional<std::string> script = try_read_file(script_path(package));
+    if (!script.has_value()) {
         return false;
     }
-    return write_file(destination_path, script);
+    return write_file(destination_path, *script);
 }
 
 }  // namespace mv

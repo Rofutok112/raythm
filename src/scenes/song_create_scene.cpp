@@ -136,8 +136,7 @@ void song_create_scene::draw() {
     }
 
     virtual_screen::begin_ui();
-    ClearBackground(t.bg);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
+    draw_scene_background(t);
     ui::draw_header_block(kHeaderRect, content_title, content_subtitle);
 
     switch (current_step_) {

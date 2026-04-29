@@ -188,16 +188,14 @@ std::array<Rectangle, 3> pause_button_rects() {
 }
 
 void draw_status(const play_session_state& state) {
-    ClearBackground(g_theme->bg);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, g_theme->bg, g_theme->bg_alt);
+    draw_scene_background(*g_theme);
     ui::draw_text_f("Play", 144.0f, 135.0f, ui_font(44), g_theme->error);
     ui::draw_text_f(state.status_text.c_str(), 144.0f, 255.0f, ui_font(28), g_theme->text);
     ui::draw_text_f("ESC: Back to Song Select", 144.0f, 337.5f, ui_font(22), g_theme->text_hint);
 }
 
 void draw_world_background() {
-    ClearBackground(g_theme->bg);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, g_theme->bg, g_theme->bg_alt);
+    draw_scene_background(*g_theme);
 }
 
 void draw_world(const play_session_state& state, const play_note_draw_queue& draw_queue,

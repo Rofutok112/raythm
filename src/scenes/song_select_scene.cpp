@@ -15,6 +15,7 @@
 #include "path_utils.h"
 #include "player_note_offsets.h"
 #include "raylib.h"
+#include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select/song_select_detail_view.h"
 #include "song_select/song_select_confirmation_dialog.h"
@@ -649,8 +650,7 @@ void song_select_scene::update(float dt) {
 void song_select_scene::draw() {
     const auto& theme = *g_theme;
     virtual_screen::begin_ui();
-    ClearBackground(theme.bg);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, theme.bg, theme.bg_alt);
+    draw_scene_background(theme);
     ui::begin_draw_queue();
     song_select::draw_frame(state_);
     song_select::draw_song_list(state_);

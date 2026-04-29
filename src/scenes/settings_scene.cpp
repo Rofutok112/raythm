@@ -5,6 +5,7 @@
 
 #include "editor_scene.h"
 #include "raylib.h"
+#include "scene_common.h"
 #include "scene_manager.h"
 #include "settings_io.h"
 #include "settings/settings_layout.h"
@@ -73,8 +74,7 @@ void settings_scene::update(float dt) {
 void settings_scene::draw() {
     const auto& t = *g_theme;
     virtual_screen::begin_ui();
-    ClearBackground(t.bg);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, t.bg, t.bg_alt);
+    draw_scene_background(t);
     ui::draw_panel(settings::kSidebarRect);
     ui::draw_panel(settings::kContentRect);
 

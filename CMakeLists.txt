@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 4.1)
 project(raythm)
 
+include(CTest)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY ON)
 set(RAYTHM_APP_ICON_PNG
@@ -171,6 +173,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/timing_engine.h
         src/network/auth_client.cpp
         src/network/auth_client.h
+        src/network/http_client.cpp
+        src/network/http_client.h
         src/network/json_helpers.cpp
         src/network/json_helpers.h
         src/network/ranking_client.cpp
@@ -203,6 +207,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title_scene.h
         src/scenes/title/home_menu_view.cpp
         src/scenes/title/home_menu_view.h
+        src/scenes/title/title_home_input_controller.cpp
+        src/scenes/title/title_home_input_controller.h
         src/scenes/title/title_audio_controller.cpp
         src/scenes/title/title_audio_controller.h
         src/scenes/title/title_audio_policy.cpp
@@ -213,6 +219,18 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/play_session_controller.h
         src/scenes/title/profile_view.cpp
         src/scenes/title/profile_view.h
+        src/scenes/title/title_create_mode_controller.cpp
+        src/scenes/title/title_create_mode_controller.h
+        src/scenes/title/title_online_mode_controller.cpp
+        src/scenes/title/title_online_mode_controller.h
+        src/scenes/title/title_play_data_controller.cpp
+        src/scenes/title/title_play_data_controller.h
+        src/scenes/title/title_play_mode_controller.cpp
+        src/scenes/title/title_play_mode_controller.h
+        src/scenes/title/title_play_transfer_controller.cpp
+        src/scenes/title/title_play_transfer_controller.h
+        src/scenes/title/title_profile_controller.cpp
+        src/scenes/title/title_profile_controller.h
         src/scenes/title/title_header_view.cpp
         src/scenes/title/title_header_view.h
         src/scenes/title/create_upload_client.cpp
@@ -245,6 +263,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/seamless_song_select_view.h
         src/scenes/title/title_spectrum_visualizer.cpp
         src/scenes/title/title_spectrum_visualizer.h
+        src/scenes/title/title_settings_overlay.cpp
+        src/scenes/title/title_settings_overlay.h
         src/scenes/mv_editor_scene.cpp
         src/scenes/mv_editor_scene.h
         src/scenes/song_create_scene.cpp
@@ -378,8 +398,6 @@ add_executable(raythm_launcher
         src/updater/update_release.h
         src/updater/update_paths.cpp
         src/updater/update_paths.h
-        src/updater/update_log.cpp
-        src/updater/update_log.h
         src/updater/update_version.cpp
         src/updater/update_version.h
         src/updater/update_workflow.cpp
@@ -405,8 +423,6 @@ add_executable(raythm_updater
         src/updater/update_paths.h
         src/updater/update_progress_window.cpp
         src/updater/update_progress_window.h
-        src/updater/update_log.cpp
-        src/updater/update_log.h
         src/updater/update_version.cpp
         src/updater/update_version.h
         src/updater/update_verify.cpp
@@ -599,6 +615,8 @@ add_executable(ranking_service_smoke
         src/scenes/title/upload_mapping_store.h
         src/network/auth_client.cpp
         src/network/auth_client.h
+        src/network/http_client.cpp
+        src/network/http_client.h
         src/network/json_helpers.cpp
         src/network/json_helpers.h
         src/network/ranking_client.cpp
@@ -703,6 +721,12 @@ add_executable(editor_timeline_controller_smoke
         src/scenes/editor/editor_timeline_controller.h
         src/ui/ui_clip.cpp
         src/ui/ui_clip.h
+        src/ui/ui_font.cpp
+        src/ui/ui_font.h
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/scenes/virtual_screen.cpp
+        src/scenes/virtual_screen.h
         src/tests/editor_timeline_controller_smoke.cpp)
 
 add_executable(editor_panel_controller_smoke
@@ -817,46 +841,68 @@ set(RAYTHM_INCLUDE_DIRS
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/src/audio
         ${CMAKE_SOURCE_DIR}/src/core
-        ${CMAKE_SOURCE_DIR}/src/editor
         ${CMAKE_SOURCE_DIR}/src/gameplay
         ${CMAKE_SOURCE_DIR}/src/models
         ${CMAKE_SOURCE_DIR}/src/scenes
         ${CMAKE_SOURCE_DIR}/src/ui
+)
+set(RAYTHM_TEST_INCLUDE_DIRS
         ${CMAKE_SOURCE_DIR}/src/tests
 )
 
-# BASSライブラリ
-target_include_directories(raythm PRIVATE ${RAYTHM_BASS_DIR} ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(raythm_launcher PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(raythm_updater PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(chart_parser_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(chart_serializer_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(chart_difficulty_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(editor_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(editor_meter_map_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(song_loader_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(song_select_state_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(settings_io_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(upload_mapping_store_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(local_catalog_database_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(input_handler_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(timing_engine_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(judge_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(score_system_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(ranking_service_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(play_note_draw_queue_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(play_chart_filter_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(play_flow_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(editor_transport_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(editor_flow_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(editor_timeline_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(editor_panel_controller_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(audio_manager_smoke PRIVATE ${RAYTHM_BASS_DIR} ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(update_version_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(mv_lang_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(mv_api_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(mv_runtime_benchmark_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
-target_include_directories(mv_storage_smoke PRIVATE ${RAYTHM_INCLUDE_DIRS})
+set(RAYTHM_APP_TARGETS
+        raythm
+        raythm_launcher
+        raythm_updater
+)
+set(RAYTHM_SMOKE_TARGETS
+        chart_parser_smoke
+        chart_serializer_smoke
+        chart_difficulty_smoke
+        editor_state_smoke
+        editor_meter_map_smoke
+        song_loader_smoke
+        song_select_state_smoke
+        settings_io_smoke
+        upload_mapping_store_smoke
+        local_catalog_database_smoke
+        mv_storage_smoke
+        input_handler_smoke
+        timing_engine_smoke
+        judge_system_smoke
+        score_system_smoke
+        ranking_service_smoke
+        play_note_draw_queue_smoke
+        play_chart_filter_smoke
+        play_flow_controller_smoke
+        editor_transport_controller_smoke
+        editor_flow_controller_smoke
+        editor_timeline_controller_smoke
+        editor_panel_controller_smoke
+        audio_manager_smoke
+        update_version_smoke
+        mv_lang_smoke
+        mv_api_smoke
+        mv_runtime_benchmark_smoke
+)
+
+foreach(raythm_target IN LISTS RAYTHM_APP_TARGETS RAYTHM_SMOKE_TARGETS)
+    target_include_directories(${raythm_target} PRIVATE ${RAYTHM_INCLUDE_DIRS})
+endforeach()
+
+foreach(raythm_target IN LISTS RAYTHM_SMOKE_TARGETS)
+    target_include_directories(${raythm_target} PRIVATE ${RAYTHM_TEST_INCLUDE_DIRS})
+endforeach()
+
+if(BUILD_TESTING)
+    foreach(raythm_target IN LISTS RAYTHM_SMOKE_TARGETS)
+        add_test(NAME ${raythm_target} COMMAND ${raythm_target})
+    endforeach()
+    set_tests_properties(audio_manager_smoke PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+target_include_directories(raythm PRIVATE ${RAYTHM_BASS_DIR})
+target_include_directories(audio_manager_smoke PRIVATE ${RAYTHM_BASS_DIR})
 target_link_libraries(raythm PRIVATE raylib sqlite3 ${RAYTHM_BASS_IMPORT_LIB} comdlg32 crypt32 winhttp)
 target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)
@@ -870,6 +916,7 @@ target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
 target_link_libraries(ranking_service_smoke PRIVATE sqlite3 crypt32 winhttp)
 target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
+target_link_libraries(editor_transport_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_flow_controller_smoke PRIVATE raylib sqlite3)
 target_link_libraries(editor_timeline_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_panel_controller_smoke PRIVATE raylib)

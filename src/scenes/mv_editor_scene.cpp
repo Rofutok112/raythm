@@ -144,8 +144,7 @@ void mv_editor_scene::update(float dt) {
 
 void mv_editor_scene::draw() {
     virtual_screen::begin_ui();
-    ClearBackground(g_theme->bg);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, g_theme->bg, g_theme->bg_alt);
+    draw_scene_background(*g_theme);
     ui::begin_draw_queue();
 
     if (metadata_modal_open_) {

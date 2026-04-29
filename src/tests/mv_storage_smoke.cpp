@@ -1,6 +1,6 @@
 #include <cstdlib>
+#include <cstdio>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <string>
 #include <system_error>
@@ -12,6 +12,16 @@
 
 namespace {
 namespace fs = std::filesystem;
+
+#ifdef _WIN32
+FILE* open_file_write_binary(const fs::path& path) {
+    return _wfopen(path.c_str(), L"wb");
+}
+#else
+FILE* open_file_write_binary(const fs::path& path) {
+    return std::fopen(path.string().c_str(), "wb");
+}
+#endif
 
 bool set_local_app_data(const std::string& value) {
 #ifdef _WIN32
@@ -52,6 +62,18 @@ void expect(bool condition, const std::string& message, bool& ok) {
     }
 }
 
+bool write_text_file(const fs::path& path, const std::string& content) {
+    FILE* file = open_file_write_binary(path);
+    if (file == nullptr) {
+        return false;
+    }
+
+    const size_t written = std::fwrite(content.data(), 1, content.size(), file);
+    const bool ok = written == content.size() && std::fflush(file) == 0;
+    std::fclose(file);
+    return ok;
+}
+
 }  // namespace
 
 int main() {
@@ -87,14 +109,14 @@ int main() {
         expect(mv::write_mv_json(package.meta, package.directory), "Expected mv.json to be written.", ok);
         expect(mv::save_script(package, "def draw(ctx):\n  return Scene([])\n"), "Expected script to be written.", ok);
 
-        const fs::path import_dir = temp_local_app_data / "MV Import" / "日本語";
+        const std::string japanese_dir = "\xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E";
+        const fs::path import_dir = temp_local_app_data / "MV Import" / path_utils::from_utf8(japanese_dir);
         fs::create_directories(import_dir, ec);
         expect(!ec, "Expected to create import directory.", ok);
         const fs::path import_path = import_dir / "imported.rmv";
-        {
-            std::ofstream out(import_path, std::ios::trunc);
-            out << "def draw(ctx):\n  DrawBackground(fill=\"#112233\")\n";
-        }
+        expect(write_text_file(import_path, "def draw(ctx):\n  DrawBackground(fill=\"#112233\")\n"),
+               "Expected to write import script.",
+               ok);
         expect(mv::import_script(package, path_utils::to_utf8(import_path)),
                "Expected import_script to overwrite the package script.",
                ok);

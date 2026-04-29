@@ -29,14 +29,17 @@ void draw_text_clipped(const char* text, float x, float y, int font_size, Color 
 }  // namespace
 
 void draw_scene_frame(const char* title, const char* subtitle, Color accent) {
-    ClearBackground(g_theme->bg);
-
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, g_theme->bg, g_theme->bg_alt);
+    draw_scene_background(*g_theme);
     DrawRectangleRounded({80.0f, 80.0f, 1120.0f, 560.0f}, 0.04f, 8, g_theme->panel);
     DrawRectangleRoundedLinesEx({80.0f, 80.0f, 1120.0f, 560.0f}, 0.04f, 8, 3.0f, accent);
 
     ui::draw_text_f(title, 130.0f, 130.0f, 44, accent);
     ui::draw_text_f(subtitle, 130.0f, 190.0f, 24, g_theme->text_secondary);
+}
+
+void draw_scene_background(const ui_theme& theme) {
+    ClearBackground(theme.bg);
+    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, theme.bg, theme.bg_alt);
 }
 
 void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Color color, double time) {
