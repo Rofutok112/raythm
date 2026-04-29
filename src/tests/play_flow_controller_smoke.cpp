@@ -172,6 +172,11 @@ int main() {
             std::cerr << "Hold completion should surface perfect feedback\n";
             return EXIT_FAILURE;
         }
+        if (state.lane_judge_effects[0].result != judge_result::perfect ||
+            state.lane_judge_effects[0].timer <= 0.0f) {
+            std::cerr << "Hold completion should trigger lane judge effects\n";
+            return EXIT_FAILURE;
+        }
         if (result.hitsound_count != 0 || state.score_system.get_combo() != 1) {
             std::cerr << "Hold completion should add score effects without replaying hitsounds\n";
             return EXIT_FAILURE;
@@ -211,6 +216,11 @@ int main() {
 
         state.input_handler.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 500.0);
         const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (state.lane_judge_effects[0].result != judge_result::perfect ||
+            state.lane_judge_effects[0].timer <= 0.0f) {
+            std::cerr << "Tap judgement should trigger lane judge effects\n";
+            return EXIT_FAILURE;
+        }
         if (immediate_hitsound_count != 1 || result.hitsound_count != 0) {
             std::cerr << "Gameplay hitsound should use the immediate callback when available\n";
             return EXIT_FAILURE;

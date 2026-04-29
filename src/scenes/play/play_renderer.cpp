@@ -1,6 +1,7 @@
 #include "play_renderer.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cmath>
 
 #include "game_settings.h"
@@ -87,6 +88,23 @@ Color judge_color(judge_result result) {
     return g_theme->text;
 }
 
+Color effect_judge_color(judge_result result) {
+    if (result == judge_result::perfect) {
+        return lerp_color(g_theme->judge_line_glow, WHITE, 0.35f);
+    }
+    return judge_color(result);
+}
+
+float ease_out(float t) {
+    const float clamped = std::clamp(t, 0.0f, 1.0f);
+    return 1.0f - (1.0f - clamped) * (1.0f - clamped);
+}
+
+Color fade_to_alpha(Color color, float alpha) {
+    color.a = static_cast<unsigned char>(std::clamp(alpha, 0.0f, 255.0f));
+    return color;
+}
+
 const char* judge_text(judge_result result) {
     switch (result) {
         case judge_result::perfect: return "PERFECT";
@@ -96,6 +114,56 @@ const char* judge_text(judge_result result) {
         case judge_result::miss: return "MISS";
     }
     return "";
+}
+
+void draw_lane_judge_effect_segment(float center_x, float start_z, float end_z,
+                                    float width, Color color, float remaining) {
+    constexpr int kEffectSegments = 18;
+    const float length = std::fabs(end_z - start_z);
+    if (length <= 0.0f) {
+        return;
+    }
+    const float delta_z = end_z - start_z;
+
+    const float segment_length = length / static_cast<float>(kEffectSegments);
+    for (int segment = 0; segment < kEffectSegments; ++segment) {
+        const float near_t = static_cast<float>(segment) / static_cast<float>(kEffectSegments);
+        const float far_t = static_cast<float>(segment + 1) / static_cast<float>(kEffectSegments);
+        const float fade = 1.0f - near_t;
+        const Color segment_color = fade_to_alpha(color, 214.0f * remaining * fade * fade);
+        const float segment_start_z = start_z + delta_z * near_t;
+        const float segment_end_z = start_z + delta_z * far_t;
+        DrawCube({center_x, kJudgeLineY - 0.018f, (segment_start_z + segment_end_z) * 0.5f},
+                 width * (0.96f - near_t * 0.08f),
+                 0.026f,
+                 segment_length,
+                 segment_color);
+    }
+}
+
+void draw_lane_judge_effect(const play_session_state& state, int lane,
+                            float lane_start_z, float judgement_z, float lane_end_z) {
+    const lane_judge_effect& effect = state.lane_judge_effects[static_cast<std::size_t>(lane)];
+    if (effect.timer <= 0.0f) {
+        return;
+    }
+
+    const float remaining =
+        effect.timer / play_session_constants::kLaneJudgeEffectDurationSeconds;
+    const float age = 1.0f - std::clamp(remaining, 0.0f, 1.0f);
+    const float pop = ease_out(age);
+    const Color color = effect_judge_color(effect.result);
+    const float center_x = lane_center_x(lane, state.key_count);
+    const float lane_width = g_settings.lane_width;
+    const Color bright_color = effect.result == judge_result::perfect
+                                   ? color
+                                   : lerp_color(color, WHITE, 0.12f);
+    const float effect_length = std::max(0.0f, lane_end_z - judgement_z) * 0.10f * (0.72f + pop * 0.28f);
+
+    draw_lane_judge_effect_segment(center_x, judgement_z, judgement_z + effect_length,
+                                   lane_width, bright_color, remaining);
+    draw_lane_judge_effect_segment(center_x, judgement_z, judgement_z - effect_length,
+                                   lane_width, bright_color, remaining);
 }
 
 void draw_hud(const play_session_state& state) {
@@ -202,8 +270,8 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
                 float lane_start_z, float judgement_z, float lane_end_z, double visual_ms) {
     for (int lane = 0; lane < state.key_count; ++lane) {
         const float center_x = lane_center_x(lane, state.key_count);
-        const bool lane_held = state.input_handler.is_lane_held(lane);
-        const Color lane_fill = lane_held ? g_theme->lane_pressed : g_theme->lane;
+        const float lane_dim = std::clamp(state.lane_hold_dim_amounts[static_cast<std::size_t>(lane)], 0.0f, 1.0f);
+        const Color lane_fill = lerp_color(g_theme->lane, g_theme->lane_pressed, lane_dim);
         DrawCube({center_x, -0.08f, (lane_start_z + lane_end_z) * 0.5f}, g_settings.lane_width, 0.05f,
                  lane_end_z - lane_start_z, lane_fill);
         DrawCubeWires({center_x, -0.08f, (lane_start_z + lane_end_z) * 0.5f}, g_settings.lane_width, 0.05f,
@@ -240,6 +308,10 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
                 }
             }
         }
+    }
+
+    for (int lane = 0; lane < state.key_count; ++lane) {
+        draw_lane_judge_effect(state, lane, lane_start_z, judgement_z, lane_end_z);
     }
 
     DrawCube({0.0f, kJudgeLineY, judgement_z}, total_width + 0.9f, 0.01f, 0.62f, g_theme->judge_line);

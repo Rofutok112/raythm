@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <optional>
 #include <string>
 #include <vector>
@@ -19,6 +20,7 @@ inline constexpr float kFailureHoldDurationSeconds = 1.0f;
 inline constexpr float kFailureTransitionDurationSeconds =
     kFailureFadeDurationSeconds + kFailureHoldDurationSeconds;
 inline constexpr float kResultTransitionDurationSeconds = 1.0f;
+inline constexpr float kLaneJudgeEffectDurationSeconds = 0.28f;
 
 }  // namespace play_session_constants
 
@@ -55,6 +57,11 @@ struct play_draw_window {
     double visual_ms = 0.0;
 };
 
+struct lane_judge_effect {
+    judge_result result = judge_result::miss;
+    float timer = 0.0f;
+};
+
 struct play_session_state {
     int key_count = 4;
     bool initialized = false;
@@ -78,6 +85,8 @@ struct play_session_state {
     std::optional<editor_resume_state> editor_resume_state;
     std::optional<judge_event> last_judge;
     std::optional<judge_event> display_judge;
+    std::array<float, judge_system::kMaxLanes> lane_hold_dim_amounts = {};
+    std::array<lane_judge_effect, judge_system::kMaxLanes> lane_judge_effects = {};
     result_data final_result;
     std::string status_text;
     float judge_feedback_timer = 0.0f;

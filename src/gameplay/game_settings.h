@@ -35,7 +35,7 @@ struct game_settings {
     int windowed_width = 1920;
     int windowed_height = 1080;
     bool fullscreen = false;
-    bool dark_mode = false;
+    bool dark_mode = true;
 };
 
 inline game_settings g_settings;
