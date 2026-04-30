@@ -75,6 +75,17 @@ float suppress_below_threshold(float level) {
     return kGateThreshold * std::pow(t, 5.2f);
 }
 
+float visual_dt(float dt) {
+    if (dt <= 0.0f) {
+        return 1.0f / 240.0f;
+    }
+    return std::min(dt, 1.0f / 20.0f);
+}
+
+float blend_for_dt(float dt, float time_constant_seconds) {
+    return 1.0f - std::exp(-dt / std::max(time_constant_seconds, 0.0001f));
+}
+
 }  // namespace
 
 void title_spectrum_visualizer::reset() {
@@ -82,9 +93,10 @@ void title_spectrum_visualizer::reset() {
     bars_.fill(0.0f);
     peaks_.fill(0.0f);
     peak_velocities_.fill(0.0f);
+    peak_hold_times_.fill(0.0f);
 }
 
-void title_spectrum_visualizer::update(source input_source) {
+void title_spectrum_visualizer::update(source input_source, float dt) {
     std::array<float, 2048> spectrum = {};
     const auto& audio = audio_manager::instance();
     const bool has_audio =
@@ -133,6 +145,7 @@ void title_spectrum_visualizer::update(source input_source) {
         raw_levels[static_cast<size_t>(i)] = level;
     }
 
+    const float frame_dt = visual_dt(dt);
     for (int i = 0; i < kBarCount; ++i) {
         const int left_index = std::max(0, i - 1);
         const int right_index = std::min(kBarCount - 1, i + 1);
@@ -145,23 +158,35 @@ void title_spectrum_visualizer::update(source input_source) {
             target = 0.0f;
         }
 
-        const float input_blend = target > smoothed_levels_[static_cast<size_t>(i)] ? 0.18f : 0.08f;
-        smoothed_levels_[static_cast<size_t>(i)] +=
-            (target - smoothed_levels_[static_cast<size_t>(i)]) * input_blend;
+        const std::size_t index = static_cast<std::size_t>(i);
+        const float input_blend = blend_for_dt(
+            frame_dt,
+            target > smoothed_levels_[index] ? 0.006f : 0.026f);
+        smoothed_levels_[index] += (target - smoothed_levels_[index]) * input_blend;
 
-        const float display_target = smoothed_levels_[static_cast<size_t>(i)];
-        const float bar_blend = display_target > bars_[static_cast<size_t>(i)] ? 0.24f : 0.10f;
-        bars_[static_cast<size_t>(i)] +=
-            (display_target - bars_[static_cast<size_t>(i)]) * bar_blend;
+        const float display_target = smoothed_levels_[index];
+        const float bar_blend = blend_for_dt(
+            frame_dt,
+            display_target > bars_[index] ? 0.004f : 0.018f);
+        bars_[index] += (display_target - bars_[index]) * bar_blend;
 
-        const float peak_target = bars_[static_cast<size_t>(i)];
-        if (peak_target > peaks_[static_cast<size_t>(i)]) {
-            peaks_[static_cast<size_t>(i)] = peak_target;
-            peak_velocities_[static_cast<size_t>(i)] = 0.0f;
+        const float peak_target = bars_[index];
+        if (peak_target > peaks_[index]) {
+            peaks_[index] = peak_target;
+            peak_velocities_[index] = 0.0f;
+            peak_hold_times_[index] = 0.001f;
         } else {
-            peak_velocities_[static_cast<size_t>(i)] += 0.0003f;
-            peaks_[static_cast<size_t>(i)] =
-                std::max(0.0f, peaks_[static_cast<size_t>(i)] - peak_velocities_[static_cast<size_t>(i)]);
+            if (peak_hold_times_[index] > 0.0f) {
+                peak_hold_times_[index] = std::max(0.0f, peak_hold_times_[index] - frame_dt);
+                peaks_[index] = std::max(peaks_[index], peak_target);
+            } else {
+                constexpr float kPeakGravity = 64.0f;
+                constexpr float kPeakMaxFallSpeed = 32.0f;
+                peak_velocities_[index] =
+                    std::min(kPeakMaxFallSpeed, peak_velocities_[index] + kPeakGravity * frame_dt);
+                peaks_[index] =
+                    std::max(peak_target, peaks_[index] - peak_velocities_[index] * frame_dt);
+            }
         }
     }
 }
