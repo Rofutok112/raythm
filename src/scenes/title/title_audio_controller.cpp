@@ -35,7 +35,7 @@ void title_audio_controller::update(title_audio_policy::hub_mode mode,
         bgm_controller_.resume();
     }
     bgm_controller_.update();
-    spectrum_visualizer_.update(current_state_.spectrum);
+    spectrum_visualizer_.update(current_state_.spectrum, dt);
 }
 
 void title_audio_controller::draw_spectrum(const Rectangle& rect, float alpha_scale) const {
