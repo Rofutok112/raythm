@@ -722,7 +722,7 @@ void title_scene::update(float dt) {
     if (quitting_) {
         quit_fade_.update(dt);
         if (quit_fade_.complete()) {
-            CloseWindow();
+            manager_.request_exit();
         }
         return;
     }

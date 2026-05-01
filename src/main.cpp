@@ -39,7 +39,7 @@ int main() {
     int applied_target_fps = g_settings.target_fps;
     bool was_window_focused = IsWindowFocused();
 
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose() && !manager.exit_requested()) {
         windows_input_source::instance().begin_frame();
         if (applied_target_fps != g_settings.target_fps) {
             SetTargetFPS(g_settings.target_fps);
@@ -78,6 +78,7 @@ int main() {
         windows_input_source::instance().end_frame();
     }
 
+    manager.shutdown();
     save_settings(g_settings);
     virtual_screen::cleanup();
     ui::shutdown_text_font();
