@@ -15,6 +15,6 @@ void draw_status(const play_session_state& state);
 void draw_world_background();
 void draw_world(const play_session_state& state, const play_note_draw_queue& draw_queue,
                 float lane_start_z, float judgement_z, float lane_end_z, double visual_ms);
-void draw_overlay(const play_session_state& state);
+void draw_overlay(const play_session_state& state, const Texture2D* jacket_texture);
 
 }  // namespace play_renderer
