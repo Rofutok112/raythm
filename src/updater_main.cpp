@@ -231,6 +231,7 @@ int main(int argc, char* argv[]) {
     updater::progress_window progress;
     progress.set_title("Updating raythm");
     progress.set_status("Preparing update...");
+    progress.set_progress(0.05f);
 
     const auto installed_version = updater::load_installed_version();
     if (installed_version.has_value()) {
@@ -249,6 +250,7 @@ int main(int argc, char* argv[]) {
         std::filesystem::path package_path;
         std::filesystem::path checksum_path;
         progress.set_status("Update found. Preparing files...");
+        progress.set_progress(0.10f);
 
         std::cout << "Requested update from " << updater::to_string(request->current_version)
                   << " to " << request->target_release.tag_name << '\n';
@@ -264,6 +266,7 @@ int main(int argc, char* argv[]) {
 
         if (!request->target_release.assets.package_url.empty()) {
             progress.set_status("Downloading update package...");
+            progress.set_progress(0.18f);
             package_path =
                 updater::downloads_root() /
                 updater::file_name_from_url(request->target_release.assets.package_url, "game-win64.zip");
@@ -276,10 +279,12 @@ int main(int argc, char* argv[]) {
                 return EXIT_FAILURE;
             }
             updater::append_update_log("updater", "package download completed");
+            progress.set_progress(0.38f);
         }
 
         if (!request->target_release.assets.checksum_url.empty()) {
             progress.set_status("Downloading checksum...");
+            progress.set_progress(0.42f);
             checksum_path =
                 updater::downloads_root() /
                 updater::file_name_from_url(request->target_release.assets.checksum_url, "SHA256SUMS.txt");
@@ -292,10 +297,12 @@ int main(int argc, char* argv[]) {
                 return EXIT_FAILURE;
             }
             updater::append_update_log("updater", "checksum download completed");
+            progress.set_progress(0.48f);
         }
 
         if (!package_path.empty() && !checksum_path.empty()) {
             progress.set_status("Verifying package...");
+            progress.set_progress(0.54f);
             std::cout << "Verifying SHA-256 checksum\n";
             updater::append_update_log("updater", "verifying SHA-256 checksum");
             if (!updater::verify_sha256_checksum(package_path, checksum_path)) {
@@ -305,10 +312,12 @@ int main(int argc, char* argv[]) {
                 return EXIT_FAILURE;
             }
             updater::append_update_log("updater", "SHA-256 verification succeeded");
+            progress.set_progress(0.62f);
         }
 
         if (!package_path.empty()) {
             progress.set_status("Extracting package...");
+            progress.set_progress(0.68f);
             std::cout << "Extracting package to " << updater::staging_root().string() << '\n';
             updater::append_update_log("updater", "extracting package to staging");
             if (!updater::extract_zip_to_directory(package_path, updater::staging_root())) {
@@ -318,20 +327,24 @@ int main(int argc, char* argv[]) {
                 return EXIT_FAILURE;
             }
             updater::append_update_log("updater", "package extraction succeeded");
+            progress.set_progress(0.76f);
 
             if (!current_process_is_elevated() && !can_write_to_directory(install_root)) {
                 progress.set_status("Requesting administrator permission...");
+                progress.set_progress(0.78f);
                 updater::append_update_log("updater", "install directory requires elevation; relaunching updater");
                 return relaunch_self_elevated(argc, argv);
             }
 
             if (!request->run_from_temp_copy && current_executable_path().parent_path() == install_root) {
                 progress.set_status("Restarting updater in a safe location...");
+                progress.set_progress(0.80f);
                 updater::append_update_log("updater", "relaunching updater from temp copy");
                 return relaunch_from_temp_copy(argc, argv, install_root);
             }
 
             progress.set_status("Waiting for running game to exit...");
+            progress.set_progress(0.82f);
             std::cout << "Waiting for raythm.exe to stop\n";
             updater::append_update_log("updater", "waiting for raythm.exe to stop");
             if (!updater::ensure_process_stopped("raythm.exe", std::chrono::seconds(2))) {
@@ -343,6 +356,7 @@ int main(int argc, char* argv[]) {
             updater::append_update_log("updater", "raythm.exe is stopped");
 
             progress.set_status("Applying update...");
+            progress.set_progress(0.88f);
             std::cout << "Applying staged update to " << install_root.string() << '\n';
             updater::append_update_log("updater", "applying staged update");
             if (!updater::apply_staged_update(install_root,
@@ -354,8 +368,10 @@ int main(int argc, char* argv[]) {
                 return EXIT_FAILURE;
             }
             updater::append_update_log("updater", "staged update applied");
+            progress.set_progress(0.94f);
 
             progress.set_status("Saving installed version...");
+            progress.set_progress(0.96f);
             if (!updater::save_installed_version({request->target_release.version})) {
                 updater::append_update_log("updater", "failed to save installed version");
                 progress.show_error("Failed to save the updated version metadata.");
@@ -365,6 +381,7 @@ int main(int argc, char* argv[]) {
             updater::append_update_log("updater", "installed version metadata updated");
 
             progress.set_status("Launching updated game...");
+            progress.set_progress(0.98f);
             if (!launch_game_process(install_root)) {
                 updater::append_update_log("updater", "failed to launch updated game");
                 progress.show_error("Failed to launch the updated game.");
@@ -372,10 +389,12 @@ int main(int argc, char* argv[]) {
                 return EXIT_FAILURE;
             }
             updater::append_update_log("updater", "updated game launched");
+            progress.set_progress(1.0f);
         }
     } else {
         updater::append_update_log("updater", "updater started without launch request");
         progress.set_status("No update request was provided.");
+        progress.set_progress(1.0f);
         std::cout << "Updater started without a launch request\n";
     }
 
