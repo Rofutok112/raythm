@@ -30,6 +30,8 @@ public:
 private:
     Camera3D make_play_camera() const;
     bool get_lane_view_bounds(const Camera3D& camera, float& lane_start_z, float& judgement_z, float& lane_end_z) const;
+    void load_jacket_texture();
+    void unload_jacket_texture();
     void rebuild_hit_regions() const;
     double get_visual_ms() const;
     void apply_navigation(play_navigation_request navigation);
@@ -40,4 +42,6 @@ private:
     std::unique_ptr<mv::mv_runtime> mv_runtime_;
     std::vector<float> mv_spectrum_buffer_;
     std::vector<float> mv_oscilloscope_buffer_;
+    Texture2D jacket_texture_{};
+    bool jacket_texture_loaded_ = false;
 };

@@ -14,6 +14,7 @@
 #include "mv/mv_storage.h"
 #include "mv/mv_runtime.h"
 #include "mv/render/mv_renderer.h"
+#include "path_utils.h"
 #include "play/play_flow_controller.h"
 #include "play/play_renderer.h"
 #include "play/play_session_loader.h"
@@ -157,10 +158,13 @@ play_scene::play_scene(scene_manager& manager, song_data song, chart_data chart,
     request_.start_tick = std::max(0, start_tick);
 }
 
-play_scene::~play_scene() = default;
+play_scene::~play_scene() {
+    unload_jacket_texture();
+}
 
 void play_scene::on_enter() {
     state_ = play_session_loader::load(request_, draw_queue_);
+    load_jacket_texture();
 
     // Try to load MV script for this song
     if (state_.song_data.has_value()) {
@@ -188,6 +192,7 @@ void play_scene::on_enter() {
 void play_scene::on_exit() {
     audio_manager::instance().stop_bgm();
     audio_manager::instance().stop_all_se();
+    unload_jacket_texture();
 }
 
 void play_scene::update(float dt) {
@@ -308,6 +313,36 @@ bool play_scene::get_lane_view_bounds(const Camera3D& camera, float& lane_start_
     return true;
 }
 
+void play_scene::load_jacket_texture() {
+    unload_jacket_texture();
+    if (!state_.song_data.has_value() || state_.song_data->meta.jacket_file.empty()) {
+        return;
+    }
+
+    const std::filesystem::path jacket_path =
+        path_utils::join_utf8(state_.song_data->directory, state_.song_data->meta.jacket_file);
+    if (!std::filesystem::exists(jacket_path) || !std::filesystem::is_regular_file(jacket_path)) {
+        return;
+    }
+
+    const std::string jacket_path_utf8 = path_utils::to_utf8(jacket_path);
+    jacket_texture_ = LoadTexture(jacket_path_utf8.c_str());
+    jacket_texture_loaded_ = jacket_texture_.id != 0;
+    if (jacket_texture_loaded_) {
+        SetTextureFilter(jacket_texture_, TEXTURE_FILTER_BILINEAR);
+    }
+}
+
+void play_scene::unload_jacket_texture() {
+    if (!jacket_texture_loaded_) {
+        return;
+    }
+
+    UnloadTexture(jacket_texture_);
+    jacket_texture_ = {};
+    jacket_texture_loaded_ = false;
+}
+
 void play_scene::draw() {
     if (!state_.initialized) {
         virtual_screen::begin_ui();
@@ -414,7 +449,7 @@ void play_scene::draw() {
 
     rebuild_hit_regions();
     ui::begin_draw_queue();
-    play_renderer::draw_overlay(state_);
+    play_renderer::draw_overlay(state_, jacket_texture_loaded_ ? &jacket_texture_ : nullptr);
     ui::flush_draw_queue();
     virtual_screen::end();
 
