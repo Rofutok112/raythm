@@ -62,12 +62,6 @@ constexpr Rectangle kSongInfoDifficultyRect = {
     kSongInfoRect.width - 172.0f,
     34.0f
 };
-constexpr Rectangle kHealthLabelRect = ui::place(kScreenRect, 150.0f, 36.0f,
-                                                 ui::anchor::top_right, ui::anchor::top_right,
-                                                 Vector2{-72.0f, 51.0f});
-constexpr Rectangle kHealthBarRect = ui::place(kScreenRect, 390.0f, 36.0f,
-                                               ui::anchor::top_right, ui::anchor::top_right,
-                                               Vector2{-72.0f, 87.0f});
 constexpr Rectangle kComboNumberRect = ui::place(kScreenRect, 450.0f, 129.0f,
                                                  ui::anchor::center, ui::anchor::center,
                                                  Vector2{0.0f, -120.0f});
@@ -84,6 +78,9 @@ constexpr float kJudgeLineY = 0.40f;
 constexpr float kJudgeLineGlowY = 0.46f;
 constexpr float kTapNoteY = 0.15f;
 constexpr float kHoldNoteY = 0.15f;
+constexpr float kLowHealthVignetteThreshold = 35.0f;
+constexpr float kDamageVignetteEdgeWidth = 220.0f;
+constexpr float kDamageVignetteMaxAlpha = 86.0f;
 
 float lane_center_x(int lane, int key_count) {
     const float total_width = key_count * g_settings.lane_width + (key_count - 1) * kLaneGap;
@@ -254,20 +251,51 @@ void draw_hud(const play_session_state& state) {
     ui::enqueue_text_in_rect(TextFormat("%.2f%%", live_accuracy), ui_font(30),
                              kTimeRect, g_theme->hud_time);
 
-    ui::enqueue_text_in_rect("HEALTH", ui_font(24), kHealthLabelRect,
-                             g_theme->hud_health_label, ui::text_align::right);
-    const float gauge_ratio = state.gauge.get_value() / 100.0f;
-    const Color gauge_color = state.gauge.get_value() >= 70.0f ? g_theme->health_high : g_theme->health_low;
-    ui::enqueue_draw_command(ui::draw_layer::base, [gauge_ratio, gauge_color]() {
-        ui::draw_progress_bar(kHealthBarRect, gauge_ratio, g_theme->hud_health_bg, gauge_color,
-                              g_theme->hud_health_border);
-    });
-
     if (state.combo_display > 0) {
         ui::enqueue_text_in_rect(TextFormat("%03d", state.combo_display), ui_font(86),
                                  kComboNumberRect, g_theme->hud_combo);
         ui::enqueue_text_in_rect("COMBO", ui_font(24), kComboLabelRect, g_theme->hud_combo);
     }
+}
+
+void draw_low_health_vignette(const play_session_state& state) {
+    const float health = state.gauge.get_value();
+    if (health >= kLowHealthVignetteThreshold) {
+        return;
+    }
+
+    const float danger = 1.0f - std::clamp(health / kLowHealthVignetteThreshold, 0.0f, 1.0f);
+    const float pulse = 0.85f + 0.15f * std::sin(static_cast<float>(GetTime()) * 6.0f);
+    const unsigned char alpha =
+        static_cast<unsigned char>(std::clamp(danger * pulse * kDamageVignetteMaxAlpha, 0.0f, 255.0f));
+    if (alpha == 0) {
+        return;
+    }
+
+    ui::enqueue_draw_command(ui::draw_layer::overlay, [alpha]() {
+        const Color edge = with_alpha(g_theme->health_low, alpha);
+        constexpr Color transparent = {0, 0, 0, 0};
+        DrawRectangleGradientV(0, 0, kScreenWidth, static_cast<int>(kDamageVignetteEdgeWidth),
+                               edge, transparent);
+        DrawRectangleGradientV(0, kScreenHeight - static_cast<int>(kDamageVignetteEdgeWidth),
+                               kScreenWidth, static_cast<int>(kDamageVignetteEdgeWidth),
+                               transparent, edge);
+        DrawRectangleGradientH(0, 0, static_cast<int>(kDamageVignetteEdgeWidth), kScreenHeight,
+                               edge, transparent);
+        DrawRectangleGradientH(kScreenWidth - static_cast<int>(kDamageVignetteEdgeWidth), 0,
+                               static_cast<int>(kDamageVignetteEdgeWidth), kScreenHeight,
+                               transparent, edge);
+
+        const Color corner = with_alpha(g_theme->health_low, static_cast<unsigned char>(alpha * 0.55f));
+        const float corner_size = kDamageVignetteEdgeWidth * 1.2f;
+        DrawRectangleGradientEx({0.0f, 0.0f, corner_size, corner_size}, corner, transparent, transparent, transparent);
+        DrawRectangleGradientEx({kScreenWidth - corner_size, 0.0f, corner_size, corner_size},
+                                transparent, corner, transparent, transparent);
+        DrawRectangleGradientEx({0.0f, kScreenHeight - corner_size, corner_size, corner_size},
+                                transparent, transparent, corner, transparent);
+        DrawRectangleGradientEx({kScreenWidth - corner_size, kScreenHeight - corner_size, corner_size, corner_size},
+                                transparent, transparent, transparent, corner);
+    });
 }
 
 void draw_pause_overlay() {
@@ -399,6 +427,7 @@ void draw_overlay(const play_session_state& state, const Texture2D* jacket_textu
     draw_hud(state);
     draw_song_info_panel(state, jacket_texture);
     draw_judge_feedback(state);
+    draw_low_health_vignette(state);
     if (state.intro_playing) {
         draw_intro_overlay(state);
     }
