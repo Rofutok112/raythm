@@ -157,6 +157,19 @@ void song_create_scene::draw() {
 }
 
 void song_create_scene::update_song_metadata() {
+    if (jacket_picker_.is_open()) {
+        jacket_picker_.update();
+        if (jacket_picker_.consume_accept()) {
+            jacket_path_input_.value = jacket_picker_.source_path();
+            jacket_crop_source_ = jacket_picker_.source_path();
+            error_.clear();
+        } else if (jacket_picker_.consume_cancel()) {
+            jacket_crop_source_.clear();
+            error_.clear();
+        }
+        return;
+    }
+
     if (IsKeyPressed(KEY_ESCAPE)) {
         go_back_to_song_select(editing_song_.has_value() ? editing_song_->meta.song_id : "");
         return;
@@ -209,7 +222,10 @@ void song_create_scene::draw_song_metadata() {
         if (ui::draw_button(browse_rect, "BROWSE", 14).clicked) {
             const std::string path = file_dialog::open_image_file();
             if (!path.empty()) {
-                jacket_path_input_.value = path;
+                if (!jacket_picker_.open(path, error_)) {
+                    jacket_path_input_.value.clear();
+                    jacket_crop_source_.clear();
+                }
             }
         }
     }
@@ -246,6 +262,10 @@ void song_create_scene::draw_song_metadata() {
     if (!error_.empty()) {
         const Rectangle error_rect = {kFormX, button_y + kButtonHeight + kErrorTopGap, kFormWidth, kErrorHeight};
         ui::draw_text_in_rect(error_.c_str(), 14, error_rect, g_theme->error, ui::text_align::left);
+    }
+
+    if (jacket_picker_.is_open()) {
+        jacket_picker_.draw();
     }
 }
 
@@ -336,13 +356,12 @@ bool song_create_scene::create_song() {
     std::string jacket_filename;
     if (!jacket_path_input_.value.empty()) {
         const fs::path jacket_source = path_utils::from_utf8(jacket_path_input_.value);
-        if (fs::exists(jacket_source)) {
-            jacket_filename = path_utils::to_utf8(jacket_source.filename());
-            const fs::path jacket_dest = song_dir / jacket_filename;
-            try {
-                fs::copy_file(jacket_source, jacket_dest, fs::copy_options::overwrite_existing);
-            } catch (...) {
-            }
+        if (!fs::exists(jacket_source)) {
+            error_ = "Jacket file not found: " + jacket_path_input_.value;
+            return false;
+        }
+        if (!export_jacket_image(jacket_source, song_dir, jacket_filename)) {
+            return false;
         }
     }
 
@@ -443,15 +462,12 @@ bool song_create_scene::save_song_edits() {
         const fs::path current_jacket_path = editing_song_->meta.jacket_file.empty()
             ? fs::path()
             : path_utils::join_utf8(editing_song_->directory, editing_song_->meta.jacket_file);
-        if (!editing_song_->meta.jacket_file.empty() && paths_match(jacket_source, current_jacket_path)) {
+        if (!editing_song_->meta.jacket_file.empty() &&
+            paths_match(jacket_source, current_jacket_path) &&
+            jacket_crop_source_ != path_utils::to_utf8(jacket_source)) {
             jacket_filename = editing_song_->meta.jacket_file;
         } else {
-            jacket_filename = path_utils::to_utf8(jacket_source.filename());
-            const fs::path jacket_dest = song_dir / jacket_filename;
-            try {
-                fs::copy_file(jacket_source, jacket_dest, fs::copy_options::overwrite_existing);
-            } catch (const std::exception& e) {
-                error_ = std::string("Failed to copy jacket file: ") + e.what();
+            if (!export_jacket_image(jacket_source, song_dir, jacket_filename)) {
                 return false;
             }
         }
@@ -481,6 +497,29 @@ bool song_create_scene::save_song_edits() {
     created_song_ = *editing_song_;
     error_.clear();
     go_back_to_song_select(meta.song_id);
+    return true;
+}
+
+bool song_create_scene::export_jacket_image(const fs::path& source_path,
+                                            const fs::path& song_dir,
+                                            std::string& jacket_filename) {
+    jacket_filename = "jacket.png";
+    const fs::path jacket_dest = song_dir / jacket_filename;
+    const std::string source_utf8 = path_utils::to_utf8(source_path);
+    const std::string dest_utf8 = path_utils::to_utf8(jacket_dest);
+
+    square_image_picker::export_result result;
+    if (jacket_crop_source_ == source_utf8 && jacket_picker_.source_path() == source_utf8) {
+        result = jacket_picker_.export_png(dest_utf8, {.output_size = 512});
+    } else {
+        result = square_image_picker::export_center_square_png(source_utf8, dest_utf8, {.output_size = 512});
+    }
+
+    if (!result.success) {
+        error_ = result.message.empty() ? "Failed to export jacket image." : result.message;
+        jacket_filename.clear();
+        return false;
+    }
     return true;
 }
 
