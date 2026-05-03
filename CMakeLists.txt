@@ -202,6 +202,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/scene_common.h
         src/scenes/shared/auth_overlay_controller.cpp
         src/scenes/shared/auth_overlay_controller.h
+        src/scenes/shared/square_image_picker.cpp
+        src/scenes/shared/square_image_picker.h
         src/scenes/shared/content_status_badge.h
         src/scenes/title_scene.cpp
         src/scenes/title_scene.h

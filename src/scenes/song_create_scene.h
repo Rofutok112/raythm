@@ -1,10 +1,12 @@
 #pragma once
 
+#include <filesystem>
 #include <optional>
 #include <string>
 
 #include "data_models.h"
 #include "scene.h"
+#include "shared/square_image_picker.h"
 #include "ui_text_input.h"
 
 // 新規楽曲作成 + 譜面作成フロー。
@@ -27,6 +29,9 @@ private:
 
     bool create_song();
     bool save_song_edits();
+    bool export_jacket_image(const std::filesystem::path& source_path,
+                             const std::filesystem::path& song_dir,
+                             std::string& jacket_filename);
     void go_back_to_song_select(const std::string& preferred_song_id = "");
     bool is_edit_mode() const;
 
@@ -42,6 +47,8 @@ private:
     ui::text_input_state sns_youtube_input_;
     ui::text_input_state sns_niconico_input_;
     ui::text_input_state sns_x_input_;
+    square_image_picker::state jacket_picker_;
+    std::string jacket_crop_source_;
 
     // Created song data (stored after song creation)
     song_data created_song_;
