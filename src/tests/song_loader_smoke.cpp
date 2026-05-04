@@ -229,8 +229,8 @@ int main() {
         std::ifstream written_input(written_song_dir / "song.json", std::ios::binary);
         const std::string written_content{std::istreambuf_iterator<char>(written_input),
                                           std::istreambuf_iterator<char>()};
-        if (written_content.find("\"songId\"") != std::string::npos) {
-            std::cerr << "Expected song writer to keep local song id outside song.json\n";
+        if (written_content.find("\"songId\": \"external-local-id\"") == std::string::npos) {
+            std::cerr << "Expected song writer to persist songId in song.json\n";
             ok = false;
         }
     }

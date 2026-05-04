@@ -20,6 +20,7 @@ bool almost_equal(float left, float right) {
 
 bool equal_chart_meta(const chart_meta& left, const chart_meta& right) {
     return left.chart_id == right.chart_id &&
+           left.song_id == right.song_id &&
            left.key_count == right.key_count &&
            left.difficulty == right.difficulty &&
            left.chart_author == right.chart_author &&
@@ -98,6 +99,7 @@ int main() {
 
     chart_data source;
     source.meta.chart_id = output_path.stem().string();
+    source.meta.song_id = "serializer-song";
     source.meta.key_count = 4;
     source.meta.difficulty = "Hyper";
     source.meta.level = 9;
@@ -129,9 +131,11 @@ int main() {
     bool ok = true;
 
     ok = content.find("offset=-35") != std::string::npos && ok;
-    ok = content.find("chartId=") == std::string::npos && ok;
-    ok = content.find("songId=") == std::string::npos && ok;
+    ok = content.find("chartId=raythm_chart_serializer_smoke") != std::string::npos && ok;
+    ok = content.find("songId=serializer-song") != std::string::npos && ok;
     ok = content.find("level=") == std::string::npos && ok;
+    ok = expect_contains_in_order(content, "chartId=", "keyCount=") && ok;
+    ok = expect_contains_in_order(content, "songId=", "keyCount=") && ok;
     ok = expect_contains_in_order(content, "meter,0,4/4", "bpm,960,180.5") && ok;
     ok = expect_contains_in_order(content, "tap,480,0", "hold,480,2,840") && ok;
 

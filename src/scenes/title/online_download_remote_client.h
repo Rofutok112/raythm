@@ -31,6 +31,13 @@ struct remote_chart_payload {
     int format_version = 0;
     int resolution = 0;
     int offset = 0;
+    int note_count = 0;
+    float min_bpm = 0.0f;
+    float max_bpm = 0.0f;
+    std::string difficulty_ruleset_id;
+    int difficulty_ruleset_version = 0;
+    std::string chart_fingerprint;
+    std::string chart_sha256;
     std::string content_source;
 };
 
