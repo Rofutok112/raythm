@@ -75,7 +75,7 @@ song select の一覧は [song_catalog_service.cpp](C:/Users/rento/CLionProjects
 その後:
 
 - 曲名でソート
-- 各楽曲の譜面を level / key_count / difficulty でソート
+- 各楽曲の譜面を calculated level / key_count / difficulty でソート
 
 して song select state に渡します。
 
@@ -87,7 +87,8 @@ song select の一覧は [song_catalog_service.cpp](C:/Users/rento/CLionProjects
 
 - 譜面拡張子は `.rchart` のみ
 - 楽曲ディレクトリには `song.json` が必要
-- `song.json` には `songId`, `title`, `artist`, `audioFile`, `jacketFile`, `baseBpm`, `chorusStartSeconds`, `songVersion` が必要
+- `song.json` には `songId`, `title`, `artist`, `audioFile`, `jacketFile`, `baseBpm`, `previewStartMs`, `songVersion` が必要
+- `.rchart` には `chartId`, `songId`, `keyCount`, `difficulty`, `chartAuthor`, `formatVersion`, `resolution`, `offset` が必要
 - 外部譜面は `chart.meta.song_id` が一致した楽曲にだけ紐付きます
 
 ## MV Package Layout

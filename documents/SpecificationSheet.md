@@ -51,7 +51,7 @@ Song/
 ├── audio.mp3       # 音源
 ├── jacket.png      # ジャケット画像
 └── charts/
-    └── *.chart     # 譜面ファイル（複数可）
+    └── *.rchart    # 譜面ファイル（複数可）
 ```
 
 ### 2.3 メタ情報（`SongMeta`）
@@ -68,7 +68,6 @@ Song/
 | `jacketFile`     | `string` | ジャケット画像ファイル名  |
 | `previewStartMs` | `int`    | 選曲画面プレビュー開始位置 |
 | `songVersion`    | `int`    | パッケージバージョン    |
-| `previewStartMs` | `float`  | サビの始まる時間（sec） |
 
 ### 2.4 識別子体系
 
@@ -107,12 +106,16 @@ Song/
 | フィールド           | 型        | 説明                |
 |-----------------|----------|-------------------|
 | `chartId`       | `string` | 譜面の一意識別子          |
+| `songId`        | `string` | 紐づく楽曲の識別子         |
 | `keyCount`      | `int`    | キー数（4 or 6）       |
 | `difficulty`    | `string` | 難易度名              |
-| `level`         | `int`    | 難易度レベル            |
 | `chartAuthor`   | `string` | 譜面作者              |
 | `formatVersion` | `int`    | フォーマットバージョン       |
 | `resolution`    | `int`    | tick解像度（ファイルごと指定） |
+| `offset`        | `int`    | 譜面オフセット（ms）       |
+
+`level` は譜面ファイルには保存しない。実行時またはサーバー側で譜面内容から
+`calculatedLevel` として計算し、表示用メタとして扱う。
 
 #### `[Timing]` — タイミングイベント（`TimingEvent`）
 

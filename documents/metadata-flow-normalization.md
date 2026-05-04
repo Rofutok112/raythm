@@ -123,7 +123,20 @@ Chart upload fields:
 - `chartFingerprint`
 - file: `chart`
 
-Chart catalog responses should return the same normalized display fields:
-`noteCount`, `minBpm`, `maxBpm`, and `calculatedLevel`. The client accepts
-`level` as a transition alias for `calculatedLevel`, and snake_case aliases for
-server implementations that have not moved to camelCase yet.
+Song catalog responses should return `id`, `title`, `artist`, `baseBpm`,
+`durationSec`, `previewStartMs`, `songVersion`, `contentSource`, `audioUrl`,
+and `jacketUrl`.
+
+Chart catalog responses should return `id`, `songId`, `keyCount`,
+`difficultyName`, `chartAuthor`, `formatVersion`, `resolution`, `offset`,
+`noteCount`, `minBpm`, `maxBpm`, `calculatedLevel`,
+`difficultyRulesetId`, `difficultyRulesetVersion`, `chartSha256`,
+`chartFingerprint`, and `contentSource`.
+
+The client accepts `level` as a transition alias for `calculatedLevel`, and
+snake_case aliases for server implementations that have not moved to camelCase
+yet. New server work should prefer camelCase.
+
+The authenticated "my uploads" responses should use the same song and chart
+field names. Client-local IDs should stay in `clientSongId` and
+`clientChartId`; server IDs should stay in `id` and `songId`.
