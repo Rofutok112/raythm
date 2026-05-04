@@ -81,8 +81,7 @@ std::string normalize_url(const std::string& server_url) {
 std::string active_server_url_from_settings() {
     const std::string content = read_file(app_paths::settings_path());
     const environment env = parse(extract_string(content, "serverEnvironment").value_or(""));
-    const std::string custom_url = extract_string(content, "customServerUrl").value_or(kDefaultCustomServerUrl);
-    return normalize_url(configured_url(env, custom_url));
+    return normalize_url(configured_url(env));
 }
 
 }  // namespace server_environment

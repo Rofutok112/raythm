@@ -82,7 +82,6 @@ int main() {
         defaults.fullscreen = true;
         defaults.dark_mode = true;
         defaults.server_env = server_environment::environment::development;
-        defaults.custom_server_url = "http://localhost:3000/dev";
 
         initialize_settings_storage(defaults);
 
@@ -113,9 +112,6 @@ int main() {
                ok);
         expect(loaded.server_env == defaults.server_env,
                "Expected server environment to be written to settings.json.",
-               ok);
-        expect(loaded.custom_server_url == defaults.custom_server_url,
-               "Expected custom server URL to be written to settings.json.",
                ok);
         expect(server_environment::active_server_url_from_settings() == "https://dev-api.raythm.net",
                "Expected active server URL to resolve the development environment.",

@@ -184,8 +184,6 @@ void load_settings(game_settings& settings) {
         settings.dark_mode = *v;
     if (auto v = extract_string(content, "serverEnvironment"))
         settings.server_env = server_environment::parse(*v);
-    if (auto v = extract_string(content, "customServerUrl"))
-        settings.custom_server_url = *v;
 
     if (auto v = extract_string(content, "keys4"))
         parse_key_array(*v, settings.keys.keys_4);
@@ -224,7 +222,6 @@ void save_settings(const game_settings& settings) {
     out << "  \"fullscreen\": " << (settings.fullscreen ? "true" : "false") << ",\n";
     out << "  \"darkMode\": " << (settings.dark_mode ? "true" : "false") << ",\n";
     out << "  \"serverEnvironment\": \"" << server_environment::key(settings.server_env) << "\",\n";
-    out << "  \"customServerUrl\": \"" << escape_json_string(settings.custom_server_url) << "\",\n";
     out << "  \"keys4\": \"" << keys_to_csv(settings.keys.keys_4) << "\",\n";
     out << "  \"keys6\": \"" << keys_to_csv(settings.keys.keys_6) << "\"\n";
     out << "}\n";

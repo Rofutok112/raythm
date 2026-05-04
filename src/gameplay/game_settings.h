@@ -40,7 +40,6 @@ struct game_settings {
     bool fullscreen = false;
     bool dark_mode = true;
     server_environment::environment server_env = server_environment::environment::production;
-    std::string custom_server_url = server_environment::kDefaultCustomServerUrl;
 };
 
 inline game_settings g_settings;

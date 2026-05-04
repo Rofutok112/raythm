@@ -3,7 +3,6 @@
 #include "game_settings.h"
 #include "settings/settings_key_config_state.h"
 #include "settings/settings_runtime_applier.h"
-#include "ui_text_input.h"
 
 class settings_gameplay_page {
 public:
@@ -60,7 +59,6 @@ public:
 
 private:
     game_settings& settings_;
-    mutable ui::text_input_state custom_url_input_;
 };
 
 class settings_key_config_page {

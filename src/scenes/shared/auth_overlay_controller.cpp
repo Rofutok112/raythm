@@ -66,8 +66,7 @@ void start_request(controller& controller_state,
     }
 
     controller_state.request_active = true;
-    const std::string server_url = auth::normalize_server_url(
-        server_environment::configured_url(g_settings.server_env, g_settings.custom_server_url));
+    const std::string server_url = auth::normalize_server_url(server_environment::configured_url(g_settings.server_env));
     const std::string display_name = dialog_state.display_name_input.value;
     const std::string email = dialog_state.email_input.value;
     const std::string password = dialog_state.password_input.value;
