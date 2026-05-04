@@ -44,6 +44,9 @@ bool song_writer::write_song_json(const song_meta& meta, const std::string& dire
     }
 
     out << "{\n";
+    if (!meta.song_id.empty()) {
+        out << "  \"songId\": \"" << escape_json_string(meta.song_id) << "\",\n";
+    }
     out << "  \"title\": \"" << escape_json_string(meta.title) << "\",\n";
     out << "  \"artist\": \"" << escape_json_string(meta.artist) << "\",\n";
     out << "  \"baseBpm\": " << format_float(meta.base_bpm) << ",\n";

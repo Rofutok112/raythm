@@ -5,7 +5,9 @@
 #include <string>
 #include <vector>
 
-// 曲一覧で扱う楽曲メタデータ。
+// Song metadata sourced from song.json or the remote song catalog.
+// Storage and API use camelCase names, but runtime code keeps this normalized
+// snake_case shape with milliseconds as the canonical preview unit.
 struct song_meta {
     std::string song_id;
     std::string title;
@@ -37,7 +39,9 @@ struct song_load_result {
     std::vector<std::string> errors;
 };
 
-// 譜面ごとの差分情報を表すメタデータ。
+// Chart identity and authored metadata sourced from .rchart or the remote chart
+// catalog. Display-only derived metadata such as note count, BPM range, content
+// verification state, and local rank lives on song_select::chart_option.
 struct chart_meta {
     std::string chart_id;
     std::string song_id;
