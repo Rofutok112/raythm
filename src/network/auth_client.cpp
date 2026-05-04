@@ -128,21 +128,15 @@ std::optional<auth::community_song_upload> parse_community_song_upload(const std
 
     return auth::community_song_upload{
         .id = *id,
-        .client_song_id = json::extract_string(object, "clientSongId")
-            .value_or(json::extract_string(object, "client_song_id").value_or("")),
+        .client_song_id = json::extract_string(object, "clientSongId").value_or(""),
         .title = *title,
         .artist = json::extract_string(object, "artist").value_or(""),
-        .content_source = json::extract_string(object, "contentSource")
-            .value_or(json::extract_string(object, "content_source").value_or("community")),
+        .content_source = json::extract_string(object, "contentSource").value_or("community"),
         .visibility = json::extract_string(object, "visibility").value_or("public"),
-        .base_bpm = json::extract_float(object, "baseBpm")
-            .value_or(json::extract_float(object, "base_bpm").value_or(0.0f)),
-        .duration_seconds = json::extract_float(object, "durationSec")
-            .value_or(json::extract_float(object, "duration_seconds").value_or(0.0f)),
-        .preview_start_ms = json::extract_int(object, "previewStartMs")
-            .value_or(json::extract_int(object, "preview_start_ms").value_or(0)),
-        .song_version = json::extract_int(object, "songVersion")
-            .value_or(json::extract_int(object, "song_version").value_or(0)),
+        .base_bpm = json::extract_float(object, "baseBpm").value_or(0.0f),
+        .duration_seconds = json::extract_float(object, "durationSec").value_or(0.0f),
+        .preview_start_ms = json::extract_int(object, "previewStartMs").value_or(0),
+        .song_version = json::extract_int(object, "songVersion").value_or(0),
     };
 }
 
@@ -161,44 +155,30 @@ std::optional<auth::community_chart_upload> parse_community_chart_upload(const s
     const std::optional<std::string> song_object = json::extract_object(object, "song");
     return auth::community_chart_upload{
         .id = *id,
-        .client_chart_id = json::extract_string(object, "clientChartId")
-            .value_or(json::extract_string(object, "client_chart_id").value_or("")),
+        .client_chart_id = json::extract_string(object, "clientChartId").value_or(""),
         .song_id = json::extract_string(object, "songId")
-            .value_or(json::extract_string(object, "song_id")
-            .value_or(song_object.has_value() ? json::extract_string(*song_object, "id").value_or("") : "")),
-        .client_song_id = json::extract_string(object, "clientSongId")
-            .value_or(json::extract_string(object, "client_song_id").value_or("")),
+            .value_or(song_object.has_value() ? json::extract_string(*song_object, "id").value_or("") : ""),
+        .client_song_id = json::extract_string(object, "clientSongId").value_or(""),
         .song_title = song_object.has_value() ? json::extract_string(*song_object, "title").value_or("") : "",
-        .difficulty_name = json::extract_string(object, "difficultyName")
-            .value_or(json::extract_string(object, "difficulty_name").value_or("")),
-        .chart_author = json::extract_string(object, "chartAuthor")
-            .value_or(json::extract_string(object, "chart_author").value_or("")),
-        .content_source = json::extract_string(object, "contentSource")
-            .value_or(json::extract_string(object, "content_source").value_or("community")),
+        .difficulty_name = json::extract_string(object, "difficultyName").value_or(""),
+        .chart_author = json::extract_string(object, "chartAuthor").value_or(""),
+        .content_source = json::extract_string(object, "contentSource").value_or("community"),
         .visibility = json::extract_string(object, "visibility").value_or("public"),
-        .key_count = json::extract_int(object, "keyCount")
-            .value_or(json::extract_int(object, "key_count").value_or(0)),
-        .level = json::extract_float(object, "calculatedLevel")
-            .value_or(json::extract_float(object, "calculated_level")
-            .value_or(json::extract_float(object, "level").value_or(0.0f))),
-        .note_count = json::extract_int(object, "noteCount")
-            .value_or(json::extract_int(object, "note_count").value_or(0)),
-        .min_bpm = json::extract_float(object, "minBpm")
-            .value_or(json::extract_float(object, "min_bpm").value_or(0.0f)),
-        .max_bpm = json::extract_float(object, "maxBpm")
-            .value_or(json::extract_float(object, "max_bpm").value_or(0.0f)),
-        .difficulty_ruleset_id = json::extract_string(object, "difficultyRulesetId")
-            .value_or(json::extract_string(object, "difficulty_ruleset_id").value_or("")),
-        .difficulty_ruleset_version = json::extract_int(object, "difficultyRulesetVersion")
-            .value_or(json::extract_int(object, "difficulty_ruleset_version").value_or(0)),
+        .key_count = json::extract_int(object, "keyCount").value_or(0),
+        .level = json::extract_float(object, "calculatedLevel").value_or(0.0f),
+        .note_count = json::extract_int(object, "noteCount").value_or(0),
+        .min_bpm = json::extract_float(object, "minBpm").value_or(0.0f),
+        .max_bpm = json::extract_float(object, "maxBpm").value_or(0.0f),
+        .difficulty_ruleset_id = json::extract_string(object, "difficultyRulesetId").value_or(""),
+        .difficulty_ruleset_version = json::extract_int(object, "difficultyRulesetVersion").value_or(0),
     };
 }
 
 std::optional<auth::profile_ranking_record> parse_profile_ranking_record(const std::string& object) {
-    const std::optional<std::string> chart_id = json::extract_string(object, "chart_id");
-    const std::optional<std::string> song_id = json::extract_string(object, "song_id");
-    const std::optional<std::string> song_title = json::extract_string(object, "song_title");
-    const std::optional<std::string> difficulty_name = json::extract_string(object, "difficulty_name");
+    const std::optional<std::string> chart_id = json::extract_string(object, "chartId");
+    const std::optional<std::string> song_id = json::extract_string(object, "songId");
+    const std::optional<std::string> song_title = json::extract_string(object, "songTitle");
+    const std::optional<std::string> difficulty_name = json::extract_string(object, "difficultyName");
     const std::optional<int> score = json::extract_int(object, "score");
     const std::optional<int> placement = json::extract_int(object, "placement");
     if (!chart_id.has_value() || !song_id.has_value() || !song_title.has_value() ||
@@ -212,15 +192,15 @@ std::optional<auth::profile_ranking_record> parse_profile_ranking_record(const s
         .song_title = *song_title,
         .artist = json::extract_string(object, "artist").value_or(""),
         .difficulty_name = *difficulty_name,
-        .chart_author = json::extract_string(object, "chart_author").value_or(""),
-        .clear_rank = json::extract_string(object, "clear_rank").value_or(""),
-        .recorded_at = json::extract_string(object, "recorded_at").value_or(""),
-        .submitted_at = json::extract_string(object, "submitted_at").value_or(""),
+        .chart_author = json::extract_string(object, "chartAuthor").value_or(""),
+        .clear_rank = json::extract_string(object, "clearRank").value_or(""),
+        .recorded_at = json::extract_string(object, "recordedAt").value_or(""),
+        .submitted_at = json::extract_string(object, "submittedAt").value_or(""),
         .score = *score,
         .placement = *placement,
-        .max_combo = json::extract_int(object, "max_combo").value_or(0),
+        .max_combo = json::extract_int(object, "maxCombo").value_or(0),
         .accuracy = json::extract_float(object, "accuracy").value_or(0.0f),
-        .is_full_combo = json::extract_bool(object, "is_full_combo").value_or(false),
+        .is_full_combo = json::extract_bool(object, "isFullCombo").value_or(false),
     };
 }
 
@@ -1071,8 +1051,8 @@ profile_rankings_result fetch_my_profile_rankings() {
         return result;
     }
 
-    parse_profile_ranking_array(response.body, "recent_records", result.recent_records);
-    parse_profile_ranking_array(response.body, "first_place_records", result.first_place_records);
+    parse_profile_ranking_array(response.body, "recentRecords", result.recent_records);
+    parse_profile_ranking_array(response.body, "firstPlaceRecords", result.first_place_records);
     result.success = true;
     result.message = "Profile rankings loaded.";
     return result;

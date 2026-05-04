@@ -141,15 +141,13 @@ Chart catalog responses should return `id`, `songId`, `keyCount`,
 `difficultyRulesetId`, `difficultyRulesetVersion`, `chartSha256`,
 `chartFingerprint`, and `contentSource`.
 
-The client accepts `level` as a transition alias for `calculatedLevel`, and
-snake_case aliases for server implementations that have not moved to camelCase
-yet. New server work should prefer camelCase.
+Server responses should use camelCase only. The client does not accept
+snake_case aliases for catalog, detail, upload listing, or manifest metadata.
 
 The authenticated "my uploads" responses should use the same song and chart
 field names. Client-local IDs should stay in `clientSongId` and
 `clientChartId`; server IDs should stay in `id` and `songId`.
 
-Manifest responses are verification-only and should prefer camelCase field
-names: `songJsonSha256`, `songJsonFingerprint`, `audioSha256`, `jacketSha256`,
-`chartSha256`, and `chartFingerprint`. The client still accepts snake_case
-aliases for transition responses.
+Manifest responses are verification-only and should use camelCase field names:
+`songJsonSha256`, `songJsonFingerprint`, `audioSha256`, `jacketSha256`,
+`chartSha256`, and `chartFingerprint`.

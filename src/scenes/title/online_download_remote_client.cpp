@@ -371,67 +371,41 @@ std::optional<remote_song_payload> parse_remote_song(const std::string& object) 
         .id = *id,
         .title = *title,
         .artist = *artist,
-        .base_bpm = json::extract_float(object, "baseBpm")
-            .value_or(json::extract_float(object, "base_bpm").value_or(0.0f)),
-        .duration_seconds = json::extract_float(object, "durationSec")
-            .value_or(json::extract_float(object, "duration_seconds").value_or(0.0f)),
-        .preview_start_ms = json::extract_int(object, "previewStartMs")
-            .value_or(json::extract_int(object, "preview_start_ms").value_or(0)),
-        .song_version = json::extract_int(object, "songVersion")
-            .value_or(json::extract_int(object, "song_version").value_or(0)),
-        .content_source = json::extract_string(object, "contentSource")
-            .value_or(json::extract_string(object, "content_source").value_or("community")),
-        .audio_url = json::extract_string(object, "audioUrl")
-            .value_or(json::extract_string(object, "audio_url").value_or("")),
-        .jacket_url = json::extract_string(object, "jacketUrl")
-            .value_or(json::extract_string(object, "jacket_url").value_or("")),
+        .base_bpm = json::extract_float(object, "baseBpm").value_or(0.0f),
+        .duration_seconds = json::extract_float(object, "durationSec").value_or(0.0f),
+        .preview_start_ms = json::extract_int(object, "previewStartMs").value_or(0),
+        .song_version = json::extract_int(object, "songVersion").value_or(0),
+        .content_source = json::extract_string(object, "contentSource").value_or("community"),
+        .audio_url = json::extract_string(object, "audioUrl").value_or(""),
+        .jacket_url = json::extract_string(object, "jacketUrl").value_or(""),
     };
 }
 
 std::optional<remote_chart_payload> parse_remote_chart(const std::string& object) {
     const auto id = json::extract_string(object, "id");
-    std::optional<std::string> song_id = json::extract_string(object, "songId");
-    if (!song_id.has_value()) {
-        song_id = json::extract_string(object, "song_id");
-    }
-    std::optional<std::string> difficulty_name = json::extract_string(object, "difficultyName");
-    if (!difficulty_name.has_value()) {
-        difficulty_name = json::extract_string(object, "difficulty_name");
-    }
+    const std::optional<std::string> song_id = json::extract_string(object, "songId");
+    const std::optional<std::string> difficulty_name = json::extract_string(object, "difficultyName");
     if (!id.has_value() || !song_id.has_value() || !difficulty_name.has_value()) {
         return std::nullopt;
     }
-
-    const float calculated_level = json::extract_float(object, "calculatedLevel")
-        .value_or(json::extract_float(object, "calculated_level")
-        .value_or(json::extract_float(object, "level").value_or(0.0f)));
 
     return remote_chart_payload{
         .id = *id,
         .song_id = *song_id,
         .key_count = json::extract_int(object, "keyCount").value_or(4),
         .difficulty_name = *difficulty_name,
-        .level = calculated_level,
-        .chart_author = json::extract_string(object, "chartAuthor")
-            .value_or(json::extract_string(object, "chart_author").value_or("")),
-        .format_version = json::extract_int(object, "formatVersion")
-            .value_or(json::extract_int(object, "format_version").value_or(0)),
+        .level = json::extract_float(object, "calculatedLevel").value_or(0.0f),
+        .chart_author = json::extract_string(object, "chartAuthor").value_or(""),
+        .format_version = json::extract_int(object, "formatVersion").value_or(0),
         .resolution = json::extract_int(object, "resolution").value_or(0),
         .offset = json::extract_int(object, "offset").value_or(0),
-        .note_count = json::extract_int(object, "noteCount")
-            .value_or(json::extract_int(object, "note_count").value_or(0)),
-        .min_bpm = json::extract_float(object, "minBpm")
-            .value_or(json::extract_float(object, "min_bpm").value_or(0.0f)),
-        .max_bpm = json::extract_float(object, "maxBpm")
-            .value_or(json::extract_float(object, "max_bpm").value_or(0.0f)),
-        .difficulty_ruleset_id = json::extract_string(object, "difficultyRulesetId")
-            .value_or(json::extract_string(object, "difficulty_ruleset_id").value_or("")),
-        .difficulty_ruleset_version = json::extract_int(object, "difficultyRulesetVersion")
-            .value_or(json::extract_int(object, "difficulty_ruleset_version").value_or(0)),
-        .chart_fingerprint = json::extract_string(object, "chartFingerprint")
-            .value_or(json::extract_string(object, "chart_fingerprint").value_or("")),
-        .chart_sha256 = json::extract_string(object, "chartSha256")
-            .value_or(json::extract_string(object, "chart_sha256").value_or("")),
+        .note_count = json::extract_int(object, "noteCount").value_or(0),
+        .min_bpm = json::extract_float(object, "minBpm").value_or(0.0f),
+        .max_bpm = json::extract_float(object, "maxBpm").value_or(0.0f),
+        .difficulty_ruleset_id = json::extract_string(object, "difficultyRulesetId").value_or(""),
+        .difficulty_ruleset_version = json::extract_int(object, "difficultyRulesetVersion").value_or(0),
+        .chart_fingerprint = json::extract_string(object, "chartFingerprint").value_or(""),
+        .chart_sha256 = json::extract_string(object, "chartSha256").value_or(""),
         .content_source = json::extract_string(object, "contentSource").value_or("community"),
     };
 }

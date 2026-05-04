@@ -17,17 +17,17 @@ using network::http::send_request;
 std::optional<ranking_service::entry> parse_ranking_entry(const std::string& content) {
     std::string player_display_name;
     if (const auto player_object = json::extract_object(content, "player"); player_object.has_value()) {
-        player_display_name = json::extract_string(*player_object, "display_name").value_or("");
+        player_display_name = json::extract_string(*player_object, "displayName").value_or("");
     }
 
     const auto placement = json::extract_int(content, "placement");
     const auto accuracy = json::extract_float(content, "accuracy");
-    const auto is_full_combo = json::extract_bool(content, "is_full_combo");
-    const auto max_combo = json::extract_int(content, "max_combo");
+    const auto is_full_combo = json::extract_bool(content, "isFullCombo");
+    const auto max_combo = json::extract_int(content, "maxCombo");
     const auto score = json::extract_int(content, "score");
-    const auto recorded_at = json::extract_string(content, "recorded_at");
+    const auto recorded_at = json::extract_string(content, "recordedAt");
     const auto verified = json::extract_bool(content, "verified");
-    const std::string clear_rank_label = json::extract_string(content, "clear_rank").value_or("");
+    const std::string clear_rank_label = json::extract_string(content, "clearRank").value_or("");
     if (!placement.has_value() ||
         !accuracy.has_value() ||
         !is_full_combo.has_value() ||
@@ -128,9 +128,9 @@ std::string build_note_results_json(const std::vector<note_result_entry>& note_r
             json += ",";
         }
         json += "{";
-        json += "\"event_index\":" + std::to_string(entry.event_index) + ",";
+        json += "\"eventIndex\":" + std::to_string(entry.event_index) + ",";
         json += "\"result\":\"" + judge_result_label(entry.result) + "\",";
-        json += "\"offset_ms\":" + std::to_string(entry.offset_ms);
+        json += "\"offsetMs\":" + std::to_string(entry.offset_ms);
         json += "}";
     }
     json += "]";
@@ -141,9 +141,9 @@ std::string build_submit_payload(const result_data& result,
                                  const std::string& recorded_at,
                                  const std::string& ruleset_version) {
     return "{"
-        "\"recorded_at\":\"" + json::escape_string(recorded_at) + "\","
-        "\"ruleset_version\":\"" + json::escape_string(ruleset_version) + "\","
-        "\"note_results\":" + build_note_results_json(result.note_results) +
+        "\"recordedAt\":\"" + json::escape_string(recorded_at) + "\","
+        "\"rulesetVersion\":\"" + json::escape_string(ruleset_version) + "\","
+        "\"noteResults\":" + build_note_results_json(result.note_results) +
         "}";
 }
 
@@ -162,69 +162,54 @@ std::optional<ranking_client::submit_response> parse_submit_response(const std::
 
 std::optional<ranking_client::chart_manifest> parse_chart_manifest_response(const std::string& body) {
     const auto available = json::extract_bool(body, "available");
-    const auto chart_id = json::extract_string(body, "chartId")
-        .value_or(json::extract_string(body, "chart_id").value_or(""));
-    const auto song_id = json::extract_string(body, "songId")
-        .value_or(json::extract_string(body, "song_id").value_or(""));
-    if (!available.has_value() || chart_id.empty() || song_id.empty()) {
+    const auto chart_id = json::extract_string(body, "chartId");
+    const auto song_id = json::extract_string(body, "songId");
+    if (!available.has_value() || !chart_id.has_value() || !song_id.has_value()) {
         return std::nullopt;
     }
 
     return ranking_client::chart_manifest{
         .available = *available,
         .message = json::extract_string(body, "message").value_or(""),
-        .content_source = json::extract_string(body, "content_source").value_or(
-            json::extract_string(body, "contentSource").value_or("")),
-        .chart_id = chart_id,
-        .song_id = song_id,
-        .song_json_sha256 = json::extract_string(body, "songJsonSha256").value_or(
-            json::extract_string(body, "song_json_sha256").value_or("")),
-        .song_json_fingerprint = json::extract_string(body, "song_json_fingerprint").value_or(
-            json::extract_string(body, "songJsonFingerprint").value_or("")),
-        .audio_sha256 = json::extract_string(body, "audioSha256").value_or(
-            json::extract_string(body, "audio_sha256").value_or("")),
-        .jacket_sha256 = json::extract_string(body, "jacketSha256").value_or(
-            json::extract_string(body, "jacket_sha256").value_or("")),
-        .chart_sha256 = json::extract_string(body, "chartSha256").value_or(
-            json::extract_string(body, "chart_sha256").value_or("")),
-        .chart_fingerprint = json::extract_string(body, "chart_fingerprint").value_or(
-            json::extract_string(body, "chartFingerprint").value_or("")),
+        .content_source = json::extract_string(body, "contentSource").value_or(""),
+        .chart_id = *chart_id,
+        .song_id = *song_id,
+        .song_json_sha256 = json::extract_string(body, "songJsonSha256").value_or(""),
+        .song_json_fingerprint = json::extract_string(body, "songJsonFingerprint").value_or(""),
+        .audio_sha256 = json::extract_string(body, "audioSha256").value_or(""),
+        .jacket_sha256 = json::extract_string(body, "jacketSha256").value_or(""),
+        .chart_sha256 = json::extract_string(body, "chartSha256").value_or(""),
+        .chart_fingerprint = json::extract_string(body, "chartFingerprint").value_or(""),
     };
 }
 
 std::optional<ranking_client::song_manifest> parse_song_manifest_response(const std::string& body) {
     const auto available = json::extract_bool(body, "available");
-    const auto song_id = json::extract_string(body, "songId")
-        .value_or(json::extract_string(body, "song_id").value_or(""));
-    if (!available.has_value() || song_id.empty()) {
+    const auto song_id = json::extract_string(body, "songId");
+    if (!available.has_value() || !song_id.has_value()) {
         return std::nullopt;
     }
 
     return ranking_client::song_manifest{
         .available = *available,
         .message = json::extract_string(body, "message").value_or(""),
-        .content_source = json::extract_string(body, "content_source").value_or(
-            json::extract_string(body, "contentSource").value_or("")),
-        .song_id = song_id,
-        .song_json_sha256 = json::extract_string(body, "songJsonSha256").value_or(
-            json::extract_string(body, "song_json_sha256").value_or("")),
-        .song_json_fingerprint = json::extract_string(body, "song_json_fingerprint").value_or(
-            json::extract_string(body, "songJsonFingerprint").value_or("")),
-        .audio_sha256 = json::extract_string(body, "audioSha256").value_or(
-            json::extract_string(body, "audio_sha256").value_or("")),
-        .jacket_sha256 = json::extract_string(body, "jacketSha256").value_or(
-            json::extract_string(body, "jacket_sha256").value_or("")),
+        .content_source = json::extract_string(body, "contentSource").value_or(""),
+        .song_id = *song_id,
+        .song_json_sha256 = json::extract_string(body, "songJsonSha256").value_or(""),
+        .song_json_fingerprint = json::extract_string(body, "songJsonFingerprint").value_or(""),
+        .audio_sha256 = json::extract_string(body, "audioSha256").value_or(""),
+        .jacket_sha256 = json::extract_string(body, "jacketSha256").value_or(""),
     };
 }
 
 std::optional<ranking_client::scoring_ruleset> parse_scoring_ruleset_response(const std::string& body) {
     const auto active = json::extract_bool(body, "active");
-    const auto accepted_input = json::extract_string(body, "accepted_input");
-    const auto ruleset_version = json::extract_string(body, "ruleset_version");
-    const auto score_model = json::extract_string(body, "score_model");
-    const auto max_score = json::extract_int(body, "max_score");
+    const auto accepted_input = json::extract_string(body, "acceptedInput");
+    const auto ruleset_version = json::extract_string(body, "rulesetVersion");
+    const auto score_model = json::extract_string(body, "scoreModel");
+    const auto max_score = json::extract_int(body, "maxScore");
     const auto judges_object = json::extract_object(body, "judges");
-    const auto thresholds_array = json::extract_array(body, "rank_thresholds");
+    const auto thresholds_array = json::extract_array(body, "rankThresholds");
     if (!active.has_value() || !accepted_input.has_value() || !ruleset_version.has_value() ||
         !score_model.has_value() || !max_score.has_value() ||
         !judges_object.has_value() || !thresholds_array.has_value()) {
@@ -244,8 +229,8 @@ std::optional<ranking_client::scoring_ruleset> parse_scoring_ruleset_response(co
     std::vector<scoring_ruleset_runtime::rank_threshold> rank_thresholds;
     for (const std::string& object : json::extract_objects_from_array(*thresholds_array)) {
         const auto rank_label = json::extract_string(object, "rank");
-        const auto min_accuracy = json::extract_float(object, "min_accuracy");
-        const auto requires_full_combo = json::extract_bool(object, "requires_full_combo");
+        const auto min_accuracy = json::extract_float(object, "minAccuracy");
+        const auto requires_full_combo = json::extract_bool(object, "requiresFullCombo");
         if (!rank_label.has_value() || !min_accuracy.has_value() || !requires_full_combo.has_value()) {
             return std::nullopt;
         }
