@@ -6,6 +6,8 @@
 #include <thread>
 #include <utility>
 
+#include "game_settings.h"
+#include "network/server_environment.h"
 #include "ui_notice.h"
 
 namespace {
@@ -64,7 +66,8 @@ void start_request(controller& controller_state,
     }
 
     controller_state.request_active = true;
-    const std::string server_url = auth::kDefaultServerUrl;
+    const std::string server_url = auth::normalize_server_url(
+        server_environment::configured_url(g_settings.server_env, g_settings.custom_server_url));
     const std::string display_name = dialog_state.display_name_input.value;
     const std::string email = dialog_state.email_input.value;
     const std::string password = dialog_state.password_input.value;

@@ -10,7 +10,7 @@
 
 struct editor_resume_state;
 
-// 設定画面。Gameplay / Audio / Video / Key Config の4ページ構成。
+// 設定画面。Gameplay / Audio / Video / Network / Key Config の5ページ構成。
 class settings_scene final : public scene {
 public:
     enum class return_target { title, song_select, editor };
@@ -36,5 +36,6 @@ private:
     settings_gameplay_page gameplay_page_;
     settings_audio_page audio_page_;
     settings_video_page video_page_;
+    settings_network_page network_page_;
     settings_key_config_page key_config_page_;
 };

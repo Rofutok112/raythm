@@ -3,6 +3,7 @@
 #include "game_settings.h"
 #include "settings/settings_key_config_state.h"
 #include "settings/settings_runtime_applier.h"
+#include "ui_text_input.h"
 
 class settings_gameplay_page {
 public:
@@ -47,6 +48,19 @@ private:
     game_settings& settings_;
     const settings_runtime_applier& runtime_applier_;
     bool dragging_frame_rate_ = false;
+};
+
+class settings_network_page {
+public:
+    explicit settings_network_page(game_settings& settings);
+
+    void reset_interaction();
+    void update();
+    void draw() const;
+
+private:
+    game_settings& settings_;
+    mutable ui::text_input_state custom_url_input_;
 };
 
 class settings_key_config_page {

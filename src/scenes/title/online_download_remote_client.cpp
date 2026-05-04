@@ -8,6 +8,7 @@
 
 #include "network/auth_client.h"
 #include "network/json_helpers.h"
+#include "network/server_environment.h"
 #include "title/online_download_view.h"
 
 #ifdef _WIN32
@@ -87,16 +88,7 @@ void push_candidate_server_url(std::vector<std::string>& urls, std::string url) 
 
 std::vector<std::string> resolve_server_urls() {
     std::vector<std::string> urls;
-    if (const std::optional<auth::session> saved = auth::load_saved_session(); saved.has_value()) {
-        push_candidate_server_url(urls, saved->server_url);
-    }
-
-    push_candidate_server_url(urls, auth::kDefaultServerUrl);
-    push_candidate_server_url(urls, auth::kLanServerUrl);
-    push_candidate_server_url(urls, "http://127.0.0.1:3000");
-    push_candidate_server_url(urls, "http://localhost:3000");
-    push_candidate_server_url(urls, "http://127.0.0.1");
-    push_candidate_server_url(urls, "http://localhost");
+    push_candidate_server_url(urls, server_environment::active_server_url_from_settings());
     return urls;
 }
 
