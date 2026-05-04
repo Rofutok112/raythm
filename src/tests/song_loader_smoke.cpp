@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "chart_identity_store.h"
 #include "song_fingerprint.h"
 #include "song_loader.h"
 #include "song_writer.h"
@@ -48,8 +47,7 @@ std::filesystem::path write_temp_chart() {
     output << "[Metadata]\n"
            << "chartId=song-loader-auto-level\n"
            << "keyCount=4\n"
-           << "difficulty=Legacy\n"
-           << "level=55.0\n"
+           << "difficulty=Auto\n"
            << "chartAuthor=Codex\n"
            << "formatVersion=1\n"
            << "resolution=480\n"
@@ -105,7 +103,7 @@ std::filesystem::path write_temp_song_with_legacy_preview_fields() {
     return song_dir;
 }
 
-std::filesystem::path write_external_chart_without_song_id() {
+std::filesystem::path write_external_chart_with_song_id() {
     const std::filesystem::path charts_dir =
         std::filesystem::temp_directory_path() / "raythm_song_loader_external_charts";
     std::error_code ec;
@@ -113,6 +111,8 @@ std::filesystem::path write_external_chart_without_song_id() {
     std::filesystem::create_directories(charts_dir);
     std::ofstream output(charts_dir / "external-linked.rchart", std::ios::trunc);
     output << "[Metadata]\n"
+           << "chartId=external-linked\n"
+           << "songId=linked-song\n"
            << "keyCount=4\n"
            << "difficulty=External\n"
            << "chartAuthor=Codex\n"
@@ -184,19 +184,13 @@ int main() {
             std::cerr << "  " << error << '\n';
         }
         ok = false;
-    } else {
-        if (chart_result.data->meta.level != 0.0f) {
-            std::cerr << "Expected legacy chart level metadata to be ignored by the loader\n";
-            ok = false;
-        }
     }
     std::filesystem::remove(temp_chart);
 
     const std::filesystem::path temp_song = write_temp_song_without_embedded_id();
     const song_load_result temp_song_result = song_loader::load_directory(temp_song.string());
-    if (temp_song_result.songs.size() != 1 ||
-        temp_song_result.songs.front().meta.song_id != "raythm_song_loader_external_song_id") {
-        std::cerr << "Expected missing songId to fall back to the song directory name\n";
+    if (!temp_song_result.songs.empty() || temp_song_result.errors.empty()) {
+        std::cerr << "Expected missing songId to be rejected\n";
         ok = false;
     }
     std::filesystem::remove_all(temp_song);
@@ -286,8 +280,7 @@ int main() {
         ok = false;
     }
 
-    const std::filesystem::path external_charts_dir = write_external_chart_without_song_id();
-    chart_identity::put("external-linked", "linked-song");
+    const std::filesystem::path external_charts_dir = write_external_chart_with_song_id();
     std::vector<song_data> external_songs;
     song_data linked_song;
     linked_song.meta.song_id = "linked-song";

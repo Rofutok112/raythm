@@ -40,7 +40,7 @@
 - メール認証済み
 - Official 譜面である
 - サーバーの scoring ruleset が active
-- サーバーの `accepted_input` が `note_results_v1`
+- サーバーの `acceptedInput` が `note_results_v1`
 
 さらに Official 譜面では、送信前に manifest を取得してローカルファイルの hash を照合する。
 
@@ -63,19 +63,19 @@
 
 ```json
 {
-  "recorded_at": "2026-04-23T02:00:00Z",
-  "ruleset_version": "2026-04-v1",
-  "note_results": [
+  "recordedAt": "2026-04-23T02:00:00Z",
+  "rulesetVersion": "2026-04-v1",
+  "noteResults": [
     {
-      "event_index": 0,
+      "eventIndex": 0,
       "result": "perfect",
-      "offset_ms": 3.2
+      "offsetMs": 3.2
     }
   ]
 }
 ```
 
-送っているのは最終スコアではなく、`note_results` 本体と `recorded_at`、`ruleset_version`。
+送っているのは最終スコアではなく、`noteResults` 本体と `recordedAt`、`rulesetVersion`。
 
 ## サーバー側フロー
 

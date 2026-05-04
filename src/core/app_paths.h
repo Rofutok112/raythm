@@ -47,9 +47,6 @@ std::filesystem::path auth_session_path();
 // AppData/Local/raythm/auth_device.json
 std::filesystem::path auth_device_path();
 
-// AppData/Local/raythm/upload_mappings.txt
-std::filesystem::path upload_mapping_path();
-
 // AppData/Local/raythm/local_content.db
 std::filesystem::path local_content_db_path();
 

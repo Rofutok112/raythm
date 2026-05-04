@@ -5,6 +5,8 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string_view>
@@ -14,7 +16,10 @@
 #include "network/auth_client.h"
 #include "network/json_helpers.h"
 #include "path_utils.h"
+#include "chart_fingerprint.h"
+#include "song_fingerprint.h"
 #include "title/local_content_index.h"
+#include "updater/update_verify.h"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -190,6 +195,42 @@ std::string build_external_links_json(const song_meta& meta) {
     }
     stream << ']';
     return stream.str();
+}
+
+std::string format_float_field(float value) {
+    std::ostringstream stream;
+    stream << std::setprecision(std::numeric_limits<float>::max_digits10) << value;
+    return stream.str();
+}
+
+void push_string_field(std::vector<multipart_field>& fields,
+                       const std::string& name,
+                       const std::string& value) {
+    if (!value.empty()) {
+        fields.push_back({name, value});
+    }
+}
+
+void push_int_field(std::vector<multipart_field>& fields,
+                    const std::string& name,
+                    int value) {
+    fields.push_back({name, std::to_string(value)});
+}
+
+void push_positive_int_field(std::vector<multipart_field>& fields,
+                             const std::string& name,
+                             int value) {
+    if (value > 0) {
+        push_int_field(fields, name, value);
+    }
+}
+
+void push_positive_float_field(std::vector<multipart_field>& fields,
+                               const std::string& name,
+                               float value) {
+    if (value > 0.0f) {
+        fields.push_back({name, format_float_field(value)});
+    }
 }
 
 std::string make_multipart_boundary() {
@@ -548,6 +589,17 @@ std::optional<auth::session> restore_upload_session(std::string& error_message) 
     };
 }
 
+void append_song_contract_fields(std::vector<multipart_field>& fields,
+                                 const song_select::song_entry& song,
+                                 const fs::path& song_dir,
+                                 const fs::path& audio_path,
+                                 const fs::path& jacket_path);
+
+void append_chart_contract_fields(std::vector<multipart_field>& fields,
+                                  const song_select::song_entry& song,
+                                  const song_select::chart_option& chart,
+                                  const fs::path& chart_path);
+
 upload_request_result send_song_upload_request(const auth::session& session,
                                                const song_select::song_entry& song,
                                                const std::optional<std::string>& remote_song_id) {
@@ -585,16 +637,13 @@ upload_request_result send_song_upload_request(const auth::session& session,
     std::vector<multipart_field> fields;
     fields.push_back({"title", meta.title});
     fields.push_back({"artist", meta.artist});
-    {
-        std::ostringstream bpm_stream;
-        bpm_stream << meta.base_bpm;
-        fields.push_back({"baseBpm", bpm_stream.str()});
-    }
+    fields.push_back({"baseBpm", format_float_field(meta.base_bpm)});
     if (meta.duration_seconds > 0.0f) {
         fields.push_back({"durationSec", std::to_string(static_cast<int>(meta.duration_seconds + 0.5f))});
     }
     fields.push_back({"previewStartMs", std::to_string(std::max(0, meta.preview_start_ms))});
     fields.push_back({"visibility", "public"});
+    append_song_contract_fields(fields, song, song_dir, audio_path, jacket_path);
     const std::string external_links_json = build_external_links_json(meta);
     if (external_links_json != "[]") {
         fields.push_back({"externalLinks", external_links_json});
@@ -635,6 +684,71 @@ std::optional<std::string> resolve_remote_song_id_for_chart_upload(const auth::s
     return binding.has_value() ? std::optional<std::string>(binding->remote_song_id) : std::nullopt;
 }
 
+void append_song_contract_fields(std::vector<multipart_field>& fields,
+                                 const song_select::song_entry& song,
+                                 const fs::path& song_dir,
+                                 const fs::path& audio_path,
+                                 const fs::path& jacket_path) {
+    const song_meta& meta = song.song.meta;
+    fields.push_back({"metadataSchemaVersion", "2"});
+    fields.push_back({"contentSource", "community"});
+    push_string_field(fields, "clientSongId", meta.song_id);
+    push_positive_int_field(fields, "songVersion", meta.song_version);
+
+    const fs::path song_json_path = song_dir / "song.json";
+    if (const std::optional<std::string> song_json_sha256 =
+            updater::compute_sha256_hex(song_json_path);
+        song_json_sha256.has_value()) {
+        fields.push_back({"songJsonSha256", *song_json_sha256});
+    }
+    if (const std::optional<std::string> song_json_fingerprint =
+            song_fingerprint::compute_sha256_hex(song_json_path);
+        song_json_fingerprint.has_value()) {
+        fields.push_back({"songJsonFingerprint", *song_json_fingerprint});
+    }
+    if (const std::optional<std::string> audio_sha256 = updater::compute_sha256_hex(audio_path);
+        audio_sha256.has_value()) {
+        fields.push_back({"audioSha256", *audio_sha256});
+    }
+    if (const std::optional<std::string> jacket_sha256 = updater::compute_sha256_hex(jacket_path);
+        jacket_sha256.has_value()) {
+        fields.push_back({"jacketSha256", *jacket_sha256});
+    }
+}
+
+void append_chart_contract_fields(std::vector<multipart_field>& fields,
+                                  const song_select::song_entry& song,
+                                  const song_select::chart_option& chart,
+                                  const fs::path& chart_path) {
+    fields.push_back({"metadataSchemaVersion", "2"});
+    fields.push_back({"contentSource", "community"});
+    push_string_field(fields, "clientChartId", chart.meta.chart_id);
+    push_string_field(fields, "clientSongId",
+                      chart.meta.song_id.empty() ? song.song.meta.song_id : chart.meta.song_id);
+    push_positive_int_field(fields, "keyCount", chart.meta.key_count);
+    push_string_field(fields, "difficultyName", chart.meta.difficulty);
+    push_string_field(fields, "chartAuthor", chart.meta.chart_author);
+    push_positive_int_field(fields, "formatVersion", chart.meta.format_version);
+    push_positive_int_field(fields, "resolution", chart.meta.resolution);
+    push_int_field(fields, "offset", chart.meta.offset);
+    push_positive_int_field(fields, "noteCount", chart.note_count);
+    push_positive_float_field(fields, "minBpm", chart.min_bpm);
+    push_positive_float_field(fields, "maxBpm", chart.max_bpm);
+    push_positive_float_field(fields, "calculatedLevel", chart.meta.level);
+    fields.push_back({"difficultyRulesetId", "raythm-local"});
+    fields.push_back({"difficultyRulesetVersion", "1"});
+
+    if (const std::optional<std::string> chart_sha256 = updater::compute_sha256_hex(chart_path);
+        chart_sha256.has_value()) {
+        fields.push_back({"chartSha256", *chart_sha256});
+    }
+    if (const std::optional<std::string> chart_fingerprint =
+            chart_fingerprint::compute_sha256_hex(chart_path);
+        chart_fingerprint.has_value()) {
+        fields.push_back({"chartFingerprint", *chart_fingerprint});
+    }
+}
+
 upload_request_result send_chart_upload_request(const auth::session& session,
                                                 const song_select::song_entry& song,
                                                 const song_select::chart_option& chart,
@@ -656,6 +770,7 @@ upload_request_result send_chart_upload_request(const auth::session& session,
     std::vector<multipart_field> fields;
     fields.push_back({"songId", remote_song_id});
     fields.push_back({"visibility", "public"});
+    append_chart_contract_fields(fields, song, chart, chart_path);
 
     std::vector<multipart_file> files;
     files.push_back({

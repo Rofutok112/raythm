@@ -4,11 +4,11 @@
 #include <string>
 #include <vector>
 
-#include "title/upload_mapping_store.h"
+#include "title/local_content_binding.h"
 
 namespace local_content_index {
 
-using online_origin = title_upload_mapping::mapping_origin;
+using online_origin = local_content_binding::origin;
 
 struct online_song_binding {
     std::string server_url;
