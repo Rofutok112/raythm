@@ -88,7 +88,7 @@ void push_candidate_server_url(std::vector<std::string>& urls, std::string url) 
 
 std::vector<std::string> resolve_server_urls() {
     std::vector<std::string> urls;
-    push_candidate_server_url(urls, server_environment::active_server_url_from_settings());
+    push_candidate_server_url(urls, server_environment::active_server_url());
     return urls;
 }
 

@@ -383,7 +383,7 @@ std::string display_ruleset_server_url() {
         return auth::normalize_server_url(summary.server_url);
     }
 
-    return server_environment::active_server_url_from_settings();
+    return server_environment::active_server_url();
 }
 
 struct cached_scoring_ruleset_state {

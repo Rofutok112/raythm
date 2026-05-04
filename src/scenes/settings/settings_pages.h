@@ -49,18 +49,6 @@ private:
     bool dragging_frame_rate_ = false;
 };
 
-class settings_network_page {
-public:
-    explicit settings_network_page(game_settings& settings);
-
-    void reset_interaction();
-    void update();
-    void draw() const;
-
-private:
-    game_settings& settings_;
-};
-
 class settings_key_config_page {
 public:
     explicit settings_key_config_page(game_settings& settings);

@@ -12,7 +12,7 @@
 
 namespace settings {
 
-enum class page_id { gameplay, audio, video, network, key_config };
+enum class page_id { gameplay, audio, video, key_config };
 
 struct page_descriptor {
     const char* navigation_label;
@@ -21,7 +21,7 @@ struct page_descriptor {
 };
 
 inline constexpr ui::draw_layer kLayer = ui::draw_layer::base;
-inline constexpr int kPageCount = 5;
+inline constexpr int kPageCount = 4;
 inline constexpr float kSliderLeftInset = 327.0f;
 inline constexpr float kSliderRightInset = 63.0f;
 inline constexpr float kSliderTopOffset = 39.0f;
@@ -62,7 +62,6 @@ inline constexpr std::array<page_descriptor, kPageCount> kPageDescriptors = {{
     {"Gameplay", "Gameplay", "Play feel and lane settings"},
     {"Audio", "Audio", "BGM and sound effect volume"},
     {"Video", "Video", "Display and frame rate settings"},
-    {"Network", "Network", "Server environment"},
     {"Key Config", "Key Config", "Per-lane keyboard bindings"},
 }};
 

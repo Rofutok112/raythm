@@ -96,7 +96,7 @@ std::string current_manifest_server_url() {
     if (!summary.server_url.empty()) {
         return auth::normalize_server_url(summary.server_url);
     }
-    return server_environment::active_server_url_from_settings();
+    return server_environment::active_server_url();
 }
 
 std::string expected_remote_song_id(const std::string& server_url,

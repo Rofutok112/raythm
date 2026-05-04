@@ -12,6 +12,9 @@ set(RAYTHM_PACKAGE_VERSION "0.1.0" CACHE STRING "Version string used for Windows
 set(RAYTHM_PACKAGE_FILE_NAME
         "raythm-${RAYTHM_PACKAGE_VERSION}-windows-x64"
         CACHE STRING "Package file name without extension")
+set(RAYTHM_SERVER_ENV "production" CACHE STRING "Server environment: production or development")
+set_property(CACHE RAYTHM_SERVER_ENV PROPERTY STRINGS production development)
+set(RAYTHM_API_BASE_URL "" CACHE STRING "Optional API base URL override for local builds")
 set(RAYTHM_BASS_DIR
         "${CMAKE_SOURCE_DIR}/libs/bass"
         CACHE PATH "Directory containing bass.h, bass.lib, and bass.dll")
@@ -30,6 +33,11 @@ foreach(required_bass_file IN ITEMS
                 "Ensure libs/bass is checked into the repository or set RAYTHM_BASS_DIR to a directory containing bass.h, bass.lib, and bass.dll.")
     endif()
 endforeach()
+
+add_compile_definitions(RAYTHM_SERVER_ENV="${RAYTHM_SERVER_ENV}")
+if(NOT RAYTHM_API_BASE_URL STREQUAL "")
+    add_compile_definitions(RAYTHM_API_BASE_URL="${RAYTHM_API_BASE_URL}")
+endif()
 
 include(FetchContent)
 FetchContent_Declare(
