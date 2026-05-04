@@ -32,6 +32,7 @@
 #include "path_utils.h"
 #include "song_loader.h"
 #include "song_writer.h"
+#include "title/local_content_index.h"
 
 namespace {
 namespace fs = std::filesystem;
@@ -90,6 +91,13 @@ std::optional<song_select::song_entry> find_song_by_id(const song_select::state&
         }
     }
     return std::nullopt;
+}
+
+const song_select::song_entry* song_at_index(const song_select::state& state, int song_index) {
+    if (!is_valid_song_index(state, song_index)) {
+        return nullptr;
+    }
+    return &state.songs[static_cast<size_t>(song_index)];
 }
 
 fs::path make_temp_directory(const char* prefix) {
@@ -333,8 +341,7 @@ transfer_result export_chart_package(const state& state, int song_index, int cha
 
 transfer_result import_chart_package(const state& state, int song_index) {
     transfer_result result;
-    (void)song_index;
-    const std::optional<chart_import_request> request = prepare_chart_import(state, result);
+    const std::optional<chart_import_request> request = prepare_chart_import(state, song_index, result);
     if (!request.has_value()) {
         return result;
     }
@@ -342,6 +349,16 @@ transfer_result import_chart_package(const state& state, int song_index) {
 }
 
 std::optional<chart_import_request> prepare_chart_import(const state& state, transfer_result& result) {
+    return prepare_chart_import(state, state.selected_song_index, result);
+}
+
+std::optional<chart_import_request> prepare_chart_import(const state& state, int song_index, transfer_result& result) {
+    const song_entry* target_song = song_at_index(state, song_index);
+    if (target_song == nullptr) {
+        result.message = "Select a song before importing a chart.";
+        return std::nullopt;
+    }
+
     const std::string source_path = file_dialog::open_chart_package_file();
     if (source_path.empty()) {
         result.cancelled = true;
@@ -351,12 +368,6 @@ std::optional<chart_import_request> prepare_chart_import(const state& state, tra
     const chart_parse_result parsed = chart_parser::parse(source_path);
     if (!parsed.success || !parsed.data.has_value()) {
         result.message = "Failed to import the chart package.";
-        return std::nullopt;
-    }
-
-    const std::optional<song_entry> target_song = find_song_by_id(state, parsed.data->meta.song_id);
-    if (!target_song.has_value()) {
-        result.message = "No song with a matching song ID was found.";
         return std::nullopt;
     }
 
@@ -370,6 +381,17 @@ std::optional<chart_import_request> prepare_chart_import(const state& state, tra
 }
 
 std::optional<chart_import_batch_request> prepare_chart_imports(const state& state, transfer_result& result) {
+    return prepare_chart_imports(state, state.selected_song_index, result);
+}
+
+std::optional<chart_import_batch_request> prepare_chart_imports(const state& state, int song_index,
+                                                                transfer_result& result) {
+    const song_entry* target_song = song_at_index(state, song_index);
+    if (target_song == nullptr) {
+        result.message = "Select a song before importing a chart.";
+        return std::nullopt;
+    }
+
     const std::vector<std::string> source_paths = file_dialog::open_chart_package_files();
     if (source_paths.empty()) {
         result.cancelled = true;
@@ -382,12 +404,6 @@ std::optional<chart_import_batch_request> prepare_chart_imports(const state& sta
         const chart_parse_result parsed = chart_parser::parse(source_path);
         if (!parsed.success || !parsed.data.has_value()) {
             result.message = "Failed to import the chart package.";
-            return std::nullopt;
-        }
-
-        const std::optional<song_entry> target_song = find_song_by_id(state, parsed.data->meta.song_id);
-        if (!target_song.has_value()) {
-            result.message = "No song with a matching song ID was found.";
             return std::nullopt;
         }
 
@@ -420,6 +436,7 @@ transfer_result import_chart_package(const chart_import_request& request) {
         result.message = "Failed to save the imported chart.";
         return result;
     }
+    local_content_index::link_chart_to_song(request.chart.meta.chart_id, request.target_song_id);
     chart_level_cache::calculate_and_store(path_utils::to_utf8(destination_path), request.chart);
 
     result.success = true;

@@ -57,7 +57,10 @@ transfer_result import_chart_package(const state& state, int song_index);
 transfer_result export_song_package(const state& state, int song_index);
 transfer_result import_song_package(const state& state);
 std::optional<chart_import_request> prepare_chart_import(const state& state, transfer_result& result);
+std::optional<chart_import_request> prepare_chart_import(const state& state, int song_index, transfer_result& result);
 std::optional<chart_import_batch_request> prepare_chart_imports(const state& state, transfer_result& result);
+std::optional<chart_import_batch_request> prepare_chart_imports(const state& state, int song_index,
+                                                                transfer_result& result);
 std::optional<song_export_request> prepare_song_export(const state& state, int song_index);
 std::optional<song_import_request> prepare_song_import(const state& state, transfer_result& result);
 song_import_prepare_result prepare_song_import_from_path(const state& state, const std::string& source_path);

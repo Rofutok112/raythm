@@ -34,16 +34,16 @@ constexpr Rectangle kPauseHintRect = {
 };
 constexpr Rectangle kScoreRect = ui::place(kScreenRect, 600.0f, 90.0f,
                                            ui::anchor::top_left, ui::anchor::top_left,
-                                           Vector2{72.0f, 51.0f});
+                                           Vector2{72.0f, 30.0f});
 constexpr Rectangle kTimeRect = ui::place(kScreenRect, 300.0f, 45.0f,
                                           ui::anchor::top_center, ui::anchor::top_center,
                                           Vector2{0.0f, 51.0f});
 constexpr Rectangle kFpsRect = ui::place(kScreenRect, 180.0f, 30.0f,
                                          ui::anchor::bottom_right, ui::anchor::bottom_right,
-                                         Vector2{-30.0f, -183.0f});
+                                         Vector2{-15.0f, 0.0f});
 constexpr Rectangle kSongInfoRect = ui::place(kScreenRect, 540.0f, 144.0f,
-                                              ui::anchor::bottom_right, ui::anchor::bottom_right,
-                                              Vector2{-30.0f, -30.0f});
+                                              ui::anchor::top_right, ui::anchor::top_right,
+                                              Vector2{-30.0f, 30.0f});
 constexpr Rectangle kSongInfoJacketRect = {
     kSongInfoRect.x + 16.0f,
     kSongInfoRect.y + 16.0f,
