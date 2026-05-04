@@ -246,15 +246,6 @@ void push_candidate_server_url(std::vector<std::string>& urls, const std::string
 std::vector<std::string> candidate_server_urls(const std::string& server_url) {
     std::vector<std::string> urls;
     push_candidate_server_url(urls, server_url);
-
-    const std::string normalized = auth::normalize_server_url(server_url);
-    if (normalized == auth::normalize_server_url(auth::kDefaultServerUrl)) {
-        push_candidate_server_url(urls, auth::kLanServerUrl);
-    } else if (normalized == auth::normalize_server_url(auth::kLanServerUrl) ||
-               normalized == auth::normalize_server_url(auth::kLegacyLanServerUrl)) {
-        push_candidate_server_url(urls, auth::kDefaultServerUrl);
-    }
-
     return urls;
 }
 

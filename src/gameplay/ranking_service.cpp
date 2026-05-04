@@ -18,6 +18,7 @@
 #include "chart_fingerprint.h"
 #include "network/auth_client.h"
 #include "network/ranking_client.h"
+#include "network/server_environment.h"
 #include "path_utils.h"
 #include "scoring_ruleset_runtime.h"
 #include "song_fingerprint.h"
@@ -382,7 +383,7 @@ std::string display_ruleset_server_url() {
         return auth::normalize_server_url(summary.server_url);
     }
 
-    return auth::normalize_server_url(auth::kDefaultServerUrl);
+    return server_environment::active_server_url_from_settings();
 }
 
 struct cached_scoring_ruleset_state {

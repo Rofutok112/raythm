@@ -4,11 +4,13 @@
 #include <string>
 #include <vector>
 
+#include "network/server_environment.h"
+
 namespace auth {
 
-inline constexpr const char* kDefaultServerUrl = "https://api.raythm.net";
-inline constexpr const char* kLanServerUrl = "http://192.168.11.33";
-inline constexpr const char* kLegacyLanServerUrl = "http://192.168.11.33";
+inline constexpr const char* kProductionServerUrl = server_environment::kProductionServerUrl;
+inline constexpr const char* kDevelopmentServerUrl = server_environment::kDevelopmentServerUrl;
+inline constexpr const char* kDefaultServerUrl = kProductionServerUrl;
 
 struct public_user {
     std::string id;

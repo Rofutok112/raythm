@@ -13,6 +13,7 @@
 #include "mv/mv_storage.h"
 #include "network/auth_client.h"
 #include "network/ranking_client.h"
+#include "network/server_environment.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
 #include "ranking_service.h"
@@ -95,7 +96,7 @@ std::string current_manifest_server_url() {
     if (!summary.server_url.empty()) {
         return auth::normalize_server_url(summary.server_url);
     }
-    return auth::normalize_server_url(auth::kDefaultServerUrl);
+    return server_environment::active_server_url_from_settings();
 }
 
 std::string expected_remote_song_id(const std::string& server_url,

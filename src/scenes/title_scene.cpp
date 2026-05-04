@@ -557,6 +557,7 @@ bool title_scene::handle_home_input(bool suppress_pointer_this_frame) {
 void title_scene::update_settings_mode(float dt) {
     if (settings_overlay_.closing()) {
         if (settings_overlay_.closed()) {
+            auth_overlay::refresh_auth_state(play_state_.auth);
             const hub_mode return_mode = settings_return_mode_;
             switch (return_mode) {
                 case hub_mode::title:

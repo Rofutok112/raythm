@@ -179,6 +179,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/network/json_helpers.h
         src/network/ranking_client.cpp
         src/network/ranking_client.h
+        src/network/server_environment.cpp
+        src/network/server_environment.h
         src/updater/update_verify.cpp
         src/updater/update_verify.h
         src/core/app_paths.cpp
@@ -520,6 +522,8 @@ add_executable(settings_io_smoke
         src/core/app_paths.h
         src/gameplay/settings_io.cpp
         src/gameplay/settings_io.h
+        src/network/server_environment.cpp
+        src/network/server_environment.h
         src/tests/settings_io_smoke.cpp)
 
 add_executable(local_catalog_database_smoke
@@ -619,6 +623,8 @@ add_executable(ranking_service_smoke
         src/network/json_helpers.h
         src/network/ranking_client.cpp
         src/network/ranking_client.h
+        src/network/server_environment.cpp
+        src/network/server_environment.h
         src/updater/update_verify.cpp
         src/updater/update_verify.h
         src/tests/ranking_service_smoke.cpp)

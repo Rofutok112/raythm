@@ -12,7 +12,7 @@
 
 namespace settings {
 
-enum class page_id { gameplay, audio, video, key_config };
+enum class page_id { gameplay, audio, video, network, key_config };
 
 struct page_descriptor {
     const char* navigation_label;
@@ -21,7 +21,7 @@ struct page_descriptor {
 };
 
 inline constexpr ui::draw_layer kLayer = ui::draw_layer::base;
-inline constexpr int kPageCount = 4;
+inline constexpr int kPageCount = 5;
 inline constexpr float kSliderLeftInset = 327.0f;
 inline constexpr float kSliderRightInset = 63.0f;
 inline constexpr float kSliderTopOffset = 39.0f;
@@ -62,6 +62,7 @@ inline constexpr std::array<page_descriptor, kPageCount> kPageDescriptors = {{
     {"Gameplay", "Gameplay", "Play feel and lane settings"},
     {"Audio", "Audio", "BGM and sound effect volume"},
     {"Video", "Video", "Display and frame rate settings"},
+    {"Network", "Network", "Server environment"},
     {"Key Config", "Key Config", "Per-lane keyboard bindings"},
 }};
 
@@ -74,7 +75,9 @@ inline const Rectangle kSidebarHeaderRect = ui::place(kSidebarRect, kSidebarItem
                                                       ui::anchor::top_left, ui::anchor::top_left, kSidebarHeaderOffset);
 inline const Rectangle kSidebarHintRect = ui::place(kSidebarRect, kSidebarItemWidth, kSidebarHintHeight,
                                                     ui::anchor::top_left, ui::anchor::top_left, kSidebarHintOffset);
-inline const Rectangle kTabArea = ui::place(kSidebarRect, kSidebarItemWidth, 4.0f * kTabRowHeight + 3.0f * kTabRowGap,
+inline const Rectangle kTabArea = ui::place(kSidebarRect, kSidebarItemWidth,
+                                            static_cast<float>(kPageCount) * kTabRowHeight +
+                                                static_cast<float>(kPageCount - 1) * kTabRowGap,
                                             ui::anchor::top_center, ui::anchor::top_center, kTabAreaOffset);
 inline const Rectangle kBackRect = ui::place(kSidebarRect, kSidebarItemWidth, kBackHeight,
                                              ui::anchor::bottom_center, ui::anchor::bottom_center, kBackOffset);

@@ -67,6 +67,7 @@ title_settings_overlay::title_settings_overlay(game_settings& settings)
     : gameplay_page_(settings),
       audio_page_(settings, runtime_applier_),
       video_page_(settings, runtime_applier_),
+      network_page_(settings),
       key_config_page_(settings) {
 }
 
@@ -77,6 +78,7 @@ void title_settings_overlay::open() {
     gameplay_page_.reset_interaction();
     audio_page_.reset_interaction();
     video_page_.reset_interaction();
+    network_page_.reset_interaction();
     key_config_page_.reset();
 }
 
@@ -201,6 +203,9 @@ void title_settings_overlay::update_current_page() {
         case settings::page_id::video:
             video_page_.update();
             break;
+        case settings::page_id::network:
+            network_page_.update();
+            break;
         case settings::page_id::key_config:
             key_config_page_.update();
             break;
@@ -218,6 +223,9 @@ void title_settings_overlay::draw_current_page() const {
         case settings::page_id::video:
             video_page_.draw();
             break;
+        case settings::page_id::network:
+            network_page_.draw();
+            break;
         case settings::page_id::key_config:
             key_config_page_.draw();
             break;
@@ -228,6 +236,7 @@ void title_settings_overlay::change_page(settings::page_id next_page) {
     gameplay_page_.reset_interaction();
     audio_page_.reset_interaction();
     video_page_.reset_interaction();
+    network_page_.reset_interaction();
     if (current_page_ == settings::page_id::key_config && next_page != settings::page_id::key_config) {
         key_config_page_.clear_selection();
     }
