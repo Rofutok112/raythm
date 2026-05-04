@@ -76,3 +76,54 @@ Authoritative fields:
 
 Bindings map local IDs to remote IDs per server URL and origin. They are not a
 metadata cache and should not duplicate song/chart display fields.
+
+## Server Contract
+
+Uploads use multipart form-data. The server can still parse uploaded files, but
+the client now sends normalized metadata fields as the preferred contract.
+
+Song upload fields:
+
+- `metadataSchemaVersion`: `2`
+- `contentSource`: `community`
+- `clientSongId`: local song ID from `song.json`
+- `title`
+- `artist`
+- `baseBpm`
+- `durationSec`
+- `previewStartMs`
+- `songVersion`
+- `songJsonSha256`
+- `songJsonFingerprint`
+- `audioSha256`
+- `jacketSha256`
+- `externalLinks`
+- files: `audio`, `jacket`
+
+Chart upload fields:
+
+- `metadataSchemaVersion`: `2`
+- `contentSource`: `community`
+- `songId`: remote song ID assigned by the server
+- `clientSongId`: local song ID
+- `clientChartId`: local chart ID
+- `keyCount`
+- `difficultyName`
+- `chartAuthor`
+- `formatVersion`
+- `resolution`
+- `offset`
+- `noteCount`
+- `minBpm`
+- `maxBpm`
+- `calculatedLevel`
+- `difficultyRulesetId`
+- `difficultyRulesetVersion`
+- `chartSha256`
+- `chartFingerprint`
+- file: `chart`
+
+Chart catalog responses should return the same normalized display fields:
+`noteCount`, `minBpm`, `maxBpm`, and `calculatedLevel`. The client accepts
+`level` as a transition alias for `calculatedLevel`, and snake_case aliases for
+server implementations that have not moved to camelCase yet.
