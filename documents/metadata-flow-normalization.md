@@ -16,9 +16,8 @@ The canonical runtime names are snake_case. Serialized JSON and remote payloads
 use camelCase. `preview_start_ms` is the canonical preview unit; seconds are a
 runtime convenience derived from it.
 
-Newly written `song.json` files include `songId`. Loading still accepts older
-files that omit it and falls back to the directory name, but new content should
-not rely on that fallback.
+`songId` is required in `song.json`. The loader no longer falls back to the
+directory name.
 
 ## Chart Metadata
 
@@ -32,9 +31,8 @@ Authoritative fields:
 `chartId`, `songId`, `keyCount`, `difficulty`, `chartAuthor`, `formatVersion`,
 `resolution`, and `offset`.
 
-Newly written `.rchart` files include `chartId` and `songId` when available.
-`level` remains excluded from the file format because runtime level is derived
-from chart notes.
+`.rchart` files must include `chartId` and `songId`. `level` remains excluded
+from the file format because runtime level is derived from chart notes.
 
 ## Display Metadata
 
@@ -87,6 +85,7 @@ Song upload fields:
 - `metadataSchemaVersion`: `2`
 - `contentSource`: `community`
 - `clientSongId`: local song ID from `song.json`
+- `visibility`: currently `public`
 - `title`
 - `artist`
 - `baseBpm`
@@ -107,6 +106,7 @@ Chart upload fields:
 - `songId`: remote song ID assigned by the server
 - `clientSongId`: local song ID
 - `clientChartId`: local chart ID
+- `visibility`: currently `public`
 - `keyCount`
 - `difficultyName`
 - `chartAuthor`
@@ -122,6 +122,14 @@ Chart upload fields:
 - `chartSha256`
 - `chartFingerprint`
 - file: `chart`
+
+Upload success responses:
+
+- Song upload: `{ "song": { "id": "<remoteSongId>" } }`
+- Chart upload: `{ "chart": { "id": "<remoteChartId>" } }`
+
+Paged catalog responses use `{ "items": [...], "total": number }`. Song detail
+uses `{ "song": { ... } }`.
 
 Song catalog responses should return `id`, `title`, `artist`, `baseBpm`,
 `durationSec`, `previewStartMs`, `songVersion`, `contentSource`, `audioUrl`,
@@ -140,3 +148,8 @@ yet. New server work should prefer camelCase.
 The authenticated "my uploads" responses should use the same song and chart
 field names. Client-local IDs should stay in `clientSongId` and
 `clientChartId`; server IDs should stay in `id` and `songId`.
+
+Manifest responses are verification-only and should prefer camelCase field
+names: `songJsonSha256`, `songJsonFingerprint`, `audioSha256`, `jacketSha256`,
+`chartSha256`, and `chartFingerprint`. The client still accepts snake_case
+aliases for transition responses.

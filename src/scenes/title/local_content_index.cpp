@@ -6,7 +6,7 @@
 namespace local_content_index {
 namespace {
 
-online_song_binding to_index_binding(const title_upload_mapping::song_mapping_entry& entry) {
+online_song_binding to_index_binding(const local_content_binding::song_binding& entry) {
     return {
         .server_url = entry.server_url,
         .local_song_id = entry.local_song_id,
@@ -15,7 +15,7 @@ online_song_binding to_index_binding(const title_upload_mapping::song_mapping_en
     };
 }
 
-online_chart_binding to_index_binding(const title_upload_mapping::chart_mapping_entry& entry) {
+online_chart_binding to_index_binding(const local_content_binding::chart_binding& entry) {
     return {
         .server_url = entry.server_url,
         .local_chart_id = entry.local_chart_id,
@@ -45,14 +45,14 @@ void unlink_charts_for_song(const std::string& local_song_id) {
 }
 
 snapshot load_snapshot() {
-    const title_upload_mapping::store mappings = local_content_database::load_mappings();
+    const local_content_binding::store mappings = local_content_database::load_mappings();
     snapshot index;
     index.songs.reserve(mappings.songs.size());
-    for (const title_upload_mapping::song_mapping_entry& entry : mappings.songs) {
+    for (const local_content_binding::song_binding& entry : mappings.songs) {
         index.songs.push_back(to_index_binding(entry));
     }
     index.charts.reserve(mappings.charts.size());
-    for (const title_upload_mapping::chart_mapping_entry& entry : mappings.charts) {
+    for (const local_content_binding::chart_binding& entry : mappings.charts) {
         index.charts.push_back(to_index_binding(entry));
     }
     return index;
@@ -104,28 +104,28 @@ std::optional<online_chart_binding> find_chart_by_remote(const snapshot& index,
 
 std::optional<online_song_binding> find_song_by_local(const std::string& server_url,
                                                       const std::string& local_song_id) {
-    const std::optional<title_upload_mapping::song_mapping_entry> binding =
+    const std::optional<local_content_binding::song_binding> binding =
         local_content_database::find_song_by_local(server_url, local_song_id);
     return binding.has_value() ? std::optional<online_song_binding>(to_index_binding(*binding)) : std::nullopt;
 }
 
 std::optional<online_song_binding> find_song_by_remote(const std::string& server_url,
                                                        const std::string& remote_song_id) {
-    const std::optional<title_upload_mapping::song_mapping_entry> binding =
+    const std::optional<local_content_binding::song_binding> binding =
         local_content_database::find_song_by_remote(server_url, remote_song_id);
     return binding.has_value() ? std::optional<online_song_binding>(to_index_binding(*binding)) : std::nullopt;
 }
 
 std::optional<online_chart_binding> find_chart_by_local(const std::string& server_url,
                                                         const std::string& local_chart_id) {
-    const std::optional<title_upload_mapping::chart_mapping_entry> binding =
+    const std::optional<local_content_binding::chart_binding> binding =
         local_content_database::find_chart_by_local(server_url, local_chart_id);
     return binding.has_value() ? std::optional<online_chart_binding>(to_index_binding(*binding)) : std::nullopt;
 }
 
 std::optional<online_chart_binding> find_chart_by_remote(const std::string& server_url,
                                                          const std::string& remote_chart_id) {
-    const std::optional<title_upload_mapping::chart_mapping_entry> binding =
+    const std::optional<local_content_binding::chart_binding> binding =
         local_content_database::find_chart_by_remote(server_url, remote_chart_id);
     return binding.has_value() ? std::optional<online_chart_binding>(to_index_binding(*binding)) : std::nullopt;
 }

@@ -239,10 +239,9 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/create_upload_client.h
         src/scenes/title/local_content_database.cpp
         src/scenes/title/local_content_database.h
+        src/scenes/title/local_content_binding.h
         src/scenes/title/local_content_index.cpp
         src/scenes/title/local_content_index.h
-        src/scenes/title/upload_mapping_store.cpp
-        src/scenes/title/upload_mapping_store.h
         src/scenes/title/online_download_internal.h
         src/scenes/title/online_download_catalog.cpp
         src/scenes/title/online_download_remote_client.cpp
@@ -523,21 +522,6 @@ add_executable(settings_io_smoke
         src/gameplay/settings_io.h
         src/tests/settings_io_smoke.cpp)
 
-add_executable(upload_mapping_store_smoke
-        src/core/app_paths.cpp
-        src/core/app_paths.h
-        src/core/local_sqlite.cpp
-        src/core/local_sqlite.h
-        src/scenes/title/local_content_database.cpp
-        src/scenes/title/local_content_database.h
-        src/scenes/title/local_content_index.cpp
-        src/scenes/title/local_content_index.h
-        src/gameplay/chart_identity_store.cpp
-        src/gameplay/chart_identity_store.h
-        src/scenes/title/upload_mapping_store.cpp
-        src/scenes/title/upload_mapping_store.h
-        src/tests/upload_mapping_store_smoke.cpp)
-
 add_executable(local_catalog_database_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
@@ -551,6 +535,20 @@ add_executable(local_catalog_database_smoke
         src/scenes/shared/scene_fade.h
         src/models/data_models.h
         src/tests/local_catalog_database_smoke.cpp)
+
+add_executable(local_content_index_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/local_sqlite.cpp
+        src/core/local_sqlite.h
+        src/gameplay/chart_identity_store.cpp
+        src/gameplay/chart_identity_store.h
+        src/scenes/title/local_content_binding.h
+        src/scenes/title/local_content_database.cpp
+        src/scenes/title/local_content_database.h
+        src/scenes/title/local_content_index.cpp
+        src/scenes/title/local_content_index.h
+        src/tests/local_content_index_smoke.cpp)
 
 add_executable(mv_storage_smoke
         src/core/app_paths.cpp
@@ -613,8 +611,6 @@ add_executable(ranking_service_smoke
         src/gameplay/scoring_ruleset_runtime.h
         src/gameplay/song_fingerprint.cpp
         src/gameplay/song_fingerprint.h
-        src/scenes/title/upload_mapping_store.cpp
-        src/scenes/title/upload_mapping_store.h
         src/network/auth_client.cpp
         src/network/auth_client.h
         src/network/http_client.cpp
@@ -866,8 +862,8 @@ set(RAYTHM_SMOKE_TARGETS
         song_loader_smoke
         song_select_state_smoke
         settings_io_smoke
-        upload_mapping_store_smoke
         local_catalog_database_smoke
+        local_content_index_smoke
         mv_storage_smoke
         input_handler_smoke
         timing_engine_smoke
@@ -910,8 +906,8 @@ target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)
 target_link_libraries(update_version_smoke PRIVATE winhttp)
 target_link_libraries(song_loader_smoke PRIVATE sqlite3)
-target_link_libraries(upload_mapping_store_smoke PRIVATE sqlite3 crypt32)
 target_link_libraries(local_catalog_database_smoke PRIVATE sqlite3 raylib)
+target_link_libraries(local_content_index_smoke PRIVATE sqlite3)
 target_link_libraries(song_select_state_smoke PRIVATE raylib)
 target_link_libraries(settings_io_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)

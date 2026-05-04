@@ -35,6 +35,10 @@ std::string format_float(float value) {
 }
 
 bool song_writer::write_song_json(const song_meta& meta, const std::string& directory) {
+    if (meta.song_id.empty()) {
+        return false;
+    }
+
     std::filesystem::create_directories(path_utils::from_utf8(directory));
 
     const std::filesystem::path json_path = path_utils::from_utf8(directory) / "song.json";
@@ -44,9 +48,7 @@ bool song_writer::write_song_json(const song_meta& meta, const std::string& dire
     }
 
     out << "{\n";
-    if (!meta.song_id.empty()) {
-        out << "  \"songId\": \"" << escape_json_string(meta.song_id) << "\",\n";
-    }
+    out << "  \"songId\": \"" << escape_json_string(meta.song_id) << "\",\n";
     out << "  \"title\": \"" << escape_json_string(meta.title) << "\",\n";
     out << "  \"artist\": \"" << escape_json_string(meta.artist) << "\",\n";
     out << "  \"baseBpm\": " << format_float(meta.base_bpm) << ",\n";

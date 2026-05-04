@@ -162,9 +162,11 @@ std::optional<ranking_client::submit_response> parse_submit_response(const std::
 
 std::optional<ranking_client::chart_manifest> parse_chart_manifest_response(const std::string& body) {
     const auto available = json::extract_bool(body, "available");
-    const auto chart_id = json::extract_string(body, "chart_id");
-    const auto song_id = json::extract_string(body, "song_id");
-    if (!available.has_value() || !chart_id.has_value() || !song_id.has_value()) {
+    const auto chart_id = json::extract_string(body, "chartId")
+        .value_or(json::extract_string(body, "chart_id").value_or(""));
+    const auto song_id = json::extract_string(body, "songId")
+        .value_or(json::extract_string(body, "song_id").value_or(""));
+    if (!available.has_value() || chart_id.empty() || song_id.empty()) {
         return std::nullopt;
     }
 
@@ -173,14 +175,18 @@ std::optional<ranking_client::chart_manifest> parse_chart_manifest_response(cons
         .message = json::extract_string(body, "message").value_or(""),
         .content_source = json::extract_string(body, "content_source").value_or(
             json::extract_string(body, "contentSource").value_or("")),
-        .chart_id = *chart_id,
-        .song_id = *song_id,
-        .song_json_sha256 = json::extract_string(body, "song_json_sha256").value_or(""),
+        .chart_id = chart_id,
+        .song_id = song_id,
+        .song_json_sha256 = json::extract_string(body, "songJsonSha256").value_or(
+            json::extract_string(body, "song_json_sha256").value_or("")),
         .song_json_fingerprint = json::extract_string(body, "song_json_fingerprint").value_or(
             json::extract_string(body, "songJsonFingerprint").value_or("")),
-        .audio_sha256 = json::extract_string(body, "audio_sha256").value_or(""),
-        .jacket_sha256 = json::extract_string(body, "jacket_sha256").value_or(""),
-        .chart_sha256 = json::extract_string(body, "chart_sha256").value_or(""),
+        .audio_sha256 = json::extract_string(body, "audioSha256").value_or(
+            json::extract_string(body, "audio_sha256").value_or("")),
+        .jacket_sha256 = json::extract_string(body, "jacketSha256").value_or(
+            json::extract_string(body, "jacket_sha256").value_or("")),
+        .chart_sha256 = json::extract_string(body, "chartSha256").value_or(
+            json::extract_string(body, "chart_sha256").value_or("")),
         .chart_fingerprint = json::extract_string(body, "chart_fingerprint").value_or(
             json::extract_string(body, "chartFingerprint").value_or("")),
     };
@@ -188,8 +194,9 @@ std::optional<ranking_client::chart_manifest> parse_chart_manifest_response(cons
 
 std::optional<ranking_client::song_manifest> parse_song_manifest_response(const std::string& body) {
     const auto available = json::extract_bool(body, "available");
-    const auto song_id = json::extract_string(body, "song_id");
-    if (!available.has_value() || !song_id.has_value()) {
+    const auto song_id = json::extract_string(body, "songId")
+        .value_or(json::extract_string(body, "song_id").value_or(""));
+    if (!available.has_value() || song_id.empty()) {
         return std::nullopt;
     }
 
@@ -198,12 +205,15 @@ std::optional<ranking_client::song_manifest> parse_song_manifest_response(const 
         .message = json::extract_string(body, "message").value_or(""),
         .content_source = json::extract_string(body, "content_source").value_or(
             json::extract_string(body, "contentSource").value_or("")),
-        .song_id = *song_id,
-        .song_json_sha256 = json::extract_string(body, "song_json_sha256").value_or(""),
+        .song_id = song_id,
+        .song_json_sha256 = json::extract_string(body, "songJsonSha256").value_or(
+            json::extract_string(body, "song_json_sha256").value_or("")),
         .song_json_fingerprint = json::extract_string(body, "song_json_fingerprint").value_or(
             json::extract_string(body, "songJsonFingerprint").value_or("")),
-        .audio_sha256 = json::extract_string(body, "audio_sha256").value_or(""),
-        .jacket_sha256 = json::extract_string(body, "jacket_sha256").value_or(""),
+        .audio_sha256 = json::extract_string(body, "audioSha256").value_or(
+            json::extract_string(body, "audio_sha256").value_or("")),
+        .jacket_sha256 = json::extract_string(body, "jacketSha256").value_or(
+            json::extract_string(body, "jacket_sha256").value_or("")),
     };
 }
 

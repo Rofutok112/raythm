@@ -102,10 +102,6 @@ std::filesystem::path auth_device_path() {
     return app_data_root() / "auth_device.json";
 }
 
-std::filesystem::path upload_mapping_path() {
-    return app_data_root() / "upload_mappings.txt";
-}
-
 std::filesystem::path local_content_db_path() {
     return app_data_root() / "local_content.db";
 }

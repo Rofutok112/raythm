@@ -83,11 +83,6 @@ std::optional<std::pair<std::string, std::string>> parse_metadata_entry(const nu
         }
     }
 
-    const std::vector<std::string> tokens = split_csv_line(line.second);
-    if (tokens.size() == 2 && !tokens[0].empty() && !tokens[1].empty()) {
-        return std::make_pair(tokens[0], tokens[1]);
-    }
-
     return std::nullopt;
 }
 
@@ -168,9 +163,6 @@ chart_parse_result chart_parser::parse(const std::string& file_path) {
 
     chart_data data;
     data.meta = parse_metadata(sections["Metadata"], errors);
-    if (data.meta.chart_id.empty()) {
-        data.meta.chart_id = path_utils::to_utf8(path_utils::from_utf8(file_path).stem());
-    }
     data.timing_events = parse_timing(sections["Timing"], errors);
     data.notes = parse_notes(sections["Notes"], errors);
 
@@ -199,7 +191,7 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
     for (const numbered_line& line : lines) {
         const std::optional<std::pair<std::string, std::string>> entry = parse_metadata_entry(line);
         if (!entry.has_value()) {
-            errors.push_back(format_line_error(line.first, "Metadata entry must be 'key=value' or 'key,value'"));
+            errors.push_back(format_line_error(line.first, "Metadata entry must be 'key=value'"));
             continue;
         }
 
@@ -222,10 +214,6 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
             }
         } else if (key == "difficulty") {
             meta.difficulty = value;
-        } else if (key == "level") {
-            // Legacy field. Runtime levels are always calculated from chart notes.
-        } else if (key == "chartName" || key == "description") {
-            // Accept legacy metadata fields for backward compatibility, but they are no longer used.
         } else if (key == "chartAuthor") {
             meta.chart_author = value;
         } else if (key == "formatVersion") {
@@ -251,15 +239,20 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
             }
         } else if (key == "songId") {
             meta.song_id = value;
+        } else {
+            errors.push_back(format_line_error(line.first, "Unknown metadata key: " + key));
         }
     }
 
-    const std::array<std::string, 5> required_fields = {
+    const std::array<std::string, 8> required_fields = {
+        "chartId",
+        "songId",
         "keyCount",
         "difficulty",
         "chartAuthor",
         "formatVersion",
         "resolution",
+        "offset",
     };
 
     for (const std::string& name : required_fields) {

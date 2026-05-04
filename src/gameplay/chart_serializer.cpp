@@ -41,18 +41,18 @@ const char* note_type_name(note_type type) {
 }
 
 bool chart_serializer::serialize(const chart_data& data, const std::string& file_path) {
+    if (data.meta.chart_id.empty() || data.meta.song_id.empty()) {
+        return false;
+    }
+
     std::ofstream output(path_utils::from_utf8(file_path), std::ios::trunc);
     if (!output.is_open()) {
         return false;
     }
 
     output << "[Metadata]\n";
-    if (!data.meta.chart_id.empty()) {
-        output << "chartId=" << data.meta.chart_id << '\n';
-    }
-    if (!data.meta.song_id.empty()) {
-        output << "songId=" << data.meta.song_id << '\n';
-    }
+    output << "chartId=" << data.meta.chart_id << '\n';
+    output << "songId=" << data.meta.song_id << '\n';
     output << "keyCount=" << data.meta.key_count << '\n';
     output << "difficulty=" << data.meta.difficulty << '\n';
     output << "chartAuthor=" << data.meta.chart_author << '\n';

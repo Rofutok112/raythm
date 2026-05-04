@@ -57,11 +57,12 @@ bool expect_failure(const std::string& path, const std::string& expected_fragmen
     return false;
 }
 
-bool expect_chart_id_fallback() {
+bool expect_missing_chart_id_failure() {
     const std::filesystem::path path =
         std::filesystem::temp_directory_path() / "raythm_parser_external_id.rchart";
     std::ofstream output(path, std::ios::trunc);
     output << "[Metadata]\n"
+           << "songId=parser-song\n"
            << "keyCount=4\n"
            << "difficulty=Fallback\n"
            << "chartAuthor=Codex\n"
@@ -77,18 +78,17 @@ bool expect_chart_id_fallback() {
 
     const chart_parse_result result = chart_parser::parse(path.string());
     std::filesystem::remove(path);
-    if (!result.success || !result.data.has_value()) {
-        std::cerr << "Expected chartId fallback chart to load\n";
-        for (const std::string& error : result.errors) {
-            std::cerr << "  " << error << '\n';
+    if (result.success) {
+        std::cerr << "Expected chart without chartId to fail\n";
+        return false;
+    }
+    for (const std::string& error : result.errors) {
+        if (error.find("Missing required metadata field: chartId") != std::string::npos) {
+            return true;
         }
-        return false;
     }
-    if (result.data->meta.chart_id != "raythm_parser_external_id") {
-        std::cerr << "Expected chartId to fall back to the file stem\n";
-        return false;
-    }
-    return true;
+    std::cerr << "Expected missing chartId error\n";
+    return false;
 }
 }
 
@@ -98,7 +98,7 @@ int main() {
     ok = expect_success(chart_path("parser_valid.rchart")) && ok;
     ok = expect_failure(chart_path("parser_invalid_overlap.rchart"), "overlapping notes") && ok;
     ok = expect_failure(chart_path("parser_invalid_metadata.rchart"), "keyCount must be 4 or 6") && ok;
-    ok = expect_chart_id_fallback() && ok;
+    ok = expect_missing_chart_id_failure() && ok;
 
     if (!ok) {
         return EXIT_FAILURE;
