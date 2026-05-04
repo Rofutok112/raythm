@@ -92,9 +92,12 @@ void apply_context_menu_command(scene_manager& manager, state& state,
         return;
     case context_menu_command::import_chart:
     {
+        const int target_song_index = state.context_menu.song_index >= 0
+            ? state.context_menu.song_index
+            : state.selected_song_index;
         close_context_menu(state);
         transfer_result result;
-        if (const auto batch = prepare_chart_imports(state, result); batch.has_value()) {
+        if (const auto batch = prepare_chart_imports(state, target_song_index, result); batch.has_value()) {
             if (batch->overwrite_count > 0) {
                 open_overwrite_chart_confirmation(batch->requests);
             } else {
