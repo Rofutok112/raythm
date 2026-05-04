@@ -69,6 +69,7 @@ jobs:
         run: >
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Release
+          -DRAYTHM_SERVER_ENV=production
           "-DRAYTHM_PACKAGE_VERSION=${{ steps.meta.outputs.package_version }}"
           "-DRAYTHM_PACKAGE_FILE_NAME=${{ steps.meta.outputs.asset_name }}"
 

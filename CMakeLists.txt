@@ -12,7 +12,7 @@ set(RAYTHM_PACKAGE_VERSION "0.1.0" CACHE STRING "Version string used for Windows
 set(RAYTHM_PACKAGE_FILE_NAME
         "raythm-${RAYTHM_PACKAGE_VERSION}-windows-x64"
         CACHE STRING "Package file name without extension")
-set(RAYTHM_SERVER_ENV "production" CACHE STRING "Server environment: production or development")
+set(RAYTHM_SERVER_ENV "development" CACHE STRING "Server environment: production or development")
 set_property(CACHE RAYTHM_SERVER_ENV PROPERTY STRINGS production development)
 set(RAYTHM_API_BASE_URL "" CACHE STRING "Optional API base URL override for local builds")
 set(RAYTHM_BASS_DIR
