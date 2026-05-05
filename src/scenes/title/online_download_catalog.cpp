@@ -69,6 +69,7 @@ song_select::song_entry make_remote_song_entry(const remote_song_payload& song, 
     entry.song.meta.song_id = song.id;
     entry.song.meta.title = song.title;
     entry.song.meta.artist = song.artist;
+    entry.song.meta.genre = song.genre;
     entry.song.meta.base_bpm = song.base_bpm;
     entry.song.meta.duration_seconds = song.duration_seconds;
     entry.song.meta.audio_url = make_absolute_remote_url(server_url, song.audio_url);

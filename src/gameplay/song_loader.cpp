@@ -182,6 +182,7 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
     const std::optional<std::string> song_id = extract_json_string(content, "songId");
     const std::optional<std::string> title = extract_json_string(content, "title");
     const std::optional<std::string> artist = extract_json_string(content, "artist");
+    const std::optional<std::string> genre = extract_json_string(content, "genre");
     const std::optional<std::string> audio_file = extract_json_string(content, "audioFile");
     const std::optional<std::string> jacket_file = extract_json_string(content, "jacketFile");
     const std::optional<std::string> difficulty_bpm = extract_json_number_token(content, "baseBpm");
@@ -204,6 +205,10 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
         errors.push_back("Missing required field artist in " + path_utils::to_utf8(song_json_path));
     } else {
         meta.artist = *artist;
+    }
+
+    if (genre.has_value()) {
+        meta.genre = *genre;
     }
 
     if (!audio_file.has_value()) {
@@ -239,19 +244,6 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
         }
     } else {
         errors.push_back("Missing required field previewStartMs in " + path_utils::to_utf8(song_json_path));
-    }
-
-    const std::optional<std::string> sns_youtube = extract_json_string(content, "snsYoutube");
-    if (sns_youtube.has_value()) {
-        meta.sns_youtube = *sns_youtube;
-    }
-    const std::optional<std::string> sns_niconico = extract_json_string(content, "snsNiconico");
-    if (sns_niconico.has_value()) {
-        meta.sns_niconico = *sns_niconico;
-    }
-    const std::optional<std::string> sns_x = extract_json_string(content, "snsX");
-    if (sns_x.has_value()) {
-        meta.sns_x = *sns_x;
     }
 
     if (!song_version.has_value()) {

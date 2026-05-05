@@ -43,6 +43,7 @@ struct command {
 struct activity_item {
     std::string song_title;
     std::string artist;
+    std::string genre;
     std::string difficulty_name;
     std::string local_summary;
     std::string online_summary;

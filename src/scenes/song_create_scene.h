@@ -40,13 +40,11 @@ private:
     // Song metadata inputs
     ui::text_input_state title_input_;
     ui::text_input_state artist_input_;
+    ui::text_input_state genre_input_;
     ui::text_input_state bpm_input_;
     ui::text_input_state audio_path_input_;
     ui::text_input_state jacket_path_input_;
     ui::text_input_state preview_ms_input_;
-    ui::text_input_state sns_youtube_input_;
-    ui::text_input_state sns_niconico_input_;
-    ui::text_input_state sns_x_input_;
     square_image_picker::state jacket_picker_;
     std::string jacket_crop_source_;
 

@@ -12,6 +12,7 @@ struct remote_song_payload {
     std::string id;
     std::string title;
     std::string artist;
+    std::string genre;
     float base_bpm = 0.0f;
     float duration_seconds = 0.0f;
     int preview_start_ms = 0;

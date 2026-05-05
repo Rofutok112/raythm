@@ -51,21 +51,14 @@ bool song_writer::write_song_json(const song_meta& meta, const std::string& dire
     out << "  \"songId\": \"" << escape_json_string(meta.song_id) << "\",\n";
     out << "  \"title\": \"" << escape_json_string(meta.title) << "\",\n";
     out << "  \"artist\": \"" << escape_json_string(meta.artist) << "\",\n";
+    if (!meta.genre.empty()) {
+        out << "  \"genre\": \"" << escape_json_string(meta.genre) << "\",\n";
+    }
     out << "  \"baseBpm\": " << format_float(meta.base_bpm) << ",\n";
     out << "  \"audioFile\": \"" << escape_json_string(meta.audio_file) << "\",\n";
     out << "  \"jacketFile\": \"" << escape_json_string(meta.jacket_file) << "\",\n";
     out << "  \"previewStartMs\": " << meta.preview_start_ms << ",\n";
     out << "  \"songVersion\": " << meta.song_version;
-
-    if (!meta.sns_youtube.empty()) {
-        out << ",\n  \"snsYoutube\": \"" << escape_json_string(meta.sns_youtube) << "\"";
-    }
-    if (!meta.sns_niconico.empty()) {
-        out << ",\n  \"snsNiconico\": \"" << escape_json_string(meta.sns_niconico) << "\"";
-    }
-    if (!meta.sns_x.empty()) {
-        out << ",\n  \"snsX\": \"" << escape_json_string(meta.sns_x) << "\"";
-    }
 
     out << "\n}\n";
 

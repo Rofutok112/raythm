@@ -42,6 +42,7 @@ song_select::song_entry make_song(const fs::path& song_dir, const fs::path& char
     song.song.meta.song_id = "song-a";
     song.song.meta.title = "Alpha";
     song.song.meta.artist = "Artist";
+    song.song.meta.genre = "Fusion";
     song.song.meta.audio_file = "audio.ogg";
     song.song.meta.jacket_file = "jacket.png";
     song.song.meta.base_bpm = 128.0f;
@@ -77,6 +78,7 @@ int main() {
     song_select::catalog_data cached = song_select::local_catalog_database::load_cached_catalog();
     assert(cached.songs.size() == 1);
     assert(cached.songs[0].song.meta.song_id == "song-a");
+    assert(cached.songs[0].song.meta.genre == "Fusion");
     assert(cached.songs[0].song.meta.preview_start_seconds == 12.0f);
     assert(cached.songs[0].status == content_status::community);
     assert(cached.songs[0].charts.size() == 1);
