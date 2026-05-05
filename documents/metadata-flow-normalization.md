@@ -27,12 +27,16 @@ Authoritative fields:
 - Remote source: `/charts`
 - Runtime model: `chart_meta`
 
-`chart_meta` contains chart identity and authored metadata only:
-`chartId`, `songId`, `keyCount`, `difficulty`, `chartAuthor`, `formatVersion`,
-`resolution`, and `offset`.
+`chart_meta` contains chart identity, authored metadata, and a runtime-only
+parent song ID:
+`chartId`, `keyCount`, `difficulty`, `chartAuthor`, `formatVersion`,
+`resolution`, and `offset` are serialized in `.rchart`; `songId` is filled from
+the parent song folder/catalog row after loading.
 
-`.rchart` files must include `chartId` and `songId`. `level` remains excluded
-from the file format because runtime level is derived from chart notes.
+`.rchart` files must include `chartId`, `keyCount`, `difficulty`,
+`chartAuthor`, `formatVersion`, `resolution`, and `offset`. `songId` is not a
+file-format relationship field. `level` remains excluded from the file format
+because runtime level is derived from chart notes.
 
 ## Display Metadata
 
@@ -103,7 +107,7 @@ Chart upload fields:
 - `metadataSchemaVersion`: `2`
 - `contentSource`: `community`
 - `songId`: remote song ID assigned by the server
-- `clientSongId`: local song ID
+- `clientSongId`: local song ID from the parent song, not from the `.rchart`
 - `clientChartId`: local chart ID
 - `visibility`: currently `public`
 - `keyCount`

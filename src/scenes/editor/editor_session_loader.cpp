@@ -70,7 +70,9 @@ editor_session_load_result load(const editor_start_request& request) {
     } else if (request.chart_path.has_value()) {
         const chart_parse_result parse_result = chart_parser::parse(*request.chart_path);
         if (parse_result.success && parse_result.data.has_value()) {
-            result.state->load(*parse_result.data, *request.chart_path);
+            chart_data loaded_chart = *parse_result.data;
+            loaded_chart.meta.song_id = request.song.meta.song_id;
+            result.state->load(loaded_chart, *request.chart_path);
             result.chart_path = request.chart_path;
         } else {
             result.state->load(make_new_chart_data(request), "");
