@@ -125,7 +125,7 @@ void draw(const song_select::state& state, const draw_config& config) {
                                   {badge_rect.x - 70.0f, row.y + kArtistOffsetY + 2.0f, 58.0f, 18.0f},
                                   with_alpha(t.text_muted, config.alpha), ui::text_align::right);
         }
-        content_status_badge::draw(badge_rect, song.status, config.alpha, 12);
+        content_status_badge::draw_compound(badge_rect, song.source_status, song.status, config.alpha, 12);
     }
 }
 

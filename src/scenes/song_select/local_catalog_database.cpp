@@ -23,8 +23,10 @@ using local_sqlite::statement;
 void ensure_optional_schema(sqlite3* database) {
     exec(database, "ALTER TABLE local_songs ADD COLUMN genre TEXT NOT NULL DEFAULT '';");
     exec(database, "ALTER TABLE local_songs ADD COLUMN duration_seconds REAL NOT NULL DEFAULT 0;");
+    exec(database, "ALTER TABLE local_songs ADD COLUMN source_status TEXT NOT NULL DEFAULT 'local';");
     exec(database, "ALTER TABLE local_charts ADD COLUMN min_bpm REAL NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_charts ADD COLUMN max_bpm REAL NOT NULL DEFAULT 0;");
+    exec(database, "ALTER TABLE local_charts ADD COLUMN source_status TEXT NOT NULL DEFAULT 'local';");
 }
 
 bool ensure_schema(sqlite3* database) {
@@ -44,6 +46,7 @@ bool ensure_schema(sqlite3* database) {
              "preview_start_ms INTEGER NOT NULL,"
              "song_version INTEGER NOT NULL,"
              "status TEXT NOT NULL,"
+             "source_status TEXT NOT NULL DEFAULT 'local',"
              "updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))"
              ");") &&
         exec(database,
@@ -60,6 +63,7 @@ bool ensure_schema(sqlite3* database) {
              "min_bpm REAL NOT NULL DEFAULT 0,"
              "max_bpm REAL NOT NULL DEFAULT 0,"
              "status TEXT NOT NULL,"
+             "source_status TEXT NOT NULL DEFAULT 'local',"
              "updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))"
              ");");
     if (ready) {
@@ -161,8 +165,8 @@ content_status parse_status(std::string value) {
 void put_song(sqlite3* database, const song_entry& song) {
     statement query(database,
                     "INSERT INTO local_songs(song_id, title, artist, genre, directory, audio_file, jacket_file, "
-                    "base_bpm, duration_seconds, preview_start_ms, song_version, status, updated_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
+                    "base_bpm, duration_seconds, preview_start_ms, song_version, status, source_status, updated_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
                     "ON CONFLICT(song_id) DO UPDATE SET "
                     "title = excluded.title,"
                     "artist = excluded.artist,"
@@ -175,6 +179,7 @@ void put_song(sqlite3* database, const song_entry& song) {
                     "preview_start_ms = excluded.preview_start_ms,"
                     "song_version = excluded.song_version,"
                     "status = excluded.status,"
+                    "source_status = excluded.source_status,"
                     "updated_at = excluded.updated_at;");
     if (!query.valid() || song.song.meta.song_id.empty()) {
         return;
@@ -192,14 +197,15 @@ void put_song(sqlite3* database, const song_entry& song) {
     sqlite3_bind_int(query.get(), 10, song.song.meta.preview_start_ms);
     sqlite3_bind_int(query.get(), 11, song.song.meta.song_version);
     bind_text(query.get(), 12, status_label(song.status));
+    bind_text(query.get(), 13, status_label(song.source_status));
     sqlite3_step(query.get());
 }
 
 void put_chart(sqlite3* database, const chart_option& chart) {
     statement query(database,
                     "INSERT INTO local_charts(chart_id, song_id, path, difficulty, level, key_count, "
-                    "chart_author, format_version, note_count, min_bpm, max_bpm, status, updated_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
+                    "chart_author, format_version, note_count, min_bpm, max_bpm, status, source_status, updated_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
                     "ON CONFLICT(chart_id) DO UPDATE SET "
                     "song_id = excluded.song_id,"
                     "path = excluded.path,"
@@ -212,6 +218,7 @@ void put_chart(sqlite3* database, const chart_option& chart) {
                     "min_bpm = excluded.min_bpm,"
                     "max_bpm = excluded.max_bpm,"
                     "status = excluded.status,"
+                    "source_status = excluded.source_status,"
                     "updated_at = excluded.updated_at;");
     if (!query.valid() || chart.meta.chart_id.empty()) {
         return;
@@ -229,6 +236,7 @@ void put_chart(sqlite3* database, const chart_option& chart) {
     sqlite3_bind_double(query.get(), 10, chart.min_bpm);
     sqlite3_bind_double(query.get(), 11, chart.max_bpm);
     bind_text(query.get(), 12, status_label(chart.status));
+    bind_text(query.get(), 13, status_label(chart.source_status));
     sqlite3_step(query.get());
 }
 
@@ -244,11 +252,15 @@ catalog_data load_cached_catalog() {
         current_catalog_signature()) {
         return catalog;
     }
+    if (local_sqlite::metadata_value(database.get(), "local_catalog.status_schema").value_or("") != "source-v1") {
+        return catalog;
+    }
 
     std::map<std::string, song_entry> by_song_id;
     statement songs(database.get(),
                     "SELECT song_id, title, artist, genre, directory, audio_file, jacket_file, base_bpm, "
-                    "duration_seconds, preview_start_ms, song_version, status FROM local_songs ORDER BY title, song_id;");
+                    "duration_seconds, preview_start_ms, song_version, status, source_status "
+                    "FROM local_songs ORDER BY title, song_id;");
     if (!songs.valid()) {
         return catalog;
     }
@@ -267,12 +279,17 @@ catalog_data load_cached_catalog() {
         entry.song.meta.preview_start_seconds = static_cast<float>(entry.song.meta.preview_start_ms) / 1000.0f;
         entry.song.meta.song_version = sqlite3_column_int(songs.get(), 10);
         entry.status = parse_status(column_text(songs.get(), 11));
+        entry.source_status = parse_status(column_text(songs.get(), 12));
+        if ((entry.status == content_status::official || entry.status == content_status::community) &&
+            entry.source_status == content_status::local) {
+            entry.source_status = entry.status;
+        }
         by_song_id[entry.song.meta.song_id] = std::move(entry);
     }
 
     statement charts(database.get(),
                      "SELECT chart_id, song_id, path, difficulty, level, key_count, chart_author, "
-                     "format_version, note_count, min_bpm, max_bpm, status "
+                     "format_version, note_count, min_bpm, max_bpm, status, source_status "
                      "FROM local_charts ORDER BY song_id, level, difficulty;");
     if (!charts.valid()) {
         return catalog;
@@ -297,6 +314,11 @@ catalog_data load_cached_catalog() {
         chart.min_bpm = static_cast<float>(sqlite3_column_double(charts.get(), 9));
         chart.max_bpm = static_cast<float>(sqlite3_column_double(charts.get(), 10));
         chart.status = parse_status(column_text(charts.get(), 11));
+        chart.source_status = parse_status(column_text(charts.get(), 12));
+        if ((chart.status == content_status::official || chart.status == content_status::community) &&
+            chart.source_status == content_status::local) {
+            chart.source_status = chart.status;
+        }
         song_it->second.song.chart_paths.push_back(chart.path);
         song_it->second.charts.push_back(std::move(chart));
     }
@@ -328,6 +350,7 @@ void replace_catalog(const std::vector<song_entry>& songs) {
         }
     }
     local_sqlite::put_metadata(database.get(), "local_catalog.signature", current_catalog_signature());
+    local_sqlite::put_metadata(database.get(), "local_catalog.status_schema", "source-v1");
     tx.commit();
 }
 

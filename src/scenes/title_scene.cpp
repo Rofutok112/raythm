@@ -326,6 +326,20 @@ void title_scene::update_play_mode(float dt) {
             .enter_home = [this]() { enter_home_mode(false); },
             .sync_media = [this]() { sync_play_media(); },
             .request_ranking_reload = [this]() { request_play_ranking_reload(); },
+            .open_update_catalog = [this]() {
+                const song_select::song_entry* song = song_select::selected_song(play_state_);
+                if (song == nullptr) {
+                    return;
+                }
+                const auto filtered = song_select::filtered_charts_for_selected_song(play_state_);
+                const song_select::chart_option* chart = song_select::selected_chart_for(play_state_, filtered);
+                title_online_view::select_local_update_target(
+                    online_state_,
+                    song->song.meta.song_id,
+                    chart != nullptr ? chart->meta.chart_id : "",
+                    true);
+                enter_online_mode();
+            },
         });
 }
 

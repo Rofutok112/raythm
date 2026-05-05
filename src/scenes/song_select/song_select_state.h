@@ -17,6 +17,7 @@ struct chart_option {
     std::string path;
     chart_meta meta;
     content_status status = content_status::local;
+    content_status source_status = content_status::local;
     int local_note_offset_ms = 0;
     std::optional<rank> best_local_rank;
     int note_count = 0;
@@ -27,6 +28,7 @@ struct chart_option {
 struct song_entry {
     song_data song;
     content_status status = content_status::local;
+    content_status source_status = content_status::local;
     std::vector<chart_option> charts;
 };
 

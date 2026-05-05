@@ -85,7 +85,7 @@ void draw_song_row(const song_select::song_entry& song, float item_y, bool is_se
                                artist_clip_rect.y, 52.0f, artist_clip_rect.height},
                               theme.text_muted, ui::text_align::right);
     }
-    content_status_badge::draw(status_rect, song.status, 255, 10);
+    content_status_badge::draw_compound(status_rect, song.source_status, song.status, 255, 10);
 }
 
 void draw_chart_rows(const song_select::state& state,
@@ -118,8 +118,8 @@ void draw_chart_rows(const song_select::state& state,
         ui::draw_text_in_rect(TextFormat("Lv.%.1f", chart.meta.level), 17, level_rect,
                               child_selected ? theme.text_secondary : theme.text_muted, ui::text_align::left);
         draw_marquee_text(chart.meta.chart_author.c_str(), author_rect, 14, theme.text_muted, now);
-        content_status_badge::draw({rank_rect.x - 96.0f, baseline_y - 1.0f, 90.0f, 18.0f},
-                                   chart.status, 255, 9);
+        content_status_badge::draw_compound({rank_rect.x - 96.0f, baseline_y - 1.0f, 90.0f, 18.0f},
+                                            chart.source_status, chart.status, 255, 9);
         if (chart.best_local_rank.has_value()) {
             ui::draw_rect_f(rank_rect, theme.section);
             ui::draw_rect_lines(rank_rect, 1.5f, theme.border_light);

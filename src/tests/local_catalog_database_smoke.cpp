@@ -34,6 +34,7 @@ song_select::chart_option make_chart(const char* chart_id, const char* song_id, 
     chart.min_bpm = 140.0f;
     chart.max_bpm = 190.0f;
     chart.status = content_status::community;
+    chart.source_status = content_status::community;
     return chart;
 }
 
@@ -52,6 +53,7 @@ song_select::song_entry make_song(const fs::path& song_dir, const fs::path& char
     song.song.meta.song_version = 3;
     song.song.directory = song_dir.string();
     song.status = content_status::community;
+    song.source_status = content_status::community;
     song.charts.push_back(make_chart("chart-a", "song-a", chart_path));
     song.song.chart_paths.push_back(chart_path.string());
     return song;
@@ -83,11 +85,13 @@ int main() {
     assert(cached.songs[0].song.meta.duration_seconds == 95.0f);
     assert(cached.songs[0].song.meta.preview_start_seconds == 12.0f);
     assert(cached.songs[0].status == content_status::community);
+    assert(cached.songs[0].source_status == content_status::community);
     assert(cached.songs[0].charts.size() == 1);
     assert(cached.songs[0].charts[0].meta.chart_id == "chart-a");
     assert(cached.songs[0].charts[0].min_bpm == 140.0f);
     assert(cached.songs[0].charts[0].max_bpm == 190.0f);
     assert(cached.songs[0].charts[0].status == content_status::community);
+    assert(cached.songs[0].charts[0].source_status == content_status::community);
     assert(cached.songs[0].song.chart_paths.size() == 1);
 
     std::ofstream(chart_dir / "chart-b.rchart") << "new chart";

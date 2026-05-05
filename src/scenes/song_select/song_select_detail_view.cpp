@@ -150,10 +150,10 @@ void draw_song_details(const state& state, const preview_controller& preview_con
     const double now = GetTime();
     draw_marquee_text(song->song.meta.title.c_str(), detail_x + content_offset_x, layout::kJacketRect.y + 4.0f, 40,
                       with_alpha(theme.text, content_alpha), detail_max_width - 118.0f, now);
-    content_status_badge::draw(
+    content_status_badge::draw_compound(
         {detail_x + detail_max_width - 108.0f + content_offset_x,
          layout::kJacketRect.y + 13.0f, 100.0f, 24.0f},
-        song->status, content_alpha, 12);
+        song->source_status, song->status, content_alpha, 12);
     draw_marquee_text(song->song.meta.artist.c_str(), detail_x + content_offset_x, layout::kJacketRect.y + 56.0f, 28,
                       with_alpha(theme.text_secondary, content_alpha), detail_max_width, now);
     const std::string meta_line = song_meta_line(song->song.meta);
@@ -170,9 +170,9 @@ void draw_song_details(const state& state, const preview_controller& preview_con
                         with_alpha(key_mode_color(selected_chart->meta.key_count), chart_alpha));
         draw_marquee_text(difficulty_label.c_str(), difficulty_x, key_y, 28,
                           with_alpha(theme.text, chart_alpha), difficulty_width, now);
-        content_status_badge::draw(
+        content_status_badge::draw_compound(
             {difficulty_x, layout::kJacketRect.y + 158.0f, 100.0f, 22.0f},
-            selected_chart->status, chart_alpha, 11);
+            selected_chart->source_status, selected_chart->status, chart_alpha, 11);
         draw_marquee_text(selected_chart->meta.chart_author.c_str(), key_x, layout::kJacketRect.y + 194.0f, 20,
                           with_alpha(theme.text_muted, chart_alpha), detail_max_width - 94.0f, now);
         if (selected_chart->best_local_rank.has_value()) {
