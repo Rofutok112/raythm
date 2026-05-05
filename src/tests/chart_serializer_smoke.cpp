@@ -21,6 +21,7 @@ bool almost_equal(float left, float right) {
 bool equal_chart_meta(const chart_meta& left, const chart_meta& right) {
     return left.chart_id == right.chart_id &&
            left.song_id == right.song_id &&
+           left.chart_version == right.chart_version &&
            left.key_count == right.key_count &&
            left.difficulty == right.difficulty &&
            left.chart_author == right.chart_author &&

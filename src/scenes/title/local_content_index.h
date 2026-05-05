@@ -22,6 +22,7 @@ struct online_chart_binding {
     std::string local_chart_id;
     std::string remote_chart_id;
     std::string remote_song_id;
+    int remote_chart_version = 0;
     online_origin origin = online_origin::owned_upload;
 };
 

@@ -26,6 +26,7 @@ struct remote_chart_payload {
     std::string song_id;
     int key_count = 0;
     std::string difficulty_name;
+    int chart_version = 0;
     float level = 0.0f;
     std::string chart_author;
     int format_version = 0;

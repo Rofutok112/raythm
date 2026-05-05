@@ -386,6 +386,7 @@ std::optional<remote_chart_payload> parse_remote_chart(const std::string& object
         .song_id = *song_id,
         .key_count = json::extract_int(object, "keyCount").value_or(4),
         .difficulty_name = *difficulty_name,
+        .chart_version = json::extract_int(object, "chartVersion").value_or(0),
         .level = json::extract_float(object, "calculatedLevel").value_or(0.0f),
         .chart_author = json::extract_string(object, "chartAuthor").value_or(""),
         .format_version = json::extract_int(object, "formatVersion").value_or(0),
