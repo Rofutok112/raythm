@@ -114,6 +114,7 @@ bool is_server_managed_metadata_key(const std::string& key) {
            key == "metadataSchemaVersion" ||
            key == "clientChartId" ||
            key == "clientSongId" ||
+           key == "songId" ||
            key == "difficultyRulesetId" ||
            key == "difficultyRulesetVersion";
 }
@@ -256,8 +257,6 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
                        !parse_int(value).has_value()) {
                 errors.push_back(format_line_error(line.first, key + " must be an integer"));
             }
-        } else if (key == "songId") {
-            meta.song_id = value;
         } else {
             errors.push_back(format_line_error(line.first, "Unknown metadata key: " + key));
         }

@@ -137,6 +137,7 @@ bool expect_server_managed_metadata_success() {
            << "metadataSchemaVersion=2\n"
            << "clientChartId=local-chart\n"
            << "clientSongId=local-song\n"
+           << "songId=legacy-song\n"
            << "difficultyRulesetId=raythm-local\n"
            << "difficultyRulesetVersion=1\n"
            << "chartAuthor=Codex\n"
@@ -159,7 +160,7 @@ bool expect_server_managed_metadata_success() {
         }
         return false;
     }
-    return result.data->meta.level == 0.0f;
+    return result.data->meta.level == 0.0f && result.data->meta.song_id.empty();
 }
 }
 
