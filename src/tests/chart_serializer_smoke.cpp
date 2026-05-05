@@ -150,13 +150,35 @@ int main() {
         "clientChartId=local-chart\nclientSongId=local-song\n"
         "difficultyRulesetId=raythm-local\ndifficultyRulesetVersion=1\n" +
         content.substr(content.find("keyCount="));
+    const std::string content_without_section_spacing =
+        "[Metadata]\nchartId=online-chart\nsongId=online-song\n" +
+        content.substr(content.find("keyCount="));
+    const std::string content_with_extra_blank_lines =
+        "[Metadata]\n  \nchartId=online-chart\nsongId=online-song\n\t\n\n" +
+        content.substr(content.find("keyCount=")) + "\n  \n";
+    std::string content_with_changed_bpm = content_with_ids;
+    const size_t bpm_pos = content_with_changed_bpm.find("bpm,960,180.5");
+    if (bpm_pos != std::string::npos) {
+        content_with_changed_bpm.replace(bpm_pos, std::string("bpm,960,180.5").size(), "bpm,960,181.5");
+    } else {
+        ok = false;
+    }
     const std::string fingerprint_with_ids = chart_fingerprint::build(content_with_ids);
     const std::string fingerprint_with_other_ids = chart_fingerprint::build(content_with_other_ids);
     const std::string fingerprint_with_legacy_level = chart_fingerprint::build(content_with_legacy_level);
+    const std::string fingerprint_without_section_spacing = chart_fingerprint::build(content_without_section_spacing);
+    const std::string fingerprint_with_extra_blank_lines = chart_fingerprint::build(content_with_extra_blank_lines);
+    const std::string fingerprint_with_changed_bpm = chart_fingerprint::build(content_with_changed_bpm);
     ok = updater::compute_sha256_hex(std::string_view(fingerprint_with_ids)) ==
          updater::compute_sha256_hex(std::string_view(fingerprint_with_other_ids)) && ok;
     ok = updater::compute_sha256_hex(std::string_view(fingerprint_with_ids)) ==
          updater::compute_sha256_hex(std::string_view(fingerprint_with_legacy_level)) && ok;
+    ok = updater::compute_sha256_hex(std::string_view(fingerprint_with_ids)) ==
+         updater::compute_sha256_hex(std::string_view(fingerprint_without_section_spacing)) && ok;
+    ok = updater::compute_sha256_hex(std::string_view(fingerprint_with_ids)) ==
+         updater::compute_sha256_hex(std::string_view(fingerprint_with_extra_blank_lines)) && ok;
+    ok = updater::compute_sha256_hex(std::string_view(fingerprint_with_ids)) !=
+         updater::compute_sha256_hex(std::string_view(fingerprint_with_changed_bpm)) && ok;
 
     const chart_parse_result reparsed = chart_parser::parse(output_path.string());
     if (!reparsed.success || !reparsed.data.has_value()) {

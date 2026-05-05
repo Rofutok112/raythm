@@ -98,6 +98,9 @@ std::string build(std::string_view content) {
     bool in_metadata = false;
     for (const std::string& line : lines) {
         const std::string trimmed = trim(line);
+        if (trimmed.empty()) {
+            continue;
+        }
 
         if (trimmed == "[Metadata]") {
             in_metadata = true;
