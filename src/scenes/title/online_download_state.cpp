@@ -324,17 +324,11 @@ std::string format_time_label(double seconds) {
 
 double preview_display_length_seconds(const song_entry_state& song) {
     const double metadata_length = static_cast<double>(song.song.song.meta.duration_seconds);
-    if (!song.song.song.meta.audio_url.empty()) {
+    if (metadata_length > 0.0) {
         return metadata_length;
     }
 
     const double stream_length = audio_manager::instance().get_preview_length_seconds();
-    if (metadata_length > 0.0) {
-        if (stream_length <= 0.0) {
-            return metadata_length;
-        }
-        return stream_length;
-    }
     if (stream_length > 0.0) {
         return stream_length;
     }
