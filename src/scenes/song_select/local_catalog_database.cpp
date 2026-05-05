@@ -22,6 +22,7 @@ using local_sqlite::statement;
 
 void ensure_optional_schema(sqlite3* database) {
     exec(database, "ALTER TABLE local_songs ADD COLUMN genre TEXT NOT NULL DEFAULT '';");
+    exec(database, "ALTER TABLE local_songs ADD COLUMN duration_seconds REAL NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_charts ADD COLUMN min_bpm REAL NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_charts ADD COLUMN max_bpm REAL NOT NULL DEFAULT 0;");
 }
@@ -39,6 +40,7 @@ bool ensure_schema(sqlite3* database) {
              "audio_file TEXT NOT NULL,"
              "jacket_file TEXT NOT NULL,"
              "base_bpm REAL NOT NULL,"
+             "duration_seconds REAL NOT NULL DEFAULT 0,"
              "preview_start_ms INTEGER NOT NULL,"
              "song_version INTEGER NOT NULL,"
              "status TEXT NOT NULL,"
@@ -159,8 +161,8 @@ content_status parse_status(std::string value) {
 void put_song(sqlite3* database, const song_entry& song) {
     statement query(database,
                     "INSERT INTO local_songs(song_id, title, artist, genre, directory, audio_file, jacket_file, "
-                    "base_bpm, preview_start_ms, song_version, status, updated_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
+                    "base_bpm, duration_seconds, preview_start_ms, song_version, status, updated_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
                     "ON CONFLICT(song_id) DO UPDATE SET "
                     "title = excluded.title,"
                     "artist = excluded.artist,"
@@ -169,6 +171,7 @@ void put_song(sqlite3* database, const song_entry& song) {
                     "audio_file = excluded.audio_file,"
                     "jacket_file = excluded.jacket_file,"
                     "base_bpm = excluded.base_bpm,"
+                    "duration_seconds = excluded.duration_seconds,"
                     "preview_start_ms = excluded.preview_start_ms,"
                     "song_version = excluded.song_version,"
                     "status = excluded.status,"
@@ -185,9 +188,10 @@ void put_song(sqlite3* database, const song_entry& song) {
     bind_text(query.get(), 6, song.song.meta.audio_file);
     bind_text(query.get(), 7, song.song.meta.jacket_file);
     sqlite3_bind_double(query.get(), 8, song.song.meta.base_bpm);
-    sqlite3_bind_int(query.get(), 9, song.song.meta.preview_start_ms);
-    sqlite3_bind_int(query.get(), 10, song.song.meta.song_version);
-    bind_text(query.get(), 11, status_label(song.status));
+    sqlite3_bind_double(query.get(), 9, song.song.meta.duration_seconds);
+    sqlite3_bind_int(query.get(), 10, song.song.meta.preview_start_ms);
+    sqlite3_bind_int(query.get(), 11, song.song.meta.song_version);
+    bind_text(query.get(), 12, status_label(song.status));
     sqlite3_step(query.get());
 }
 
@@ -244,7 +248,7 @@ catalog_data load_cached_catalog() {
     std::map<std::string, song_entry> by_song_id;
     statement songs(database.get(),
                     "SELECT song_id, title, artist, genre, directory, audio_file, jacket_file, base_bpm, "
-                    "preview_start_ms, song_version, status FROM local_songs ORDER BY title, song_id;");
+                    "duration_seconds, preview_start_ms, song_version, status FROM local_songs ORDER BY title, song_id;");
     if (!songs.valid()) {
         return catalog;
     }
@@ -258,10 +262,11 @@ catalog_data load_cached_catalog() {
         entry.song.meta.audio_file = column_text(songs.get(), 5);
         entry.song.meta.jacket_file = column_text(songs.get(), 6);
         entry.song.meta.base_bpm = static_cast<float>(sqlite3_column_double(songs.get(), 7));
-        entry.song.meta.preview_start_ms = sqlite3_column_int(songs.get(), 8);
+        entry.song.meta.duration_seconds = static_cast<float>(sqlite3_column_double(songs.get(), 8));
+        entry.song.meta.preview_start_ms = sqlite3_column_int(songs.get(), 9);
         entry.song.meta.preview_start_seconds = static_cast<float>(entry.song.meta.preview_start_ms) / 1000.0f;
-        entry.song.meta.song_version = sqlite3_column_int(songs.get(), 9);
-        entry.status = parse_status(column_text(songs.get(), 10));
+        entry.song.meta.song_version = sqlite3_column_int(songs.get(), 10);
+        entry.status = parse_status(column_text(songs.get(), 11));
         by_song_id[entry.song.meta.song_id] = std::move(entry);
     }
 

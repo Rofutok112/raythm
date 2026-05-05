@@ -1,6 +1,7 @@
 #include "title/song_list_view.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "theme.h"
 #include "ui_clip.h"
@@ -25,6 +26,14 @@ constexpr float kArtistHeight = 27.0f;
 constexpr float kStatusBadgeWidth = 96.0f;
 constexpr float kStatusBadgeHeight = 24.0f;
 constexpr float kStatusBadgeInset = 15.0f;
+
+std::string format_duration_label(float seconds) {
+    if (seconds <= 0.0f) {
+        return "";
+    }
+    const int total_seconds = static_cast<int>(std::round(seconds));
+    return TextFormat("%d:%02d", total_seconds / 60, total_seconds % 60);
+}
 
 }  // namespace
 
@@ -104,10 +113,18 @@ void draw(const song_select::state& state, const draw_config& config) {
                           {row.x + kTextPaddingX, row.y + kTitleOffsetY,
                            row.width - kTextPaddingX * 2.0f - kStatusBadgeWidth, kTitleHeight},
                           20, with_alpha(t.text, config.alpha), config.now);
+        const std::string duration_label = format_duration_label(song.song.meta.duration_seconds);
+        const float artist_reserved_width = duration_label.empty() ? 0.0f : 62.0f;
         draw_marquee_text(song.song.meta.artist.c_str(),
                           {row.x + kTextPaddingX, row.y + kArtistOffsetY,
-                           row.width - kTextPaddingX * 2.0f - kStatusBadgeWidth, kArtistHeight},
+                           row.width - kTextPaddingX * 2.0f - kStatusBadgeWidth - artist_reserved_width, kArtistHeight},
                           14, with_alpha(t.text_muted, config.alpha), config.now);
+        if (!duration_label.empty()) {
+            ui::draw_text_in_rect(duration_label.c_str(),
+                                  13,
+                                  {badge_rect.x - 70.0f, row.y + kArtistOffsetY + 2.0f, 58.0f, 18.0f},
+                                  with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+        }
         content_status_badge::draw(badge_rect, song.status, config.alpha, 12);
     }
 }

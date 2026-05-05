@@ -43,6 +43,7 @@ song_select::song_entry make_song(const fs::path& song_dir, const fs::path& char
     song.song.meta.title = "Alpha";
     song.song.meta.artist = "Artist";
     song.song.meta.genre = "Fusion";
+    song.song.meta.duration_seconds = 95.0f;
     song.song.meta.audio_file = "audio.ogg";
     song.song.meta.jacket_file = "jacket.png";
     song.song.meta.base_bpm = 128.0f;
@@ -79,6 +80,7 @@ int main() {
     assert(cached.songs.size() == 1);
     assert(cached.songs[0].song.meta.song_id == "song-a");
     assert(cached.songs[0].song.meta.genre == "Fusion");
+    assert(cached.songs[0].song.meta.duration_seconds == 95.0f);
     assert(cached.songs[0].song.meta.preview_start_seconds == 12.0f);
     assert(cached.songs[0].status == content_status::community);
     assert(cached.songs[0].charts.size() == 1);
