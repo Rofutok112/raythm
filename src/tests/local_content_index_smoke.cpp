@@ -35,6 +35,7 @@ int main() {
         .local_chart_id = "local-chart",
         .remote_chart_id = "remote-chart",
         .remote_song_id = "remote-song",
+        .remote_chart_version = 7,
         .origin = local_content_index::online_origin::downloaded,
     });
 
@@ -53,6 +54,7 @@ int main() {
     ok = chart_by_local.has_value() && chart_by_local->remote_chart_id == "remote-chart" && ok;
     ok = chart_by_remote.has_value() && chart_by_remote->local_chart_id == "local-chart" && ok;
     ok = chart_by_local.has_value() &&
+         chart_by_local->remote_chart_version == 7 &&
          chart_by_local->origin == local_content_index::online_origin::downloaded && ok;
 
     std::filesystem::remove_all(appdata_root, ec);

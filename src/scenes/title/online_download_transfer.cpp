@@ -386,6 +386,7 @@ download_song_result download_chart_file(const song_entry_state song,
         .local_chart_id = local_chart_id,
         .remote_chart_id = result.chart_id,
         .remote_song_id = result.song_id,
+        .remote_chart_version = chart.chart.meta.chart_version,
         .origin = local_content_index::online_origin::downloaded,
     });
 

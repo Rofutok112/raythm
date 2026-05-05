@@ -20,6 +20,7 @@ online_chart_binding to_index_binding(const local_content_binding::chart_binding
         .local_chart_id = entry.local_chart_id,
         .remote_chart_id = entry.remote_chart_id,
         .remote_song_id = entry.remote_song_id,
+        .remote_chart_version = entry.remote_chart_version,
         .origin = entry.origin,
     };
 }
@@ -127,6 +128,7 @@ void put_chart_binding(const online_chart_binding& binding) {
         .local_chart_id = binding.local_chart_id,
         .remote_chart_id = binding.remote_chart_id,
         .remote_song_id = binding.remote_song_id,
+        .remote_chart_version = binding.remote_chart_version,
         .origin = binding.origin,
     });
 }

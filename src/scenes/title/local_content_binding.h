@@ -23,6 +23,7 @@ struct chart_binding {
     std::string local_chart_id;
     std::string remote_chart_id;
     std::string remote_song_id;
+    int remote_chart_version = 0;
     origin origin = origin::owned_upload;
 };
 

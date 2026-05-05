@@ -45,6 +45,7 @@ struct song_load_result {
 struct chart_meta {
     std::string chart_id;
     std::string song_id;
+    int chart_version = 0;
     int key_count = 0;
     std::string difficulty;
     float level = 0.0f;

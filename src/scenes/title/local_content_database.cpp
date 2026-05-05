@@ -70,6 +70,19 @@ bool chart_bindings_has_local_song_id(sqlite3* database) {
     return false;
 }
 
+bool chart_bindings_has_remote_chart_version(sqlite3* database) {
+    statement columns(database, "PRAGMA table_info(chart_bindings);");
+    if (!columns.valid()) {
+        return false;
+    }
+    while (sqlite3_step(columns.get()) == SQLITE_ROW) {
+        if (column_text(columns.get(), 1) == "remote_chart_version") {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool migrate_chart_bindings_without_local_song_id(sqlite3* database) {
     if (!chart_bindings_has_local_song_id(database)) {
         return true;
@@ -84,14 +97,15 @@ bool migrate_chart_bindings_without_local_song_id(sqlite3* database) {
                 "local_chart_id TEXT NOT NULL,"
                 "remote_chart_id TEXT NOT NULL,"
                 "remote_song_id TEXT NOT NULL,"
+                "remote_chart_version INTEGER NOT NULL DEFAULT 0,"
                 "origin INTEGER NOT NULL,"
                 "updated_at INTEGER NOT NULL,"
                 "PRIMARY KEY (server_url, local_chart_id)"
                 ");") &&
            exec(database,
                 "INSERT OR REPLACE INTO chart_bindings_new("
-                "server_url, local_chart_id, remote_chart_id, remote_song_id, origin, updated_at) "
-                "SELECT server_url, local_chart_id, remote_chart_id, remote_song_id, origin, updated_at "
+                "server_url, local_chart_id, remote_chart_id, remote_song_id, remote_chart_version, origin, updated_at) "
+                "SELECT server_url, local_chart_id, remote_chart_id, remote_song_id, 0, origin, updated_at "
                 "FROM chart_bindings;") &&
            exec(database, "DROP TABLE chart_bindings;") &&
            exec(database, "ALTER TABLE chart_bindings_new RENAME TO chart_bindings;") &&
@@ -99,6 +113,11 @@ bool migrate_chart_bindings_without_local_song_id(sqlite3* database) {
                 "CREATE UNIQUE INDEX idx_chart_bindings_remote "
                 "ON chart_bindings(server_url, remote_chart_id);") &&
            tx.commit();
+}
+
+bool ensure_chart_binding_version_column(sqlite3* database) {
+    return chart_bindings_has_remote_chart_version(database) ||
+           exec(database, "ALTER TABLE chart_bindings ADD COLUMN remote_chart_version INTEGER NOT NULL DEFAULT 0;");
 }
 
 bool ensure_schema(sqlite3* database) {
@@ -121,6 +140,7 @@ bool ensure_schema(sqlite3* database) {
                 "local_chart_id TEXT NOT NULL,"
                 "remote_chart_id TEXT NOT NULL,"
                 "remote_song_id TEXT NOT NULL,"
+                "remote_chart_version INTEGER NOT NULL DEFAULT 0,"
                 "origin INTEGER NOT NULL,"
                 "updated_at INTEGER NOT NULL,"
                 "PRIMARY KEY (server_url, local_chart_id)"
@@ -129,6 +149,7 @@ bool ensure_schema(sqlite3* database) {
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_chart_bindings_remote "
                 "ON chart_bindings(server_url, remote_chart_id);") &&
            migrate_chart_bindings_without_local_song_id(database) &&
+           ensure_chart_binding_version_column(database) &&
            exec(database,
                 "INSERT INTO metadata(key, value) VALUES('schema_version', '2') "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value;");
@@ -209,11 +230,12 @@ void put_chart(sqlite3* database, const local_content_binding::chart_binding& bi
 
     statement query(database,
                     "INSERT INTO chart_bindings(server_url, local_chart_id, remote_chart_id, "
-                    "remote_song_id, origin, updated_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?) "
+                    "remote_song_id, remote_chart_version, origin, updated_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT(server_url, local_chart_id) DO UPDATE SET "
                     "remote_chart_id = excluded.remote_chart_id,"
                     "remote_song_id = excluded.remote_song_id,"
+                    "remote_chart_version = excluded.remote_chart_version,"
                     "origin = excluded.origin,"
                     "updated_at = excluded.updated_at;");
     if (!query.valid()) {
@@ -223,8 +245,9 @@ void put_chart(sqlite3* database, const local_content_binding::chart_binding& bi
     bind_text(query.get(), 2, binding.local_chart_id);
     bind_text(query.get(), 3, binding.remote_chart_id);
     bind_text(query.get(), 4, binding.remote_song_id);
-    sqlite3_bind_int(query.get(), 5, origin_to_int(origin));
-    sqlite3_bind_int64(query.get(), 6, now_unix_seconds());
+    sqlite3_bind_int(query.get(), 5, binding.remote_chart_version);
+    sqlite3_bind_int(query.get(), 6, origin_to_int(origin));
+    sqlite3_bind_int64(query.get(), 7, now_unix_seconds());
     step_done(query.get());
 }
 
@@ -254,7 +277,8 @@ std::optional<local_content_binding::chart_binding> read_chart(sqlite3_stmt* sta
         .local_chart_id = column_text(statement, 1),
         .remote_chart_id = column_text(statement, 2),
         .remote_song_id = column_text(statement, 3),
-        .origin = origin_from_int(sqlite3_column_int(statement, 4)),
+        .remote_chart_version = sqlite3_column_int(statement, 4),
+        .origin = origin_from_int(sqlite3_column_int(statement, 5)),
     };
 }
 
@@ -314,7 +338,7 @@ local_content_binding::store load_mappings() {
     }
 
     statement charts(database.get(),
-                     "SELECT server_url, local_chart_id, remote_chart_id, remote_song_id, origin "
+                     "SELECT server_url, local_chart_id, remote_chart_id, remote_song_id, remote_chart_version, origin "
                      "FROM chart_bindings ORDER BY server_url, local_chart_id;");
     if (charts.valid()) {
         while (sqlite3_step(charts.get()) == SQLITE_ROW) {
@@ -323,7 +347,8 @@ local_content_binding::store load_mappings() {
                 .local_chart_id = column_text(charts.get(), 1),
                 .remote_chart_id = column_text(charts.get(), 2),
                 .remote_song_id = column_text(charts.get(), 3),
-                .origin = origin_from_int(sqlite3_column_int(charts.get(), 4)),
+                .remote_chart_version = sqlite3_column_int(charts.get(), 4),
+                .origin = origin_from_int(sqlite3_column_int(charts.get(), 5)),
             });
         }
     }
@@ -362,7 +387,7 @@ std::optional<local_content_binding::chart_binding> find_chart_by_local(const st
     local_sqlite::database database = open_ready_database();
     if (database.valid()) {
         return find_chart(database.get(),
-                          "SELECT server_url, local_chart_id, remote_chart_id, remote_song_id, origin "
+                          "SELECT server_url, local_chart_id, remote_chart_id, remote_song_id, remote_chart_version, origin "
                           "FROM chart_bindings WHERE server_url = ? AND local_chart_id = ?;",
                           server_url,
                           local_chart_id);
@@ -375,7 +400,7 @@ std::optional<local_content_binding::chart_binding> find_chart_by_remote(const s
     local_sqlite::database database = open_ready_database();
     if (database.valid()) {
         return find_chart(database.get(),
-                          "SELECT server_url, local_chart_id, remote_chart_id, remote_song_id, origin "
+                          "SELECT server_url, local_chart_id, remote_chart_id, remote_song_id, remote_chart_version, origin "
                           "FROM chart_bindings WHERE server_url = ? AND remote_chart_id = ?;",
                           server_url,
                           remote_chart_id);

@@ -69,6 +69,7 @@ struct upload_request_result {
     std::string message;
     std::string remote_song_id;
     std::string remote_chart_id;
+    int remote_chart_version = 0;
 };
 
 #ifdef _WIN32
@@ -553,6 +554,7 @@ upload_request_result parse_chart_upload_response(const http_response& response,
 
     result.success = true;
     result.remote_chart_id = *chart_id;
+    result.remote_chart_version = json::extract_int(*chart_object, "chartVersion").value_or(0);
     result.message = updated_existing ? "Chart upload updated." : "Chart uploaded.";
     return result;
 }
@@ -948,6 +950,7 @@ upload_result upload_chart(const song_select::song_entry& song,
         .local_chart_id = chart.meta.chart_id,
         .remote_chart_id = request_result.remote_chart_id,
         .remote_song_id = *remote_song_id,
+        .remote_chart_version = request_result.remote_chart_version,
         .origin = local_content_index::online_origin::owned_upload,
     });
 

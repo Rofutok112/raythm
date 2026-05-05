@@ -187,6 +187,12 @@ void append_chart_page(song_entry_state& song_state,
                             }
                             return matches;
                         });
+        const bool chart_update_available =
+            local_chart_installed &&
+            binding.has_value() &&
+            chart.chart_version > (binding->remote_chart_version > 0
+                ? binding->remote_chart_version
+                : 1);
 
         song_state.charts.push_back({
             {
@@ -194,6 +200,7 @@ void append_chart_page(song_entry_state& song_state,
                 chart_meta{
                     .chart_id = chart.id,
                     .song_id = chart.song_id,
+                    .chart_version = chart.chart_version,
                     .key_count = chart.key_count,
                     .difficulty = chart.difficulty_name,
                     .level = chart.level,
@@ -211,7 +218,7 @@ void append_chart_page(song_entry_state& song_state,
             },
             installed_local_chart_id,
             local_chart_installed,
-            false,
+            chart_update_available,
         });
     }
 
