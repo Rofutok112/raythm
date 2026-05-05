@@ -82,6 +82,10 @@ std::filesystem::path chart_path(const std::string& chart_id) {
     return charts_root() / (chart_id + ".rchart");
 }
 
+std::filesystem::path song_chart_path(const std::string& song_id, const std::string& chart_id) {
+    return song_dir(song_id) / "charts" / (chart_id + ".rchart");
+}
+
 std::filesystem::path local_ranking_path(const std::string& chart_id) {
     return rankings_root() / (chart_id + ".bin");
 }

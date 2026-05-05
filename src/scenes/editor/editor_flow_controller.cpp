@@ -118,7 +118,8 @@ bool save_chart_from_dialog(const editor_flow_context& context, editor_flow_resu
     }
 
     if (is_appdata_song(*context.song)) {
-        const std::filesystem::path dest = app_paths::chart_path(context.state->data().meta.chart_id);
+        const std::filesystem::path dest =
+            app_paths::song_chart_path(context.song->meta.song_id, context.state->data().meta.chart_id);
         app_paths::ensure_directories();
         if (!save_to_path(context, path_utils::to_utf8(dest), result)) {
             return false;

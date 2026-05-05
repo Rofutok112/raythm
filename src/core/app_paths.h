@@ -30,7 +30,11 @@ std::filesystem::path rankings_root();
 std::filesystem::path song_dir(const std::string& song_id);
 
 // AppData/Local/raythm/charts/{chart_id}.rchart
+// Legacy external chart location kept for existing installs.
 std::filesystem::path chart_path(const std::string& chart_id);
+
+// AppData/Local/raythm/songs/{song_id}/charts/{chart_id}.rchart
+std::filesystem::path song_chart_path(const std::string& song_id, const std::string& chart_id);
 
 // AppData/Local/raythm/rankings/{chart_id}.bin
 std::filesystem::path local_ranking_path(const std::string& chart_id);
@@ -65,7 +69,7 @@ std::filesystem::path mvs_root();
 // AppData/Local/raythm/mvs/{mv_id}/
 std::filesystem::path mv_dir(const std::string& mv_id);
 
-// Create songs/ and charts/ directories if they don't exist.
+// Create app data directories if they don't exist.
 void ensure_directories();
 
 }
