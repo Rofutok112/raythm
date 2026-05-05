@@ -16,7 +16,7 @@ struct rank_threshold {
 
 struct ruleset {
     bool active = true;
-    std::string accepted_input = "note_results_v1";
+    std::string accepted_input = "noteResultsV1";
     std::string ruleset_version = "local-default";
     std::string score_model = "combo-progress-squared";
     int max_score = 1'000'000;
