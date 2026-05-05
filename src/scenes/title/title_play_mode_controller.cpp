@@ -32,6 +32,10 @@ void title_play_mode_controller::update(scene_manager& manager,
         title_play_session::start_selected_chart(manager, state, preview_controller);
         return;
     }
+    if (result.update_selected_requested) {
+        callbacks.open_update_catalog();
+        return;
+    }
     if (result.song_selection_changed) {
         callbacks.sync_media();
         return;

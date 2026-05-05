@@ -174,9 +174,14 @@ bool handle_detail_actions(state& state,
     }
 
     if (song != nullptr && !state.download_in_progress && ui::is_clicked(current.primary_action_rect)) {
-        result.action = needs_download(*song)
-            ? requested_action::primary
-            : requested_action::open_local;
+        const chart_entry_state* chart = selected_chart(state);
+        if (needs_download(*song)) {
+            result.action = requested_action::primary;
+        } else if (chart != nullptr && chart->installed && chart->update_available) {
+            result.action = requested_action::download_chart;
+        } else {
+            result.action = requested_action::open_local;
+        }
         return true;
     }
 

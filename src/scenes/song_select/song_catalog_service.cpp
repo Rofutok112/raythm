@@ -257,6 +257,15 @@ std::string cache_key(std::string_view server_url, std::string_view chart_id) {
     return std::string(server_url) + "\n" + std::string(chart_id);
 }
 
+bool should_reuse_cached_hashes(const verification_cache_record* cached,
+                                const std::string& signature) {
+    if (cached == nullptr || cached->file_signature != signature) {
+        return false;
+    }
+    return cached->status != content_status::modified &&
+           cached->status != content_status::update;
+}
+
 using verification_cache = std::unordered_map<std::string, verification_cache_record>;
 
 verification_cache load_verification_cache() {
@@ -333,7 +342,7 @@ content_status verify_song_content_source(const song_data& song,
     }
 
     std::optional<content_hashes> local_hashes;
-    if (cached != nullptr && cached->file_signature == signature && song_hashes_present(cached->local_hashes)) {
+    if (should_reuse_cached_hashes(cached, signature) && song_hashes_present(cached->local_hashes)) {
         local_hashes = cached->local_hashes;
     } else {
         local_hashes = compute_song_hashes(song);
@@ -419,7 +428,7 @@ content_status verify_chart_content_source(const song_data& song,
     }
 
     std::optional<content_hashes> local_hashes;
-    if (cached != nullptr && cached->file_signature == signature && hashes_present(cached->local_hashes)) {
+    if (should_reuse_cached_hashes(cached, signature) && hashes_present(cached->local_hashes)) {
         local_hashes = cached->local_hashes;
     } else {
         local_hashes = compute_hashes(files);

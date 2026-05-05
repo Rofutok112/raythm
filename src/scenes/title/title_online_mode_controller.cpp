@@ -12,10 +12,6 @@ void title_online_mode_controller::update(title_online_view::state& state,
         callbacks.enter_home();
         return;
     }
-    if (result.song_selection_changed) {
-        callbacks.select_preview_song();
-        return;
-    }
     if (result.action == title_online_view::requested_action::primary) {
         title_online_view::start_download(state);
         return;
@@ -34,5 +30,9 @@ void title_online_mode_controller::update(title_online_view::state& state,
     }
     if (result.action == title_online_view::requested_action::open_local) {
         callbacks.open_local_selection();
+        return;
+    }
+    if (result.song_selection_changed) {
+        callbacks.select_preview_song();
     }
 }

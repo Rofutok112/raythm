@@ -133,6 +133,24 @@ int hit_test_chart(Rectangle area, float scroll_y, Vector2 point, int count) {
     return -1;
 }
 
+Rectangle song_status_badge_rect(Rectangle main_column_rect) {
+    return {
+        main_column_rect.x + main_column_rect.width - kHeaderPaddingX - kStatusBadgeWidth,
+        main_column_rect.y + kTitleOffsetY + 8.0f,
+        kStatusBadgeWidth,
+        kStatusBadgeHeight,
+    };
+}
+
+Rectangle chart_status_badge_rect(Rectangle chart_detail_rect) {
+    return {
+        chart_detail_rect.x,
+        chart_detail_rect.y + kChartStatusOffsetY,
+        kStatusBadgeWidth,
+        kStatusBadgeHeight,
+    };
+}
+
 void draw(const song_select::state& state,
           const song_select::preview_controller& preview_controller,
           const song_select::song_entry* song,
@@ -199,8 +217,7 @@ void draw(const song_select::state& state,
                       song_title_text_rect,
                       28, with_alpha(t.text, config.alpha), config.now);
     content_status_badge::draw(
-        {title_rect.x + title_rect.width - kStatusBadgeWidth, title_rect.y + 8.0f,
-         kStatusBadgeWidth, kStatusBadgeHeight},
+        song_status_badge_rect(config.main_column_rect),
         song->status, config.alpha, 12);
     draw_marquee_text(song->song.meta.artist.c_str(),
                       artist_rect,
@@ -212,9 +229,7 @@ void draw(const song_select::state& state,
                                config.chart_detail_rect.width, kChartDifficultyHeight},
                               with_alpha(t.text, config.alpha), ui::text_align::left);
         content_status_badge::draw(
-            {config.chart_detail_rect.x,
-             config.chart_detail_rect.y + kChartStatusOffsetY,
-             kStatusBadgeWidth, kStatusBadgeHeight},
+            chart_status_badge_rect(config.chart_detail_rect),
             chart->status, config.alpha, 12);
         ui::draw_text_in_rect(TextFormat("%s   %d Notes", key_mode_label(chart->meta.key_count).c_str(),
                                          chart->note_count),

@@ -46,6 +46,7 @@ struct update_result {
     bool export_chart_requested = false;
     bool edit_mv_requested = false;
     bool manage_library_requested = false;
+    bool update_selected_requested = false;
 };
 
 layout make_layout(float anim_t, Rectangle origin_rect);

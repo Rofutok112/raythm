@@ -150,6 +150,7 @@ std::string format_number(double value) {
 
 std::string canonical_string(std::string_view content) {
     const std::optional<std::string> base_bpm = extract_json_number_token(content, "baseBpm");
+    const std::optional<std::string> duration_sec = extract_json_number_token(content, "durationSec");
     const std::optional<std::string> preview_start_ms = extract_json_number_token(content, "previewStartMs");
     const std::optional<std::string> song_version = extract_json_number_token(content, "songVersion");
 
@@ -171,6 +172,15 @@ std::string canonical_string(std::string_view content) {
         }
     }
 
+    std::string canonical_duration;
+    if (duration_sec.has_value()) {
+        if (const std::optional<double> parsed = parse_number(*duration_sec)) {
+            canonical_duration = std::to_string(static_cast<int>(*parsed));
+        } else {
+            canonical_duration = *duration_sec;
+        }
+    }
+
     std::string canonical_version = "1";
     if (song_version.has_value()) {
         if (const std::optional<int> parsed = parse_int(*song_version)) {
@@ -184,6 +194,7 @@ std::string canonical_string(std::string_view content) {
     out << "title=" << extract_json_string(content, "title").value_or("") << '\n'
         << "artist=" << extract_json_string(content, "artist").value_or("") << '\n'
         << "baseBpm=" << canonical_bpm << '\n'
+        << "durationSec=" << canonical_duration << '\n'
         << "previewStartMs=" << preview_ms << '\n'
         << "songVersion=" << canonical_version;
     return out.str();

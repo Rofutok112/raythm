@@ -268,6 +268,26 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
     }
 
     if (view_mode == mode::play) {
+        const song_select::song_entry* song = song_select::selected_song(state);
+        const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
+        const bool update_available =
+            (song != nullptr && song->status == content_status::update) ||
+            (chart != nullptr && chart->status == content_status::update);
+        if (left_pressed && update_available) {
+            const bool song_update_clicked =
+                song != nullptr &&
+                song->status == content_status::update &&
+                CheckCollisionPointRec(mouse, title_center_view::song_status_badge_rect(current.main_column));
+            const bool chart_update_clicked =
+                chart != nullptr &&
+                chart->status == content_status::update &&
+                CheckCollisionPointRec(mouse, title_center_view::chart_status_badge_rect(current.chart_detail_rect));
+            if (song_update_clicked || chart_update_clicked) {
+                result.update_selected_requested = true;
+                return result;
+            }
+        }
+
         const title_ranking_view::draw_config ranking_config = {
             .header_rect = current.ranking_header_rect,
             .source_local_rect = current.ranking_source_local_rect,

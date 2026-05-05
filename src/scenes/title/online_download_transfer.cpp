@@ -94,6 +94,7 @@ bool write_chart_file(const std::filesystem::path& path,
 
 std::optional<song_meta> parse_downloaded_song_metadata(const std::string& metadata_json,
                                                         const std::string& local_song_id,
+                                                        int fallback_song_version,
                                                         std::string& error_message) {
     song_meta meta;
     meta.song_id = local_song_id;
@@ -106,7 +107,8 @@ std::optional<song_meta> parse_downloaded_song_metadata(const std::string& metad
     meta.duration_seconds = json::extract_float(metadata_json, "durationSec").value_or(0.0f);
     meta.preview_start_ms = json::extract_int(metadata_json, "previewStartMs").value_or(0);
     meta.preview_start_seconds = static_cast<float>(meta.preview_start_ms) / 1000.0f;
-    meta.song_version = json::extract_int(metadata_json, "songVersion").value_or(1);
+    meta.song_version = json::extract_int(metadata_json, "songVersion").value_or(
+        fallback_song_version > 0 ? fallback_song_version : 1);
 
     if (meta.song_id.empty()) {
         error_message = "Downloaded song metadata was missing a local song ID.";
@@ -228,7 +230,10 @@ download_song_result download_song_package(const song_entry_state song,
     std::string error_message;
     const std::string metadata_json(metadata_fetch.bytes.begin(), metadata_fetch.bytes.end());
     const std::optional<song_meta> local_meta =
-        parse_downloaded_song_metadata(metadata_json, local_song_id, error_message);
+        parse_downloaded_song_metadata(metadata_json,
+                                       local_song_id,
+                                       song.song.song.meta.song_version,
+                                       error_message);
     if (!local_meta.has_value()) {
         result.message = error_message;
         return result;
