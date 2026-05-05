@@ -55,6 +55,9 @@ bool song_writer::write_song_json(const song_meta& meta, const std::string& dire
         out << "  \"genre\": \"" << escape_json_string(meta.genre) << "\",\n";
     }
     out << "  \"baseBpm\": " << format_float(meta.base_bpm) << ",\n";
+    if (meta.duration_seconds > 0.0f) {
+        out << "  \"durationSec\": " << format_float(meta.duration_seconds) << ",\n";
+    }
     out << "  \"audioFile\": \"" << escape_json_string(meta.audio_file) << "\",\n";
     out << "  \"jacketFile\": \"" << escape_json_string(meta.jacket_file) << "\",\n";
     out << "  \"previewStartMs\": " << meta.preview_start_ms << ",\n";

@@ -494,8 +494,16 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             const std::string card_subtitle = song.song.song.meta.genre.empty()
                 ? song.song.song.meta.artist
                 : song.song.song.meta.artist + " / " + song.song.song.meta.genre;
+            const bool has_duration = song.song.song.meta.duration_seconds > 0.0f;
+            if (song.song.song.meta.duration_seconds > 0.0f) {
+                ui::draw_text_in_rect(detail::format_time_label(song.song.song.meta.duration_seconds).c_str(),
+                                      12,
+                                      {card.x + card.width - 72.0f, card.y + 186.0f, 58.0f, 18.0f},
+                                      with_alpha(t.text_muted, grid_alpha), ui::text_align::right);
+            }
             draw_marquee_text(card_subtitle.c_str(),
-                              {card.x + 14.0f, card.y + 184.0f, card.width - 28.0f, 22.0f},
+                              {card.x + 14.0f, card.y + 184.0f,
+                               card.width - (has_duration ? 88.0f : 28.0f), 22.0f},
                               13, with_alpha(t.text_muted, grid_alpha), now);
         }
     }
@@ -564,6 +572,12 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         : song->song.song.meta.artist + " / " + song->song.song.meta.genre;
     draw_marquee_text(detail_subtitle.c_str(), artist_rect, 17,
                       with_alpha(t.text_secondary, detail_alpha), now);
+    if (song->song.song.meta.duration_seconds > 0.0f) {
+        ui::draw_text_in_rect(detail::format_time_label(song->song.song.meta.duration_seconds).c_str(),
+                              14,
+                              {artist_rect.x, artist_rect.y + 26.0f, artist_rect.width, 20.0f},
+                              with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
+    }
 
     const audio_manager& audio = audio_manager::instance();
     const double preview_length = detail::preview_display_length_seconds(*song);

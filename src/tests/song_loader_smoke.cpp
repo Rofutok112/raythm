@@ -187,6 +187,7 @@ int main() {
     written_meta.title = "Written Song";
     written_meta.artist = "Codex";
     written_meta.genre = "Artcore";
+    written_meta.duration_seconds = 123.0f;
     written_meta.base_bpm = 128.0f;
     written_meta.audio_file = "audio.ogg";
     written_meta.jacket_file = "jacket.png";
@@ -207,8 +208,18 @@ int main() {
             std::cerr << "Expected song writer to persist genre in song.json\n";
             ok = false;
         }
+        if (written_content.find("\"durationSec\": 123") == std::string::npos) {
+            std::cerr << "Expected song writer to persist durationSec in song.json\n";
+            ok = false;
+        }
         if (written_content.find("sns") != std::string::npos) {
             std::cerr << "Expected song writer to omit legacy SNS fields\n";
+            ok = false;
+        }
+        const song_load_result written_load_result = song_loader::load_directory(written_song_dir.string());
+        if (written_load_result.songs.size() != 1 ||
+            written_load_result.songs.front().meta.duration_seconds != 123.0f) {
+            std::cerr << "Expected song loader to parse durationSec from song.json\n";
             ok = false;
         }
     }
