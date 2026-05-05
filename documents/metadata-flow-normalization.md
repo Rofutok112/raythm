@@ -96,7 +96,6 @@ Song upload fields:
 - `songJsonFingerprint`
 - `audioSha256`
 - `jacketSha256`
-- `externalLinks`
 - files: `audio`, `jacket`
 
 Chart upload fields:

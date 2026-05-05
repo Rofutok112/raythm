@@ -12,6 +12,7 @@ struct song_meta {
     std::string song_id;
     std::string title;
     std::string artist;
+    std::string genre;
     float base_bpm = 0.0f;
     std::string audio_file;
     std::string jacket_file;
@@ -21,9 +22,6 @@ struct song_meta {
     float preview_start_seconds = 0.0f;
     int preview_start_ms = 0;
     int song_version = 0;
-    std::string sns_youtube;
-    std::string sns_niconico;
-    std::string sns_x;
 };
 
 // 曲一覧で扱う読み込み済み楽曲データ。

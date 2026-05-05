@@ -167,37 +167,6 @@ std::string detect_image_content_type(const fs::path& path) {
     return "image/jpeg";
 }
 
-std::string build_external_links_json(const song_meta& meta) {
-    struct external_link {
-        const char* label;
-        const std::string* url;
-    };
-
-    const external_link links[] = {
-        {"YouTube", &meta.sns_youtube},
-        {"Niconico", &meta.sns_niconico},
-        {"X", &meta.sns_x},
-    };
-
-    std::ostringstream stream;
-    stream << '[';
-    bool first = true;
-    for (const external_link& link : links) {
-        if (link.url == nullptr || link.url->empty()) {
-            continue;
-        }
-
-        if (!first) {
-            stream << ',';
-        }
-        first = false;
-        stream << "{\"url\":\"" << json::escape_string(*link.url)
-               << "\",\"label\":\"" << json::escape_string(link.label) << "\"}";
-    }
-    stream << ']';
-    return stream.str();
-}
-
 std::string format_float_field(float value) {
     std::ostringstream stream;
     stream << std::setprecision(std::numeric_limits<float>::max_digits10) << value;
@@ -639,6 +608,9 @@ upload_request_result send_song_upload_request(const auth::session& session,
     std::vector<multipart_field> fields;
     fields.push_back({"title", meta.title});
     fields.push_back({"artist", meta.artist});
+    if (!meta.genre.empty()) {
+        fields.push_back({"genre", meta.genre});
+    }
     fields.push_back({"baseBpm", format_float_field(meta.base_bpm)});
     if (meta.duration_seconds > 0.0f) {
         fields.push_back({"durationSec", std::to_string(static_cast<int>(meta.duration_seconds + 0.5f))});
@@ -646,10 +618,6 @@ upload_request_result send_song_upload_request(const auth::session& session,
     fields.push_back({"previewStartMs", std::to_string(std::max(0, meta.preview_start_ms))});
     fields.push_back({"visibility", "public"});
     append_song_contract_fields(fields, song, song_dir, audio_path, jacket_path);
-    const std::string external_links_json = build_external_links_json(meta);
-    if (external_links_json != "[]") {
-        fields.push_back({"externalLinks", external_links_json});
-    }
 
     std::vector<multipart_file> files;
     files.push_back({

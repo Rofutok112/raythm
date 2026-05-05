@@ -363,6 +363,7 @@ std::optional<remote_song_payload> parse_remote_song(const std::string& object) 
         .id = *id,
         .title = *title,
         .artist = *artist,
+        .genre = json::extract_string(object, "genre").value_or(""),
         .base_bpm = json::extract_float(object, "baseBpm").value_or(0.0f),
         .duration_seconds = json::extract_float(object, "durationSec").value_or(0.0f),
         .preview_start_ms = json::extract_int(object, "previewStartMs").value_or(0),

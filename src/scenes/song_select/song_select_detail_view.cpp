@@ -136,8 +136,11 @@ void draw_song_details(const state& state, const preview_controller& preview_con
         song->status, content_alpha, 12);
     draw_marquee_text(song->song.meta.artist.c_str(), detail_x + content_offset_x, layout::kJacketRect.y + 56.0f, 28,
                       with_alpha(theme.text_secondary, content_alpha), detail_max_width, now);
-    ui::draw_text_f(TextFormat("BPM %.0f", song->song.meta.base_bpm), detail_x + content_offset_x,
-                    layout::kJacketRect.y + 100.0f, 24, with_alpha(theme.text_muted, content_alpha));
+    const std::string song_meta_line = song->song.meta.genre.empty()
+        ? TextFormat("BPM %.0f", song->song.meta.base_bpm)
+        : TextFormat("%s / BPM %.0f", song->song.meta.genre.c_str(), song->song.meta.base_bpm);
+    draw_marquee_text(song_meta_line.c_str(), detail_x + content_offset_x, layout::kJacketRect.y + 100.0f, 24,
+                      with_alpha(theme.text_muted, content_alpha), detail_max_width, now);
     if (selected_chart != nullptr) {
         const float key_x = detail_x + content_offset_x + chart_offset_x;
         const float key_y = layout::kJacketRect.y + 126.0f;

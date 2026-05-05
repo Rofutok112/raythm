@@ -14,6 +14,7 @@ title_profile_view::activity_item to_activity_item(const auth::profile_ranking_r
     return {
         .song_title = record.song_title,
         .artist = record.artist,
+        .genre = record.genre,
         .difficulty_name = record.difficulty_name,
         .local_summary = "Score " + std::to_string(record.score),
         .online_summary = "Online #" + std::to_string(record.placement) + " / " + std::to_string(record.score),

@@ -101,6 +101,7 @@ struct auth_state {
     std::string email;
     std::string display_name;
     bool email_verified = false;
+    std::vector<auth::external_link> external_links;
 };
 
 enum class login_dialog_mode {

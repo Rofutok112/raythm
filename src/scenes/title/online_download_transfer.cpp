@@ -102,15 +102,13 @@ std::optional<song_meta> parse_downloaded_song_metadata(const std::string& metad
     meta.song_id = local_song_id;
     meta.title = trim_ascii(json::extract_string(metadata_json, "title").value_or(""));
     meta.artist = trim_ascii(json::extract_string(metadata_json, "artist").value_or(""));
+    meta.genre = trim_ascii(json::extract_string(metadata_json, "genre").value_or(""));
     meta.audio_file = trim_ascii(json::extract_string(metadata_json, "audioFile").value_or(""));
     meta.jacket_file = trim_ascii(json::extract_string(metadata_json, "jacketFile").value_or(""));
     meta.base_bpm = json::extract_float(metadata_json, "baseBpm").value_or(0.0f);
     meta.preview_start_ms = json::extract_int(metadata_json, "previewStartMs").value_or(0);
     meta.preview_start_seconds = static_cast<float>(meta.preview_start_ms) / 1000.0f;
     meta.song_version = json::extract_int(metadata_json, "songVersion").value_or(1);
-    meta.sns_youtube = trim_ascii(json::extract_string(metadata_json, "snsYoutube").value_or(""));
-    meta.sns_niconico = trim_ascii(json::extract_string(metadata_json, "snsNiconico").value_or(""));
-    meta.sns_x = trim_ascii(json::extract_string(metadata_json, "snsX").value_or(""));
 
     if (meta.song_id.empty()) {
         error_message = "Downloaded song metadata was missing a local song ID.";

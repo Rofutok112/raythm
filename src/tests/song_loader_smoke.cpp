@@ -186,6 +186,7 @@ int main() {
     written_meta.song_id = "external-local-id";
     written_meta.title = "Written Song";
     written_meta.artist = "Codex";
+    written_meta.genre = "Artcore";
     written_meta.base_bpm = 128.0f;
     written_meta.audio_file = "audio.ogg";
     written_meta.jacket_file = "jacket.png";
@@ -200,6 +201,14 @@ int main() {
                                           std::istreambuf_iterator<char>()};
         if (written_content.find("\"songId\": \"external-local-id\"") == std::string::npos) {
             std::cerr << "Expected song writer to persist songId in song.json\n";
+            ok = false;
+        }
+        if (written_content.find("\"genre\": \"Artcore\"") == std::string::npos) {
+            std::cerr << "Expected song writer to persist genre in song.json\n";
+            ok = false;
+        }
+        if (written_content.find("sns") != std::string::npos) {
+            std::cerr << "Expected song writer to omit legacy SNS fields\n";
             ok = false;
         }
     }

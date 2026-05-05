@@ -12,11 +12,17 @@ inline constexpr const char* kProductionServerUrl = server_environment::kProduct
 inline constexpr const char* kDevelopmentServerUrl = server_environment::kDevelopmentServerUrl;
 inline constexpr const char* kDefaultServerUrl = kProductionServerUrl;
 
+struct external_link {
+    std::string label;
+    std::string url;
+};
+
 struct public_user {
     std::string id;
     std::string email;
     std::string display_name;
     bool email_verified = false;
+    std::vector<external_link> external_links;
 };
 
 struct session {
@@ -32,6 +38,7 @@ struct session_summary {
     std::string email;
     std::string display_name;
     bool email_verified = false;
+    std::vector<external_link> external_links;
 };
 
 enum class verification_purpose {
@@ -54,6 +61,7 @@ struct community_song_upload {
     std::string client_song_id;
     std::string title;
     std::string artist;
+    std::string genre;
     std::string content_source;
     std::string visibility;
     float base_bpm = 0.0f;
@@ -93,6 +101,7 @@ struct profile_ranking_record {
     std::string song_id;
     std::string song_title;
     std::string artist;
+    std::string genre;
     std::string difficulty_name;
     std::string chart_author;
     std::string clear_rank;

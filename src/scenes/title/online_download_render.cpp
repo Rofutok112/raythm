@@ -491,7 +491,10 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             draw_marquee_text(song.song.song.meta.title.c_str(),
                               {card.x + 14.0f, card.y + 154.0f, card.width - 28.0f, 30.0f},
                               18, with_alpha(t.text, grid_alpha), now);
-            draw_marquee_text(song.song.song.meta.artist.c_str(),
+            const std::string card_subtitle = song.song.song.meta.genre.empty()
+                ? song.song.song.meta.artist
+                : song.song.song.meta.artist + " / " + song.song.song.meta.genre;
+            draw_marquee_text(card_subtitle.c_str(),
                               {card.x + 14.0f, card.y + 184.0f, card.width - 28.0f, 22.0f},
                               13, with_alpha(t.text_muted, grid_alpha), now);
         }
@@ -556,7 +559,10 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         27.0f
     };
     draw_marquee_text(song->song.song.meta.title.c_str(), title_rect, 28, with_alpha(t.text, detail_alpha), now);
-    draw_marquee_text(song->song.song.meta.artist.c_str(), artist_rect, 17,
+    const std::string detail_subtitle = song->song.song.meta.genre.empty()
+        ? song->song.song.meta.artist
+        : song->song.song.meta.artist + " / " + song->song.song.meta.genre;
+    draw_marquee_text(detail_subtitle.c_str(), artist_rect, 17,
                       with_alpha(t.text_secondary, detail_alpha), now);
 
     const audio_manager& audio = audio_manager::instance();

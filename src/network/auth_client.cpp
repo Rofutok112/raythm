@@ -42,12 +42,27 @@ std::optional<auth::public_user> parse_user_object(const std::string& content) {
     }
 
     const bool email_verified = json::extract_bool(content, "emailVerified").value_or(false);
+    std::vector<auth::external_link> external_links;
+    if (const std::optional<std::string> links_array = json::extract_array(content, "externalLinks");
+        links_array.has_value()) {
+        for (const std::string& link_object : json::extract_objects_from_array(*links_array)) {
+            const std::string url = json::extract_string(link_object, "url").value_or("");
+            if (url.empty()) {
+                continue;
+            }
+            external_links.push_back({
+                .label = json::extract_string(link_object, "label").value_or(""),
+                .url = url,
+            });
+        }
+    }
 
     return auth::public_user{
         .id = *id,
         .email = *email,
         .display_name = *display_name,
         .email_verified = email_verified,
+        .external_links = std::move(external_links),
     };
 }
 
@@ -131,6 +146,7 @@ std::optional<auth::community_song_upload> parse_community_song_upload(const std
         .client_song_id = json::extract_string(object, "clientSongId").value_or(""),
         .title = *title,
         .artist = json::extract_string(object, "artist").value_or(""),
+        .genre = json::extract_string(object, "genre").value_or(""),
         .content_source = json::extract_string(object, "contentSource").value_or("community"),
         .visibility = json::extract_string(object, "visibility").value_or("public"),
         .base_bpm = json::extract_float(object, "baseBpm").value_or(0.0f),
@@ -191,6 +207,7 @@ std::optional<auth::profile_ranking_record> parse_profile_ranking_record(const s
         .song_id = *song_id,
         .song_title = *song_title,
         .artist = json::extract_string(object, "artist").value_or(""),
+        .genre = json::extract_string(object, "genre").value_or(""),
         .difficulty_name = *difficulty_name,
         .chart_author = json::extract_string(object, "chartAuthor").value_or(""),
         .clear_rank = json::extract_string(object, "clearRank").value_or(""),
@@ -243,7 +260,17 @@ bool write_session_file(const auth::session& session_data) {
     output << "    \"id\": \"" << json::escape_string(session_data.user.id) << "\",\n";
     output << "    \"email\": \"" << json::escape_string(session_data.user.email) << "\",\n";
     output << "    \"displayName\": \"" << json::escape_string(session_data.user.display_name) << "\",\n";
-    output << "    \"emailVerified\": " << (session_data.user.email_verified ? "true" : "false") << "\n";
+    output << "    \"emailVerified\": " << (session_data.user.email_verified ? "true" : "false") << ",\n";
+    output << "    \"externalLinks\": [";
+    for (size_t i = 0; i < session_data.user.external_links.size(); ++i) {
+        const auth::external_link& link = session_data.user.external_links[i];
+        if (i > 0) {
+            output << ", ";
+        }
+        output << "{\"label\":\"" << json::escape_string(link.label)
+               << "\",\"url\":\"" << json::escape_string(link.url) << "\"}";
+    }
+    output << "]\n";
     output << "  }\n";
     output << "}\n";
     return output.good();
@@ -446,6 +473,7 @@ session_summary load_session_summary() {
             .email = {},
             .display_name = {},
             .email_verified = false,
+            .external_links = {},
         };
     }
 
@@ -455,6 +483,7 @@ session_summary load_session_summary() {
         .email = stored->user.email,
         .display_name = stored->user.display_name,
         .email_verified = stored->user.email_verified,
+        .external_links = stored->user.external_links,
     };
 }
 

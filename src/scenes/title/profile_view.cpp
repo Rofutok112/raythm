@@ -123,6 +123,31 @@ std::string song_label(const auth::community_song_upload& song) {
     return song.title.empty() ? song.id : song.title;
 }
 
+std::string song_subtitle(const auth::community_song_upload& song) {
+    if (!song.genre.empty() && !song.artist.empty()) {
+        return song.artist + " / " + song.genre;
+    }
+    if (!song.genre.empty()) {
+        return song.genre;
+    }
+    return song.artist;
+}
+
+std::string ranking_subtitle(const activity_item& item) {
+    std::string result = item.artist;
+    if (!item.genre.empty()) {
+        result += result.empty() ? item.genre : " / " + item.genre;
+    }
+    if (!item.difficulty_name.empty()) {
+        result += result.empty() ? item.difficulty_name : " / " + item.difficulty_name;
+    }
+    return result;
+}
+
+std::string profile_link_label(const auth::external_link& link) {
+    return link.label.empty() ? link.url : link.label;
+}
+
 std::string chart_label(const auth::community_chart_upload& chart) {
     if (!chart.song_title.empty() && !chart.difficulty_name.empty()) {
         return chart.song_title + " / " + chart.difficulty_name;
@@ -424,6 +449,19 @@ void draw(state& profile, const song_select::auth_state& auth_state, bool reques
                               13,
                               {avatar.x + avatar.width + 25.0f, avatar.y + 76.0f, 260.0f, 24.0f},
                               auth_state.email_verified ? t.success : t.error, ui::text_align::left);
+        if (!auth_state.external_links.empty()) {
+            std::string links_label;
+            const size_t count = std::min<size_t>(auth_state.external_links.size(), 3);
+            for (size_t i = 0; i < count; ++i) {
+                if (i > 0) {
+                    links_label += " / ";
+                }
+                links_label += profile_link_label(auth_state.external_links[i]);
+            }
+            ui::draw_text_in_rect(links_label.c_str(), 12,
+                                  {avatar.x + avatar.width + 25.0f, avatar.y + 106.0f, 620.0f, 22.0f},
+                                  t.accent, ui::text_align::left);
+        }
 
         const std::string songs_count = std::to_string(profile.uploads.songs.size()) + " songs";
         const std::string charts_count = std::to_string(profile.uploads.charts.size()) + " charts";
@@ -496,7 +534,8 @@ void draw(state& profile, const song_select::auth_state& auth_state, bool reques
                 ui::draw_text_in_rect(item.song_title.c_str(), 15,
                                       {recent.x + 18.0f, recent.y + 48.0f, 540.0f, 24.0f},
                                       t.text, ui::text_align::left);
-                ui::draw_text_in_rect((item.artist + " / " + item.difficulty_name).c_str(), 11,
+                const std::string subtitle = ranking_subtitle(item);
+                ui::draw_text_in_rect(subtitle.c_str(), 11,
                                       {recent.x + 18.0f, recent.y + 76.0f, 540.0f, 18.0f},
                                       t.text_muted, ui::text_align::left);
                 ui::draw_text_in_rect(item.local_summary.c_str(), 13,
@@ -529,7 +568,8 @@ void draw(state& profile, const song_select::auth_state& auth_state, bool reques
                 ui::draw_text_in_rect(item.song_title.c_str(), 15,
                                       {first_place.x + 18.0f, first_place.y + 48.0f, 540.0f, 24.0f},
                                       t.text, ui::text_align::left);
-                ui::draw_text_in_rect((item.artist + " / " + item.difficulty_name).c_str(), 11,
+                const std::string subtitle = ranking_subtitle(item);
+                ui::draw_text_in_rect(subtitle.c_str(), 11,
                                       {first_place.x + 18.0f, first_place.y + 76.0f, 540.0f, 18.0f},
                                       t.text_muted, ui::text_align::left);
                 ui::draw_text_in_rect(item.online_summary.c_str(), 13,
@@ -551,7 +591,8 @@ void draw(state& profile, const song_select::auth_state& auth_state, bool reques
                     ui::draw_text_in_rect(item.song_title.c_str(), 15,
                                           {row.x + 18.0f, row.y + 9.0f, 520.0f, 24.0f},
                                           t.text, ui::text_align::left);
-                    ui::draw_text_in_rect((item.artist + " / " + item.difficulty_name).c_str(), 11,
+                    const std::string subtitle = ranking_subtitle(item);
+                    ui::draw_text_in_rect(subtitle.c_str(), 11,
                                           {row.x + 18.0f, row.y + 38.0f, 520.0f, 18.0f},
                                           t.text_muted, ui::text_align::left);
                     ui::draw_text_in_rect(item.local_summary.c_str(), 13,
@@ -581,7 +622,8 @@ void draw(state& profile, const song_select::auth_state& auth_state, bool reques
                     ui::draw_text_in_rect(song_label(song).c_str(), 15,
                                           {row.x + 18.0f, row.y + 9.0f, row.width - 160.0f, 24.0f},
                                           t.text, ui::text_align::left);
-                    ui::draw_text_in_rect(song.artist.c_str(), 11,
+                    const std::string subtitle = song_subtitle(song);
+                    ui::draw_text_in_rect(subtitle.c_str(), 11,
                                           {row.x + 18.0f, row.y + 38.0f, row.width - 160.0f, 18.0f},
                                           t.text_muted, ui::text_align::left);
                     draw_profile_button(row_action_rect(row), "DELETE", !busy, t.error);

@@ -48,6 +48,7 @@ void refresh_auth_state(song_select::auth_state& auth_state) {
     auth_state.email = summary.email;
     auth_state.display_name = summary.display_name;
     auth_state.email_verified = summary.email_verified;
+    auth_state.external_links = summary.external_links;
 }
 
 void start_restore(controller& controller_state, song_select::login_dialog_state&) {
