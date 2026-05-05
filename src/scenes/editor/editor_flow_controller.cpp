@@ -5,7 +5,6 @@
 #include <filesystem>
 
 #include "app_paths.h"
-#include "chart_identity_store.h"
 #include "chart_serializer.h"
 #include "path_utils.h"
 
@@ -105,7 +104,6 @@ bool save_to_path(const editor_flow_context& context, const std::string& file_pa
     }
 
     const std::string saved_path = path_utils::to_utf8(path);
-    chart_identity::put(context.chart_for_save->meta.chart_id, context.chart_for_save->meta.song_id);
     context.state->mark_saved(saved_path);
     context.save_dialog->error.clear();
     result.saved_chart_path = saved_path;
@@ -118,7 +116,8 @@ bool save_chart_from_dialog(const editor_flow_context& context, editor_flow_resu
     }
 
     if (is_appdata_song(*context.song)) {
-        const std::filesystem::path dest = app_paths::chart_path(context.state->data().meta.chart_id);
+        const std::filesystem::path dest =
+            app_paths::song_chart_path(context.song->meta.song_id, context.state->data().meta.chart_id);
         app_paths::ensure_directories();
         if (!save_to_path(context, path_utils::to_utf8(dest), result)) {
             return false;

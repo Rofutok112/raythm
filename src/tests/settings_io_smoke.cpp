@@ -81,14 +81,11 @@ int main() {
         defaults.target_fps = 240;
         defaults.fullscreen = true;
         defaults.dark_mode = true;
-        defaults.server_env = server_environment::environment::development;
-        defaults.custom_server_url = "http://localhost:3000/dev";
 
         initialize_settings_storage(defaults);
 
         expect(fs::is_directory(app_paths::app_data_root()), "Expected AppData root to be created.", ok);
         expect(fs::is_directory(app_paths::songs_root()), "Expected songs directory to be created.", ok);
-        expect(fs::is_directory(app_paths::charts_root()), "Expected charts directory to be created.", ok);
         expect(fs::is_regular_file(app_paths::settings_path()), "Expected settings.json to be created.", ok);
 
         game_settings loaded;
@@ -110,15 +107,6 @@ int main() {
                ok);
         expect(loaded.dark_mode == defaults.dark_mode,
                "Expected default dark mode flag to be written to settings.json.",
-               ok);
-        expect(loaded.server_env == defaults.server_env,
-               "Expected server environment to be written to settings.json.",
-               ok);
-        expect(loaded.custom_server_url == defaults.custom_server_url,
-               "Expected custom server URL to be written to settings.json.",
-               ok);
-        expect(server_environment::active_server_url_from_settings() == "https://dev-api.raythm.net",
-               "Expected active server URL to resolve the development environment.",
                ok);
 
         game_settings different_defaults = defaults;

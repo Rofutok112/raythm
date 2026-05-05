@@ -90,6 +90,77 @@ bool expect_missing_chart_id_failure() {
     std::cerr << "Expected missing chartId error\n";
     return false;
 }
+
+bool expect_chart_without_song_id_success() {
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "raythm_parser_no_song_id.rchart";
+    std::ofstream output(path, std::ios::trunc);
+    output << "[Metadata]\n"
+           << "chartId=parser-no-song-id\n"
+           << "keyCount=4\n"
+           << "difficulty=No Song ID\n"
+           << "chartAuthor=Codex\n"
+           << "formatVersion=1\n"
+           << "resolution=480\n"
+           << "offset=0\n\n"
+           << "[Timing]\n"
+           << "bpm,0,120\n"
+           << "meter,0,4/4\n\n"
+           << "[Notes]\n"
+           << "tap,0,0\n";
+    output.close();
+
+    const chart_parse_result result = chart_parser::parse(path.string());
+    std::filesystem::remove(path);
+    if (!result.success || !result.data.has_value()) {
+        std::cerr << "Expected chart without songId to parse\n";
+        for (const std::string& error : result.errors) {
+            std::cerr << "  " << error << '\n';
+        }
+        return false;
+    }
+    return result.data->meta.song_id.empty();
+}
+
+bool expect_server_managed_metadata_success() {
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "raythm_parser_server_managed_metadata.rchart";
+    std::ofstream output(path, std::ios::trunc);
+    output << "[Metadata]\n"
+           << "chartId=parser-server-managed-metadata\n"
+           << "keyCount=4\n"
+           << "difficulty=Server Managed\n"
+           << "level=12.5\n"
+           << "calculatedLevel=12.5\n"
+           << "isPublic=true\n"
+           << "contentSource=official\n"
+           << "metadataSchemaVersion=2\n"
+           << "clientChartId=local-chart\n"
+           << "clientSongId=local-song\n"
+           << "difficultyRulesetId=raythm-local\n"
+           << "difficultyRulesetVersion=1\n"
+           << "chartAuthor=Codex\n"
+           << "formatVersion=1\n"
+           << "resolution=480\n"
+           << "offset=0\n\n"
+           << "[Timing]\n"
+           << "bpm,0,120\n"
+           << "meter,0,4/4\n\n"
+           << "[Notes]\n"
+           << "tap,0,0\n";
+    output.close();
+
+    const chart_parse_result result = chart_parser::parse(path.string());
+    std::filesystem::remove(path);
+    if (!result.success || !result.data.has_value()) {
+        std::cerr << "Expected chart with server-managed metadata to parse\n";
+        for (const std::string& error : result.errors) {
+            std::cerr << "  " << error << '\n';
+        }
+        return false;
+    }
+    return result.data->meta.level == 0.0f;
+}
 }
 
 int main() {
@@ -99,6 +170,8 @@ int main() {
     ok = expect_failure(chart_path("parser_invalid_overlap.rchart"), "overlapping notes") && ok;
     ok = expect_failure(chart_path("parser_invalid_metadata.rchart"), "keyCount must be 4 or 6") && ok;
     ok = expect_missing_chart_id_failure() && ok;
+    ok = expect_chart_without_song_id_success() && ok;
+    ok = expect_server_managed_metadata_success() && ok;
 
     if (!ok) {
         return EXIT_FAILURE;

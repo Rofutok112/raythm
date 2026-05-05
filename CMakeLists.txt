@@ -12,6 +12,9 @@ set(RAYTHM_PACKAGE_VERSION "0.1.0" CACHE STRING "Version string used for Windows
 set(RAYTHM_PACKAGE_FILE_NAME
         "raythm-${RAYTHM_PACKAGE_VERSION}-windows-x64"
         CACHE STRING "Package file name without extension")
+set(RAYTHM_SERVER_ENV "development" CACHE STRING "Server environment: production or development")
+set_property(CACHE RAYTHM_SERVER_ENV PROPERTY STRINGS production development)
+set(RAYTHM_API_BASE_URL "" CACHE STRING "Optional API base URL override for local builds")
 set(RAYTHM_BASS_DIR
         "${CMAKE_SOURCE_DIR}/libs/bass"
         CACHE PATH "Directory containing bass.h, bass.lib, and bass.dll")
@@ -30,6 +33,11 @@ foreach(required_bass_file IN ITEMS
                 "Ensure libs/bass is checked into the repository or set RAYTHM_BASS_DIR to a directory containing bass.h, bass.lib, and bass.dll.")
     endif()
 endforeach()
+
+add_compile_definitions(RAYTHM_SERVER_ENV="${RAYTHM_SERVER_ENV}")
+if(NOT RAYTHM_API_BASE_URL STREQUAL "")
+    add_compile_definitions(RAYTHM_API_BASE_URL="${RAYTHM_API_BASE_URL}")
+endif()
 
 include(FetchContent)
 FetchContent_Declare(
@@ -142,8 +150,6 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/chart_parser.h
         src/gameplay/chart_difficulty.cpp
         src/gameplay/chart_difficulty.h
-        src/gameplay/chart_identity_store.cpp
-        src/gameplay/chart_identity_store.h
         src/gameplay/chart_fingerprint.cpp
         src/gameplay/chart_fingerprint.h
         src/gameplay/chart_level_cache.cpp
@@ -496,8 +502,6 @@ add_executable(song_loader_smoke
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/core/path_utils.h
-        src/gameplay/chart_identity_store.cpp
-        src/gameplay/chart_identity_store.h
         src/gameplay/song_fingerprint.cpp
         src/gameplay/song_fingerprint.h
         src/gameplay/song_loader.cpp
@@ -545,8 +549,6 @@ add_executable(local_content_index_smoke
         src/core/app_paths.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
-        src/gameplay/chart_identity_store.cpp
-        src/gameplay/chart_identity_store.h
         src/scenes/title/local_content_binding.h
         src/scenes/title/local_content_database.cpp
         src/scenes/title/local_content_database.h
@@ -604,8 +606,6 @@ add_executable(ranking_service_smoke
         src/scenes/title/local_content_database.h
         src/scenes/title/local_content_index.cpp
         src/scenes/title/local_content_index.h
-        src/gameplay/chart_identity_store.cpp
-        src/gameplay/chart_identity_store.h
         src/models/data_models.h
         src/gameplay/chart_fingerprint.cpp
         src/gameplay/chart_fingerprint.h
@@ -696,8 +696,6 @@ add_executable(editor_flow_controller_smoke
         src/scenes/editor/editor_timing_panel.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
-        src/gameplay/chart_identity_store.cpp
-        src/gameplay/chart_identity_store.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/models/data_models.h

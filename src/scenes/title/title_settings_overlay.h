@@ -28,7 +28,6 @@ private:
     settings_gameplay_page gameplay_page_;
     settings_audio_page audio_page_;
     settings_video_page video_page_;
-    settings_network_page network_page_;
     settings_key_config_page key_config_page_;
     settings::page_id current_page_ = settings::page_id::gameplay;
     float animation_ = 0.0f;

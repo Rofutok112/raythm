@@ -6,11 +6,8 @@
 #include <string>
 
 #include "raylib.h"
-#include "network/auth_client.h"
-#include "network/server_environment.h"
 #include "settings/settings_layout.h"
 #include "ui_draw.h"
-#include "ui_text_input.h"
 
 namespace {
 
@@ -23,17 +20,6 @@ constexpr float kNoteSpeedDisplayScale = 10.0f;
 
 std::string format_offset_label(int offset_ms) {
     return (offset_ms > 0 ? "+" : "") + std::to_string(offset_ms) + " ms";
-}
-
-std::string active_server_url(const game_settings& settings) {
-    return auth::normalize_server_url(
-        server_environment::configured_url(settings.server_env, settings.custom_server_url));
-}
-
-void clear_session_if_server_changed(const std::string& previous_url, const game_settings& settings) {
-    if (previous_url != active_server_url(settings)) {
-        auth::clear_saved_session();
-    }
 }
 
 }  // namespace
@@ -228,66 +214,6 @@ void settings_video_page::draw() const {
                              settings::kLayer, 22, settings::kSliderTopOffset);
     ui::draw_value_selector(settings::kGeneralRows[1], "Display", settings_.fullscreen ? "Fullscreen" : "Windowed", settings::kLayer);
     ui::draw_value_selector(settings::kGeneralRows[2], "Theme", settings_.dark_mode ? "Dark" : "Light", settings::kLayer);
-}
-
-settings_network_page::settings_network_page(game_settings& settings) : settings_(settings) {
-    custom_url_input_.value = settings_.custom_server_url;
-    custom_url_input_.cursor = ui::utf8_codepoint_count(custom_url_input_.value);
-}
-
-void settings_network_page::reset_interaction() {
-    custom_url_input_.active = false;
-    ui::clear_text_input_selection(custom_url_input_);
-}
-
-void settings_network_page::update() {
-    const std::string previous_url = active_server_url(settings_);
-    if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[0]), settings::kLayer)) {
-        settings_.server_env = server_environment::previous(settings_.server_env);
-    } else if (ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[0]), settings::kLayer)) {
-        settings_.server_env = server_environment::next(settings_.server_env);
-    }
-    clear_session_if_server_changed(previous_url, settings_);
-}
-
-void settings_network_page::draw() const {
-    ui::draw_value_selector(settings::kGeneralRows[0], "Server", server_environment::label(settings_.server_env),
-                            settings::kLayer);
-
-    const ui::text_input_result result = ui::draw_text_input(
-        settings::kGeneralRows[1],
-        custom_url_input_,
-        "Custom URL",
-        server_environment::kDefaultCustomServerUrl,
-        nullptr,
-        settings::kLayer,
-        18,
-        128,
-        ui::default_text_input_filter,
-        180.0f);
-    if (result.changed) {
-        const std::string previous_url = active_server_url(settings_);
-        settings_.custom_server_url = auth::normalize_server_url(custom_url_input_.value);
-        if (custom_url_input_.value != settings_.custom_server_url) {
-            custom_url_input_.value = settings_.custom_server_url;
-            custom_url_input_.cursor = ui::utf8_codepoint_count(custom_url_input_.value);
-        }
-        clear_session_if_server_changed(previous_url, settings_);
-    }
-
-    const std::string active_url = active_server_url(settings_);
-    const ui::row_state active_row =
-        ui::draw_row(settings::kGeneralRows[2], g_theme->row, g_theme->row_hover, g_theme->border);
-    const Rectangle active_content = ui::inset(active_row.visual, ui::edge_insets::symmetric(0.0f, 18.0f));
-    const ui::rect_pair active_columns = ui::split_columns(active_content, 180.0f);
-    ui::draw_text_in_rect("Active URL", 22, active_columns.first, g_theme->text, ui::text_align::left);
-    ui::draw_text_in_rect(active_url.c_str(), 18, active_columns.second, g_theme->text_dim, ui::text_align::right);
-
-    const ui::row_state sign_in_row =
-        ui::draw_row(settings::kGeneralRows[3], g_theme->row, g_theme->row_hover, g_theme->border);
-    const Rectangle sign_in_content = ui::inset(sign_in_row.visual, ui::edge_insets::symmetric(0.0f, 18.0f));
-    ui::draw_text_in_rect("Switching servers uses a separate sign-in session", 20,
-                          sign_in_content, g_theme->text_dim, ui::text_align::left);
 }
 
 settings_key_config_page::settings_key_config_page(game_settings& settings) : settings_(settings) {

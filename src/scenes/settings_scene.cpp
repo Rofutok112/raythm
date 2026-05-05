@@ -20,7 +20,6 @@ settings_scene::settings_scene(scene_manager& manager, return_target target)
       gameplay_page_(g_settings),
       audio_page_(g_settings, runtime_applier_),
       video_page_(g_settings, runtime_applier_),
-      network_page_(g_settings),
       key_config_page_(g_settings) {
 }
 
@@ -35,7 +34,6 @@ void settings_scene::on_enter() {
     gameplay_page_.reset_interaction();
     audio_page_.reset_interaction();
     video_page_.reset_interaction();
-    network_page_.reset_interaction();
     key_config_page_.reset();
 }
 
@@ -120,9 +118,6 @@ void settings_scene::update_current_page() {
         case settings::page_id::video:
             video_page_.update();
             break;
-        case settings::page_id::network:
-            network_page_.update();
-            break;
         case settings::page_id::key_config:
             key_config_page_.update();
             break;
@@ -140,9 +135,6 @@ void settings_scene::draw_current_page() const {
         case settings::page_id::video:
             video_page_.draw();
             break;
-        case settings::page_id::network:
-            network_page_.draw();
-            break;
         case settings::page_id::key_config:
             key_config_page_.draw();
             break;
@@ -153,7 +145,6 @@ void settings_scene::change_page(settings::page_id next_page) {
     gameplay_page_.reset_interaction();
     audio_page_.reset_interaction();
     video_page_.reset_interaction();
-    network_page_.reset_interaction();
     if (current_page_ == settings::page_id::key_config && next_page != settings::page_id::key_config) {
         key_config_page_.clear_selection();
     }

@@ -224,42 +224,8 @@ std::string parse_error_message(const std::string& body, std::string fallback) {
     return message.value_or(std::move(fallback));
 }
 
-std::string migrate_legacy_server_url(const std::string& server_url) {
-    const std::string normalized = auth::normalize_server_url(server_url);
-    return normalized;
-}
-
-void push_candidate_server_url(std::vector<std::string>& urls, const std::string& server_url) {
-    const std::string normalized = auth::normalize_server_url(server_url);
-    if (normalized.empty()) {
-        return;
-    }
-
-    for (const std::string& existing : urls) {
-        if (existing == normalized) {
-            return;
-        }
-    }
-    urls.push_back(normalized);
-}
-
-std::vector<std::string> candidate_server_urls(const std::string& server_url) {
-    std::vector<std::string> urls;
-    push_candidate_server_url(urls, server_url);
-    return urls;
-}
-
 bool server_urls_match(const std::string& lhs, const std::string& rhs) {
-    const std::vector<std::string> lhs_candidates = candidate_server_urls(lhs);
-    const std::vector<std::string> rhs_candidates = candidate_server_urls(rhs);
-    for (const std::string& lhs_candidate : lhs_candidates) {
-        for (const std::string& rhs_candidate : rhs_candidates) {
-            if (lhs_candidate == rhs_candidate) {
-                return true;
-            }
-        }
-    }
-    return false;
+    return auth::normalize_server_url(lhs) == auth::normalize_server_url(rhs);
 }
 
 bool write_session_file(const auth::session& session_data) {
@@ -270,7 +236,7 @@ bool write_session_file(const auth::session& session_data) {
     }
 
     output << "{\n";
-    output << "  \"serverUrl\": \"" << json::escape_string(migrate_legacy_server_url(session_data.server_url)) << "\",\n";
+    output << "  \"serverUrl\": \"" << json::escape_string(auth::normalize_server_url(session_data.server_url)) << "\",\n";
     output << "  \"accessToken\": \"" << json::escape_string(session_data.access_token) << "\",\n";
     output << "  \"refreshToken\": \"" << json::escape_string(session_data.refresh_token) << "\",\n";
     output << "  \"user\": {\n";
@@ -315,7 +281,7 @@ bool write_trusted_device_token(const std::string& server_url, const std::string
     }
 
     output << "{\n";
-    output << "  \"serverUrl\": \"" << json::escape_string(migrate_legacy_server_url(server_url)) << "\",\n";
+    output << "  \"serverUrl\": \"" << json::escape_string(auth::normalize_server_url(server_url)) << "\",\n";
     output << "  \"email\": \"" << json::escape_string(json::trim(email)) << "\",\n";
     output << "  \"trustedDeviceToken\": \"" << json::escape_string(token) << "\"\n";
     output << "}\n";
@@ -351,14 +317,7 @@ http_response send_authenticated_request(const auth::session& session_data,
         headers.emplace_back("Content-Type", "application/json");
     }
 
-    http_response last_response;
-    for (const std::string& server_url : candidate_server_urls(session_data.server_url)) {
-        last_response = send_request(method, build_auth_url(server_url, path), body, headers);
-        if (last_response.error_message.empty()) {
-            return last_response;
-        }
-    }
-    return last_response;
+    return send_request(method, build_auth_url(session_data.server_url, path), body, headers);
 }
 
 auth::operation_result parse_auth_response(const http_response& response,
@@ -418,32 +377,21 @@ auth::operation_result parse_auth_response(const http_response& response,
     }, *session_data);
 }
 
-auth::operation_result send_auth_json_with_fallback(const std::string& server_url,
-                                                    std::string_view path,
-                                                    const std::string& body,
-                                                    std::string success_message,
-                                                    const std::string& email_for_device = {}) {
-    auth::operation_result last_result{
-        .success = false,
-        .message = "Server URL is required.",
-        .session_data = std::nullopt,
-    };
-    for (const std::string& candidate_url : candidate_server_urls(server_url)) {
-        const http_response response = send_request(
-            "POST",
-            build_auth_url(candidate_url, path),
-            body,
-            {
-                {"Accept", "application/json"},
-                {"Content-Type", "application/json"},
-                {"User-Agent", "raythm/0.1"},
-            });
-        last_result = parse_auth_response(response, candidate_url, success_message, email_for_device);
-        if (response.error_message.empty()) {
-            return last_result;
-        }
-    }
-    return last_result;
+auth::operation_result send_auth_json(const std::string& server_url,
+                                      std::string_view path,
+                                      const std::string& body,
+                                      std::string success_message,
+                                      const std::string& email_for_device = {}) {
+    const http_response response = send_request(
+        "POST",
+        build_auth_url(server_url, path),
+        body,
+        {
+            {"Accept", "application/json"},
+            {"Content-Type", "application/json"},
+            {"User-Agent", "raythm/0.1"},
+        });
+    return parse_auth_response(response, server_url, success_message, email_for_device);
 }
 
 }  // namespace
@@ -478,7 +426,7 @@ std::optional<session> load_saved_session() {
     }
 
     session loaded{
-        .server_url = migrate_legacy_server_url(*server_url),
+        .server_url = normalize_server_url(*server_url),
         .access_token = *access_token,
         .refresh_token = *refresh_token,
         .user = *user,
@@ -545,7 +493,7 @@ operation_result register_user(const std::string& server_url,
         "\"password\":\"" + json::escape_string(password) + "\""
         "}";
 
-    return send_auth_json_with_fallback(
+    return send_auth_json(
         normalized_server_url,
         "/auth/register",
         body,
@@ -576,7 +524,7 @@ operation_result login_user(const std::string& server_url,
                : "") +
         "}";
 
-    return send_auth_json_with_fallback(
+    return send_auth_json(
         normalized_server_url,
         "/auth/login",
         body,
@@ -594,7 +542,7 @@ operation_result verify_email_code(const std::string& server_url,
         "\"code\":\"" + json::escape_string(json::trim(code)) + "\""
         "}";
 
-    return send_auth_json_with_fallback(
+    return send_auth_json(
         normalized_server_url,
         "/auth/verify-email",
         body,
@@ -612,7 +560,7 @@ operation_result verify_login_code(const std::string& server_url,
         "\"code\":\"" + json::escape_string(json::trim(code)) + "\""
         "}";
 
-    return send_auth_json_with_fallback(
+    return send_auth_json(
         normalized_server_url,
         "/auth/verify-login",
         body,
@@ -633,21 +581,15 @@ operation_result resend_verification_code(const std::string& server_url,
         "\"purpose\":\"" + purpose_text + "\""
         "}";
 
-    http_response response;
-    for (const std::string& candidate_url : candidate_server_urls(normalized_server_url)) {
-        response = send_request(
-            "POST",
-            build_auth_url(candidate_url, "/auth/resend-code"),
-            body,
-            {
-                {"Accept", "application/json"},
-                {"Content-Type", "application/json"},
-                {"User-Agent", "raythm/0.1"},
-            });
-        if (response.error_message.empty()) {
-            break;
-        }
-    }
+    const http_response response = send_request(
+        "POST",
+        build_auth_url(normalized_server_url, "/auth/resend-code"),
+        body,
+        {
+            {"Accept", "application/json"},
+            {"Content-Type", "application/json"},
+            {"User-Agent", "raythm/0.1"},
+        });
 
     if (!response.error_message.empty()) {
         return {
@@ -680,23 +622,16 @@ operation_result restore_saved_session() {
         };
     }
 
-    http_response me_response;
-    std::string active_server_url = stored->server_url;
-    for (const std::string& candidate_url : candidate_server_urls(stored->server_url)) {
-        me_response = send_request(
-            "GET",
-            build_auth_url(candidate_url, "/me"),
-            {},
-            {
-                {"Accept", "application/json"},
-                {"Authorization", "Bearer " + stored->access_token},
-                {"User-Agent", "raythm/0.1"},
-            });
-        active_server_url = candidate_url;
-        if (me_response.error_message.empty()) {
-            break;
-        }
-    }
+    const std::string active_server_url = normalize_server_url(stored->server_url);
+    const http_response me_response = send_request(
+        "GET",
+        build_auth_url(active_server_url, "/me"),
+        {},
+        {
+            {"Accept", "application/json"},
+            {"Authorization", "Bearer " + stored->access_token},
+            {"User-Agent", "raythm/0.1"},
+        });
 
     if (me_response.error_message.empty() && me_response.status_code >= 200 && me_response.status_code < 300) {
         const std::optional<public_user> user = parse_me_response(me_response.body);

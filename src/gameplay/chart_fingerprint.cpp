@@ -71,6 +71,20 @@ std::string read_text_file(const std::filesystem::path& path) {
     return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
+bool is_storage_metadata_key(const std::string& key) {
+    return key == "chartId" ||
+           key == "songId" ||
+           key == "level" ||
+           key == "calculatedLevel" ||
+           key == "isPublic" ||
+           key == "contentSource" ||
+           key == "metadataSchemaVersion" ||
+           key == "clientChartId" ||
+           key == "clientSongId" ||
+           key == "difficultyRulesetId" ||
+           key == "difficultyRulesetVersion";
+}
+
 }  // namespace
 
 namespace chart_fingerprint {
@@ -84,6 +98,9 @@ std::string build(std::string_view content) {
     bool in_metadata = false;
     for (const std::string& line : lines) {
         const std::string trimmed = trim(line);
+        if (trimmed.empty()) {
+            continue;
+        }
 
         if (trimmed == "[Metadata]") {
             in_metadata = true;
@@ -99,7 +116,7 @@ std::string build(std::string_view content) {
             const size_t separator_index = line.find('=');
             if (separator_index != std::string::npos) {
                 const std::string key = trim(std::string_view(line).substr(0, separator_index));
-                if (key == "chartId" || key == "songId") {
+                if (is_storage_metadata_key(key)) {
                     continue;
                 }
             }

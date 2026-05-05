@@ -366,27 +366,3 @@ song_load_result song_loader::load_directory(const std::string& song_dir_utf8) {
 chart_parse_result song_loader::load_chart(const std::string& path) {
     return chart_parser::parse(path);
 }
-
-void song_loader::attach_external_charts(const std::string& charts_dir, std::vector<song_data>& songs) {
-    const fs::path root = path_utils::from_utf8(charts_dir);
-    if (!fs::exists(root) || !fs::is_directory(root)) {
-        return;
-    }
-
-    for (const fs::path& chart_path : collect_chart_files_in_directory(root)) {
-        const fs::directory_entry entry(chart_path);
-        const chart_parse_result parse_result = chart_parser::parse(path_utils::to_utf8(entry.path()));
-        if (!parse_result.success || !parse_result.data.has_value()) {
-            continue;
-        }
-
-        const std::string& song_id = parse_result.data->meta.song_id;
-
-        for (song_data& song : songs) {
-            if (song.meta.song_id == song_id) {
-                song.chart_paths.push_back(path_utils::to_utf8(entry.path()));
-                break;
-            }
-        }
-    }
-}

@@ -3,7 +3,6 @@
 #include <string>
 
 #include "input_handler.h"
-#include "network/server_environment.h"
 
 // 解像度プリセット
 struct resolution_preset {
@@ -39,8 +38,6 @@ struct game_settings {
     int windowed_height = 1080;
     bool fullscreen = false;
     bool dark_mode = true;
-    server_environment::environment server_env = server_environment::environment::production;
-    std::string custom_server_url = server_environment::kDefaultCustomServerUrl;
 };
 
 inline game_settings g_settings;

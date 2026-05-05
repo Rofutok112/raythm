@@ -20,7 +20,6 @@ struct online_song_binding {
 struct online_chart_binding {
     std::string server_url;
     std::string local_chart_id;
-    std::string local_song_id;
     std::string remote_chart_id;
     std::string remote_song_id;
     online_origin origin = online_origin::owned_upload;
@@ -30,11 +29,6 @@ struct snapshot {
     std::vector<online_song_binding> songs;
     std::vector<online_chart_binding> charts;
 };
-
-std::optional<std::string> linked_song_for_chart(const std::string& local_chart_id);
-void link_chart_to_song(const std::string& local_chart_id, const std::string& local_song_id);
-void unlink_chart(const std::string& local_chart_id);
-void unlink_charts_for_song(const std::string& local_song_id);
 
 snapshot load_snapshot();
 std::optional<online_song_binding> find_song_by_local(const snapshot& index,

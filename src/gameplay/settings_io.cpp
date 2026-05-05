@@ -7,7 +7,6 @@
 #include <optional>
 #include <sstream>
 #include <string>
-#include <string_view>
 #include <system_error>
 
 #include "app_paths.h"
@@ -31,34 +30,6 @@ std::string read_file(const fs::path& path) {
     std::ostringstream buffer;
     buffer << input.rdbuf();
     return buffer.str();
-}
-
-std::string escape_json_string(const std::string& value) {
-    std::string escaped;
-    escaped.reserve(value.size());
-    for (char ch : value) {
-        switch (ch) {
-        case '\\':
-            escaped += "\\\\";
-            break;
-        case '"':
-            escaped += "\\\"";
-            break;
-        case '\n':
-            escaped += "\\n";
-            break;
-        case '\r':
-            escaped += "\\r";
-            break;
-        case '\t':
-            escaped += "\\t";
-            break;
-        default:
-            escaped += ch;
-            break;
-        }
-    }
-    return escaped;
 }
 
 // JSON から文字列値を取り出す。
@@ -182,10 +153,6 @@ void load_settings(game_settings& settings) {
         settings.fullscreen = *v;
     if (auto v = extract_bool(content, "darkMode"))
         settings.dark_mode = *v;
-    if (auto v = extract_string(content, "serverEnvironment"))
-        settings.server_env = server_environment::parse(*v);
-    if (auto v = extract_string(content, "customServerUrl"))
-        settings.custom_server_url = *v;
 
     if (auto v = extract_string(content, "keys4"))
         parse_key_array(*v, settings.keys.keys_4);
@@ -223,8 +190,6 @@ void save_settings(const game_settings& settings) {
     out << "  \"windowedHeight\": " << settings.windowed_height << ",\n";
     out << "  \"fullscreen\": " << (settings.fullscreen ? "true" : "false") << ",\n";
     out << "  \"darkMode\": " << (settings.dark_mode ? "true" : "false") << ",\n";
-    out << "  \"serverEnvironment\": \"" << server_environment::key(settings.server_env) << "\",\n";
-    out << "  \"customServerUrl\": \"" << escape_json_string(settings.custom_server_url) << "\",\n";
     out << "  \"keys4\": \"" << keys_to_csv(settings.keys.keys_4) << "\",\n";
     out << "  \"keys6\": \"" << keys_to_csv(settings.keys.keys_6) << "\"\n";
     out << "}\n";

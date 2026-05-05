@@ -946,7 +946,6 @@ upload_result upload_chart(const song_select::song_entry& song,
     local_content_index::put_chart_binding({
         .server_url = session.server_url,
         .local_chart_id = chart.meta.chart_id,
-        .local_song_id = song.song.meta.song_id,
         .remote_chart_id = request_result.remote_chart_id,
         .remote_song_id = *remote_song_id,
         .origin = local_content_index::online_origin::owned_upload,

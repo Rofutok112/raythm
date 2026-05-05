@@ -72,7 +72,7 @@ bool is_absolute_remote_url(std::string_view value) {
     return value.rfind("http://", 0) == 0 || value.rfind("https://", 0) == 0;
 }
 
-void push_candidate_server_url(std::vector<std::string>& urls, std::string url) {
+void append_unique_server_url(std::vector<std::string>& urls, std::string url) {
     url = auth::normalize_server_url(json::trim(url));
     if (url.empty()) {
         return;
@@ -88,7 +88,7 @@ void push_candidate_server_url(std::vector<std::string>& urls, std::string url) 
 
 std::vector<std::string> resolve_server_urls() {
     std::vector<std::string> urls;
-    push_candidate_server_url(urls, server_environment::active_server_url_from_settings());
+    append_unique_server_url(urls, server_environment::active_server_url());
     return urls;
 }
 
@@ -126,9 +126,9 @@ std::string build_chart_page_url(const std::string& server_url,
 
 std::vector<std::string> prioritize_server_url(const std::string& preferred_server_url) {
     std::vector<std::string> urls;
-    push_candidate_server_url(urls, preferred_server_url);
+    append_unique_server_url(urls, preferred_server_url);
     for (const std::string& server_url : resolve_server_urls()) {
-        push_candidate_server_url(urls, server_url);
+        append_unique_server_url(urls, server_url);
     }
     return urls;
 }
