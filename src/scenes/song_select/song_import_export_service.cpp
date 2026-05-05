@@ -438,7 +438,6 @@ transfer_result import_chart_package(const chart_import_request& request) {
         result.message = "Failed to save the imported chart.";
         return result;
     }
-    local_content_index::link_chart_to_song(request.chart.meta.chart_id, request.target_song_id);
     chart_level_cache::calculate_and_store(path_utils::to_utf8(destination_path), chart_data_for_save);
 
     result.success = true;

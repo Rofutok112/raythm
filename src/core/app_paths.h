@@ -20,18 +20,11 @@ std::filesystem::path app_data_root();
 // AppData/Local/raythm/songs/
 std::filesystem::path songs_root();
 
-// AppData/Local/raythm/charts/
-std::filesystem::path charts_root();
-
 // AppData/Local/raythm/rankings/
 std::filesystem::path rankings_root();
 
 // AppData/Local/raythm/songs/{song_id}/
 std::filesystem::path song_dir(const std::string& song_id);
-
-// AppData/Local/raythm/charts/{chart_id}.rchart
-// Legacy external chart location kept for existing installs.
-std::filesystem::path chart_path(const std::string& chart_id);
 
 // AppData/Local/raythm/songs/{song_id}/charts/{chart_id}.rchart
 std::filesystem::path song_chart_path(const std::string& song_id, const std::string& chart_id);
@@ -59,9 +52,6 @@ std::filesystem::path scoring_ruleset_cache_path();
 
 // AppData/Local/raythm/source_verification_cache.txt
 std::filesystem::path source_verification_cache_path();
-
-// AppData/Local/raythm/chart_identity_index.txt
-std::filesystem::path chart_identity_index_path();
 
 // AppData/Local/raythm/mvs/
 std::filesystem::path mvs_root();

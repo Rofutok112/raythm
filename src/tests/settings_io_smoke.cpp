@@ -86,7 +86,6 @@ int main() {
 
         expect(fs::is_directory(app_paths::app_data_root()), "Expected AppData root to be created.", ok);
         expect(fs::is_directory(app_paths::songs_root()), "Expected songs directory to be created.", ok);
-        expect(fs::is_directory(app_paths::charts_root()), "Expected charts directory to be created.", ok);
         expect(fs::is_regular_file(app_paths::settings_path()), "Expected settings.json to be created.", ok);
 
         game_settings loaded;

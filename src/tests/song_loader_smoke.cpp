@@ -3,9 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <vector>
 
-#include "chart_identity_store.h"
 #include "song_fingerprint.h"
 #include "song_loader.h"
 #include "song_writer.h"
@@ -103,28 +101,6 @@ std::filesystem::path write_temp_song_with_legacy_preview_fields() {
     return song_dir;
 }
 
-std::filesystem::path write_external_chart_without_song_id() {
-    const std::filesystem::path charts_dir =
-        std::filesystem::temp_directory_path() / "raythm_song_loader_external_charts";
-    std::error_code ec;
-    std::filesystem::remove_all(charts_dir, ec);
-    std::filesystem::create_directories(charts_dir);
-    std::ofstream output(charts_dir / "external-linked.rchart", std::ios::trunc);
-    output << "[Metadata]\n"
-           << "chartId=external-linked\n"
-           << "keyCount=4\n"
-           << "difficulty=External\n"
-           << "chartAuthor=Codex\n"
-           << "formatVersion=1\n"
-           << "resolution=480\n"
-           << "offset=0\n\n"
-           << "[Timing]\n"
-           << "bpm,0,120\n"
-           << "meter,0,4/4\n\n"
-           << "[Notes]\n"
-           << "tap,0,0\n";
-    return charts_dir;
-}
 }
 
 int main() {
@@ -279,18 +255,6 @@ int main() {
         ok = false;
     }
 
-    const std::filesystem::path external_charts_dir = write_external_chart_without_song_id();
-    std::vector<song_data> external_songs;
-    song_data linked_song;
-    linked_song.meta.song_id = "linked-song";
-    external_songs.push_back(linked_song);
-    chart_identity::put("external-linked", "linked-song");
-    song_loader::attach_external_charts(external_charts_dir.string(), external_songs);
-    if (external_songs.front().chart_paths.empty()) {
-        std::cerr << "Expected external chart identity index to attach chart to song\n";
-        ok = false;
-    }
-    std::filesystem::remove_all(external_charts_dir);
     std::filesystem::remove_all(appdata_root, ec);
 
     if (std::filesystem::exists(songs_root()) && ok) {

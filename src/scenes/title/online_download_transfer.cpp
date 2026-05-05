@@ -324,8 +324,6 @@ download_song_result download_chart_file(const song_entry_state song,
         result.message = error_message;
         return result;
     }
-    local_content_index::link_chart_to_song(local_chart_id, local_song_id);
-
     if (!local_content_index::find_song_by_local(server_url, local_song_id).has_value()) {
         local_content_index::put_song_binding({
             .server_url = server_url,
@@ -337,7 +335,6 @@ download_song_result download_chart_file(const song_entry_state song,
     local_content_index::put_chart_binding({
         .server_url = server_url,
         .local_chart_id = local_chart_id,
-        .local_song_id = local_song_id,
         .remote_chart_id = result.chart_id,
         .remote_song_id = result.song_id,
         .origin = local_content_index::online_origin::downloaded,

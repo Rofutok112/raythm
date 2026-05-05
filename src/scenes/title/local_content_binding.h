@@ -21,7 +21,6 @@ struct song_binding {
 struct chart_binding {
     std::string server_url;
     std::string local_chart_id;
-    std::string local_song_id;
     std::string remote_chart_id;
     std::string remote_song_id;
     origin origin = origin::owned_upload;

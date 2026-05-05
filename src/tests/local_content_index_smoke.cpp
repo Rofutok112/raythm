@@ -33,7 +33,6 @@ int main() {
     local_content_index::put_chart_binding({
         .server_url = "https://server.example",
         .local_chart_id = "local-chart",
-        .local_song_id = "local-song",
         .remote_chart_id = "remote-chart",
         .remote_song_id = "remote-song",
         .origin = local_content_index::online_origin::downloaded,
@@ -55,11 +54,6 @@ int main() {
     ok = chart_by_remote.has_value() && chart_by_remote->local_chart_id == "local-chart" && ok;
     ok = chart_by_local.has_value() &&
          chart_by_local->origin == local_content_index::online_origin::downloaded && ok;
-
-    local_content_index::link_chart_to_song("local-chart", "local-song");
-    ok = local_content_index::linked_song_for_chart("local-chart").value_or("") == "local-song" && ok;
-    local_content_index::unlink_chart("local-chart");
-    ok = !local_content_index::linked_song_for_chart("local-chart").has_value() && ok;
 
     std::filesystem::remove_all(appdata_root, ec);
     if (!ok) {

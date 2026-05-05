@@ -106,7 +106,6 @@ void append_tree_signature(std::ostringstream& output, const std::filesystem::pa
 std::string current_catalog_signature() {
     std::ostringstream output;
     append_tree_signature(output, app_paths::songs_root(), "songs");
-    append_tree_signature(output, app_paths::charts_root(), "charts");
     return output.str();
 }
 

@@ -66,20 +66,12 @@ std::filesystem::path songs_root() {
     return app_data_root() / "songs";
 }
 
-std::filesystem::path charts_root() {
-    return app_data_root() / "charts";
-}
-
 std::filesystem::path rankings_root() {
     return app_data_root() / "rankings";
 }
 
 std::filesystem::path song_dir(const std::string& song_id) {
     return songs_root() / song_id;
-}
-
-std::filesystem::path chart_path(const std::string& chart_id) {
-    return charts_root() / (chart_id + ".rchart");
 }
 
 std::filesystem::path song_chart_path(const std::string& song_id, const std::string& chart_id) {
@@ -118,10 +110,6 @@ std::filesystem::path source_verification_cache_path() {
     return app_data_root() / "source_verification_cache.txt";
 }
 
-std::filesystem::path chart_identity_index_path() {
-    return app_data_root() / "chart_identity_index.txt";
-}
-
 std::filesystem::path mvs_root() {
     return app_data_root() / "mvs";
 }
@@ -134,7 +122,6 @@ void ensure_directories() {
     std::error_code ec;
     std::filesystem::create_directories(app_data_root(), ec);
     std::filesystem::create_directories(songs_root(), ec);
-    std::filesystem::create_directories(charts_root(), ec);
     std::filesystem::create_directories(rankings_root(), ec);
     std::filesystem::create_directories(mvs_root(), ec);
 }

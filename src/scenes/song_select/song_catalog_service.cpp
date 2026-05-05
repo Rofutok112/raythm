@@ -49,10 +49,6 @@ bool is_within_root(const std::filesystem::path& path, const std::filesystem::pa
     return true;
 }
 
-bool is_chart_file_path(const std::filesystem::path& path) {
-    return path.extension() == ".rchart";
-}
-
 std::optional<rank> load_best_local_rank(const std::string& chart_id) {
     if (chart_id.empty()) {
         return std::nullopt;
@@ -602,8 +598,7 @@ catalog_data load_catalog(bool calculate_missing_levels) {
     const song_load_result load_result = song_loader::load_all(path_utils::to_utf8(app_paths::songs_root()));
     catalog.load_errors = load_result.errors;
 
-    std::vector<song_data> all_songs = load_result.songs;
-    song_loader::attach_external_charts(path_utils::to_utf8(app_paths::charts_root()), all_songs);
+    const std::vector<song_data> all_songs = load_result.songs;
 
     catalog.songs.reserve(all_songs.size());
     for (const song_data& song : all_songs) {
@@ -668,48 +663,7 @@ delete_result delete_song(const state& state, int song_index) {
         return result;
     }
 
-    struct chart_delete_target {
-        std::filesystem::path path;
-        std::string chart_id;
-    };
-    std::vector<chart_delete_target> chart_paths_to_delete;
-    const std::filesystem::path charts_root = app_paths::charts_root();
-    if (std::filesystem::exists(charts_root) && std::filesystem::is_directory(charts_root)) {
-        for (const auto& chart_entry : std::filesystem::directory_iterator(charts_root)) {
-            if (!chart_entry.is_regular_file() || !is_chart_file_path(chart_entry.path())) {
-                continue;
-            }
-
-            const chart_parse_result parse_result = song_loader::load_chart(path_utils::to_utf8(chart_entry.path()));
-            if (!parse_result.success || !parse_result.data.has_value()) {
-                continue;
-            }
-
-            std::string linked_song_id = local_content_index::linked_song_for_chart(parse_result.data->meta.chart_id)
-                .value_or("");
-            if (linked_song_id.empty()) {
-                linked_song_id = parse_result.data->meta.song_id;
-            }
-
-            if (linked_song_id == entry.song.meta.song_id) {
-                chart_paths_to_delete.push_back({
-                    .path = chart_entry.path(),
-                    .chart_id = parse_result.data->meta.chart_id,
-                });
-            }
-        }
-    }
-
     std::error_code ec;
-    for (const auto& chart_target : chart_paths_to_delete) {
-        std::filesystem::remove(chart_target.path, ec);
-        if (ec) {
-            result.message = "Failed to delete a linked chart file.";
-            return result;
-        }
-        local_content_index::unlink_chart(chart_target.chart_id);
-    }
-
     for (const auto& package : mv::load_all_packages()) {
         if (package.meta.song_id != entry.song.meta.song_id) {
             continue;
@@ -727,7 +681,6 @@ delete_result delete_song(const state& state, int song_index) {
         result.message = "Failed to delete the song directory.";
         return result;
     }
-    local_content_index::unlink_charts_for_song(entry.song.meta.song_id);
     local_content_index::remove_song_bindings(entry.song.meta.song_id);
     local_catalog_database::remove_song(entry.song.meta.song_id);
 
@@ -763,7 +716,6 @@ delete_result delete_chart(const state& state, int song_index, int chart_index) 
         return result;
     }
     const std::string deleted_chart_id = charts[static_cast<size_t>(chart_index)].meta.chart_id;
-    local_content_index::unlink_chart(deleted_chart_id);
     local_content_index::remove_chart_bindings(deleted_chart_id);
     local_catalog_database::remove_chart(deleted_chart_id);
 
