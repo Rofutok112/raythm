@@ -121,8 +121,8 @@ void title_create_mode_controller::update(scene_manager& manager,
     if (result.upload_chart_requested) {
         if (song == nullptr || chart == nullptr) {
             song_select::queue_status_message(state, "Select a chart to upload.", true);
-        } else if (!can_upload_content(song->status) || !can_upload_content(chart->status)) {
-            ui::notify("Only Local charts from Local songs can be uploaded.", ui::notice_tone::error, 2.8f);
+        } else if (!can_upload_content(chart->status)) {
+            ui::notify("Only Local charts can be uploaded.", ui::notice_tone::error, 2.8f);
         } else {
             callbacks.start_chart_upload(*song, *chart);
         }

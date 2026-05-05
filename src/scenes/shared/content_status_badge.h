@@ -7,6 +7,20 @@
 
 namespace content_status_badge {
 
+inline bool is_source_status(content_status status) {
+    return status == content_status::official ||
+           status == content_status::community ||
+           status == content_status::local;
+}
+
+inline bool should_show_source(content_status source_status, content_status status) {
+    return source_status != content_status::local &&
+           source_status != status &&
+           (status == content_status::update ||
+            status == content_status::modified ||
+            status == content_status::checking);
+}
+
 inline const char* label(content_status status) {
     switch (status) {
         case content_status::official: return "Official";
@@ -40,6 +54,28 @@ inline void draw(Rectangle rect, content_status status, unsigned char alpha, int
     DrawRectangleRounded(rect, 0.35f, 6, fill);
     DrawRectangleRoundedLinesEx(rect, 0.35f, 6, 1.2f, border);
     ui::draw_text_in_rect(label(status), font_size, rect, text, ui::text_align::center);
+}
+
+inline void draw_compound(Rectangle rect,
+                          content_status source_status,
+                          content_status status,
+                          unsigned char alpha,
+                          int font_size = 12) {
+    if (!should_show_source(source_status, status)) {
+        draw(rect, status, alpha, font_size);
+        return;
+    }
+
+    const float gap = 6.0f;
+    const float badge_width = rect.width;
+    Rectangle source_rect{
+        rect.x - badge_width - gap,
+        rect.y,
+        badge_width,
+        rect.height,
+    };
+    draw(source_rect, source_status, alpha, font_size);
+    draw(rect, status, alpha, font_size);
 }
 
 }  // namespace content_status_badge
