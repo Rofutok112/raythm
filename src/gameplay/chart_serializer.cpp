@@ -41,7 +41,7 @@ const char* note_type_name(note_type type) {
 }
 
 bool chart_serializer::serialize(const chart_data& data, const std::string& file_path) {
-    if (data.meta.chart_id.empty() || data.meta.song_id.empty()) {
+    if (data.meta.chart_id.empty()) {
         return false;
     }
 
@@ -52,7 +52,6 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
 
     output << "[Metadata]\n";
     output << "chartId=" << data.meta.chart_id << '\n';
-    output << "songId=" << data.meta.song_id << '\n';
     output << "keyCount=" << data.meta.key_count << '\n';
     output << "difficulty=" << data.meta.difficulty << '\n';
     output << "chartAuthor=" << data.meta.chart_author << '\n';

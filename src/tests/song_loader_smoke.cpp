@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "chart_identity_store.h"
 #include "song_fingerprint.h"
 #include "song_loader.h"
 #include "song_writer.h"
@@ -51,8 +52,7 @@ std::filesystem::path write_temp_chart() {
            << "chartAuthor=Codex\n"
            << "formatVersion=1\n"
            << "resolution=480\n"
-           << "offset=0\n"
-           << "songId=song-loader-song\n\n"
+           << "offset=0\n\n"
            << "[Timing]\n"
            << "bpm,0,120\n"
            << "meter,0,4/4\n\n"
@@ -103,7 +103,7 @@ std::filesystem::path write_temp_song_with_legacy_preview_fields() {
     return song_dir;
 }
 
-std::filesystem::path write_external_chart_with_song_id() {
+std::filesystem::path write_external_chart_without_song_id() {
     const std::filesystem::path charts_dir =
         std::filesystem::temp_directory_path() / "raythm_song_loader_external_charts";
     std::error_code ec;
@@ -112,7 +112,6 @@ std::filesystem::path write_external_chart_with_song_id() {
     std::ofstream output(charts_dir / "external-linked.rchart", std::ios::trunc);
     output << "[Metadata]\n"
            << "chartId=external-linked\n"
-           << "songId=linked-song\n"
            << "keyCount=4\n"
            << "difficulty=External\n"
            << "chartAuthor=Codex\n"
@@ -280,11 +279,12 @@ int main() {
         ok = false;
     }
 
-    const std::filesystem::path external_charts_dir = write_external_chart_with_song_id();
+    const std::filesystem::path external_charts_dir = write_external_chart_without_song_id();
     std::vector<song_data> external_songs;
     song_data linked_song;
     linked_song.meta.song_id = "linked-song";
     external_songs.push_back(linked_song);
+    chart_identity::put("external-linked", "linked-song");
     song_loader::attach_external_charts(external_charts_dir.string(), external_songs);
     if (external_songs.front().chart_paths.empty()) {
         std::cerr << "Expected external chart identity index to attach chart to song\n";

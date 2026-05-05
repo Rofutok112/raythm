@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string_view>
 
+#include "chart_identity_store.h"
 #include "path_utils.h"
 
 namespace {
@@ -380,7 +381,11 @@ void song_loader::attach_external_charts(const std::string& charts_dir, std::vec
             continue;
         }
 
-        const std::string& song_id = parse_result.data->meta.song_id;
+        std::string song_id = chart_identity::find_song_id(parse_result.data->meta.chart_id).value_or("");
+        if (song_id.empty() && !parse_result.data->meta.song_id.empty()) {
+            song_id = parse_result.data->meta.song_id;
+            chart_identity::put(parse_result.data->meta.chart_id, song_id);
+        }
 
         for (song_data& song : songs) {
             if (song.meta.song_id == song_id) {

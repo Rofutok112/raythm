@@ -132,10 +132,9 @@ int main() {
 
     ok = content.find("offset=-35") != std::string::npos && ok;
     ok = content.find("chartId=raythm_chart_serializer_smoke") != std::string::npos && ok;
-    ok = content.find("songId=serializer-song") != std::string::npos && ok;
+    ok = content.find("songId=") == std::string::npos && ok;
     ok = content.find("level=") == std::string::npos && ok;
     ok = expect_contains_in_order(content, "chartId=", "keyCount=") && ok;
-    ok = expect_contains_in_order(content, "songId=", "keyCount=") && ok;
     ok = expect_contains_in_order(content, "meter,0,4/4", "bpm,960,180.5") && ok;
     ok = expect_contains_in_order(content, "tap,480,0", "hold,480,2,840") && ok;
 
@@ -161,6 +160,7 @@ int main() {
     }
 
     chart_data expected = normalized_chart(source);
+    expected.meta.song_id.clear();
     if (!equal_chart_data(expected, *reparsed.data)) {
         std::cerr << "Round-trip chart data mismatch\n";
         ok = false;

@@ -244,9 +244,8 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
         }
     }
 
-    const std::array<std::string, 8> required_fields = {
+    const std::array<std::string, 7> required_fields = {
         "chartId",
-        "songId",
         "keyCount",
         "difficulty",
         "chartAuthor",

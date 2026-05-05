@@ -616,9 +616,7 @@ catalog_data load_catalog(bool calculate_missing_levels) {
             }
 
             chart_meta meta = parse_result.data->meta;
-            if (meta.song_id.empty()) {
-                meta.song_id = song.meta.song_id;
-            }
+            meta.song_id = song.meta.song_id;
             if (calculate_missing_levels) {
                 meta.level = chart_level_cache::get_or_calculate(chart_path, *parse_result.data);
             } else if (const std::optional<float> cached_level = chart_level_cache::find_level(chart_path);
@@ -687,10 +685,10 @@ delete_result delete_song(const state& state, int song_index) {
                 continue;
             }
 
-            std::string linked_song_id = parse_result.data->meta.song_id;
+            std::string linked_song_id = local_content_index::linked_song_for_chart(parse_result.data->meta.chart_id)
+                .value_or("");
             if (linked_song_id.empty()) {
-                linked_song_id = local_content_index::linked_song_for_chart(parse_result.data->meta.chart_id)
-                    .value_or("");
+                linked_song_id = parse_result.data->meta.song_id;
             }
 
             if (linked_song_id == entry.song.meta.song_id) {
