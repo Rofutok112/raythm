@@ -155,6 +155,8 @@ struct state {
     std::string reload_restore_song_id;
     std::string reload_restore_chart_id;
     bool preview_bar_dragging = false;
+    bool preview_bar_resume_after_drag = false;
+    double preview_bar_drag_position_seconds = 0.0;
 };
 
 struct layout {

@@ -15,6 +15,8 @@ void reset_chart_scroll(state& state) {
     state.chart_scroll_y = 0.0f;
     state.chart_scroll_y_target = 0.0f;
     state.preview_bar_dragging = false;
+    state.preview_bar_resume_after_drag = false;
+    state.preview_bar_drag_position_seconds = 0.0;
 }
 
 void reset_browse_scrolls(state& state) {
@@ -27,6 +29,8 @@ bool handle_back_or_close_input(state& state, update_result& result) {
     if (state.detail_open && (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))) {
         state.detail_open = false;
         state.preview_bar_dragging = false;
+        state.preview_bar_resume_after_drag = false;
+        state.preview_bar_drag_position_seconds = 0.0;
         reset_chart_scroll(state);
         return true;
     }
@@ -137,12 +141,11 @@ bool handle_detail_actions(state& state,
         request_charts_for_selected_song(state);
     }
 
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        state.preview_bar_dragging = false;
-    }
-
     if (song != nullptr && left_pressed && CheckCollisionPointRec(mouse, current.preview_bar_rect)) {
         state.preview_bar_dragging = true;
+        state.preview_bar_resume_after_drag = audio_manager::instance().is_preview_playing();
+        state.preview_bar_drag_position_seconds = audio_manager::instance().get_preview_position_seconds();
+        audio_manager::instance().pause_preview();
     }
 
     if (song != nullptr && state.preview_bar_dragging) {
@@ -150,12 +153,17 @@ bool handle_detail_actions(state& state,
         if (preview_length > 0.0 && audio_manager::instance().is_preview_loaded()) {
             const float ratio = std::clamp((mouse.x - current.preview_bar_rect.x) / current.preview_bar_rect.width,
                                            0.0f, 1.0f);
-            audio_manager::instance().seek_preview(preview_length * static_cast<double>(ratio));
+            state.preview_bar_drag_position_seconds = preview_length * static_cast<double>(ratio);
         }
         if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
             return true;
         }
+        audio_manager::instance().seek_preview(state.preview_bar_drag_position_seconds);
+        if (state.preview_bar_resume_after_drag) {
+            audio_manager::instance().play_preview(false);
+        }
         state.preview_bar_dragging = false;
+        state.preview_bar_resume_after_drag = false;
     }
 
     if (ui::is_clicked(current.preview_play_rect)) {
@@ -272,9 +280,6 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
     const layout current = make_layout(anim_t, origin_rect);
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-    if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        state.preview_bar_dragging = false;
-    }
     const float wheel = GetMouseWheelMove();
     const float detail_target = state.detail_open ? 1.0f : 0.0f;
     const float detail_lerp_speed = state.detail_open ? 6.5f : 10.0f;

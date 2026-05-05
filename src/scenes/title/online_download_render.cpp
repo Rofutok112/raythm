@@ -581,7 +581,9 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
 
     const audio_manager& audio = audio_manager::instance();
     const double preview_length = detail::preview_display_length_seconds(*song);
-    const double preview_position = audio.get_preview_position_seconds();
+    const double preview_position = state.preview_bar_dragging
+        ? state.preview_bar_drag_position_seconds
+        : audio.get_preview_position_seconds();
     const float preview_ratio =
         preview_length > 0.0 ? std::clamp(static_cast<float>(preview_position / preview_length), 0.0f, 1.0f) : 0.0f;
     ui::draw_rect_f(current.preview_bar_rect, with_alpha(t.bg_alt, static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
