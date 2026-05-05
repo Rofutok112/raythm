@@ -58,7 +58,7 @@ int main() {
     ruleset_score.on_judge({judge_result::perfect, 0.0, 0});
     const result_data ruleset_result = ruleset_score.get_result_data();
     if (ruleset_result.scoring_ruleset_version != "smoke-ruleset" ||
-        ruleset_result.scoring_accepted_input != "note_results_v1" ||
+        ruleset_result.scoring_accepted_input != "noteResultsV1" ||
         ruleset_result.score != 123456) {
         std::cerr << "Score result should retain the ruleset used during play\n";
         return EXIT_FAILURE;

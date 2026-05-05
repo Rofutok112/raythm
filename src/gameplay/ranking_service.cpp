@@ -33,7 +33,8 @@
 namespace {
 
 constexpr char kLocalRankingFileHeader[] = "RAYTHM_LOCAL_RANKING_V6";
-constexpr char kAuthoritativeAcceptedInput[] = "note_results_v1";
+constexpr char kAuthoritativeAcceptedInput[] = "noteResultsV1";
+constexpr char kLegacyAuthoritativeAcceptedInput[] = "note_results_v1";
 constexpr wchar_t kEntropyLabel[] = L"raythm-local-ranking";
 
 std::string trim(std::string_view value) {
@@ -48,6 +49,13 @@ std::string trim(std::string_view value) {
     }
 
     return std::string(value.substr(start, end - start));
+}
+
+std::string normalize_accepted_input(std::string_view value) {
+    const std::string normalized = trim(value);
+    return normalized == kLegacyAuthoritativeAcceptedInput
+        ? std::string(kAuthoritativeAcceptedInput)
+        : normalized;
 }
 
 std::string current_timestamp_utc() {
@@ -299,7 +307,7 @@ std::vector<stored_local_record> parse_records(const std::string& content) {
                     continue;
                 }
                 record.scoring_ruleset_version = trim(ruleset_version_token);
-                record.scoring_accepted_input = trim(accepted_input_token);
+                record.scoring_accepted_input = normalize_accepted_input(accepted_input_token);
                 const std::optional<std::vector<note_result_entry>> note_results =
                     parse_note_results(note_results_token);
                 if (!note_results.has_value()) {
@@ -479,7 +487,7 @@ std::optional<std::pair<std::string, ranking_client::scoring_ruleset>> load_cach
         } else if (key == "active") {
             ruleset.active = trim(value) == "1";
         } else if (key == "accepted_input") {
-            ruleset.accepted_input = trim(value);
+            ruleset.accepted_input = normalize_accepted_input(value);
         } else if (key == "ruleset_version") {
             ruleset.ruleset_version = trim(value);
         } else if (key == "score_model") {
@@ -982,7 +990,7 @@ local_submit_result submit_local_result_detailed(const chart_meta& chart, const 
     new_record.scoring_accepted_input =
         result.scoring_accepted_input.empty()
             ? std::string(kAuthoritativeAcceptedInput)
-            : result.scoring_accepted_input;
+            : normalize_accepted_input(result.scoring_accepted_input);
     new_record.note_results = result.note_results;
     entry new_entry = resolve_record_entry(new_record, ruleset);
 
@@ -1087,6 +1095,7 @@ online_submit_result submit_online_result(const song_data& song,
         return submission;
     }
 
+    ruleset->accepted_input = normalize_accepted_input(ruleset->accepted_input);
     if (!ruleset->active ||
         ruleset->accepted_input != kAuthoritativeAcceptedInput) {
         submission.message = "The server does not accept this ranking submission format.";
@@ -1100,7 +1109,7 @@ online_submit_result submit_online_result(const song_data& song,
     const std::string submission_input_format =
         result.scoring_accepted_input.empty()
             ? std::string(kAuthoritativeAcceptedInput)
-            : result.scoring_accepted_input;
+            : normalize_accepted_input(result.scoring_accepted_input);
     if (submission_input_format != ruleset->accepted_input) {
         submission.message = "The score input format changed. Start the chart again to submit online ranking.";
         return submission;
