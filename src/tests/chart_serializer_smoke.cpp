@@ -144,10 +144,16 @@ int main() {
     const std::string content_with_other_ids =
         "[Metadata]\nchartId=other-chart\nsongId=other-song\n" +
         content.substr(content.find("keyCount="));
+    const std::string content_with_legacy_level =
+        "[Metadata]\nchartId=online-chart\nsongId=online-song\nlevel=12.5\n" +
+        content.substr(content.find("keyCount="));
     const std::string fingerprint_with_ids = chart_fingerprint::build(content_with_ids);
     const std::string fingerprint_with_other_ids = chart_fingerprint::build(content_with_other_ids);
+    const std::string fingerprint_with_legacy_level = chart_fingerprint::build(content_with_legacy_level);
     ok = updater::compute_sha256_hex(std::string_view(fingerprint_with_ids)) ==
          updater::compute_sha256_hex(std::string_view(fingerprint_with_other_ids)) && ok;
+    ok = updater::compute_sha256_hex(std::string_view(fingerprint_with_ids)) ==
+         updater::compute_sha256_hex(std::string_view(fingerprint_with_legacy_level)) && ok;
 
     const chart_parse_result reparsed = chart_parser::parse(output_path.string());
     if (!reparsed.success || !reparsed.data.has_value()) {

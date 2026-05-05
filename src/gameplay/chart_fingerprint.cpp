@@ -99,7 +99,7 @@ std::string build(std::string_view content) {
             const size_t separator_index = line.find('=');
             if (separator_index != std::string::npos) {
                 const std::string key = trim(std::string_view(line).substr(0, separator_index));
-                if (key == "chartId" || key == "songId") {
+                if (key == "chartId" || key == "songId" || key == "level") {
                     continue;
                 }
             }

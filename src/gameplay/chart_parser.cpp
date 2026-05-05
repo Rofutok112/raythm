@@ -237,6 +237,10 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
             } else {
                 meta.offset = *parsed;
             }
+        } else if (key == "level") {
+            if (!parse_float(value).has_value()) {
+                errors.push_back(format_line_error(line.first, "level must be a number"));
+            }
         } else if (key == "songId") {
             meta.song_id = value;
         } else {

@@ -121,6 +121,38 @@ bool expect_chart_without_song_id_success() {
     }
     return result.data->meta.song_id.empty();
 }
+
+bool expect_legacy_level_success() {
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "raythm_parser_legacy_level.rchart";
+    std::ofstream output(path, std::ios::trunc);
+    output << "[Metadata]\n"
+           << "chartId=parser-legacy-level\n"
+           << "keyCount=4\n"
+           << "difficulty=Legacy Level\n"
+           << "level=12.5\n"
+           << "chartAuthor=Codex\n"
+           << "formatVersion=1\n"
+           << "resolution=480\n"
+           << "offset=0\n\n"
+           << "[Timing]\n"
+           << "bpm,0,120\n"
+           << "meter,0,4/4\n\n"
+           << "[Notes]\n"
+           << "tap,0,0\n";
+    output.close();
+
+    const chart_parse_result result = chart_parser::parse(path.string());
+    std::filesystem::remove(path);
+    if (!result.success || !result.data.has_value()) {
+        std::cerr << "Expected chart with legacy level metadata to parse\n";
+        for (const std::string& error : result.errors) {
+            std::cerr << "  " << error << '\n';
+        }
+        return false;
+    }
+    return result.data->meta.level == 0.0f;
+}
 }
 
 int main() {
@@ -131,6 +163,7 @@ int main() {
     ok = expect_failure(chart_path("parser_invalid_metadata.rchart"), "keyCount must be 4 or 6") && ok;
     ok = expect_missing_chart_id_failure() && ok;
     ok = expect_chart_without_song_id_success() && ok;
+    ok = expect_legacy_level_success() && ok;
 
     if (!ok) {
         return EXIT_FAILURE;
