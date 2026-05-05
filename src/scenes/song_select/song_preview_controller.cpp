@@ -15,15 +15,18 @@ constexpr double kPreviewLoopTailSeconds = 1.0;
 
 double effective_preview_length_seconds(const song_data& song) {
     const double metadata_length = static_cast<double>(song.meta.duration_seconds);
-    if (metadata_length > 0.0) {
+    if (!song.meta.audio_url.empty()) {
         return metadata_length;
     }
 
     const double stream_length = audio_manager::instance().get_preview_length_seconds();
-    if (stream_length > 0.0) {
+    if (metadata_length > 0.0) {
+        if (stream_length <= 0.0) {
+            return metadata_length;
+        }
         return stream_length;
     }
-    return 0.0;
+    return stream_length;
 }
 
 }  // namespace
