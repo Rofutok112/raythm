@@ -4,7 +4,6 @@
 
 - 配布物として同梱される `assets/`
 - ローカル楽曲を置く `AppData/Local/raythm/songs/`
-- ローカル譜面を置く `AppData/Local/raythm/charts/`
 - ローカル MV を置く `AppData/Local/raythm/mvs/`
 
 このドキュメントは、どこに何が保存され、song select がどこを参照しているかを整理したものです。
@@ -20,8 +19,6 @@
   - `AppData/Local/raythm/`
 - `songs_root()`
   - `AppData/Local/raythm/songs/`
-- `charts_root()`
-  - `AppData/Local/raythm/charts/`
 - `mvs_root()`
   - `AppData/Local/raythm/mvs/`
 - `mv_dir(mv_id)`
@@ -47,8 +44,8 @@
   - `AppData/Local/raythm/songs/{song_id}/song.json`
   - `AppData/Local/raythm/songs/{song_id}/...audio...`
   - 必要なら jacket
-- 外部譜面:
-  - `AppData/Local/raythm/charts/{chart_id}.rchart`
+- 譜面:
+  - `AppData/Local/raythm/songs/{song_id}/charts/{chart_id}.rchart`
 - MV:
   - `AppData/Local/raythm/mvs/{mv_id}/mv.json`
   - `AppData/Local/raythm/mvs/{mv_id}/script.rmv`
@@ -60,7 +57,7 @@
 - 譜面拡張子は `.rchart`
 - 楽曲パッケージ拡張子は `.rpack`
 - imported song は `songs_root()`
-- imported chart は `charts_root()`
+- imported chart は対象楽曲の `songs_root()/{song_id}/charts/`
 - MV は `mvs_root()`
 
 ## Song Catalog Build
@@ -70,7 +67,8 @@ song select の一覧は [song_catalog_service.cpp](C:/Users/rento/CLionProjects
 読み込み順は次です。
 
 1. `songs_root()` からローカル楽曲を読む
-2. `charts_root()` の外部譜面を `song_id` でローカル楽曲へ紐付ける
+2. 各楽曲ディレクトリの `charts/*.rchart` を読み、親楽曲IDを実行時メタに反映する
+3. ローカルカタログDBへ `local_charts.song_id` として保存する
 
 その後:
 
@@ -88,8 +86,8 @@ song select の一覧は [song_catalog_service.cpp](C:/Users/rento/CLionProjects
 - 譜面拡張子は `.rchart` のみ
 - 楽曲ディレクトリには `song.json` が必要
 - `song.json` には `songId`, `title`, `artist`, `audioFile`, `jacketFile`, `baseBpm`, `previewStartMs`, `songVersion` が必要
-- `.rchart` には `chartId`, `songId`, `keyCount`, `difficulty`, `chartAuthor`, `formatVersion`, `resolution`, `offset` が必要
-- 外部譜面は `chart.meta.song_id` が一致した楽曲にだけ紐付きます
+- `.rchart` には `chartId`, `keyCount`, `difficulty`, `chartAuthor`, `formatVersion`, `resolution`, `offset` が必要
+- 譜面と曲の紐づけは `songs/<songId>/charts/*.rchart` の配置とローカルカタログDBで決まり、`.rchart` 内の `songId` は使いません
 
 ## MV Package Layout
 
@@ -115,8 +113,8 @@ MV は曲から独立したパッケージとして保存されます。
   - `.rpack` を作る
 - `IMPORT CHART`
   - `.rchart` を読む
-  - `chart.meta.song_id` と一致する楽曲を自動で探す
-  - `charts_root()/chart_id.rchart` に保存
+  - 選択中の楽曲ディレクトリ配下へ保存
+  - `songs_root()/song_id/charts/chart_id.rchart` に保存
 - `EXPORT CHART`
   - 既存譜面を `.rchart` として書き出す
 
@@ -126,8 +124,8 @@ MV は曲から独立したパッケージとして保存されます。
   - `AppData/Local/raythm/songs/`
   - 対象の `song.json`
 - imported chart が出ない
-  - `AppData/Local/raythm/charts/`
-  - `chart.meta.song_id`
+  - `AppData/Local/raythm/songs/<songId>/charts/`
+  - ローカルカタログDBの `local_charts.song_id`
 - MV が出ない / 読まれない
   - `AppData/Local/raythm/mvs/`
   - 対象の `mv.json`

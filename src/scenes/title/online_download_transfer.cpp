@@ -68,7 +68,6 @@ bool write_binary_file(const std::filesystem::path& path,
 
 bool write_chart_file(const std::filesystem::path& path,
                       const std::vector<unsigned char>& bytes,
-                      const std::string& local_song_id,
                       std::string& error_message) {
     std::filesystem::create_directories(path.parent_path());
     const std::filesystem::path temp_path = path.parent_path() / (path.filename().string() + ".download.tmp");
@@ -83,9 +82,7 @@ bool write_chart_file(const std::filesystem::path& path,
         return false;
     }
 
-    chart_data data = *parsed.data;
-    data.meta.song_id = local_song_id;
-    if (!chart_serializer::serialize(data, path_utils::to_utf8(path))) {
+    if (!chart_serializer::serialize(*parsed.data, path_utils::to_utf8(path))) {
         std::filesystem::remove(temp_path);
         error_message = "Failed to write downloaded chart data to disk.";
         return false;
@@ -367,7 +364,6 @@ download_song_result download_chart_file(const song_entry_state song,
     app_paths::ensure_directories();
     if (!write_chart_file(app_paths::song_chart_path(local_song_id, local_chart_id),
                           chart_fetch.bytes,
-                          local_song_id,
                           error_message)) {
         result.message = error_message;
         return result;

@@ -693,8 +693,7 @@ void append_chart_contract_fields(std::vector<multipart_field>& fields,
     fields.push_back({"metadataSchemaVersion", "2"});
     fields.push_back({"contentSource", "community"});
     push_string_field(fields, "clientChartId", chart.meta.chart_id);
-    push_string_field(fields, "clientSongId",
-                      chart.meta.song_id.empty() ? song.song.meta.song_id : chart.meta.song_id);
+    push_string_field(fields, "clientSongId", song.song.meta.song_id);
     push_positive_int_field(fields, "keyCount", chart.meta.key_count);
     push_string_field(fields, "difficultyName", chart.meta.difficulty);
     push_string_field(fields, "chartAuthor", chart.meta.chart_author);

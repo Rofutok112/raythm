@@ -126,6 +126,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
         return state;
     }
 
+    state.chart_data->meta.song_id = state.song_data->meta.song_id;
     state.chart_data = play_chart_filter::prepare_chart_for_playback(*state.chart_data, state.start_tick);
 
     state.input_handler = input_handler(g_settings.keys);
