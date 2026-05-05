@@ -145,7 +145,10 @@ int main() {
         "[Metadata]\nchartId=other-chart\nsongId=other-song\n" +
         content.substr(content.find("keyCount="));
     const std::string content_with_legacy_level =
-        "[Metadata]\nchartId=online-chart\nsongId=online-song\nlevel=12.5\n" +
+        "[Metadata]\nchartId=online-chart\nsongId=online-song\nlevel=12.5\n"
+        "calculatedLevel=12.5\nisPublic=true\ncontentSource=official\nmetadataSchemaVersion=2\n"
+        "clientChartId=local-chart\nclientSongId=local-song\n"
+        "difficultyRulesetId=raythm-local\ndifficultyRulesetVersion=1\n" +
         content.substr(content.find("keyCount="));
     const std::string fingerprint_with_ids = chart_fingerprint::build(content_with_ids);
     const std::string fingerprint_with_other_ids = chart_fingerprint::build(content_with_other_ids);

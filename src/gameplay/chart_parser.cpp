@@ -105,6 +105,18 @@ std::optional<note_type> parse_note_type(const std::string& value) {
     }
     return std::nullopt;
 }
+
+bool is_server_managed_metadata_key(const std::string& key) {
+    return key == "level" ||
+           key == "calculatedLevel" ||
+           key == "isPublic" ||
+           key == "contentSource" ||
+           key == "metadataSchemaVersion" ||
+           key == "clientChartId" ||
+           key == "clientSongId" ||
+           key == "difficultyRulesetId" ||
+           key == "difficultyRulesetVersion";
+}
 }
 
 chart_parse_result chart_parser::parse(const std::string& file_path) {
@@ -237,9 +249,12 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
             } else {
                 meta.offset = *parsed;
             }
-        } else if (key == "level") {
-            if (!parse_float(value).has_value()) {
-                errors.push_back(format_line_error(line.first, "level must be a number"));
+        } else if (is_server_managed_metadata_key(key)) {
+            if ((key == "level" || key == "calculatedLevel") && !parse_float(value).has_value()) {
+                errors.push_back(format_line_error(line.first, key + " must be a number"));
+            } else if ((key == "metadataSchemaVersion" || key == "difficultyRulesetVersion") &&
+                       !parse_int(value).has_value()) {
+                errors.push_back(format_line_error(line.first, key + " must be an integer"));
             }
         } else if (key == "songId") {
             meta.song_id = value;
