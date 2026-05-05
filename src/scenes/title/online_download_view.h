@@ -154,6 +154,7 @@ struct state {
     catalog_mode reload_restore_mode = catalog_mode::official;
     std::string reload_restore_song_id;
     std::string reload_restore_chart_id;
+    bool preview_bar_dragging = false;
 };
 
 struct layout {
