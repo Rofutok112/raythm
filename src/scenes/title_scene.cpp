@@ -326,7 +326,7 @@ void title_scene::update_play_mode(float dt) {
             .enter_home = [this]() { enter_home_mode(false); },
             .sync_media = [this]() { sync_play_media(); },
             .request_ranking_reload = [this]() { request_play_ranking_reload(); },
-            .open_update_catalog = [this]() {
+            .open_update_catalog = [this](bool include_chart) {
                 const song_select::song_entry* song = song_select::selected_song(play_state_);
                 if (song == nullptr) {
                     return;
@@ -336,7 +336,7 @@ void title_scene::update_play_mode(float dt) {
                 title_online_view::select_local_update_target(
                     online_state_,
                     song->song.meta.song_id,
-                    chart != nullptr ? chart->meta.chart_id : "",
+                    include_chart && chart != nullptr ? chart->meta.chart_id : "",
                     true);
                 enter_online_mode();
             },

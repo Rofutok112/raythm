@@ -3,14 +3,34 @@
 #include <optional>
 
 #include "models/data_models.h"
+#include "network/server_environment.h"
 #include "song_select/song_select_navigation.h"
+#include "title/local_content_index.h"
 #include "title/seamless_song_select_view.h"
 #include "ui_notice.h"
 
 namespace {
 
-bool can_upload_content(content_status status) {
-    return status == content_status::local;
+bool has_owned_song_upload(const song_select::song_entry& song) {
+    const auto binding =
+        local_content_index::find_song_by_local(server_environment::active_server_url(), song.song.meta.song_id);
+    return binding.has_value() && binding->origin == local_content_index::online_origin::owned_upload;
+}
+
+bool has_owned_chart_upload(const song_select::chart_option& chart) {
+    const auto binding =
+        local_content_index::find_chart_by_local(server_environment::active_server_url(), chart.meta.chart_id);
+    return binding.has_value() && binding->origin == local_content_index::online_origin::owned_upload;
+}
+
+bool can_upload_song(const song_select::song_entry& song) {
+    return song.status == content_status::local ||
+           (song.status == content_status::modified && has_owned_song_upload(song));
+}
+
+bool can_upload_chart(const song_select::chart_option& chart) {
+    return chart.status == content_status::local ||
+           (chart.status == content_status::modified && has_owned_chart_upload(chart));
 }
 
 }  // namespace
@@ -85,8 +105,8 @@ void title_create_mode_controller::update(scene_manager& manager,
     if (result.upload_song_requested) {
         if (song == nullptr) {
             song_select::queue_status_message(state, "Select a song to upload.", true);
-        } else if (!can_upload_content(song->status)) {
-            ui::notify("Only Local songs can be uploaded.", ui::notice_tone::error, 2.8f);
+        } else if (!can_upload_song(*song)) {
+            ui::notify("Only Local songs or your Modified uploads can be published.", ui::notice_tone::error, 2.8f);
         } else {
             callbacks.start_song_upload(*song);
         }
@@ -121,8 +141,8 @@ void title_create_mode_controller::update(scene_manager& manager,
     if (result.upload_chart_requested) {
         if (song == nullptr || chart == nullptr) {
             song_select::queue_status_message(state, "Select a chart to upload.", true);
-        } else if (!can_upload_content(chart->status)) {
-            ui::notify("Only Local charts can be uploaded.", ui::notice_tone::error, 2.8f);
+        } else if (!can_upload_chart(*chart)) {
+            ui::notify("Only Local charts or your Modified uploads can be published.", ui::notice_tone::error, 2.8f);
         } else {
             callbacks.start_chart_upload(*song, *chart);
         }
