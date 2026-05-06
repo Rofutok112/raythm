@@ -14,7 +14,7 @@ public:
         std::function<void()> enter_home;
         std::function<void()> sync_media;
         std::function<void()> request_ranking_reload;
-        std::function<void()> open_update_catalog;
+        std::function<void(bool)> open_update_catalog;
     };
 
     static void update(scene_manager& manager,

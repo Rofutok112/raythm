@@ -417,8 +417,12 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
                 chart != nullptr &&
                 chart->status == content_status::update &&
                 CheckCollisionPointRec(mouse, title_center_view::chart_status_badge_rect(current.chart_detail_rect));
-            if (song_update_clicked || chart_update_clicked) {
-                result.update_selected_requested = true;
+            if (song_update_clicked) {
+                result.update_song_requested = true;
+                return result;
+            }
+            if (chart_update_clicked) {
+                result.update_chart_requested = true;
                 return result;
             }
         }

@@ -92,6 +92,20 @@ bool write_chart_file(const std::filesystem::path& path,
     return true;
 }
 
+bool restore_staged_charts(const std::filesystem::path& staged_charts_dir,
+                           const std::filesystem::path& charts_dir) {
+    std::error_code ec;
+    if (!std::filesystem::exists(staged_charts_dir, ec)) {
+        return true;
+    }
+    std::filesystem::create_directories(charts_dir.parent_path(), ec);
+    if (ec) {
+        return false;
+    }
+    std::filesystem::rename(staged_charts_dir, charts_dir, ec);
+    return !ec;
+}
+
 std::optional<song_meta> parse_downloaded_song_metadata(const std::string& metadata_json,
                                                         const std::string& local_song_id,
                                                         int fallback_song_version,
@@ -271,25 +285,53 @@ download_song_result download_song_package(const song_entry_state song,
 
     app_paths::ensure_directories();
     const std::filesystem::path song_dir = app_paths::song_dir(local_song_id);
+    const std::filesystem::path charts_dir = song_dir / "charts";
     const std::filesystem::path audio_path = song_dir / path_utils::from_utf8(local_meta->audio_file);
     const std::filesystem::path jacket_path = song_dir / path_utils::from_utf8(local_meta->jacket_file);
 
     std::error_code ec;
-    std::filesystem::remove_all(song_dir, ec);
+    const std::filesystem::path staged_charts_dir =
+        app_paths::app_data_root() / "download-staging" / (local_song_id + "-charts");
+    std::filesystem::remove_all(staged_charts_dir, ec);
     ec.clear();
+    if (std::filesystem::exists(charts_dir, ec)) {
+        std::filesystem::create_directories(staged_charts_dir.parent_path(), ec);
+        if (ec) {
+            result.message = "Failed to prepare existing chart files for song update.";
+            return result;
+        }
+        std::filesystem::rename(charts_dir, staged_charts_dir, ec);
+        if (ec) {
+            result.message = "Failed to preserve existing chart files for song update.";
+            return result;
+        }
+    }
+    std::filesystem::remove_all(song_dir, ec);
+    if (ec) {
+        restore_staged_charts(staged_charts_dir, charts_dir);
+        result.message = "Failed to replace the local song files.";
+        return result;
+    }
 
     if (!song_writer::write_song_json(*local_meta, path_utils::to_utf8(song_dir))) {
+        restore_staged_charts(staged_charts_dir, charts_dir);
         result.message = "Failed to write downloaded song metadata to disk.";
         return result;
     }
 
     if (!write_binary_file(audio_path, audio_fetch.bytes, error_message)) {
+        restore_staged_charts(staged_charts_dir, charts_dir);
         result.message = error_message;
         return result;
     }
 
     if (!local_meta->jacket_file.empty() && !write_binary_file(jacket_path, jacket_bytes, error_message)) {
+        restore_staged_charts(staged_charts_dir, charts_dir);
         result.message = error_message;
+        return result;
+    }
+    if (!restore_staged_charts(staged_charts_dir, charts_dir)) {
+        result.message = "Song updated, but existing chart files could not be restored.";
         return result;
     }
 
@@ -307,7 +349,7 @@ download_song_result download_song_package(const song_entry_state song,
     });
 
     result.success = true;
-    result.message = "Song downloaded.";
+    result.message = song.installed ? "Song updated." : "Song downloaded.";
     return result;
 }
 
