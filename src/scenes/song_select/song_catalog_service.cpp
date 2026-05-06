@@ -156,17 +156,14 @@ content_hashes manifest_song_hashes(const ranking_client::song_manifest& manifes
     };
 }
 
-bool hashes_present(const content_hashes& hashes) {
-    return (!hashes.song_json_fingerprint.empty() || !hashes.song_json_sha256.empty()) &&
-           !hashes.audio_sha256.empty() &&
-           !hashes.jacket_sha256.empty() &&
-           (!hashes.chart_fingerprint.empty() || !hashes.chart_sha256.empty());
-}
-
 bool song_hashes_present(const content_hashes& hashes) {
     return (!hashes.song_json_fingerprint.empty() || !hashes.song_json_sha256.empty()) &&
            !hashes.audio_sha256.empty() &&
            !hashes.jacket_sha256.empty();
+}
+
+bool chart_hashes_present(const content_hashes& hashes) {
+    return !hashes.chart_fingerprint.empty() || !hashes.chart_sha256.empty();
 }
 
 bool song_json_hash_equal(const content_hashes& left, const content_hashes& right) {
@@ -177,29 +174,12 @@ bool song_json_hash_equal(const content_hashes& left, const content_hashes& righ
            left.song_json_sha256 == right.song_json_sha256;
 }
 
-bool hashes_equal(const content_hashes& left, const content_hashes& right) {
-    if (!song_json_hash_equal(left, right) ||
-        left.audio_sha256 != right.audio_sha256 ||
-        left.jacket_sha256 != right.jacket_sha256) {
-        return false;
-    }
-
+bool chart_hash_equal(const content_hashes& left, const content_hashes& right) {
     if (!left.chart_fingerprint.empty() && !right.chart_fingerprint.empty()) {
         return left.chart_fingerprint == right.chart_fingerprint;
     }
     return !left.chart_sha256.empty() && !right.chart_sha256.empty() &&
            left.chart_sha256 == right.chart_sha256;
-}
-
-std::string content_signature(const local_content_files& files) {
-    const std::string song_json = file_signature(files.song_json_path);
-    const std::string audio = file_signature(files.audio_path);
-    const std::string jacket = file_signature(files.jacket_path);
-    const std::string chart = file_signature(files.chart_path);
-    if (song_json.empty() || audio.empty() || jacket.empty() || chart.empty()) {
-        return {};
-    }
-    return song_json + ";" + audio + ";" + jacket + ";" + chart;
 }
 
 std::string song_content_signature(const song_data& song) {
@@ -218,20 +198,8 @@ std::string song_content_signature(const song_data& song) {
     return song_json + ";" + audio + ";" + jacket;
 }
 
-std::optional<content_hashes> compute_hashes(const local_content_files& files) {
-    const std::optional<std::string> song_json = updater::compute_sha256_hex(files.song_json_path);
-    const std::optional<std::string> song_json_fingerprint =
-        song_fingerprint::compute_sha256_hex(files.song_json_path);
-    const std::optional<std::string> audio = updater::compute_sha256_hex(files.audio_path);
-    const std::optional<std::string> jacket = updater::compute_sha256_hex(files.jacket_path);
-    const std::optional<std::string> chart = updater::compute_sha256_hex(files.chart_path);
-    const std::optional<std::string> fingerprint = chart_fingerprint::compute_sha256_hex(files.chart_path);
-    if (!song_json.has_value() || !song_json_fingerprint.has_value() ||
-        !audio.has_value() || !jacket.has_value() ||
-        !chart.has_value() || !fingerprint.has_value()) {
-        return std::nullopt;
-    }
-    return content_hashes{*song_json, *song_json_fingerprint, *audio, *jacket, *chart, *fingerprint};
+std::string chart_content_signature(const std::filesystem::path& chart_path) {
+    return file_signature(chart_path);
 }
 
 std::optional<content_hashes> compute_song_hashes(const song_data& song) {
@@ -249,6 +217,15 @@ std::optional<content_hashes> compute_song_hashes(const song_data& song) {
         return std::nullopt;
     }
     return content_hashes{*song_json, *song_json_fingerprint, *audio, *jacket, {}, {}};
+}
+
+std::optional<content_hashes> compute_chart_hashes(const std::filesystem::path& chart_path) {
+    const std::optional<std::string> chart = updater::compute_sha256_hex(chart_path);
+    const std::optional<std::string> fingerprint = chart_fingerprint::compute_sha256_hex(chart_path);
+    if (!chart.has_value() || !fingerprint.has_value()) {
+        return std::nullopt;
+    }
+    return content_hashes{{}, {}, {}, {}, *chart, *fingerprint};
 }
 
 using verification_cache_record = song_select::content_verification_cache_database::record;
@@ -410,13 +387,8 @@ verification_result verify_chart_content_source(const song_data& song,
         return {};
     }
 
-    const local_content_files files{
-        path_utils::from_utf8(song.directory) / "song.json",
-        path_utils::from_utf8(song.directory) / path_utils::from_utf8(song.meta.audio_file),
-        path_utils::from_utf8(song.directory) / path_utils::from_utf8(song.meta.jacket_file),
-        path_utils::from_utf8(chart.path),
-    };
-    const std::string signature = content_signature(files);
+    const std::filesystem::path chart_path = path_utils::from_utf8(chart.path);
+    const std::string signature = chart_content_signature(chart_path);
     if (signature.empty()) {
         return {};
     }
@@ -447,26 +419,26 @@ verification_result verify_chart_content_source(const song_data& song,
     }
 
     std::optional<content_hashes> local_hashes;
-    if (should_reuse_cached_hashes(cached, signature) && hashes_present(cached->local_hashes)) {
+    if (should_reuse_cached_hashes(cached, signature) && chart_hashes_present(cached->local_hashes)) {
         local_hashes = cached->local_hashes;
     } else {
-        local_hashes = compute_hashes(files);
+        local_hashes = compute_chart_hashes(chart_path);
     }
     if (!local_hashes.has_value()) {
         return {};
     }
 
     const content_hashes server_hashes = manifest_hashes(manifest);
-    if (!hashes_present(server_hashes)) {
+    if (!chart_hashes_present(server_hashes)) {
         return {};
     }
 
     const content_status source_status = status_for_content_source(manifest.content_source);
-    const bool matched = hashes_equal(*local_hashes, server_hashes);
+    const bool matched = chart_hash_equal(*local_hashes, server_hashes);
     const bool local_unchanged =
         cached != nullptr &&
         cached->file_signature == signature &&
-        hashes_equal(*local_hashes, cached->local_hashes);
+        chart_hash_equal(*local_hashes, cached->local_hashes);
     const content_status status = matched ? source_status : mismatched_verified_status(cached, local_unchanged);
 
     cache[key] = verification_cache_record{
