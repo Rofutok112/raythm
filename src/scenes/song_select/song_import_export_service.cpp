@@ -432,6 +432,17 @@ transfer_result import_chart_package(const chart_import_request& request) {
     transfer_result result;
     app_paths::ensure_directories();
     const fs::path destination_path = app_paths::song_chart_path(request.target_song_id, request.chart.meta.chart_id);
+    const fs::path target_song_dir = destination_path.parent_path().parent_path();
+    if (!fs::exists(target_song_dir / "song.json")) {
+        result.message = "Download or import the song before importing a chart.";
+        return result;
+    }
+    std::error_code ec;
+    fs::create_directories(destination_path.parent_path(), ec);
+    if (ec) {
+        result.message = "Failed to prepare the song charts directory.";
+        return result;
+    }
     chart_data chart_data_for_save = request.chart;
     if (!chart_serializer::serialize(chart_data_for_save, path_utils::to_utf8(destination_path))) {
         result.message = "Failed to save the imported chart.";
