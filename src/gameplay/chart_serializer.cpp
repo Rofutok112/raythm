@@ -34,6 +34,10 @@ const char* note_type_name(note_type type) {
             return "tap";
         case note_type::hold:
             return "hold";
+        case note_type::release:
+            return "release";
+        case note_type::stay:
+            return "stay";
     }
 
     return "";
@@ -90,6 +94,9 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
         output << note_type_name(note.type) << ',' << note.tick << ',' << note.lane;
         if (note.type == note_type::hold) {
             output << ',' << note.end_tick;
+        }
+        if (note.is_ray) {
+            output << ",ray";
         }
         output << '\n';
     }

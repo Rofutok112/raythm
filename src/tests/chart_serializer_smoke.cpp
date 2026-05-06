@@ -42,7 +42,8 @@ bool equal_note(const note_data& left, const note_data& right) {
     return left.type == right.type &&
            left.tick == right.tick &&
            left.lane == right.lane &&
-           left.end_tick == right.end_tick;
+           left.end_tick == right.end_tick &&
+           left.is_ray == right.is_ray;
 }
 
 bool equal_chart_data(const chart_data& left, const chart_data& right) {
@@ -120,6 +121,8 @@ int main() {
         {.type = note_type::hold, .tick = 480, .lane = 2, .end_tick = 840},
         {.type = note_type::tap, .tick = 480, .lane = 0, .end_tick = 480},
         {.type = note_type::tap, .tick = 0, .lane = 1, .end_tick = 0},
+        {.type = note_type::release, .tick = 960, .lane = 0, .end_tick = 960, .is_ray = true},
+        {.type = note_type::stay, .tick = 1200, .lane = 1, .end_tick = 1200},
     };
 
     const bool serialized = chart_serializer::serialize(source, output_path.string());
@@ -138,6 +141,8 @@ int main() {
     ok = expect_contains_in_order(content, "chartId=", "keyCount=") && ok;
     ok = expect_contains_in_order(content, "meter,0,4/4", "bpm,960,180.5") && ok;
     ok = expect_contains_in_order(content, "tap,480,0", "hold,480,2,840") && ok;
+    ok = content.find("release,960,0,ray") != std::string::npos && ok;
+    ok = content.find("stay,1200,1") != std::string::npos && ok;
 
     const std::string content_with_ids =
         "[Metadata]\nchartId=online-chart\nsongId=online-song\n" +

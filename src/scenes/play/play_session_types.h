@@ -8,6 +8,7 @@
 #include "editor/editor_scene_types.h"
 #include "input_handler.h"
 #include "judge_system.h"
+#include "performance_system.h"
 #include "score_system.h"
 #include "song_loader.h"
 #include "timing_engine.h"
@@ -62,6 +63,39 @@ struct lane_judge_effect {
     float timer = 0.0f;
 };
 
+struct play_hitsound_paths {
+    std::string tap;
+    std::string ray_tap;
+    std::string release;
+    std::string ray_release;
+    std::string stay;
+    std::string ray_stay;
+
+    [[nodiscard]] bool has_any() const {
+        return !tap.empty() || !ray_tap.empty() || !release.empty() ||
+               !ray_release.empty() || !stay.empty() || !ray_stay.empty();
+    }
+
+    [[nodiscard]] const std::string& path_for(const judge_event& event) const {
+        if (event.hitsound_type == note_type::release) {
+            if (event.is_ray && !ray_release.empty()) {
+                return ray_release;
+            }
+            return release.empty() ? tap : release;
+        }
+        if (event.hitsound_type == note_type::stay) {
+            if (event.is_ray && !ray_stay.empty()) {
+                return ray_stay;
+            }
+            return stay.empty() ? tap : stay;
+        }
+        if (event.is_ray && !ray_tap.empty()) {
+            return ray_tap;
+        }
+        return tap;
+    }
+};
+
 struct play_session_state {
     int key_count = 4;
     bool initialized = false;
@@ -75,6 +109,7 @@ struct play_session_state {
     double lane_speed = 0.045;
     int combo_display = 0;
     score_system score_system;
+    performance_system performance_system;
     gauge gauge;
     input_handler input_handler;
     timing_engine timing_engine;
@@ -97,6 +132,7 @@ struct play_session_state {
     bool result_transition_playing = false;
     float result_transition_timer = 0.0f;
     std::string hitsound_path;
+    play_hitsound_paths hitsounds;
     std::vector<float> mv_waveform;
     int start_tick = 0;
     double start_ms = 0.0;

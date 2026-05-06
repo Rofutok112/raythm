@@ -71,7 +71,9 @@ struct timing_event {
 // ノート入力の種類。
 enum class note_type {
     tap,
-    hold
+    hold,
+    release,
+    stay
 };
 
 // 入力イベントの種別。
@@ -93,6 +95,7 @@ struct note_data {
     int tick = 0;
     int lane = 0;
     int end_tick = 0;
+    bool is_ray = false;
 };
 
 // 1 譜面分のパース済みデータ。
@@ -165,6 +168,8 @@ struct judge_event {
     bool apply_gameplay_effects = true;
     bool show_feedback = true;
     int event_index = -1;
+    note_type hitsound_type = note_type::tap;
+    bool is_ray = false;
 };
 
 // 達成率に応じたランク種別。

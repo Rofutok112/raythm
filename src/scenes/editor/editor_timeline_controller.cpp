@@ -40,10 +40,14 @@ std::optional<size_t> note_at_position(const editor_timeline_context& context, V
         }
 
         const editor_timeline_note timeline_note = {
-            note.type == note_type::hold ? editor_timeline_note_type::hold : editor_timeline_note_type::tap,
+            note.type == note_type::hold ? editor_timeline_note_type::hold :
+            note.type == note_type::release ? editor_timeline_note_type::release :
+            note.type == note_type::stay ? editor_timeline_note_type::stay :
+            editor_timeline_note_type::tap,
             note.tick,
             note.lane,
             note.end_tick,
+            note.is_ray,
         };
         const editor_timeline_note_draw_info info = context.metrics.note_rects(timeline_note);
         if (CheckCollisionPointRec(point, info.head_rect) ||
@@ -78,6 +82,11 @@ std::optional<note_data> dragged_note(const editor_timeline_context& context,
     if (note.type == note_type::tap) {
         note.end_tick = note.tick;
     }
+    if (context.palette.type != note_type::hold) {
+        note.type = context.palette.type;
+        note.end_tick = note.tick;
+    }
+    note.is_ray = context.palette.is_ray;
 
     return note;
 }
@@ -157,7 +166,8 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
 
     result.drag_state.current_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
     std::optional<note_data> note = dragged_note(context, result.drag_state);
-    if (note.has_value() && (note->end_tick - note->tick) < minimum_hold_tick_gap(context)) {
+    if (note.has_value() && note->type == note_type::hold &&
+        (note->end_tick - note->tick) < minimum_hold_tick_gap(context)) {
         note->type = note_type::tap;
         note->end_tick = note->tick;
     }

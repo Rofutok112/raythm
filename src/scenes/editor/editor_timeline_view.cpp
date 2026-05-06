@@ -7,6 +7,49 @@
 #include "ui_clip.h"
 #include "ui_draw.h"
 
+namespace {
+
+Vector2 rect_center(Rectangle rect) {
+    return {rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
+}
+
+void draw_stay_note_marker(Rectangle rect, Color fill, Color outline) {
+    const Vector2 center = rect_center(rect);
+    const float radius = std::max(3.5f, std::min(rect.width, rect.height) * 0.34f);
+    DrawCircleV(center, radius, fill);
+    DrawCircleLines(static_cast<int>(std::lround(center.x)), static_cast<int>(std::lround(center.y)),
+                    radius, outline);
+}
+
+void draw_release_note_marker(Rectangle rect, Color fill, Color outline) {
+    DrawRectangleRounded(rect, 0.3f, 6, fill);
+    ui::draw_rect_lines(rect, 1.5f, outline);
+
+    const float center_x = rect.x + rect.width * 0.5f;
+    const float tip_y = rect.y - 17.0f;
+    const float wing_y = rect.y - 5.0f;
+    const float half_width = std::min(11.0f, rect.width * 0.28f);
+    const Rectangle stem = {center_x - 2.0f, rect.y - 5.0f, 4.0f, 9.0f};
+    DrawRectangleRounded(stem, 0.4f, 4, fill);
+    ui::draw_rect_lines(stem, 1.0f, outline);
+    DrawTriangle({center_x, tip_y}, {center_x - half_width, wing_y}, {center_x + half_width, wing_y}, fill);
+    DrawTriangleLines({center_x, tip_y}, {center_x - half_width, wing_y}, {center_x + half_width, wing_y}, outline);
+}
+
+void draw_note_marker(const editor_timeline_note& note,
+                      const editor_timeline_note_draw_info& info,
+                      Color fill, Color outline) {
+    if (note.type == editor_timeline_note_type::stay) {
+        draw_stay_note_marker(info.head_rect, fill, outline);
+    } else if (note.type == editor_timeline_note_type::release) {
+        draw_release_note_marker(info.head_rect, fill, outline);
+    } else {
+        DrawRectangleRounded(info.head_rect, 0.3f, 6, fill);
+        ui::draw_rect_lines(info.head_rect, 1.5f, outline);
+    }
+}
+}
+
 Rectangle editor_timeline_metrics::content_rect() const {
     return {
         panel_rect.x + padding,
@@ -61,7 +104,13 @@ editor_timeline_note_draw_info editor_timeline_metrics::note_rects(const editor_
     const Rectangle lane = lane_rect(note.lane);
     const float start_y = tick_to_y(note.tick);
     editor_timeline_note_draw_info info;
-    info.head_rect = {lane.x + 6.0f, start_y - note_head_height * 0.5f, lane.width - 12.0f, note_head_height};
+    float inset = 6.0f;
+    if (note.type == editor_timeline_note_type::release) {
+        inset = 3.0f;
+    } else if (note.type == editor_timeline_note_type::stay) {
+        inset = 9.0f;
+    }
+    info.head_rect = {lane.x + inset, start_y - note_head_height * 0.5f, lane.width - inset * 2.0f, note_head_height};
 
     if (note.type == editor_timeline_note_type::hold) {
         const float end_y = tick_to_y(note.end_tick);
@@ -139,7 +188,15 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
 
             const editor_timeline_note_draw_info info = model.metrics.note_rects(note);
             const bool selected = model.selected_note_index.has_value() && *model.selected_note_index == i;
-            const Color head_fill = selected ? t.row_active : t.note_color;
+            Color head_fill = selected ? t.row_active : t.note_color;
+            if (!selected && note.type == editor_timeline_note_type::release) {
+                head_fill = lerp_color(t.note_color, t.judge_great, 0.35f);
+            } else if (!selected && note.type == editor_timeline_note_type::stay) {
+                head_fill = lerp_color(t.note_color, t.judge_perfect, 0.25f);
+            }
+            if (note.is_ray) {
+                head_fill = lerp_color(head_fill, t.judge_line_glow, 0.45f);
+            }
             const Color outline = selected ? t.border_active : t.note_outline;
             const Color hold_fill = selected ? with_alpha(t.row_active, 200) : with_alpha(t.accent, 170);
 
@@ -149,8 +206,7 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
                 ui::draw_rect_lines(info.tail_rect, 1.5f, outline);
             }
 
-            DrawRectangleRounded(info.head_rect, 0.3f, 6, head_fill);
-            ui::draw_rect_lines(info.head_rect, 1.5f, outline);
+            draw_note_marker(note, info, head_fill, outline);
         }
 
         if (model.preview_note.has_value()) {
@@ -162,8 +218,7 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
                 DrawRectangleRounded(info.tail_rect, 0.4f, 6, fill);
                 ui::draw_rect_lines(info.tail_rect, 1.5f, outline);
             }
-            DrawRectangleRounded(info.head_rect, 0.3f, 6, fill);
-            ui::draw_rect_lines(info.head_rect, 1.5f, outline);
+            draw_note_marker(*model.preview_note, info, fill, outline);
         }
 
         if (model.playback_tick.has_value()) {

@@ -35,6 +35,9 @@ constexpr Rectangle kPauseHintRect = {
 constexpr Rectangle kScoreRect = ui::place(kScreenRect, 600.0f, 90.0f,
                                            ui::anchor::top_left, ui::anchor::top_left,
                                            Vector2{72.0f, 30.0f});
+constexpr Rectangle kPpRect = ui::place(kScreenRect, 360.0f, 42.0f,
+                                        ui::anchor::top_left, ui::anchor::top_left,
+                                        Vector2{72.0f, 100.0f});
 constexpr Rectangle kTimeRect = ui::place(kScreenRect, 300.0f, 45.0f,
                                           ui::anchor::top_center, ui::anchor::top_center,
                                           Vector2{0.0f, 51.0f});
@@ -78,6 +81,8 @@ constexpr float kJudgeLineY = 0.40f;
 constexpr float kJudgeLineGlowY = 0.46f;
 constexpr float kTapNoteY = 0.15f;
 constexpr float kHoldNoteY = 0.15f;
+constexpr float kReleaseBillboardY = 0.58f;
+constexpr float kStayDotY = 0.24f;
 constexpr float kLowHealthVignetteThreshold = 35.0f;
 constexpr float kDamageVignetteEdgeWidth = 220.0f;
 constexpr float kDamageVignetteMaxAlpha = 86.0f;
@@ -95,6 +100,28 @@ int ui_font(int font_size) {
 
 void draw_note_plane(float center_x, float y, float center_z, float width, float length, Color fill) {
     DrawPlane({center_x, y, center_z}, {width, length}, fill);
+}
+
+void draw_stay_dot(float center_x, float center_z, Color fill) {
+    DrawSphere({center_x, kStayDotY, center_z}, g_settings.lane_width * 0.09f, fill);
+}
+
+void draw_release_billboard(float center_x, float center_z, Color fill) {
+    const float half_width = g_settings.lane_width * 0.23f;
+    const float tip_y = kReleaseBillboardY + 0.42f;
+    const float wing_y = kReleaseBillboardY + 0.13f;
+    const float stem_y = kReleaseBillboardY - 0.06f;
+    const float z = center_z - 0.02f;
+
+    DrawCube({center_x, stem_y, z}, g_settings.lane_width * 0.10f, 0.34f, 0.035f, fill);
+    DrawTriangle3D({center_x, tip_y, z},
+                   {center_x - half_width, wing_y, z},
+                   {center_x + half_width, wing_y, z},
+                   fill);
+    DrawTriangle3D({center_x, tip_y, z},
+                   {center_x + half_width, wing_y, z},
+                   {center_x - half_width, wing_y, z},
+                   fill);
 }
 
 Color judge_color(judge_result result) {
@@ -240,11 +267,43 @@ void draw_lane_judge_effect(const play_session_state& state, int lane,
                                    lane_width, bright_color, remaining);
 }
 
+Color note_draw_color(const note_state& note_state, Color base) {
+    if (note_state.note_ref.is_ray) {
+        return lerp_color(base, g_theme->judge_line_glow, 0.45f);
+    }
+    switch (note_state.note_ref.type) {
+        case note_type::release:
+            return lerp_color(base, g_theme->judge_great, 0.35f);
+        case note_type::stay:
+            return lerp_color(base, g_theme->judge_perfect, 0.25f);
+        case note_type::tap:
+        case note_type::hold:
+            return base;
+    }
+    return base;
+}
+
+bool should_draw_note_in_pass(note_type type, int pass) {
+    switch (pass) {
+        case 0:
+            return type == note_type::release;
+        case 1:
+            return type == note_type::stay;
+        case 2:
+            return type == note_type::tap;
+        case 3:
+            return type == note_type::hold;
+    }
+    return false;
+}
+
 void draw_hud(const play_session_state& state) {
     const result_data result = state.score_system.get_result_data();
     const float live_accuracy = state.score_system.get_live_accuracy();
     ui::enqueue_text_in_rect(TextFormat("SCORE %07d", result.score), ui_font(30),
                              kScoreRect, g_theme->hud_score, ui::text_align::left);
+    ui::enqueue_text_in_rect(TextFormat("PP %.2f", state.performance_system.current_pp()), ui_font(24),
+                             kPpRect, g_theme->text_secondary, ui::text_align::left);
 
     ui::enqueue_text_in_rect(TextFormat("FPS: %d", GetFPS()), ui_font(20),
                              kFpsRect, g_theme->hud_fps, ui::text_align::right);
@@ -389,27 +448,39 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
         const std::vector<note_state>& note_states = state.judge_system.note_states();
         const Color note_color = g_theme->note_color;
 
-        for (int lane = 0; lane < state.key_count; ++lane) {
-            for (const size_t idx : draw_queue.active_indices_for_lane(lane)) {
-                const note_state& note_state = note_states[idx];
-                const float head_z = static_cast<float>(judgement_z + state.lane_speed * (note_state.target_ms - visual_ms));
-                const float center_x = lane_center_x(note_state.note_ref.lane, state.key_count);
-
-                if (note_state.note_ref.type == note_type::hold) {
-                    const double tail_target_ms = state.timing_engine.tick_to_ms(note_state.note_ref.end_tick);
-                    const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_ms));
-                    const float visual_head_z = note_state.is_holding() ? judgement_z : head_z;
-                    const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);
-                    const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);
-                    if (segment_end > segment_start) {
-                        draw_note_plane(center_x, kHoldNoteY, (segment_start + segment_end) * 0.5f,
-                                        g_settings.lane_width * 0.92f, segment_end - segment_start, note_color);
+        for (int pass = 0; pass < 4; ++pass) {
+            for (int lane = 0; lane < state.key_count; ++lane) {
+                for (const size_t idx : draw_queue.active_indices_for_lane(lane)) {
+                    const note_state& note_state = note_states[idx];
+                    if (!should_draw_note_in_pass(note_state.note_ref.type, pass)) {
+                        continue;
                     }
-                }
 
-                if (note_state.note_ref.type == note_type::tap) {
-                    draw_note_plane(center_x, kTapNoteY, head_z,
-                                    g_settings.lane_width * 0.92f, kTapNoteBaseLength * g_settings.note_height, note_color);
+                    const Color note_color_for_type = note_draw_color(note_state, note_color);
+                    const float head_z = static_cast<float>(judgement_z + state.lane_speed * (note_state.target_ms - visual_ms));
+                    const float center_x = lane_center_x(note_state.note_ref.lane, state.key_count);
+
+                    if (note_state.note_ref.type == note_type::hold) {
+                        const double tail_target_ms = state.timing_engine.tick_to_ms(note_state.note_ref.end_tick);
+                        const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_ms));
+                        const float visual_head_z = note_state.is_holding() ? judgement_z : head_z;
+                        const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);
+                        const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);
+                        if (segment_end > segment_start) {
+                            draw_note_plane(center_x, kHoldNoteY, (segment_start + segment_end) * 0.5f,
+                                            g_settings.lane_width * 0.92f, segment_end - segment_start, note_color_for_type);
+                        }
+                    } else if (note_state.note_ref.type == note_type::stay) {
+                        draw_stay_dot(center_x, head_z, note_color_for_type);
+                    } else {
+                        draw_note_plane(center_x, kTapNoteY, head_z,
+                                        g_settings.lane_width * 0.92f,
+                                        kTapNoteBaseLength * g_settings.note_height,
+                                        note_color_for_type);
+                        if (note_state.note_ref.type == note_type::release) {
+                            draw_release_billboard(center_x, head_z, note_color_for_type);
+                        }
+                    }
                 }
             }
         }

@@ -97,13 +97,52 @@ std::optional<timing_event_type> parse_timing_type(const std::string& value) {
 }
 
 std::optional<note_type> parse_note_type(const std::string& value) {
-    if (value == "tap") {
+    std::string normalized = value;
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    bool ray_prefix = false;
+    if (normalized.rfind("ray", 0) == 0 && normalized.size() > 3) {
+        ray_prefix = true;
+        normalized = normalized.substr(3);
+    }
+
+    if (normalized == "tap") {
         return note_type::tap;
     }
-    if (value == "hold") {
+    if (normalized == "hold") {
         return note_type::hold;
     }
+    if (normalized == "release") {
+        return note_type::release;
+    }
+    if (normalized == "stay") {
+        return note_type::stay;
+    }
+    (void)ray_prefix;
     return std::nullopt;
+}
+
+bool parse_note_ray_flag(const std::vector<std::string>& tokens) {
+    if (tokens.empty()) {
+        return false;
+    }
+
+    const std::string& type = tokens[0];
+    std::string normalized_type = type;
+    std::transform(normalized_type.begin(), normalized_type.end(), normalized_type.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (normalized_type.rfind("ray", 0) == 0 && normalized_type.size() > 3) {
+        return true;
+    }
+    return std::any_of(tokens.begin(), tokens.end(), [](const std::string& token) {
+        std::string normalized = token;
+        std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+        return normalized == "ray";
+    });
 }
 
 bool is_server_managed_metadata_key(const std::string& key) {
@@ -358,8 +397,9 @@ std::vector<note_data> chart_parser::parse_notes(const std::vector<numbered_line
             continue;
         }
 
-        const size_t expected_fields = *type == note_type::tap ? 3 : 4;
-        if (tokens.size() != expected_fields) {
+        const size_t required_fields = *type == note_type::hold ? 4 : 3;
+        const bool has_trailing_ray = tokens.size() == required_fields + 1 && parse_note_ray_flag(tokens);
+        if (tokens.size() != required_fields && !has_trailing_ray) {
             errors.push_back(format_line_error(line.first, "Note entry has an unexpected number of fields"));
             continue;
         }
@@ -376,6 +416,7 @@ std::vector<note_data> chart_parser::parse_notes(const std::vector<numbered_line
         note.tick = *tick;
         note.lane = *lane;
         note.end_tick = note.tick;
+        note.is_ray = parse_note_ray_flag(tokens);
 
         if (*type == note_type::hold) {
             const std::optional<int> end_tick = parse_int(tokens[3]);
@@ -421,9 +462,67 @@ std::vector<std::string> chart_parser::validate(const chart_data& data) {
         }
     }
 
+    enum class note_overlap_role {
+        tap,
+        hold_head,
+        hold_body,
+        hold_tail,
+        release,
+        stay,
+    };
+
     struct note_interval {
         int start_tick = 0;
-        int end_tick_exclusive = 0;
+        int end_tick = 0;
+        note_overlap_role role = note_overlap_role::tap;
+    };
+
+    auto add_note_intervals = [](std::vector<note_interval>& intervals, const note_data& note) {
+        switch (note.type) {
+            case note_type::tap:
+                intervals.push_back({note.tick, note.tick, note_overlap_role::tap});
+                break;
+            case note_type::release:
+                intervals.push_back({note.tick, note.tick, note_overlap_role::release});
+                break;
+            case note_type::stay:
+                intervals.push_back({note.tick, note.tick, note_overlap_role::stay});
+                break;
+            case note_type::hold:
+                intervals.push_back({note.tick, note.tick, note_overlap_role::hold_head});
+                if (note.end_tick - note.tick > 1) {
+                    intervals.push_back({note.tick + 1, note.end_tick - 1, note_overlap_role::hold_body});
+                }
+                intervals.push_back({note.end_tick, note.end_tick, note_overlap_role::hold_tail});
+                break;
+        }
+    };
+
+    auto roles_can_overlap = [](note_overlap_role left, note_overlap_role right) {
+        if (left == note_overlap_role::stay || right == note_overlap_role::stay) {
+            return true;
+        }
+
+        if ((left == note_overlap_role::tap && right == note_overlap_role::release) ||
+            (left == note_overlap_role::release && right == note_overlap_role::tap)) {
+            return true;
+        }
+
+        if (left == note_overlap_role::release && right == note_overlap_role::release) {
+            return true;
+        }
+
+        if ((left == note_overlap_role::hold_head && right == note_overlap_role::tap) ||
+            (left == note_overlap_role::tap && right == note_overlap_role::hold_head)) {
+            return true;
+        }
+
+        if ((left == note_overlap_role::hold_tail && right == note_overlap_role::release) ||
+            (left == note_overlap_role::release && right == note_overlap_role::hold_tail)) {
+            return true;
+        }
+
+        return false;
     };
 
     std::vector<std::vector<note_interval>> lane_intervals(static_cast<size_t>(std::max(data.meta.key_count, 0)));
@@ -439,16 +538,14 @@ std::vector<std::string> chart_parser::validate(const chart_data& data) {
             continue;
         }
 
-        int end_tick_exclusive = note.tick + 1;
         if (note.type == note_type::hold) {
             if (note.end_tick <= note.tick) {
                 errors.push_back("Hold note endTick must be greater than tick");
                 continue;
             }
-            end_tick_exclusive = note.end_tick;
         }
 
-        lane_intervals[static_cast<size_t>(note.lane)].push_back({note.tick, end_tick_exclusive});
+        add_note_intervals(lane_intervals[static_cast<size_t>(note.lane)], note);
     }
 
     for (std::vector<note_interval>& intervals : lane_intervals) {
@@ -456,13 +553,18 @@ std::vector<std::string> chart_parser::validate(const chart_data& data) {
             if (left.start_tick != right.start_tick) {
                 return left.start_tick < right.start_tick;
             }
-            return left.end_tick_exclusive < right.end_tick_exclusive;
+            return left.end_tick < right.end_tick;
         });
 
-        for (size_t index = 1; index < intervals.size(); ++index) {
-            if (intervals[index].start_tick < intervals[index - 1].end_tick_exclusive) {
-                errors.push_back("Detected overlapping notes on the same lane");
-                break;
+        bool found_overlap_error = false;
+        for (size_t right = 1; right < intervals.size() && !found_overlap_error; ++right) {
+            for (size_t left = 0; left < right; ++left) {
+                if (intervals[right].start_tick <= intervals[left].end_tick &&
+                    !roles_can_overlap(intervals[left].role, intervals[right].role)) {
+                    errors.push_back("Detected disallowed overlapping notes on the same lane");
+                    found_overlap_error = true;
+                    break;
+                }
             }
         }
     }

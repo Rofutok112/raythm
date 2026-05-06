@@ -282,6 +282,60 @@ int main() {
     }
     windows_input_source::instance().shutdown();
 
+    judge_system release_note_judge;
+    release_note_judge.init({note_data{note_type::release, 960, 0, 960}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 900.0);
+    release_note_judge.update(900.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1080.0);
+    release_note_judge.update(1080.0, input);
+    if (!release_note_judge.get_last_judge().has_value() ||
+        release_note_judge.get_last_judge()->result != judge_result::perfect) {
+        std::cerr << "Release note should award perfect anywhere inside the bad window\n";
+        return EXIT_FAILURE;
+    }
+    if (release_note_judge.get_last_judge()->hitsound_type != note_type::release) {
+        std::cerr << "Release note should request a release hitsound\n";
+        return EXIT_FAILURE;
+    }
+
+    judge_system stay_held_judge;
+    stay_held_judge.init({note_data{note_type::stay, 960, 1, 960, true}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 900.0);
+    stay_held_judge.update(900.0, input);
+    stay_held_judge.update(1000.0, input);
+    if (!stay_held_judge.get_last_judge().has_value() ||
+        stay_held_judge.get_last_judge()->result != judge_result::perfect) {
+        std::cerr << "Stay note should perfect when held through the target\n";
+        return EXIT_FAILURE;
+    }
+    if (stay_held_judge.get_last_judge()->hitsound_type != note_type::stay ||
+        !stay_held_judge.get_last_judge()->is_ray) {
+        std::cerr << "Stay note should request a ray stay hitsound\n";
+        return EXIT_FAILURE;
+    }
+
+    judge_system replaced_tail_judge;
+    replaced_tail_judge.init({
+        note_data{note_type::hold, 480, 0, 960},
+        note_data{note_type::release, 960, 0, 960},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 500.0);
+    replaced_tail_judge.update(500.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1000.0);
+    replaced_tail_judge.update(1000.0, input);
+    if (replaced_tail_judge.get_judge_events().size() != 1 ||
+        !replaced_tail_judge.note_states()[0].is_completed() ||
+        !replaced_tail_judge.note_states()[1].is_completed()) {
+        std::cerr << "Release note should replace overlapping hold tail judgement\n";
+        return EXIT_FAILURE;
+    }
+
     std::cout << "judge_system smoke test passed\n";
     return EXIT_SUCCESS;
 }

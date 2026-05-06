@@ -10,7 +10,9 @@
 
 enum class editor_timeline_note_type {
     tap,
-    hold
+    hold,
+    release,
+    stay
 };
 
 struct editor_timeline_note {
@@ -18,6 +20,7 @@ struct editor_timeline_note {
     int tick = 0;
     int lane = 0;
     int end_tick = 0;
+    bool is_ray = false;
 };
 
 struct editor_timeline_note_draw_info {

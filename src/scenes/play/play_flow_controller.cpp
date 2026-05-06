@@ -163,11 +163,13 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
     for (const judge_event& event : judge_events) {
         if (event.apply_gameplay_effects) {
             state.score_system.on_judge(event);
+            state.performance_system.on_judge(event);
             state.gauge.on_judge(event.result);
         }
-        if (!state.hitsound_path.empty() && event.play_hitsound && event.result != judge_result::miss) {
+        if ((!state.hitsound_path.empty() || state.hitsounds.has_any()) &&
+            event.play_hitsound && event.result != judge_result::miss) {
             if (context.play_hitsound_immediately) {
-                context.play_hitsound_immediately();
+                context.play_hitsound_immediately(event);
             } else {
                 ++result.hitsound_count;
             }

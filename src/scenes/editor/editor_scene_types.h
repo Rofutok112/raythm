@@ -32,6 +32,11 @@ struct editor_timeline_note_drag_state {
     int current_tick = 0;
 };
 
+struct editor_note_palette_selection {
+    note_type type = note_type::tap;
+    bool is_ray = false;
+};
+
 enum class editor_right_panel_tab {
     timing,
 };
@@ -203,6 +208,7 @@ struct editor_timeline_context {
     int snap_division = 1;
     std::optional<size_t> selected_note_index;
     editor_timeline_note_drag_state drag_state;
+    editor_note_palette_selection palette;
 };
 
 struct editor_timeline_result {

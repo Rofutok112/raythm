@@ -99,14 +99,39 @@ int main() {
         editor_timeline_result start = editor_timeline_controller::update(
             timing_panel,
             {state.get(), &meter_map, metrics, {lane_rect.x + lane_rect.width * 0.5f, start_y}, true,
-             true, false, false, false, false, false, 8, std::nullopt, drag_state});
+             true, false, false, false, false, false, 8, std::nullopt, drag_state,
+             {note_type::hold, false}});
         editor_timeline_result finish = editor_timeline_controller::update(
             timing_panel,
             {state.get(), &meter_map, metrics, {lane_rect.x + lane_rect.width * 0.5f, metrics.tick_to_y(720)}, true,
-             false, true, true, false, false, false, 8, std::nullopt, start.drag_state});
+             false, true, true, false, false, false, 8, std::nullopt, start.drag_state,
+             {note_type::hold, false}});
         if (!finish.note_to_add.has_value() || finish.note_to_add->lane != 2 ||
             finish.note_to_add->tick != 240 || finish.note_to_add->end_tick != 720) {
             std::cerr << "drag release should request a new note\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        editor_timing_panel_state timing_panel;
+        const editor_timeline_metrics metrics = make_metrics();
+        const Rectangle lane_rect = metrics.lane_rect(3);
+        const float y = metrics.tick_to_y(840);
+        editor_timeline_note_drag_state drag_state;
+        editor_timeline_result start = editor_timeline_controller::update(
+            timing_panel,
+            {state.get(), &meter_map, metrics, {lane_rect.x + lane_rect.width * 0.5f, y}, true,
+             true, false, false, false, false, false, 8, std::nullopt, drag_state,
+             {note_type::release, true}});
+        editor_timeline_result finish = editor_timeline_controller::update(
+            timing_panel,
+            {state.get(), &meter_map, metrics, {lane_rect.x + lane_rect.width * 0.5f, y}, true,
+             false, true, true, false, false, false, 8, std::nullopt, start.drag_state,
+             {note_type::release, true}});
+        if (!finish.note_to_add.has_value() || finish.note_to_add->type != note_type::release ||
+            !finish.note_to_add->is_ray || finish.note_to_add->tick != finish.note_to_add->end_tick) {
+            std::cerr << "palette should create a ray release note without converting it to tap\n";
             return EXIT_FAILURE;
         }
     }

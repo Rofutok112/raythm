@@ -48,6 +48,8 @@ struct context_input {
     int combo = 0;
     float accuracy = 0;       // 0..1
     int key_count = 4;
+    float ray_pulse = 0.0f;
+    int ray_lane = -1;
 
     // screen
     float screen_w = 1920;

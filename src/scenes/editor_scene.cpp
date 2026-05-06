@@ -196,6 +196,7 @@ void editor_scene::update(float dt) {
         IsKeyPressed(KEY_ESCAPE),
         IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT),
         editor_timeline_viewport::snap_division(viewport_),
+        note_palette_,
     });
     if (timeline_result.request_apply_selected_timing) {
         apply_selected_timing_event();
@@ -248,12 +249,16 @@ void editor_scene::draw() {
         !state_->file_path().empty(),
         state_->is_dirty(),
         &metadata_panel_,
-        state_->data().meta.key_count == 6 ? "6K" : "4K",
-        state_->data().meta.offset,
-        static_cast<int>(state_->data().notes.size()),
+        note_palette_,
         load_errors_.empty() ? nullptr : &load_errors_.front(),
         now,
     });
+    if (left_panel.selected_note_type.has_value()) {
+        note_palette_.type = *left_panel.selected_note_type;
+    }
+    if (left_panel.ray_toggled) {
+        note_palette_.is_ray = !note_palette_.is_ray;
+    }
     const editor_metadata_panel_result metadata_panel_result = editor_panel_controller::update_metadata_panel(
         metadata_panel_,
         timing_panel_,
@@ -442,6 +447,11 @@ std::optional<note_data> editor_scene::dragged_note() const {
     if (note.type == note_type::tap) {
         note.end_tick = note.tick;
     }
+    if (note_palette_.type != note_type::hold) {
+        note.type = note_palette_.type;
+        note.end_tick = note.tick;
+    }
+    note.is_ray = note_palette_.is_ray;
 
     return note;
 }

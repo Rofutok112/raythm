@@ -48,6 +48,16 @@ void scroll_timing_list_to_bottom(editor_timing_panel_state& timing_panel, size_
     timing_panel.list_scroll_offset = std::max(0.0f, content_height - kTimingListViewportHeight);
 }
 
+std::string first_existing_audio_asset(std::initializer_list<const char*> file_names) {
+    for (const char* file_name : file_names) {
+        const std::filesystem::path path = app_paths::audio_root() / file_name;
+        if (std::filesystem::exists(path)) {
+            return path_utils::to_utf8(path);
+        }
+    }
+    return "";
+}
+
 }  // namespace
 
 namespace editor_session_loader {
@@ -123,8 +133,7 @@ editor_session_load_result load(const editor_start_request& request) {
         }
     }
 
-    const std::filesystem::path hitsound_path = app_paths::audio_root() / "hitsound.mp3";
-    result.hitsound_path = std::filesystem::exists(hitsound_path) ? path_utils::to_utf8(hitsound_path) : "";
+    result.hitsound_path = first_existing_audio_asset({"HitSound_Tap.mp3", "hitsound.mp3"});
 
     if (request.resume_state.has_value() && result.audio_loaded) {
         const double target_seconds =

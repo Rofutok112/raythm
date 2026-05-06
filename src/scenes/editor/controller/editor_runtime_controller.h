@@ -48,6 +48,7 @@ struct editor_runtime_timeline_context {
     bool escape_pressed = false;
     bool alt_down = false;
     int snap_division = 1;
+    editor_note_palette_selection palette;
 };
 
 struct editor_runtime_timeline_result {

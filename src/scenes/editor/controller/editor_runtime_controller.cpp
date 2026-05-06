@@ -85,6 +85,7 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
         context.snap_division,
         context.selected_note_index,
         context.drag_state,
+        context.palette,
     });
 
     context.selected_note_index = timeline_result.selected_note_index;

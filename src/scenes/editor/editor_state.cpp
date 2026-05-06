@@ -9,18 +9,45 @@ namespace {
 struct note_span {
     int start_tick = 0;
     int end_tick = 0;
+    note_type type = note_type::tap;
 };
 
 note_span make_note_span(const note_data& note) {
     if (note.type == note_type::hold) {
-        return {std::min(note.tick, note.end_tick), std::max(note.tick, note.end_tick)};
+        return {std::min(note.tick, note.end_tick), std::max(note.tick, note.end_tick), note.type};
     }
 
-    return {note.tick, note.tick};
+    return {note.tick, note.tick, note.type};
 }
 
 bool spans_overlap(const note_span& left, const note_span& right) {
     return left.start_tick <= right.end_tick && right.start_tick <= left.end_tick;
+}
+
+bool overlap_allowed(const note_data& left, const note_data& right) {
+    if (left.type == note_type::stay || right.type == note_type::stay) {
+        return true;
+    }
+    if ((left.type == note_type::tap && right.type == note_type::release) ||
+        (left.type == note_type::release && right.type == note_type::tap)) {
+        return left.tick == right.tick;
+    }
+    if (left.type == note_type::release && right.type == note_type::release) {
+        return left.tick == right.tick;
+    }
+    if (left.type == note_type::hold && right.type == note_type::tap) {
+        return left.tick == right.tick;
+    }
+    if (left.type == note_type::tap && right.type == note_type::hold) {
+        return left.tick == right.tick;
+    }
+    if (left.type == note_type::hold && right.type == note_type::release) {
+        return left.end_tick == right.tick;
+    }
+    if (left.type == note_type::release && right.type == note_type::hold) {
+        return left.tick == right.end_tick;
+    }
+    return false;
 }
 
 class add_note_command final : public editor_command {
@@ -329,7 +356,8 @@ bool editor_state::has_note_overlap(const note_data& note, std::optional<size_t>
             continue;
         }
 
-        if (spans_overlap(candidate, make_note_span(existing))) {
+        if (spans_overlap(candidate, make_note_span(existing)) &&
+            !overlap_allowed(note, existing)) {
             return true;
         }
     }
