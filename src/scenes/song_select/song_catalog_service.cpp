@@ -482,67 +482,6 @@ verification_result verify_chart_content_source(const song_data& song,
     return {status, source_status};
 }
 
-verification_result aggregate_chart_results(const std::vector<song_select::chart_option>& charts) {
-    if (charts.empty()) {
-        return {};
-    }
-
-    bool has_modified = false;
-    bool has_update = false;
-    bool has_local = false;
-    std::optional<content_status> remote_source;
-    for (const song_select::chart_option& chart : charts) {
-        if (chart.status == content_status::modified) {
-            has_modified = true;
-        } else if (chart.status == content_status::update) {
-            has_update = true;
-        } else if (chart.status == content_status::official || chart.status == content_status::community) {
-            // Verified remote charts are represented through source_status below.
-        } else {
-            has_local = true;
-        }
-        if (chart.source_status == content_status::official || chart.source_status == content_status::community) {
-            if (!remote_source.has_value()) {
-                remote_source = chart.source_status;
-            } else if (*remote_source != chart.source_status) {
-                has_local = true;
-            }
-        } else if (chart.source_status == content_status::local) {
-            has_local = true;
-        }
-    }
-
-    if (has_modified) {
-        return {content_status::modified, remote_source.value_or(content_status::local)};
-    }
-    if (has_update) {
-        return {content_status::update, remote_source.value_or(content_status::local)};
-    }
-    if (!has_local && remote_source.has_value()) {
-        return {*remote_source, *remote_source};
-    }
-    return {content_status::local, remote_source.value_or(content_status::local)};
-}
-
-verification_result combine_song_and_chart_status(verification_result song_result,
-                                                  verification_result chart_result) {
-    const content_status song_status = song_result.status;
-    const content_status chart_status = chart_result.status;
-    const content_status source_status = song_result.source_status != content_status::local
-        ? song_result.source_status
-        : chart_result.source_status;
-    if (song_status == content_status::modified || chart_status == content_status::modified) {
-        return {content_status::modified, source_status};
-    }
-    if (song_status == content_status::update || chart_status == content_status::update) {
-        return {content_status::update, source_status};
-    }
-    if (song_status == content_status::official || song_status == content_status::community) {
-        return {song_status, song_result.source_status};
-    }
-    return {chart_status, chart_result.source_status};
-}
-
 int source_sort_bucket(content_status status) {
     switch (status) {
     case content_status::official:
@@ -677,9 +616,8 @@ catalog_data load_catalog(bool calculate_missing_levels) {
             entry.charts.push_back(std::move(option));
         }
 
-        const verification_result entry_result = combine_song_and_chart_status(
-            verify_song_content_source(song, manifest_server_url, verification_cache, manifest_server_reachable),
-            aggregate_chart_results(entry.charts));
+        const verification_result entry_result =
+            verify_song_content_source(song, manifest_server_url, verification_cache, manifest_server_reachable);
         entry.status = entry_result.status;
         entry.source_status = entry_result.source_status;
         std::sort(entry.charts.begin(), entry.charts.end(), chart_source_less);
