@@ -67,6 +67,7 @@ private:
     editor_transport_state transport_;
     std::optional<int> space_playback_start_tick_;
     std::string hitsound_path_;
+    editor_hitsound_paths hitsounds_;
     bool waveform_visible_ = true;
     int waveform_offset_ms_ = 0;
     audio_waveform_summary waveform_summary_;

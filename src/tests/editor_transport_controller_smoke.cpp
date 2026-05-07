@@ -30,6 +30,8 @@ chart_data make_chart() {
         {note_type::tap, 240, 0, 240},
         {note_type::tap, 480, 1, 480},
         {note_type::tap, 720, 2, 720},
+        {note_type::release, 960, 1, 960, true},
+        {note_type::stay, 1200, 2, 1200, true},
     };
     return data;
 }
@@ -53,9 +55,38 @@ int main() {
         const editor_transport_result result = editor_transport_controller::sync(context);
 
         if (!result.audio_loaded || !result.audio_playing || result.playback_tick != 600 ||
-            result.hitsound_count != 1 || result.audio_length_tick <= 0 ||
+            result.hitsound_count != 1 || result.hitsound_requests.size() != 1 ||
+            result.hitsound_requests.front().type != note_type::tap ||
+            result.audio_length_tick <= 0 ||
             result.previous_playback_tick != 600 || !result.previous_audio_playing) {
             std::cerr << "sync should update playback state and hitsounds\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        editor_hitsound_paths hitsounds;
+        hitsounds.tap = "tap.mp3";
+        hitsounds.ray_release = "ray-release.mp3";
+        hitsounds.ray_stay = "ray-stay.mp3";
+        editor_transport_context context;
+        context.state = state.get();
+        context.audio_loaded = true;
+        context.previous_playback_tick = 900;
+        context.previous_audio_playing = true;
+        context.hitsounds = &hitsounds;
+        context.bgm_clock = audio_clock_snapshot{true, true, 0.0, state->engine().tick_to_ms(1300) / 1000.0, 0.0, 0.0};
+        context.bgm_length_seconds = 8.0;
+
+        const editor_transport_result result = editor_transport_controller::sync(context);
+        if (result.hitsound_requests.size() != 2 ||
+            result.hitsound_requests[0].type != note_type::release ||
+            !result.hitsound_requests[0].is_ray ||
+            result.hitsound_requests[1].type != note_type::stay ||
+            !result.hitsound_requests[1].is_ray ||
+            hitsounds.path_for(result.hitsound_requests[0]) != "ray-release.mp3" ||
+            hitsounds.path_for(result.hitsound_requests[1]) != "ray-stay.mp3") {
+            std::cerr << "sync should preserve note type and ray state for editor hitsounds\n";
             return EXIT_FAILURE;
         }
     }

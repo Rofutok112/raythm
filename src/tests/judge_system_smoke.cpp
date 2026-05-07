@@ -318,6 +318,61 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    judge_system tap_stay_judge;
+    tap_stay_judge.init({
+        note_data{note_type::tap, 960, 0, 960},
+        note_data{note_type::stay, 960, 0, 960},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 1000.0);
+    tap_stay_judge.update(1000.0, input);
+    if (tap_stay_judge.get_judge_events().size() != 2 ||
+        !tap_stay_judge.note_states()[0].is_completed() ||
+        !tap_stay_judge.note_states()[1].is_completed()) {
+        std::cerr << "Tap and stay on the same tick should both judge from one press\n";
+        return EXIT_FAILURE;
+    }
+    if (!tap_stay_judge.get_judge_events()[0].play_hitsound ||
+        tap_stay_judge.get_judge_events()[1].play_hitsound) {
+        std::cerr << "Stacked press notes should only play one hitsound\n";
+        return EXIT_FAILURE;
+    }
+
+    judge_system hold_head_stay_judge;
+    hold_head_stay_judge.init({
+        note_data{note_type::hold, 960, 1, 1440},
+        note_data{note_type::stay, 960, 1, 960},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+    hold_head_stay_judge.update(1000.0, input);
+    if (hold_head_stay_judge.get_judge_events().size() != 2 ||
+        !hold_head_stay_judge.note_states()[0].is_holding() ||
+        !hold_head_stay_judge.note_states()[1].is_completed()) {
+        std::cerr << "Hold head and stay on the same tick should both judge from one press\n";
+        return EXIT_FAILURE;
+    }
+
+    judge_system stay_release_judge;
+    stay_release_judge.init({
+        note_data{note_type::stay, 960, 2, 960},
+        note_data{note_type::release, 960, 2, 960},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, true, false}, 900.0);
+    stay_release_judge.update(900.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 950.0);
+    stay_release_judge.update(950.0, input);
+    if (stay_release_judge.get_judge_events().size() != 2 ||
+        !stay_release_judge.note_states()[0].is_completed() ||
+        !stay_release_judge.note_states()[1].is_completed()) {
+        std::cerr << "Stay and release should both judge from one release\n";
+        return EXIT_FAILURE;
+    }
+
     judge_system replaced_tail_judge;
     replaced_tail_judge.init({
         note_data{note_type::hold, 480, 0, 960},
@@ -329,10 +384,62 @@ int main() {
     replaced_tail_judge.update(500.0, input);
     input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1000.0);
     replaced_tail_judge.update(1000.0, input);
-    if (replaced_tail_judge.get_judge_events().size() != 1 ||
+    if (replaced_tail_judge.get_judge_events().size() != 2 ||
         !replaced_tail_judge.note_states()[0].is_completed() ||
         !replaced_tail_judge.note_states()[1].is_completed()) {
-        std::cerr << "Release note should replace overlapping hold tail judgement\n";
+        std::cerr << "Release note should stack with overlapping hold tail judgement\n";
+        return EXIT_FAILURE;
+    }
+    if (replaced_tail_judge.get_judge_events()[0].event_index ==
+        replaced_tail_judge.get_judge_events()[1].event_index) {
+        std::cerr << "Stacked hold tail and release should emit separate judge events\n";
+        return EXIT_FAILURE;
+    }
+    int replaced_tail_hitsounds = 0;
+    int replaced_tail_feedback = 0;
+    for (const judge_event& event : replaced_tail_judge.get_judge_events()) {
+        if (event.play_hitsound) {
+            ++replaced_tail_hitsounds;
+        }
+        if (event.show_feedback) {
+            ++replaced_tail_feedback;
+        }
+    }
+    if (replaced_tail_hitsounds != 1 || replaced_tail_feedback != 1 ||
+        replaced_tail_judge.get_last_judge()->hitsound_type != note_type::release) {
+        std::cerr << "Stacked hold tail and release should present the release note once\n";
+        return EXIT_FAILURE;
+    }
+
+    note_data wide_tap{note_type::tap, 960, 1, 960};
+    wide_tap.lane_width = 3;
+    judge_system wide_tap_judge;
+    wide_tap_judge.init({wide_tap}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, true, false}, 1000.0);
+    wide_tap_judge.update(1000.0, input);
+    if (!wide_tap_judge.get_last_judge().has_value() ||
+        wide_tap_judge.get_last_judge()->result != judge_result::perfect ||
+        !wide_tap_judge.note_states().front().is_completed()) {
+        std::cerr << "Wide tap should judge from any covered lane\n";
+        return EXIT_FAILURE;
+    }
+
+    note_data wide_hold{note_type::hold, 960, 0, 1440};
+    wide_hold.lane_width = 2;
+    judge_system wide_hold_judge;
+    wide_hold_judge.init({wide_hold}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+    wide_hold_judge.update(1000.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1390.0);
+    wide_hold_judge.update(1390.0, input);
+    if (!wide_hold_judge.get_last_judge().has_value() ||
+        wide_hold_judge.get_last_judge()->result != judge_result::good ||
+        !wide_hold_judge.note_states().front().is_completed()) {
+        std::cerr << "Wide hold should track releases from any covered lane\n";
         return EXIT_FAILURE;
     }
 

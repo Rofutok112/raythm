@@ -74,6 +74,48 @@ int main() {
 
     {
         editor_timing_panel_state timing_panel;
+        const editor_timeline_metrics metrics = make_metrics();
+        const Rectangle lane_rect = metrics.lane_rect(1);
+        const float y = metrics.tick_to_y(480);
+        const editor_timeline_result result = editor_timeline_controller::update(
+            timing_panel,
+            {state.get(), &meter_map, metrics, {lane_rect.x + lane_rect.width * 0.5f, y}, true,
+             true, false, false, false, false, false, 4, std::nullopt, {}});
+        if (!result.selected_note_index.has_value() || *result.selected_note_index != 0 ||
+            result.note_to_add.has_value()) {
+            std::cerr << "left click should select the note under the cursor\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        editor_timing_panel_state timing_panel;
+        const editor_timeline_metrics metrics = make_metrics();
+        const editor_timeline_note selected_note{editor_timeline_note_type::tap, 480, 1, 480, false, 1};
+        const editor_timeline_note_draw_info info = metrics.note_rects(selected_note);
+        const Rectangle lane2_rect = metrics.lane_rect(2);
+        editor_timeline_note_drag_state drag_state;
+        editor_timeline_result start = editor_timeline_controller::update(
+            timing_panel,
+            {state.get(), &meter_map, metrics,
+             {info.right_resize_rect.x + info.right_resize_rect.width * 0.5f,
+              info.right_resize_rect.y + info.right_resize_rect.height * 0.5f},
+             true, true, false, false, false, false, false, 4, std::optional<size_t>(0), drag_state});
+        editor_timeline_result finish = editor_timeline_controller::update(
+            timing_panel,
+            {state.get(), &meter_map, metrics,
+             {lane2_rect.x + lane2_rect.width * 0.5f, metrics.tick_to_y(480)},
+             true, false, true, true, false, false, false, 4, start.selected_note_index, start.drag_state});
+        if (!finish.note_to_modify_index.has_value() || *finish.note_to_modify_index != 0 ||
+            !finish.note_to_modify.has_value() || finish.note_to_modify->lane != 1 ||
+            finish.note_to_modify->lane_width != 2) {
+            std::cerr << "right resize handle should expand the selected note\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        editor_timing_panel_state timing_panel;
         timing_panel.bar_pick_mode = true;
         timing_panel.selected_event_index = 0;
         const editor_timeline_metrics metrics = make_metrics();
@@ -93,22 +135,24 @@ int main() {
     {
         editor_timing_panel_state timing_panel;
         const editor_timeline_metrics metrics = make_metrics();
-        const Rectangle lane_rect = metrics.lane_rect(2);
+        const Rectangle lane2_rect = metrics.lane_rect(2);
+        const Rectangle lane3_rect = metrics.lane_rect(3);
         const float start_y = metrics.tick_to_y(240);
         editor_timeline_note_drag_state drag_state;
         editor_timeline_result start = editor_timeline_controller::update(
             timing_panel,
-            {state.get(), &meter_map, metrics, {lane_rect.x + lane_rect.width * 0.5f, start_y}, true,
+            {state.get(), &meter_map, metrics, {lane2_rect.x + lane2_rect.width * 0.5f, start_y}, true,
              true, false, false, false, false, false, 8, std::nullopt, drag_state,
              {note_type::hold, false}});
         editor_timeline_result finish = editor_timeline_controller::update(
             timing_panel,
-            {state.get(), &meter_map, metrics, {lane_rect.x + lane_rect.width * 0.5f, metrics.tick_to_y(720)}, true,
+            {state.get(), &meter_map, metrics, {lane3_rect.x + lane3_rect.width * 0.5f, metrics.tick_to_y(720)}, true,
              false, true, true, false, false, false, 8, std::nullopt, start.drag_state,
              {note_type::hold, false}});
         if (!finish.note_to_add.has_value() || finish.note_to_add->lane != 2 ||
+            finish.note_to_add->lane_width != 2 ||
             finish.note_to_add->tick != 240 || finish.note_to_add->end_tick != 720) {
-            std::cerr << "drag release should request a new note\n";
+            std::cerr << "drag release should request a new wide note\n";
             return EXIT_FAILURE;
         }
     }

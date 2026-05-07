@@ -20,7 +20,7 @@ editor_timeline_note make_timeline_note(const note_data& note) {
             break;
     }
 
-    return {type, note.tick, note.lane, note.end_tick, note.is_ray};
+    return {type, note.tick, note.lane, note.end_tick, note.is_ray, note_lane_width(note)};
 }
 }
 

@@ -145,6 +145,29 @@ bool parse_note_ray_flag(const std::vector<std::string>& tokens) {
     });
 }
 
+std::optional<int> parse_note_width(const std::vector<std::string>& tokens) {
+    for (const std::string& token : tokens) {
+        std::string normalized = token;
+        std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+        constexpr std::string_view kPrefix = "width=";
+        if (normalized.rfind(kPrefix, 0) != 0) {
+            continue;
+        }
+        return parse_int(normalized.substr(kPrefix.size()));
+    }
+    return 1;
+}
+
+bool is_note_modifier_token(const std::string& token) {
+    std::string normalized = token;
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return normalized == "ray" || normalized.rfind("width=", 0) == 0;
+}
+
 bool is_server_managed_metadata_key(const std::string& key) {
     return key == "level" ||
            key == "calculatedLevel" ||
@@ -398,8 +421,9 @@ std::vector<note_data> chart_parser::parse_notes(const std::vector<numbered_line
         }
 
         const size_t required_fields = *type == note_type::hold ? 4 : 3;
-        const bool has_trailing_ray = tokens.size() == required_fields + 1 && parse_note_ray_flag(tokens);
-        if (tokens.size() != required_fields && !has_trailing_ray) {
+        if (tokens.size() < required_fields ||
+            !std::all_of(tokens.begin() + static_cast<std::ptrdiff_t>(required_fields), tokens.end(),
+                         is_note_modifier_token)) {
             errors.push_back(format_line_error(line.first, "Note entry has an unexpected number of fields"));
             continue;
         }
@@ -417,6 +441,12 @@ std::vector<note_data> chart_parser::parse_notes(const std::vector<numbered_line
         note.lane = *lane;
         note.end_tick = note.tick;
         note.is_ray = parse_note_ray_flag(tokens);
+        const std::optional<int> lane_width = parse_note_width(tokens);
+        if (!lane_width.has_value()) {
+            errors.push_back(format_line_error(line.first, "Note width must be an integer"));
+            continue;
+        }
+        note.lane_width = *lane_width;
 
         if (*type == note_type::hold) {
             const std::optional<int> end_tick = parse_int(tokens[3]);
@@ -537,6 +567,14 @@ std::vector<std::string> chart_parser::validate(const chart_data& data) {
             errors.push_back("Note lane out of range for keyCount");
             continue;
         }
+        if (note_lane_width(note) <= 0) {
+            errors.push_back("Note width must be greater than zero");
+            continue;
+        }
+        if (note_last_lane(note) >= data.meta.key_count) {
+            errors.push_back("Note width extends beyond keyCount");
+            continue;
+        }
 
         if (note.type == note_type::hold) {
             if (note.end_tick <= note.tick) {
@@ -545,7 +583,9 @@ std::vector<std::string> chart_parser::validate(const chart_data& data) {
             }
         }
 
-        add_note_intervals(lane_intervals[static_cast<size_t>(note.lane)], note);
+        for (int lane = note.lane; lane <= note_last_lane(note); ++lane) {
+            add_note_intervals(lane_intervals[static_cast<size_t>(lane)], note);
+        }
     }
 
     for (std::vector<note_interval>& intervals : lane_intervals) {

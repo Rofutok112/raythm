@@ -96,7 +96,20 @@ struct note_data {
     int lane = 0;
     int end_tick = 0;
     bool is_ray = false;
+    int lane_width = 1;
 };
+
+inline int note_lane_width(const note_data& note) {
+    return note.lane_width > 0 ? note.lane_width : 1;
+}
+
+inline int note_last_lane(const note_data& note) {
+    return note.lane + note_lane_width(note) - 1;
+}
+
+inline bool note_covers_lane(const note_data& note, int lane) {
+    return lane >= note.lane && lane <= note_last_lane(note);
+}
 
 // 1 譜面分のパース済みデータ。
 struct chart_data {

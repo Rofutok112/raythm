@@ -1,5 +1,7 @@
 #include "editor_scene.h"
 
+#include <algorithm>
+#include <cstdlib>
 #include <memory>
 
 #include "audio_manager.h"
@@ -87,6 +89,7 @@ void editor_scene::on_enter() {
     transport_.previous_playback_tick = load_result.previous_playback_tick;
     transport_.previous_audio_playing = load_result.previous_audio_playing;
     hitsound_path_ = load_result.hitsound_path;
+    hitsounds_ = load_result.hitsounds;
     waveform_visible_ = load_result.waveform_visible;
     waveform_offset_ms_ = load_result.waveform_offset_ms;
     waveform_summary_ = load_result.waveform_summary;
@@ -109,7 +112,7 @@ void editor_scene::on_exit() {
 
 void editor_scene::update(float dt) {
     rebuild_hit_regions();
-    editor_transport_service::sync(transport_, state_.get(), hitsound_path_);
+    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_);
 
     const chart_data chart_for_save = make_chart_data_for_save();
     const bool save_dialog_submit = save_dialog_.submit_requested ||
@@ -161,6 +164,7 @@ void editor_scene::update(float dt) {
         transport_,
         space_playback_start_tick_,
         hitsound_path_,
+        &hitsounds_,
         has_blocking_modal(),
         false,
         IsKeyPressed(KEY_SPACE),
@@ -186,6 +190,7 @@ void editor_scene::update(float dt) {
         selected_note_index_,
         timeline_drag_,
         hitsound_path_,
+        &hitsounds_,
         metrics,
         mouse,
         ui::is_hovered(content, ui::draw_layer::base),
@@ -205,7 +210,7 @@ void editor_scene::update(float dt) {
         scroll_to_tick(*timeline_result.scroll_to_tick);
     }
 
-    editor_transport_service::sync(transport_, state_.get(), hitsound_path_);
+    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_);
     apply_scroll_and_zoom(dt);
 }
 
@@ -439,8 +444,28 @@ std::optional<note_data> editor_scene::dragged_note() const {
         return std::nullopt;
     }
 
+    if (timeline_drag_.mode == editor_timeline_drag_mode::resize_left ||
+        timeline_drag_.mode == editor_timeline_drag_mode::resize_right) {
+        if (!timeline_drag_.note_index.has_value() ||
+            *timeline_drag_.note_index >= state_->data().notes.size()) {
+            return std::nullopt;
+        }
+
+        note_data note = timeline_drag_.original_note;
+        if (timeline_drag_.mode == editor_timeline_drag_mode::resize_left) {
+            const int last_lane = note_last_lane(timeline_drag_.original_note);
+            note.lane = std::clamp(timeline_drag_.current_lane, 0, last_lane);
+            note.lane_width = last_lane - note.lane + 1;
+        } else {
+            const int last_lane = std::clamp(timeline_drag_.current_lane, note.lane, state_->data().meta.key_count - 1);
+            note.lane_width = last_lane - note.lane + 1;
+        }
+        return note;
+    }
+
     note_data note;
-    note.lane = timeline_drag_.lane;
+    note.lane = std::min(timeline_drag_.lane, timeline_drag_.current_lane);
+    note.lane_width = std::abs(timeline_drag_.current_lane - timeline_drag_.lane) + 1;
     note.tick = std::min(timeline_drag_.start_tick, timeline_drag_.current_tick);
     note.end_tick = std::max(timeline_drag_.start_tick, timeline_drag_.current_tick);
     note.type = (note.end_tick - note.tick) >= editor_timeline_viewport::snap_interval(viewport_model()) ? note_type::hold : note_type::tap;
@@ -507,7 +532,7 @@ bool editor_scene::apply_selected_timing_event() {
         return false;
     }
     editor_scene_sync::sync_after_timing_change(make_sync_context());
-    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, true);
+    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
     if (result.scroll_to_tick.has_value()) {
         scroll_to_tick(*result.scroll_to_tick);
     }
@@ -522,7 +547,7 @@ void editor_scene::add_timing_event(timing_event_type type) {
         default_timing_event_tick(),
     }, type);
     editor_scene_sync::sync_after_timing_change(make_sync_context());
-    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, true);
+    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
     if (result.selected_event_index.has_value()) {
         select_timing_event(result.selected_event_index, true);
     }
@@ -540,7 +565,7 @@ void editor_scene::delete_selected_timing_event() {
         return;
     }
     editor_scene_sync::sync_after_timing_change(make_sync_context());
-    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, true);
+    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
 }
 
 bool editor_scene::can_delete_selected_timing_event() const {
@@ -562,7 +587,7 @@ bool editor_scene::apply_metadata_changes(bool clear_notes_for_key_count_change)
         return false;
     }
     editor_scene_sync::sync_after_metadata_change(make_sync_context(), result.key_count_changed);
-    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, true);
+    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
     return true;
 }
 
@@ -572,12 +597,16 @@ bool editor_scene::apply_chart_offset(int offset_ms) {
     }
 
     editor_scene_sync::sync_after_offset_change(make_sync_context());
-    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, true);
+    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
     return true;
 }
 
 void editor_scene::draw_timeline() const {
     const std::optional<note_data> preview_note = dragged_note();
+    const std::optional<size_t> preview_ignore_index =
+        timeline_drag_.active && timeline_drag_.mode != editor_timeline_drag_mode::create
+            ? timeline_drag_.note_index
+            : std::nullopt;
     editor_timeline_presenter::draw({
         *state_,
         meter_map_,
@@ -588,7 +617,7 @@ void editor_scene::draw_timeline() const {
         transport_.playback_tick,
         selected_note_index_,
         preview_note,
-        preview_note.has_value() && state_->has_note_overlap(*preview_note),
+        preview_note.has_value() && state_->has_note_overlap(*preview_note, preview_ignore_index),
         viewport_model(),
     });
 }

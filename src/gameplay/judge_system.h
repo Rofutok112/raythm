@@ -42,8 +42,13 @@ private:
     void resolve_hold_completions(double current_ms);
     void resolve_auto_misses(double current_ms);
     void advance_lane_head_index(int lane);
+    void advance_note_lane_head_indices(const note_data& note);
+    void clear_active_hold_for_note(size_t note_index);
     std::optional<size_t> find_press_candidate(int lane, double timestamp_ms);
     std::optional<size_t> find_release_candidate(int lane, double timestamp_ms);
+    std::vector<size_t> find_press_candidates(int lane, double timestamp_ms);
+    std::vector<size_t> find_release_candidates(int lane, double timestamp_ms);
+    std::vector<size_t> find_early_release_stay_candidates(int lane, double timestamp_ms);
     void complete_held_note(size_t note_index, bool emit_display_judge);
     void complete_event(size_t event_descriptor_index, judge_result result, double offset_ms);
     void complete_event(size_t event_descriptor_index, judge_result result, double offset_ms,

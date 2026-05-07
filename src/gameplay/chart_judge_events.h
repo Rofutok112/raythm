@@ -27,6 +27,7 @@ struct chart_judge_event {
     double time_ms = 0.0;
     int tick = 0;
     int lane = 0;
+    int lane_width = 1;
     bool is_ray = false;
 };
 

@@ -58,6 +58,41 @@ std::string first_existing_audio_asset(std::initializer_list<const char*> file_n
     return "";
 }
 
+std::string audio_asset_path(const char* file_name) {
+    const std::filesystem::path path = app_paths::audio_root() / file_name;
+    return std::filesystem::exists(path) ? path_utils::to_utf8(path) : "";
+}
+
+editor_hitsound_paths load_hitsound_paths() {
+    editor_hitsound_paths hitsounds;
+    hitsounds.tap = audio_asset_path("HitSound_Tap.mp3");
+    hitsounds.ray_tap = audio_asset_path("HitSound_RayTap.mp3");
+    hitsounds.release = audio_asset_path("HitSound_Release.mp3");
+    hitsounds.ray_release = audio_asset_path("HitSound_RayRelease.mp3");
+    hitsounds.stay = audio_asset_path("HitSound_Stay.mp3");
+    hitsounds.ray_stay = audio_asset_path("HitSound_RayStay.mp3");
+    if (hitsounds.tap.empty()) {
+        hitsounds.tap = first_existing_audio_asset({"hitsound.mp3"});
+    }
+    return hitsounds;
+}
+
+void preload_hitsounds(audio_manager& audio, const editor_hitsound_paths& hitsounds) {
+    const std::string* paths[] = {
+        &hitsounds.tap,
+        &hitsounds.ray_tap,
+        &hitsounds.release,
+        &hitsounds.ray_release,
+        &hitsounds.stay,
+        &hitsounds.ray_stay,
+    };
+    for (const std::string* path : paths) {
+        if (path != nullptr && !path->empty()) {
+            audio.preload_se(*path);
+        }
+    }
+}
+
 }  // namespace
 
 namespace editor_session_loader {
@@ -133,7 +168,9 @@ editor_session_load_result load(const editor_start_request& request) {
         }
     }
 
-    result.hitsound_path = first_existing_audio_asset({"HitSound_Tap.mp3", "hitsound.mp3"});
+    result.hitsounds = load_hitsound_paths();
+    result.hitsound_path = result.hitsounds.tap;
+    preload_hitsounds(audio, result.hitsounds);
 
     if (request.resume_state.has_value() && result.audio_loaded) {
         const double target_seconds =
@@ -147,6 +184,7 @@ editor_session_load_result load(const editor_start_request& request) {
     transport_context.previous_playback_tick = 0;
     transport_context.previous_audio_playing = false;
     transport_context.hitsound_path = &result.hitsound_path;
+    transport_context.hitsounds = &result.hitsounds;
     if (result.audio_loaded && audio.is_bgm_loaded()) {
         transport_context.bgm_clock = audio.get_bgm_clock();
         transport_context.bgm_length_seconds = audio.get_bgm_length_seconds();

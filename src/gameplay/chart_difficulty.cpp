@@ -129,19 +129,20 @@ std::vector<note_event> build_note_events(const chart_data& data, const timing_e
     events.reserve(data.notes.size() * 2);
 
     for (const note_data& note : data.notes) {
+        const int representative_lane = note.lane + note_lane_width(note) / 2;
         switch (note.type) {
             case note_type::tap:
-                events.push_back({engine.tick_to_ms(note.tick), note.lane, note_event::kind::tap});
+                events.push_back({engine.tick_to_ms(note.tick), representative_lane, note_event::kind::tap});
                 break;
             case note_type::hold:
-                events.push_back({engine.tick_to_ms(note.tick), note.lane, note_event::kind::hold_head});
-                events.push_back({engine.tick_to_ms(note.end_tick), note.lane, note_event::kind::hold_tail});
+                events.push_back({engine.tick_to_ms(note.tick), representative_lane, note_event::kind::hold_head});
+                events.push_back({engine.tick_to_ms(note.end_tick), representative_lane, note_event::kind::hold_tail});
                 break;
             case note_type::release:
-                events.push_back({engine.tick_to_ms(note.tick), note.lane, note_event::kind::release});
+                events.push_back({engine.tick_to_ms(note.tick), representative_lane, note_event::kind::release});
                 break;
             case note_type::stay:
-                events.push_back({engine.tick_to_ms(note.tick), note.lane, note_event::kind::stay});
+                events.push_back({engine.tick_to_ms(note.tick), representative_lane, note_event::kind::stay});
                 break;
         }
     }
@@ -162,7 +163,8 @@ std::vector<hold_interval> build_hold_intervals(const chart_data& data, const ti
         if (note.type != note_type::hold) {
             continue;
         }
-        holds.push_back({engine.tick_to_ms(note.tick), engine.tick_to_ms(note.end_tick), note.lane});
+        holds.push_back({engine.tick_to_ms(note.tick), engine.tick_to_ms(note.end_tick),
+                         note.lane + note_lane_width(note) / 2});
     }
     return holds;
 }

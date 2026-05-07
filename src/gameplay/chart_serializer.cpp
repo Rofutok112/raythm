@@ -59,7 +59,10 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
     output << "keyCount=" << data.meta.key_count << '\n';
     output << "difficulty=" << data.meta.difficulty << '\n';
     output << "chartAuthor=" << data.meta.chart_author << '\n';
-    output << "formatVersion=" << data.meta.format_version << '\n';
+    const bool has_wide_notes = std::any_of(data.notes.begin(), data.notes.end(), [](const note_data& note) {
+        return note_lane_width(note) > 1;
+    });
+    output << "formatVersion=" << std::max(data.meta.format_version, has_wide_notes ? 2 : 1) << '\n';
     output << "resolution=" << data.meta.resolution << '\n';
     output << "offset=" << data.meta.offset << '\n';
     output << '\n';
@@ -94,6 +97,9 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
         output << note_type_name(note.type) << ',' << note.tick << ',' << note.lane;
         if (note.type == note_type::hold) {
             output << ',' << note.end_tick;
+        }
+        if (note_lane_width(note) > 1) {
+            output << ",width=" << note_lane_width(note);
         }
         if (note.is_ray) {
             output << ",ray";

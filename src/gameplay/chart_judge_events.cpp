@@ -2,21 +2,6 @@
 
 #include <algorithm>
 
-namespace {
-
-bool has_release_replacement(const chart_data& chart, const note_data& hold_note) {
-    for (const note_data& note : chart.notes) {
-        if (note.type == note_type::release &&
-            note.lane == hold_note.lane &&
-            note.tick == hold_note.end_tick) {
-            return true;
-        }
-    }
-    return false;
-}
-
-}  // namespace
-
 namespace chart_judge_events {
 
 std::vector<chart_judge_event> build(const chart_data& chart, const timing_engine& engine) {
@@ -37,6 +22,7 @@ std::vector<chart_judge_event> build(const chart_data& chart, const timing_engin
                     engine.tick_to_ms(note.tick),
                     note.tick,
                     note.lane,
+                    note_lane_width(note),
                     note.is_ray,
                 });
                 break;
@@ -50,20 +36,20 @@ std::vector<chart_judge_event> build(const chart_data& chart, const timing_engin
                     engine.tick_to_ms(note.tick),
                     note.tick,
                     note.lane,
+                    note_lane_width(note),
                     note.is_ray,
                 });
-                if (!has_release_replacement(chart, note)) {
-                    events.push_back({
-                        event_index++,
-                        note_index,
-                        chart_judge_event_kind::release,
-                        chart_judge_event_role::hold_tail,
-                        engine.tick_to_ms(note.end_tick),
-                        note.end_tick,
-                        note.lane,
-                        note.is_ray,
-                    });
-                }
+                events.push_back({
+                    event_index++,
+                    note_index,
+                    chart_judge_event_kind::release,
+                    chart_judge_event_role::hold_tail,
+                    engine.tick_to_ms(note.end_tick),
+                    note.end_tick,
+                    note.lane,
+                    note_lane_width(note),
+                    note.is_ray,
+                });
                 break;
 
             case note_type::release:
@@ -75,6 +61,7 @@ std::vector<chart_judge_event> build(const chart_data& chart, const timing_engin
                     engine.tick_to_ms(note.tick),
                     note.tick,
                     note.lane,
+                    note_lane_width(note),
                     note.is_ray,
                 });
                 break;
@@ -88,6 +75,7 @@ std::vector<chart_judge_event> build(const chart_data& chart, const timing_engin
                     engine.tick_to_ms(note.tick),
                     note.tick,
                     note.lane,
+                    note_lane_width(note),
                     note.is_ray,
                 });
                 break;
@@ -98,8 +86,10 @@ std::vector<chart_judge_event> build(const chart_data& chart, const timing_engin
         if (left.time_ms != right.time_ms) {
             return left.time_ms < right.time_ms;
         }
-        if (left.lane != right.lane) {
-            return left.lane < right.lane;
+        const int left_center_lane2 = left.lane * 2 + left.lane_width - 1;
+        const int right_center_lane2 = right.lane * 2 + right.lane_width - 1;
+        if (left_center_lane2 != right_center_lane2) {
+            return left_center_lane2 < right_center_lane2;
         }
         return left.event_index < right.event_index;
     });

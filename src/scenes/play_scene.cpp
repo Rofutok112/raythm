@@ -452,7 +452,7 @@ void play_scene::draw() {
 
     BeginMode3D(camera);
     if (has_bounds) {
-        play_renderer::draw_world(state_, draw_queue_, lane_start_z, judgement_z, lane_end_z, visual_ms);
+        play_renderer::draw_world(state_, draw_queue_, camera, lane_start_z, judgement_z, lane_end_z, visual_ms);
     }
     EndMode3D();
 

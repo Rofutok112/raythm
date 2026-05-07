@@ -16,6 +16,10 @@ Vector2 rect_center(Rectangle rect) {
 void draw_stay_note_marker(Rectangle rect, Color fill, Color outline) {
     const Vector2 center = rect_center(rect);
     const float radius = std::max(3.5f, std::min(rect.width, rect.height) * 0.34f);
+    const float bar_width = std::max(12.0f, rect.width * 0.78f);
+    const Rectangle bar = {center.x - bar_width * 0.5f, center.y - 1.25f, bar_width, 2.5f};
+    DrawRectangleRounded(bar, 0.6f, 4, fill);
+    ui::draw_rect_lines(bar, 1.0f, outline);
     DrawCircleV(center, radius, fill);
     DrawCircleLines(static_cast<int>(std::lround(center.x)), static_cast<int>(std::lround(center.y)),
                     radius, outline);
@@ -101,7 +105,15 @@ Rectangle editor_timeline_metrics::lane_rect(int lane) const {
 }
 
 editor_timeline_note_draw_info editor_timeline_metrics::note_rects(const editor_timeline_note& note) const {
-    const Rectangle lane = lane_rect(note.lane);
+    const int clamped_width = std::max(1, note.lane_width);
+    const Rectangle first_lane = lane_rect(note.lane);
+    const Rectangle last_lane = lane_rect(std::min(key_count - 1, note.lane + clamped_width - 1));
+    const Rectangle lane = {
+        std::min(first_lane.x, last_lane.x),
+        first_lane.y,
+        std::fabs((last_lane.x + last_lane.width) - first_lane.x),
+        first_lane.height,
+    };
     const float start_y = tick_to_y(note.tick);
     editor_timeline_note_draw_info info;
     float inset = 6.0f;
@@ -111,6 +123,16 @@ editor_timeline_note_draw_info editor_timeline_metrics::note_rects(const editor_
         inset = 9.0f;
     }
     info.head_rect = {lane.x + inset, start_y - note_head_height * 0.5f, lane.width - inset * 2.0f, note_head_height};
+    const float handle_width = std::min(9.0f, std::max(5.0f, lane.width * 0.18f));
+    const float handle_height = note_head_height + 8.0f;
+    info.left_resize_rect = {info.head_rect.x - handle_width * 0.5f,
+                             start_y - handle_height * 0.5f,
+                             handle_width,
+                             handle_height};
+    info.right_resize_rect = {info.head_rect.x + info.head_rect.width - handle_width * 0.5f,
+                              start_y - handle_height * 0.5f,
+                              handle_width,
+                              handle_height};
 
     if (note.type == editor_timeline_note_type::hold) {
         const float end_y = tick_to_y(note.end_tick);
@@ -118,6 +140,10 @@ editor_timeline_note_draw_info editor_timeline_metrics::note_rects(const editor_
         const float height = std::fabs(end_y - start_y);
         info.body_rect = {lane.x + lane.width * 0.3f, top, lane.width * 0.4f, std::max(height, 6.0f)};
         info.tail_rect = {lane.x + 10.0f, end_y - 5.0f, lane.width - 20.0f, 10.0f};
+        info.left_resize_rect.height = std::fabs(end_y - start_y) + handle_height;
+        info.left_resize_rect.y = std::min(start_y, end_y) - handle_height * 0.5f;
+        info.right_resize_rect.height = info.left_resize_rect.height;
+        info.right_resize_rect.y = info.left_resize_rect.y;
         info.has_body = true;
     }
 
@@ -207,6 +233,12 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             }
 
             draw_note_marker(note, info, head_fill, outline);
+            if (selected) {
+                DrawRectangleRounded(info.left_resize_rect, 0.45f, 4, with_alpha(t.border_active, 210));
+                DrawRectangleRounded(info.right_resize_rect, 0.45f, 4, with_alpha(t.border_active, 210));
+                ui::draw_rect_lines(info.left_resize_rect, 1.0f, t.text);
+                ui::draw_rect_lines(info.right_resize_rect, 1.0f, t.text);
+            }
         }
 
         if (model.preview_note.has_value()) {

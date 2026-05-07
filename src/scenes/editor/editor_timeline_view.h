@@ -21,12 +21,15 @@ struct editor_timeline_note {
     int lane = 0;
     int end_tick = 0;
     bool is_ray = false;
+    int lane_width = 1;
 };
 
 struct editor_timeline_note_draw_info {
     Rectangle head_rect = {};
     Rectangle body_rect = {};
     Rectangle tail_rect = {};
+    Rectangle left_resize_rect = {};
+    Rectangle right_resize_rect = {};
     bool has_body = false;
 };
 

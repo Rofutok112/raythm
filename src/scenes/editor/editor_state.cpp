@@ -50,6 +50,10 @@ bool overlap_allowed(const note_data& left, const note_data& right) {
     return false;
 }
 
+bool lanes_overlap(const note_data& left, const note_data& right) {
+    return left.lane <= note_last_lane(right) && right.lane <= note_last_lane(left);
+}
+
 class add_note_command final : public editor_command {
 public:
     add_note_command(chart_data& chart, note_data note) : chart_(chart), note_(std::move(note)) {}
@@ -341,7 +345,8 @@ int editor_state::snap_tick(int raw_tick, int division) const {
 }
 
 bool editor_state::has_note_overlap(const note_data& note, std::optional<size_t> ignore_index) const {
-    if (note.lane < 0 || note.lane >= chart_.meta.key_count) {
+    if (note.lane < 0 || note.lane >= chart_.meta.key_count ||
+        note_lane_width(note) <= 0 || note_last_lane(note) >= chart_.meta.key_count) {
         return true;
     }
 
@@ -352,7 +357,7 @@ bool editor_state::has_note_overlap(const note_data& note, std::optional<size_t>
         }
 
         const note_data& existing = chart_.notes[i];
-        if (existing.lane != note.lane) {
+        if (!lanes_overlap(existing, note)) {
             continue;
         }
 
