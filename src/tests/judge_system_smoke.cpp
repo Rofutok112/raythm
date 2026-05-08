@@ -113,6 +113,12 @@ int main() {
         std::cerr << "Graded hold release should still affect gameplay\n";
         return EXIT_FAILURE;
     }
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 2000.0);
+    hold_release_window_judge.update(2000.0, input);
+    if (!hold_release_window_judge.get_judge_events().empty()) {
+        std::cerr << "Early hold release should not emit the tail event again later\n";
+        return EXIT_FAILURE;
+    }
 
     judge_system hold_release_success_judge;
     hold_release_success_judge.init({note_data{note_type::hold, 960, 1, 1440}}, engine);
