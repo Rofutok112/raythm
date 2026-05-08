@@ -277,6 +277,11 @@ void judge_system::handle_hold_release(const input_event& event) {
     state.progress = note_progress_state::completed;
     state.result = evaluate_hold_release_offset(release_offset_ms);
     clear_active_hold_for_note(*active_hold);
+    if (const std::optional<size_t> tail_descriptor_index =
+            descriptor_index_for_event_index(state.tail_event_index); !tail_descriptor_index.has_value() ||
+            !mark_event_completed(*tail_descriptor_index)) {
+        return;
+    }
     judge_emit_options options;
     options.play_hitsound = false;
     emit_judge(state.result, release_offset_ms, state.note_ref.lane, state.tail_event_index, options);
@@ -712,11 +717,12 @@ void judge_system::complete_held_note(size_t note_index, bool emit_display_judge
     state.result = judge_result::perfect;
     state.progress = note_progress_state::completed;
     advance_note_lane_head_indices(state.note_ref);
-    if (const std::optional<size_t> tail_descriptor_index =
-            descriptor_index_for_event_index(state.tail_event_index); tail_descriptor_index.has_value()) {
-        mark_event_completed(*tail_descriptor_index);
-    }
     if (state.tail_event_index < 0) {
+        return;
+    }
+    if (const std::optional<size_t> tail_descriptor_index =
+            descriptor_index_for_event_index(state.tail_event_index); !tail_descriptor_index.has_value() ||
+            !mark_event_completed(*tail_descriptor_index)) {
         return;
     }
     judge_emit_options options;

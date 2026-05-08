@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include <vector>
 
 #include "data_models.h"
@@ -17,6 +18,7 @@ public:
 
 private:
     int normalized_score() const;
+    std::vector<note_result_entry> normalized_note_results() const;
 
     double raw_score_ = 0.0;
     int combo_ = 0;
@@ -27,7 +29,7 @@ private:
     int slow_count_ = 0;
     double offset_sum_ = 0.0;
     int judged_notes_ = 0;
-    std::vector<note_result_entry> note_results_;
+    std::vector<std::optional<note_result_entry>> note_results_by_event_;
     scoring_ruleset_runtime::ruleset ruleset_ = scoring_ruleset_runtime::make_default_ruleset();
 };
 

@@ -46,20 +46,26 @@ void score_system::init(int total_notes) {
     slow_count_ = 0;
     offset_sum_ = 0.0;
     judged_notes_ = 0;
-    note_results_.clear();
-    note_results_.reserve(static_cast<size_t>(total_notes_));
+    note_results_by_event_.assign(static_cast<size_t>(total_notes_), std::nullopt);
 }
 
 void score_system::on_judge(const judge_event& event) {
-    ++judge_counts_[judge_index(event.result)];
-    ++judged_notes_;
-    if (event.event_index >= 0) {
-        note_results_.push_back(note_result_entry{
+    if (event.event_index >= 0 &&
+        event.event_index < total_notes_) {
+        std::optional<note_result_entry>& stored =
+            note_results_by_event_[static_cast<size_t>(event.event_index)];
+        if (stored.has_value()) {
+            return;
+        }
+        stored = note_result_entry{
             .event_index = event.event_index,
             .result = event.result,
             .offset_ms = event.offset_ms,
-        });
+        };
     }
+
+    ++judge_counts_[judge_index(event.result)];
+    ++judged_notes_;
 
     if (event.offset_ms < 0.0) {
         ++fast_count_;
@@ -118,7 +124,7 @@ result_data score_system::get_result_data() const {
     result.accuracy = get_live_accuracy();
     result.scoring_ruleset_version = ruleset_.ruleset_version;
     result.scoring_accepted_input = ruleset_.accepted_input;
-    result.note_results = note_results_;
+    result.note_results = normalized_note_results();
 
     result.clear_rank = scoring_ruleset_runtime::compute_rank_for(ruleset_, result.accuracy, result.is_full_combo);
 
@@ -133,6 +139,19 @@ int score_system::normalized_score() const {
 
     const double normalized = raw_score_ / max_raw_score;
     return static_cast<int>(std::clamp(normalized, 0.0, 1.0) * ruleset_.max_score);
+}
+
+std::vector<note_result_entry> score_system::normalized_note_results() const {
+    std::vector<note_result_entry> results;
+    results.reserve(static_cast<size_t>(total_notes_));
+    for (int event_index = 0; event_index < total_notes_; ++event_index) {
+        const std::optional<note_result_entry>& stored =
+            note_results_by_event_[static_cast<size_t>(event_index)];
+        if (stored.has_value()) {
+            results.push_back(*stored);
+        }
+    }
+    return results;
 }
 
 void gauge::on_judge(judge_result result) {

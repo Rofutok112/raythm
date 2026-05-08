@@ -148,6 +148,36 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    score_system note_result_normalization;
+    note_result_normalization.init(4);
+    note_result_normalization.on_judge({
+        .result = judge_result::perfect,
+        .offset_ms = 0.0,
+        .lane = 0,
+        .event_index = 0,
+    });
+    note_result_normalization.on_judge({
+        .result = judge_result::great,
+        .offset_ms = 5.0,
+        .lane = 1,
+        .event_index = 2,
+    });
+    note_result_normalization.on_judge({
+        .result = judge_result::miss,
+        .offset_ms = 10.0,
+        .lane = 1,
+        .event_index = 2,
+    });
+    const result_data normalized = note_result_normalization.get_result_data();
+    if (normalized.note_results.size() != 2 ||
+        normalized.note_results[0].event_index != 0 ||
+        normalized.note_results[1].event_index != 2 ||
+        normalized.note_results[1].result != judge_result::great ||
+        normalized.judge_counts[static_cast<size_t>(judge_result::miss)] != 0) {
+        std::cerr << "Online note results should stay sorted without double-counting duplicate events\n";
+        return EXIT_FAILURE;
+    }
+
     std::cout << "score_system smoke test passed\n";
     return EXIT_SUCCESS;
 }

@@ -597,6 +597,14 @@ add_executable(judge_system_smoke
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h)
 
+add_executable(chart_judge_events_smoke
+        src/models/data_models.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/tests/chart_judge_events_smoke.cpp)
+
 add_executable(score_system_smoke
         src/models/data_models.h
         src/gameplay/scoring_ruleset_runtime.cpp
@@ -897,6 +905,7 @@ set(RAYTHM_SMOKE_TARGETS
         mv_storage_smoke
         input_handler_smoke
         timing_engine_smoke
+        chart_judge_events_smoke
         judge_system_smoke
         score_system_smoke
         performance_system_smoke
