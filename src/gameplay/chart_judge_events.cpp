@@ -83,8 +83,8 @@ std::vector<chart_judge_event> build(const chart_data& chart, const timing_engin
     }
 
     std::stable_sort(events.begin(), events.end(), [](const chart_judge_event& left, const chart_judge_event& right) {
-        if (left.time_ms != right.time_ms) {
-            return left.time_ms < right.time_ms;
+        if (left.tick != right.tick) {
+            return left.tick < right.tick;
         }
         const int left_center_lane2 = left.lane * 2 + left.lane_width - 1;
         const int right_center_lane2 = right.lane * 2 + right.lane_width - 1;
@@ -93,6 +93,10 @@ std::vector<chart_judge_event> build(const chart_data& chart, const timing_engin
         }
         return left.event_index < right.event_index;
     });
+
+    for (size_t i = 0; i < events.size(); ++i) {
+        events[i].event_index = static_cast<int>(i);
+    }
 
     return events;
 }
