@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include "theme.h"
 #include "ui_clip.h"
@@ -50,6 +51,51 @@ void draw_note_marker(const editor_timeline_note& note,
     } else {
         DrawRectangleRounded(info.head_rect, 0.3f, 6, fill);
         ui::draw_rect_lines(info.head_rect, 1.5f, outline);
+    }
+}
+
+void draw_waveform(const editor_timeline_view_model& model, Rectangle content, const ui_theme& t) {
+    if (!model.waveform_visible || model.waveform_summary == nullptr || model.timing_engine == nullptr) {
+        return;
+    }
+
+    const int row_count = std::max(1, static_cast<int>(std::ceil(content.height)));
+    std::vector<float> row_amplitudes(static_cast<std::size_t>(row_count), 0.0f);
+    for (const audio_waveform_peak& peak : model.waveform_summary->peaks) {
+        const double shifted_ms = peak.seconds * 1000.0 + static_cast<double>(model.waveform_offset_ms);
+        const int tick = model.timing_engine->ms_to_tick(shifted_ms);
+        if (tick < model.min_tick || tick > model.max_tick) {
+            continue;
+        }
+
+        const float y = model.metrics.tick_to_y(tick);
+        const int row = static_cast<int>(std::floor(y - content.y));
+        if (row < 0 || row >= row_count) {
+            continue;
+        }
+        row_amplitudes[static_cast<std::size_t>(row)] = std::max(
+            row_amplitudes[static_cast<std::size_t>(row)],
+            std::clamp(peak.amplitude, 0.0f, 1.0f));
+    }
+
+    const float center_x = content.x + content.width * 0.5f;
+    const bool dark_theme = t.bg.r < 128;
+    const unsigned char primary_alpha = dark_theme ? 70 : 22;
+    const unsigned char secondary_alpha = dark_theme ? 26 : 8;
+    for (int row = 0; row < row_count; ++row) {
+        const float amplitude = row_amplitudes[static_cast<std::size_t>(row)];
+        if (amplitude <= 0.001f) {
+            continue;
+        }
+
+        const float y = content.y + static_cast<float>(row) + 0.5f;
+        const float half_width = content.width * 0.5f * amplitude;
+        ui::draw_line_f(center_x - half_width, y - 1.0f, center_x + half_width, y - 1.0f,
+                        with_alpha(t.accent, secondary_alpha));
+        ui::draw_line_f(center_x - half_width, y, center_x + half_width, y,
+                        with_alpha(t.accent, primary_alpha));
+        ui::draw_line_f(center_x - half_width, y + 1.0f, center_x + half_width, y + 1.0f,
+                        with_alpha(t.accent, secondary_alpha));
     }
 }
 }
@@ -160,26 +206,7 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
     {
         ui::scoped_clip_rect clip_scope(content);
 
-        if (model.waveform_visible && model.waveform_summary != nullptr && model.timing_engine != nullptr) {
-            const float center_x = content.x + content.width * 0.5f;
-            const bool dark_theme = t.bg.r < 128;
-            const unsigned char primary_alpha = dark_theme ? 84 : 24;
-            const unsigned char secondary_alpha = dark_theme ? 38 : 10;
-            for (const audio_waveform_peak& peak : model.waveform_summary->peaks) {
-                const double shifted_ms =
-                    peak.seconds * 1000.0 + static_cast<double>(model.waveform_offset_ms);
-                const int tick = model.timing_engine->ms_to_tick(shifted_ms);
-                if (tick < model.min_tick || tick > model.max_tick) {
-                    continue;
-                }
-
-                const float y = model.metrics.tick_to_y(tick);
-                const float half_width = content.width * 0.5f * std::clamp(peak.amplitude, 0.0f, 1.0f);
-                ui::draw_line_f(center_x - half_width, y - 1.0f, center_x + half_width, y - 1.0f, with_alpha(t.accent, secondary_alpha));
-                ui::draw_line_f(center_x - half_width, y, center_x + half_width, y, with_alpha(t.accent, primary_alpha));
-                ui::draw_line_f(center_x - half_width, y + 1.0f, center_x + half_width, y + 1.0f, with_alpha(t.accent, secondary_alpha));
-            }
-        }
+        draw_waveform(model, content, t);
 
         for (int lane = 0; lane < std::max(1, model.metrics.key_count); ++lane) {
             const Rectangle rect = model.metrics.lane_rect(lane);

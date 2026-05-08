@@ -10,6 +10,7 @@
 #include "editor/service/editor_chart_identity_service.h"
 #include "editor_scene_sync.h"
 #include "editor_transport_controller.h"
+#include "game_settings.h"
 #include "path_utils.h"
 
 namespace {
@@ -156,6 +157,7 @@ editor_session_load_result load(const editor_start_request& request) {
     audio_manager& audio = audio_manager::instance();
     const std::filesystem::path audio_path = path_utils::join_utf8(request.song.directory, request.song.meta.audio_file);
     if (std::filesystem::exists(audio_path) && audio.load_bgm(path_utils::to_utf8(audio_path))) {
+        audio.set_bgm_volume(g_settings.bgm_volume);
         result.audio_loaded = true;
     }
 
