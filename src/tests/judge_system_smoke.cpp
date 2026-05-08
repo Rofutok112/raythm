@@ -280,6 +280,23 @@ int main() {
         std::cerr << "Native simultaneous judge failed\n";
         return EXIT_FAILURE;
     }
+
+    judge_system native_flick_release_judge;
+    native_flick_release_judge.init({note_data{note_type::release, 960, 0, 960}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    windows_input_source::instance().set_test_current_time_ms(1010.0);
+    windows_input_source::instance().push_test_event({KEY_D, input_event_type::press, 900.0, 7});
+    windows_input_source::instance().push_test_event({KEY_D, input_event_type::release, 1000.0, 8});
+    input.update(1010.0);
+    native_flick_release_judge.update(1010.0, input);
+    const std::optional<judge_event> native_flick_release_event = native_flick_release_judge.get_last_judge();
+    if (!native_flick_release_event.has_value() ||
+        native_flick_release_event->result != judge_result::perfect ||
+        native_flick_release_event->hitsound_type != note_type::release) {
+        std::cerr << "Native same-frame flick release should arm before release judgement\n";
+        return EXIT_FAILURE;
+    }
     windows_input_source::instance().shutdown();
 
     judge_system release_note_judge;
@@ -297,6 +314,28 @@ int main() {
     }
     if (release_note_judge.get_last_judge()->hitsound_type != note_type::release) {
         std::cerr << "Release note should request a release hitsound\n";
+        return EXIT_FAILURE;
+    }
+
+    judge_system tap_release_absorb_judge;
+    tap_release_absorb_judge.init({
+        note_data{note_type::tap, 840, 0, 840},
+        note_data{note_type::release, 960, 0, 960},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 880.0);
+    tap_release_absorb_judge.update(880.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 940.0);
+    tap_release_absorb_judge.update(940.0, input);
+    if (tap_release_absorb_judge.note_states()[1].is_completed()) {
+        std::cerr << "Tap release should not arm a standalone release note\n";
+        return EXIT_FAILURE;
+    }
+    tap_release_absorb_judge.update(1170.0, input);
+    if (!tap_release_absorb_judge.note_states()[1].is_completed() ||
+        tap_release_absorb_judge.note_states()[1].result != judge_result::miss) {
+        std::cerr << "Unarmed standalone release should miss after its window\n";
         return EXIT_FAILURE;
     }
 

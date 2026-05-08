@@ -87,6 +87,9 @@ std::optional<editor_timeline_drag_mode> resize_handle_at_position(const editor_
 
     const note_data& note = context.state->data().notes[note_index];
     const editor_timeline_note_draw_info info = context.metrics.note_rects(make_timeline_note(note));
+    if (note.type == note_type::hold && CheckCollisionPointRec(point, info.end_resize_rect)) {
+        return editor_timeline_drag_mode::resize_end;
+    }
     if (CheckCollisionPointRec(point, info.left_resize_rect)) {
         return editor_timeline_drag_mode::resize_left;
     }
@@ -145,6 +148,11 @@ std::optional<note_data> resized_note(const editor_timeline_context& context,
         const int key_count = std::max(1, context.state->data().meta.key_count);
         const int last_lane = std::clamp(drag_state.current_lane, note.lane, key_count - 1);
         note.lane_width = last_lane - note.lane + 1;
+    } else if (drag_state.mode == editor_timeline_drag_mode::resize_end) {
+        if (note.type != note_type::hold) {
+            return std::nullopt;
+        }
+        note.end_tick = std::max(note.tick + minimum_hold_tick_gap(context), drag_state.current_tick);
     } else {
         return std::nullopt;
     }
@@ -219,7 +227,10 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
                 result.drag_state.lane = result.drag_state.original_note.lane;
                 result.drag_state.current_lane = lane_at_x_clamped(context, context.mouse.x);
                 result.drag_state.start_tick = result.drag_state.original_note.tick;
-                result.drag_state.current_tick = result.drag_state.start_tick;
+                result.drag_state.current_tick =
+                    *handle == editor_timeline_drag_mode::resize_end
+                        ? result.drag_state.original_note.end_tick
+                        : result.drag_state.start_tick;
                 return result;
             }
         }
@@ -247,6 +258,8 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             if (const std::optional<int> lane = lane_at_position(context, context.mouse); lane.has_value()) {
                 result.drag_state.current_lane = *lane;
             }
+        } else if (result.drag_state.mode == editor_timeline_drag_mode::resize_end) {
+            result.drag_state.current_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
         } else {
             result.drag_state.current_lane = lane_at_x_clamped(context, context.mouse.x);
         }

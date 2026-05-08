@@ -29,6 +29,7 @@ enum class editor_timeline_drag_mode {
     create,
     resize_left,
     resize_right,
+    resize_end,
 };
 
 struct editor_timeline_note_drag_state {

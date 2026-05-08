@@ -115,6 +115,38 @@ int main() {
     }
 
     {
+        chart_data hold_chart = make_chart();
+        hold_chart.notes = {
+            {note_type::hold, 480, 1, 720},
+        };
+        const auto hold_state = std::make_shared<editor_state>(hold_chart, "");
+        editor_meter_map hold_meter_map;
+        hold_meter_map.rebuild(hold_state->data());
+        editor_timing_panel_state timing_panel;
+        const editor_timeline_metrics metrics = make_metrics();
+        const editor_timeline_note selected_note{editor_timeline_note_type::hold, 480, 1, 720, false, 1};
+        const editor_timeline_note_draw_info info = metrics.note_rects(selected_note);
+        editor_timeline_note_drag_state drag_state;
+        editor_timeline_result start = editor_timeline_controller::update(
+            timing_panel,
+            {hold_state.get(), &hold_meter_map, metrics,
+             {info.end_resize_rect.x + info.end_resize_rect.width * 0.5f,
+              info.end_resize_rect.y + info.end_resize_rect.height * 0.5f},
+             true, true, false, false, false, false, false, 8, std::optional<size_t>(0), drag_state});
+        editor_timeline_result finish = editor_timeline_controller::update(
+            timing_panel,
+            {hold_state.get(), &hold_meter_map, metrics,
+             {info.end_resize_rect.x + info.end_resize_rect.width * 0.5f, metrics.tick_to_y(960)},
+             true, false, true, true, false, false, false, 8, start.selected_note_index, start.drag_state});
+        if (!finish.note_to_modify_index.has_value() || *finish.note_to_modify_index != 0 ||
+            !finish.note_to_modify.has_value() || finish.note_to_modify->tick != 480 ||
+            finish.note_to_modify->end_tick != 960 || finish.note_to_modify->type != note_type::hold) {
+            std::cerr << "hold top resize handle should adjust the end tick\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
         editor_timing_panel_state timing_panel;
         timing_panel.bar_pick_mode = true;
         timing_panel.selected_event_index = 0;

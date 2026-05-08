@@ -140,6 +140,7 @@ editor_timeline_note_draw_info editor_timeline_metrics::note_rects(const editor_
         const float height = std::fabs(end_y - start_y);
         info.body_rect = {lane.x + lane.width * 0.3f, top, lane.width * 0.4f, std::max(height, 6.0f)};
         info.tail_rect = {lane.x + 10.0f, end_y - 5.0f, lane.width - 20.0f, 10.0f};
+        info.end_resize_rect = {lane.x + 8.0f, end_y - 8.0f, lane.width - 16.0f, 16.0f};
         info.left_resize_rect.height = std::fabs(end_y - start_y) + handle_height;
         info.left_resize_rect.y = std::min(start_y, end_y) - handle_height * 0.5f;
         info.right_resize_rect.height = info.left_resize_rect.height;
@@ -238,6 +239,10 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
                 DrawRectangleRounded(info.right_resize_rect, 0.45f, 4, with_alpha(t.border_active, 210));
                 ui::draw_rect_lines(info.left_resize_rect, 1.0f, t.text);
                 ui::draw_rect_lines(info.right_resize_rect, 1.0f, t.text);
+                if (info.has_body) {
+                    DrawRectangleRounded(info.end_resize_rect, 0.45f, 4, with_alpha(t.border_active, 220));
+                    ui::draw_rect_lines(info.end_resize_rect, 1.0f, t.text);
+                }
             }
         }
 

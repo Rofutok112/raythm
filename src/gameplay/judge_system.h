@@ -36,19 +36,27 @@ private:
     judge_result evaluate_stay_offset(double offset_ms) const;
     bool is_in_judgement_window(double offset_ms) const;
     void complete_due_hold_before(int lane, double timestamp_ms);
+    void process_input_event(const input_event& event);
     void handle_hold_release(const input_event& event);
     void handle_press(const input_event& event);
     void resolve_stay_notes(double current_ms, const input_handler& input);
     void resolve_hold_completions(double current_ms);
     void resolve_auto_misses(double current_ms);
     void advance_lane_head_index(int lane);
+    void advance_lane_event_head_index(int lane);
     void advance_note_lane_head_indices(const note_data& note);
+    void advance_event_lane_head_indices(const chart_judge_event& event);
     void clear_active_hold_for_note(size_t note_index);
-    std::optional<size_t> find_press_candidate(int lane, double timestamp_ms);
-    std::optional<size_t> find_release_candidate(int lane, double timestamp_ms);
+    bool mark_event_completed(size_t event_descriptor_index);
+    std::optional<size_t> descriptor_index_for_event_index(int event_index) const;
+    bool release_overlaps_hold_tail(const chart_judge_event& release) const;
     std::vector<size_t> find_press_candidates(int lane, double timestamp_ms);
     std::vector<size_t> find_release_candidates(int lane, double timestamp_ms);
     std::vector<size_t> find_early_release_stay_candidates(int lane, double timestamp_ms);
+    void arm_release_candidate(int lane, double timestamp_ms);
+    bool is_standalone_release_event(size_t event_descriptor_index) const;
+    bool release_event_is_armed(size_t event_descriptor_index, int lane) const;
+    void clear_armed_release_event(size_t event_descriptor_index);
     void complete_held_note(size_t note_index, bool emit_display_judge);
     void complete_event(size_t event_descriptor_index, judge_result result, double offset_ms);
     void complete_event(size_t event_descriptor_index, judge_result result, double offset_ms,
@@ -59,6 +67,8 @@ private:
 
     std::vector<note_state> note_states_;
     std::vector<chart_judge_event> event_descriptors_;
+    std::vector<size_t> event_descriptor_indices_by_event_index_;
+    std::vector<bool> standalone_release_events_;
     std::vector<bool> event_completed_;
     // Each lane keeps its own ordered note list and next unresolved head index.
     std::array<std::vector<size_t>, kMaxLanes> lane_note_indices_;
@@ -66,5 +76,6 @@ private:
     std::array<size_t, kMaxLanes> lane_head_indices_ = {};
     std::array<size_t, kMaxLanes> lane_event_head_indices_ = {};
     std::array<std::optional<size_t>, kMaxLanes> active_hold_indices_;
+    std::array<std::optional<size_t>, kMaxLanes> armed_release_event_indices_;
     std::vector<judge_event> judge_events_;
 };
