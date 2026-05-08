@@ -42,7 +42,9 @@ bool equal_note(const note_data& left, const note_data& right) {
     return left.type == right.type &&
            left.tick == right.tick &&
            left.lane == right.lane &&
-           left.end_tick == right.end_tick;
+           left.end_tick == right.end_tick &&
+           left.is_ray == right.is_ray &&
+           note_lane_width(left) == note_lane_width(right);
 }
 
 bool equal_chart_data(const chart_data& left, const chart_data& right) {
@@ -115,11 +117,16 @@ int main() {
         {.type = timing_event_type::bpm, .tick = 0, .bpm = 150.0f, .numerator = 4, .denominator = 4},
     };
 
+    note_data wide_tap{.type = note_type::tap, .tick = 1320, .lane = 1, .end_tick = 1320};
+    wide_tap.lane_width = 2;
     source.notes = {
         {.type = note_type::tap, .tick = 960, .lane = 3, .end_tick = 960},
         {.type = note_type::hold, .tick = 480, .lane = 2, .end_tick = 840},
         {.type = note_type::tap, .tick = 480, .lane = 0, .end_tick = 480},
         {.type = note_type::tap, .tick = 0, .lane = 1, .end_tick = 0},
+        {.type = note_type::release, .tick = 960, .lane = 0, .end_tick = 960, .is_ray = true},
+        {.type = note_type::stay, .tick = 1200, .lane = 1, .end_tick = 1200},
+        wide_tap,
     };
 
     const bool serialized = chart_serializer::serialize(source, output_path.string());
@@ -132,12 +139,16 @@ int main() {
     bool ok = true;
 
     ok = content.find("offset=-35") != std::string::npos && ok;
+    ok = content.find("formatVersion=2") != std::string::npos && ok;
     ok = content.find("chartId=raythm_chart_serializer_smoke") != std::string::npos && ok;
     ok = content.find("songId=") == std::string::npos && ok;
     ok = content.find("level=") == std::string::npos && ok;
     ok = expect_contains_in_order(content, "chartId=", "keyCount=") && ok;
     ok = expect_contains_in_order(content, "meter,0,4/4", "bpm,960,180.5") && ok;
     ok = expect_contains_in_order(content, "tap,480,0", "hold,480,2,840") && ok;
+    ok = content.find("release,960,0,ray") != std::string::npos && ok;
+    ok = content.find("stay,1200,1") != std::string::npos && ok;
+    ok = content.find("tap,1320,1,width=2") != std::string::npos && ok;
 
     const std::string content_with_ids =
         "[Metadata]\nchartId=online-chart\nsongId=online-song\n" +
@@ -193,6 +204,7 @@ int main() {
 
     chart_data expected = normalized_chart(source);
     expected.meta.song_id.clear();
+    expected.meta.format_version = 2;
     if (!equal_chart_data(expected, *reparsed.data)) {
         std::cerr << "Round-trip chart data mismatch\n";
         ok = false;

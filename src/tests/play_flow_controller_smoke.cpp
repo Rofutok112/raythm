@@ -210,7 +210,7 @@ int main() {
         context.dt = 0.0f;
         context.bgm_audio_time_ms = 500.0;
         context.input_already_updated = true;
-        context.play_hitsound_immediately = [&immediate_hitsound_count]() {
+        context.play_hitsound_immediately = [&immediate_hitsound_count](const judge_event&) {
             ++immediate_hitsound_count;
         };
 

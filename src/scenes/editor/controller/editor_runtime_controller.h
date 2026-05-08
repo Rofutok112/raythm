@@ -15,6 +15,7 @@ struct editor_shortcut_context {
     editor_transport_state& transport;
     std::optional<int>& space_playback_start_tick;
     const std::string& hitsound_path;
+    const editor_hitsound_paths* hitsounds = nullptr;
     bool blocking_modal = false;
     bool mv_script_editor_active = false;
     bool space_pressed = false;
@@ -38,6 +39,7 @@ struct editor_runtime_timeline_context {
     std::optional<size_t>& selected_note_index;
     editor_timeline_note_drag_state& drag_state;
     const std::string& hitsound_path;
+    const editor_hitsound_paths* hitsounds = nullptr;
     editor_timeline_metrics metrics;
     Vector2 mouse = {};
     bool timeline_hovered = false;
@@ -48,6 +50,7 @@ struct editor_runtime_timeline_context {
     bool escape_pressed = false;
     bool alt_down = false;
     int snap_division = 1;
+    editor_note_palette_selection palette;
 };
 
 struct editor_runtime_timeline_result {

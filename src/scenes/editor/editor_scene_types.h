@@ -25,11 +25,27 @@ struct editor_resume_state {
     std::optional<size_t> selected_note_index;
 };
 
+enum class editor_timeline_drag_mode {
+    create,
+    resize_left,
+    resize_right,
+    resize_end,
+};
+
 struct editor_timeline_note_drag_state {
     bool active = false;
+    editor_timeline_drag_mode mode = editor_timeline_drag_mode::create;
+    std::optional<size_t> note_index;
     int lane = 0;
+    int current_lane = 0;
     int start_tick = 0;
     int current_tick = 0;
+    note_data original_note;
+};
+
+struct editor_note_palette_selection {
+    note_type type = note_type::tap;
+    bool is_ray = false;
 };
 
 enum class editor_right_panel_tab {
@@ -87,6 +103,44 @@ struct editor_start_request {
     std::optional<editor_resume_state> resume_state;
 };
 
+struct editor_hitsound_request {
+    note_type type = note_type::tap;
+    bool is_ray = false;
+};
+
+struct editor_hitsound_paths {
+    std::string tap;
+    std::string ray_tap;
+    std::string release;
+    std::string ray_release;
+    std::string stay;
+    std::string ray_stay;
+
+    [[nodiscard]] bool has_any() const {
+        return !tap.empty() || !ray_tap.empty() || !release.empty() ||
+               !ray_release.empty() || !stay.empty() || !ray_stay.empty();
+    }
+
+    [[nodiscard]] const std::string& path_for(const editor_hitsound_request& request) const {
+        if (request.type == note_type::release) {
+            if (request.is_ray && !ray_release.empty()) {
+                return ray_release;
+            }
+            return release.empty() ? tap : release;
+        }
+        if (request.type == note_type::stay) {
+            if (request.is_ray && !ray_stay.empty()) {
+                return ray_stay;
+            }
+            return stay.empty() ? tap : stay;
+        }
+        if (request.is_ray && !ray_tap.empty()) {
+            return ray_tap;
+        }
+        return tap;
+    }
+};
+
 struct editor_session_load_result {
     std::shared_ptr<editor_state> state;
     std::optional<std::string> chart_path;
@@ -104,6 +158,7 @@ struct editor_session_load_result {
     int previous_playback_tick = 0;
     bool previous_audio_playing = false;
     std::string hitsound_path;
+    editor_hitsound_paths hitsounds;
     bool waveform_visible = true;
     int waveform_offset_ms = 0;
     audio_waveform_summary waveform_summary;
@@ -157,6 +212,7 @@ struct editor_transport_context {
     int previous_playback_tick = 0;
     bool previous_audio_playing = false;
     const std::string* hitsound_path = nullptr;
+    const editor_hitsound_paths* hitsounds = nullptr;
     std::optional<audio_clock_snapshot> bgm_clock;
     std::optional<double> bgm_length_seconds;
     std::optional<int> seek_tick;
@@ -185,6 +241,7 @@ struct editor_transport_result {
     bool request_pause_bgm = false;
     std::optional<double> seek_bgm_seconds;
     int hitsound_count = 0;
+    std::vector<editor_hitsound_request> hitsound_requests;
     std::optional<int> next_space_playback_start_tick;
 };
 
@@ -203,6 +260,7 @@ struct editor_timeline_context {
     int snap_division = 1;
     std::optional<size_t> selected_note_index;
     editor_timeline_note_drag_state drag_state;
+    editor_note_palette_selection palette;
 };
 
 struct editor_timeline_result {
@@ -214,6 +272,8 @@ struct editor_timeline_result {
     bool scroll_seek_if_paused = false;
     bool request_apply_selected_timing = false;
     std::optional<note_data> note_to_add;
+    std::optional<size_t> note_to_modify_index;
+    std::optional<note_data> note_to_modify;
 };
 
 struct editor_metadata_panel_actions {

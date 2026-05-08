@@ -31,13 +31,24 @@ editor_transport_result build_audio_state(const editor_transport_context& contex
     return result;
 }
 
+editor_hitsound_request hitsound_request_for_note(const note_data& note) {
+    note_type type = note.type;
+    if (type == note_type::hold) {
+        type = note_type::tap;
+    }
+    return {type, note.is_ray};
+}
+
 }  // namespace
 
 editor_transport_result editor_transport_controller::sync(const editor_transport_context& context) {
     editor_transport_result result = build_audio_state(context);
     const std::string hitsound_path = context.hitsound_path == nullptr ? "" : *context.hitsound_path;
+    const bool has_hitsounds = context.hitsounds != nullptr
+        ? context.hitsounds->has_any()
+        : !hitsound_path.empty();
 
-    if (!result.audio_loaded || hitsound_path.empty()) {
+    if (!result.audio_loaded || !has_hitsounds) {
         result.previous_playback_tick = result.playback_tick;
         result.previous_audio_playing = result.audio_playing;
         return result;
@@ -64,6 +75,7 @@ editor_transport_result editor_transport_controller::sync(const editor_transport
     for (const note_data& note : context.state->data().notes) {
         if (note.tick > context.previous_playback_tick && note.tick <= result.playback_tick) {
             ++result.hitsound_count;
+            result.hitsound_requests.push_back(hitsound_request_for_note(note));
         }
     }
 

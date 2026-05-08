@@ -218,9 +218,12 @@ void play_scene::update(float dt) {
         context.pause_restart_clicked = ui::is_clicked(pause_buttons[1], ui::draw_layer::modal);
         context.pause_song_select_clicked = ui::is_clicked(pause_buttons[2], ui::draw_layer::modal);
     }
-    if (!state_.hitsound_path.empty()) {
-        context.play_hitsound_immediately = [hitsound_path = state_.hitsound_path]() {
-            audio_manager::instance().play_se(hitsound_path);
+    if (!state_.hitsound_path.empty() || state_.hitsounds.has_any()) {
+        context.play_hitsound_immediately = [hitsounds = state_.hitsounds](const judge_event& event) {
+            const std::string& path = hitsounds.path_for(event);
+            if (!path.empty()) {
+                audio_manager::instance().play_se(path);
+            }
         };
     }
 
@@ -377,6 +380,12 @@ void play_scene::draw() {
         }
 
         mv_input.combo = state_.combo_display;
+        if (state_.last_judge.has_value() &&
+            state_.last_judge->is_ray &&
+            state_.last_judge->result != judge_result::miss) {
+            mv_input.ray_pulse = 1.0f;
+            mv_input.ray_lane = state_.last_judge->lane;
+        }
         mv_input.key_count = state_.key_count;
         fill_mv_spectrum(mv_spectrum_buffer_);
         mv_input.spectrum = mv_spectrum_buffer_;
@@ -443,7 +452,7 @@ void play_scene::draw() {
 
     BeginMode3D(camera);
     if (has_bounds) {
-        play_renderer::draw_world(state_, draw_queue_, lane_start_z, judgement_z, lane_end_z, visual_ms);
+        play_renderer::draw_world(state_, draw_queue_, camera, lane_start_z, judgement_z, lane_end_z, visual_ms);
     }
     EndMode3D();
 

@@ -403,6 +403,8 @@ mv_value load_ctx_attr_fast(const mv_value& base_value, ctx_attr_slot slot) {
         case ctx_attr_slot::ctx_chart_combo: return traverse_attr_path(base_value, {"chart", "combo"});
         case ctx_attr_slot::ctx_chart_accuracy: return traverse_attr_path(base_value, {"chart", "accuracy"});
         case ctx_attr_slot::ctx_chart_key_count: return traverse_attr_path(base_value, {"chart", "key_count"});
+        case ctx_attr_slot::ctx_chart_ray_pulse: return traverse_attr_path(base_value, {"chart", "ray_pulse"});
+        case ctx_attr_slot::ctx_chart_ray_lane: return traverse_attr_path(base_value, {"chart", "ray_lane"});
         case ctx_attr_slot::ctx_screen: return traverse_attr_path(base_value, {"screen"});
         case ctx_attr_slot::ctx_screen_w: return traverse_attr_path(base_value, {"screen", "w"});
         case ctx_attr_slot::ctx_screen_h: return traverse_attr_path(base_value, {"screen", "h"});
@@ -464,6 +466,8 @@ mv_value load_ctx_attr_fast(const mv_value& base_value, ctx_attr_slot slot) {
     case ctx_attr_slot::ctx_chart_combo: return chart ? mv_value{chart->combo} : mv_value{std::monostate{}};
     case ctx_attr_slot::ctx_chart_accuracy: return chart ? mv_value{chart->accuracy} : mv_value{std::monostate{}};
     case ctx_attr_slot::ctx_chart_key_count: return chart ? mv_value{chart->key_count} : mv_value{std::monostate{}};
+    case ctx_attr_slot::ctx_chart_ray_pulse: return chart ? mv_value{chart->ray_pulse} : mv_value{std::monostate{}};
+    case ctx_attr_slot::ctx_chart_ray_lane: return chart ? mv_value{chart->ray_lane} : mv_value{std::monostate{}};
     case ctx_attr_slot::ctx_screen: return mv_value{root->screen};
     case ctx_attr_slot::ctx_screen_w: return screen ? mv_value{screen->w} : mv_value{std::monostate{}};
     case ctx_attr_slot::ctx_screen_h: return screen ? mv_value{screen->h} : mv_value{std::monostate{}};

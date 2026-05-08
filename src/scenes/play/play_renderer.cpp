@@ -10,6 +10,8 @@
 #include "scene_common.h"
 #include "theme.h"
 #include "ui_draw.h"
+#include "raymath.h"
+#include "rlgl.h"
 
 namespace {
 
@@ -35,6 +37,9 @@ constexpr Rectangle kPauseHintRect = {
 constexpr Rectangle kScoreRect = ui::place(kScreenRect, 600.0f, 90.0f,
                                            ui::anchor::top_left, ui::anchor::top_left,
                                            Vector2{72.0f, 30.0f});
+constexpr Rectangle kRcRect = ui::place(kScreenRect, 360.0f, 42.0f,
+                                        ui::anchor::top_left, ui::anchor::top_left,
+                                        Vector2{72.0f, 100.0f});
 constexpr Rectangle kTimeRect = ui::place(kScreenRect, 300.0f, 45.0f,
                                           ui::anchor::top_center, ui::anchor::top_center,
                                           Vector2{0.0f, 51.0f});
@@ -78,6 +83,8 @@ constexpr float kJudgeLineY = 0.40f;
 constexpr float kJudgeLineGlowY = 0.46f;
 constexpr float kTapNoteY = 0.15f;
 constexpr float kHoldNoteY = 0.15f;
+constexpr float kReleaseMarkerLift = 2.5f;
+constexpr float kStayDotY = 0.24f;
 constexpr float kLowHealthVignetteThreshold = 35.0f;
 constexpr float kDamageVignetteEdgeWidth = 220.0f;
 constexpr float kDamageVignetteMaxAlpha = 86.0f;
@@ -89,12 +96,325 @@ float lane_center_x(int lane, int key_count) {
     return left + visual_lane * (g_settings.lane_width + kLaneGap);
 }
 
+float note_center_x(const note_data& note, int key_count) {
+    const float first = lane_center_x(note.lane, key_count);
+    const float last = lane_center_x(note_last_lane(note), key_count);
+    return (first + last) * 0.5f;
+}
+
+float note_visual_width(const note_data& note) {
+    const int width = note_lane_width(note);
+    return static_cast<float>(width) * g_settings.lane_width +
+           static_cast<float>(width - 1) * kLaneGap;
+}
+
+float note_body_width(const note_data& note) {
+    const float single_lane_inset = g_settings.lane_width * 0.08f;
+    return std::max(g_settings.lane_width * 0.2f, note_visual_width(note) - single_lane_inset);
+}
+
+float note_hold_body_width(const note_data& note) {
+    const float hold_inset = g_settings.lane_width * 0.20f;
+    return std::max(g_settings.lane_width * 0.18f, note_visual_width(note) - hold_inset);
+}
+
 int ui_font(int font_size) {
     return static_cast<int>(std::lround(static_cast<float>(font_size) * kUiFontScale));
 }
 
 void draw_note_plane(float center_x, float y, float center_z, float width, float length, Color fill) {
     DrawPlane({center_x, y, center_z}, {width, length}, fill);
+}
+
+Color tap_gradient_color(Color base, float t) {
+    const float edge_factor = std::pow(std::fabs(t - 0.5f) * 2.0f, 1.25f);
+    const float highlight = 0.26f + (1.0f - edge_factor) * 0.26f;
+    const unsigned char alpha = static_cast<unsigned char>(166.0f + edge_factor * 42.0f);
+    return with_alpha(lerp_color(base, WHITE, highlight), alpha);
+}
+
+void draw_tap_gradient_plane(float center_x, float center_z, float width, float length, Color base) {
+    constexpr int kGradientSteps = 16;
+    const float left = center_x - width * 0.5f;
+    const float near_z = center_z - length * 0.5f;
+    const float far_z = center_z + length * 0.5f;
+    const float y = kTapNoteY + 0.014f;
+
+    rlBegin(RL_QUADS);
+    for (int i = 0; i < kGradientSteps; ++i) {
+        const float t0 = static_cast<float>(i) / static_cast<float>(kGradientSteps);
+        const float t1 = static_cast<float>(i + 1) / static_cast<float>(kGradientSteps);
+        const float x0 = left + width * t0;
+        const float x1 = left + width * t1;
+        const Color c0 = tap_gradient_color(base, t0);
+        const Color c1 = tap_gradient_color(base, t1);
+
+        rlColor4ub(c0.r, c0.g, c0.b, c0.a);
+        rlVertex3f(x0, y, near_z);
+        rlVertex3f(x0, y, far_z);
+        rlColor4ub(c1.r, c1.g, c1.b, c1.a);
+        rlVertex3f(x1, y, far_z);
+        rlVertex3f(x1, y, near_z);
+    }
+    rlEnd();
+}
+
+void draw_horizontal_gradient_plane(float center_x, float y, float center_z,
+                                    float width, float length, Color left_color, Color right_color) {
+    const float left = center_x - width * 0.5f;
+    const float right = center_x + width * 0.5f;
+    const float near_z = center_z - length * 0.5f;
+    const float far_z = center_z + length * 0.5f;
+
+    rlBegin(RL_QUADS);
+    rlColor4ub(left_color.r, left_color.g, left_color.b, left_color.a);
+    rlVertex3f(left, y, near_z);
+    rlVertex3f(left, y, far_z);
+    rlColor4ub(right_color.r, right_color.g, right_color.b, right_color.a);
+    rlVertex3f(right, y, far_z);
+    rlVertex3f(right, y, near_z);
+    rlEnd();
+}
+
+void draw_depth_gradient_plane(float center_x, float y, float center_z,
+                               float width, float length, Color near_color, Color far_color) {
+    const float left = center_x - width * 0.5f;
+    const float right = center_x + width * 0.5f;
+    const float near_z = center_z - length * 0.5f;
+    const float far_z = center_z + length * 0.5f;
+
+    rlBegin(RL_QUADS);
+    rlColor4ub(near_color.r, near_color.g, near_color.b, near_color.a);
+    rlVertex3f(left, y, near_z);
+    rlVertex3f(right, y, near_z);
+    rlColor4ub(far_color.r, far_color.g, far_color.b, far_color.a);
+    rlVertex3f(right, y, far_z);
+    rlVertex3f(left, y, far_z);
+    rlEnd();
+}
+
+Color hold_gradient_color(Color base, float t) {
+    const float edge_factor = std::pow(std::fabs(t - 0.5f) * 2.0f, 1.55f);
+    const unsigned char alpha = static_cast<unsigned char>(84.0f + edge_factor * 110.0f);
+    return with_alpha(lerp_color(base, WHITE, edge_factor * 0.10f), alpha);
+}
+
+void draw_hold_gradient_plane(float center_x, float center_z, float width, float length, Color base) {
+    constexpr int kGradientSteps = 24;
+    const float left = center_x - width * 0.5f;
+    const float near_z = center_z - length * 0.5f;
+    const float far_z = center_z + length * 0.5f;
+    const float y = kHoldNoteY + 0.006f;
+
+    rlBegin(RL_QUADS);
+    for (int i = 0; i < kGradientSteps; ++i) {
+        const float t0 = static_cast<float>(i) / static_cast<float>(kGradientSteps);
+        const float t1 = static_cast<float>(i + 1) / static_cast<float>(kGradientSteps);
+        const float x0 = left + width * t0;
+        const float x1 = left + width * t1;
+        const Color c0 = hold_gradient_color(base, t0);
+        const Color c1 = hold_gradient_color(base, t1);
+
+        rlColor4ub(c0.r, c0.g, c0.b, c0.a);
+        rlVertex3f(x0, y, near_z);
+        rlVertex3f(x0, y, far_z);
+        rlColor4ub(c1.r, c1.g, c1.b, c1.a);
+        rlVertex3f(x1, y, far_z);
+        rlVertex3f(x1, y, near_z);
+    }
+    rlEnd();
+}
+
+void draw_tap_slab(float center_x, float center_z, float width, float length,
+                   Color fill, bool release_style = false, bool ray_style = false) {
+    const Color tap_base = ray_style
+                               ? lerp_color(fill, {180, 132, 255, 255}, 0.72f)
+                               : release_style
+                               ? lerp_color(fill, {255, 118, 156, 255}, 0.38f)
+                               : lerp_color(fill, WHITE, 0.56f);
+    const Color edge = lerp_color(tap_base, WHITE, 0.30f);
+
+    const float rim_length = std::max(0.024f, length * 0.16f);
+    const float side_width = std::max(0.024f, std::min(width * 0.055f, length * 0.18f));
+    const float frame_y = kTapNoteY + 0.060f;
+    const Color frame_left = with_alpha(lerp_color(edge, WHITE, 0.12f), 232);
+    const Color frame_right = with_alpha(lerp_color(edge, BLACK, 0.08f), 218);
+    const Color frame_near = with_alpha(lerp_color(edge, WHITE, 0.18f), 238);
+    const Color frame_far = with_alpha(lerp_color(edge, BLACK, 0.12f), 210);
+    draw_tap_gradient_plane(center_x, center_z, width, length, tap_base);
+    draw_horizontal_gradient_plane(center_x, frame_y, center_z - length * 0.5f + rim_length * 0.5f,
+                                   width, rim_length, frame_left, frame_right);
+    draw_horizontal_gradient_plane(center_x, frame_y, center_z + length * 0.5f - rim_length * 0.5f,
+                                   width, rim_length, frame_left, frame_right);
+    draw_depth_gradient_plane(center_x - width * 0.5f + side_width * 0.5f, frame_y, center_z,
+                              side_width, length, frame_near, frame_far);
+    draw_depth_gradient_plane(center_x + width * 0.5f - side_width * 0.5f, frame_y, center_z,
+                              side_width, length, frame_near, frame_far);
+}
+
+void draw_hold_body(float center_x, float center_z, float width, float length, Color fill, bool ray_style = false) {
+    const Color hold_base = ray_style
+                                ? lerp_color(fill, g_theme->accent, 0.68f)
+                                : lerp_color(fill, WHITE, 0.94f);
+    const Color edge = lerp_color(hold_base, WHITE, 0.24f);
+    const float cap_length = std::min(0.32f, std::max(0.08f, length * 0.16f));
+    const float cap_overhang = std::min(g_settings.lane_width * 0.035f, width * 0.015f);
+    const float cap_width = width + cap_overhang * 2.0f;
+
+    draw_hold_gradient_plane(center_x, center_z, width, length, hold_base);
+    const Color cap_left = with_alpha(lerp_color(edge, WHITE, 0.16f), 230);
+    const Color cap_right = with_alpha(lerp_color(edge, BLACK, 0.10f), 214);
+    draw_horizontal_gradient_plane(center_x, kHoldNoteY + 0.074f,
+                                   center_z - length * 0.5f + cap_length * 0.5f,
+                                   cap_width, cap_length, cap_left, cap_right);
+    draw_horizontal_gradient_plane(center_x, kHoldNoteY + 0.074f,
+                                   center_z + length * 0.5f - cap_length * 0.5f,
+                                   cap_width, cap_length, cap_left, cap_right);
+}
+
+Color stay_gradient_color(Color base, float t) {
+    const float center_factor = 1.0f - std::pow(std::fabs(t - 0.5f) * 2.0f, 1.35f);
+    const float highlight = 0.16f + center_factor * 0.52f;
+    const unsigned char alpha = static_cast<unsigned char>(208.0f + center_factor * 24.0f);
+    return with_alpha(lerp_color(base, WHITE, highlight), alpha);
+}
+
+void draw_stay_gradient_bar(float center_x, float center_z, float width, float length, Color base) {
+    constexpr int kGradientSteps = 18;
+    const float left = center_x - width * 0.5f;
+    const float near_z = center_z - length * 0.5f;
+    const float far_z = center_z + length * 0.5f;
+    const float y = kStayDotY + 0.018f;
+
+    rlBegin(RL_QUADS);
+    for (int i = 0; i < kGradientSteps; ++i) {
+        const float t0 = static_cast<float>(i) / static_cast<float>(kGradientSteps);
+        const float t1 = static_cast<float>(i + 1) / static_cast<float>(kGradientSteps);
+        const float x0 = left + width * t0;
+        const float x1 = left + width * t1;
+        const Color c0 = stay_gradient_color(base, t0);
+        const Color c1 = stay_gradient_color(base, t1);
+
+        rlColor4ub(c0.r, c0.g, c0.b, c0.a);
+        rlVertex3f(x0, y, near_z);
+        rlVertex3f(x0, y, far_z);
+        rlColor4ub(c1.r, c1.g, c1.b, c1.a);
+        rlVertex3f(x1, y, far_z);
+        rlVertex3f(x1, y, near_z);
+    }
+    rlEnd();
+}
+
+void draw_stay_dot(float center_x, float center_z, float width, Color fill, bool ray_style = false) {
+    const Color stay_base = ray_style
+                                ? lerp_color(WHITE, {224, 214, 255, 255}, 0.14f)
+                                : lerp_color({70, 236, 224, 255}, fill, 0.14f);
+    const Color end_edge = with_alpha(lerp_color(stay_base, WHITE, 0.34f), 226);
+    const Color end_inner = with_alpha(lerp_color(stay_base, WHITE, 0.12f), 178);
+    const float bar_width = std::max(g_settings.lane_width * 0.54f, width * 1.04f);
+    const float bar_length = 0.28f;
+    const float cap_width = std::min(g_settings.lane_width * 0.070f, bar_width * 0.055f);
+    const float cap_length = bar_length * 1.55f;
+
+    draw_stay_gradient_bar(center_x, center_z, bar_width, bar_length, stay_base);
+    draw_depth_gradient_plane(center_x - bar_width * 0.5f + cap_width * 0.5f, kStayDotY + 0.032f,
+                              center_z, cap_width, cap_length, end_inner, end_edge);
+    draw_depth_gradient_plane(center_x + bar_width * 0.5f - cap_width * 0.5f, kStayDotY + 0.032f,
+                              center_z, cap_width, cap_length, end_inner, end_edge);
+}
+
+void draw_release_polygon_triangle(Vector3 a, Vector3 b, Vector3 c, Color color) {
+    DrawTriangle3D(a, b, c, color);
+    DrawTriangle3D(c, b, a, color);
+}
+
+void draw_release_contour_segment(Vector3 origin, Vector3 axis_x, Vector3 axis_y,
+                                  float x0, float y0, float x1, float y1,
+                                  float thickness, Color color) {
+    const auto point = [&](float x, float y) {
+        return Vector3Add(origin, Vector3Add(Vector3Scale(axis_x, x), Vector3Scale(axis_y, y)));
+    };
+    const float dx = x1 - x0;
+    const float dy = y1 - y0;
+    const float length = std::sqrt(dx * dx + dy * dy);
+    if (length <= 0.0001f) {
+        return;
+    }
+
+    const float nx = -dy / length * thickness * 0.5f;
+    const float ny = dx / length * thickness * 0.5f;
+    const Vector3 p0 = point(x0 + nx, y0 + ny);
+    const Vector3 p1 = point(x0 - nx, y0 - ny);
+    const Vector3 p2 = point(x1 - nx, y1 - ny);
+    const Vector3 p3 = point(x1 + nx, y1 + ny);
+    draw_release_polygon_triangle(p0, p1, p2, color);
+    draw_release_polygon_triangle(p0, p2, p3, color);
+}
+
+void draw_release_chevron_polygon(Vector3 origin, Vector3 axis_x, Vector3 axis_y,
+                                  float width, float height, Color color, Color contour_color) {
+    const auto point = [&](float x, float y) {
+        return Vector3Add(origin, Vector3Add(Vector3Scale(axis_x, x), Vector3Scale(axis_y, y)));
+    };
+    const Vector3 left_outer_bottom = point(-width * 0.50f, -height * 0.38f);
+    const Vector3 left_outer_top = point(-width * 0.50f, -height * 0.10f);
+    const Vector3 center_top = point(0.0f, height * 0.36f);
+    const Vector3 center_bottom = point(0.0f, height * 0.08f);
+    const Vector3 right_outer_top = point(width * 0.50f, -height * 0.10f);
+    const Vector3 right_outer_bottom = point(width * 0.50f, -height * 0.38f);
+
+    rlDisableDepthTest();
+    rlDisableDepthMask();
+    rlDisableBackfaceCulling();
+    draw_release_polygon_triangle(left_outer_bottom, left_outer_top, center_top, color);
+    draw_release_polygon_triangle(left_outer_bottom, center_top, center_bottom, color);
+    draw_release_polygon_triangle(center_bottom, center_top, right_outer_top, color);
+    draw_release_polygon_triangle(center_bottom, right_outer_top, right_outer_bottom, color);
+    const float contour = std::clamp(height * 0.110f, 0.040f, 0.082f);
+    draw_release_contour_segment(origin, axis_x, axis_y, -width * 0.50f, -height * 0.38f,
+                                 -width * 0.50f, -height * 0.10f, contour, contour_color);
+    draw_release_contour_segment(origin, axis_x, axis_y, -width * 0.50f, -height * 0.10f,
+                                 0.0f, height * 0.36f, contour, contour_color);
+    draw_release_contour_segment(origin, axis_x, axis_y, 0.0f, height * 0.36f,
+                                 width * 0.50f, -height * 0.10f, contour, contour_color);
+    draw_release_contour_segment(origin, axis_x, axis_y, width * 0.50f, -height * 0.10f,
+                                 width * 0.50f, -height * 0.38f, contour, contour_color);
+    draw_release_contour_segment(origin, axis_x, axis_y, width * 0.50f, -height * 0.38f,
+                                 0.0f, height * 0.08f, contour, contour_color);
+    draw_release_contour_segment(origin, axis_x, axis_y, 0.0f, height * 0.08f,
+                                 -width * 0.50f, -height * 0.38f, contour, contour_color);
+    rlEnableBackfaceCulling();
+    rlEnableDepthMask();
+    rlEnableDepthTest();
+}
+
+void draw_release_marker(float center_x, float center_z, float width, Color fill,
+                         const Camera3D& camera, bool ray_style = false) {
+    const Color release_seed = ray_style ? Color{190, 112, 255, 255} : Color{255, 90, 132, 255};
+    const Color release_base = lerp_color(release_seed, fill, ray_style ? 0.24f : 0.16f);
+    const Color marker_color = with_alpha(lerp_color(release_base, WHITE, 0.28f), 255);
+    const Color contour_color = with_alpha(lerp_color(release_base, BLACK, 0.16f), 255);
+
+    const Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+    Vector3 axis_x_raw = Vector3CrossProduct(forward, camera.up);
+    Vector3 axis_x = {};
+    if (Vector3Length(axis_x_raw) <= 0.0001f) {
+        axis_x = {1.0f, 0.0f, 0.0f};
+    } else {
+        axis_x = Vector3Normalize(axis_x_raw);
+    }
+    const Vector3 axis_y = Vector3Normalize(Vector3CrossProduct(axis_x, forward));
+    Vector3 origin = {center_x, kTapNoteY, center_z};
+    origin = Vector3Add(origin, Vector3Scale(axis_y, kReleaseMarkerLift));
+    origin = Vector3Add(origin, Vector3Scale(forward, -0.14f));
+
+    const float marker_width = std::max(g_settings.lane_width * 0.76f, width * 0.78f);
+    const float marker_height = g_settings.lane_width * 0.40f;
+
+    const float marker_bottom_offset = marker_height * 0.50f;
+    const Vector3 marker_origin = Vector3Add(origin, Vector3Scale(axis_y, marker_bottom_offset));
+    draw_release_chevron_polygon(marker_origin, axis_x, axis_y,
+                                 marker_width, marker_height, marker_color, contour_color);
 }
 
 Color judge_color(judge_result result) {
@@ -227,17 +547,62 @@ void draw_lane_judge_effect(const play_session_state& state, int lane,
     const float age = 1.0f - std::clamp(remaining, 0.0f, 1.0f);
     const float pop = ease_out(age);
     const Color color = effect_judge_color(effect.result);
-    const float center_x = lane_center_x(lane, state.key_count);
-    const float lane_width = g_settings.lane_width;
+    const int lane_width_count = std::max(1, std::min(effect.lane_width, state.key_count - lane));
+    const float first_x = lane_center_x(lane, state.key_count);
+    const float last_x = lane_center_x(lane + lane_width_count - 1, state.key_count);
+    const float center_x = (first_x + last_x) * 0.5f;
+    const float effect_width =
+        static_cast<float>(lane_width_count) * g_settings.lane_width +
+        static_cast<float>(lane_width_count - 1) * kLaneGap;
     const Color bright_color = effect.result == judge_result::perfect
                                    ? color
                                    : lerp_color(color, WHITE, 0.12f);
     const float effect_length = std::max(0.0f, lane_end_z - judgement_z) * 0.10f * (0.72f + pop * 0.28f);
 
     draw_lane_judge_effect_segment(center_x, judgement_z, judgement_z + effect_length,
-                                   lane_width, bright_color, remaining);
+                                   effect_width, bright_color, remaining);
     draw_lane_judge_effect_segment(center_x, judgement_z, judgement_z - effect_length,
-                                   lane_width, bright_color, remaining);
+                                   effect_width, bright_color, remaining);
+}
+
+Color note_draw_color(const note_state& note_state, Color base) {
+    if (note_state.note_ref.is_ray) {
+        switch (note_state.note_ref.type) {
+            case note_type::hold:
+                return lerp_color(base, {142, 92, 236, 255}, 0.72f);
+            case note_type::release:
+                return lerp_color(base, {198, 116, 255, 255}, 0.76f);
+            case note_type::stay:
+                return lerp_color(base, WHITE, 0.90f);
+            case note_type::tap:
+                return lerp_color(base, {180, 132, 255, 255}, 0.68f);
+        }
+    }
+    switch (note_state.note_ref.type) {
+        case note_type::release:
+            return lerp_color(base, {255, 105, 148, 255}, 0.42f);
+        case note_type::stay:
+            return lerp_color(base, g_theme->judge_perfect, 0.25f);
+        case note_type::tap:
+            return lerp_color(base, WHITE, 0.42f);
+        case note_type::hold:
+            return lerp_color(base, WHITE, 0.96f);
+    }
+    return base;
+}
+
+bool should_draw_note_in_pass(note_type type, int pass) {
+    switch (pass) {
+        case 0:
+            return type == note_type::hold;
+        case 1:
+            return type == note_type::tap;
+        case 2:
+            return type == note_type::stay;
+        case 3:
+            return type == note_type::release;
+    }
+    return false;
 }
 
 void draw_hud(const play_session_state& state) {
@@ -245,6 +610,8 @@ void draw_hud(const play_session_state& state) {
     const float live_accuracy = state.score_system.get_live_accuracy();
     ui::enqueue_text_in_rect(TextFormat("SCORE %07d", result.score), ui_font(30),
                              kScoreRect, g_theme->hud_score, ui::text_align::left);
+    ui::enqueue_text_in_rect(TextFormat("RC %.2f", state.performance_system.current_rc()), ui_font(24),
+                             kRcRect, g_theme->text_secondary, ui::text_align::left);
 
     ui::enqueue_text_in_rect(TextFormat("FPS: %d", GetFPS()), ui_font(20),
                              kFpsRect, g_theme->hud_fps, ui::text_align::right);
@@ -372,7 +739,7 @@ void draw_world_background() {
 }
 
 void draw_world(const play_session_state& state, const play_note_draw_queue& draw_queue,
-                float lane_start_z, float judgement_z, float lane_end_z, double visual_ms) {
+                const Camera3D& camera, float lane_start_z, float judgement_z, float lane_end_z, double visual_ms) {
     for (int lane = 0; lane < state.key_count; ++lane) {
         const float center_x = lane_center_x(lane, state.key_count);
         const float lane_dim = std::clamp(state.lane_hold_dim_amounts[static_cast<std::size_t>(lane)], 0.0f, 1.0f);
@@ -389,27 +756,46 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
         const std::vector<note_state>& note_states = state.judge_system.note_states();
         const Color note_color = g_theme->note_color;
 
-        for (int lane = 0; lane < state.key_count; ++lane) {
-            for (const size_t idx : draw_queue.active_indices_for_lane(lane)) {
-                const note_state& note_state = note_states[idx];
-                const float head_z = static_cast<float>(judgement_z + state.lane_speed * (note_state.target_ms - visual_ms));
-                const float center_x = lane_center_x(note_state.note_ref.lane, state.key_count);
-
-                if (note_state.note_ref.type == note_type::hold) {
-                    const double tail_target_ms = state.timing_engine.tick_to_ms(note_state.note_ref.end_tick);
-                    const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_ms));
-                    const float visual_head_z = note_state.is_holding() ? judgement_z : head_z;
-                    const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);
-                    const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);
-                    if (segment_end > segment_start) {
-                        draw_note_plane(center_x, kHoldNoteY, (segment_start + segment_end) * 0.5f,
-                                        g_settings.lane_width * 0.92f, segment_end - segment_start, note_color);
+        for (int pass = 0; pass < 4; ++pass) {
+            for (int lane = 0; lane < state.key_count; ++lane) {
+                for (const size_t idx : draw_queue.active_indices_for_lane(lane)) {
+                    const note_state& note_state = note_states[idx];
+                    if (!should_draw_note_in_pass(note_state.note_ref.type, pass)) {
+                        continue;
                     }
-                }
 
-                if (note_state.note_ref.type == note_type::tap) {
-                    draw_note_plane(center_x, kTapNoteY, head_z,
-                                    g_settings.lane_width * 0.92f, kTapNoteBaseLength * g_settings.note_height, note_color);
+                    const Color note_color_for_type = note_draw_color(note_state, note_color);
+                    const float head_z = static_cast<float>(judgement_z + state.lane_speed * (note_state.target_ms - visual_ms));
+                    const float center_x = note_center_x(note_state.note_ref, state.key_count);
+                    const float visual_width = note_visual_width(note_state.note_ref);
+                    const float body_width = note_body_width(note_state.note_ref);
+                    const float hold_body_width = note_hold_body_width(note_state.note_ref);
+
+                    if (note_state.note_ref.type == note_type::hold) {
+                        const double tail_target_ms = state.timing_engine.tick_to_ms(note_state.note_ref.end_tick);
+                        const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_ms));
+                        const float visual_head_z = note_state.is_holding() ? judgement_z : head_z;
+                        const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);
+                        const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);
+                        if (segment_end > segment_start) {
+                            draw_hold_body(center_x, (segment_start + segment_end) * 0.5f,
+                                           hold_body_width, segment_end - segment_start, note_color_for_type,
+                                           note_state.note_ref.is_ray);
+                        }
+                    } else if (note_state.note_ref.type == note_type::stay) {
+                        draw_stay_dot(center_x, head_z, body_width, note_color_for_type,
+                                      note_state.note_ref.is_ray);
+                    } else {
+                        draw_tap_slab(center_x, head_z, body_width,
+                                      kTapNoteBaseLength * g_settings.note_height,
+                                      note_color_for_type,
+                                      note_state.note_ref.type == note_type::release,
+                                      note_state.note_ref.is_ray);
+                        if (note_state.note_ref.type == note_type::release) {
+                            draw_release_marker(center_x, head_z, body_width, note_color_for_type, camera,
+                                                note_state.note_ref.is_ray);
+                        }
+                    }
                 }
             }
         }

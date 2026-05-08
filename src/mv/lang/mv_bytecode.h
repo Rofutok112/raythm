@@ -53,6 +53,8 @@ enum class ctx_attr_slot : uint32_t {
     ctx_chart_combo,
     ctx_chart_accuracy,
     ctx_chart_key_count,
+    ctx_chart_ray_pulse,
+    ctx_chart_ray_lane,
     ctx_screen,
     ctx_screen_w,
     ctx_screen_h,

@@ -88,7 +88,8 @@ const std::unordered_map<std::string_view, member_set>& ctx_member_schema() {
                                "waveform", "waveform_size", "waveform_index"}},
         {"ctx.song", {"song_id", "title", "artist", "base_bpm"}},
         {"ctx.chart", {"chart_id", "song_id", "difficulty", "level", "chart_author",
-                       "resolution", "offset", "total_notes", "combo", "accuracy", "key_count"}},
+                       "resolution", "offset", "total_notes", "combo", "accuracy", "key_count",
+                       "ray_pulse", "ray_lane"}},
         {"ctx.screen", {"w", "h"}},
     };
     return schema;

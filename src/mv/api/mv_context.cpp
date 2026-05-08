@@ -148,6 +148,8 @@ std::shared_ptr<mv_object> context_builder::build(const context_input& input) {
     chart.combo = static_cast<double>(input.combo);
     chart.accuracy = static_cast<double>(input.accuracy);
     chart.key_count = static_cast<double>(input.key_count);
+    chart.ray_pulse = static_cast<double>(input.ray_pulse);
+    chart.ray_lane = static_cast<double>(input.ray_lane);
 
     auto& screen = as_ctx_screen(screen_);
     screen.w = static_cast<double>(input.screen_w);

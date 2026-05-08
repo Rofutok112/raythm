@@ -123,6 +123,32 @@ chart_data make_balanced_stream_chart() {
     return make_chart("balanced_stream", std::move(notes));
 }
 
+chart_data make_release_stream_chart() {
+    std::vector<note_data> notes;
+    const int lanes[] = {0, 1, 2, 3};
+    for (int i = 0; i < 16; ++i) {
+        notes.push_back({note_type::release, i * 120, lanes[i % 4], 0});
+    }
+    return make_chart("release_stream", std::move(notes));
+}
+
+chart_data make_tap_stream_chart() {
+    std::vector<note_data> notes;
+    const int lanes[] = {0, 1, 2, 3};
+    for (int i = 0; i < 16; ++i) {
+        notes.push_back({note_type::tap, i * 120, lanes[i % 4], 0});
+    }
+    return make_chart("tap_stream", std::move(notes));
+}
+
+chart_data with_added_stays(chart_data data) {
+    const int lanes[] = {3, 2, 1, 0};
+    for (int i = 0; i < 16; ++i) {
+        data.notes.push_back({note_type::stay, 60 + i * 120, lanes[i % 4], 0});
+    }
+    return data;
+}
+
 bool approx(float actual, float expected, float tolerance = 0.05f) {
     return std::fabs(actual - expected) <= tolerance;
 }
@@ -198,6 +224,23 @@ int main() {
     if (one_hand_stream <= balanced_stream * 0.95f) {
         std::cerr << "Expected one-hand stream burden to stay visible against balanced streams: "
                   << one_hand_stream << " <= " << balanced_stream << "\n";
+        return EXIT_FAILURE;
+    }
+
+    const float tap_stream = chart_difficulty::calculate_rating(make_tap_stream_chart());
+    const float release_stream = chart_difficulty::calculate_rating(make_release_stream_chart());
+    if (!approx(release_stream, tap_stream, 0.001f)) {
+        std::cerr << "Expected release notes to rate like tap notes: "
+                  << release_stream << " != " << tap_stream << "\n";
+        return EXIT_FAILURE;
+    }
+
+    const chart_data stay_free = make_tap_stream_chart();
+    const float stay_free_rating = chart_difficulty::calculate_rating(stay_free);
+    const float with_stays_rating = chart_difficulty::calculate_rating(with_added_stays(stay_free));
+    if (!approx(with_stays_rating, stay_free_rating, 0.001f)) {
+        std::cerr << "Expected stay notes not to affect rating: "
+                  << with_stays_rating << " != " << stay_free_rating << "\n";
         return EXIT_FAILURE;
     }
 

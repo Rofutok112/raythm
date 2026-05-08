@@ -34,6 +34,10 @@ const char* note_type_name(note_type type) {
             return "tap";
         case note_type::hold:
             return "hold";
+        case note_type::release:
+            return "release";
+        case note_type::stay:
+            return "stay";
     }
 
     return "";
@@ -55,7 +59,13 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
     output << "keyCount=" << data.meta.key_count << '\n';
     output << "difficulty=" << data.meta.difficulty << '\n';
     output << "chartAuthor=" << data.meta.chart_author << '\n';
-    output << "formatVersion=" << data.meta.format_version << '\n';
+    const bool needs_format_v2 = std::any_of(data.notes.begin(), data.notes.end(), [](const note_data& note) {
+        return note.type == note_type::release ||
+               note.type == note_type::stay ||
+               note.is_ray ||
+               note_lane_width(note) > 1;
+    });
+    output << "formatVersion=" << std::max(data.meta.format_version, needs_format_v2 ? 2 : 1) << '\n';
     output << "resolution=" << data.meta.resolution << '\n';
     output << "offset=" << data.meta.offset << '\n';
     output << '\n';
@@ -90,6 +100,12 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
         output << note_type_name(note.type) << ',' << note.tick << ',' << note.lane;
         if (note.type == note_type::hold) {
             output << ',' << note.end_tick;
+        }
+        if (note_lane_width(note) > 1) {
+            output << ",width=" << note_lane_width(note);
+        }
+        if (note.is_ray) {
+            output << ",ray";
         }
         output << '\n';
     }

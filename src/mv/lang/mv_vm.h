@@ -401,6 +401,8 @@ struct ctx_chart_object final : mv_object {
     double combo = 0.0;
     double accuracy = 0.0;
     double key_count = 4.0;
+    double ray_pulse = 0.0;
+    double ray_lane = -1.0;
 
 protected:
     std::optional<mv_value> get_known_attr(std::string_view name) const override {
@@ -415,6 +417,8 @@ protected:
         if (name == "combo") return mv_value{combo};
         if (name == "accuracy") return mv_value{accuracy};
         if (name == "key_count") return mv_value{key_count};
+        if (name == "ray_pulse") return mv_value{ray_pulse};
+        if (name == "ray_lane") return mv_value{ray_lane};
         return std::nullopt;
     }
 
@@ -430,6 +434,8 @@ protected:
         if (name == "combo") { combo = detail::value_as_number(value); return true; }
         if (name == "accuracy") { accuracy = detail::value_as_number(value); return true; }
         if (name == "key_count") { key_count = detail::value_as_number(value); return true; }
+        if (name == "ray_pulse") { ray_pulse = detail::value_as_number(value); return true; }
+        if (name == "ray_lane") { ray_lane = detail::value_as_number(value); return true; }
         return false;
     }
 };

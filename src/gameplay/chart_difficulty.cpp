@@ -6,6 +6,7 @@
 #include <numeric>
 #include <vector>
 
+#include "chart_judge_events.h"
 #include "timing_engine.h"
 
 namespace {
@@ -15,6 +16,8 @@ struct note_event {
         tap,
         hold_head,
         hold_tail,
+        release,
+        stay,
     };
 
     double time_ms = 0.0;
@@ -121,18 +124,26 @@ std::vector<const note_event*> collect_events_near(const std::vector<note_event>
     return nearby;
 }
 
-std::vector<note_event> build_note_events(const chart_data& data, timing_engine& engine) {
+std::vector<note_event> build_note_events(const chart_data& data, const timing_engine& engine) {
     std::vector<note_event> events;
     events.reserve(data.notes.size() * 2);
 
     for (const note_data& note : data.notes) {
-        if (note.type == note_type::tap) {
-            events.push_back({engine.tick_to_ms(note.tick), note.lane, note_event::kind::tap});
-            continue;
+        const int representative_lane = note.lane + note_lane_width(note) / 2;
+        switch (note.type) {
+            case note_type::tap:
+                events.push_back({engine.tick_to_ms(note.tick), representative_lane, note_event::kind::tap});
+                break;
+            case note_type::hold:
+                events.push_back({engine.tick_to_ms(note.tick), representative_lane, note_event::kind::hold_head});
+                events.push_back({engine.tick_to_ms(note.end_tick), representative_lane, note_event::kind::hold_tail});
+                break;
+            case note_type::release:
+                events.push_back({engine.tick_to_ms(note.tick), representative_lane, note_event::kind::tap});
+                break;
+            case note_type::stay:
+                break;
         }
-
-        events.push_back({engine.tick_to_ms(note.tick), note.lane, note_event::kind::hold_head});
-        events.push_back({engine.tick_to_ms(note.end_tick), note.lane, note_event::kind::hold_tail});
     }
 
     std::sort(events.begin(), events.end(), [](const note_event& left, const note_event& right) {
@@ -144,14 +155,15 @@ std::vector<note_event> build_note_events(const chart_data& data, timing_engine&
     return events;
 }
 
-std::vector<hold_interval> build_hold_intervals(const chart_data& data, timing_engine& engine) {
+std::vector<hold_interval> build_hold_intervals(const chart_data& data, const timing_engine& engine) {
     std::vector<hold_interval> holds;
     holds.reserve(data.notes.size());
     for (const note_data& note : data.notes) {
         if (note.type != note_type::hold) {
             continue;
         }
-        holds.push_back({engine.tick_to_ms(note.tick), engine.tick_to_ms(note.end_tick), note.lane});
+        holds.push_back({engine.tick_to_ms(note.tick), engine.tick_to_ms(note.end_tick),
+                         note.lane + note_lane_width(note) / 2});
     }
     return holds;
 }
@@ -177,7 +189,9 @@ std::vector<transition_sample> build_transitions(const std::vector<note_event>& 
 }
 
 bool is_press_event(const note_event& event) {
-    return event.type == note_event::kind::tap || event.type == note_event::kind::hold_head;
+    return event.type == note_event::kind::tap ||
+           event.type == note_event::kind::hold_head ||
+           event.type == note_event::kind::stay;
 }
 
 int hand_for_lane(int lane, int key_count) {
@@ -257,7 +271,10 @@ float local_density_per_second(const std::vector<note_event>& events, double cen
             case note_event::kind::hold_head:
                 weighted_count += 1.0f;
                 break;
+            case note_event::kind::stay:
+                break;
             case note_event::kind::hold_tail:
+            case note_event::kind::release:
                 weighted_count += 1.10f;
                 break;
         }
@@ -296,7 +313,8 @@ float local_release_factor(const std::vector<note_event>& events, double center_
     float sum = 0.0f;
     int count = 0;
     for (const note_event& event : events) {
-        if (event.type != note_event::kind::hold_tail || std::abs(event.time_ms - center_ms) > kReleaseRadiusMs) {
+        if ((event.type != note_event::kind::hold_tail && event.type != note_event::kind::release) ||
+            std::abs(event.time_ms - center_ms) > kReleaseRadiusMs) {
             continue;
         }
         sum += std::pow(1.0 / (nearest_event_gap_seconds(events, event) + kTimeEpsilonSeconds), kGammaRelease);
@@ -312,7 +330,7 @@ float local_overlap_factor(const std::vector<note_event>& events, const std::vec
         if (std::abs(event.time_ms - center_ms) > 400.0) {
             continue;
         }
-        if (event.type == note_event::kind::hold_tail) {
+        if (event.type == note_event::kind::hold_tail || event.type == note_event::kind::release) {
             continue;
         }
         const int active_holds = active_hold_count_at(holds, event.time_ms);
@@ -652,6 +670,38 @@ float calculate_rating(const chart_data& data) {
     }
 
     return kScale * static_cast<float>(std::pow(weighted_sum / total_weight_ms, 1.0 / kPeakPower));
+}
+
+std::vector<event_difficulty> calculate_event_difficulties(const chart_data& data,
+                                                           const timing_engine& engine) {
+    std::vector<event_difficulty> difficulties;
+    if (data.notes.empty() || data.meta.key_count <= 0) {
+        return difficulties;
+    }
+
+    std::vector<note_event> events = build_note_events(data, engine);
+    std::vector<hold_interval> holds = build_hold_intervals(data, engine);
+    std::vector<transition_sample> transitions = build_transitions(events, data.meta.key_count);
+    if (events.empty()) {
+        return difficulties;
+    }
+
+    difficulties.reserve(data.notes.size() * 2);
+    const std::vector<chart_judge_event> judge_events = chart_judge_events::build(data, engine);
+    for (const chart_judge_event& event : judge_events) {
+        const double head_ms = event.time_ms;
+        const float local_difficulty = event.role == chart_judge_event_role::stay
+                                           ? 0.0f
+                                           : std::max(0.0f, local_difficulty_at(events, holds, transitions,
+                                                                               head_ms, data.meta.key_count));
+        difficulties.push_back(event_difficulty{
+            event.event_index,
+            head_ms,
+            local_difficulty,
+        });
+    }
+
+    return difficulties;
 }
 
 float level_from_rating(float raw_rating) {

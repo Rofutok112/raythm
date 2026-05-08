@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -162,6 +163,67 @@ bool expect_server_managed_metadata_success() {
     }
     return result.data->meta.level == 0.0f && result.data->meta.song_id.empty();
 }
+
+bool expect_wide_note_success() {
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "raythm_parser_wide_note.rchart";
+    std::ofstream output(path, std::ios::trunc);
+    output << "[Metadata]\n"
+           << "chartId=parser-wide-note\n"
+           << "keyCount=4\n"
+           << "difficulty=Wide\n"
+           << "chartAuthor=Codex\n"
+           << "formatVersion=2\n"
+           << "resolution=480\n"
+           << "offset=0\n\n"
+           << "[Timing]\n"
+           << "bpm,0,120\n"
+           << "meter,0,4/4\n\n"
+           << "[Notes]\n"
+           << "tap,0,1,width=2\n"
+           << "release,480,0,width=3,ray\n";
+    output.close();
+
+    const chart_parse_result result = chart_parser::parse(path.string());
+    std::filesystem::remove(path);
+    if (!result.success || !result.data.has_value() || result.data->notes.size() != 2) {
+        std::cerr << "Expected wide notes to parse\n";
+        return false;
+    }
+    return result.data->notes[0].lane_width == 2 &&
+           result.data->notes[1].lane_width == 3 &&
+           result.data->notes[1].is_ray;
+}
+
+bool expect_wide_note_bounds_failure() {
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "raythm_parser_wide_note_bounds.rchart";
+    std::ofstream output(path, std::ios::trunc);
+    output << "[Metadata]\n"
+           << "chartId=parser-wide-note-bounds\n"
+           << "keyCount=4\n"
+           << "difficulty=Wide\n"
+           << "chartAuthor=Codex\n"
+           << "formatVersion=2\n"
+           << "resolution=480\n"
+           << "offset=0\n\n"
+           << "[Timing]\n"
+           << "bpm,0,120\n"
+           << "meter,0,4/4\n\n"
+           << "[Notes]\n"
+           << "tap,0,3,width=2\n";
+    output.close();
+
+    const chart_parse_result result = chart_parser::parse(path.string());
+    std::filesystem::remove(path);
+    if (result.success) {
+        std::cerr << "Expected out-of-bounds wide note to fail\n";
+        return false;
+    }
+    return std::any_of(result.errors.begin(), result.errors.end(), [](const std::string& error) {
+        return error.find("width extends beyond keyCount") != std::string::npos;
+    });
+}
 }
 
 int main() {
@@ -173,6 +235,8 @@ int main() {
     ok = expect_missing_chart_id_failure() && ok;
     ok = expect_chart_without_song_id_success() && ok;
     ok = expect_server_managed_metadata_success() && ok;
+    ok = expect_wide_note_success() && ok;
+    ok = expect_wide_note_bounds_failure() && ok;
 
     if (!ok) {
         return EXIT_FAILURE;
