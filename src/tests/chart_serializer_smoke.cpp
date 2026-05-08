@@ -107,7 +107,7 @@ int main() {
     source.meta.difficulty = "Hyper";
     source.meta.level = 9;
     source.meta.chart_author = "Codex";
-    source.meta.format_version = 2;
+    source.meta.format_version = 1;
     source.meta.resolution = 480;
     source.meta.offset = -35;
 
@@ -139,6 +139,7 @@ int main() {
     bool ok = true;
 
     ok = content.find("offset=-35") != std::string::npos && ok;
+    ok = content.find("formatVersion=2") != std::string::npos && ok;
     ok = content.find("chartId=raythm_chart_serializer_smoke") != std::string::npos && ok;
     ok = content.find("songId=") == std::string::npos && ok;
     ok = content.find("level=") == std::string::npos && ok;
@@ -203,6 +204,7 @@ int main() {
 
     chart_data expected = normalized_chart(source);
     expected.meta.song_id.clear();
+    expected.meta.format_version = 2;
     if (!equal_chart_data(expected, *reparsed.data)) {
         std::cerr << "Round-trip chart data mismatch\n";
         ok = false;
