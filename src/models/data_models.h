@@ -183,6 +183,7 @@ struct judge_event {
     int event_index = -1;
     note_type hitsound_type = note_type::tap;
     bool is_ray = false;
+    int lane_width = 1;
 };
 
 // 達成率に応じたランク種別。

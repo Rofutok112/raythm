@@ -61,6 +61,7 @@ struct play_draw_window {
 struct lane_judge_effect {
     judge_result result = judge_result::miss;
     float timer = 0.0f;
+    int lane_width = 1;
 };
 
 struct play_hitsound_paths {

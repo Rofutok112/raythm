@@ -25,10 +25,13 @@ size_t judge_index(judge_result result) {
 }
 
 float event_weight_for(float local_difficulty) {
+    if (local_difficulty <= 0.0f) {
+        return 0.0f;
+    }
     return std::pow(std::max(local_difficulty, 0.001f), 1.12f);
 }
 
-float chart_max_pp_for(const chart_data& chart, size_t event_count) {
+float chart_max_rc_for(const chart_data& chart, size_t event_count) {
     const float level = chart.meta.level > 0.0f
                             ? chart.meta.level
                             : chart_difficulty::calculate_level(chart);
@@ -73,7 +76,11 @@ void performance_system::init(const chart_data& chart, const timing_engine& engi
     for (float weight : event_weights_) {
         total_possible_weight_ += weight;
     }
-    chart_max_pp_ = chart_max_pp_for(chart, event_weights_.size());
+    const size_t positive_event_count =
+        static_cast<size_t>(std::count_if(event_weights_.begin(), event_weights_.end(), [](float weight) {
+            return weight > 0.0f;
+        }));
+    chart_max_rc_ = chart_max_rc_for(chart, positive_event_count);
 }
 
 void performance_system::reset() {
@@ -81,12 +88,12 @@ void performance_system::reset() {
     total_possible_weight_ = 0.0f;
     judged_possible_weight_ = 0.0f;
     earned_weight_ = 0.0f;
-    chart_max_pp_ = 0.0f;
+    chart_max_rc_ = 0.0f;
     judged_events_ = 0;
     combo_ = 0;
     max_combo_ = 0;
     judge_counts_.fill(0);
-    cached_current_pp_ = 0.0f;
+    cached_current_rc_ = 0.0f;
 }
 
 void performance_system::on_judge(const judge_event& event) {
@@ -96,6 +103,9 @@ void performance_system::on_judge(const judge_event& event) {
     }
 
     const float possible = event_weights_[static_cast<size_t>(event.event_index)];
+    if (possible <= 0.0f) {
+        return;
+    }
     judged_possible_weight_ += possible;
     earned_weight_ += possible * judge_factor(event.result);
     ++judged_events_;
@@ -108,15 +118,15 @@ void performance_system::on_judge(const judge_event& event) {
         max_combo_ = std::max(max_combo_, combo_);
     }
 
-    cached_current_pp_ = calculate_current_pp();
+    cached_current_rc_ = calculate_current_rc();
 }
 
-float performance_system::current_pp() const {
-    return cached_current_pp_;
+float performance_system::current_rc() const {
+    return cached_current_rc_;
 }
 
-float performance_system::max_pp() const {
-    return chart_max_pp_;
+float performance_system::max_rc() const {
+    return chart_max_rc_;
 }
 
 float performance_system::weighted_accuracy() const {
@@ -126,8 +136,8 @@ float performance_system::weighted_accuracy() const {
     return std::clamp(earned_weight_ / judged_possible_weight_, 0.0f, 1.0f);
 }
 
-float performance_system::calculate_current_pp() const {
-    if (chart_max_pp_ <= 0.0f || total_possible_weight_ <= 0.0f) {
+float performance_system::calculate_current_rc() const {
+    if (chart_max_rc_ <= 0.0f || total_possible_weight_ <= 0.0f) {
         return 0.0f;
     }
 
@@ -147,7 +157,7 @@ float performance_system::calculate_current_pp() const {
         combo_factor = 0.78f + 0.22f * std::sqrt(combo_ratio);
     }
 
-    return chart_max_pp_ * strain_progress * accuracy_factor * miss_penalty * combo_factor;
+    return chart_max_rc_ * strain_progress * accuracy_factor * miss_penalty * combo_factor;
 }
 
 float performance_system::judge_factor(judge_result result) const {

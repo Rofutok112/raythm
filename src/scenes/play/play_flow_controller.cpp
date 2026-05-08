@@ -47,6 +47,7 @@ void trigger_lane_judge_effect(play_session_state& state, const judge_event& eve
     lane_judge_effect& effect = state.lane_judge_effects[static_cast<std::size_t>(event.lane)];
     effect.result = event.result;
     effect.timer = play_session_constants::kLaneJudgeEffectDurationSeconds;
+    effect.lane_width = std::max(1, std::min(event.lane_width, state.key_count - event.lane));
 }
 
 }  // namespace

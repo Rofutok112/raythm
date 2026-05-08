@@ -683,9 +683,13 @@ void judge_system::emit_judge(judge_result result, double offset_ms, int lane,
                               judge_emit_options options) {
     bool is_ray = false;
     note_type hitsound_type = note_type::tap;
+    int lane_width = 1;
+    int display_lane = lane;
     for (const chart_judge_event& descriptor : event_descriptors_) {
         if (descriptor.event_index == event_index) {
             is_ray = descriptor.is_ray;
+            lane_width = std::max(1, descriptor.lane_width);
+            display_lane = descriptor.lane;
             if (descriptor.role == chart_judge_event_role::release) {
                 hitsound_type = note_type::release;
             } else if (descriptor.role == chart_judge_event_role::stay) {
@@ -694,12 +698,13 @@ void judge_system::emit_judge(judge_result result, double offset_ms, int lane,
             break;
         }
     }
-    judge_event event{result, offset_ms, lane,
+    judge_event event{result, offset_ms, display_lane,
                       options.play_hitsound,
                       options.apply_gameplay_effects,
                       options.show_feedback,
                       event_index,
                       hitsound_type,
-                      is_ray};
+                      is_ray,
+                      lane_width};
     judge_events_.push_back(event);
 }

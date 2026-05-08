@@ -139,10 +139,9 @@ std::vector<note_event> build_note_events(const chart_data& data, const timing_e
                 events.push_back({engine.tick_to_ms(note.end_tick), representative_lane, note_event::kind::hold_tail});
                 break;
             case note_type::release:
-                events.push_back({engine.tick_to_ms(note.tick), representative_lane, note_event::kind::release});
+                events.push_back({engine.tick_to_ms(note.tick), representative_lane, note_event::kind::tap});
                 break;
             case note_type::stay:
-                events.push_back({engine.tick_to_ms(note.tick), representative_lane, note_event::kind::stay});
                 break;
         }
     }
@@ -270,8 +269,9 @@ float local_density_per_second(const std::vector<note_event>& events, double cen
         switch (event.type) {
             case note_event::kind::tap:
             case note_event::kind::hold_head:
-            case note_event::kind::stay:
                 weighted_count += 1.0f;
+                break;
+            case note_event::kind::stay:
                 break;
             case note_event::kind::hold_tail:
             case note_event::kind::release:
@@ -690,10 +690,14 @@ std::vector<event_difficulty> calculate_event_difficulties(const chart_data& dat
     const std::vector<chart_judge_event> judge_events = chart_judge_events::build(data, engine);
     for (const chart_judge_event& event : judge_events) {
         const double head_ms = event.time_ms;
+        const float local_difficulty = event.role == chart_judge_event_role::stay
+                                           ? 0.0f
+                                           : std::max(0.0f, local_difficulty_at(events, holds, transitions,
+                                                                               head_ms, data.meta.key_count));
         difficulties.push_back(event_difficulty{
             event.event_index,
             head_ms,
-            std::max(0.0f, local_difficulty_at(events, holds, transitions, head_ms, data.meta.key_count)),
+            local_difficulty,
         });
     }
 

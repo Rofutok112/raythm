@@ -425,6 +425,11 @@ int main() {
         std::cerr << "Wide tap should judge from any covered lane\n";
         return EXIT_FAILURE;
     }
+    if (wide_tap_judge.get_last_judge()->lane != 1 ||
+        wide_tap_judge.get_last_judge()->lane_width != 3) {
+        std::cerr << "Wide tap judge event should preserve its full lane span\n";
+        return EXIT_FAILURE;
+    }
 
     note_data wide_hold{note_type::hold, 960, 0, 1440};
     wide_hold.lane_width = 2;
@@ -440,6 +445,11 @@ int main() {
         wide_hold_judge.get_last_judge()->result != judge_result::good ||
         !wide_hold_judge.note_states().front().is_completed()) {
         std::cerr << "Wide hold should track releases from any covered lane\n";
+        return EXIT_FAILURE;
+    }
+    if (wide_hold_judge.get_last_judge()->lane != 0 ||
+        wide_hold_judge.get_last_judge()->lane_width != 2) {
+        std::cerr << "Wide hold release judge event should preserve its full lane span\n";
         return EXIT_FAILURE;
     }
 

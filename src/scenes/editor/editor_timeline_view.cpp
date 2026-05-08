@@ -221,7 +221,7 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
                 head_fill = lerp_color(t.note_color, t.judge_perfect, 0.25f);
             }
             if (note.is_ray) {
-                head_fill = lerp_color(head_fill, t.judge_line_glow, 0.45f);
+                head_fill = lerp_color(head_fill, {180, 132, 255, 255}, 0.58f);
             }
             const Color outline = selected ? t.border_active : t.note_outline;
             const Color hold_fill = selected ? with_alpha(t.row_active, 200) : with_alpha(t.accent, 170);
