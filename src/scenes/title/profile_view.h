@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -32,12 +33,14 @@ enum class command_type {
     delete_account,
     delete_song,
     delete_chart,
+    save_external_links,
 };
 
 struct command {
     command_type type = command_type::none;
     std::string id;
     std::string password;
+    std::vector<auth::external_link> external_links;
 };
 
 struct activity_item {
@@ -61,7 +64,9 @@ struct state {
     bool closing = false;
     bool loading = false;
     bool deleting = false;
+    bool saving_links = false;
     bool loaded_once = false;
+    bool settings_links_initialized = false;
     float open_anim = 0.0f;
     tab selected_tab = tab::overview;
     float activity_scroll = 0.0f;
@@ -75,6 +80,8 @@ struct state {
     std::string pending_id;
     std::string pending_label;
     ui::text_input_state delete_password_input;
+    std::array<ui::text_input_state, 3> link_label_inputs;
+    std::array<ui::text_input_state, 3> link_url_inputs;
 };
 
 Rectangle bounds();

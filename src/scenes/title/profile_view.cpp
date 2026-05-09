@@ -24,6 +24,7 @@ constexpr float kContentOuterPadding = 42.0f;
 constexpr float kOpenAnimOffsetY = 30.0f;
 constexpr float kOpenAnimScaleInset = 0.035f;
 constexpr int kTabCount = 5;
+constexpr int kEditableExternalLinkCount = 3;
 constexpr float kRowHeight = 70.0f;
 constexpr float kRowGap = 10.0f;
 constexpr float kWheelStep = 78.0f;
@@ -92,7 +93,29 @@ Rectangle overview_card_rect(Rectangle content, int index) {
 }
 
 Rectangle settings_delete_account_rect(Rectangle content) {
-    return {content.x + 18.0f, content.y + 116.0f, 238.0f, 42.0f};
+    return {content.x + 18.0f, content.y + 378.0f, 238.0f, 42.0f};
+}
+
+Rectangle settings_save_links_rect(Rectangle content) {
+    return {content.x + content.width - 202.0f, content.y + 256.0f, 164.0f, 42.0f};
+}
+
+Rectangle settings_link_label_rect(Rectangle content, int index) {
+    return {
+        content.x + 18.0f,
+        content.y + 76.0f + static_cast<float>(index) * 58.0f,
+        330.0f,
+        42.0f,
+    };
+}
+
+Rectangle settings_link_url_rect(Rectangle content, int index) {
+    return {
+        content.x + 368.0f,
+        content.y + 76.0f + static_cast<float>(index) * 58.0f,
+        content.width - 386.0f,
+        42.0f,
+    };
 }
 
 Rectangle account_delete_panel_rect() {
@@ -229,6 +252,50 @@ bool is_upload_tab(tab selected_tab) {
     return selected_tab == tab::songs || selected_tab == tab::charts;
 }
 
+void reset_text_input(ui::text_input_state& input) {
+    input.value.clear();
+    input.active = false;
+    input.cursor = 0;
+    input.has_selection = false;
+    input.selection_anchor = 0;
+    input.mouse_selecting = false;
+    input.scroll_x = 0.0f;
+}
+
+void sync_settings_links(state& profile, const song_select::auth_state& auth_state) {
+    if (profile.settings_links_initialized) {
+        return;
+    }
+
+    for (int i = 0; i < kEditableExternalLinkCount; ++i) {
+        reset_text_input(profile.link_label_inputs[static_cast<size_t>(i)]);
+        reset_text_input(profile.link_url_inputs[static_cast<size_t>(i)]);
+        if (static_cast<size_t>(i) < auth_state.external_links.size()) {
+            const auth::external_link& link = auth_state.external_links[static_cast<size_t>(i)];
+            profile.link_label_inputs[static_cast<size_t>(i)].value = link.label;
+            profile.link_label_inputs[static_cast<size_t>(i)].cursor = ui::utf8_codepoint_count(link.label);
+            profile.link_url_inputs[static_cast<size_t>(i)].value = link.url;
+            profile.link_url_inputs[static_cast<size_t>(i)].cursor = ui::utf8_codepoint_count(link.url);
+        }
+    }
+    profile.settings_links_initialized = true;
+}
+
+std::vector<auth::external_link> collect_settings_links(const state& profile) {
+    std::vector<auth::external_link> links;
+    for (int i = 0; i < kEditableExternalLinkCount; ++i) {
+        const std::string& url = profile.link_url_inputs[static_cast<size_t>(i)].value;
+        if (url.empty()) {
+            continue;
+        }
+        links.push_back({
+            .label = profile.link_label_inputs[static_cast<size_t>(i)].value,
+            .url = url,
+        });
+    }
+    return links;
+}
+
 }  // namespace
 
 Rectangle bounds() {
@@ -247,6 +314,7 @@ void open(state& profile) {
     profile.delete_password_input.active = false;
     profile.delete_password_input.has_selection = false;
     profile.delete_password_input.mouse_selecting = false;
+    profile.settings_links_initialized = false;
 }
 
 void close(state& profile) {
@@ -284,7 +352,7 @@ command update(state& profile, bool request_active) {
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     const float wheel = GetMouseWheelMove();
-    const bool busy = profile.loading || profile.deleting || request_active;
+    const bool busy = profile.loading || profile.deleting || profile.saving_links || request_active;
     const Rectangle content = content_rect();
 
     if (!busy && profile.pending_delete != delete_target::none &&
@@ -392,6 +460,14 @@ command update(state& profile, bool request_active) {
     }
 
     if (!busy && profile.selected_tab == tab::settings &&
+        CheckCollisionPointRec(mouse, settings_save_links_rect(content))) {
+        return {
+            .type = command_type::save_external_links,
+            .external_links = collect_settings_links(profile),
+        };
+    }
+
+    if (!busy && profile.selected_tab == tab::settings &&
         CheckCollisionPointRec(mouse, settings_delete_account_rect(content))) {
         profile.pending_delete = delete_target::account;
         profile.delete_password_input.value.clear();
@@ -411,11 +487,12 @@ void draw(state& profile, const song_select::auth_state& auth_state, bool reques
     if (!profile.open) {
         return;
     }
+    sync_settings_links(profile, auth_state);
 
     ui::enqueue_draw_command(layer, [&profile, auth_state, request_active, layer]() {
         const auto& t = *g_theme;
         const Vector2 mouse = virtual_screen::get_virtual_mouse();
-        const bool busy = profile.loading || profile.deleting || request_active || profile.closing;
+        const bool busy = profile.loading || profile.deleting || profile.saving_links || request_active || profile.closing;
         const float anim_t = tween::ease_out_cubic(std::clamp(profile.open_anim, 0.0f, 1.0f));
         const float scale = 1.0f - (1.0f - anim_t) * kOpenAnimScaleInset;
         const float offset_y = (1.0f - anim_t) * kOpenAnimOffsetY;
@@ -655,13 +732,34 @@ void draw(state& profile, const song_select::auth_state& auth_state, bool reques
             ui::draw_text_in_rect("Settings", 18,
                                   {content.x + 18.0f, content.y + 18.0f, content.width - 36.0f, 30.0f},
                                   t.text, ui::text_align::left);
+            ui::draw_text_in_rect("Profile Links",
+                                  13,
+                                  {content.x + 18.0f, content.y + 48.0f, 560.0f, 22.0f},
+                                  t.text_secondary, ui::text_align::left);
+            for (int i = 0; i < kEditableExternalLinkCount; ++i) {
+                ui::draw_text_input(settings_link_label_rect(content, i),
+                                    profile.link_label_inputs[static_cast<size_t>(i)],
+                                    "Label", "X / YouTube / Site", nullptr,
+                                    layer, 13, 40, ui::default_text_input_filter, 76.0f);
+                ui::draw_text_input(settings_link_url_rect(content, i),
+                                    profile.link_url_inputs[static_cast<size_t>(i)],
+                                    "URL", "https://example.com/you", nullptr,
+                                    layer, 13, 240, ui::default_text_input_filter, 56.0f);
+            }
+            draw_profile_button(settings_save_links_rect(content), "SAVE LINKS", !busy, t.accent);
+            ui::draw_text_in_rect("Public on profile and uploaded content cards.",
+                                  12,
+                                  {content.x + 18.0f, content.y + 262.0f, 560.0f, 20.0f},
+                                  t.text_muted, ui::text_align::left);
+            ui::draw_rect_lines({content.x + 18.0f, content.y + 306.0f, content.width - 36.0f, 1.0f},
+                                1.0f, with_alpha(t.border, 150));
             ui::draw_text_in_rect("Delete this account from raythm-Server.",
                                   13,
-                                  {content.x + 18.0f, content.y + 56.0f, 560.0f, 22.0f},
+                                  {content.x + 18.0f, content.y + 318.0f, 560.0f, 22.0f},
                                   t.text_secondary, ui::text_align::left);
             ui::draw_text_in_rect("This does not delete local songs or charts.",
                                   12,
-                                  {content.x + 18.0f, content.y + 78.0f, 560.0f, 20.0f},
+                                  {content.x + 18.0f, content.y + 340.0f, 560.0f, 20.0f},
                                   t.text_muted, ui::text_align::left);
             draw_profile_button(settings_delete_account_rect(content), "DELETE ACCOUNT", !busy, t.error);
         }
@@ -674,6 +772,12 @@ void draw(state& profile, const song_select::auth_state& auth_state, bool reques
         }
         if (profile.deleting) {
             ui::draw_text_in_rect("Deleting...", 13,
+                                  {kDialogRect.x + 42.0f, kDialogRect.y + kDialogRect.height - 104.0f,
+                                   260.0f, 24.0f},
+                                  t.text_muted, ui::text_align::left);
+        }
+        if (profile.saving_links) {
+            ui::draw_text_in_rect("Saving links...", 13,
                                   {kDialogRect.x + 42.0f, kDialogRect.y + kDialogRect.height - 104.0f,
                                    260.0f, 24.0f},
                                   t.text_muted, ui::text_align::left);

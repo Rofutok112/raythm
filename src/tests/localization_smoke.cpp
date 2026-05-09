@@ -48,6 +48,12 @@ int main() {
     expect(std::string(localization::tr_literal("SETTINGS")) == "設定",
            "Expected literal lookup to translate existing UI labels.",
            ok);
+    expect(std::string(localization::tr_literal("Profile Links")) == "プロフィールリンク",
+           "Expected profile settings labels to translate.",
+           ok);
+    expect(std::string(localization::tr_literal("SAVE LINKS")) == "リンクを保存",
+           "Expected profile link actions to translate.",
+           ok);
     localization::set_current_locale(localization::locale::english);
     expect(std::string(localization::tr_literal("SETTINGS")) == "SETTINGS",
            "Expected literal lookup to preserve English labels in English locale.",
