@@ -6,6 +6,12 @@
 
 namespace ui {
 
+enum class font_locale_mode {
+    automatic,
+    japanese_ui,
+};
+
+void set_font_locale_mode(font_locale_mode mode);
 void initialize_text_font();
 void shutdown_text_font();
 

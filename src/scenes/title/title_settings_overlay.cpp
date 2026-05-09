@@ -6,6 +6,7 @@
 #include "rlgl.h"
 #include "scene_common.h"
 #include "settings_io.h"
+#include "localization/localization.h"
 #include "theme.h"
 #include "tween.h"
 #include "ui_draw.h"
@@ -67,6 +68,7 @@ title_settings_overlay::title_settings_overlay(game_settings& settings)
     : gameplay_page_(settings),
       audio_page_(settings, runtime_applier_),
       video_page_(settings, runtime_applier_),
+      system_page_(settings, runtime_applier_),
       key_config_page_(settings) {
 }
 
@@ -77,6 +79,7 @@ void title_settings_overlay::open() {
     gameplay_page_.reset_interaction();
     audio_page_.reset_interaction();
     video_page_.reset_interaction();
+    system_page_.reset_interaction();
     key_config_page_.reset();
 }
 
@@ -152,7 +155,8 @@ void title_settings_overlay::draw() const {
     ui::draw_panel(settings::kSidebarRect);
     ui::draw_panel(settings::kContentRect);
 
-    ui::draw_header_block(settings::kSidebarHeaderRect, "SETTINGS", "Saved on back");
+    ui::draw_header_block(settings::kSidebarHeaderRect, localization::tr(localization::text_key::settings),
+                          localization::tr(localization::text_key::saved_on_back));
 
     Rectangle tabs[settings::kPageCount];
     settings::build_tab_rects(tabs);
@@ -160,21 +164,22 @@ void title_settings_overlay::draw() const {
         const settings::page_descriptor& descriptor =
             settings::page_descriptor_for(static_cast<settings::page_id>(i));
         if (static_cast<int>(current_page_) == i) {
-            ui::draw_button_colored(tabs[i], descriptor.navigation_label, 22,
+            ui::draw_button_colored(tabs[i], localization::tr(descriptor.navigation_label), 22,
                                     theme.row_selected, theme.row_active, theme.text);
         } else {
-            ui::draw_button_colored(tabs[i], descriptor.navigation_label, 22,
+            ui::draw_button_colored(tabs[i], localization::tr(descriptor.navigation_label), 22,
                                     theme.row, theme.row_hover, theme.text_secondary);
         }
     }
 
-    draw_marquee_text("ESC or right click goes back", settings::kSidebarHintRect.x,
+    draw_marquee_text(localization::tr(localization::text_key::settings_hint_back), settings::kSidebarHintRect.x,
                       settings::kSidebarHintRect.y, 20, theme.text_muted,
                       settings::kSidebarHintRect.width, GetTime());
-    ui::draw_button(settings::kBackRect, "BACK", 22);
+    ui::draw_button(settings::kBackRect, localization::tr(localization::text_key::back), 22);
 
     const settings::page_descriptor& descriptor = settings::page_descriptor_for(current_page_);
-    ui::draw_header_block(settings::kContentHeaderRect, descriptor.title, descriptor.subtitle);
+    ui::draw_header_block(settings::kContentHeaderRect, localization::tr(descriptor.title),
+                          localization::tr(descriptor.subtitle));
 
     draw_current_page();
 
@@ -201,6 +206,9 @@ void title_settings_overlay::update_current_page() {
         case settings::page_id::video:
             video_page_.update();
             break;
+        case settings::page_id::system:
+            system_page_.update();
+            break;
         case settings::page_id::key_config:
             key_config_page_.update();
             break;
@@ -218,6 +226,9 @@ void title_settings_overlay::draw_current_page() const {
         case settings::page_id::video:
             video_page_.draw();
             break;
+        case settings::page_id::system:
+            system_page_.draw();
+            break;
         case settings::page_id::key_config:
             key_config_page_.draw();
             break;
@@ -228,6 +239,7 @@ void title_settings_overlay::change_page(settings::page_id next_page) {
     gameplay_page_.reset_interaction();
     audio_page_.reset_interaction();
     video_page_.reset_interaction();
+    system_page_.reset_interaction();
     if (current_page_ == settings::page_id::key_config && next_page != settings::page_id::key_config) {
         key_config_page_.clear_selection();
     }

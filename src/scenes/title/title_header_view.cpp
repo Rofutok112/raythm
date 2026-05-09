@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "title/title_layout.h"
+#include "localization/localization.h"
 #include "theme.h"
 #include "tween.h"
 #include "ui_draw.h"
@@ -163,7 +164,8 @@ void draw(const draw_config& config) {
     const Color subtitle_color = with_alpha(t.text_dim, static_cast<unsigned char>(255.0f * title_visibility));
     if (title_visibility > 0.01f) {
         ui::draw_text_f("raythm", title_pos.x, title_pos.y, 124, title_color);
-        ui::draw_text_f("trace the line before the beat disappears", subtitle_pos.x, subtitle_pos.y, 30, subtitle_color);
+        ui::draw_text_f(localization::tr_literal("trace the line before the beat disappears"),
+                        subtitle_pos.x, subtitle_pos.y, 30, subtitle_color);
     }
 
     if (config.menu_t <= 0.01f) {
