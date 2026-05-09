@@ -1,6 +1,7 @@
 #include "audio_manager.h"
 #include "core/window_dialog_support.h"
 #include "game_settings.h"
+#include "localization/localization.h"
 #include "raylib.h"
 #include "scene_manager.h"
 #include "title_scene.h"
@@ -15,6 +16,7 @@
 int main() {
     initialize_settings_storage(g_settings);
     load_settings(g_settings);
+    localization::set_current_locale(g_settings.ui_locale);
     set_theme(g_settings.dark_mode);
     audio_manager::instance().set_bgm_volume(g_settings.bgm_volume);
     audio_manager::instance().set_se_volume(g_settings.se_volume);
@@ -32,6 +34,9 @@ int main() {
                                           window_dialog_support::current_monitor_width(),
                                           window_dialog_support::current_monitor_height());
     virtual_screen::init();
+    ui::set_font_locale_mode(g_settings.ui_locale == localization::locale::japanese
+                                 ? ui::font_locale_mode::japanese_ui
+                                 : ui::font_locale_mode::automatic);
     ui::initialize_text_font();
 
     scene_manager manager;

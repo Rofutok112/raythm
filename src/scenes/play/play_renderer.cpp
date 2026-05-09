@@ -7,6 +7,7 @@
 #include <string>
 
 #include "game_settings.h"
+#include "localization/localization.h"
 #include "scene_common.h"
 #include "theme.h"
 #include "ui_draw.h"
@@ -729,9 +730,9 @@ std::array<Rectangle, 3> pause_button_rects() {
 
 void draw_status(const play_session_state& state) {
     draw_scene_background(*g_theme);
-    ui::draw_text_f("Play", 144.0f, 135.0f, ui_font(44), g_theme->error);
+    ui::draw_text_f(localization::tr_literal("Play"), 144.0f, 135.0f, ui_font(44), g_theme->error);
     ui::draw_text_f(state.status_text.c_str(), 144.0f, 255.0f, ui_font(28), g_theme->text);
-    ui::draw_text_f("ESC: Back to Song Select", 144.0f, 337.5f, ui_font(22), g_theme->text_hint);
+    ui::draw_text_f(localization::tr_literal("ESC: Back to Song Select"), 144.0f, 337.5f, ui_font(22), g_theme->text_hint);
 }
 
 void draw_world_background() {

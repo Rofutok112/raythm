@@ -6,22 +6,23 @@
 #include <span>
 
 #include "raylib.h"
+#include "localization/localization.h"
 #include "scene_common.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
 
 namespace settings {
 
-enum class page_id { gameplay, audio, video, key_config };
+enum class page_id { gameplay, audio, video, system, key_config };
 
 struct page_descriptor {
-    const char* navigation_label;
-    const char* title;
-    const char* subtitle;
+    localization::text_key navigation_label;
+    localization::text_key title;
+    localization::text_key subtitle;
 };
 
 inline constexpr ui::draw_layer kLayer = ui::draw_layer::base;
-inline constexpr int kPageCount = 4;
+inline constexpr int kPageCount = 5;
 inline constexpr float kSliderLeftInset = 327.0f;
 inline constexpr float kSliderRightInset = 63.0f;
 inline constexpr float kSliderTopOffset = 39.0f;
@@ -59,10 +60,11 @@ inline constexpr float kKeySlotStartY = 321.0f;
 inline constexpr float kKeySlotStepY = 93.0f;
 
 inline constexpr std::array<page_descriptor, kPageCount> kPageDescriptors = {{
-    {"Gameplay", "Gameplay", "Play feel and lane settings"},
-    {"Audio", "Audio", "BGM and sound effect volume"},
-    {"Video", "Video", "Display and frame rate settings"},
-    {"Key Config", "Key Config", "Per-lane keyboard bindings"},
+    {localization::text_key::gameplay, localization::text_key::gameplay, localization::text_key::gameplay_subtitle},
+    {localization::text_key::audio, localization::text_key::audio, localization::text_key::audio_subtitle},
+    {localization::text_key::video, localization::text_key::video, localization::text_key::video_subtitle},
+    {localization::text_key::system, localization::text_key::system, localization::text_key::system_subtitle},
+    {localization::text_key::key_config, localization::text_key::key_config, localization::text_key::key_config_subtitle},
 }};
 
 inline const Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};

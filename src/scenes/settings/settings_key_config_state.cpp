@@ -4,6 +4,7 @@
 #include <span>
 
 #include "key_names.h"
+#include "localization/localization.h"
 #include "raylib.h"
 #include "settings/settings_layout.h"
 #include "theme.h"
@@ -51,7 +52,7 @@ void settings_key_config_state::handle_listening(game_settings& settings) {
     }
 
     if (!is_valid_play_key(pressed)) {
-        show_error("This key cannot be assigned");
+        show_error(localization::tr(localization::text_key::key_cannot_be_assigned));
         return;
     }
 
@@ -61,7 +62,11 @@ void settings_key_config_state::handle_listening(game_settings& settings) {
     const int count = mode_ == 0 ? 4 : 6;
     for (int i = 0; i < count; ++i) {
         if (i != slot_ && keys[static_cast<std::size_t>(i)] == static_cast<KeyboardKey>(pressed)) {
-            show_error(TextFormat("Key '%s' is already assigned to Lane %d", get_key_name(pressed), i + 1));
+            show_error(TextFormat("%s: %s (%s %d)",
+                                  localization::tr(localization::text_key::key_already_assigned),
+                                  get_key_name(pressed),
+                                  localization::tr(localization::text_key::lane),
+                                  i + 1));
             return;
         }
     }
@@ -102,7 +107,8 @@ void settings_key_config_state::update(game_settings& settings) {
 
 void settings_key_config_state::draw(const game_settings& settings) const {
     const auto& theme = *g_theme;
-    ui::draw_value_selector(settings::kKeyModeRect, "Mode", mode_ == 0 ? "4K" : "6K", settings::kLayer);
+    ui::draw_value_selector(settings::kKeyModeRect, localization::tr(localization::text_key::mode),
+                            mode_ == 0 ? "4K" : "6K", settings::kLayer);
 
     const std::span<const KeyboardKey> keys = mode_ == 0
         ? std::span<const KeyboardKey>(settings.keys.keys_4)
@@ -116,9 +122,11 @@ void settings_key_config_state::draw(const game_settings& settings) const {
                                                      selected ? theme.row_selected : theme.row,
                                                      selected ? theme.row_active : theme.row_hover,
                                                      selected ? theme.border_active : theme.border);
-        const char* key_label = is_listening ? "Press a key..." : get_key_name(keys[static_cast<std::size_t>(i)]);
+        const char* key_label = is_listening ? localization::tr(localization::text_key::press_a_key)
+                                             : get_key_name(keys[static_cast<std::size_t>(i)]);
         const ui::rect_pair columns = ui::split_columns(ui::inset(row_state.visual, 18.0f), 160.0f);
-        ui::draw_text_in_rect(TextFormat("Lane %d", i + 1), 24, columns.first, theme.text, ui::text_align::left);
+        ui::draw_text_in_rect(TextFormat("%s %d", localization::tr(localization::text_key::lane), i + 1),
+                              24, columns.first, theme.text, ui::text_align::left);
         ui::draw_text_in_rect(key_label, 24, columns.second, is_listening ? theme.error : theme.text_dim, ui::text_align::right);
     }
 
