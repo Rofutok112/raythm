@@ -49,6 +49,19 @@ private:
     bool dragging_frame_rate_ = false;
 };
 
+class settings_system_page {
+public:
+    settings_system_page(game_settings& settings, const settings_runtime_applier& runtime_applier);
+
+    void reset_interaction();
+    void update();
+    void draw() const;
+
+private:
+    game_settings& settings_;
+    const settings_runtime_applier& runtime_applier_;
+};
+
 class settings_key_config_page {
 public:
     explicit settings_key_config_page(game_settings& settings);

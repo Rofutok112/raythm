@@ -10,6 +10,7 @@
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select/song_select_navigation.h"
+#include "localization/localization.h"
 #include "theme.h"
 #include "ui_draw.h"
 #include "ui/ui_font.h"
@@ -254,7 +255,7 @@ void result_scene::draw() {
 
     // FAILED 表示
     if (result_.failed) {
-        ui::draw_text_f("FAILED", kRankRect.x + kRankRect.width + kFailedOffset,
+        ui::draw_text_f(localization::tr_literal("FAILED"), kRankRect.x + kRankRect.width + kFailedOffset,
                         kRankRect.y + kFailedOffset, 40, t.error);
     }
 

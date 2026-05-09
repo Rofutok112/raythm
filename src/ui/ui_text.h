@@ -1,6 +1,7 @@
 #pragma once
 
 #include "raylib.h"
+#include "localization/localization.h"
 #include "ui_coord.h"
 #include "ui_font.h"
 #include "ui_layout.h"
@@ -13,6 +14,7 @@ namespace ui {
 // 水平方向は align に従い、垂直方向は中央揃え。
 inline Vector2 text_position(const char* text, int font_size, Rectangle rect,
                              text_align align = text_align::center) {
+    text = localization::tr_literal(text);
     const float layout_font_size = text_layout_font_size(static_cast<float>(font_size));
     const float text_width = measure_text_size(text, static_cast<float>(font_size), 0.0f).x;
     float x;
@@ -34,6 +36,7 @@ inline Vector2 text_position(const char* text, int font_size, Rectangle rect,
 // rect 内にテキストを描画する。水平方向は align、垂直方向は中央揃え。
 inline void draw_text_in_rect(const char* text, int font_size, Rectangle rect,
                               Color color, text_align align = text_align::center) {
+    text = localization::tr_literal(text);
     const Vector2 pos = text_position(text, font_size, rect, align);
     draw_text_f(text, pos.x, pos.y, font_size, color);
 }

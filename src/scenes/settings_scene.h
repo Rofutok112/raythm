@@ -36,5 +36,6 @@ private:
     settings_gameplay_page gameplay_page_;
     settings_audio_page audio_page_;
     settings_video_page video_page_;
+    settings_system_page system_page_;
     settings_key_config_page key_config_page_;
 };

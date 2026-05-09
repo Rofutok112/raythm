@@ -3,6 +3,7 @@
 #include <string>
 
 #include "input_handler.h"
+#include "localization/localization.h"
 
 // 解像度プリセット
 struct resolution_preset {
@@ -38,6 +39,7 @@ struct game_settings {
     int windowed_height = 1080;
     bool fullscreen = false;
     bool dark_mode = true;
+    localization::locale ui_locale = localization::locale::english;
 };
 
 inline game_settings g_settings;

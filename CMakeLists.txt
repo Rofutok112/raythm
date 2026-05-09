@@ -206,6 +206,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/core/scene_manager.cpp
         src/core/scene_manager.h
         src/core/uuid_util.h
+        src/localization/localization.cpp
+        src/localization/localization.h
         src/gameplay/game_settings.h
         src/gameplay/key_names.h
         src/gameplay/settings_io.cpp
@@ -530,11 +532,18 @@ add_executable(song_select_state_smoke
 add_executable(settings_io_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/localization/localization.cpp
+        src/localization/localization.h
         src/gameplay/settings_io.cpp
         src/gameplay/settings_io.h
         src/network/server_environment.cpp
         src/network/server_environment.h
         src/tests/settings_io_smoke.cpp)
+
+add_executable(localization_smoke
+        src/localization/localization.cpp
+        src/localization/localization.h
+        src/tests/localization_smoke.cpp)
 
 add_executable(local_catalog_database_smoke
         src/core/app_paths.cpp
@@ -900,6 +909,7 @@ set(RAYTHM_SMOKE_TARGETS
         song_loader_smoke
         song_select_state_smoke
         settings_io_smoke
+        localization_smoke
         local_catalog_database_smoke
         local_content_index_smoke
         mv_storage_smoke
