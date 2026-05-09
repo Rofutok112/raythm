@@ -446,6 +446,8 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                 ? "Loading..."
                 : (state.mode == catalog_mode::owned && state.owned_loading)
                     ? "Syncing owned songs..."
+                : state.catalog_maintenance
+                    ? "Server maintenance"
                 : (state.catalog_request_failed ? "Could not reach raythm-Server." : "No songs found.");
             ui::draw_text_in_rect(empty_title,
                                   26, {placeholder.x, placeholder.y + 8.0f, placeholder.width, 28.0f},
@@ -453,7 +455,9 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             if (!loading && state.catalog_request_failed) {
                 const std::string detail = !state.catalog_status_message.empty()
                     ? state.catalog_status_message
-                    : "Check the server URL and confirm raythm-Server is running.";
+                    : state.catalog_maintenance
+                        ? "Online features are temporarily unavailable. Please try again later."
+                        : "Check the server URL and confirm raythm-Server is running.";
                 ui::draw_text_in_rect(detail.c_str(),
                                       14, {placeholder.x + 20.0f, placeholder.y + 42.0f, placeholder.width - 40.0f, 16.0f},
                                       with_alpha(t.text_muted, grid_alpha), ui::text_align::center);

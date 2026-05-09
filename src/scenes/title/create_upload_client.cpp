@@ -15,6 +15,7 @@
 
 #include "network/auth_client.h"
 #include "network/json_helpers.h"
+#include "network/network_error.h"
 #include "path_utils.h"
 #include "chart_fingerprint.h"
 #include "song_fingerprint.h"
@@ -47,6 +48,7 @@ struct http_response {
     int status_code = 0;
     std::string body;
     std::string error_message;
+    std::string retry_after;
 };
 
 struct multipart_field {
@@ -65,8 +67,10 @@ struct upload_request_result {
     bool success = false;
     bool not_found = false;
     bool unauthorized = false;
+    bool maintenance = false;
     bool updated_existing = false;
     std::string message;
+    std::string retry_after;
     std::string remote_song_id;
     std::string remote_chart_id;
     int remote_chart_version = 0;
@@ -113,14 +117,25 @@ std::string escape_multipart_header_value(const std::string& value) {
 }
 
 std::string parse_error_message(const http_response& response, std::string fallback) {
-    if (const std::optional<std::string> message = json::extract_string(response.body, "message");
-        message.has_value() && !message->empty()) {
-        return *message;
+    const network::error_classification error = network::classify_http_error(
+        response.status_code,
+        response.body,
+        std::move(fallback),
+        response.retry_after);
+    if (!error.message.empty()) {
+        return error.message;
     }
     if (!response.error_message.empty()) {
         return response.error_message;
     }
-    return fallback;
+    return "Upload failed.";
+}
+
+void apply_error_classification(upload_request_result& result,
+                                const network::error_classification& error) {
+    result.message = error.message;
+    result.maintenance = error.is_maintenance();
+    result.retry_after = error.retry_after;
 }
 
 bool read_binary_file(const fs::path& path,
@@ -266,6 +281,26 @@ std::wstring widen_utf8(const std::string& input) {
     return output;
 }
 
+std::string narrow_utf8(std::wstring input) {
+    while (!input.empty() && input.back() == L'\0') {
+        input.pop_back();
+    }
+    if (input.empty()) {
+        return {};
+    }
+
+    const int required = WideCharToMultiByte(CP_UTF8, 0, input.c_str(), static_cast<int>(input.size()),
+                                             nullptr, 0, nullptr, nullptr);
+    if (required <= 0) {
+        return {};
+    }
+
+    std::string output(static_cast<size_t>(required), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, input.c_str(), static_cast<int>(input.size()),
+                        output.data(), required, nullptr, nullptr);
+    return output;
+}
+
 std::string describe_winhttp_error(DWORD error_code) {
     switch (error_code) {
         case ERROR_WINHTTP_TIMEOUT:
@@ -311,6 +346,35 @@ std::optional<http_url_parts> parse_url(const std::string& url) {
     parts.port = components.nPort;
     parts.secure = components.nScheme == INTERNET_SCHEME_HTTPS;
     return parts;
+}
+
+std::string query_retry_after(HINTERNET request) {
+    DWORD size_bytes = 0;
+    if (WinHttpQueryHeaders(request,
+                            WINHTTP_QUERY_CUSTOM,
+                            L"Retry-After",
+                            WINHTTP_NO_OUTPUT_BUFFER,
+                            &size_bytes,
+                            WINHTTP_NO_HEADER_INDEX) == FALSE &&
+        GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+        return {};
+    }
+
+    if (size_bytes == 0) {
+        return {};
+    }
+
+    std::wstring buffer(size_bytes / sizeof(wchar_t), L'\0');
+    if (WinHttpQueryHeaders(request,
+                            WINHTTP_QUERY_CUSTOM,
+                            L"Retry-After",
+                            buffer.data(),
+                            &size_bytes,
+                            WINHTTP_NO_HEADER_INDEX) == FALSE) {
+        return {};
+    }
+
+    return narrow_utf8(std::move(buffer));
 }
 
 http_response send_request(const std::string& method,
@@ -399,6 +463,7 @@ http_response send_request(const std::string& method,
         return response;
     }
     response.status_code = static_cast<int>(status_code);
+    response.retry_after = query_retry_after(request);
 
     DWORD available_size = 0;
     while (WinHttpQueryDataAvailable(request, &available_size) == TRUE && available_size > 0) {
@@ -426,9 +491,10 @@ http_response send_request(const std::string&,
                            const std::string&,
                            const std::vector<std::pair<std::string, std::string>>&) {
     return {
-        0,
-        {},
-        "Community upload is only supported on Windows builds right now.",
+        .status_code = 0,
+        .body = {},
+        .error_message = "Community upload is only supported on Windows builds right now.",
+        .retry_after = {},
     };
 }
 #endif
@@ -440,6 +506,16 @@ upload_request_result parse_song_upload_response(const http_response& response,
 
     if (!response.error_message.empty()) {
         result.message = response.error_message;
+        return result;
+    }
+
+    const network::error_classification classified = network::classify_http_error(
+        response.status_code,
+        response.body,
+        "Song upload failed.",
+        response.retry_after);
+    if (classified.is_maintenance()) {
+        apply_error_classification(result, classified);
         return result;
     }
 
@@ -487,6 +563,16 @@ upload_request_result parse_chart_upload_response(const http_response& response,
 
     if (!response.error_message.empty()) {
         result.message = response.error_message;
+        return result;
+    }
+
+    const network::error_classification classified = network::classify_http_error(
+        response.status_code,
+        response.body,
+        "Chart upload failed.",
+        response.retry_after);
+    if (classified.is_maintenance()) {
+        apply_error_classification(result, classified);
         return result;
     }
 
@@ -815,7 +901,9 @@ upload_result upload_song(const song_select::song_entry& song) {
     }
 
     result.success = request_result.success;
+    result.maintenance = request_result.maintenance;
     result.message = request_result.message;
+    result.retry_after = request_result.retry_after;
     result.should_refresh_online_catalog = request_result.success;
     if (!request_result.success) {
         return result;
@@ -898,7 +986,9 @@ upload_result upload_chart(const song_select::song_entry& song,
     }
 
     result.success = request_result.success;
+    result.maintenance = request_result.maintenance;
     result.message = request_result.message;
+    result.retry_after = request_result.retry_after;
     result.should_refresh_online_catalog = request_result.success;
     if (!request_result.success) {
         return result;

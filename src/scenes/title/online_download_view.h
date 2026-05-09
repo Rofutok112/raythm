@@ -57,7 +57,9 @@ struct catalog_load_result {
     std::vector<song_select::song_entry> local_songs;
     std::string catalog_server_url;
     std::string catalog_status_message;
+    std::string catalog_retry_after;
     bool catalog_request_failed = false;
+    bool catalog_maintenance = false;
     bool official_has_more = false;
     bool community_has_more = false;
 };
@@ -146,7 +148,9 @@ struct state {
     bool download_in_progress = false;
     std::string catalog_server_url;
     std::string catalog_status_message;
+    std::string catalog_retry_after;
     bool catalog_request_failed = false;
+    bool catalog_maintenance = false;
     bool detail_open = false;
     float detail_transition = 0.0f;
     bool reload_preserve_view = false;

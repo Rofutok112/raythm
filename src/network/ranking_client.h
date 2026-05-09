@@ -18,7 +18,9 @@ struct listing_response {
 struct operation_result {
     bool success = false;
     bool unauthorized = false;
+    bool maintenance = false;
     std::string message;
+    std::string retry_after;
     std::optional<listing_response> listing;
 };
 
@@ -32,7 +34,9 @@ struct submit_response {
 struct submit_operation_result {
     bool success = false;
     bool unauthorized = false;
+    bool maintenance = false;
     std::string message;
+    std::string retry_after;
     std::optional<submit_response> submission;
 };
 
@@ -40,7 +44,9 @@ using scoring_ruleset = scoring_ruleset_runtime::ruleset;
 
 struct scoring_ruleset_operation_result {
     bool success = false;
+    bool maintenance = false;
     std::string message;
+    std::string retry_after;
     std::optional<scoring_ruleset> ruleset;
 };
 
@@ -71,13 +77,17 @@ struct song_manifest {
 
 struct manifest_operation_result {
     bool success = false;
+    bool maintenance = false;
     std::string message;
+    std::string retry_after;
     std::optional<chart_manifest> manifest;
 };
 
 struct song_manifest_operation_result {
     bool success = false;
+    bool maintenance = false;
     std::string message;
+    std::string retry_after;
     std::optional<song_manifest> manifest;
 };
 

@@ -8,11 +8,23 @@
 
 #include "network/http_client.h"
 #include "network/json_helpers.h"
+#include "network/network_error.h"
 
 namespace {
 namespace json = network::json;
 using http_response = network::http::response;
 using network::http::send_request;
+
+network::error_classification classify_response_error(const http_response& response, std::string fallback) {
+    return network::classify_http_error(response.status_code, response.body, std::move(fallback), response.retry_after);
+}
+
+template <typename Result>
+void apply_error_classification(Result& result, const network::error_classification& error) {
+    result.message = error.message;
+    result.maintenance = error.is_maintenance();
+    result.retry_after = error.retry_after;
+}
 
 std::optional<ranking_service::entry> parse_ranking_entry(const std::string& content) {
     std::string player_display_name;
@@ -322,12 +334,14 @@ operation_result fetch_chart_ranking(const std::string& server_url,
     }
 
     if (response.status_code < 200 || response.status_code >= 300) {
-        return {
+        operation_result result{
             .success = false,
             .unauthorized = false,
-            .message = json::extract_string(response.body, "message").value_or("Failed to load online rankings."),
+            .message = {},
             .listing = std::nullopt,
         };
+        apply_error_classification(result, classify_response_error(response, "Failed to load online rankings."));
+        return result;
     }
 
     const std::optional<listing_response> listing = parse_listing_response(response.body);
@@ -402,12 +416,14 @@ submit_operation_result submit_chart_ranking(const std::string& server_url,
     }
 
     if (response.status_code < 200 || response.status_code >= 300) {
-        return {
+        submit_operation_result result{
             .success = false,
             .unauthorized = false,
-            .message = json::extract_string(response.body, "message").value_or("Failed to submit online ranking."),
+            .message = {},
             .submission = std::nullopt,
         };
+        apply_error_classification(result, classify_response_error(response, "Failed to submit online ranking."));
+        return result;
     }
 
     const std::optional<submit_response> submission = parse_submit_response(response.body);
@@ -454,11 +470,13 @@ scoring_ruleset_operation_result fetch_scoring_ruleset(const std::string& server
     }
 
     if (response.status_code < 200 || response.status_code >= 300) {
-        return {
+        scoring_ruleset_operation_result result{
             .success = false,
-            .message = json::extract_string(response.body, "message").value_or("Failed to fetch scoring ruleset."),
+            .message = {},
             .ruleset = std::nullopt,
         };
+        apply_error_classification(result, classify_response_error(response, "Failed to fetch scoring ruleset."));
+        return result;
     }
 
     const std::optional<scoring_ruleset> ruleset = parse_scoring_ruleset_response(response.body);
@@ -532,11 +550,13 @@ manifest_operation_result fetch_chart_manifest(const std::string& server_url,
     }
 
     if (response.status_code < 200 || response.status_code >= 300) {
-        return {
+        manifest_operation_result result{
             .success = false,
-            .message = json::extract_string(response.body, "message").value_or("Failed to fetch chart manifest."),
+            .message = {},
             .manifest = std::nullopt,
         };
+        apply_error_classification(result, classify_response_error(response, "Failed to fetch chart manifest."));
+        return result;
     }
 
     const std::optional<chart_manifest> manifest = parse_chart_manifest_response(response.body);
@@ -594,11 +614,13 @@ song_manifest_operation_result fetch_song_manifest(const std::string& server_url
     }
 
     if (response.status_code < 200 || response.status_code >= 300) {
-        return {
+        song_manifest_operation_result result{
             .success = false,
-            .message = json::extract_string(response.body, "message").value_or("Failed to fetch song manifest."),
+            .message = {},
             .manifest = std::nullopt,
         };
+        apply_error_classification(result, classify_response_error(response, "Failed to fetch song manifest."));
+        return result;
     }
 
     const std::optional<song_manifest> manifest = parse_song_manifest_response(response.body);
