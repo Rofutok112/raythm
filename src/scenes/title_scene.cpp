@@ -413,6 +413,7 @@ void title_scene::update_common_animation(float dt) {
     poll_scoring_ruleset_warm();
     poll_create_upload();
     if (profile_controller_.poll().content_changed) {
+        auth_overlay::refresh_auth_state(play_state_.auth);
         title_online_view::reload_catalog(online_state_);
         request_play_catalog_reload("", "", mode_ == hub_mode::play || mode_ == hub_mode::create);
     }

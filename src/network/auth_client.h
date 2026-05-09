@@ -147,6 +147,7 @@ operation_result resend_verification_code(const std::string& server_url,
 operation_result restore_saved_session();
 operation_result logout_saved_session();
 operation_result delete_saved_account(const std::string& password);
+operation_result update_profile_external_links(const std::vector<external_link>& links);
 my_uploads_result fetch_my_community_uploads();
 profile_rankings_result fetch_my_profile_rankings();
 operation_result delete_community_song_upload(const std::string& song_id);

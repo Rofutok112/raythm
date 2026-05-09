@@ -3,6 +3,7 @@
 #include <future>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "network/auth_client.h"
 #include "song_select/song_select_state.h"
@@ -33,10 +34,12 @@ public:
 
 private:
     void request_reload();
+    void start_save_external_links(std::vector<auth::external_link> links);
     void start_delete_song(std::string song_id);
     void start_delete_chart(std::string chart_id);
 
     title_profile_view::state state_;
     std::future<title_profile_view::load_result> load_future_;
+    std::future<auth::operation_result> save_links_future_;
     std::future<auth::operation_result> delete_future_;
 };

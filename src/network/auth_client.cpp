@@ -882,6 +882,91 @@ operation_result delete_saved_account(const std::string& password) {
     };
 }
 
+operation_result update_profile_external_links(const std::vector<external_link>& links) {
+    std::optional<session> stored = load_saved_session();
+    if (!stored.has_value()) {
+        return {
+            .success = false,
+            .message = "Login required.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    std::ostringstream body;
+    body << "{\"externalLinks\":[";
+    bool first = true;
+    for (const external_link& link : links) {
+        const std::string url = json::trim(link.url);
+        if (url.empty()) {
+            continue;
+        }
+        if (!first) {
+            body << ',';
+        }
+        first = false;
+        body << "{\"label\":\"" << json::escape_string(json::trim(link.label))
+             << "\",\"url\":\"" << json::escape_string(url) << "\"}";
+    }
+    body << "]}";
+
+    auto send_update = [&](const session& session_data) {
+        return send_authenticated_request(
+            session_data,
+            "PUT",
+            "/me/profile/external-links",
+            body.str());
+    };
+
+    http_response response = send_update(*stored);
+    if (response.error_message.empty() && response.status_code == 401) {
+        const operation_result restored = restore_saved_session();
+        if (restored.success && restored.session_data.has_value()) {
+            stored = restored.session_data;
+            response = send_update(*stored);
+        }
+    }
+
+    if (!response.error_message.empty()) {
+        return {
+            .success = false,
+            .message = response.error_message,
+            .session_data = std::nullopt,
+        };
+    }
+    if (response.status_code < 200 || response.status_code >= 300) {
+        return {
+            .success = false,
+            .message = parse_error_message(response.body, "Failed to save profile links."),
+            .session_data = std::nullopt,
+        };
+    }
+
+    const std::optional<public_user> user = parse_me_response(response.body);
+    if (!user.has_value()) {
+        return {
+            .success = false,
+            .message = "Server returned an unexpected profile response.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    session updated = *stored;
+    updated.user = *user;
+    if (!write_session_file(updated)) {
+        return {
+            .success = false,
+            .message = "Profile links saved, but the local session could not be updated.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    return finish_with_session({
+        .success = true,
+        .message = "Profile links saved.",
+        .session_data = std::nullopt,
+    }, updated);
+}
+
 my_uploads_result fetch_my_community_uploads() {
     my_uploads_result result;
     std::optional<session> stored = load_saved_session();
