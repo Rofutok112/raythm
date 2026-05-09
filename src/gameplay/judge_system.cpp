@@ -49,6 +49,7 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
     chart.notes = notes;
     event_descriptors_ = chart_judge_events::build(chart, engine);
     event_completed_.assign(event_descriptors_.size(), false);
+    completed_wide_press_absorb_until_ms_.assign(event_descriptors_.size(), -1.0);
     event_descriptor_indices_by_event_index_.assign(event_descriptors_.size(), kInvalidEventDescriptorIndex);
     standalone_release_events_.assign(event_descriptors_.size(), false);
     for (size_t i = 0; i < event_descriptors_.size(); ++i) {
@@ -294,6 +295,10 @@ void judge_system::handle_press(const input_event& event) {
 
     complete_due_hold_before(event.lane, event.timestamp_ms);
 
+    if (try_absorb_completed_wide_press(event)) {
+        return;
+    }
+
     const std::vector<size_t> candidate_indices = find_press_candidates(event.lane, event.timestamp_ms);
     if (candidate_indices.empty()) {
         arm_release_candidate(event.lane, event.timestamp_ms);
@@ -315,11 +320,14 @@ void judge_system::handle_press(const input_event& event) {
                 : note_progress_state::completed;
         candidate.result = result;
         mark_event_completed(candidate_index);
+        if (descriptor.kind == chart_judge_event_kind::press &&
+            descriptor.lane_width > 1 &&
+            result == judge_result::perfect) {
+            completed_wide_press_absorb_until_ms_[candidate_index] = descriptor.time_ms + kPerfectWindowMs;
+        }
         advance_note_lane_head_indices(candidate.note_ref);
         if (candidate.is_holding()) {
-            for (int lane = candidate.note_ref.lane; lane <= note_last_lane(candidate.note_ref) && lane < kMaxLanes; ++lane) {
-                active_hold_indices_[static_cast<size_t>(lane)] = descriptor.note_index;
-            }
+            active_hold_indices_[static_cast<size_t>(event.lane)] = descriptor.note_index;
         }
         judge_emit_options options;
         options.play_hitsound = i == 0;
@@ -518,6 +526,53 @@ bool judge_system::release_overlaps_hold_tail(const chart_judge_event& release) 
         }
     }
     return false;
+}
+
+bool judge_system::try_absorb_completed_wide_press(const input_event& event) {
+    if (event.lane < 0 || event.lane >= kMaxLanes) {
+        return false;
+    }
+
+    std::optional<size_t> absorbed_descriptor_index;
+    double best_abs_offset = kPerfectWindowMs + 1.0;
+    for (size_t i = 0; i < event_descriptors_.size(); ++i) {
+        if (!event_completed_[i] ||
+            i >= completed_wide_press_absorb_until_ms_.size() ||
+            event.timestamp_ms > completed_wide_press_absorb_until_ms_[i]) {
+            continue;
+        }
+
+        const chart_judge_event& descriptor = event_descriptors_[i];
+        if (descriptor.kind != chart_judge_event_kind::press ||
+            descriptor.lane_width <= 1 ||
+            event.lane < descriptor.lane ||
+            event.lane >= descriptor.lane + descriptor.lane_width) {
+            continue;
+        }
+
+        const double offset_ms = event.timestamp_ms - descriptor.time_ms;
+        if (std::fabs(offset_ms) > kPerfectWindowMs) {
+            continue;
+        }
+
+        const double abs_offset = std::fabs(offset_ms);
+        if (abs_offset < best_abs_offset) {
+            absorbed_descriptor_index = i;
+            best_abs_offset = abs_offset;
+        }
+    }
+
+    if (!absorbed_descriptor_index.has_value()) {
+        return false;
+    }
+
+    const chart_judge_event& descriptor = event_descriptors_[*absorbed_descriptor_index];
+    if (descriptor.role == chart_judge_event_role::hold_head &&
+        descriptor.note_index < note_states_.size() &&
+        note_states_[descriptor.note_index].is_holding()) {
+        active_hold_indices_[static_cast<size_t>(event.lane)] = descriptor.note_index;
+    }
+    return true;
 }
 
 std::vector<size_t> judge_system::find_press_candidates(int lane, double timestamp_ms) {

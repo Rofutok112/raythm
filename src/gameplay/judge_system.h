@@ -50,6 +50,7 @@ private:
     bool mark_event_completed(size_t event_descriptor_index);
     std::optional<size_t> descriptor_index_for_event_index(int event_index) const;
     bool release_overlaps_hold_tail(const chart_judge_event& release) const;
+    bool try_absorb_completed_wide_press(const input_event& event);
     std::vector<size_t> find_press_candidates(int lane, double timestamp_ms);
     std::vector<size_t> find_release_candidates(int lane, double timestamp_ms);
     std::vector<size_t> find_early_release_stay_candidates(int lane, double timestamp_ms);
@@ -70,6 +71,7 @@ private:
     std::vector<size_t> event_descriptor_indices_by_event_index_;
     std::vector<bool> standalone_release_events_;
     std::vector<bool> event_completed_;
+    std::vector<double> completed_wide_press_absorb_until_ms_;
     // Each lane keeps its own ordered note list and next unresolved head index.
     std::array<std::vector<size_t>, kMaxLanes> lane_note_indices_;
     std::array<std::vector<size_t>, kMaxLanes> lane_event_indices_;
