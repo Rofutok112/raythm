@@ -53,6 +53,7 @@ void trigger_lane_judge_effect(play_session_state& state, const judge_event& eve
 void capture_final_result(play_session_state& state) {
     state.final_result = state.score_system.get_result_data();
     state.final_result.gauge_value = state.gauge.get_value();
+    state.final_result.rc_value = state.performance_system.current_rc();
 }
 
 }  // namespace

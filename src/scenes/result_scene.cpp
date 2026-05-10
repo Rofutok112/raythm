@@ -5,6 +5,8 @@
 #include <memory>
 #include <thread>
 
+#include "app_paths.h"
+#include "audio_manager.h"
 #include "path_utils.h"
 #include "play_scene.h"
 #include "raylib.h"
@@ -14,6 +16,23 @@
 #include "song_select/song_select_navigation.h"
 #include "ui_notice.h"
 #include "virtual_screen.h"
+
+namespace {
+
+std::string result_bgm_path(bool failed) {
+    const std::filesystem::path path =
+        app_paths::audio_root() / (failed ? "result_failed.mp3" : "result_success.mp3");
+    return std::filesystem::exists(path) ? path_utils::to_utf8(path) : "";
+}
+
+void play_result_bgm(bool failed) {
+    const std::string path = result_bgm_path(failed);
+    if (!path.empty() && audio_manager::instance().load_bgm(path)) {
+        audio_manager::instance().play_bgm(true);
+    }
+}
+
+}  // namespace
 
 result_scene::result_scene(scene_manager& manager, result_data result, bool ranking_enabled,
                            song_data song, std::string chart_path, chart_meta chart, int key_count)
@@ -28,6 +47,7 @@ result_scene::~result_scene() {
 void result_scene::on_enter() {
     reveal_t_ = 0.0f;
     load_jacket_texture();
+    play_result_bgm(result_.failed);
 
     local_submit_result_ = ranking_service::submit_local_result_detailed(chart_, result_);
 

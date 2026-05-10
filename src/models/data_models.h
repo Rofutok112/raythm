@@ -221,6 +221,7 @@ struct result_data {
     std::array<int, 5> judge_counts = {};
     int max_combo = 0;
     float gauge_value = 100.0f;
+    float rc_value = 0.0f;
     float avg_offset = 0.0f;
     int fast_count = 0;
     int slow_count = 0;

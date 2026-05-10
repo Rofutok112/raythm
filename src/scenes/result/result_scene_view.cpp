@@ -17,18 +17,17 @@ namespace {
 constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
 constexpr Rectangle kContentRect = {36.0f, 108.0f, 1848.0f, 786.0f};
 constexpr Rectangle kTitleRect = {36.0f, 28.0f, 520.0f, 62.0f};
-constexpr Rectangle kMainPanelRect = {36.0f, 108.0f, 1080.0f, 704.0f};
+constexpr Rectangle kMainPanelRect = {36.0f, 108.0f, 1080.0f, 790.0f};
 constexpr Rectangle kJacketRect = {60.0f, 132.0f, 320.0f, 320.0f};
 constexpr Rectangle kSongInfoRect = {404.0f, 146.0f, 650.0f, 178.0f};
-constexpr Rectangle kRankRect = {60.0f, 478.0f, 382.0f, 184.0f};
-constexpr Rectangle kScoreRect = {476.0f, 488.0f, 590.0f, 150.0f};
-constexpr Rectangle kAchievementRect = {60.0f, 690.0f, 1030.0f, 92.0f};
+constexpr Rectangle kRankRect = {60.0f, 518.0f, 382.0f, 184.0f};
+constexpr Rectangle kScoreRect = {476.0f, 528.0f, 590.0f, 150.0f};
+constexpr Rectangle kAchievementRect = {60.0f, 792.0f, 1030.0f, 78.0f};
 constexpr Rectangle kMetricAccuracyRect = {1152.0f, 130.0f, 312.0f, 158.0f};
 constexpr Rectangle kMetricComboRect = {1482.0f, 130.0f, 266.0f, 158.0f};
 constexpr Rectangle kMetricOffsetRect = {1152.0f, 306.0f, 266.0f, 146.0f};
 constexpr Rectangle kOffsetRect = {1436.0f, 306.0f, 312.0f, 146.0f};
-constexpr Rectangle kJudgementRect = {1152.0f, 470.0f, 596.0f, 342.0f};
-constexpr Rectangle kStatusAnchorRect = {360.0f, 836.0f, 1200.0f, 70.0f};
+constexpr Rectangle kJudgementRect = {1152.0f, 470.0f, 596.0f, 428.0f};
 constexpr Rectangle kRetryRect = {50.0f, 928.0f, 520.0f, 92.0f};
 constexpr Rectangle kSongSelectRect = {626.0f, 928.0f, 668.0f, 92.0f};
 constexpr Rectangle kReplayRect = {1350.0f, 928.0f, 520.0f, 92.0f};
@@ -89,10 +88,14 @@ Rectangle text_rect(float x, float y, float width, int font_size) {
     return {x, y, width, ui::text_layout_font_size(static_cast<float>(font_size))};
 }
 
+float measured_width(const std::string& text, int font_size) {
+    return ui::measure_text_size(text.c_str(), static_cast<float>(font_size), 0.0f).x;
+}
+
 int fit_font_size(const std::string& text, int desired_size, float max_width, int min_size = 14) {
     const std::string localized = localized_text(text);
     int size = desired_size;
-    while (size > min_size && ui::measure_text_size(localized.c_str(), static_cast<float>(size), 0.0f).x > max_width) {
+    while (size > min_size && measured_width(localized, size) > max_width) {
         --size;
     }
     return size;
@@ -125,6 +128,23 @@ void draw_panel_rect(Rectangle rect, float reveal_t, Color fill, Color border) {
 
 void draw_accent_rule(Rectangle rect, Color color, float reveal_t) {
     ui::draw_rect_f({rect.x, rect.y, rect.width * reveal_t, rect.height}, alpha(color, reveal_t));
+}
+
+Rectangle dynamic_badge_rect(float x, float y, const std::string& text, int font_size,
+                             float horizontal_padding, float min_width, float max_width) {
+    const float width = std::clamp(
+        measured_width(text, font_size) + horizontal_padding * 2.0f,
+        min_width,
+        max_width);
+    return {x, y, width, 38.0f};
+}
+
+void draw_badge(Rectangle rect, const std::string& text, Color text_color, Color border_color, float reveal_t,
+                float horizontal_inset = 12.0f) {
+    ui::draw_rect_f(rect, alpha(g_theme->row_soft, reveal_t));
+    ui::draw_rect_lines(rect, 1.5f, alpha(border_color, reveal_t));
+    draw_fit_text(text, 18, ui::inset(rect, ui::edge_insets::symmetric(0.0f, horizontal_inset)),
+                  alpha(text_color, reveal_t), ui::text_align::center, 14);
 }
 
 void draw_background(const model& data) {
@@ -176,23 +196,29 @@ void draw_jacket(const Texture2D* jacket, float reveal_t) {
     }
 }
 
-void draw_song_info(const song_data& song, const chart_meta& chart, int key_count, double now, float reveal_t) {
+void draw_song_info(const song_data& song, const chart_meta& chart, int key_count, float rc_value,
+                    double now, float reveal_t) {
     const Rectangle visual = reveal_rect(kSongInfoRect, reveal_t, 18.0f, 0.0f);
     draw_marquee_text(song.meta.title.c_str(), text_rect(visual.x, visual.y, visual.width, 44), 44,
                       alpha(g_theme->text, reveal_t), now);
     draw_marquee_text(song.meta.artist.c_str(), text_rect(visual.x, visual.y + 64.0f, visual.width, 26), 26,
                       alpha(g_theme->text_secondary, reveal_t), now);
 
-    const Rectangle difficulty = {visual.x, visual.y + 116.0f, 128.0f, 38.0f};
-    const Rectangle level = {visual.x + 140.0f, visual.y + 116.0f, 92.0f, 38.0f};
-    ui::draw_rect_f(difficulty, alpha(g_theme->row_soft, reveal_t));
-    ui::draw_rect_lines(difficulty, 1.5f, alpha(g_theme->border_active, reveal_t));
-    ui::draw_text_in_rect(chart.difficulty.c_str(), 18, difficulty, alpha(g_theme->error, reveal_t));
-    ui::draw_rect_f(level, alpha(g_theme->row_soft, reveal_t));
-    ui::draw_rect_lines(level, 1.5f, alpha(g_theme->border, reveal_t));
-    ui::draw_text_in_rect(TextFormat("Lv. %.1f", chart.level), 18, level, alpha(g_theme->text_secondary, reveal_t));
-    ui::draw_text_in_rect(key_mode_label(key_count), 18, {visual.x + 248.0f, visual.y + 116.0f, 62.0f, 38.0f},
+    constexpr float kBadgePadding = 30.0f;
+    constexpr float kBadgeGap = 12.0f;
+    const std::string level_text = TextFormat("Lv. %.1f", chart.level);
+    const Rectangle difficulty = dynamic_badge_rect(visual.x, visual.y + 116.0f, chart.difficulty, 18,
+                                                    kBadgePadding, 112.0f, 240.0f);
+    const Rectangle level = dynamic_badge_rect(difficulty.x + difficulty.width + kBadgeGap, visual.y + 116.0f,
+                                               level_text, 18, kBadgePadding * 0.5f, 92.0f, 150.0f);
+    draw_badge(difficulty, chart.difficulty, g_theme->error, g_theme->border_active, reveal_t, 14.0f);
+    draw_badge(level, level_text, g_theme->text_secondary, g_theme->border, reveal_t, 10.0f);
+    ui::draw_text_in_rect(key_mode_label(key_count), 18,
+                          {level.x + level.width + kBadgeGap + 8.0f, visual.y + 116.0f, 62.0f, 38.0f},
                           alpha(g_theme->accent, reveal_t));
+    ui::draw_text_in_rect(TextFormat("RC %.2f", rc_value), 32,
+                          {difficulty.x, 410.0f, difficulty.width + level.width + 180.0f, 42.0f},
+                          alpha(g_theme->text, reveal_t), ui::text_align::left);
 }
 
 void draw_rank_score(const result_data& result, float reveal_t) {
@@ -200,28 +226,28 @@ void draw_rank_score(const result_data& result, float reveal_t) {
     const Color rcolor = rank_color(result.clear_rank);
     ui::draw_text_in_rect(rank_label(result.clear_rank), result.clear_rank == rank::aa ? 118 : 150,
                           rank_visual, alpha(rcolor, reveal_t));
-    ui::draw_line_ex({448.0f, 496.0f}, {448.0f, 648.0f}, 1.5f, alpha(g_theme->border, reveal_t));
+    ui::draw_line_ex({448.0f, 536.0f}, {448.0f, 688.0f}, 1.5f, alpha(g_theme->border, reveal_t));
 
     const Rectangle score_visual = reveal_rect(kScoreRect, reveal_t, 18.0f, 0.0f);
     draw_fit_text(format_score(result.score), 96, score_visual, alpha(g_theme->text, reveal_t),
-                  ui::text_align::left, 66);
-    draw_accent_rule({476.0f, 660.0f, 590.0f, 3.0f}, rcolor, reveal_t);
+                  ui::text_align::right, 66);
+    draw_accent_rule({476.0f, 700.0f, 590.0f, 3.0f}, rcolor, reveal_t);
 
     if (result.failed) {
-        ui::draw_text_in_rect("FAILED", 30, {902.0f, 454.0f, 160.0f, 44.0f}, alpha(g_theme->error, reveal_t));
+        ui::draw_text_in_rect("FAILED", 30, {902.0f, 494.0f, 160.0f, 44.0f}, alpha(g_theme->error, reveal_t));
     } else if (result.is_all_perfect) {
-        ui::draw_text_in_rect("ALL PERFECT", 24, {858.0f, 454.0f, 206.0f, 44.0f}, alpha(g_theme->all_perfect, reveal_t));
+        ui::draw_text_in_rect("ALL PERFECT", 24, {858.0f, 494.0f, 206.0f, 44.0f}, alpha(g_theme->all_perfect, reveal_t));
     } else if (result.is_full_combo) {
-        ui::draw_text_in_rect("FULL COMBO", 24, {858.0f, 454.0f, 206.0f, 44.0f}, alpha(g_theme->full_combo, reveal_t));
+        ui::draw_text_in_rect("FULL COMBO", 24, {858.0f, 494.0f, 206.0f, 44.0f}, alpha(g_theme->full_combo, reveal_t));
     }
 }
 
 void draw_chip(Rectangle rect, const char* label, const std::string& value, Color tone, float reveal_t) {
     ui::draw_rect_f(rect, alpha(lerp_color(g_theme->panel, tone, 0.12f), 0.92f * reveal_t));
     ui::draw_rect_lines(rect, 1.5f, alpha(lerp_color(g_theme->border, tone, 0.4f), reveal_t));
-    ui::draw_text_in_rect(label, 20, {rect.x + 24.0f, rect.y + 14.0f, rect.width - 48.0f, 26.0f},
+    ui::draw_text_in_rect(label, 18, {rect.x + 24.0f, rect.y + 10.0f, rect.width - 48.0f, 24.0f},
                           alpha(tone, reveal_t), ui::text_align::left);
-    draw_fit_text(value, 25, {rect.x + 24.0f, rect.y + 42.0f, rect.width - 48.0f, 30.0f},
+    draw_fit_text(value, 23, {rect.x + 24.0f, rect.y + 38.0f, rect.width - 48.0f, 28.0f},
                   alpha(g_theme->text, reveal_t), ui::text_align::left, 16);
 }
 
@@ -341,70 +367,6 @@ void draw_judgements(const result_data& result, float reveal_t) {
     }
 }
 
-bool contains_text(const std::string& haystack, const char* needle) {
-    return haystack.find(needle) != std::string::npos;
-}
-
-Color status_tone_for(const model& data, const std::string& message) {
-    if (data.online_status_is_error) {
-        return g_theme->error;
-    }
-    if (data.online_submit != nullptr && data.online_submit->success && data.online_submit->updated) {
-        return g_theme->success;
-    }
-    if (data.local_submit != nullptr && data.local_submit->best_updated &&
-        (message.empty() || contains_text(message, "Local best"))) {
-        return g_theme->success;
-    }
-    if (contains_text(message, "not beat") ||
-        contains_text(message, "Not Updated") ||
-        contains_text(message, "disabled") ||
-        contains_text(message, "not ranked") ||
-        contains_text(message, "not ranking eligible") ||
-        contains_text(message, "FAILED")) {
-        return g_theme->rank_c;
-    }
-    return g_theme->text_secondary;
-}
-
-void draw_status(const model& data, float reveal_t) {
-    std::string message = data.online_status_message;
-    if (message.empty()) {
-        if (data.online_submit != nullptr && data.online_submit->success && data.online_submit->updated) {
-            message = "Ranking Updated";
-        } else if (data.online_submit != nullptr && data.online_submit->success) {
-            message = "Submitted - Not Updated";
-        } else if (data.local_submit != nullptr && data.local_submit->best_updated) {
-            message = "Local Best Updated";
-        } else {
-            message = "Result Saved Locally";
-        }
-    }
-    const Color tone = status_tone_for(data, message);
-
-    constexpr int kStatusFontSize = 30;
-    constexpr int kStatusMinFontSize = 20;
-    constexpr float kHorizontalPadding = 34.0f;
-    constexpr float kMinWidth = 320.0f;
-    constexpr float kMaxWidth = 1200.0f;
-    const std::string localized_message = localized_text(message);
-    const int font_size = fit_font_size(message, kStatusFontSize, kMaxWidth - kHorizontalPadding * 2.0f,
-                                        kStatusMinFontSize);
-    const float measured_width = ui::measure_text_size(localized_message.c_str(), static_cast<float>(font_size), 0.0f).x;
-    const float width = std::clamp(measured_width + kHorizontalPadding * 2.0f, kMinWidth, kMaxWidth);
-    const Rectangle status_rect = {
-        kStatusAnchorRect.x + (kStatusAnchorRect.width - width) * 0.5f,
-        kStatusAnchorRect.y,
-        width,
-        kStatusAnchorRect.height
-    };
-    const Rectangle visual = reveal_rect(status_rect, reveal_t, 0.0f, 16.0f);
-    ui::draw_rect_f(visual, alpha(lerp_color(g_theme->panel, tone, 0.16f), 0.92f * reveal_t));
-    ui::draw_rect_lines(visual, 1.5f, alpha(lerp_color(g_theme->border, tone, 0.48f), reveal_t));
-    ui::draw_text_in_rect(localized_message.c_str(), font_size, ui::inset(visual, ui::edge_insets::symmetric(0.0f, kHorizontalPadding)),
-                          alpha(tone, reveal_t));
-}
-
 void draw_action_button(Rectangle rect, const char* label, float reveal_t) {
     const Rectangle visual = reveal_rect(rect, reveal_t, 0.0f, 18.0f);
     const bool hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), visual);
@@ -446,7 +408,7 @@ void draw(const model& data) {
     draw_title(title_t);
     draw_panel_rect(kMainPanelRect, main_t, with_alpha(g_theme->panel, 210), g_theme->border);
     draw_jacket(data.jacket_texture, main_t);
-    draw_song_info(data.song, data.chart, data.key_count, data.now, main_t);
+    draw_song_info(data.song, data.chart, data.key_count, data.result.rc_value, data.now, main_t);
     draw_rank_score(data.result, main_t);
     draw_achievements(data, delayed(data.reveal_t, 0.20f));
 
@@ -456,7 +418,6 @@ void draw(const model& data) {
                 detail_t);
     draw_offsets(data.result, detail_t);
     draw_judgements(data.result, detail_t);
-    draw_status(data, delayed(data.reveal_t, 0.30f));
 
     draw_action_button(kRetryRect, "Retry", action_t);
     draw_action_button(kSongSelectRect, "Song Select", action_t);
