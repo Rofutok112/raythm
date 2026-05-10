@@ -31,7 +31,9 @@ struct listing {
     source ranking_source = source::local;
     std::vector<entry> entries;
     std::string message;
+    std::string retry_after;
     bool available = true;
+    bool maintenance = false;
 };
 
 struct local_submit_result {
@@ -44,7 +46,9 @@ struct online_submit_result {
     bool attempted = false;
     bool success = false;
     bool updated = false;
+    bool maintenance = false;
     std::string message;
+    std::string retry_after;
     std::optional<entry> entry;
 };
 

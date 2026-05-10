@@ -549,6 +549,8 @@ catalog_load_result load_catalog_result() {
     result.local_songs = local_catalog.songs;
     result.catalog_request_failed = !official_page.success && !community_page.success;
     result.catalog_status_message = official_page.success ? community_page.error_message : official_page.error_message;
+    result.catalog_maintenance = official_page.success ? community_page.maintenance : official_page.maintenance;
+    result.catalog_retry_after = official_page.success ? community_page.retry_after : official_page.retry_after;
     result.catalog_server_url = official_page.success ? official_page.server_url : community_page.server_url;
     result.official_has_more = official_page.success &&
                                static_cast<int>(official_page.songs.size()) < official_page.total;
@@ -676,7 +678,9 @@ void reload_catalog(state& state, bool preserve_view) {
     capture_reload_restore(state, preserve_view);
     state.catalog_loading = true;
     state.catalog_request_failed = false;
+    state.catalog_maintenance = false;
     state.catalog_status_message.clear();
+    state.catalog_retry_after.clear();
     state.official_next_page = 2;
     state.community_next_page = 2;
     state.official_has_more = false;
@@ -721,16 +725,20 @@ bool poll_catalog(state& state) {
         result = state.catalog_future.get();
     } catch (const std::exception& ex) {
         result.catalog_request_failed = true;
+        result.catalog_maintenance = false;
         result.catalog_status_message = ex.what();
     } catch (...) {
         result.catalog_request_failed = true;
+        result.catalog_maintenance = false;
         result.catalog_status_message = "Failed to load online catalog.";
     }
     state.catalog_loading = false;
     state.catalog_loaded_once = true;
     state.catalog_server_url = std::move(result.catalog_server_url);
     state.catalog_status_message = std::move(result.catalog_status_message);
+    state.catalog_retry_after = std::move(result.catalog_retry_after);
     state.catalog_request_failed = result.catalog_request_failed;
+    state.catalog_maintenance = result.catalog_maintenance;
     state.local_songs = std::move(result.local_songs);
     state.official_songs = std::move(result.official_songs);
     state.community_songs = std::move(result.community_songs);
@@ -795,6 +803,8 @@ bool poll_song_page(state& state) {
     state.song_page_loading = false;
     if (!page_result.success) {
         state.catalog_status_message = page_result.error_message;
+        state.catalog_retry_after = page_result.retry_after;
+        state.catalog_maintenance = page_result.maintenance;
         return true;
     }
 
@@ -878,6 +888,9 @@ bool poll_chart_page(state& state) {
     if (!page_result.success) {
         song->charts_failed = true;
         song->charts_loaded = true;
+        state.catalog_status_message = page_result.error_message;
+        state.catalog_retry_after = page_result.retry_after;
+        state.catalog_maintenance = page_result.maintenance;
         return true;
     }
 

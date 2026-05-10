@@ -51,6 +51,8 @@ struct operation_result {
     bool success = false;
     std::string message;
     std::optional<session> session_data;
+    bool maintenance = false;
+    std::string retry_after;
     bool verification_required = false;
     verification_purpose verification = verification_purpose::none;
     std::string verification_email;
@@ -91,7 +93,9 @@ struct community_chart_upload {
 
 struct my_uploads_result {
     bool success = false;
+    bool maintenance = false;
     std::string message;
+    std::string retry_after;
     std::vector<community_song_upload> songs;
     std::vector<community_chart_upload> charts;
 };
@@ -116,7 +120,9 @@ struct profile_ranking_record {
 
 struct profile_rankings_result {
     bool success = false;
+    bool maintenance = false;
     std::string message;
+    std::string retry_after;
     std::vector<profile_ranking_record> recent_records;
     std::vector<profile_ranking_record> first_place_records;
 };

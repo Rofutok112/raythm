@@ -187,6 +187,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/network/http_client.h
         src/network/json_helpers.cpp
         src/network/json_helpers.h
+        src/network/network_error.cpp
+        src/network/network_error.h
         src/network/ranking_client.cpp
         src/network/ranking_client.h
         src/network/server_environment.cpp
@@ -658,6 +660,8 @@ add_executable(ranking_service_smoke
         src/network/http_client.h
         src/network/json_helpers.cpp
         src/network/json_helpers.h
+        src/network/network_error.cpp
+        src/network/network_error.h
         src/network/ranking_client.cpp
         src/network/ranking_client.h
         src/network/server_environment.cpp
@@ -665,6 +669,13 @@ add_executable(ranking_service_smoke
         src/updater/update_verify.cpp
         src/updater/update_verify.h
         src/tests/ranking_service_smoke.cpp)
+
+add_executable(network_error_smoke
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/network/network_error.cpp
+        src/network/network_error.h
+        src/tests/network_error_smoke.cpp)
 
 add_executable(play_note_draw_queue_smoke
         src/models/data_models.h
@@ -920,6 +931,7 @@ set(RAYTHM_SMOKE_TARGETS
         score_system_smoke
         performance_system_smoke
         ranking_service_smoke
+        network_error_smoke
         play_note_draw_queue_smoke
         play_chart_filter_smoke
         play_flow_controller_smoke

@@ -28,6 +28,13 @@ std::wstring to_wstring(std::string_view value) {
     return std::wstring(value.begin(), value.end());
 }
 
+std::string to_string(std::wstring value) {
+    while (!value.empty() && value.back() == L'\0') {
+        value.pop_back();
+    }
+    return std::string(value.begin(), value.end());
+}
+
 std::string describe_winhttp_error(DWORD error_code) {
     switch (error_code) {
         case ERROR_WINHTTP_TIMEOUT:
@@ -78,6 +85,35 @@ std::optional<url_parts> parse_url_parts(const std::string& url) {
     parts.port = components.nPort;
     parts.secure = components.nScheme == INTERNET_SCHEME_HTTPS;
     return parts;
+}
+
+std::string query_retry_after(HINTERNET request) {
+    DWORD size_bytes = 0;
+    if (WinHttpQueryHeaders(request,
+                            WINHTTP_QUERY_CUSTOM,
+                            L"Retry-After",
+                            WINHTTP_NO_OUTPUT_BUFFER,
+                            &size_bytes,
+                            WINHTTP_NO_HEADER_INDEX) == FALSE &&
+        GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+        return {};
+    }
+
+    if (size_bytes == 0) {
+        return {};
+    }
+
+    std::wstring buffer(size_bytes / sizeof(wchar_t), L'\0');
+    if (WinHttpQueryHeaders(request,
+                            WINHTTP_QUERY_CUSTOM,
+                            L"Retry-After",
+                            buffer.data(),
+                            &size_bytes,
+                            WINHTTP_NO_HEADER_INDEX) == FALSE) {
+        return {};
+    }
+
+    return to_string(buffer);
 }
 #endif
 
@@ -171,6 +207,7 @@ response send_request(const std::string& method,
     }
 
     result.status_code = static_cast<int>(status_code);
+    result.retry_after = query_retry_after(request);
 
     DWORD available_size = 0;
     while (WinHttpQueryDataAvailable(request, &available_size) == TRUE && available_size > 0) {

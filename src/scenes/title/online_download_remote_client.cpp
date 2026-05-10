@@ -8,6 +8,7 @@
 
 #include "network/auth_client.h"
 #include "network/json_helpers.h"
+#include "network/network_error.h"
 #include "network/server_environment.h"
 #include "title/online_download_view.h"
 
@@ -38,18 +39,23 @@ struct http_response {
     std::string content_type;
     size_t content_length = 0;
     std::string error_message;
+    std::string retry_after;
 };
 
 struct remote_song_fetch_result {
     std::vector<remote_song_payload> songs;
     bool success = false;
+    bool maintenance = false;
     std::string error_message;
+    std::string retry_after;
 };
 
 struct remote_chart_fetch_result {
     std::vector<remote_chart_payload> charts;
     bool success = false;
+    bool maintenance = false;
     std::string error_message;
+    std::string retry_after;
 };
 
 constexpr int kRemotePageSize = 100;
@@ -90,6 +96,17 @@ std::vector<std::string> resolve_server_urls() {
     std::vector<std::string> urls;
     append_unique_server_url(urls, server_environment::active_server_url());
     return urls;
+}
+
+network::error_classification classify_response_error(const http_response& response, std::string fallback) {
+    return network::classify_http_error(response.status_code, response.body, std::move(fallback), response.retry_after);
+}
+
+template <typename Result>
+void apply_error_classification(Result& result, const network::error_classification& error) {
+    result.error_message = error.message;
+    result.maintenance = error.is_maintenance();
+    result.retry_after = error.retry_after;
 }
 
 std::string build_paged_url(const std::string& server_url, const std::string& path, int page) {
@@ -238,6 +255,38 @@ size_t query_content_length(HINTERNET request) {
     return static_cast<size_t>(content_length);
 }
 
+std::string query_retry_after(HINTERNET request) {
+    DWORD size_bytes = 0;
+    if (WinHttpQueryHeaders(request,
+                            WINHTTP_QUERY_CUSTOM,
+                            L"Retry-After",
+                            WINHTTP_NO_OUTPUT_BUFFER,
+                            &size_bytes,
+                            WINHTTP_NO_HEADER_INDEX) == FALSE &&
+        GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+        return {};
+    }
+
+    if (size_bytes == 0) {
+        return {};
+    }
+
+    std::wstring buffer(size_bytes / sizeof(wchar_t), L'\0');
+    if (WinHttpQueryHeaders(request,
+                            WINHTTP_QUERY_CUSTOM,
+                            L"Retry-After",
+                            buffer.data(),
+                            &size_bytes,
+                            WINHTTP_NO_HEADER_INDEX) == FALSE) {
+        return {};
+    }
+
+    while (!buffer.empty() && buffer.back() == L'\0') {
+        buffer.pop_back();
+    }
+    return narrow_utf8(buffer);
+}
+
 http_response send_request(const std::string& method,
                            const std::string& url,
                            const remote_binary_progress_callback& progress_callback = {}) {
@@ -314,6 +363,7 @@ http_response send_request(const std::string& method,
     response.status_code = static_cast<int>(status_code);
     response.content_type = query_content_type(request);
     response.content_length = query_content_length(request);
+    response.retry_after = query_retry_after(request);
 
     DWORD available_size = 0;
     size_t total_bytes_read = 0;
@@ -343,10 +393,12 @@ http_response send_request(const std::string& method,
 #else
 http_response send_request(const std::string&, const std::string&) {
     return {
-        0,
-        {},
-        {},
-        "Remote browse is only supported on Windows builds right now.",
+        .status_code = 0,
+        .body = {},
+        .content_type = {},
+        .content_length = 0,
+        .error_message = "Remote browse is only supported on Windows builds right now.",
+        .retry_after = {},
     };
 }
 #endif
@@ -416,8 +468,11 @@ remote_song_fetch_result fetch_remote_songs(const std::string& server_url) {
             return result;
         }
         if (response.status_code < 200 || response.status_code >= 300) {
-            result.error_message =
-                "raythm-Server returned HTTP " + std::to_string(response.status_code) + " for /songs.";
+            apply_error_classification(
+                result,
+                classify_response_error(
+                    response,
+                    "raythm-Server returned HTTP " + std::to_string(response.status_code) + " for /songs."));
             return result;
         }
 
@@ -462,8 +517,11 @@ remote_song_page_fetch_result fetch_remote_song_page_from_server(const std::stri
         return result;
     }
     if (response.status_code < 200 || response.status_code >= 300) {
-        result.error_message =
-            "raythm-Server returned HTTP " + std::to_string(response.status_code) + " for /songs.";
+        apply_error_classification(
+            result,
+            classify_response_error(
+                response,
+                "raythm-Server returned HTTP " + std::to_string(response.status_code) + " for /songs."));
         return result;
     }
 
@@ -498,8 +556,11 @@ remote_chart_fetch_result fetch_remote_charts(const std::string& server_url) {
             return result;
         }
         if (response.status_code < 200 || response.status_code >= 300) {
-            result.error_message =
-                "raythm-Server returned HTTP " + std::to_string(response.status_code) + " for /charts.";
+            apply_error_classification(
+                result,
+                classify_response_error(
+                    response,
+                    "raythm-Server returned HTTP " + std::to_string(response.status_code) + " for /charts."));
             return result;
         }
 
@@ -545,8 +606,11 @@ remote_chart_page_fetch_result fetch_remote_chart_page_from_server(const std::st
         return result;
     }
     if (response.status_code < 200 || response.status_code >= 300) {
-        result.error_message =
-            "raythm-Server returned HTTP " + std::to_string(response.status_code) + " for /charts.";
+        apply_error_classification(
+            result,
+            classify_response_error(
+                response,
+                "raythm-Server returned HTTP " + std::to_string(response.status_code) + " for /charts."));
         return result;
     }
 
@@ -584,8 +648,11 @@ remote_song_lookup_result fetch_remote_song_by_id_from_server(const std::string&
         return result;
     }
     if (response.status_code < 200 || response.status_code >= 300) {
-        result.error_message =
-            "raythm-Server returned HTTP " + std::to_string(response.status_code) + " for /songs/:songId.";
+        apply_error_classification(
+            result,
+            classify_response_error(
+                response,
+                "raythm-Server returned HTTP " + std::to_string(response.status_code) + " for /songs/:songId."));
         return result;
     }
 
@@ -630,7 +697,12 @@ remote_catalog_fetch_result fetch_remote_catalog() {
         if (!songs.success) {
             if (result.error_message.empty()) {
                 result.error_message = songs.error_message;
+                result.maintenance = songs.maintenance;
+                result.retry_after = songs.retry_after;
                 result.server_url = server_url;
+            }
+            if (songs.maintenance) {
+                return result;
             }
             continue;
         }
@@ -639,7 +711,12 @@ remote_catalog_fetch_result fetch_remote_catalog() {
         if (!charts.success) {
             if (result.error_message.empty()) {
                 result.error_message = charts.error_message;
+                result.maintenance = charts.maintenance;
+                result.retry_after = charts.retry_after;
                 result.server_url = server_url;
+            }
+            if (charts.maintenance) {
+                return result;
             }
             continue;
         }
@@ -648,6 +725,8 @@ remote_catalog_fetch_result fetch_remote_catalog() {
         result.charts = charts.charts;
         result.server_url = server_url;
         result.success = true;
+        result.maintenance = false;
+        result.retry_after.clear();
         result.error_message.clear();
         return result;
     }
@@ -668,6 +747,9 @@ remote_song_page_fetch_result fetch_remote_song_page(catalog_mode mode,
     for (const std::string& server_url : prioritize_server_url(preferred_server_url)) {
         result = fetch_remote_song_page_from_server(server_url, mode, page, page_size);
         if (result.success) {
+            return result;
+        }
+        if (result.maintenance) {
             return result;
         }
     }
@@ -695,6 +777,9 @@ remote_song_lookup_result fetch_remote_song_by_id(const std::string& song_id,
         if (result.not_found) {
             return result;
         }
+        if (result.maintenance) {
+            return result;
+        }
     }
     if (result.error_message.empty()) {
         result.error_message = "Could not connect to raythm-Server.";
@@ -712,7 +797,11 @@ remote_binary_fetch_result fetch_remote_binary(
         return result;
     }
     if (response.status_code < 200 || response.status_code >= 300) {
-        result.error_message = "raythm-Server returned HTTP " + std::to_string(response.status_code) + ".";
+        apply_error_classification(
+            result,
+            classify_response_error(
+                response,
+                "raythm-Server returned HTTP " + std::to_string(response.status_code) + "."));
         return result;
     }
 

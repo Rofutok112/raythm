@@ -904,6 +904,8 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
             const auth::operation_result restored = auth::restore_saved_session();
             if (!restored.success || !restored.session_data.has_value()) {
                 result.available = false;
+                result.maintenance = restored.maintenance;
+                result.retry_after = restored.retry_after;
                 result.message = restored.message.empty()
                     ? "Sign in to view online rankings."
                     : restored.message;
@@ -919,6 +921,8 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
 
         if (!online_result.success || !online_result.listing.has_value()) {
             result.available = false;
+            result.maintenance = online_result.maintenance;
+            result.retry_after = online_result.retry_after;
             result.message = online_result.message.empty()
                 ? "Failed to load online rankings."
                 : online_result.message;
@@ -926,6 +930,8 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
         }
 
         result.available = online_result.listing->available;
+        result.maintenance = online_result.maintenance;
+        result.retry_after = online_result.retry_after;
         result.entries = std::move(online_result.listing->entries);
         result.message = online_result.listing->message;
         return result;
@@ -1135,6 +1141,8 @@ online_submit_result submit_online_result(const song_data& song,
         const auth::operation_result restored = auth::restore_saved_session();
         if (!restored.success || !restored.session_data.has_value()) {
             submission.success = false;
+            submission.maintenance = restored.maintenance;
+            submission.retry_after = restored.retry_after;
             submission.message = restored.message.empty()
                 ? "Sign in to submit online rankings."
                 : restored.message;
@@ -1151,6 +1159,8 @@ online_submit_result submit_online_result(const song_data& song,
     }
 
     submission.success = request.success;
+    submission.maintenance = request.maintenance;
+    submission.retry_after = request.retry_after;
     submission.message = request.message;
     if (request.submission.has_value()) {
         submission.updated = request.submission->updated;

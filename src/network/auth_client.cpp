@@ -13,6 +13,7 @@
 #include "app_paths.h"
 #include "network/http_client.h"
 #include "network/json_helpers.h"
+#include "network/network_error.h"
 
 namespace {
 namespace fs = std::filesystem;
@@ -236,9 +237,29 @@ void parse_profile_ranking_array(const std::string& body,
     }
 }
 
-std::string parse_error_message(const std::string& body, std::string fallback) {
-    const std::optional<std::string> message = json::extract_string(body, "message");
-    return message.value_or(std::move(fallback));
+network::error_classification classify_response_error(const http_response& response, std::string fallback) {
+    return network::classify_http_error(response.status_code, response.body, std::move(fallback), response.retry_after);
+}
+
+std::string parse_error_message(const http_response& response, std::string fallback) {
+    return classify_response_error(response, std::move(fallback)).message;
+}
+
+template <typename Result>
+void apply_error_classification(Result& result, const network::error_classification& error) {
+    result.message = error.message;
+    result.maintenance = error.is_maintenance();
+    result.retry_after = error.retry_after;
+}
+
+auth::operation_result make_operation_http_error(const http_response& response, std::string fallback) {
+    auth::operation_result result{
+        .success = false,
+        .message = {},
+        .session_data = std::nullopt,
+    };
+    apply_error_classification(result, classify_response_error(response, std::move(fallback)));
+    return result;
 }
 
 bool server_urls_match(const std::string& lhs, const std::string& rhs) {
@@ -360,11 +381,7 @@ auth::operation_result parse_auth_response(const http_response& response,
     }
 
     if (response.status_code < 200 || response.status_code >= 300) {
-        return {
-            .success = false,
-            .message = parse_error_message(response.body, "Authentication request failed."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(response, "Authentication request failed.");
     }
 
     if (const std::optional<auth::operation_result> verification = parse_verification_required_response(response.body);
@@ -628,15 +645,11 @@ operation_result resend_verification_code(const std::string& server_url,
         };
     }
     if (response.status_code < 200 || response.status_code >= 300) {
-        return {
-            .success = false,
-            .message = parse_error_message(response.body, "Failed to resend code."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(response, "Failed to resend code.");
     }
     return {
         .success = true,
-        .message = parse_error_message(response.body, "Verification code sent."),
+        .message = parse_error_message(response, "Verification code sent."),
         .session_data = std::nullopt,
     };
 }
@@ -693,11 +706,7 @@ operation_result restore_saved_session() {
     }
 
     if (me_response.status_code != 401) {
-        return {
-            .success = false,
-            .message = parse_error_message(me_response.body, "Failed to restore session."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(me_response, "Failed to restore session.");
     }
 
     const std::string refresh_body =
@@ -725,11 +734,7 @@ operation_result restore_saved_session() {
 
     if (refresh_response.status_code < 200 || refresh_response.status_code >= 300) {
         clear_saved_session();
-        return {
-            .success = false,
-            .message = parse_error_message(refresh_response.body, "Saved session expired."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(refresh_response, "Saved session expired.");
     }
 
     const std::optional<session> refreshed = parse_auth_session_response(refresh_response.body, active_server_url);
@@ -794,11 +799,7 @@ operation_result logout_saved_session() {
     if (response.status_code != 204 &&
         (response.status_code < 200 || response.status_code >= 300) &&
         response.status_code != 401) {
-        return {
-            .success = false,
-            .message = parse_error_message(response.body, "Failed to log out."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(response, "Failed to log out.");
     }
 
     clear_saved_session();
@@ -866,11 +867,7 @@ operation_result delete_saved_account(const std::string& password) {
 
     if (response.status_code != 204 &&
         (response.status_code < 200 || response.status_code >= 300)) {
-        return {
-            .success = false,
-            .message = parse_error_message(response.body, "Failed to delete account."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(response, "Failed to delete account.");
     }
 
     clear_saved_session();
@@ -934,11 +931,7 @@ operation_result update_profile_external_links(const std::vector<external_link>&
         };
     }
     if (response.status_code < 200 || response.status_code >= 300) {
-        return {
-            .success = false,
-            .message = parse_error_message(response.body, "Failed to save profile links."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(response, "Failed to save profile links.");
     }
 
     const std::optional<public_user> user = parse_me_response(response.body);
@@ -1003,7 +996,9 @@ my_uploads_result fetch_my_community_uploads() {
             return result;
         }
         if (response.status_code < 200 || response.status_code >= 300) {
-            result.message = parse_error_message(response.body, "Failed to load uploaded songs.");
+            apply_error_classification(
+                result,
+                classify_response_error(response, "Failed to load uploaded songs."));
             return result;
         }
 
@@ -1036,7 +1031,9 @@ my_uploads_result fetch_my_community_uploads() {
             return result;
         }
         if (response.status_code < 200 || response.status_code >= 300) {
-            result.message = parse_error_message(response.body, "Failed to load uploaded charts.");
+            apply_error_classification(
+                result,
+                classify_response_error(response, "Failed to load uploaded charts."));
             return result;
         }
 
@@ -1087,7 +1084,9 @@ profile_rankings_result fetch_my_profile_rankings() {
         return result;
     }
     if (response.status_code < 200 || response.status_code >= 300) {
-        result.message = parse_error_message(response.body, "Failed to load profile rankings.");
+        apply_error_classification(
+            result,
+            classify_response_error(response, "Failed to load profile rankings."));
         return result;
     }
 
@@ -1128,11 +1127,7 @@ operation_result delete_community_song_upload(const std::string& song_id) {
         };
     }
     if (response.status_code != 204 && (response.status_code < 200 || response.status_code >= 300)) {
-        return {
-            .success = false,
-            .message = parse_error_message(response.body, "Failed to delete uploaded song."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(response, "Failed to delete uploaded song.");
     }
     return {
         .success = true,
@@ -1171,11 +1166,7 @@ operation_result delete_community_chart_upload(const std::string& chart_id) {
         };
     }
     if (response.status_code != 204 && (response.status_code < 200 || response.status_code >= 300)) {
-        return {
-            .success = false,
-            .message = parse_error_message(response.body, "Failed to delete uploaded chart."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(response, "Failed to delete uploaded chart.");
     }
     return {
         .success = true,
