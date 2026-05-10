@@ -7,6 +7,7 @@
 
 #include "data_models.h"
 #include "ranking_service.h"
+#include "raylib.h"
 #include "scene.h"
 #include "score_system.h"
 #include "shared/scene_fade.h"
@@ -16,8 +17,10 @@ class result_scene final : public scene {
 public:
     result_scene(scene_manager& manager, result_data result, bool ranking_enabled,
                  song_data song, std::string chart_path, chart_meta chart, int key_count);
+    ~result_scene() override;
 
     void on_enter() override;
+    void on_exit() override;
     void update(float dt) override;
     void draw() override;
 
@@ -29,7 +32,10 @@ private:
     };
 
     void return_to_song_select() const;
+    void retry_chart();
     void poll_online_submit();
+    void load_jacket_texture();
+    void unload_jacket_texture();
 
     result_data result_;
     bool ranking_enabled_ = true;
@@ -37,9 +43,14 @@ private:
     std::string chart_path_;
     chart_meta chart_;
     int key_count_ = 4;
+    ranking_service::local_submit_result local_submit_result_;
+    ranking_service::online_submit_result online_submit_result_;
     std::shared_ptr<online_submit_task_state> online_submit_task_;
     bool online_submit_consumed_ = false;
     std::string online_submit_status_message_;
     bool online_submit_status_is_error_ = false;
+    Texture2D jacket_texture_{};
+    bool jacket_texture_loaded_ = false;
+    float reveal_t_ = 0.0f;
     scene_fade fade_in_{scene_fade::direction::in, 1.0f, 0.65f};
 };

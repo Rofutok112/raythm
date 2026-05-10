@@ -67,10 +67,12 @@ void score_system::on_judge(const judge_event& event) {
     ++judge_counts_[judge_index(event.result)];
     ++judged_notes_;
 
-    if (event.offset_ms < 0.0) {
-        ++fast_count_;
-    } else if (event.offset_ms > 0.0) {
-        ++slow_count_;
+    if (event.result != judge_result::perfect) {
+        if (event.offset_ms < 0.0) {
+            ++fast_count_;
+        } else if (event.offset_ms > 0.0) {
+            ++slow_count_;
+        }
     }
     offset_sum_ += event.offset_ms;
 

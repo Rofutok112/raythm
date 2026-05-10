@@ -50,6 +50,11 @@ void trigger_lane_judge_effect(play_session_state& state, const judge_event& eve
     effect.lane_width = std::max(1, std::min(event.lane_width, state.key_count - event.lane));
 }
 
+void capture_final_result(play_session_state& state) {
+    state.final_result = state.score_system.get_result_data();
+    state.final_result.gauge_value = state.gauge.get_value();
+}
+
 }  // namespace
 
 play_update_result play_flow_controller::update(play_session_state& state, play_note_draw_queue& draw_queue,
@@ -184,7 +189,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
     state.combo_display = state.score_system.get_combo();
 
     if (!is_no_fail_playtest(state) && state.gauge.get_value() <= 0.0f) {
-        state.final_result = state.score_system.get_result_data();
+        capture_final_result(state);
         state.final_result.failed = true;
         state.ranking_enabled = false;
         state.failure_transition_playing = true;
@@ -206,7 +211,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         });
 
     if (chart_finished) {
-        state.final_result = state.score_system.get_result_data();
+        capture_final_result(state);
         state.result_transition_playing = true;
         state.result_transition_timer = 0.0f;
         result.request_fade_out_bgm = true;
@@ -214,7 +219,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
     }
 
     if (state.current_ms >= state.song_end_ms) {
-        state.final_result = state.score_system.get_result_data();
+        capture_final_result(state);
         state.result_transition_playing = true;
         state.result_transition_timer = 0.0f;
         result.request_fade_out_bgm = true;

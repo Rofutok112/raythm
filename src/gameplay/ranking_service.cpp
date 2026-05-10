@@ -979,6 +979,9 @@ local_submit_result submit_local_result_detailed(const chart_meta& chart, const 
         entries.push_back(resolve_record_entry(record, ruleset));
     }
     std::sort(entries.begin(), entries.end(), ranking_entry_better);
+    for (size_t i = 0; i < entries.size(); ++i) {
+        entries[i].placement = static_cast<int>(i) + 1;
+    }
 
     const std::string recorded_at = current_timestamp_utc();
     const std::string player_display_name = current_local_player_display_name();
@@ -1000,12 +1003,26 @@ local_submit_result submit_local_result_detailed(const chart_meta& chart, const 
     new_record.note_results = result.note_results;
     entry new_entry = resolve_record_entry(new_record, ruleset);
 
+    if (!entries.empty()) {
+        submission.previous_best = entries.front();
+    }
     submission.best_updated =
         entries.empty() || ranking_entry_better(new_entry, entries.front());
 
     records.push_back(new_record);
     entries.push_back(new_entry);
     std::sort(entries.begin(), entries.end(), ranking_entry_better);
+    for (size_t i = 0; i < entries.size(); ++i) {
+        entries[i].placement = static_cast<int>(i) + 1;
+    }
+    for (const entry& sorted_entry : entries) {
+        if (sorted_entry.recorded_at == recorded_at &&
+            sorted_entry.player_display_name == player_display_name &&
+            sorted_entry.score == new_entry.score) {
+            new_entry = sorted_entry;
+            break;
+        }
+    }
     if (entries.size() > 50) {
         entries.resize(50);
     }
@@ -1165,6 +1182,7 @@ online_submit_result submit_online_result(const song_data& song,
     if (request.submission.has_value()) {
         submission.updated = request.submission->updated;
         submission.entry = request.submission->entry;
+        submission.previous_entry = request.submission->previous_entry;
         if (submission.message.empty()) {
             submission.message = request.submission->message;
         }
