@@ -26,7 +26,7 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
     lane_head_indices_.fill(0);
     lane_event_head_indices_.fill(0);
     active_hold_indices_.fill(std::nullopt);
-    active_hold_lanes_.clear();
+    active_hold_sessions_.clear();
     armed_release_event_indices_.fill(std::nullopt);
     judge_events_.clear();
     event_descriptor_indices_by_event_index_.clear();
@@ -45,7 +45,10 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
             }
         }
     }
-    active_hold_lanes_.assign(note_states_.size(), {});
+    active_hold_sessions_.resize(note_states_.size());
+    for (size_t i = 0; i < active_hold_sessions_.size(); ++i) {
+        active_hold_sessions_[i].note_index = i;
+    }
 
     chart_data chart;
     chart.notes = notes;
@@ -370,17 +373,16 @@ void judge_system::resolve_stay_notes(double current_ms, const input_handler& in
 }
 
 void judge_system::resolve_hold_completions(double current_ms) {
-    for (int lane = 0; lane < kMaxLanes; ++lane) {
-        const std::optional<size_t> active_hold = active_hold_indices_[static_cast<size_t>(lane)];
-        if (!active_hold.has_value()) {
+    for (const active_hold_session& session : active_hold_sessions_) {
+        if (!session.active || session.note_index >= note_states_.size()) {
             continue;
         }
 
         // hold 中のノートが tail まで到達したら完了。tail 側も独立した判定として加点する。
-        if (note_states_[*active_hold].is_holding() &&
-            note_states_[*active_hold].tail_event_index >= 0 &&
-            current_ms >= note_states_[*active_hold].end_target_ms) {
-            complete_held_note(*active_hold, true);
+        if (note_states_[session.note_index].is_holding() &&
+            note_states_[session.note_index].tail_event_index >= 0 &&
+            current_ms >= note_states_[session.note_index].end_target_ms) {
+            complete_held_note(session.note_index, true);
         }
     }
 }
@@ -484,9 +486,25 @@ void judge_system::advance_event_lane_head_indices(const chart_judge_event& even
     }
 }
 
+judge_system::active_hold_session* judge_system::active_hold_session_for_note(size_t note_index) {
+    if (note_index >= active_hold_sessions_.size()) {
+        return nullptr;
+    }
+    active_hold_session& session = active_hold_sessions_[note_index];
+    return session.active ? &session : nullptr;
+}
+
+const judge_system::active_hold_session* judge_system::active_hold_session_for_note(size_t note_index) const {
+    if (note_index >= active_hold_sessions_.size()) {
+        return nullptr;
+    }
+    const active_hold_session& session = active_hold_sessions_[note_index];
+    return session.active ? &session : nullptr;
+}
+
 bool judge_system::activate_hold_lane(size_t note_index, int lane) {
     if (note_index >= note_states_.size() ||
-        note_index >= active_hold_lanes_.size() ||
+        note_index >= active_hold_sessions_.size() ||
         lane < 0 ||
         lane >= kMaxLanes ||
         !note_states_[note_index].is_holding() ||
@@ -494,13 +512,17 @@ bool judge_system::activate_hold_lane(size_t note_index, int lane) {
         return false;
     }
 
+    active_hold_session& session = active_hold_sessions_[note_index];
+    session.active = true;
+    session.note_index = note_index;
     active_hold_indices_[static_cast<size_t>(lane)] = note_index;
-    active_hold_lanes_[note_index][static_cast<size_t>(lane)] = true;
+    session.adopted_lanes[static_cast<size_t>(lane)] = true;
     return true;
 }
 
 void judge_system::deactivate_hold_lane(size_t note_index, int lane) {
-    if (note_index >= active_hold_lanes_.size() || lane < 0 || lane >= kMaxLanes) {
+    active_hold_session* session = active_hold_session_for_note(note_index);
+    if (session == nullptr || lane < 0 || lane >= kMaxLanes) {
         return;
     }
 
@@ -508,7 +530,8 @@ void judge_system::deactivate_hold_lane(size_t note_index, int lane) {
     if (active_hold.has_value() && *active_hold == note_index) {
         active_hold.reset();
     }
-    active_hold_lanes_[note_index][static_cast<size_t>(lane)] = false;
+    session->adopted_lanes[static_cast<size_t>(lane)] = false;
+    session->active = has_active_hold_for_note(note_index);
 }
 
 void judge_system::clear_active_hold_for_note(size_t note_index) {
@@ -525,16 +548,18 @@ void judge_system::clear_active_hold_for_note(size_t note_index) {
             active_hold.reset();
         }
     }
-    if (note_index < active_hold_lanes_.size()) {
-        active_hold_lanes_[note_index].fill(false);
+    if (note_index < active_hold_sessions_.size()) {
+        active_hold_sessions_[note_index].active = false;
+        active_hold_sessions_[note_index].adopted_lanes.fill(false);
     }
 }
 
 bool judge_system::has_active_hold_for_note(size_t note_index) const {
-    if (note_index >= active_hold_lanes_.size()) {
+    const active_hold_session* session = active_hold_session_for_note(note_index);
+    if (session == nullptr) {
         return false;
     }
-    for (const bool lane_is_active : active_hold_lanes_[note_index]) {
+    for (const bool lane_is_active : session->adopted_lanes) {
         if (lane_is_active) {
             return true;
         }
@@ -636,12 +661,12 @@ bool judge_system::try_adopt_active_wide_hold_lane(const input_event& event) {
 
     std::optional<size_t> adopted_note_index;
     double adopted_end_ms = 0.0;
-    for (const std::optional<size_t>& active_hold : active_hold_indices_) {
-        if (!active_hold.has_value() || *active_hold >= note_states_.size()) {
+    for (const active_hold_session& session : active_hold_sessions_) {
+        if (!session.active || session.note_index >= note_states_.size()) {
             continue;
         }
 
-        const note_state& state = note_states_[*active_hold];
+        const note_state& state = note_states_[session.note_index];
         if (!state.is_holding() ||
             state.note_ref.type != note_type::hold ||
             note_lane_width(state.note_ref) <= 1 ||
@@ -652,7 +677,7 @@ bool judge_system::try_adopt_active_wide_hold_lane(const input_event& event) {
         }
 
         if (!adopted_note_index.has_value() || state.end_target_ms < adopted_end_ms) {
-            adopted_note_index = *active_hold;
+            adopted_note_index = session.note_index;
             adopted_end_ms = state.end_target_ms;
         }
     }

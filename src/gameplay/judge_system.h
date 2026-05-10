@@ -30,6 +30,12 @@ private:
         bool show_feedback = true;
     };
 
+    struct active_hold_session {
+        bool active = false;
+        size_t note_index = 0;
+        std::array<bool, kMaxLanes> adopted_lanes = {};
+    };
+
     judge_result evaluate_offset(double offset_ms) const;
     judge_result evaluate_hold_release_offset(double offset_ms) const;
     judge_result evaluate_release_offset(double offset_ms) const;
@@ -46,6 +52,8 @@ private:
     void advance_lane_event_head_index(int lane);
     void advance_note_lane_head_indices(const note_data& note);
     void advance_event_lane_head_indices(const chart_judge_event& event);
+    active_hold_session* active_hold_session_for_note(size_t note_index);
+    const active_hold_session* active_hold_session_for_note(size_t note_index) const;
     bool activate_hold_lane(size_t note_index, int lane);
     void deactivate_hold_lane(size_t note_index, int lane);
     void clear_active_hold_for_note(size_t note_index);
@@ -82,7 +90,7 @@ private:
     std::array<size_t, kMaxLanes> lane_head_indices_ = {};
     std::array<size_t, kMaxLanes> lane_event_head_indices_ = {};
     std::array<std::optional<size_t>, kMaxLanes> active_hold_indices_;
-    std::vector<std::array<bool, kMaxLanes>> active_hold_lanes_;
+    std::vector<active_hold_session> active_hold_sessions_;
     std::array<std::optional<size_t>, kMaxLanes> armed_release_event_indices_;
     std::vector<judge_event> judge_events_;
 };
