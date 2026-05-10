@@ -29,6 +29,7 @@ struct submit_response {
     bool updated = false;
     std::string message;
     std::optional<ranking_service::entry> entry;
+    std::optional<ranking_service::entry> previous_entry;
 };
 
 struct submit_operation_result {

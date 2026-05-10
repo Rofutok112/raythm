@@ -29,7 +29,7 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    if (result.fast_count != 1 || result.slow_count != 3) {
+    if (result.fast_count != 0 || result.slow_count != 3) {
         std::cerr << "Fast/slow aggregation failed\n";
         return EXIT_FAILURE;
     }

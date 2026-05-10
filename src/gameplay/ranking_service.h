@@ -40,6 +40,7 @@ struct local_submit_result {
     bool success = false;
     bool best_updated = false;
     std::optional<entry> submitted_entry;
+    std::optional<entry> previous_best;
 };
 
 struct online_submit_result {
@@ -50,6 +51,7 @@ struct online_submit_result {
     std::string message;
     std::string retry_after;
     std::optional<entry> entry;
+    std::optional<ranking_service::entry> previous_entry;
 };
 
 listing load_chart_ranking(const std::string& chart_id, source ranking_source, int limit = 50);

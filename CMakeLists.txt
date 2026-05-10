@@ -376,6 +376,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/play/play_session_loader.cpp
         src/scenes/play/play_session_loader.h
         src/scenes/play/play_session_types.h
+        src/scenes/result/result_scene_view.cpp
+        src/scenes/result/result_scene_view.h
         src/scenes/result_scene.cpp
         src/scenes/result_scene.h
         src/scenes/shared/scene_fade.cpp

@@ -168,6 +168,9 @@ std::optional<ranking_client::submit_response> parse_submit_response(const std::
     if (const auto entry_object = json::extract_object(body, "entry"); entry_object.has_value()) {
         response.entry = parse_ranking_entry(*entry_object);
     }
+    if (const auto previous_object = json::extract_object(body, "previousEntry"); previous_object.has_value()) {
+        response.previous_entry = parse_ranking_entry(*previous_object);
+    }
 
     return response;
 }
