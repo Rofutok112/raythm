@@ -46,6 +46,8 @@ private:
     void advance_lane_event_head_index(int lane);
     void advance_note_lane_head_indices(const note_data& note);
     void advance_event_lane_head_indices(const chart_judge_event& event);
+    bool activate_hold_lane(size_t note_index, int lane);
+    void deactivate_hold_lane(size_t note_index, int lane);
     void clear_active_hold_for_note(size_t note_index);
     bool has_active_hold_for_note(size_t note_index) const;
     bool mark_event_completed(size_t event_descriptor_index);
@@ -80,6 +82,7 @@ private:
     std::array<size_t, kMaxLanes> lane_head_indices_ = {};
     std::array<size_t, kMaxLanes> lane_event_head_indices_ = {};
     std::array<std::optional<size_t>, kMaxLanes> active_hold_indices_;
+    std::vector<std::array<bool, kMaxLanes>> active_hold_lanes_;
     std::array<std::optional<size_t>, kMaxLanes> armed_release_event_indices_;
     std::vector<judge_event> judge_events_;
 };

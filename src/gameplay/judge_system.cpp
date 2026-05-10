@@ -26,6 +26,7 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
     lane_head_indices_.fill(0);
     lane_event_head_indices_.fill(0);
     active_hold_indices_.fill(std::nullopt);
+    active_hold_lanes_.clear();
     armed_release_event_indices_.fill(std::nullopt);
     judge_events_.clear();
     event_descriptor_indices_by_event_index_.clear();
@@ -44,6 +45,7 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
             }
         }
     }
+    active_hold_lanes_.assign(note_states_.size(), {});
 
     chart_data chart;
     chart.notes = notes;
@@ -274,7 +276,7 @@ void judge_system::handle_hold_release(const input_event& event) {
         return;
     }
 
-    active_hold.reset();
+    deactivate_hold_lane(note_index, event.lane);
     if (has_active_hold_for_note(note_index)) {
         return;
     }
@@ -336,7 +338,7 @@ void judge_system::handle_press(const input_event& event) {
         }
         advance_note_lane_head_indices(candidate.note_ref);
         if (candidate.is_holding()) {
-            active_hold_indices_[static_cast<size_t>(event.lane)] = descriptor.note_index;
+            activate_hold_lane(descriptor.note_index, event.lane);
         }
         judge_emit_options options;
         options.play_hitsound = i == 0;
@@ -482,6 +484,33 @@ void judge_system::advance_event_lane_head_indices(const chart_judge_event& even
     }
 }
 
+bool judge_system::activate_hold_lane(size_t note_index, int lane) {
+    if (note_index >= note_states_.size() ||
+        note_index >= active_hold_lanes_.size() ||
+        lane < 0 ||
+        lane >= kMaxLanes ||
+        !note_states_[note_index].is_holding() ||
+        !note_covers_lane(note_states_[note_index].note_ref, lane)) {
+        return false;
+    }
+
+    active_hold_indices_[static_cast<size_t>(lane)] = note_index;
+    active_hold_lanes_[note_index][static_cast<size_t>(lane)] = true;
+    return true;
+}
+
+void judge_system::deactivate_hold_lane(size_t note_index, int lane) {
+    if (note_index >= active_hold_lanes_.size() || lane < 0 || lane >= kMaxLanes) {
+        return;
+    }
+
+    std::optional<size_t>& active_hold = active_hold_indices_[static_cast<size_t>(lane)];
+    if (active_hold.has_value() && *active_hold == note_index) {
+        active_hold.reset();
+    }
+    active_hold_lanes_[note_index][static_cast<size_t>(lane)] = false;
+}
+
 void judge_system::clear_active_hold_for_note(size_t note_index) {
     if (note_index >= note_states_.size()) {
         return;
@@ -496,11 +525,17 @@ void judge_system::clear_active_hold_for_note(size_t note_index) {
             active_hold.reset();
         }
     }
+    if (note_index < active_hold_lanes_.size()) {
+        active_hold_lanes_[note_index].fill(false);
+    }
 }
 
 bool judge_system::has_active_hold_for_note(size_t note_index) const {
-    for (const std::optional<size_t>& active_hold : active_hold_indices_) {
-        if (active_hold.has_value() && *active_hold == note_index) {
+    if (note_index >= active_hold_lanes_.size()) {
+        return false;
+    }
+    for (const bool lane_is_active : active_hold_lanes_[note_index]) {
+        if (lane_is_active) {
             return true;
         }
     }
@@ -588,7 +623,7 @@ bool judge_system::try_absorb_completed_wide_press(const input_event& event) {
     if (descriptor.role == chart_judge_event_role::hold_head &&
         descriptor.note_index < note_states_.size() &&
         note_states_[descriptor.note_index].is_holding()) {
-        active_hold_indices_[static_cast<size_t>(event.lane)] = descriptor.note_index;
+        activate_hold_lane(descriptor.note_index, event.lane);
     }
     return true;
 }
@@ -626,8 +661,7 @@ bool judge_system::try_adopt_active_wide_hold_lane(const input_event& event) {
         return false;
     }
 
-    active_hold_indices_[static_cast<size_t>(event.lane)] = *adopted_note_index;
-    return true;
+    return activate_hold_lane(*adopted_note_index, event.lane);
 }
 
 std::vector<size_t> judge_system::find_press_candidates(int lane, double timestamp_ms) {
