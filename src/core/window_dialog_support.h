@@ -7,6 +7,7 @@ namespace window_dialog_support {
 bool is_fullscreen();
 void toggle_fullscreen();
 void minimize_window();
+void set_reserved_top_chrome_height(int pixels);
 void apply_windowed_layout(int client_width, int client_height);
 void set_fullscreen(bool fullscreen, int windowed_client_width, int windowed_client_height);
 int current_monitor_width();

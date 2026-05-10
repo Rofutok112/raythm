@@ -83,6 +83,7 @@ int main() {
         defaults.note_height = 1.4f;
         defaults.target_fps = 240;
         defaults.fullscreen = true;
+        defaults.window_maximized = true;
         defaults.dark_mode = true;
         defaults.ui_locale = localization::locale::japanese;
 
@@ -109,6 +110,9 @@ int main() {
         expect(loaded.fullscreen == defaults.fullscreen,
                "Expected default fullscreen flag to be written to settings.json.",
                ok);
+        expect(loaded.window_maximized == defaults.window_maximized,
+               "Expected default maximized flag to be written to settings.json.",
+               ok);
         expect(loaded.dark_mode == defaults.dark_mode,
                "Expected default dark mode flag to be written to settings.json.",
                ok);
@@ -129,6 +133,9 @@ int main() {
         expect(loaded_again.fullscreen == defaults.fullscreen,
                "Expected existing fullscreen setting not to be overwritten.",
                ok);
+        expect(loaded_again.window_maximized == defaults.window_maximized,
+               "Expected existing maximized setting not to be overwritten.",
+               ok);
 
         save_settings(defaults);
         std::string content;
@@ -137,6 +144,9 @@ int main() {
             content.assign(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
         }
         const std::string language_token = "\"language\": \"ja\"";
+        expect(content.find("\"windowMaximized\": true") != std::string::npos,
+               "Expected windowMaximized key to be present in settings.json.",
+               ok);
         const size_t language_pos = content.find(language_token);
         expect(language_pos != std::string::npos,
                "Expected language key to be present in settings.json.",

@@ -18,6 +18,8 @@ inline constexpr resolution_preset kResolutionPresets[] = {
     {3840, 2160, "3840x2160"},
 };
 inline constexpr int kResolutionPresetCount = 3;
+inline constexpr int kDefaultWindowedWidth = 1280;
+inline constexpr int kDefaultWindowedHeight = 720;
 inline constexpr float kMinLaneWidth = 0.6f;
 inline constexpr float kMaxLaneWidth = 10.0f;
 
@@ -35,9 +37,10 @@ struct game_settings {
     int target_fps = 144;
     key_config keys;
     int resolution_index = 0;  // デフォルト 1920x1080
-    int windowed_width = 1920;
-    int windowed_height = 1080;
+    int windowed_width = kDefaultWindowedWidth;
+    int windowed_height = kDefaultWindowedHeight;
     bool fullscreen = false;
+    bool window_maximized = false;
     bool dark_mode = true;
     localization::locale ui_locale = localization::locale::english;
 };
