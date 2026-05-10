@@ -1,11 +1,13 @@
 #include "virtual_screen.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
 RenderTexture2D render_target_{};
 RenderTexture2D ui_render_target_{};
 bool initialized_ = false;
+int top_reserved_pixels_ = 0;
 
 enum class render_mode {
     none,
@@ -52,6 +54,14 @@ void cleanup() {
     }
 }
 
+void set_top_reserved_pixels(int pixels) {
+    top_reserved_pixels_ = std::max(0, pixels);
+}
+
+int top_reserved_pixels() {
+    return top_reserved_pixels_;
+}
+
 void begin() {
     BeginTextureMode(render_target_);
     active_mode_ = render_mode::standard;
@@ -75,7 +85,8 @@ void end() {
 
 void draw_to_screen(bool use_alpha) {
     const float screen_w = static_cast<float>(GetScreenWidth());
-    const float screen_h = static_cast<float>(GetScreenHeight());
+    const float reserved_top = static_cast<float>(std::clamp(top_reserved_pixels_, 0, std::max(0, GetScreenHeight() - 1)));
+    const float screen_h = std::max(1.0f, static_cast<float>(GetScreenHeight()) - reserved_top);
     const RenderTexture2D& target = current_target(present_mode_);
     const float source_w = static_cast<float>(target.texture.width);
     const float source_h = static_cast<float>(target.texture.height);
@@ -88,7 +99,7 @@ void draw_to_screen(bool use_alpha) {
     const float dest_w = std::round(source_w * scale);
     const float dest_h = std::round(source_h * scale);
     const float offset_x = std::round((screen_w - dest_w) * 0.5f);
-    const float offset_y = std::round((screen_h - dest_h) * 0.5f);
+    const float offset_y = reserved_top + std::round((screen_h - dest_h) * 0.5f);
 
     // RenderTexture は OpenGL 座標系で上下反転しているため source.height を負にする
     const Rectangle source = {0.0f, 0.0f, source_w, -source_h};
@@ -97,11 +108,11 @@ void draw_to_screen(bool use_alpha) {
     if (!use_alpha) {
         if (offset_y > 0.0f) {
             DrawTexturePro(target.texture,
-                           {0.0f, 0.0f, source_w, -1.0f},
-                           {0.0f, 0.0f, screen_w, offset_y},
+                           {0.0f, source_h - 1.0f, source_w, -1.0f},
+                           {0.0f, reserved_top, screen_w, offset_y - reserved_top},
                            {0.0f, 0.0f}, 0.0f, WHITE);
             DrawTexturePro(target.texture,
-                           {0.0f, source_h - 1.0f, source_w, -1.0f},
+                           {0.0f, 0.0f, source_w, -1.0f},
                            {0.0f, offset_y + dest_h, screen_w, screen_h - offset_y - dest_h},
                            {0.0f, 0.0f}, 0.0f, WHITE);
         }
@@ -124,7 +135,8 @@ void draw_to_screen(bool use_alpha) {
 Vector2 get_virtual_mouse() {
     const Vector2 physical = GetMousePosition();
     const float screen_w = static_cast<float>(GetScreenWidth());
-    const float screen_h = static_cast<float>(GetScreenHeight());
+    const float reserved_top = static_cast<float>(std::clamp(top_reserved_pixels_, 0, std::max(0, GetScreenHeight() - 1)));
+    const float screen_h = std::max(1.0f, static_cast<float>(GetScreenHeight()) - reserved_top);
 
     const float source_w = static_cast<float>(current_target(present_mode_).texture.width);
     const float source_h = static_cast<float>(current_target(present_mode_).texture.height);
@@ -135,7 +147,7 @@ Vector2 get_virtual_mouse() {
     const float dest_w = std::round(source_w * scale);
     const float dest_h = std::round(source_h * scale);
     const float offset_x = std::round((screen_w - dest_w) * 0.5f);
-    const float offset_y = std::round((screen_h - dest_h) * 0.5f);
+    const float offset_y = reserved_top + std::round((screen_h - dest_h) * 0.5f);
 
     const float normalized_x = (physical.x - offset_x) / dest_w;
     const float normalized_y = (physical.y - offset_y) / dest_h;
@@ -147,7 +159,8 @@ Vector2 get_virtual_mouse() {
 
 float design_to_screen_scale() {
     const float screen_w = static_cast<float>(GetScreenWidth());
-    const float screen_h = static_cast<float>(GetScreenHeight());
+    const float reserved_top = static_cast<float>(std::clamp(top_reserved_pixels_, 0, std::max(0, GetScreenHeight() - 1)));
+    const float screen_h = std::max(1.0f, static_cast<float>(GetScreenHeight()) - reserved_top);
     const float scale_x = screen_w / static_cast<float>(kDesignWidth);
     const float scale_y = screen_h / static_cast<float>(kDesignHeight);
     return (scale_x < scale_y) ? scale_x : scale_y;
