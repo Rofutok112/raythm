@@ -5,6 +5,7 @@
 #include <string>
 
 #include "core/tween.h"
+#include "localization/localization.h"
 #include "scene_common.h"
 #include "theme.h"
 #include "ui_draw.h"
@@ -16,18 +17,18 @@ namespace {
 constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
 constexpr Rectangle kContentRect = {36.0f, 108.0f, 1848.0f, 786.0f};
 constexpr Rectangle kTitleRect = {36.0f, 28.0f, 520.0f, 62.0f};
-constexpr Rectangle kMainPanelRect = {36.0f, 108.0f, 980.0f, 704.0f};
+constexpr Rectangle kMainPanelRect = {36.0f, 108.0f, 1080.0f, 704.0f};
 constexpr Rectangle kJacketRect = {60.0f, 132.0f, 320.0f, 320.0f};
-constexpr Rectangle kSongInfoRect = {404.0f, 146.0f, 560.0f, 178.0f};
+constexpr Rectangle kSongInfoRect = {404.0f, 146.0f, 650.0f, 178.0f};
 constexpr Rectangle kRankRect = {60.0f, 478.0f, 382.0f, 184.0f};
-constexpr Rectangle kScoreRect = {482.0f, 498.0f, 468.0f, 142.0f};
-constexpr Rectangle kAchievementRect = {60.0f, 690.0f, 930.0f, 92.0f};
-constexpr Rectangle kMetricAccuracyRect = {1040.0f, 108.0f, 304.0f, 272.0f};
-constexpr Rectangle kMetricComboRect = {1356.0f, 108.0f, 260.0f, 272.0f};
-constexpr Rectangle kMetricGaugeRect = {1628.0f, 108.0f, 256.0f, 272.0f};
-constexpr Rectangle kOffsetRect = {1040.0f, 392.0f, 382.0f, 196.0f};
-constexpr Rectangle kJudgementRect = {1434.0f, 392.0f, 450.0f, 420.0f};
-constexpr Rectangle kStatusRect = {612.0f, 836.0f, 696.0f, 70.0f};
+constexpr Rectangle kScoreRect = {476.0f, 488.0f, 590.0f, 150.0f};
+constexpr Rectangle kAchievementRect = {60.0f, 690.0f, 1030.0f, 92.0f};
+constexpr Rectangle kMetricAccuracyRect = {1152.0f, 130.0f, 312.0f, 158.0f};
+constexpr Rectangle kMetricComboRect = {1482.0f, 130.0f, 266.0f, 158.0f};
+constexpr Rectangle kMetricOffsetRect = {1152.0f, 306.0f, 266.0f, 146.0f};
+constexpr Rectangle kOffsetRect = {1436.0f, 306.0f, 312.0f, 146.0f};
+constexpr Rectangle kJudgementRect = {1152.0f, 470.0f, 596.0f, 342.0f};
+constexpr Rectangle kStatusAnchorRect = {360.0f, 836.0f, 1200.0f, 70.0f};
 constexpr Rectangle kRetryRect = {50.0f, 928.0f, 520.0f, 92.0f};
 constexpr Rectangle kSongSelectRect = {626.0f, 928.0f, 668.0f, 92.0f};
 constexpr Rectangle kReplayRect = {1350.0f, 928.0f, 520.0f, 92.0f};
@@ -80,13 +81,18 @@ std::string format_delta(int delta) {
     return "+0";
 }
 
+std::string localized_text(const std::string& text) {
+    return localization::tr_literal(text.c_str());
+}
+
 Rectangle text_rect(float x, float y, float width, int font_size) {
     return {x, y, width, ui::text_layout_font_size(static_cast<float>(font_size))};
 }
 
 int fit_font_size(const std::string& text, int desired_size, float max_width, int min_size = 14) {
+    const std::string localized = localized_text(text);
     int size = desired_size;
-    while (size > min_size && ui::measure_text_size(text.c_str(), static_cast<float>(size), 0.0f).x > max_width) {
+    while (size > min_size && ui::measure_text_size(localized.c_str(), static_cast<float>(size), 0.0f).x > max_width) {
         --size;
     }
     return size;
@@ -94,8 +100,9 @@ int fit_font_size(const std::string& text, int desired_size, float max_width, in
 
 void draw_fit_text(const std::string& text, int desired_size, Rectangle rect, Color color,
                    ui::text_align align = ui::text_align::left, int min_size = 14) {
+    const std::string localized = localized_text(text);
     const int size = fit_font_size(text, desired_size, rect.width, min_size);
-    ui::draw_text_in_rect(text.c_str(), size, rect, color, align);
+    ui::draw_text_in_rect(localized.c_str(), size, rect, color, align);
 }
 
 Color alpha(Color color, float amount) {
@@ -193,19 +200,19 @@ void draw_rank_score(const result_data& result, float reveal_t) {
     const Color rcolor = rank_color(result.clear_rank);
     ui::draw_text_in_rect(rank_label(result.clear_rank), result.clear_rank == rank::aa ? 118 : 150,
                           rank_visual, alpha(rcolor, reveal_t));
-    ui::draw_line_ex({448.0f, 496.0f}, {448.0f, 644.0f}, 1.5f, alpha(g_theme->border, reveal_t));
+    ui::draw_line_ex({448.0f, 496.0f}, {448.0f, 648.0f}, 1.5f, alpha(g_theme->border, reveal_t));
 
     const Rectangle score_visual = reveal_rect(kScoreRect, reveal_t, 18.0f, 0.0f);
-    ui::draw_text_in_rect(format_score(result.score).c_str(), 78, score_visual, alpha(g_theme->text, reveal_t),
-                          ui::text_align::left);
-    draw_accent_rule({482.0f, 658.0f, 468.0f, 3.0f}, rcolor, reveal_t);
+    draw_fit_text(format_score(result.score), 96, score_visual, alpha(g_theme->text, reveal_t),
+                  ui::text_align::left, 66);
+    draw_accent_rule({476.0f, 660.0f, 590.0f, 3.0f}, rcolor, reveal_t);
 
     if (result.failed) {
-        ui::draw_text_in_rect("FAILED", 30, {780.0f, 454.0f, 160.0f, 44.0f}, alpha(g_theme->error, reveal_t));
+        ui::draw_text_in_rect("FAILED", 30, {902.0f, 454.0f, 160.0f, 44.0f}, alpha(g_theme->error, reveal_t));
     } else if (result.is_all_perfect) {
-        ui::draw_text_in_rect("ALL PERFECT", 24, {744.0f, 454.0f, 206.0f, 44.0f}, alpha(g_theme->all_perfect, reveal_t));
+        ui::draw_text_in_rect("ALL PERFECT", 24, {858.0f, 454.0f, 206.0f, 44.0f}, alpha(g_theme->all_perfect, reveal_t));
     } else if (result.is_full_combo) {
-        ui::draw_text_in_rect("FULL COMBO", 24, {744.0f, 454.0f, 206.0f, 44.0f}, alpha(g_theme->full_combo, reveal_t));
+        ui::draw_text_in_rect("FULL COMBO", 24, {858.0f, 454.0f, 206.0f, 44.0f}, alpha(g_theme->full_combo, reveal_t));
     }
 }
 
@@ -232,7 +239,7 @@ void draw_achievements(const model& data, float reveal_t) {
                 : data.result.score;
             local_value = format_delta(delta);
         } else if (data.local_submit->previous_best.has_value()) {
-            local_value = "BEST " + format_score(data.local_submit->previous_best->score);
+            local_value = localized_text("BEST") + " " + format_score(data.local_submit->previous_best->score);
         }
     }
 
@@ -265,7 +272,7 @@ void draw_achievements(const model& data, float reveal_t) {
         }
     } else if (data.local_submit != nullptr && data.local_submit->submitted_entry.has_value() &&
                data.local_submit->submitted_entry->placement > 0) {
-        rank_value = "LOCAL #" + std::to_string(data.local_submit->submitted_entry->placement);
+        rank_value = localized_text("LOCAL") + " #" + std::to_string(data.local_submit->submitted_entry->placement);
     }
 
     draw_chip(reveal_rect(chips[0], reveal_t, -10.0f, 14.0f), "LOCAL BEST", local_value, local_color, reveal_t);
@@ -276,45 +283,36 @@ void draw_achievements(const model& data, float reveal_t) {
 void draw_metric(Rectangle rect, const char* label, const std::string& value, Color tone, float reveal_t) {
     draw_panel_rect(rect, reveal_t, with_alpha(g_theme->panel, 218), lerp_color(g_theme->border, tone, 0.25f));
     const Rectangle visual = reveal_rect(rect, reveal_t);
-    ui::draw_text_in_rect(label, 25, {visual.x + 34.0f, visual.y + 32.0f, visual.width - 68.0f, 32.0f},
+    ui::draw_text_in_rect(label, 20, {visual.x + 26.0f, visual.y + 24.0f, visual.width - 52.0f, 26.0f},
                           alpha(g_theme->text, reveal_t), ui::text_align::left);
-    draw_accent_rule({visual.x + 34.0f, visual.y + 72.0f, 58.0f, 3.0f}, tone, reveal_t);
-    draw_fit_text(value, 52, {visual.x + 22.0f, visual.y + 108.0f, visual.width - 44.0f, 76.0f},
-                  alpha(g_theme->text, reveal_t), ui::text_align::center, 34);
-}
-
-void draw_gauge_bar(const result_data& result, float reveal_t) {
-    const Rectangle visual = reveal_rect(kMetricGaugeRect, reveal_t);
-    const Rectangle bar = {visual.x + 32.0f, visual.y + 204.0f, visual.width - 64.0f, 28.0f};
-    const float ratio = std::clamp(result.gauge_value / 100.0f, 0.0f, 1.0f);
-    ui::draw_progress_bar(bar, ratio, alpha(g_theme->section, reveal_t),
-                          alpha(result.gauge_value >= 70.0f ? g_theme->success : g_theme->health_low, reveal_t),
-                          alpha(g_theme->border, reveal_t), 1.5f, 4.0f);
+    draw_accent_rule({visual.x + 26.0f, visual.y + 56.0f, 48.0f, 2.0f}, tone, reveal_t);
+    draw_fit_text(value, 42, {visual.x + 20.0f, visual.y + 78.0f, visual.width - 40.0f, 54.0f},
+                  alpha(g_theme->text, reveal_t), ui::text_align::center, 24);
 }
 
 void draw_offsets(const result_data& result, float reveal_t) {
     draw_panel_rect(kOffsetRect, reveal_t, with_alpha(g_theme->panel, 218), g_theme->border);
     const Rectangle visual = reveal_rect(kOffsetRect, reveal_t);
-    const Rectangle left = {visual.x + 34.0f, visual.y + 38.0f, 132.0f, 118.0f};
-    const Rectangle right = {visual.x + 224.0f, visual.y + 38.0f, 132.0f, 118.0f};
-    ui::draw_text_in_rect("FAST", 25, {left.x, left.y, left.width, 32.0f}, alpha(g_theme->fast, reveal_t),
+    const Rectangle left = {visual.x + 26.0f, visual.y + 24.0f, 112.0f, 92.0f};
+    const Rectangle right = {visual.x + 174.0f, visual.y + 24.0f, 112.0f, 92.0f};
+    ui::draw_text_in_rect("FAST", 20, {left.x, left.y, left.width, 26.0f}, alpha(g_theme->fast, reveal_t),
                           ui::text_align::left);
-    draw_accent_rule({left.x, left.y + 40.0f, 82.0f, 2.0f}, g_theme->fast, reveal_t);
-    ui::draw_text_in_rect(std::to_string(result.fast_count).c_str(), 46, {left.x, left.y + 62.0f, left.width, 52.0f},
+    draw_accent_rule({left.x, left.y + 32.0f, 56.0f, 2.0f}, g_theme->fast, reveal_t);
+    ui::draw_text_in_rect(std::to_string(result.fast_count).c_str(), 38, {left.x, left.y + 50.0f, left.width, 42.0f},
                           alpha(g_theme->fast, reveal_t), ui::text_align::left);
-    ui::draw_line_ex({visual.x + visual.width * 0.5f, visual.y + 64.0f},
-                     {visual.x + visual.width * 0.5f, visual.y + 134.0f}, 1.0f, alpha(g_theme->border, reveal_t));
-    ui::draw_text_in_rect("SLOW", 25, {right.x, right.y, right.width, 32.0f}, alpha(g_theme->slow, reveal_t),
+    ui::draw_line_ex({visual.x + visual.width * 0.5f, visual.y + 38.0f},
+                     {visual.x + visual.width * 0.5f, visual.y + 114.0f}, 1.0f, alpha(g_theme->border, reveal_t));
+    ui::draw_text_in_rect("SLOW", 20, {right.x, right.y, right.width, 26.0f}, alpha(g_theme->slow, reveal_t),
                           ui::text_align::left);
-    draw_accent_rule({right.x, right.y + 40.0f, 82.0f, 2.0f}, g_theme->slow, reveal_t);
-    ui::draw_text_in_rect(std::to_string(result.slow_count).c_str(), 46,
-                          {right.x, right.y + 62.0f, right.width, 52.0f}, alpha(g_theme->slow, reveal_t),
+    draw_accent_rule({right.x, right.y + 32.0f, 56.0f, 2.0f}, g_theme->slow, reveal_t);
+    ui::draw_text_in_rect(std::to_string(result.slow_count).c_str(), 38,
+                          {right.x, right.y + 50.0f, right.width, 42.0f}, alpha(g_theme->slow, reveal_t),
                           ui::text_align::left);
 }
 
 void draw_judgements(const result_data& result, float reveal_t) {
     draw_panel_rect(kJudgementRect, reveal_t, with_alpha(g_theme->panel, 218), g_theme->border);
-    const Rectangle content = ui::inset(reveal_rect(kJudgementRect, reveal_t), ui::edge_insets::symmetric(34.0f, 34.0f));
+    const Rectangle content = ui::inset(reveal_rect(kJudgementRect, reveal_t), ui::edge_insets::symmetric(30.0f, 28.0f));
     struct row {
         const char* label;
         int count;
@@ -330,9 +328,9 @@ void draw_judgements(const result_data& result, float reveal_t) {
     Rectangle rects[5];
     ui::vstack_fill(content, 8.0f, rects);
     for (int i = 0; i < 5; ++i) {
-        ui::draw_text_in_rect(rows[i].label, 28, {rects[i].x, rects[i].y, 190.0f, rects[i].height},
+        ui::draw_text_in_rect(rows[i].label, 23, {rects[i].x, rects[i].y, 190.0f, rects[i].height},
                               alpha(rows[i].color, reveal_t), ui::text_align::left);
-        ui::draw_text_in_rect(std::to_string(rows[i].count).c_str(), 31,
+        ui::draw_text_in_rect(std::to_string(rows[i].count).c_str(), 26,
                               {rects[i].x + 210.0f, rects[i].y, rects[i].width - 210.0f, rects[i].height},
                               alpha(g_theme->text, reveal_t), ui::text_align::right);
         if (i < 4) {
@@ -343,32 +341,71 @@ void draw_judgements(const result_data& result, float reveal_t) {
     }
 }
 
+bool contains_text(const std::string& haystack, const char* needle) {
+    return haystack.find(needle) != std::string::npos;
+}
+
+Color status_tone_for(const model& data, const std::string& message) {
+    if (data.online_status_is_error) {
+        return g_theme->error;
+    }
+    if (data.online_submit != nullptr && data.online_submit->success && data.online_submit->updated) {
+        return g_theme->success;
+    }
+    if (data.local_submit != nullptr && data.local_submit->best_updated &&
+        (message.empty() || contains_text(message, "Local best"))) {
+        return g_theme->success;
+    }
+    if (contains_text(message, "not beat") ||
+        contains_text(message, "Not Updated") ||
+        contains_text(message, "disabled") ||
+        contains_text(message, "not ranked") ||
+        contains_text(message, "not ranking eligible") ||
+        contains_text(message, "FAILED")) {
+        return g_theme->rank_c;
+    }
+    return g_theme->text_secondary;
+}
+
 void draw_status(const model& data, float reveal_t) {
     std::string message = data.online_status_message;
-    Color tone = data.online_status_is_error ? g_theme->error : g_theme->success;
     if (message.empty()) {
         if (data.online_submit != nullptr && data.online_submit->success && data.online_submit->updated) {
             message = "Ranking Updated";
-            tone = g_theme->success;
         } else if (data.online_submit != nullptr && data.online_submit->success) {
             message = "Submitted - Not Updated";
-            tone = g_theme->text_secondary;
         } else if (data.local_submit != nullptr && data.local_submit->best_updated) {
             message = "Local Best Updated";
-            tone = g_theme->rank_c;
         } else {
             message = "Result Saved Locally";
-            tone = g_theme->text_secondary;
         }
     }
+    const Color tone = status_tone_for(data, message);
 
-    const Rectangle visual = reveal_rect(kStatusRect, reveal_t, 0.0f, 16.0f);
+    constexpr int kStatusFontSize = 30;
+    constexpr int kStatusMinFontSize = 20;
+    constexpr float kHorizontalPadding = 34.0f;
+    constexpr float kMinWidth = 320.0f;
+    constexpr float kMaxWidth = 1200.0f;
+    const std::string localized_message = localized_text(message);
+    const int font_size = fit_font_size(message, kStatusFontSize, kMaxWidth - kHorizontalPadding * 2.0f,
+                                        kStatusMinFontSize);
+    const float measured_width = ui::measure_text_size(localized_message.c_str(), static_cast<float>(font_size), 0.0f).x;
+    const float width = std::clamp(measured_width + kHorizontalPadding * 2.0f, kMinWidth, kMaxWidth);
+    const Rectangle status_rect = {
+        kStatusAnchorRect.x + (kStatusAnchorRect.width - width) * 0.5f,
+        kStatusAnchorRect.y,
+        width,
+        kStatusAnchorRect.height
+    };
+    const Rectangle visual = reveal_rect(status_rect, reveal_t, 0.0f, 16.0f);
     ui::draw_rect_f(visual, alpha(lerp_color(g_theme->panel, tone, 0.16f), 0.92f * reveal_t));
     ui::draw_rect_lines(visual, 1.5f, alpha(lerp_color(g_theme->border, tone, 0.48f), reveal_t));
-    ui::draw_text_in_rect(message.c_str(), 30, visual, alpha(tone, reveal_t));
+    ui::draw_text_in_rect(localized_message.c_str(), font_size, ui::inset(visual, ui::edge_insets::symmetric(0.0f, kHorizontalPadding)),
+                          alpha(tone, reveal_t));
 }
 
-void draw_action_button(Rectangle rect, const char* icon, const char* label, float reveal_t) {
+void draw_action_button(Rectangle rect, const char* label, float reveal_t) {
     const Rectangle visual = reveal_rect(rect, reveal_t, 0.0f, 18.0f);
     const bool hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), visual);
     const bool pressed = hovered && IsMouseButtonDown(MOUSE_BUTTON_LEFT);
@@ -378,8 +415,7 @@ void draw_action_button(Rectangle rect, const char* icon, const char* label, flo
     const Color fill = with_alpha(hovered ? g_theme->row_soft_hover : g_theme->row_soft, row_alpha);
     ui::draw_rect_f(pressed_visual, fill);
     ui::draw_rect_lines(pressed_visual, 1.5f, alpha(g_theme->border, reveal_t));
-    const std::string button_label = std::string(icon) + "  " + label;
-    draw_fit_text(button_label, 30,
+    draw_fit_text(label, 30,
                   {pressed_visual.x + 26.0f, pressed_visual.y, pressed_visual.width - 52.0f, pressed_visual.height},
                   alpha(g_theme->text, reveal_t), ui::text_align::center, 20);
 }
@@ -416,15 +452,15 @@ void draw(const model& data) {
 
     draw_metric(kMetricAccuracyRect, "Accuracy", TextFormat("%.2f%%", data.result.accuracy), g_theme->fast, metric_t);
     draw_metric(kMetricComboRect, "Max Combo", std::to_string(data.result.max_combo), g_theme->accent, metric_t);
-    draw_metric(kMetricGaugeRect, "Gauge", TextFormat("%.0f%%", data.result.gauge_value), g_theme->success, metric_t);
-    draw_gauge_bar(data.result, metric_t);
+    draw_metric(kMetricOffsetRect, "Avg Offset", TextFormat("%+.1fms", data.result.avg_offset), g_theme->text_secondary,
+                detail_t);
     draw_offsets(data.result, detail_t);
     draw_judgements(data.result, detail_t);
     draw_status(data, delayed(data.reveal_t, 0.30f));
 
-    draw_action_button(kRetryRect, "R", "Retry", action_t);
-    draw_action_button(kSongSelectRect, ">", "Song Select", action_t);
-    draw_action_button(kReplayRect, "P", "Replay", action_t);
+    draw_action_button(kRetryRect, "Retry", action_t);
+    draw_action_button(kSongSelectRect, "Song Select", action_t);
+    draw_action_button(kReplayRect, "Replay", action_t);
 }
 
 }  // namespace result_scene_view
