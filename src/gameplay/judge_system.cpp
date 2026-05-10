@@ -262,14 +262,20 @@ void judge_system::handle_hold_release(const input_event& event) {
         return;
     }
 
-    note_state& state = note_states_[*active_hold];
+    const size_t note_index = *active_hold;
+    note_state& state = note_states_[note_index];
     if (!state.is_holding()) {
         active_hold.reset();
         return;
     }
 
     if (event.timestamp_ms >= state.end_target_ms) {
-        complete_held_note(*active_hold, false);
+        complete_held_note(note_index, false);
+        return;
+    }
+
+    active_hold.reset();
+    if (has_active_hold_for_note(note_index)) {
         return;
     }
 
@@ -277,7 +283,7 @@ void judge_system::handle_hold_release(const input_event& event) {
     const double release_offset_ms = event.timestamp_ms - state.end_target_ms;
     state.progress = note_progress_state::completed;
     state.result = evaluate_hold_release_offset(release_offset_ms);
-    clear_active_hold_for_note(*active_hold);
+    clear_active_hold_for_note(note_index);
     if (const std::optional<size_t> tail_descriptor_index =
             descriptor_index_for_event_index(state.tail_event_index); !tail_descriptor_index.has_value() ||
             !mark_event_completed(*tail_descriptor_index)) {
@@ -301,6 +307,9 @@ void judge_system::handle_press(const input_event& event) {
 
     const std::vector<size_t> candidate_indices = find_press_candidates(event.lane, event.timestamp_ms);
     if (candidate_indices.empty()) {
+        if (try_adopt_active_wide_hold_lane(event)) {
+            return;
+        }
         arm_release_candidate(event.lane, event.timestamp_ms);
         return;
     }
@@ -489,6 +498,15 @@ void judge_system::clear_active_hold_for_note(size_t note_index) {
     }
 }
 
+bool judge_system::has_active_hold_for_note(size_t note_index) const {
+    for (const std::optional<size_t>& active_hold : active_hold_indices_) {
+        if (active_hold.has_value() && *active_hold == note_index) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool judge_system::mark_event_completed(size_t event_descriptor_index) {
     if (event_descriptor_index >= event_descriptors_.size() || event_completed_[event_descriptor_index]) {
         return false;
@@ -572,6 +590,43 @@ bool judge_system::try_absorb_completed_wide_press(const input_event& event) {
         note_states_[descriptor.note_index].is_holding()) {
         active_hold_indices_[static_cast<size_t>(event.lane)] = descriptor.note_index;
     }
+    return true;
+}
+
+bool judge_system::try_adopt_active_wide_hold_lane(const input_event& event) {
+    if (event.lane < 0 || event.lane >= kMaxLanes ||
+        active_hold_indices_[static_cast<size_t>(event.lane)].has_value()) {
+        return false;
+    }
+
+    std::optional<size_t> adopted_note_index;
+    double adopted_end_ms = 0.0;
+    for (const std::optional<size_t>& active_hold : active_hold_indices_) {
+        if (!active_hold.has_value() || *active_hold >= note_states_.size()) {
+            continue;
+        }
+
+        const note_state& state = note_states_[*active_hold];
+        if (!state.is_holding() ||
+            state.note_ref.type != note_type::hold ||
+            note_lane_width(state.note_ref) <= 1 ||
+            !note_covers_lane(state.note_ref, event.lane) ||
+            event.timestamp_ms < state.target_ms ||
+            event.timestamp_ms >= state.end_target_ms) {
+            continue;
+        }
+
+        if (!adopted_note_index.has_value() || state.end_target_ms < adopted_end_ms) {
+            adopted_note_index = *active_hold;
+            adopted_end_ms = state.end_target_ms;
+        }
+    }
+
+    if (!adopted_note_index.has_value()) {
+        return false;
+    }
+
+    active_hold_indices_[static_cast<size_t>(event.lane)] = *adopted_note_index;
     return true;
 }
 

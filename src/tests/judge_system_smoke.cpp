@@ -565,6 +565,58 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    note_data handoff_wide_hold{note_type::hold, 960, 0, 1440};
+    handoff_wide_hold.lane_width = 2;
+    judge_system handoff_wide_hold_judge;
+    handoff_wide_hold_judge.init({handoff_wide_hold}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 1000.0);
+    handoff_wide_hold_judge.update(1000.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{true, true, false, false}, 1200.0);
+    handoff_wide_hold_judge.update(1200.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1300.0);
+    handoff_wide_hold_judge.update(1300.0, input);
+    if (!handoff_wide_hold_judge.get_judge_events().empty() ||
+        !handoff_wide_hold_judge.note_states().front().is_holding()) {
+        std::cerr << "Wide hold handoff should keep holding after the starting lane is released\n";
+        return EXIT_FAILURE;
+    }
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1510.0);
+    handoff_wide_hold_judge.update(1510.0, input);
+    if (!handoff_wide_hold_judge.note_states().front().is_completed() ||
+        handoff_wide_hold_judge.get_last_judge()->result != judge_result::perfect) {
+        std::cerr << "Wide hold handoff should complete from the adopted held lane\n";
+        return EXIT_FAILURE;
+    }
+
+    note_data handoff_drop_wide_hold{note_type::hold, 960, 0, 1440};
+    handoff_drop_wide_hold.lane_width = 2;
+    judge_system handoff_drop_wide_hold_judge;
+    handoff_drop_wide_hold_judge.init({handoff_drop_wide_hold}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 1000.0);
+    handoff_drop_wide_hold_judge.update(1000.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{true, true, false, false}, 1200.0);
+    handoff_drop_wide_hold_judge.update(1200.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1250.0);
+    handoff_drop_wide_hold_judge.update(1250.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1300.0);
+    handoff_drop_wide_hold_judge.update(1300.0, input);
+    if (!handoff_drop_wide_hold_judge.note_states().front().is_completed() ||
+        !handoff_drop_wide_hold_judge.get_last_judge().has_value() ||
+        handoff_drop_wide_hold_judge.get_last_judge()->result != judge_result::miss ||
+        handoff_drop_wide_hold_judge.get_last_judge()->offset_ms != -200.0) {
+        std::cerr << "Wide hold handoff should miss when the final adopted lane drops early\n";
+        return EXIT_FAILURE;
+    }
+    if (handoff_drop_wide_hold_judge.get_last_judge()->play_hitsound ||
+        !handoff_drop_wide_hold_judge.get_last_judge()->apply_gameplay_effects) {
+        std::cerr << "Wide hold handoff early release should use hold-tail judge effects\n";
+        return EXIT_FAILURE;
+    }
+
     note_data first_tail_hold{note_type::hold, 960, 0, 1440};
     note_data second_tail_hold{note_type::hold, 960, 1, 1440};
     note_data wide_release_over_tails{note_type::release, 1440, 0, 1440};

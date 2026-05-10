@@ -47,10 +47,12 @@ private:
     void advance_note_lane_head_indices(const note_data& note);
     void advance_event_lane_head_indices(const chart_judge_event& event);
     void clear_active_hold_for_note(size_t note_index);
+    bool has_active_hold_for_note(size_t note_index) const;
     bool mark_event_completed(size_t event_descriptor_index);
     std::optional<size_t> descriptor_index_for_event_index(int event_index) const;
     bool release_overlaps_hold_tail(const chart_judge_event& release) const;
     bool try_absorb_completed_wide_press(const input_event& event);
+    bool try_adopt_active_wide_hold_lane(const input_event& event);
     std::vector<size_t> find_press_candidates(int lane, double timestamp_ms);
     std::vector<size_t> find_release_candidates(int lane, double timestamp_ms);
     std::vector<size_t> find_early_release_stay_candidates(int lane, double timestamp_ms);
