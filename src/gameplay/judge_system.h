@@ -30,10 +30,22 @@ private:
         bool show_feedback = true;
     };
 
+    using input_session_id = size_t;
+
+    struct input_session {
+        input_session_id id = 0;
+        int lane = 0;
+        double press_ms = 0.0;
+        double release_ms = 0.0;
+        bool held = true;
+        std::optional<size_t> armed_release_event_index;
+        std::optional<size_t> active_hold_note_index;
+    };
+
     struct active_hold_session {
         bool active = false;
         size_t note_index = 0;
-        std::array<bool, kMaxLanes> adopted_lanes = {};
+        std::array<std::optional<input_session_id>, kMaxLanes> adopted_sessions = {};
     };
 
     judge_result evaluate_offset(double offset_ms) const;
@@ -52,23 +64,28 @@ private:
     void advance_lane_event_head_index(int lane);
     void advance_note_lane_head_indices(const note_data& note);
     void advance_event_lane_head_indices(const chart_judge_event& event);
+    input_session* session_for_id(input_session_id session_id);
+    const input_session* session_for_id(input_session_id session_id) const;
+    input_session_id begin_input_session(const input_event& event);
+    input_session* release_input_session(const input_event& event);
     active_hold_session* active_hold_session_for_note(size_t note_index);
     const active_hold_session* active_hold_session_for_note(size_t note_index) const;
-    bool activate_hold_lane(size_t note_index, int lane);
-    void deactivate_hold_lane(size_t note_index, int lane);
+    bool activate_hold_lane(size_t note_index, int lane, input_session_id input_id);
+    void deactivate_hold_lane(size_t note_index, int lane, input_session_id input_id);
     void clear_active_hold_for_note(size_t note_index);
     bool has_active_hold_for_note(size_t note_index) const;
     bool mark_event_completed(size_t event_descriptor_index);
     std::optional<size_t> descriptor_index_for_event_index(int event_index) const;
     bool release_overlaps_hold_tail(const chart_judge_event& release) const;
-    bool try_absorb_completed_wide_press(const input_event& event);
-    bool try_adopt_active_wide_hold_lane(const input_event& event);
+    bool try_absorb_completed_wide_press(const input_event& event, input_session_id input_id);
+    bool try_adopt_active_wide_hold_lane(const input_event& event, input_session_id input_id);
     std::vector<size_t> find_press_candidates(int lane, double timestamp_ms);
-    std::vector<size_t> find_release_candidates(int lane, double timestamp_ms);
+    std::vector<size_t> find_release_candidates(int lane, double timestamp_ms,
+                                                std::optional<input_session_id> input_id);
     std::vector<size_t> find_early_release_stay_candidates(int lane, double timestamp_ms);
-    void arm_release_candidate(int lane, double timestamp_ms);
+    void arm_release_candidate(input_session_id input_id, double timestamp_ms);
     bool is_standalone_release_event(size_t event_descriptor_index) const;
-    bool release_event_is_armed(size_t event_descriptor_index, int lane) const;
+    bool release_event_is_armed(size_t event_descriptor_index, std::optional<input_session_id> input_id) const;
     void clear_armed_release_event(size_t event_descriptor_index);
     void complete_held_note(size_t note_index, bool emit_display_judge);
     void complete_event(size_t event_descriptor_index, judge_result result, double offset_ms);
@@ -90,7 +107,8 @@ private:
     std::array<size_t, kMaxLanes> lane_head_indices_ = {};
     std::array<size_t, kMaxLanes> lane_event_head_indices_ = {};
     std::array<std::optional<size_t>, kMaxLanes> active_hold_indices_;
+    std::array<std::optional<input_session_id>, kMaxLanes> held_input_session_by_lane_;
+    std::vector<input_session> input_sessions_;
     std::vector<active_hold_session> active_hold_sessions_;
-    std::array<std::optional<size_t>, kMaxLanes> armed_release_event_indices_;
     std::vector<judge_event> judge_events_;
 };
