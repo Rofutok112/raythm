@@ -18,6 +18,7 @@
 #include "chart_fingerprint.h"
 #include "network/auth_client.h"
 #include "network/ranking_client.h"
+#include "network/server_environment.h"
 #include "path_utils.h"
 #include "scoring_ruleset_runtime.h"
 #include "song_fingerprint.h"
@@ -32,7 +33,8 @@
 namespace {
 
 constexpr char kLocalRankingFileHeader[] = "RAYTHM_LOCAL_RANKING_V6";
-constexpr char kAuthoritativeAcceptedInput[] = "note_results_v1";
+constexpr char kAuthoritativeAcceptedInput[] = "noteResultsV1";
+constexpr char kLegacyAuthoritativeAcceptedInput[] = "note_results_v1";
 constexpr wchar_t kEntropyLabel[] = L"raythm-local-ranking";
 
 std::string trim(std::string_view value) {
@@ -47,6 +49,13 @@ std::string trim(std::string_view value) {
     }
 
     return std::string(value.substr(start, end - start));
+}
+
+std::string normalize_accepted_input(std::string_view value) {
+    const std::string normalized = trim(value);
+    return normalized == kLegacyAuthoritativeAcceptedInput
+        ? std::string(kAuthoritativeAcceptedInput)
+        : normalized;
 }
 
 std::string current_timestamp_utc() {
@@ -298,7 +307,7 @@ std::vector<stored_local_record> parse_records(const std::string& content) {
                     continue;
                 }
                 record.scoring_ruleset_version = trim(ruleset_version_token);
-                record.scoring_accepted_input = trim(accepted_input_token);
+                record.scoring_accepted_input = normalize_accepted_input(accepted_input_token);
                 const std::optional<std::vector<note_result_entry>> note_results =
                     parse_note_results(note_results_token);
                 if (!note_results.has_value()) {
@@ -382,7 +391,7 @@ std::string display_ruleset_server_url() {
         return auth::normalize_server_url(summary.server_url);
     }
 
-    return auth::normalize_server_url(auth::kDefaultServerUrl);
+    return server_environment::active_server_url();
 }
 
 struct cached_scoring_ruleset_state {
@@ -478,7 +487,7 @@ std::optional<std::pair<std::string, ranking_client::scoring_ruleset>> load_cach
         } else if (key == "active") {
             ruleset.active = trim(value) == "1";
         } else if (key == "accepted_input") {
-            ruleset.accepted_input = trim(value);
+            ruleset.accepted_input = normalize_accepted_input(value);
         } else if (key == "ruleset_version") {
             ruleset.ruleset_version = trim(value);
         } else if (key == "score_model") {
@@ -895,6 +904,8 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
             const auth::operation_result restored = auth::restore_saved_session();
             if (!restored.success || !restored.session_data.has_value()) {
                 result.available = false;
+                result.maintenance = restored.maintenance;
+                result.retry_after = restored.retry_after;
                 result.message = restored.message.empty()
                     ? "Sign in to view online rankings."
                     : restored.message;
@@ -910,6 +921,8 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
 
         if (!online_result.success || !online_result.listing.has_value()) {
             result.available = false;
+            result.maintenance = online_result.maintenance;
+            result.retry_after = online_result.retry_after;
             result.message = online_result.message.empty()
                 ? "Failed to load online rankings."
                 : online_result.message;
@@ -917,6 +930,8 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
         }
 
         result.available = online_result.listing->available;
+        result.maintenance = online_result.maintenance;
+        result.retry_after = online_result.retry_after;
         result.entries = std::move(online_result.listing->entries);
         result.message = online_result.listing->message;
         return result;
@@ -964,6 +979,9 @@ local_submit_result submit_local_result_detailed(const chart_meta& chart, const 
         entries.push_back(resolve_record_entry(record, ruleset));
     }
     std::sort(entries.begin(), entries.end(), ranking_entry_better);
+    for (size_t i = 0; i < entries.size(); ++i) {
+        entries[i].placement = static_cast<int>(i) + 1;
+    }
 
     const std::string recorded_at = current_timestamp_utc();
     const std::string player_display_name = current_local_player_display_name();
@@ -981,16 +999,30 @@ local_submit_result submit_local_result_detailed(const chart_meta& chart, const 
     new_record.scoring_accepted_input =
         result.scoring_accepted_input.empty()
             ? std::string(kAuthoritativeAcceptedInput)
-            : result.scoring_accepted_input;
+            : normalize_accepted_input(result.scoring_accepted_input);
     new_record.note_results = result.note_results;
     entry new_entry = resolve_record_entry(new_record, ruleset);
 
+    if (!entries.empty()) {
+        submission.previous_best = entries.front();
+    }
     submission.best_updated =
         entries.empty() || ranking_entry_better(new_entry, entries.front());
 
     records.push_back(new_record);
     entries.push_back(new_entry);
     std::sort(entries.begin(), entries.end(), ranking_entry_better);
+    for (size_t i = 0; i < entries.size(); ++i) {
+        entries[i].placement = static_cast<int>(i) + 1;
+    }
+    for (const entry& sorted_entry : entries) {
+        if (sorted_entry.recorded_at == recorded_at &&
+            sorted_entry.player_display_name == player_display_name &&
+            sorted_entry.score == new_entry.score) {
+            new_entry = sorted_entry;
+            break;
+        }
+    }
     if (entries.size() > 50) {
         entries.resize(50);
     }
@@ -1086,6 +1118,7 @@ online_submit_result submit_online_result(const song_data& song,
         return submission;
     }
 
+    ruleset->accepted_input = normalize_accepted_input(ruleset->accepted_input);
     if (!ruleset->active ||
         ruleset->accepted_input != kAuthoritativeAcceptedInput) {
         submission.message = "The server does not accept this ranking submission format.";
@@ -1099,7 +1132,7 @@ online_submit_result submit_online_result(const song_data& song,
     const std::string submission_input_format =
         result.scoring_accepted_input.empty()
             ? std::string(kAuthoritativeAcceptedInput)
-            : result.scoring_accepted_input;
+            : normalize_accepted_input(result.scoring_accepted_input);
     if (submission_input_format != ruleset->accepted_input) {
         submission.message = "The score input format changed. Start the chart again to submit online ranking.";
         return submission;
@@ -1125,6 +1158,8 @@ online_submit_result submit_online_result(const song_data& song,
         const auth::operation_result restored = auth::restore_saved_session();
         if (!restored.success || !restored.session_data.has_value()) {
             submission.success = false;
+            submission.maintenance = restored.maintenance;
+            submission.retry_after = restored.retry_after;
             submission.message = restored.message.empty()
                 ? "Sign in to submit online rankings."
                 : restored.message;
@@ -1141,10 +1176,13 @@ online_submit_result submit_online_result(const song_data& song,
     }
 
     submission.success = request.success;
+    submission.maintenance = request.maintenance;
+    submission.retry_after = request.retry_after;
     submission.message = request.message;
     if (request.submission.has_value()) {
         submission.updated = request.submission->updated;
         submission.entry = request.submission->entry;
+        submission.previous_entry = request.submission->previous_entry;
         if (submission.message.empty()) {
             submission.message = request.submission->message;
         }

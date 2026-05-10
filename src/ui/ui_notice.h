@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "localization/localization.h"
 #include "raylib.h"
 #include "theme.h"
 #include "ui_font.h"
@@ -28,6 +29,12 @@ struct notice_entry {
 
 struct notice_queue {
     std::vector<notice_entry> items;
+};
+
+struct notice_layout {
+    std::string display_message;
+    int font_size = 18;
+    Rectangle rect{};
 };
 
 inline void clear_notices(notice_queue& queue) {
@@ -96,6 +103,32 @@ inline unsigned char notice_alpha(const notice_entry& notice) {
     return static_cast<unsigned char>(160.0f + 95.0f * alpha);
 }
 
+inline int fit_notice_font_size(const std::string& text, int desired_size, float max_text_width) {
+    constexpr int kMinFontSize = 12;
+    int size = desired_size;
+    while (size > kMinFontSize && measure_text_size(text, static_cast<float>(size)).x > max_text_width) {
+        --size;
+    }
+    return size;
+}
+
+inline notice_layout measure_notice_layout(const notice_entry& notice, float right, float bottom,
+                                           float max_width, float min_width,
+                                           float horizontal_padding, float vertical_padding,
+                                           int font_size) {
+    notice_layout layout;
+    layout.display_message = localization::tr_literal(notice.message.c_str());
+    layout.font_size = fit_notice_font_size(layout.display_message, font_size, max_width - horizontal_padding * 2.0f);
+
+    const Vector2 measured = measure_text_size(layout.display_message, static_cast<float>(layout.font_size));
+    const float width = std::clamp(measured.x + horizontal_padding * 2.0f, min_width, max_width);
+    const float height = std::max(45.0f,
+                                  std::max(measured.y, text_layout_font_size(static_cast<float>(layout.font_size))) +
+                                      vertical_padding * 2.0f);
+    layout.rect = {right - width, bottom - height, width, height};
+    return layout;
+}
+
 inline void draw_notice_queue_bottom_right(const notice_queue& queue, Rectangle bounds,
                                            float right_margin = 36.0f, float bottom_margin = 24.0f,
                                            float max_width = 690.0f, float min_width = 210.0f,
@@ -107,35 +140,33 @@ inline void draw_notice_queue_bottom_right(const notice_queue& queue, Rectangle 
     constexpr float kHorizontalPadding = 18.0f;
     constexpr float kVerticalPadding = 10.5f;
     constexpr int kFontSize = 18;
-    const float line_height = text_layout_font_size(static_cast<float>(kFontSize));
     float bottom_y = bounds.y + bounds.height - bottom_margin;
 
     for (auto it = queue.items.rbegin(); it != queue.items.rend(); ++it) {
         const notice_entry& notice = *it;
         const Color tone = notice_color(notice.tone);
         const unsigned char alpha = notice_alpha(notice);
-        const Vector2 measured = measure_text_size(notice.message, static_cast<float>(kFontSize));
-        const float width = std::clamp(measured.x + kHorizontalPadding * 2.0f, min_width, max_width);
-        const float height = std::max(45.0f,
-                                      std::max(measured.y, line_height) + kVerticalPadding * 2.0f);
-        const Rectangle rect = {
-            bounds.x + bounds.width - right_margin - width,
-            bottom_y - height,
-            width,
-            height
-        };
+        const notice_layout layout = measure_notice_layout(
+            notice,
+            bounds.x + bounds.width - right_margin,
+            bottom_y,
+            max_width,
+            min_width,
+            kHorizontalPadding,
+            kVerticalPadding,
+            kFontSize);
 
         const Color background = with_alpha(lerp_color(g_theme->panel, tone, 0.12f), alpha);
         const Color border = with_alpha(lerp_color(g_theme->border, tone, 0.45f), alpha);
         const Color text_color = with_alpha(tone, alpha);
 
-        draw_rect_f(rect, background);
-        draw_rect_lines(rect, 2.0f, border);
-        draw_text_in_rect(notice.message.c_str(), kFontSize,
-                          inset(rect, edge_insets::symmetric(kVerticalPadding, kHorizontalPadding)),
+        draw_rect_f(layout.rect, background);
+        draw_rect_lines(layout.rect, 2.0f, border);
+        draw_text_in_rect(layout.display_message.c_str(), layout.font_size,
+                          inset(layout.rect, edge_insets::symmetric(kVerticalPadding, kHorizontalPadding)),
                           text_color, text_align::right);
 
-        bottom_y = rect.y - vertical_gap;
+        bottom_y = layout.rect.y - vertical_gap;
     }
 }
 

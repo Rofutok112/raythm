@@ -13,6 +13,7 @@
 #include "mv/mv_storage.h"
 #include "network/auth_client.h"
 #include "network/ranking_client.h"
+#include "network/server_environment.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
 #include "ranking_service.h"
@@ -46,10 +47,6 @@ bool is_within_root(const std::filesystem::path& path, const std::filesystem::pa
     }
 
     return true;
-}
-
-bool is_chart_file_path(const std::filesystem::path& path) {
-    return path.extension() == ".rchart";
 }
 
 std::optional<rank> load_best_local_rank(const std::string& chart_id) {
@@ -95,7 +92,7 @@ std::string current_manifest_server_url() {
     if (!summary.server_url.empty()) {
         return auth::normalize_server_url(summary.server_url);
     }
-    return auth::normalize_server_url(auth::kDefaultServerUrl);
+    return server_environment::active_server_url();
 }
 
 std::string expected_remote_song_id(const std::string& server_url,
@@ -159,17 +156,14 @@ content_hashes manifest_song_hashes(const ranking_client::song_manifest& manifes
     };
 }
 
-bool hashes_present(const content_hashes& hashes) {
-    return (!hashes.song_json_fingerprint.empty() || !hashes.song_json_sha256.empty()) &&
-           !hashes.audio_sha256.empty() &&
-           !hashes.jacket_sha256.empty() &&
-           (!hashes.chart_fingerprint.empty() || !hashes.chart_sha256.empty());
-}
-
 bool song_hashes_present(const content_hashes& hashes) {
     return (!hashes.song_json_fingerprint.empty() || !hashes.song_json_sha256.empty()) &&
            !hashes.audio_sha256.empty() &&
            !hashes.jacket_sha256.empty();
+}
+
+bool chart_hashes_present(const content_hashes& hashes) {
+    return !hashes.chart_fingerprint.empty() || !hashes.chart_sha256.empty();
 }
 
 bool song_json_hash_equal(const content_hashes& left, const content_hashes& right) {
@@ -180,29 +174,12 @@ bool song_json_hash_equal(const content_hashes& left, const content_hashes& righ
            left.song_json_sha256 == right.song_json_sha256;
 }
 
-bool hashes_equal(const content_hashes& left, const content_hashes& right) {
-    if (!song_json_hash_equal(left, right) ||
-        left.audio_sha256 != right.audio_sha256 ||
-        left.jacket_sha256 != right.jacket_sha256) {
-        return false;
-    }
-
+bool chart_hash_equal(const content_hashes& left, const content_hashes& right) {
     if (!left.chart_fingerprint.empty() && !right.chart_fingerprint.empty()) {
         return left.chart_fingerprint == right.chart_fingerprint;
     }
     return !left.chart_sha256.empty() && !right.chart_sha256.empty() &&
            left.chart_sha256 == right.chart_sha256;
-}
-
-std::string content_signature(const local_content_files& files) {
-    const std::string song_json = file_signature(files.song_json_path);
-    const std::string audio = file_signature(files.audio_path);
-    const std::string jacket = file_signature(files.jacket_path);
-    const std::string chart = file_signature(files.chart_path);
-    if (song_json.empty() || audio.empty() || jacket.empty() || chart.empty()) {
-        return {};
-    }
-    return song_json + ";" + audio + ";" + jacket + ";" + chart;
 }
 
 std::string song_content_signature(const song_data& song) {
@@ -221,20 +198,8 @@ std::string song_content_signature(const song_data& song) {
     return song_json + ";" + audio + ";" + jacket;
 }
 
-std::optional<content_hashes> compute_hashes(const local_content_files& files) {
-    const std::optional<std::string> song_json = updater::compute_sha256_hex(files.song_json_path);
-    const std::optional<std::string> song_json_fingerprint =
-        song_fingerprint::compute_sha256_hex(files.song_json_path);
-    const std::optional<std::string> audio = updater::compute_sha256_hex(files.audio_path);
-    const std::optional<std::string> jacket = updater::compute_sha256_hex(files.jacket_path);
-    const std::optional<std::string> chart = updater::compute_sha256_hex(files.chart_path);
-    const std::optional<std::string> fingerprint = chart_fingerprint::compute_sha256_hex(files.chart_path);
-    if (!song_json.has_value() || !song_json_fingerprint.has_value() ||
-        !audio.has_value() || !jacket.has_value() ||
-        !chart.has_value() || !fingerprint.has_value()) {
-        return std::nullopt;
-    }
-    return content_hashes{*song_json, *song_json_fingerprint, *audio, *jacket, *chart, *fingerprint};
+std::string chart_content_signature(const std::filesystem::path& chart_path) {
+    return file_signature(chart_path);
 }
 
 std::optional<content_hashes> compute_song_hashes(const song_data& song) {
@@ -254,13 +219,36 @@ std::optional<content_hashes> compute_song_hashes(const song_data& song) {
     return content_hashes{*song_json, *song_json_fingerprint, *audio, *jacket, {}, {}};
 }
 
+std::optional<content_hashes> compute_chart_hashes(const std::filesystem::path& chart_path) {
+    const std::optional<std::string> chart = updater::compute_sha256_hex(chart_path);
+    const std::optional<std::string> fingerprint = chart_fingerprint::compute_sha256_hex(chart_path);
+    if (!chart.has_value() || !fingerprint.has_value()) {
+        return std::nullopt;
+    }
+    return content_hashes{{}, {}, {}, {}, *chart, *fingerprint};
+}
+
 using verification_cache_record = song_select::content_verification_cache_database::record;
 
 std::string cache_key(std::string_view server_url, std::string_view chart_id) {
     return std::string(server_url) + "\n" + std::string(chart_id);
 }
 
+bool should_reuse_cached_hashes(const verification_cache_record* cached,
+                                const std::string& signature) {
+    if (cached == nullptr || cached->file_signature != signature) {
+        return false;
+    }
+    return cached->status != content_status::modified &&
+           cached->status != content_status::update;
+}
+
 using verification_cache = std::unordered_map<std::string, verification_cache_record>;
+
+struct verification_result {
+    content_status status = content_status::local;
+    content_status source_status = content_status::local;
+};
 
 verification_cache load_verification_cache() {
     return song_select::content_verification_cache_database::load();
@@ -276,6 +264,20 @@ content_status cached_status_for(const verification_cache_record* cached,
         return cached->status;
     }
     return content_status::local;
+}
+
+verification_result cached_result_for(const verification_cache_record* cached,
+                                      const std::string& signature) {
+    const content_status status = cached_status_for(cached, signature);
+    content_status source_status = content_status::local;
+    if (cached != nullptr && cached->file_signature == signature) {
+        source_status = status_for_content_source(cached->content_source);
+    }
+    if (source_status == content_status::local &&
+        (status == content_status::official || status == content_status::community)) {
+        source_status = status;
+    }
+    return {status, source_status};
 }
 
 bool is_verified_status(content_status status) {
@@ -298,17 +300,17 @@ content_status mismatched_verified_status(const verification_cache_record* cache
     return content_status::local;
 }
 
-content_status verify_song_content_source(const song_data& song,
-                                          const std::string& server_url,
-                                          verification_cache& cache,
-                                          bool& server_reachable) {
+verification_result verify_song_content_source(const song_data& song,
+                                               const std::string& server_url,
+                                               verification_cache& cache,
+                                               bool& server_reachable) {
     if (server_url.empty() || song.meta.song_id.empty()) {
-        return content_status::local;
+        return {};
     }
 
     const std::string signature = song_content_signature(song);
     if (signature.empty()) {
-        return content_status::local;
+        return {};
     }
 
     const std::string song_cache_id = "song:" + song.meta.song_id;
@@ -316,7 +318,7 @@ content_status verify_song_content_source(const song_data& song,
     const auto cached_it = cache.find(key);
     const verification_cache_record* cached = cached_it == cache.end() ? nullptr : &cached_it->second;
     if (!server_reachable) {
-        return cached_status_for(cached, signature);
+        return cached_result_for(cached, signature);
     }
 
     const std::string remote_song_id = expected_remote_song_id(server_url, song.meta.song_id);
@@ -324,30 +326,30 @@ content_status verify_song_content_source(const song_data& song,
         ranking_client::fetch_song_manifest(server_url, remote_song_id);
     if (!request.success) {
         server_reachable = false;
-        return cached_status_for(cached, signature);
+        return cached_result_for(cached, signature);
     }
     if (!request.manifest.has_value() || !request.manifest->available) {
-        return cached_status_for(cached, signature);
+        return cached_result_for(cached, signature);
     }
 
     const ranking_client::song_manifest& manifest = *request.manifest;
     if (manifest.song_id != remote_song_id) {
-        return content_status::local;
+        return {};
     }
 
     std::optional<content_hashes> local_hashes;
-    if (cached != nullptr && cached->file_signature == signature && song_hashes_present(cached->local_hashes)) {
+    if (should_reuse_cached_hashes(cached, signature) && song_hashes_present(cached->local_hashes)) {
         local_hashes = cached->local_hashes;
     } else {
         local_hashes = compute_song_hashes(song);
     }
     if (!local_hashes.has_value()) {
-        return content_status::local;
+        return {};
     }
 
     const content_hashes server_hashes = manifest_song_hashes(manifest);
     if (!song_hashes_present(server_hashes)) {
-        return content_status::local;
+        return {};
     }
 
     const content_status source_status = status_for_content_source(manifest.content_source);
@@ -373,34 +375,29 @@ content_status verify_song_content_source(const song_data& song,
         .local_hashes = *local_hashes,
         .server_hashes = server_hashes,
     };
-    return status;
+    return {status, source_status};
 }
 
-content_status verify_chart_content_source(const song_data& song,
-                                           const song_select::chart_option& chart,
-                                           const std::string& server_url,
-                                           verification_cache& cache,
-                                           bool& server_reachable) {
+verification_result verify_chart_content_source(const song_data& song,
+                                                const song_select::chart_option& chart,
+                                                const std::string& server_url,
+                                                verification_cache& cache,
+                                                bool& server_reachable) {
     if (server_url.empty() || chart.meta.chart_id.empty()) {
-        return content_status::local;
+        return {};
     }
 
-    const local_content_files files{
-        path_utils::from_utf8(song.directory) / "song.json",
-        path_utils::from_utf8(song.directory) / path_utils::from_utf8(song.meta.audio_file),
-        path_utils::from_utf8(song.directory) / path_utils::from_utf8(song.meta.jacket_file),
-        path_utils::from_utf8(chart.path),
-    };
-    const std::string signature = content_signature(files);
+    const std::filesystem::path chart_path = path_utils::from_utf8(chart.path);
+    const std::string signature = chart_content_signature(chart_path);
     if (signature.empty()) {
-        return content_status::local;
+        return {};
     }
 
     const std::string key = cache_key(server_url, chart.meta.chart_id);
     const auto cached_it = cache.find(key);
     const verification_cache_record* cached = cached_it == cache.end() ? nullptr : &cached_it->second;
     if (!server_reachable) {
-        return cached_status_for(cached, signature);
+        return cached_result_for(cached, signature);
     }
 
     const std::string remote_song_id = expected_remote_song_id(server_url, song.meta.song_id);
@@ -409,39 +406,39 @@ content_status verify_chart_content_source(const song_data& song,
         ranking_client::fetch_chart_manifest(server_url, remote_chart_id);
     if (!request.success) {
         server_reachable = false;
-        return cached_status_for(cached, signature);
+        return cached_result_for(cached, signature);
     }
     if (!request.manifest.has_value() || !request.manifest->available) {
-        return cached_status_for(cached, signature);
+        return cached_result_for(cached, signature);
     }
 
     const ranking_client::chart_manifest& manifest = *request.manifest;
     if (manifest.chart_id != remote_chart_id ||
         manifest.song_id != remote_song_id) {
-        return content_status::local;
+        return {};
     }
 
     std::optional<content_hashes> local_hashes;
-    if (cached != nullptr && cached->file_signature == signature && hashes_present(cached->local_hashes)) {
+    if (should_reuse_cached_hashes(cached, signature) && chart_hashes_present(cached->local_hashes)) {
         local_hashes = cached->local_hashes;
     } else {
-        local_hashes = compute_hashes(files);
+        local_hashes = compute_chart_hashes(chart_path);
     }
     if (!local_hashes.has_value()) {
-        return content_status::local;
+        return {};
     }
 
     const content_hashes server_hashes = manifest_hashes(manifest);
-    if (!hashes_present(server_hashes)) {
-        return content_status::local;
+    if (!chart_hashes_present(server_hashes)) {
+        return {};
     }
 
     const content_status source_status = status_for_content_source(manifest.content_source);
-    const bool matched = hashes_equal(*local_hashes, server_hashes);
+    const bool matched = chart_hash_equal(*local_hashes, server_hashes);
     const bool local_unchanged =
         cached != nullptr &&
         cached->file_signature == signature &&
-        hashes_equal(*local_hashes, cached->local_hashes);
+        chart_hash_equal(*local_hashes, cached->local_hashes);
     const content_status status = matched ? source_status : mismatched_verified_status(cached, local_unchanged);
 
     cache[key] = verification_cache_record{
@@ -454,57 +451,7 @@ content_status verify_chart_content_source(const song_data& song,
         .local_hashes = *local_hashes,
         .server_hashes = server_hashes,
     };
-    return status;
-}
-
-content_status aggregate_song_status(const std::vector<song_select::chart_option>& charts) {
-    if (charts.empty()) {
-        return content_status::local;
-    }
-
-    bool has_modified = false;
-    bool has_update = false;
-    bool has_local = false;
-    std::optional<content_status> remote_status;
-    for (const song_select::chart_option& chart : charts) {
-        if (chart.status == content_status::modified) {
-            has_modified = true;
-        } else if (chart.status == content_status::update) {
-            has_update = true;
-        } else if (chart.status == content_status::official || chart.status == content_status::community) {
-            if (!remote_status.has_value()) {
-                remote_status = chart.status;
-            } else if (*remote_status != chart.status) {
-                has_local = true;
-            }
-        } else {
-            has_local = true;
-        }
-    }
-
-    if (has_modified) {
-        return content_status::modified;
-    }
-    if (has_update) {
-        return content_status::update;
-    }
-    if (!has_local && remote_status.has_value()) {
-        return *remote_status;
-    }
-    return content_status::local;
-}
-
-content_status combine_song_and_chart_status(content_status song_status, content_status chart_status) {
-    if (song_status == content_status::modified || chart_status == content_status::modified) {
-        return content_status::modified;
-    }
-    if (song_status == content_status::update || chart_status == content_status::update) {
-        return content_status::update;
-    }
-    if (song_status == content_status::official || song_status == content_status::community) {
-        return song_status;
-    }
-    return chart_status;
+    return {status, source_status};
 }
 
 int source_sort_bucket(content_status status) {
@@ -523,8 +470,8 @@ int source_sort_bucket(content_status status) {
 }
 
 bool song_source_less(const song_select::song_entry& left, const song_select::song_entry& right) {
-    const int left_bucket = source_sort_bucket(left.status);
-    const int right_bucket = source_sort_bucket(right.status);
+    const int left_bucket = source_sort_bucket(left.source_status);
+    const int right_bucket = source_sort_bucket(right.source_status);
     if (left_bucket != right_bucket) {
         return left_bucket < right_bucket;
     }
@@ -532,8 +479,8 @@ bool song_source_less(const song_select::song_entry& left, const song_select::so
 }
 
 bool chart_source_less(const song_select::chart_option& left, const song_select::chart_option& right) {
-    const int left_bucket = source_sort_bucket(left.status);
-    const int right_bucket = source_sort_bucket(right.status);
+    const int left_bucket = source_sort_bucket(left.source_status);
+    const int right_bucket = source_sort_bucket(right.source_status);
     if (left_bucket != right_bucket) {
         return left_bucket < right_bucket;
     }
@@ -601,8 +548,7 @@ catalog_data load_catalog(bool calculate_missing_levels) {
     const song_load_result load_result = song_loader::load_all(path_utils::to_utf8(app_paths::songs_root()));
     catalog.load_errors = load_result.errors;
 
-    std::vector<song_data> all_songs = load_result.songs;
-    song_loader::attach_external_charts(path_utils::to_utf8(app_paths::charts_root()), all_songs);
+    const std::vector<song_data> all_songs = load_result.songs;
 
     catalog.songs.reserve(all_songs.size());
     for (const song_data& song : all_songs) {
@@ -615,9 +561,7 @@ catalog_data load_catalog(bool calculate_missing_levels) {
             }
 
             chart_meta meta = parse_result.data->meta;
-            if (meta.song_id.empty()) {
-                meta.song_id = song.meta.song_id;
-            }
+            meta.song_id = song.meta.song_id;
             if (calculate_missing_levels) {
                 meta.level = chart_level_cache::get_or_calculate(chart_path, *parse_result.data);
             } else if (const std::optional<float> cached_level = chart_level_cache::find_level(chart_path);
@@ -630,20 +574,24 @@ catalog_data load_catalog(bool calculate_missing_levels) {
                 chart_path,
                 meta,
                 content_status::local,
+                content_status::local,
                 chart_offsets.contains(meta.chart_id) ? chart_offsets.at(meta.chart_id) : 0,
                 load_best_local_rank(meta.chart_id),
                 static_cast<int>(parse_result.data->notes.size()),
                 min_bpm,
                 max_bpm,
             };
-            option.status = verify_chart_content_source(
+            const verification_result chart_result = verify_chart_content_source(
                 song, option, manifest_server_url, verification_cache, manifest_server_reachable);
+            option.status = chart_result.status;
+            option.source_status = chart_result.source_status;
             entry.charts.push_back(std::move(option));
         }
 
-        entry.status = combine_song_and_chart_status(
-            verify_song_content_source(song, manifest_server_url, verification_cache, manifest_server_reachable),
-            aggregate_song_status(entry.charts));
+        const verification_result entry_result =
+            verify_song_content_source(song, manifest_server_url, verification_cache, manifest_server_reachable);
+        entry.status = entry_result.status;
+        entry.source_status = entry_result.source_status;
         std::sort(entry.charts.begin(), entry.charts.end(), chart_source_less);
         catalog.songs.push_back(std::move(entry));
     }
@@ -669,48 +617,7 @@ delete_result delete_song(const state& state, int song_index) {
         return result;
     }
 
-    struct chart_delete_target {
-        std::filesystem::path path;
-        std::string chart_id;
-    };
-    std::vector<chart_delete_target> chart_paths_to_delete;
-    const std::filesystem::path charts_root = app_paths::charts_root();
-    if (std::filesystem::exists(charts_root) && std::filesystem::is_directory(charts_root)) {
-        for (const auto& chart_entry : std::filesystem::directory_iterator(charts_root)) {
-            if (!chart_entry.is_regular_file() || !is_chart_file_path(chart_entry.path())) {
-                continue;
-            }
-
-            const chart_parse_result parse_result = song_loader::load_chart(path_utils::to_utf8(chart_entry.path()));
-            if (!parse_result.success || !parse_result.data.has_value()) {
-                continue;
-            }
-
-            std::string linked_song_id = parse_result.data->meta.song_id;
-            if (linked_song_id.empty()) {
-                linked_song_id = local_content_index::linked_song_for_chart(parse_result.data->meta.chart_id)
-                    .value_or("");
-            }
-
-            if (linked_song_id == entry.song.meta.song_id) {
-                chart_paths_to_delete.push_back({
-                    .path = chart_entry.path(),
-                    .chart_id = parse_result.data->meta.chart_id,
-                });
-            }
-        }
-    }
-
     std::error_code ec;
-    for (const auto& chart_target : chart_paths_to_delete) {
-        std::filesystem::remove(chart_target.path, ec);
-        if (ec) {
-            result.message = "Failed to delete a linked chart file.";
-            return result;
-        }
-        local_content_index::unlink_chart(chart_target.chart_id);
-    }
-
     for (const auto& package : mv::load_all_packages()) {
         if (package.meta.song_id != entry.song.meta.song_id) {
             continue;
@@ -728,7 +635,6 @@ delete_result delete_song(const state& state, int song_index) {
         result.message = "Failed to delete the song directory.";
         return result;
     }
-    local_content_index::unlink_charts_for_song(entry.song.meta.song_id);
     local_content_index::remove_song_bindings(entry.song.meta.song_id);
     local_catalog_database::remove_song(entry.song.meta.song_id);
 
@@ -764,7 +670,6 @@ delete_result delete_chart(const state& state, int song_index, int chart_index) 
         return result;
     }
     const std::string deleted_chart_id = charts[static_cast<size_t>(chart_index)].meta.chart_id;
-    local_content_index::unlink_chart(deleted_chart_id);
     local_content_index::remove_chart_bindings(deleted_chart_id);
     local_catalog_database::remove_chart(deleted_chart_id);
 

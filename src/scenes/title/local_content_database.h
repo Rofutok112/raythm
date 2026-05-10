@@ -3,22 +3,22 @@
 #include <optional>
 #include <string>
 
-#include "title/upload_mapping_store.h"
+#include "title/local_content_binding.h"
 
 namespace local_content_database {
 
-title_upload_mapping::store load_mappings();
-std::optional<title_upload_mapping::song_mapping_entry> find_song_by_local(const std::string& server_url,
-                                                                           const std::string& local_song_id);
-std::optional<title_upload_mapping::song_mapping_entry> find_song_by_remote(const std::string& server_url,
-                                                                            const std::string& remote_song_id);
-std::optional<title_upload_mapping::chart_mapping_entry> find_chart_by_local(const std::string& server_url,
-                                                                             const std::string& local_chart_id);
-std::optional<title_upload_mapping::chart_mapping_entry> find_chart_by_remote(const std::string& server_url,
-                                                                              const std::string& remote_chart_id);
+local_content_binding::store load_mappings();
+std::optional<local_content_binding::song_binding> find_song_by_local(const std::string& server_url,
+                                                                      const std::string& local_song_id);
+std::optional<local_content_binding::song_binding> find_song_by_remote(const std::string& server_url,
+                                                                       const std::string& remote_song_id);
+std::optional<local_content_binding::chart_binding> find_chart_by_local(const std::string& server_url,
+                                                                        const std::string& local_chart_id);
+std::optional<local_content_binding::chart_binding> find_chart_by_remote(const std::string& server_url,
+                                                                         const std::string& remote_chart_id);
 
-void put_song(const title_upload_mapping::song_mapping_entry& binding);
-void put_chart(const title_upload_mapping::chart_mapping_entry& binding);
+void put_song(const local_content_binding::song_binding& binding);
+void put_chart(const local_content_binding::chart_binding& binding);
 
 void remove_song(const std::string& server_url, const std::string& local_song_id);
 void remove_chart(const std::string& server_url, const std::string& local_chart_id);

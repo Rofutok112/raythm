@@ -20,6 +20,8 @@ bool almost_equal(float left, float right) {
 
 bool equal_chart_meta(const chart_meta& left, const chart_meta& right) {
     return left.chart_id == right.chart_id &&
+           left.song_id == right.song_id &&
+           left.chart_version == right.chart_version &&
            left.key_count == right.key_count &&
            left.difficulty == right.difficulty &&
            left.chart_author == right.chart_author &&
@@ -40,7 +42,9 @@ bool equal_note(const note_data& left, const note_data& right) {
     return left.type == right.type &&
            left.tick == right.tick &&
            left.lane == right.lane &&
-           left.end_tick == right.end_tick;
+           left.end_tick == right.end_tick &&
+           left.is_ray == right.is_ray &&
+           note_lane_width(left) == note_lane_width(right);
 }
 
 bool equal_chart_data(const chart_data& left, const chart_data& right) {
@@ -98,6 +102,7 @@ int main() {
 
     chart_data source;
     source.meta.chart_id = output_path.stem().string();
+    source.meta.song_id = "serializer-song";
     source.meta.key_count = 4;
     source.meta.difficulty = "Hyper";
     source.meta.level = 9;
@@ -112,11 +117,16 @@ int main() {
         {.type = timing_event_type::bpm, .tick = 0, .bpm = 150.0f, .numerator = 4, .denominator = 4},
     };
 
+    note_data wide_tap{.type = note_type::tap, .tick = 1320, .lane = 1, .end_tick = 1320};
+    wide_tap.lane_width = 2;
     source.notes = {
         {.type = note_type::tap, .tick = 960, .lane = 3, .end_tick = 960},
         {.type = note_type::hold, .tick = 480, .lane = 2, .end_tick = 840},
         {.type = note_type::tap, .tick = 480, .lane = 0, .end_tick = 480},
         {.type = note_type::tap, .tick = 0, .lane = 1, .end_tick = 0},
+        {.type = note_type::release, .tick = 960, .lane = 0, .end_tick = 960, .is_ray = true},
+        {.type = note_type::stay, .tick = 1200, .lane = 1, .end_tick = 1200},
+        wide_tap,
     };
 
     const bool serialized = chart_serializer::serialize(source, output_path.string());
@@ -129,11 +139,16 @@ int main() {
     bool ok = true;
 
     ok = content.find("offset=-35") != std::string::npos && ok;
-    ok = content.find("chartId=") == std::string::npos && ok;
+    ok = content.find("formatVersion=2") != std::string::npos && ok;
+    ok = content.find("chartId=raythm_chart_serializer_smoke") != std::string::npos && ok;
     ok = content.find("songId=") == std::string::npos && ok;
     ok = content.find("level=") == std::string::npos && ok;
+    ok = expect_contains_in_order(content, "chartId=", "keyCount=") && ok;
     ok = expect_contains_in_order(content, "meter,0,4/4", "bpm,960,180.5") && ok;
     ok = expect_contains_in_order(content, "tap,480,0", "hold,480,2,840") && ok;
+    ok = content.find("release,960,0,ray") != std::string::npos && ok;
+    ok = content.find("stay,1200,1") != std::string::npos && ok;
+    ok = content.find("tap,1320,1,width=2") != std::string::npos && ok;
 
     const std::string content_with_ids =
         "[Metadata]\nchartId=online-chart\nsongId=online-song\n" +
@@ -141,10 +156,41 @@ int main() {
     const std::string content_with_other_ids =
         "[Metadata]\nchartId=other-chart\nsongId=other-song\n" +
         content.substr(content.find("keyCount="));
+    const std::string content_with_legacy_level =
+        "[Metadata]\nchartId=online-chart\nsongId=online-song\nlevel=12.5\n"
+        "calculatedLevel=12.5\nisPublic=true\ncontentSource=official\nmetadataSchemaVersion=2\n"
+        "clientChartId=local-chart\nclientSongId=local-song\n"
+        "difficultyRulesetId=raythm-local\ndifficultyRulesetVersion=1\n" +
+        content.substr(content.find("keyCount="));
+    const std::string content_without_section_spacing =
+        "[Metadata]\nchartId=online-chart\nsongId=online-song\n" +
+        content.substr(content.find("keyCount="));
+    const std::string content_with_extra_blank_lines =
+        "[Metadata]\n  \nchartId=online-chart\nsongId=online-song\n\t\n\n" +
+        content.substr(content.find("keyCount=")) + "\n  \n";
+    std::string content_with_changed_bpm = content_with_ids;
+    const size_t bpm_pos = content_with_changed_bpm.find("bpm,960,180.5");
+    if (bpm_pos != std::string::npos) {
+        content_with_changed_bpm.replace(bpm_pos, std::string("bpm,960,180.5").size(), "bpm,960,181.5");
+    } else {
+        ok = false;
+    }
     const std::string fingerprint_with_ids = chart_fingerprint::build(content_with_ids);
     const std::string fingerprint_with_other_ids = chart_fingerprint::build(content_with_other_ids);
+    const std::string fingerprint_with_legacy_level = chart_fingerprint::build(content_with_legacy_level);
+    const std::string fingerprint_without_section_spacing = chart_fingerprint::build(content_without_section_spacing);
+    const std::string fingerprint_with_extra_blank_lines = chart_fingerprint::build(content_with_extra_blank_lines);
+    const std::string fingerprint_with_changed_bpm = chart_fingerprint::build(content_with_changed_bpm);
     ok = updater::compute_sha256_hex(std::string_view(fingerprint_with_ids)) ==
          updater::compute_sha256_hex(std::string_view(fingerprint_with_other_ids)) && ok;
+    ok = updater::compute_sha256_hex(std::string_view(fingerprint_with_ids)) ==
+         updater::compute_sha256_hex(std::string_view(fingerprint_with_legacy_level)) && ok;
+    ok = updater::compute_sha256_hex(std::string_view(fingerprint_with_ids)) ==
+         updater::compute_sha256_hex(std::string_view(fingerprint_without_section_spacing)) && ok;
+    ok = updater::compute_sha256_hex(std::string_view(fingerprint_with_ids)) ==
+         updater::compute_sha256_hex(std::string_view(fingerprint_with_extra_blank_lines)) && ok;
+    ok = updater::compute_sha256_hex(std::string_view(fingerprint_with_ids)) !=
+         updater::compute_sha256_hex(std::string_view(fingerprint_with_changed_bpm)) && ok;
 
     const chart_parse_result reparsed = chart_parser::parse(output_path.string());
     if (!reparsed.success || !reparsed.data.has_value()) {
@@ -157,6 +203,8 @@ int main() {
     }
 
     chart_data expected = normalized_chart(source);
+    expected.meta.song_id.clear();
+    expected.meta.format_version = 2;
     if (!equal_chart_data(expected, *reparsed.data)) {
         std::cerr << "Round-trip chart data mismatch\n";
         ok = false;

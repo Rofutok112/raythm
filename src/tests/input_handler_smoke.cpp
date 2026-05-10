@@ -103,6 +103,16 @@ int main() {
         std::cerr << "Input source metadata failed\n";
         return EXIT_FAILURE;
     }
+    windows_input_source::instance().set_test_current_time_ms(120.0);
+    handler.update(620.0);
+    if (handler.last_update_source() != input_update_source::native_windows ||
+        handler.last_update_event_count() != 0 ||
+        !handler.events().empty() ||
+        !handler.is_lane_held(0) ||
+        !handler.is_lane_held(1)) {
+        std::cerr << "Native input should not fall back to polling on empty frames\n";
+        return EXIT_FAILURE;
+    }
 
     windows_input_source::instance().shutdown();
 

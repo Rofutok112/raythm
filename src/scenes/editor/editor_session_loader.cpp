@@ -10,6 +10,7 @@
 #include "editor/service/editor_chart_identity_service.h"
 #include "editor_scene_sync.h"
 #include "editor_transport_controller.h"
+#include "game_settings.h"
 #include "path_utils.h"
 
 namespace {
@@ -48,6 +49,51 @@ void scroll_timing_list_to_bottom(editor_timing_panel_state& timing_panel, size_
     timing_panel.list_scroll_offset = std::max(0.0f, content_height - kTimingListViewportHeight);
 }
 
+std::string first_existing_audio_asset(std::initializer_list<const char*> file_names) {
+    for (const char* file_name : file_names) {
+        const std::filesystem::path path = app_paths::audio_root() / file_name;
+        if (std::filesystem::exists(path)) {
+            return path_utils::to_utf8(path);
+        }
+    }
+    return "";
+}
+
+std::string audio_asset_path(const char* file_name) {
+    const std::filesystem::path path = app_paths::audio_root() / file_name;
+    return std::filesystem::exists(path) ? path_utils::to_utf8(path) : "";
+}
+
+editor_hitsound_paths load_hitsound_paths() {
+    editor_hitsound_paths hitsounds;
+    hitsounds.tap = audio_asset_path("HitSound_Tap.mp3");
+    hitsounds.ray_tap = audio_asset_path("HitSound_RayTap.mp3");
+    hitsounds.release = audio_asset_path("HitSound_Release.mp3");
+    hitsounds.ray_release = audio_asset_path("HitSound_RayRelease.mp3");
+    hitsounds.stay = audio_asset_path("HitSound_Stay.mp3");
+    hitsounds.ray_stay = audio_asset_path("HitSound_RayStay.mp3");
+    if (hitsounds.tap.empty()) {
+        hitsounds.tap = first_existing_audio_asset({"hitsound.mp3"});
+    }
+    return hitsounds;
+}
+
+void preload_hitsounds(audio_manager& audio, const editor_hitsound_paths& hitsounds) {
+    const std::string* paths[] = {
+        &hitsounds.tap,
+        &hitsounds.ray_tap,
+        &hitsounds.release,
+        &hitsounds.ray_release,
+        &hitsounds.stay,
+        &hitsounds.ray_stay,
+    };
+    for (const std::string* path : paths) {
+        if (path != nullptr && !path->empty()) {
+            audio.preload_se(*path);
+        }
+    }
+}
+
 }  // namespace
 
 namespace editor_session_loader {
@@ -70,7 +116,9 @@ editor_session_load_result load(const editor_start_request& request) {
     } else if (request.chart_path.has_value()) {
         const chart_parse_result parse_result = chart_parser::parse(*request.chart_path);
         if (parse_result.success && parse_result.data.has_value()) {
-            result.state->load(*parse_result.data, *request.chart_path);
+            chart_data loaded_chart = *parse_result.data;
+            loaded_chart.meta.song_id = request.song.meta.song_id;
+            result.state->load(loaded_chart, *request.chart_path);
             result.chart_path = request.chart_path;
         } else {
             result.state->load(make_new_chart_data(request), "");
@@ -109,6 +157,7 @@ editor_session_load_result load(const editor_start_request& request) {
     audio_manager& audio = audio_manager::instance();
     const std::filesystem::path audio_path = path_utils::join_utf8(request.song.directory, request.song.meta.audio_file);
     if (std::filesystem::exists(audio_path) && audio.load_bgm(path_utils::to_utf8(audio_path))) {
+        audio.set_bgm_volume(g_settings.bgm_volume);
         result.audio_loaded = true;
     }
 
@@ -121,8 +170,9 @@ editor_session_load_result load(const editor_start_request& request) {
         }
     }
 
-    const std::filesystem::path hitsound_path = app_paths::audio_root() / "hitsound.mp3";
-    result.hitsound_path = std::filesystem::exists(hitsound_path) ? path_utils::to_utf8(hitsound_path) : "";
+    result.hitsounds = load_hitsound_paths();
+    result.hitsound_path = result.hitsounds.tap;
+    preload_hitsounds(audio, result.hitsounds);
 
     if (request.resume_state.has_value() && result.audio_loaded) {
         const double target_seconds =
@@ -136,6 +186,7 @@ editor_session_load_result load(const editor_start_request& request) {
     transport_context.previous_playback_tick = 0;
     transport_context.previous_audio_playing = false;
     transport_context.hitsound_path = &result.hitsound_path;
+    transport_context.hitsounds = &result.hitsounds;
     if (result.audio_loaded && audio.is_bgm_loaded()) {
         transport_context.bgm_clock = audio.get_bgm_clock();
         transport_context.bgm_length_seconds = audio.get_bgm_length_seconds();

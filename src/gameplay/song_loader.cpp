@@ -9,7 +9,6 @@
 #include <sstream>
 #include <string_view>
 
-#include "chart_identity_store.h"
 #include "path_utils.h"
 
 namespace {
@@ -171,7 +170,6 @@ std::optional<float> parse_float(const std::string& value) {
 }
 
 std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
-                                         const std::string& fallback_song_id,
                                          std::vector<std::string>& errors) {
     const std::string content = read_file(song_json_path);
     if (content.empty()) {
@@ -184,14 +182,16 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
     const std::optional<std::string> song_id = extract_json_string(content, "songId");
     const std::optional<std::string> title = extract_json_string(content, "title");
     const std::optional<std::string> artist = extract_json_string(content, "artist");
+    const std::optional<std::string> genre = extract_json_string(content, "genre");
     const std::optional<std::string> audio_file = extract_json_string(content, "audioFile");
     const std::optional<std::string> jacket_file = extract_json_string(content, "jacketFile");
     const std::optional<std::string> difficulty_bpm = extract_json_number_token(content, "baseBpm");
+    const std::optional<std::string> duration_sec = extract_json_number_token(content, "durationSec");
     const std::optional<std::string> preview_start_ms = extract_json_number_token(content, "previewStartMs");
     const std::optional<std::string> song_version = extract_json_number_token(content, "songVersion");
 
     if (!song_id.has_value()) {
-        meta.song_id = fallback_song_id;
+        errors.push_back("Missing required field songId in " + path_utils::to_utf8(song_json_path));
     } else {
         meta.song_id = *song_id;
     }
@@ -206,6 +206,10 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
         errors.push_back("Missing required field artist in " + path_utils::to_utf8(song_json_path));
     } else {
         meta.artist = *artist;
+    }
+
+    if (genre.has_value()) {
+        meta.genre = *genre;
     }
 
     if (!audio_file.has_value()) {
@@ -231,6 +235,15 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
         }
     }
 
+    if (duration_sec.has_value()) {
+        const std::optional<float> parsed = parse_float(*duration_sec);
+        if (!parsed.has_value()) {
+            errors.push_back("durationSec must be a number in " + path_utils::to_utf8(song_json_path));
+        } else {
+            meta.duration_seconds = *parsed;
+        }
+    }
+
     if (preview_start_ms.has_value()) {
         const std::optional<int> parsed = parse_int(*preview_start_ms);
         if (!parsed.has_value()) {
@@ -241,19 +254,6 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
         }
     } else {
         errors.push_back("Missing required field previewStartMs in " + path_utils::to_utf8(song_json_path));
-    }
-
-    const std::optional<std::string> sns_youtube = extract_json_string(content, "snsYoutube");
-    if (sns_youtube.has_value()) {
-        meta.sns_youtube = *sns_youtube;
-    }
-    const std::optional<std::string> sns_niconico = extract_json_string(content, "snsNiconico");
-    if (sns_niconico.has_value()) {
-        meta.sns_niconico = *sns_niconico;
-    }
-    const std::optional<std::string> sns_x = extract_json_string(content, "snsX");
-    if (sns_x.has_value()) {
-        meta.sns_x = *sns_x;
     }
 
     if (!song_version.has_value()) {
@@ -299,7 +299,7 @@ song_load_result song_loader::load_all(const std::string& songs_dir) {
 
         std::vector<std::string> song_errors;
         const std::optional<song_meta> meta =
-            parse_song_meta(song_json_path, path_utils::to_utf8(song_dir.filename()), song_errors);
+            parse_song_meta(song_json_path, song_errors);
         if (!meta.has_value()) {
             result.errors.insert(result.errors.end(), song_errors.begin(), song_errors.end());
             continue;
@@ -343,7 +343,7 @@ song_load_result song_loader::load_directory(const std::string& song_dir_utf8) {
 
     std::vector<std::string> song_errors;
     const std::optional<song_meta> meta =
-        parse_song_meta(song_json_path, path_utils::to_utf8(song_dir.filename()), song_errors);
+        parse_song_meta(song_json_path, song_errors);
     if (!meta.has_value()) {
         result.errors = std::move(song_errors);
         return result;
@@ -367,34 +367,4 @@ song_load_result song_loader::load_directory(const std::string& song_dir_utf8) {
 
 chart_parse_result song_loader::load_chart(const std::string& path) {
     return chart_parser::parse(path);
-}
-
-void song_loader::attach_external_charts(const std::string& charts_dir, std::vector<song_data>& songs) {
-    const fs::path root = path_utils::from_utf8(charts_dir);
-    if (!fs::exists(root) || !fs::is_directory(root)) {
-        return;
-    }
-
-    for (const fs::path& chart_path : collect_chart_files_in_directory(root)) {
-        const fs::directory_entry entry(chart_path);
-        const chart_parse_result parse_result = chart_parser::parse(path_utils::to_utf8(entry.path()));
-        if (!parse_result.success || !parse_result.data.has_value()) {
-            continue;
-        }
-
-        std::string song_id = parse_result.data->meta.song_id;
-        if (song_id.empty()) {
-            song_id = chart_identity::find_song_id(parse_result.data->meta.chart_id).value_or("");
-        }
-        if (song_id.empty()) {
-            continue;
-        }
-
-        for (song_data& song : songs) {
-            if (song.meta.song_id == song_id) {
-                song.chart_paths.push_back(path_utils::to_utf8(entry.path()));
-                break;
-            }
-        }
-    }
 }

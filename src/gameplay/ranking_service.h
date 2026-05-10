@@ -31,21 +31,27 @@ struct listing {
     source ranking_source = source::local;
     std::vector<entry> entries;
     std::string message;
+    std::string retry_after;
     bool available = true;
+    bool maintenance = false;
 };
 
 struct local_submit_result {
     bool success = false;
     bool best_updated = false;
     std::optional<entry> submitted_entry;
+    std::optional<entry> previous_best;
 };
 
 struct online_submit_result {
     bool attempted = false;
     bool success = false;
     bool updated = false;
+    bool maintenance = false;
     std::string message;
+    std::string retry_after;
     std::optional<entry> entry;
+    std::optional<ranking_service::entry> previous_entry;
 };
 
 listing load_chart_ranking(const std::string& chart_id, source ranking_source, int limit = 50);

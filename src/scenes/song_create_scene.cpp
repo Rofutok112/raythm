@@ -99,11 +99,9 @@ song_create_scene::song_create_scene(scene_manager& manager, song_data song_to_e
     const song_meta& meta = editing_song_->meta;
     title_input_.value = meta.title;
     artist_input_.value = meta.artist;
+    genre_input_.value = meta.genre;
     bpm_input_.value = meta.base_bpm > 0.0f ? TextFormat("%.6g", meta.base_bpm) : "";
     preview_ms_input_.value = std::to_string(meta.preview_start_ms);
-    sns_youtube_input_.value = meta.sns_youtube;
-    sns_niconico_input_.value = meta.sns_niconico;
-    sns_x_input_.value = meta.sns_x;
 
     if (!meta.audio_file.empty()) {
         audio_path_input_.value = path_utils::to_utf8(path_utils::join_utf8(editing_song_->directory, meta.audio_file));
@@ -192,6 +190,9 @@ void song_create_scene::draw_song_metadata() {
     ui::draw_text_input(make_row(row++), artist_input_, "Artist", "Artist name",
                         nullptr, kLayer, 16, 128, wide_text_filter, kTextInputLabelWidth);
 
+    ui::draw_text_input(make_row(row++), genre_input_, "Genre", "Genre (optional)",
+                        nullptr, kLayer, 16, 100, wide_text_filter, kTextInputLabelWidth);
+
     ui::draw_text_input(make_row(row++), bpm_input_, "BPM", "120.0",
                         nullptr, kLayer, 16, 16, numeric_filter, kTextInputLabelWidth);
 
@@ -232,13 +233,6 @@ void song_create_scene::draw_song_metadata() {
 
     ui::draw_text_input(make_row(row++), preview_ms_input_, "Preview (ms)", "0",
                         "0", kLayer, 16, 10, int_filter, kTextInputLabelWidth);
-
-    ui::draw_text_input(make_row(row++), sns_youtube_input_, "YouTube", "URL (optional)",
-                        nullptr, kLayer, 16, 256, nullptr, kTextInputLabelWidth);
-    ui::draw_text_input(make_row(row++), sns_niconico_input_, "Niconico", "URL (optional)",
-                        nullptr, kLayer, 16, 256, nullptr, kTextInputLabelWidth);
-    ui::draw_text_input(make_row(row++), sns_x_input_, "X", "URL (optional)",
-                        nullptr, kLayer, 16, 256, nullptr, kTextInputLabelWidth);
 
     const float button_y = kFormStartY + static_cast<float>(row) * (kRowHeight + kRowGap) + kButtonTopGap;
     const Rectangle create_rect = {kFormX + kFormWidth - kButtonWidth, button_y, kButtonWidth, kButtonHeight};
@@ -369,15 +363,13 @@ bool song_create_scene::create_song() {
     meta.song_id = song_id;
     meta.title = title_input_.value;
     meta.artist = artist_input_.value;
+    meta.genre = genre_input_.value;
     meta.base_bpm = base_bpm;
     meta.audio_file = audio_filename;
     meta.jacket_file = jacket_filename;
     meta.preview_start_ms = preview_ms;
     meta.preview_start_seconds = static_cast<float>(preview_ms) / 1000.0f;
     meta.song_version = 1;
-    meta.sns_youtube = sns_youtube_input_.value;
-    meta.sns_niconico = sns_niconico_input_.value;
-    meta.sns_x = sns_x_input_.value;
 
     if (!song_writer::write_song_json(meta, path_utils::to_utf8(song_dir))) {
         error_ = "Failed to write song.json.";
@@ -476,14 +468,12 @@ bool song_create_scene::save_song_edits() {
     song_meta meta = editing_song_->meta;
     meta.title = title_input_.value;
     meta.artist = artist_input_.value;
+    meta.genre = genre_input_.value;
     meta.base_bpm = base_bpm;
     meta.audio_file = audio_filename;
     meta.jacket_file = jacket_filename;
     meta.preview_start_ms = preview_ms;
     meta.preview_start_seconds = static_cast<float>(preview_ms) / 1000.0f;
-    meta.sns_youtube = sns_youtube_input_.value;
-    meta.sns_niconico = sns_niconico_input_.value;
-    meta.sns_x = sns_x_input_.value;
     if (meta.song_version <= 0) {
         meta.song_version = 1;
     }

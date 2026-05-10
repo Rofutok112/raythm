@@ -1,5 +1,7 @@
 #include "song_select/song_select_list_view.h"
 
+#include <cmath>
+
 #include "scene_common.h"
 #include "song_select/song_select_layout.h"
 #include "theme.h"
@@ -45,6 +47,14 @@ Color rank_color(rank value) {
     return theme.text_secondary;
 }
 
+std::string format_duration_label(float seconds) {
+    if (seconds <= 0.0f) {
+        return "";
+    }
+    const int total_seconds = static_cast<int>(std::round(seconds));
+    return TextFormat("%d:%02d", total_seconds / 60, total_seconds % 60);
+}
+
 void draw_song_row(const song_select::song_entry& song, float item_y, bool is_selected, double now) {
     const auto& theme = *g_theme;
     const Rectangle row_rect = {song_select::layout::kSongListRect.x + 14.0f, item_y - 8.0f,
@@ -54,6 +64,7 @@ void draw_song_row(const song_select::song_entry& song, float item_y, bool is_se
     const Rectangle title_clip_rect = {text_x, item_y - 3.0f, list_text_max_w, 24.0f};
     const Rectangle artist_clip_rect = {text_x, item_y + 19.0f, list_text_max_w, 16.0f};
     const Rectangle status_rect = {row_rect.x + row_rect.width - 118.0f, item_y - 1.0f, 96.0f, 18.0f};
+    const std::string duration_label = format_duration_label(song.song.meta.duration_seconds);
 
     if (ui::is_hovered(row_rect, song_select::layout::kSceneLayer) || is_selected) {
         const ui::row_state row_state = ui::draw_selectable_row(row_rect, is_selected, 0.0f);
@@ -62,9 +73,19 @@ void draw_song_row(const song_select::song_entry& song, float item_y, bool is_se
 
     draw_marquee_text(song.song.meta.title.c_str(), title_clip_rect,
                       24, is_selected ? theme.text : theme.text_secondary, now);
-    draw_marquee_text(song.song.meta.artist.c_str(), artist_clip_rect,
+    const Rectangle artist_text_rect = duration_label.empty()
+        ? artist_clip_rect
+        : Rectangle{artist_clip_rect.x, artist_clip_rect.y, artist_clip_rect.width - 56.0f, artist_clip_rect.height};
+    draw_marquee_text(song.song.meta.artist.c_str(), artist_text_rect,
                       16, theme.text_muted, now);
-    content_status_badge::draw(status_rect, song.status, 255, 10);
+    if (!duration_label.empty()) {
+        ui::draw_text_in_rect(duration_label.c_str(),
+                              13,
+                              {artist_clip_rect.x + artist_clip_rect.width - 52.0f,
+                               artist_clip_rect.y, 52.0f, artist_clip_rect.height},
+                              theme.text_muted, ui::text_align::right);
+    }
+    content_status_badge::draw_compound(status_rect, song.source_status, song.status, 255, 10);
 }
 
 void draw_chart_rows(const song_select::state& state,
@@ -97,8 +118,8 @@ void draw_chart_rows(const song_select::state& state,
         ui::draw_text_in_rect(TextFormat("Lv.%.1f", chart.meta.level), 17, level_rect,
                               child_selected ? theme.text_secondary : theme.text_muted, ui::text_align::left);
         draw_marquee_text(chart.meta.chart_author.c_str(), author_rect, 14, theme.text_muted, now);
-        content_status_badge::draw({rank_rect.x - 96.0f, baseline_y - 1.0f, 90.0f, 18.0f},
-                                   chart.status, 255, 9);
+        content_status_badge::draw_compound({rank_rect.x - 96.0f, baseline_y - 1.0f, 90.0f, 18.0f},
+                                            chart.source_status, chart.status, 255, 9);
         if (chart.best_local_rank.has_value()) {
             ui::draw_rect_f(rank_rect, theme.section);
             ui::draw_rect_lines(rank_rect, 1.5f, theme.border_light);

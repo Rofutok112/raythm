@@ -7,10 +7,10 @@
 #include <optional>
 #include <sstream>
 #include <string>
-#include <string_view>
 #include <system_error>
 
 #include "app_paths.h"
+#include "localization/localization.h"
 
 namespace {
 namespace fs = std::filesystem;
@@ -150,10 +150,16 @@ void load_settings(game_settings& settings) {
         settings.windowed_width = std::clamp(std::stoi(*v), 640, 7680);
     if (auto v = extract_number_token(content, "windowedHeight"))
         settings.windowed_height = std::clamp(std::stoi(*v), 360, 4320);
+    settings.windowed_width = kDefaultWindowedWidth;
+    settings.windowed_height = kDefaultWindowedHeight;
     if (auto v = extract_bool(content, "fullscreen"))
         settings.fullscreen = *v;
+    if (auto v = extract_bool(content, "windowMaximized"))
+        settings.window_maximized = *v;
     if (auto v = extract_bool(content, "darkMode"))
         settings.dark_mode = *v;
+    if (auto v = extract_string(content, "language"))
+        settings.ui_locale = localization::parse_locale_code_or_default(*v);
 
     if (auto v = extract_string(content, "keys4"))
         parse_key_array(*v, settings.keys.keys_4);
@@ -190,7 +196,9 @@ void save_settings(const game_settings& settings) {
     out << "  \"windowedWidth\": " << settings.windowed_width << ",\n";
     out << "  \"windowedHeight\": " << settings.windowed_height << ",\n";
     out << "  \"fullscreen\": " << (settings.fullscreen ? "true" : "false") << ",\n";
+    out << "  \"windowMaximized\": " << (settings.window_maximized ? "true" : "false") << ",\n";
     out << "  \"darkMode\": " << (settings.dark_mode ? "true" : "false") << ",\n";
+    out << "  \"language\": \"" << localization::locale_code(settings.ui_locale) << "\",\n";
     out << "  \"keys4\": \"" << keys_to_csv(settings.keys.keys_4) << "\",\n";
     out << "  \"keys6\": \"" << keys_to_csv(settings.keys.keys_6) << "\"\n";
     out << "}\n";

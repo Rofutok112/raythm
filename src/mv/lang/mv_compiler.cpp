@@ -263,6 +263,8 @@ struct compiler_state {
                 if (attr == "combo") { slot_out = ctx_attr_slot::ctx_chart_combo; return true; }
                 if (attr == "accuracy") { slot_out = ctx_attr_slot::ctx_chart_accuracy; return true; }
                 if (attr == "key_count") { slot_out = ctx_attr_slot::ctx_chart_key_count; return true; }
+                if (attr == "ray_pulse") { slot_out = ctx_attr_slot::ctx_chart_ray_pulse; return true; }
+                if (attr == "ray_lane") { slot_out = ctx_attr_slot::ctx_chart_ray_lane; return true; }
                 return false;
             case ctx_attr_slot::ctx_screen:
                 if (attr == "w") { slot_out = ctx_attr_slot::ctx_screen_w; return true; }

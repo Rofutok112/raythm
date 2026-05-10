@@ -16,6 +16,10 @@ void init();
 // CloseWindow() の前に呼ぶ。RenderTexture を解放する。
 void cleanup();
 
+// Physical pixels reserved above the scaled virtual scene, used by native window chrome.
+void set_top_reserved_pixels(int pixels);
+int top_reserved_pixels();
+
 // 仮想スクリーンへの描画を開始する。以降の Draw 呼び出しは RenderTexture に書き込まれる。
 void begin();
 

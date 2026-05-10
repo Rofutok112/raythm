@@ -431,13 +431,26 @@ std::optional<chart_import_batch_request> prepare_chart_imports(const state& sta
 transfer_result import_chart_package(const chart_import_request& request) {
     transfer_result result;
     app_paths::ensure_directories();
-    const fs::path destination_path = app_paths::chart_path(request.chart.meta.chart_id);
-    if (!chart_serializer::serialize(request.chart, path_utils::to_utf8(destination_path))) {
+    const fs::path destination_path = app_paths::song_chart_path(request.target_song_id, request.chart.meta.chart_id);
+    const fs::path target_song_dir = destination_path.parent_path().parent_path();
+    if (!fs::exists(target_song_dir / "song.json")) {
+        result.message = "Download or import the song before importing a chart.";
+        return result;
+    }
+    std::error_code ec;
+    fs::create_directories(destination_path.parent_path(), ec);
+    if (ec) {
+        result.message = "Failed to prepare the song charts directory.";
+        return result;
+    }
+    chart_data chart_data_for_save = request.chart;
+    if (!chart_serializer::serialize(chart_data_for_save, path_utils::to_utf8(destination_path))) {
         result.message = "Failed to save the imported chart.";
         return result;
     }
-    local_content_index::link_chart_to_song(request.chart.meta.chart_id, request.target_song_id);
-    chart_level_cache::calculate_and_store(path_utils::to_utf8(destination_path), request.chart);
+    chart_data chart_data_for_cache = chart_data_for_save;
+    chart_data_for_cache.meta.song_id = request.target_song_id;
+    chart_level_cache::calculate_and_store(path_utils::to_utf8(destination_path), chart_data_for_cache);
 
     result.success = true;
     result.reload_catalog = true;
@@ -709,11 +722,14 @@ transfer_result import_song_package(const song_import_request& request) {
                 : source_chart_path.filename();
             const fs::path destination_chart_path = charts_destination / chart_file_name;
             const std::string destination_chart_utf8 = path_utils::to_utf8(destination_chart_path);
-            if (!chart_serializer::serialize(*parsed_chart.data, destination_chart_utf8)) {
+            chart_data chart_data_for_save = *parsed_chart.data;
+            if (!chart_serializer::serialize(chart_data_for_save, destination_chart_utf8)) {
                 result.message = "Failed to import the song package charts.";
                 return result;
             }
-            chart_level_cache::calculate_and_store(destination_chart_utf8, *parsed_chart.data);
+            chart_data chart_data_for_cache = chart_data_for_save;
+            chart_data_for_cache.meta.song_id = request.imported_song.meta.song_id;
+            chart_level_cache::calculate_and_store(destination_chart_utf8, chart_data_for_cache);
         }
     }
 

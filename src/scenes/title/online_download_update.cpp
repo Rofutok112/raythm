@@ -14,6 +14,9 @@ namespace {
 void reset_chart_scroll(state& state) {
     state.chart_scroll_y = 0.0f;
     state.chart_scroll_y_target = 0.0f;
+    state.preview_bar_dragging = false;
+    state.preview_bar_resume_after_drag = false;
+    state.preview_bar_drag_position_seconds = 0.0;
 }
 
 void reset_browse_scrolls(state& state) {
@@ -25,6 +28,9 @@ void reset_browse_scrolls(state& state) {
 bool handle_back_or_close_input(state& state, update_result& result) {
     if (state.detail_open && (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))) {
         state.detail_open = false;
+        state.preview_bar_dragging = false;
+        state.preview_bar_resume_after_drag = false;
+        state.preview_bar_drag_position_seconds = 0.0;
         reset_chart_scroll(state);
         return true;
     }
@@ -136,13 +142,28 @@ bool handle_detail_actions(state& state,
     }
 
     if (song != nullptr && left_pressed && CheckCollisionPointRec(mouse, current.preview_bar_rect)) {
+        state.preview_bar_dragging = true;
+        state.preview_bar_resume_after_drag = audio_manager::instance().is_preview_playing();
+        state.preview_bar_drag_position_seconds = audio_manager::instance().get_preview_position_seconds();
+        audio_manager::instance().pause_preview();
+    }
+
+    if (song != nullptr && state.preview_bar_dragging) {
         const double preview_length = detail::preview_display_length_seconds(*song);
         if (preview_length > 0.0 && audio_manager::instance().is_preview_loaded()) {
             const float ratio = std::clamp((mouse.x - current.preview_bar_rect.x) / current.preview_bar_rect.width,
                                            0.0f, 1.0f);
-            audio_manager::instance().seek_preview(preview_length * static_cast<double>(ratio));
+            state.preview_bar_drag_position_seconds = preview_length * static_cast<double>(ratio);
         }
-        return true;
+        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            return true;
+        }
+        audio_manager::instance().seek_preview(state.preview_bar_drag_position_seconds);
+        if (state.preview_bar_resume_after_drag) {
+            audio_manager::instance().play_preview(false);
+        }
+        state.preview_bar_dragging = false;
+        state.preview_bar_resume_after_drag = false;
     }
 
     if (ui::is_clicked(current.preview_play_rect)) {
@@ -153,9 +174,14 @@ bool handle_detail_actions(state& state,
     }
 
     if (song != nullptr && !state.download_in_progress && ui::is_clicked(current.primary_action_rect)) {
-        result.action = needs_download(*song)
-            ? requested_action::primary
-            : requested_action::open_local;
+        const chart_entry_state* chart = selected_chart(state);
+        if (needs_download(*song)) {
+            result.action = requested_action::primary;
+        } else if (chart != nullptr && chart->installed && chart->update_available) {
+            result.action = requested_action::download_chart;
+        } else {
+            result.action = requested_action::open_local;
+        }
         return true;
     }
 

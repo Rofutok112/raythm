@@ -11,9 +11,7 @@ struct editor_left_panel_view_model {
     bool has_file = false;
     bool is_dirty = false;
     metadata_panel_state* metadata_panel = nullptr;
-    const char* current_key_mode_label = "";
-    int current_offset_ms = 0;
-    int note_count = 0;
+    editor_note_palette_selection note_palette;
     const std::string* load_error = nullptr;
     double now = 0.0;
 };
@@ -23,6 +21,8 @@ struct editor_left_panel_view_result {
     ui::text_input_result author_result;
     bool key_count_left_clicked = false;
     bool key_count_right_clicked = false;
+    std::optional<note_type> selected_note_type;
+    bool ray_toggled = false;
 };
 
 class editor_left_panel_view final {

@@ -16,8 +16,11 @@
 #include <vector>
 
 #include "app_paths.h"
+#include "chart_parser.h"
+#include "chart_serializer.h"
 #include "network/json_helpers.h"
 #include "path_utils.h"
+#include "song_writer.h"
 #include "title/local_content_index.h"
 #include "title/online_download_remote_client.h"
 #include "ui_notice.h"
@@ -61,6 +64,92 @@ bool write_binary_file(const std::filesystem::path& path,
     }
 
     return true;
+}
+
+bool write_chart_file(const std::filesystem::path& path,
+                      const std::vector<unsigned char>& bytes,
+                      std::string& error_message) {
+    std::filesystem::create_directories(path.parent_path());
+    const std::filesystem::path temp_path = path.parent_path() / (path.filename().string() + ".download.tmp");
+    if (!write_binary_file(temp_path, bytes, error_message)) {
+        return false;
+    }
+
+    const chart_parse_result parsed = chart_parser::parse(path_utils::to_utf8(temp_path));
+    if (!parsed.success || !parsed.data.has_value()) {
+        std::filesystem::remove(temp_path);
+        error_message = parsed.errors.empty() ? "Downloaded chart file was invalid." : parsed.errors.front();
+        return false;
+    }
+
+    if (!chart_serializer::serialize(*parsed.data, path_utils::to_utf8(path))) {
+        std::filesystem::remove(temp_path);
+        error_message = "Failed to write downloaded chart data to disk.";
+        return false;
+    }
+
+    std::filesystem::remove(temp_path);
+    return true;
+}
+
+bool restore_staged_charts(const std::filesystem::path& staged_charts_dir,
+                           const std::filesystem::path& charts_dir) {
+    std::error_code ec;
+    if (!std::filesystem::exists(staged_charts_dir, ec)) {
+        return true;
+    }
+    std::filesystem::create_directories(charts_dir.parent_path(), ec);
+    if (ec) {
+        return false;
+    }
+    std::filesystem::rename(staged_charts_dir, charts_dir, ec);
+    return !ec;
+}
+
+std::optional<song_meta> parse_downloaded_song_metadata(const std::string& metadata_json,
+                                                        const std::string& local_song_id,
+                                                        int fallback_song_version,
+                                                        std::string& error_message) {
+    song_meta meta;
+    meta.song_id = local_song_id;
+    meta.title = trim_ascii(json::extract_string(metadata_json, "title").value_or(""));
+    meta.artist = trim_ascii(json::extract_string(metadata_json, "artist").value_or(""));
+    meta.genre = trim_ascii(json::extract_string(metadata_json, "genre").value_or(""));
+    meta.audio_file = trim_ascii(json::extract_string(metadata_json, "audioFile").value_or(""));
+    meta.jacket_file = trim_ascii(json::extract_string(metadata_json, "jacketFile").value_or(""));
+    meta.base_bpm = json::extract_float(metadata_json, "baseBpm").value_or(0.0f);
+    meta.duration_seconds = json::extract_float(metadata_json, "durationSec").value_or(0.0f);
+    meta.preview_start_ms = json::extract_int(metadata_json, "previewStartMs").value_or(0);
+    meta.preview_start_seconds = static_cast<float>(meta.preview_start_ms) / 1000.0f;
+    meta.song_version = json::extract_int(metadata_json, "songVersion").value_or(
+        fallback_song_version > 0 ? fallback_song_version : 1);
+
+    if (meta.song_id.empty()) {
+        error_message = "Downloaded song metadata was missing a local song ID.";
+        return std::nullopt;
+    }
+    if (meta.title.empty()) {
+        error_message = "Downloaded song metadata did not include title.";
+        return std::nullopt;
+    }
+    if (meta.artist.empty()) {
+        error_message = "Downloaded song metadata did not include artist.";
+        return std::nullopt;
+    }
+    if (meta.audio_file.empty()) {
+        error_message = "Downloaded song metadata did not include audioFile.";
+        return std::nullopt;
+    }
+    if (meta.jacket_file.empty()) {
+        error_message = "Downloaded song metadata did not include jacketFile.";
+        return std::nullopt;
+    }
+    if (meta.base_bpm <= 0.0f) {
+        error_message = "Downloaded song metadata did not include a valid baseBpm.";
+        return std::nullopt;
+    }
+
+    return meta;
 }
 
 void mark_song_downloaded(std::vector<song_entry_state>& songs, const std::string& song_id) {
@@ -152,15 +241,19 @@ download_song_result download_song_package(const song_entry_state song,
     }
     finish_step();
 
+    std::string error_message;
     const std::string metadata_json(metadata_fetch.bytes.begin(), metadata_fetch.bytes.end());
-    const std::string audio_file = trim_ascii(json::extract_string(metadata_json, "audioFile").value_or(""));
-    const std::string jacket_file = trim_ascii(json::extract_string(metadata_json, "jacketFile").value_or(""));
-    if (audio_file.empty()) {
-        result.message = "Downloaded song metadata did not include audioFile.";
+    const std::optional<song_meta> local_meta =
+        parse_downloaded_song_metadata(metadata_json,
+                                       local_song_id,
+                                       song.song.song.meta.song_version,
+                                       error_message);
+    if (!local_meta.has_value()) {
+        result.message = error_message;
         return result;
     }
 
-    const int total_steps = 2 + (jacket_file.empty() ? 0 : 1);
+    const int total_steps = 2 + (local_meta->jacket_file.empty() ? 0 : 1);
     if (progress) {
         progress->total_steps.store(total_steps);
         progress->completed_steps.store(1);
@@ -178,7 +271,7 @@ download_song_result download_song_package(const song_entry_state song,
     finish_step();
 
     std::vector<unsigned char> jacket_bytes;
-    if (!jacket_file.empty()) {
+    if (!local_meta->jacket_file.empty()) {
         const remote_binary_fetch_result jacket_fetch = begin_step(song.song.song.meta.jacket_url);
         if (!jacket_fetch.success || jacket_fetch.bytes.empty()) {
             result.message = jacket_fetch.error_message.empty()
@@ -192,23 +285,53 @@ download_song_result download_song_package(const song_entry_state song,
 
     app_paths::ensure_directories();
     const std::filesystem::path song_dir = app_paths::song_dir(local_song_id);
-    const std::filesystem::path song_json_path = song_dir / "song.json";
-    const std::filesystem::path audio_path = song_dir / path_utils::from_utf8(audio_file);
-    const std::filesystem::path jacket_path = song_dir / path_utils::from_utf8(jacket_file);
+    const std::filesystem::path charts_dir = song_dir / "charts";
+    const std::filesystem::path audio_path = song_dir / path_utils::from_utf8(local_meta->audio_file);
+    const std::filesystem::path jacket_path = song_dir / path_utils::from_utf8(local_meta->jacket_file);
 
-    std::string error_message;
     std::error_code ec;
-    std::filesystem::remove_all(song_dir, ec);
+    const std::filesystem::path staged_charts_dir =
+        app_paths::app_data_root() / "download-staging" / (local_song_id + "-charts");
+    std::filesystem::remove_all(staged_charts_dir, ec);
     ec.clear();
+    if (std::filesystem::exists(charts_dir, ec)) {
+        std::filesystem::create_directories(staged_charts_dir.parent_path(), ec);
+        if (ec) {
+            result.message = "Failed to prepare existing chart files for song update.";
+            return result;
+        }
+        std::filesystem::rename(charts_dir, staged_charts_dir, ec);
+        if (ec) {
+            result.message = "Failed to preserve existing chart files for song update.";
+            return result;
+        }
+    }
+    std::filesystem::remove_all(song_dir, ec);
+    if (ec) {
+        restore_staged_charts(staged_charts_dir, charts_dir);
+        result.message = "Failed to replace the local song files.";
+        return result;
+    }
 
-    if (!write_binary_file(song_json_path, metadata_fetch.bytes, error_message) ||
-        !write_binary_file(audio_path, audio_fetch.bytes, error_message)) {
+    if (!song_writer::write_song_json(*local_meta, path_utils::to_utf8(song_dir))) {
+        restore_staged_charts(staged_charts_dir, charts_dir);
+        result.message = "Failed to write downloaded song metadata to disk.";
+        return result;
+    }
+
+    if (!write_binary_file(audio_path, audio_fetch.bytes, error_message)) {
+        restore_staged_charts(staged_charts_dir, charts_dir);
         result.message = error_message;
         return result;
     }
 
-    if (!jacket_file.empty() && !write_binary_file(jacket_path, jacket_bytes, error_message)) {
+    if (!local_meta->jacket_file.empty() && !write_binary_file(jacket_path, jacket_bytes, error_message)) {
+        restore_staged_charts(staged_charts_dir, charts_dir);
         result.message = error_message;
+        return result;
+    }
+    if (!restore_staged_charts(staged_charts_dir, charts_dir)) {
+        result.message = "Song updated, but existing chart files could not be restored.";
         return result;
     }
 
@@ -226,7 +349,7 @@ download_song_result download_song_package(const song_entry_state song,
     });
 
     result.success = true;
-    result.message = "Song downloaded.";
+    result.message = song.installed ? "Song updated." : "Song downloaded.";
     return result;
 }
 
@@ -286,12 +409,12 @@ download_song_result download_chart_file(const song_entry_state song,
 
     std::string error_message;
     app_paths::ensure_directories();
-    if (!write_binary_file(app_paths::chart_path(local_chart_id), chart_fetch.bytes, error_message)) {
+    if (!write_chart_file(app_paths::song_chart_path(local_song_id, local_chart_id),
+                          chart_fetch.bytes,
+                          error_message)) {
         result.message = error_message;
         return result;
     }
-    local_content_index::link_chart_to_song(local_chart_id, local_song_id);
-
     if (!local_content_index::find_song_by_local(server_url, local_song_id).has_value()) {
         local_content_index::put_song_binding({
             .server_url = server_url,
@@ -303,9 +426,9 @@ download_song_result download_chart_file(const song_entry_state song,
     local_content_index::put_chart_binding({
         .server_url = server_url,
         .local_chart_id = local_chart_id,
-        .local_song_id = local_song_id,
         .remote_chart_id = result.chart_id,
         .remote_song_id = result.song_id,
+        .remote_chart_version = chart.chart.meta.chart_version,
         .origin = local_content_index::online_origin::downloaded,
     });
 

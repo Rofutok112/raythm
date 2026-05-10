@@ -10,6 +10,7 @@ struct response {
     int status_code = 0;
     std::string body;
     std::string error_message;
+    std::string retry_after;
 };
 
 response send_request(const std::string& method,

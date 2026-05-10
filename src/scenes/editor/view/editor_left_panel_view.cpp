@@ -15,6 +15,35 @@ const char* key_count_label(int key_count) {
 bool accepts_metadata_character(int codepoint, const std::string&) {
     return codepoint >= 32 && codepoint <= 126;
 }
+
+const char* palette_label(note_type type) {
+    switch (type) {
+        case note_type::tap:
+            return "TAP";
+        case note_type::hold:
+            return "LONG";
+        case note_type::release:
+            return "RELEASE";
+        case note_type::stay:
+            return "STAY";
+    }
+    return "TAP";
+}
+
+void draw_palette_button(Rectangle rect, note_type type, const editor_note_palette_selection& selection,
+                         editor_left_panel_view_result& result) {
+    const auto& t = *g_theme;
+    const bool selected = selection.type == type;
+    const ui::button_state button = ui::draw_button_colored(
+        rect, palette_label(type), 14,
+        selected ? t.row_selected : t.row,
+        selected ? t.row_active : t.row_hover,
+        selected ? t.text : t.text_secondary,
+        1.5f);
+    if (button.clicked) {
+        result.selected_note_type = type;
+    }
+}
 }
 
 editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_panel_view_model& model) {
@@ -63,21 +92,41 @@ editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_pan
                               t.error, ui::text_align::left);
     }
 
-    const Rectangle tools_box = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 114.0f};
-    ui::draw_section(tools_box);
-    ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 16.0f, tools_box.width - 24.0f, 24.0f},
-                         "Mode", model.current_key_mode_label, 16,
-                         t.text_secondary, t.text, 92.0f);
-    ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 44.0f, tools_box.width - 24.0f, 24.0f},
-                         "Offset", TextFormat("%d ms", model.current_offset_ms), 16,
-                         t.text_secondary, t.text, 92.0f);
-    ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 72.0f, tools_box.width - 24.0f, 24.0f},
-                         "Notes", TextFormat("%d", model.note_count), 16,
-                         t.text_secondary, t.text, 92.0f);
+    const Rectangle palette_box = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 136.0f};
+    ui::draw_section(palette_box);
+    ui::draw_text_in_rect("Palette", 22,
+                          {palette_box.x + 12.0f, palette_box.y + 10.0f, palette_box.width - 24.0f, 28.0f},
+                          t.text, ui::text_align::left);
+
+    const float gap = 8.0f;
+    const float button_width = (palette_box.width - 24.0f - gap) * 0.5f;
+    const float button_height = 28.0f;
+    const float left = palette_box.x + 12.0f;
+    const float right = left + button_width + gap;
+    const float first_row_y = palette_box.y + 44.0f;
+    const float second_row_y = first_row_y + button_height + gap;
+    draw_palette_button({left, first_row_y, button_width, button_height},
+                        note_type::tap, model.note_palette, result);
+    draw_palette_button({right, first_row_y, button_width, button_height},
+                        note_type::hold, model.note_palette, result);
+    draw_palette_button({left, second_row_y, button_width, button_height},
+                        note_type::release, model.note_palette, result);
+    draw_palette_button({right, second_row_y, button_width, button_height},
+                        note_type::stay, model.note_palette, result);
+
+    const bool ray_selected = model.note_palette.is_ray;
+    const ui::button_state ray_button = ui::draw_button_colored(
+        {palette_box.x + 12.0f, second_row_y + button_height + gap, palette_box.width - 24.0f, 28.0f},
+        "RAY", 14,
+        ray_selected ? t.row_selected : t.row,
+        ray_selected ? t.row_active : t.row_hover,
+        ray_selected ? t.text : t.text_secondary,
+        1.5f);
+    result.ray_toggled = ray_button.clicked;
 
     if (model.load_error != nullptr) {
         ui::draw_text_in_rect(model.load_error->c_str(), 18,
-                              {content.x, tools_box.y + tools_box.height + 18.0f, content.width, 52.0f},
+                              {content.x, palette_box.y + palette_box.height + 18.0f, content.width, 52.0f},
                               t.error, ui::text_align::left);
     }
 

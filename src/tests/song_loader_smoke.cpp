@@ -3,9 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <vector>
 
-#include "chart_identity_store.h"
 #include "song_fingerprint.h"
 #include "song_loader.h"
 #include "song_writer.h"
@@ -48,13 +46,11 @@ std::filesystem::path write_temp_chart() {
     output << "[Metadata]\n"
            << "chartId=song-loader-auto-level\n"
            << "keyCount=4\n"
-           << "difficulty=Legacy\n"
-           << "level=55.0\n"
+           << "difficulty=Auto\n"
            << "chartAuthor=Codex\n"
            << "formatVersion=1\n"
            << "resolution=480\n"
-           << "offset=0\n"
-           << "songId=song-loader-song\n\n"
+           << "offset=0\n\n"
            << "[Timing]\n"
            << "bpm,0,120\n"
            << "meter,0,4/4\n\n"
@@ -105,27 +101,6 @@ std::filesystem::path write_temp_song_with_legacy_preview_fields() {
     return song_dir;
 }
 
-std::filesystem::path write_external_chart_without_song_id() {
-    const std::filesystem::path charts_dir =
-        std::filesystem::temp_directory_path() / "raythm_song_loader_external_charts";
-    std::error_code ec;
-    std::filesystem::remove_all(charts_dir, ec);
-    std::filesystem::create_directories(charts_dir);
-    std::ofstream output(charts_dir / "external-linked.rchart", std::ios::trunc);
-    output << "[Metadata]\n"
-           << "keyCount=4\n"
-           << "difficulty=External\n"
-           << "chartAuthor=Codex\n"
-           << "formatVersion=1\n"
-           << "resolution=480\n"
-           << "offset=0\n\n"
-           << "[Timing]\n"
-           << "bpm,0,120\n"
-           << "meter,0,4/4\n\n"
-           << "[Notes]\n"
-           << "tap,0,0\n";
-    return charts_dir;
-}
 }
 
 int main() {
@@ -184,19 +159,13 @@ int main() {
             std::cerr << "  " << error << '\n';
         }
         ok = false;
-    } else {
-        if (chart_result.data->meta.level != 0.0f) {
-            std::cerr << "Expected legacy chart level metadata to be ignored by the loader\n";
-            ok = false;
-        }
     }
     std::filesystem::remove(temp_chart);
 
     const std::filesystem::path temp_song = write_temp_song_without_embedded_id();
     const song_load_result temp_song_result = song_loader::load_directory(temp_song.string());
-    if (temp_song_result.songs.size() != 1 ||
-        temp_song_result.songs.front().meta.song_id != "raythm_song_loader_external_song_id") {
-        std::cerr << "Expected missing songId to fall back to the song directory name\n";
+    if (!temp_song_result.songs.empty() || temp_song_result.errors.empty()) {
+        std::cerr << "Expected missing songId to be rejected\n";
         ok = false;
     }
     std::filesystem::remove_all(temp_song);
@@ -217,6 +186,8 @@ int main() {
     written_meta.song_id = "external-local-id";
     written_meta.title = "Written Song";
     written_meta.artist = "Codex";
+    written_meta.genre = "Artcore";
+    written_meta.duration_seconds = 123.0f;
     written_meta.base_bpm = 128.0f;
     written_meta.audio_file = "audio.ogg";
     written_meta.jacket_file = "jacket.png";
@@ -229,8 +200,26 @@ int main() {
         std::ifstream written_input(written_song_dir / "song.json", std::ios::binary);
         const std::string written_content{std::istreambuf_iterator<char>(written_input),
                                           std::istreambuf_iterator<char>()};
-        if (written_content.find("\"songId\"") != std::string::npos) {
-            std::cerr << "Expected song writer to keep local song id outside song.json\n";
+        if (written_content.find("\"songId\": \"external-local-id\"") == std::string::npos) {
+            std::cerr << "Expected song writer to persist songId in song.json\n";
+            ok = false;
+        }
+        if (written_content.find("\"genre\": \"Artcore\"") == std::string::npos) {
+            std::cerr << "Expected song writer to persist genre in song.json\n";
+            ok = false;
+        }
+        if (written_content.find("\"durationSec\": 123") == std::string::npos) {
+            std::cerr << "Expected song writer to persist durationSec in song.json\n";
+            ok = false;
+        }
+        if (written_content.find("sns") != std::string::npos) {
+            std::cerr << "Expected song writer to omit legacy SNS fields\n";
+            ok = false;
+        }
+        const song_load_result written_load_result = song_loader::load_directory(written_song_dir.string());
+        if (written_load_result.songs.size() != 1 ||
+            written_load_result.songs.front().meta.duration_seconds != 123.0f) {
+            std::cerr << "Expected song loader to parse durationSec from song.json\n";
             ok = false;
         }
     }
@@ -286,18 +275,6 @@ int main() {
         ok = false;
     }
 
-    const std::filesystem::path external_charts_dir = write_external_chart_without_song_id();
-    chart_identity::put("external-linked", "linked-song");
-    std::vector<song_data> external_songs;
-    song_data linked_song;
-    linked_song.meta.song_id = "linked-song";
-    external_songs.push_back(linked_song);
-    song_loader::attach_external_charts(external_charts_dir.string(), external_songs);
-    if (external_songs.front().chart_paths.empty()) {
-        std::cerr << "Expected external chart identity index to attach chart to song\n";
-        ok = false;
-    }
-    std::filesystem::remove_all(external_charts_dir);
     std::filesystem::remove_all(appdata_root, ec);
 
     if (std::filesystem::exists(songs_root()) && ok) {

@@ -67,6 +67,7 @@ private:
     editor_transport_state transport_;
     std::optional<int> space_playback_start_tick_;
     std::string hitsound_path_;
+    editor_hitsound_paths hitsounds_;
     bool waveform_visible_ = true;
     int waveform_offset_ms_ = 0;
     audio_waveform_summary waveform_summary_;
@@ -74,6 +75,7 @@ private:
     bool snap_dropdown_open_ = false;
     std::optional<size_t> selected_note_index_;
     editor_timeline_note_drag_state timeline_drag_;
+    editor_note_palette_selection note_palette_;
     metadata_panel_state metadata_panel_;
     save_dialog_state save_dialog_;
     unsaved_changes_dialog_state unsaved_changes_dialog_;

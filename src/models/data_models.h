@@ -5,11 +5,14 @@
 #include <string>
 #include <vector>
 
-// 曲一覧で扱う楽曲メタデータ。
+// Song metadata sourced from song.json or the remote song catalog.
+// Storage and API use camelCase names, but runtime code keeps this normalized
+// snake_case shape with milliseconds as the canonical preview unit.
 struct song_meta {
     std::string song_id;
     std::string title;
     std::string artist;
+    std::string genre;
     float base_bpm = 0.0f;
     std::string audio_file;
     std::string jacket_file;
@@ -19,9 +22,6 @@ struct song_meta {
     float preview_start_seconds = 0.0f;
     int preview_start_ms = 0;
     int song_version = 0;
-    std::string sns_youtube;
-    std::string sns_niconico;
-    std::string sns_x;
 };
 
 // 曲一覧で扱う読み込み済み楽曲データ。
@@ -37,10 +37,13 @@ struct song_load_result {
     std::vector<std::string> errors;
 };
 
-// 譜面ごとの差分情報を表すメタデータ。
+// Chart identity and authored metadata sourced from .rchart or the remote chart
+// catalog. Display-only derived metadata such as note count, BPM range, content
+// verification state, and local rank lives on song_select::chart_option.
 struct chart_meta {
     std::string chart_id;
     std::string song_id;
+    int chart_version = 0;
     int key_count = 0;
     std::string difficulty;
     float level = 0.0f;
@@ -68,7 +71,9 @@ struct timing_event {
 // ノート入力の種類。
 enum class note_type {
     tap,
-    hold
+    hold,
+    release,
+    stay
 };
 
 // 入力イベントの種別。
@@ -90,7 +95,21 @@ struct note_data {
     int tick = 0;
     int lane = 0;
     int end_tick = 0;
+    bool is_ray = false;
+    int lane_width = 1;
 };
+
+inline int note_lane_width(const note_data& note) {
+    return note.lane_width > 0 ? note.lane_width : 1;
+}
+
+inline int note_last_lane(const note_data& note) {
+    return note.lane + note_lane_width(note) - 1;
+}
+
+inline bool note_covers_lane(const note_data& note, int lane) {
+    return lane >= note.lane && lane <= note_last_lane(note);
+}
 
 // 1 譜面分のパース済みデータ。
 struct chart_data {
@@ -162,6 +181,9 @@ struct judge_event {
     bool apply_gameplay_effects = true;
     bool show_feedback = true;
     int event_index = -1;
+    note_type hitsound_type = note_type::tap;
+    bool is_ray = false;
+    int lane_width = 1;
 };
 
 // 達成率に応じたランク種別。
@@ -198,6 +220,8 @@ struct result_data {
     float accuracy = 0.0f;
     std::array<int, 5> judge_counts = {};
     int max_combo = 0;
+    float gauge_value = 100.0f;
+    float rc_value = 0.0f;
     float avg_offset = 0.0f;
     int fast_count = 0;
     int slow_count = 0;
@@ -206,6 +230,6 @@ struct result_data {
     bool is_full_combo = false;
     bool is_all_perfect = false;
     std::string scoring_ruleset_version;
-    std::string scoring_accepted_input = "note_results_v1";
+    std::string scoring_accepted_input = "noteResultsV1";
     std::vector<note_result_entry> note_results;
 };

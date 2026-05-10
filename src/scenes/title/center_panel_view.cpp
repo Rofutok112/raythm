@@ -133,6 +133,24 @@ int hit_test_chart(Rectangle area, float scroll_y, Vector2 point, int count) {
     return -1;
 }
 
+Rectangle song_status_badge_rect(Rectangle main_column_rect) {
+    return {
+        main_column_rect.x + main_column_rect.width - kHeaderPaddingX - kStatusBadgeWidth,
+        main_column_rect.y + kTitleOffsetY + 8.0f,
+        kStatusBadgeWidth,
+        kStatusBadgeHeight,
+    };
+}
+
+Rectangle chart_status_badge_rect(Rectangle chart_detail_rect) {
+    return {
+        chart_detail_rect.x,
+        chart_detail_rect.y + kChartStatusOffsetY,
+        kStatusBadgeWidth,
+        kStatusBadgeHeight,
+    };
+}
+
 void draw(const song_select::state& state,
           const song_select::preview_controller& preview_controller,
           const song_select::song_entry* song,
@@ -198,10 +216,9 @@ void draw(const song_select::state& state,
     draw_marquee_text(song->song.meta.title.c_str(),
                       song_title_text_rect,
                       28, with_alpha(t.text, config.alpha), config.now);
-    content_status_badge::draw(
-        {title_rect.x + title_rect.width - kStatusBadgeWidth, title_rect.y + 8.0f,
-         kStatusBadgeWidth, kStatusBadgeHeight},
-        song->status, config.alpha, 12);
+    content_status_badge::draw_compound(
+        song_status_badge_rect(config.main_column_rect),
+        song->source_status, song->status, config.alpha, 12);
     draw_marquee_text(song->song.meta.artist.c_str(),
                       artist_rect,
                       18, with_alpha(t.text_secondary, config.alpha), config.now);
@@ -211,11 +228,9 @@ void draw(const song_select::state& state,
                               {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartDifficultyOffsetY,
                                config.chart_detail_rect.width, kChartDifficultyHeight},
                               with_alpha(t.text, config.alpha), ui::text_align::left);
-        content_status_badge::draw(
-            {config.chart_detail_rect.x,
-             config.chart_detail_rect.y + kChartStatusOffsetY,
-             kStatusBadgeWidth, kStatusBadgeHeight},
-            chart->status, config.alpha, 12);
+        content_status_badge::draw_compound(
+            chart_status_badge_rect(config.chart_detail_rect),
+            chart->source_status, chart->status, config.alpha, 12);
         ui::draw_text_in_rect(TextFormat("%s   %d Notes", key_mode_label(chart->meta.key_count).c_str(),
                                          chart->note_count),
                               14,
@@ -255,11 +270,11 @@ void draw(const song_select::state& state,
                               {row.x + kChartTextPaddingX, row.y + kChartTitleOffsetY,
                                row.width - kChartRightReserved - kChartStatusWidth, kChartTitleHeight},
                               with_alpha(t.text, config.alpha), ui::text_align::left);
-        content_status_badge::draw(
+        content_status_badge::draw_compound(
                               {row.x + row.width - kChartRightReserved - kChartStatusWidth,
                                row.y + kChartTitleOffsetY + 1.0f,
                                kChartStatusWidth, kStatusBadgeHeight},
-                              item.status, config.alpha, 10);
+                              item.source_status, item.status, config.alpha, 10);
         ui::draw_text_in_rect(TextFormat("Lv.%.1f", item.meta.level), 13,
                               {row.x + kChartTextPaddingX, row.y + kChartLevelOffsetY,
                                row.width - kChartRightReserved, kChartLevelHeight},

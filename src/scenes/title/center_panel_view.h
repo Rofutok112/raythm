@@ -27,6 +27,8 @@ float chart_list_content_height(int count);
 float max_chart_scroll(Rectangle area, int count);
 Rectangle chart_button_rect(Rectangle area, int index, float scroll_y);
 int hit_test_chart(Rectangle area, float scroll_y, Vector2 point, int count);
+Rectangle song_status_badge_rect(Rectangle main_column_rect);
+Rectangle chart_status_badge_rect(Rectangle chart_detail_rect);
 void draw(const song_select::state& state,
           const song_select::preview_controller& preview_controller,
           const song_select::song_entry* song,

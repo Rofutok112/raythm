@@ -315,6 +315,33 @@ void draw_download_icon_button(Rectangle rect, bool update, unsigned char alpha)
     DrawLineEx({cx - 8.0f, bottom}, {cx + 8.0f, bottom}, 2.0f, stroke);
 }
 
+Color action_tone_for_state(bool update_available, bool installed, bool downloading) {
+    const auto& t = *g_theme;
+    if (downloading) {
+        return t.text_muted;
+    }
+    if (update_available) {
+        return t.accent;
+    }
+    if (!installed) {
+        return t.success;
+    }
+    return t.fast;
+}
+
+void draw_toned_button(Rectangle rect,
+                       const char* label,
+                       int font_size,
+                       Color tone,
+                       unsigned char alpha,
+                       unsigned char base_alpha,
+                       unsigned char hover_alpha) {
+    const auto& t = *g_theme;
+    const Color base = with_alpha(lerp_color(t.section, tone, 0.14f), base_alpha);
+    const Color hover = with_alpha(lerp_color(t.section, tone, 0.28f), hover_alpha);
+    ui::draw_button_colored(rect, label, font_size, base, hover, with_alpha(t.text, alpha), 1.4f);
+}
+
 }  // namespace
 
 void draw(state& state, float anim_t, Rectangle origin_rect) {
@@ -419,6 +446,8 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                 ? "Loading..."
                 : (state.mode == catalog_mode::owned && state.owned_loading)
                     ? "Syncing owned songs..."
+                : state.catalog_maintenance
+                    ? "Server maintenance"
                 : (state.catalog_request_failed ? "Could not reach raythm-Server." : "No songs found.");
             ui::draw_text_in_rect(empty_title,
                                   26, {placeholder.x, placeholder.y + 8.0f, placeholder.width, 28.0f},
@@ -426,7 +455,9 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             if (!loading && state.catalog_request_failed) {
                 const std::string detail = !state.catalog_status_message.empty()
                     ? state.catalog_status_message
-                    : "Check the server URL and confirm raythm-Server is running.";
+                    : state.catalog_maintenance
+                        ? "Online features are temporarily unavailable. Please try again later."
+                        : "Check the server URL and confirm raythm-Server is running.";
                 ui::draw_text_in_rect(detail.c_str(),
                                       14, {placeholder.x + 20.0f, placeholder.y + 42.0f, placeholder.width - 40.0f, 16.0f},
                                       with_alpha(t.text_muted, grid_alpha), ui::text_align::center);
@@ -491,8 +522,19 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             draw_marquee_text(song.song.song.meta.title.c_str(),
                               {card.x + 14.0f, card.y + 154.0f, card.width - 28.0f, 30.0f},
                               18, with_alpha(t.text, grid_alpha), now);
-            draw_marquee_text(song.song.song.meta.artist.c_str(),
-                              {card.x + 14.0f, card.y + 184.0f, card.width - 28.0f, 22.0f},
+            const std::string card_subtitle = song.song.song.meta.genre.empty()
+                ? song.song.song.meta.artist
+                : song.song.song.meta.artist + " / " + song.song.song.meta.genre;
+            const bool has_duration = song.song.song.meta.duration_seconds > 0.0f;
+            if (song.song.song.meta.duration_seconds > 0.0f) {
+                ui::draw_text_in_rect(detail::format_time_label(song.song.song.meta.duration_seconds).c_str(),
+                                      12,
+                                      {card.x + card.width - 72.0f, card.y + 186.0f, 58.0f, 18.0f},
+                                      with_alpha(t.text_muted, grid_alpha), ui::text_align::right);
+            }
+            draw_marquee_text(card_subtitle.c_str(),
+                              {card.x + 14.0f, card.y + 184.0f,
+                               card.width - (has_duration ? 88.0f : 28.0f), 22.0f},
                               13, with_alpha(t.text_muted, grid_alpha), now);
         }
     }
@@ -556,12 +598,23 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         27.0f
     };
     draw_marquee_text(song->song.song.meta.title.c_str(), title_rect, 28, with_alpha(t.text, detail_alpha), now);
-    draw_marquee_text(song->song.song.meta.artist.c_str(), artist_rect, 17,
+    const std::string detail_subtitle = song->song.song.meta.genre.empty()
+        ? song->song.song.meta.artist
+        : song->song.song.meta.artist + " / " + song->song.song.meta.genre;
+    draw_marquee_text(detail_subtitle.c_str(), artist_rect, 17,
                       with_alpha(t.text_secondary, detail_alpha), now);
+    if (song->song.song.meta.duration_seconds > 0.0f) {
+        ui::draw_text_in_rect(detail::format_time_label(song->song.song.meta.duration_seconds).c_str(),
+                              14,
+                              {artist_rect.x, artist_rect.y + 26.0f, artist_rect.width, 20.0f},
+                              with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
+    }
 
     const audio_manager& audio = audio_manager::instance();
     const double preview_length = detail::preview_display_length_seconds(*song);
-    const double preview_position = audio.get_preview_position_seconds();
+    const double preview_position = state.preview_bar_dragging
+        ? state.preview_bar_drag_position_seconds
+        : audio.get_preview_position_seconds();
     const float preview_ratio =
         preview_length > 0.0 ? std::clamp(static_cast<float>(preview_position / preview_length), 0.0f, 1.0f) : 0.0f;
     ui::draw_rect_f(current.preview_bar_rect, with_alpha(t.bg_alt, static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
@@ -579,8 +632,11 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
 
     draw_transport_toggle_button(current.preview_play_rect, audio.is_preview_playing(), detail_alpha);
 
+    const bool selected_chart_update =
+        chart != nullptr && chart->installed && chart->update_available;
     const char* primary_label = state.download_in_progress ? "DOWNLOADING..."
-        : (needs_download(*song) ? (song->update_available ? "UPDATE SONG" : "DOWNLOAD SONG") : "OPEN LOCAL");
+        : (needs_download(*song) ? (song->update_available ? "UPDATE SONG" : "DOWNLOAD SONG")
+           : (selected_chart_update ? "UPDATE CHART" : "OPEN LOCAL"));
     if (state.download_in_progress && state.download_progress) {
         const int total_steps = std::max(1, state.download_progress->total_steps.load());
         const int completed_steps = std::clamp(state.download_progress->completed_steps.load(), 0, total_steps);
@@ -610,10 +666,15 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                               {progress_rect.x, progress_rect.y - 16.0f, progress_rect.width, 14.0f},
                               with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
     }
-    ui::draw_button_colored(current.primary_action_rect, primary_label, 15,
-                            with_alpha(button_selected, selected_row_alpha),
-                            with_alpha(button_selected, hover_row_alpha),
-                            with_alpha(t.text, detail_alpha), 1.5f);
+    draw_toned_button(current.primary_action_rect,
+                      primary_label,
+                      15,
+                      action_tone_for_state(song->update_available || selected_chart_update,
+                                            song->installed,
+                                            state.download_in_progress),
+                      detail_alpha,
+                      selected_row_alpha,
+                      hover_row_alpha);
 
     ui::draw_text_in_rect(TextFormat("%d items", static_cast<int>(song->charts.size())), 14,
                           {current.chart_list_rect.x + current.chart_list_rect.width * 0.46f, current.chart_list_rect.y - 26.0f,

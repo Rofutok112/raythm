@@ -24,6 +24,7 @@ constexpr float kUiAuthoringScale1080p = 1920.0f / 1280.0f;
 std::string g_font_path;
 Font g_font = {};
 bool g_font_loaded = false;
+font_locale_mode g_font_mode = font_locale_mode::automatic;
 std::set<int> g_loaded_codepoints;
 
 float snap_custom_font_size(float font_size) {
@@ -61,7 +62,19 @@ bool contains_non_ascii_bytes(const char* text) {
     return false;
 }
 
+bool should_use_custom_font(const char* text) {
+    if (!g_font_loaded) {
+        return false;
+    }
+    return contains_non_ascii_bytes(text);
+}
+
 std::string find_font_path() {
+    const std::filesystem::path japanese_font = app_paths::assets_root() / "fonts" / "mihiPixelmoji_v1.1.ttf";
+    if (std::filesystem::exists(japanese_font)) {
+        return path_utils::to_utf8(japanese_font);
+    }
+
     std::vector<std::filesystem::path> candidates;
     const std::filesystem::path assets_root = app_paths::assets_root();
     if (!std::filesystem::exists(assets_root)) {
@@ -117,6 +130,10 @@ void seed_ascii_codepoints() {
 
 }  // namespace
 
+void set_font_locale_mode(font_locale_mode mode) {
+    g_font_mode = mode;
+}
+
 void initialize_text_font() {
     g_font_path = find_font_path();
     g_loaded_codepoints.clear();
@@ -149,7 +166,7 @@ Font text_font() {
 }
 
 Font text_font_for_text(const char* text) {
-    if (g_font_loaded && contains_non_ascii_bytes(text)) {
+    if (should_use_custom_font(text)) {
         return g_font;
     }
     return GetFontDefault();
@@ -161,14 +178,14 @@ float text_layout_font_size(float font_size) {
 
 float text_font_size_for_text(const char* text, float font_size) {
     const float scaled_font_size = text_layout_font_size(font_size);
-    if (g_font_loaded && contains_non_ascii_bytes(text)) {
+    if (should_use_custom_font(text)) {
         return snap_custom_font_size(scaled_font_size * kCustomFontSizeScale);
     }
     return snap_default_font_size(scaled_font_size);
 }
 
 float text_spacing_for_text(const char* text, float font_size, float spacing) {
-    if (g_font_loaded && contains_non_ascii_bytes(text)) {
+    if (should_use_custom_font(text)) {
         return spacing + kCustomFontSpacingOffset;
     }
 
@@ -184,7 +201,7 @@ float text_spacing_for_text(const char* text, float font_size, float spacing) {
 }
 
 void ensure_text_glyphs(const char* text) {
-    if (!g_font_loaded || !contains_non_ascii_bytes(text)) {
+    if (!should_use_custom_font(text)) {
         return;
     }
 
@@ -226,7 +243,7 @@ void draw_text_auto(const char* text, Vector2 position, float font_size, float s
 
     ensure_text_glyphs(text);
     const float adjusted_font_size = text_font_size_for_text(text, font_size);
-    const bool uses_custom_font = g_font_loaded && contains_non_ascii_bytes(text);
+    const bool uses_custom_font = should_use_custom_font(text);
     const Vector2 draw_position = uses_custom_font
                                       ? Vector2{snap_custom_coordinate(position.x), snap_custom_coordinate(position.y)}
                                       : Vector2{snap_default_coordinate(position.x), snap_default_coordinate(position.y)};

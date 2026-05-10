@@ -47,6 +47,13 @@ void trigger_lane_judge_effect(play_session_state& state, const judge_event& eve
     lane_judge_effect& effect = state.lane_judge_effects[static_cast<std::size_t>(event.lane)];
     effect.result = event.result;
     effect.timer = play_session_constants::kLaneJudgeEffectDurationSeconds;
+    effect.lane_width = std::max(1, std::min(event.lane_width, state.key_count - event.lane));
+}
+
+void capture_final_result(play_session_state& state) {
+    state.final_result = state.score_system.get_result_data();
+    state.final_result.gauge_value = state.gauge.get_value();
+    state.final_result.rc_value = state.performance_system.current_rc();
 }
 
 }  // namespace
@@ -163,11 +170,13 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
     for (const judge_event& event : judge_events) {
         if (event.apply_gameplay_effects) {
             state.score_system.on_judge(event);
+            state.performance_system.on_judge(event);
             state.gauge.on_judge(event.result);
         }
-        if (!state.hitsound_path.empty() && event.play_hitsound && event.result != judge_result::miss) {
+        if ((!state.hitsound_path.empty() || state.hitsounds.has_any()) &&
+            event.play_hitsound && event.result != judge_result::miss) {
             if (context.play_hitsound_immediately) {
-                context.play_hitsound_immediately();
+                context.play_hitsound_immediately(event);
             } else {
                 ++result.hitsound_count;
             }
@@ -181,7 +190,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
     state.combo_display = state.score_system.get_combo();
 
     if (!is_no_fail_playtest(state) && state.gauge.get_value() <= 0.0f) {
-        state.final_result = state.score_system.get_result_data();
+        capture_final_result(state);
         state.final_result.failed = true;
         state.ranking_enabled = false;
         state.failure_transition_playing = true;
@@ -203,7 +212,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         });
 
     if (chart_finished) {
-        state.final_result = state.score_system.get_result_data();
+        capture_final_result(state);
         state.result_transition_playing = true;
         state.result_transition_timer = 0.0f;
         result.request_fade_out_bgm = true;
@@ -211,7 +220,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
     }
 
     if (state.current_ms >= state.song_end_ms) {
-        state.final_result = state.score_system.get_result_data();
+        capture_final_result(state);
         state.result_transition_playing = true;
         state.result_transition_timer = 0.0f;
         result.request_fade_out_bgm = true;

@@ -8,8 +8,10 @@ namespace title_create_upload {
 
 struct upload_result {
     bool success = false;
+    bool maintenance = false;
     bool should_refresh_online_catalog = false;
     std::string message;
+    std::string retry_after;
 };
 
 upload_result upload_song(const song_select::song_entry& song);

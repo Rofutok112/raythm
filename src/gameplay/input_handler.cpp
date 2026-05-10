@@ -32,7 +32,6 @@ void input_handler::set_key_count(int key_count) {
 }
 
 void input_handler::update(double timestamp_ms) {
-    const std::span<const KeyboardKey> lane_keys = key_config_.get_lane_keys(key_count_);
     events_.clear();
     prev_state_ = curr_state_;
 
@@ -40,12 +39,13 @@ void input_handler::update(double timestamp_ms) {
         const std::vector<native_key_event> native_events = windows_input_source::instance().drain_events();
         if (!native_events.empty()) {
             apply_native_events(native_events, timestamp_ms);
-            last_update_source_ = input_update_source::native_windows;
-            last_update_event_count_ = static_cast<int>(events_.size());
-            return;
         }
+        last_update_source_ = input_update_source::native_windows;
+        last_update_event_count_ = static_cast<int>(events_.size());
+        return;
     }
 
+    const std::span<const KeyboardKey> lane_keys = key_config_.get_lane_keys(key_count_);
     std::array<bool, kMaxLanes> next_state = {};
     for (int lane = 0; lane < key_count_; ++lane) {
         const KeyboardKey key = lane_keys[static_cast<size_t>(lane)];

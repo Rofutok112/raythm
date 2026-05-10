@@ -4,17 +4,25 @@
 #include <string>
 #include <vector>
 
+#include "network/server_environment.h"
+
 namespace auth {
 
-inline constexpr const char* kDefaultServerUrl = "https://api.raythm.net";
-inline constexpr const char* kLanServerUrl = "http://192.168.11.33";
-inline constexpr const char* kLegacyLanServerUrl = "http://192.168.11.33";
+inline constexpr const char* kProductionServerUrl = server_environment::kProductionServerUrl;
+inline constexpr const char* kDevelopmentServerUrl = server_environment::kDevelopmentServerUrl;
+inline constexpr const char* kDefaultServerUrl = kProductionServerUrl;
+
+struct external_link {
+    std::string label;
+    std::string url;
+};
 
 struct public_user {
     std::string id;
     std::string email;
     std::string display_name;
     bool email_verified = false;
+    std::vector<external_link> external_links;
 };
 
 struct session {
@@ -30,6 +38,7 @@ struct session_summary {
     std::string email;
     std::string display_name;
     bool email_verified = false;
+    std::vector<external_link> external_links;
 };
 
 enum class verification_purpose {
@@ -42,6 +51,8 @@ struct operation_result {
     bool success = false;
     std::string message;
     std::optional<session> session_data;
+    bool maintenance = false;
+    std::string retry_after;
     bool verification_required = false;
     verification_purpose verification = verification_purpose::none;
     std::string verification_email;
@@ -49,23 +60,42 @@ struct operation_result {
 
 struct community_song_upload {
     std::string id;
+    std::string client_song_id;
     std::string title;
     std::string artist;
+    std::string genre;
+    std::string content_source;
     std::string visibility;
+    float base_bpm = 0.0f;
+    float duration_seconds = 0.0f;
+    int preview_start_ms = 0;
+    int song_version = 0;
 };
 
 struct community_chart_upload {
     std::string id;
+    std::string client_chart_id;
     std::string song_id;
+    std::string client_song_id;
     std::string song_title;
     std::string difficulty_name;
     std::string chart_author;
+    std::string content_source;
     std::string visibility;
+    int key_count = 0;
+    float level = 0.0f;
+    int note_count = 0;
+    float min_bpm = 0.0f;
+    float max_bpm = 0.0f;
+    std::string difficulty_ruleset_id;
+    int difficulty_ruleset_version = 0;
 };
 
 struct my_uploads_result {
     bool success = false;
+    bool maintenance = false;
     std::string message;
+    std::string retry_after;
     std::vector<community_song_upload> songs;
     std::vector<community_chart_upload> charts;
 };
@@ -75,6 +105,7 @@ struct profile_ranking_record {
     std::string song_id;
     std::string song_title;
     std::string artist;
+    std::string genre;
     std::string difficulty_name;
     std::string chart_author;
     std::string clear_rank;
@@ -89,7 +120,9 @@ struct profile_ranking_record {
 
 struct profile_rankings_result {
     bool success = false;
+    bool maintenance = false;
     std::string message;
+    std::string retry_after;
     std::vector<profile_ranking_record> recent_records;
     std::vector<profile_ranking_record> first_place_records;
 };
@@ -120,6 +153,7 @@ operation_result resend_verification_code(const std::string& server_url,
 operation_result restore_saved_session();
 operation_result logout_saved_session();
 operation_result delete_saved_account(const std::string& password);
+operation_result update_profile_external_links(const std::vector<external_link>& links);
 my_uploads_result fetch_my_community_uploads();
 profile_rankings_result fetch_my_profile_rankings();
 operation_result delete_community_song_upload(const std::string& song_id);

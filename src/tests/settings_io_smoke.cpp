@@ -1,12 +1,15 @@
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <system_error>
 
 #include "app_paths.h"
 #include "game_settings.h"
+#include "localization/localization.h"
 #include "settings_io.h"
 
 namespace {
@@ -80,13 +83,14 @@ int main() {
         defaults.note_height = 1.4f;
         defaults.target_fps = 240;
         defaults.fullscreen = true;
+        defaults.window_maximized = true;
         defaults.dark_mode = true;
+        defaults.ui_locale = localization::locale::japanese;
 
         initialize_settings_storage(defaults);
 
         expect(fs::is_directory(app_paths::app_data_root()), "Expected AppData root to be created.", ok);
         expect(fs::is_directory(app_paths::songs_root()), "Expected songs directory to be created.", ok);
-        expect(fs::is_directory(app_paths::charts_root()), "Expected charts directory to be created.", ok);
         expect(fs::is_regular_file(app_paths::settings_path()), "Expected settings.json to be created.", ok);
 
         game_settings loaded;
@@ -106,8 +110,14 @@ int main() {
         expect(loaded.fullscreen == defaults.fullscreen,
                "Expected default fullscreen flag to be written to settings.json.",
                ok);
+        expect(loaded.window_maximized == defaults.window_maximized,
+               "Expected default maximized flag to be written to settings.json.",
+               ok);
         expect(loaded.dark_mode == defaults.dark_mode,
                "Expected default dark mode flag to be written to settings.json.",
+               ok);
+        expect(loaded.ui_locale == defaults.ui_locale,
+               "Expected default language to be written to settings.json.",
                ok);
 
         game_settings different_defaults = defaults;
@@ -122,6 +132,36 @@ int main() {
                ok);
         expect(loaded_again.fullscreen == defaults.fullscreen,
                "Expected existing fullscreen setting not to be overwritten.",
+               ok);
+        expect(loaded_again.window_maximized == defaults.window_maximized,
+               "Expected existing maximized setting not to be overwritten.",
+               ok);
+
+        save_settings(defaults);
+        std::string content;
+        {
+            std::ifstream input(app_paths::settings_path());
+            content.assign(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+        }
+        const std::string language_token = "\"language\": \"ja\"";
+        expect(content.find("\"windowMaximized\": true") != std::string::npos,
+               "Expected windowMaximized key to be present in settings.json.",
+               ok);
+        const size_t language_pos = content.find(language_token);
+        expect(language_pos != std::string::npos,
+               "Expected language key to be present in settings.json.",
+               ok);
+        if (language_pos != std::string::npos) {
+            content.replace(language_pos, language_token.size(), "\"language\": \"xx\"");
+        }
+        {
+            std::ofstream output(app_paths::settings_path());
+            output << content;
+        }
+        game_settings invalid_language;
+        load_settings(invalid_language);
+        expect(invalid_language.ui_locale == localization::locale::english,
+               "Expected unknown language code to fall back to English.",
                ok);
     }
 

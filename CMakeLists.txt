@@ -12,6 +12,9 @@ set(RAYTHM_PACKAGE_VERSION "0.1.0" CACHE STRING "Version string used for Windows
 set(RAYTHM_PACKAGE_FILE_NAME
         "raythm-${RAYTHM_PACKAGE_VERSION}-windows-x64"
         CACHE STRING "Package file name without extension")
+set(RAYTHM_SERVER_ENV "development" CACHE STRING "Server environment: production or development")
+set_property(CACHE RAYTHM_SERVER_ENV PROPERTY STRINGS production development)
+set(RAYTHM_API_BASE_URL "" CACHE STRING "Optional API base URL override for local builds")
 set(RAYTHM_BASS_DIR
         "${CMAKE_SOURCE_DIR}/libs/bass"
         CACHE PATH "Directory containing bass.h, bass.lib, and bass.dll")
@@ -30,6 +33,11 @@ foreach(required_bass_file IN ITEMS
                 "Ensure libs/bass is checked into the repository or set RAYTHM_BASS_DIR to a directory containing bass.h, bass.lib, and bass.dll.")
     endif()
 endforeach()
+
+add_compile_definitions(RAYTHM_SERVER_ENV="${RAYTHM_SERVER_ENV}")
+if(NOT RAYTHM_API_BASE_URL STREQUAL "")
+    add_compile_definitions(RAYTHM_API_BASE_URL="${RAYTHM_API_BASE_URL}")
+endif()
 
 include(FetchContent)
 FetchContent_Declare(
@@ -138,12 +146,14 @@ add_executable(raythm WIN32 src/main.cpp
         src/platform/windows_input_source.h
         src/platform/windows_app_icon.cpp
         src/platform/windows_app_icon.h
+        src/platform/window_chrome.cpp
+        src/platform/window_chrome.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
         src/gameplay/chart_difficulty.cpp
         src/gameplay/chart_difficulty.h
-        src/gameplay/chart_identity_store.cpp
-        src/gameplay/chart_identity_store.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/gameplay/chart_fingerprint.cpp
         src/gameplay/chart_fingerprint.h
         src/gameplay/chart_level_cache.cpp
@@ -157,6 +167,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/judge_system.h
         src/gameplay/player_note_offsets.cpp
         src/gameplay/player_note_offsets.h
+        src/gameplay/performance_system.cpp
+        src/gameplay/performance_system.h
         src/gameplay/ranking_service.cpp
         src/gameplay/ranking_service.h
         src/gameplay/scoring_ruleset_runtime.cpp
@@ -177,8 +189,12 @@ add_executable(raythm WIN32 src/main.cpp
         src/network/http_client.h
         src/network/json_helpers.cpp
         src/network/json_helpers.h
+        src/network/network_error.cpp
+        src/network/network_error.h
         src/network/ranking_client.cpp
         src/network/ranking_client.h
+        src/network/server_environment.cpp
+        src/network/server_environment.h
         src/updater/update_verify.cpp
         src/updater/update_verify.h
         src/core/app_paths.cpp
@@ -194,6 +210,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/core/scene_manager.cpp
         src/core/scene_manager.h
         src/core/uuid_util.h
+        src/localization/localization.cpp
+        src/localization/localization.h
         src/gameplay/game_settings.h
         src/gameplay/key_names.h
         src/gameplay/settings_io.cpp
@@ -239,10 +257,9 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/create_upload_client.h
         src/scenes/title/local_content_database.cpp
         src/scenes/title/local_content_database.h
+        src/scenes/title/local_content_binding.h
         src/scenes/title/local_content_index.cpp
         src/scenes/title/local_content_index.h
-        src/scenes/title/upload_mapping_store.cpp
-        src/scenes/title/upload_mapping_store.h
         src/scenes/title/online_download_internal.h
         src/scenes/title/online_download_catalog.cpp
         src/scenes/title/online_download_remote_client.cpp
@@ -361,6 +378,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/play/play_session_loader.cpp
         src/scenes/play/play_session_loader.h
         src/scenes/play/play_session_types.h
+        src/scenes/result/result_scene_view.cpp
+        src/scenes/result/result_scene_view.h
         src/scenes/result_scene.cpp
         src/scenes/result_scene.h
         src/scenes/shared/scene_fade.cpp
@@ -465,6 +484,8 @@ add_executable(chart_difficulty_smoke
         src/models/data_models.h
         src/gameplay/chart_difficulty.cpp
         src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/tests/chart_difficulty_smoke.cpp)
@@ -495,8 +516,6 @@ add_executable(song_loader_smoke
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/core/path_utils.h
-        src/gameplay/chart_identity_store.cpp
-        src/gameplay/chart_identity_store.h
         src/gameplay/song_fingerprint.cpp
         src/gameplay/song_fingerprint.h
         src/gameplay/song_loader.cpp
@@ -519,24 +538,18 @@ add_executable(song_select_state_smoke
 add_executable(settings_io_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/localization/localization.cpp
+        src/localization/localization.h
         src/gameplay/settings_io.cpp
         src/gameplay/settings_io.h
+        src/network/server_environment.cpp
+        src/network/server_environment.h
         src/tests/settings_io_smoke.cpp)
 
-add_executable(upload_mapping_store_smoke
-        src/core/app_paths.cpp
-        src/core/app_paths.h
-        src/core/local_sqlite.cpp
-        src/core/local_sqlite.h
-        src/scenes/title/local_content_database.cpp
-        src/scenes/title/local_content_database.h
-        src/scenes/title/local_content_index.cpp
-        src/scenes/title/local_content_index.h
-        src/gameplay/chart_identity_store.cpp
-        src/gameplay/chart_identity_store.h
-        src/scenes/title/upload_mapping_store.cpp
-        src/scenes/title/upload_mapping_store.h
-        src/tests/upload_mapping_store_smoke.cpp)
+add_executable(localization_smoke
+        src/localization/localization.cpp
+        src/localization/localization.h
+        src/tests/localization_smoke.cpp)
 
 add_executable(local_catalog_database_smoke
         src/core/app_paths.cpp
@@ -551,6 +564,18 @@ add_executable(local_catalog_database_smoke
         src/scenes/shared/scene_fade.h
         src/models/data_models.h
         src/tests/local_catalog_database_smoke.cpp)
+
+add_executable(local_content_index_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/local_sqlite.cpp
+        src/core/local_sqlite.h
+        src/scenes/title/local_content_binding.h
+        src/scenes/title/local_content_database.cpp
+        src/scenes/title/local_content_database.h
+        src/scenes/title/local_content_index.cpp
+        src/scenes/title/local_content_index.h
+        src/tests/local_content_index_smoke.cpp)
 
 add_executable(mv_storage_smoke
         src/core/app_paths.cpp
@@ -579,11 +604,21 @@ add_executable(judge_system_smoke
         src/platform/windows_input_source.h
         src/gameplay/input_handler.cpp
         src/gameplay/input_handler.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/gameplay/judge_system.cpp
         src/gameplay/judge_system.h
         src/tests/judge_system_smoke.cpp
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h)
+
+add_executable(chart_judge_events_smoke
+        src/models/data_models.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/tests/chart_judge_events_smoke.cpp)
 
 add_executable(score_system_smoke
         src/models/data_models.h
@@ -592,6 +627,18 @@ add_executable(score_system_smoke
         src/gameplay/score_system.cpp
         src/gameplay/score_system.h
         src/tests/score_system_smoke.cpp)
+
+add_executable(performance_system_smoke
+        src/models/data_models.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
+        src/gameplay/performance_system.cpp
+        src/gameplay/performance_system.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/tests/performance_system_smoke.cpp)
 
 add_executable(ranking_service_smoke
         src/core/app_paths.cpp
@@ -602,8 +649,6 @@ add_executable(ranking_service_smoke
         src/scenes/title/local_content_database.h
         src/scenes/title/local_content_index.cpp
         src/scenes/title/local_content_index.h
-        src/gameplay/chart_identity_store.cpp
-        src/gameplay/chart_identity_store.h
         src/models/data_models.h
         src/gameplay/chart_fingerprint.cpp
         src/gameplay/chart_fingerprint.h
@@ -613,19 +658,28 @@ add_executable(ranking_service_smoke
         src/gameplay/scoring_ruleset_runtime.h
         src/gameplay/song_fingerprint.cpp
         src/gameplay/song_fingerprint.h
-        src/scenes/title/upload_mapping_store.cpp
-        src/scenes/title/upload_mapping_store.h
         src/network/auth_client.cpp
         src/network/auth_client.h
         src/network/http_client.cpp
         src/network/http_client.h
         src/network/json_helpers.cpp
         src/network/json_helpers.h
+        src/network/network_error.cpp
+        src/network/network_error.h
         src/network/ranking_client.cpp
         src/network/ranking_client.h
+        src/network/server_environment.cpp
+        src/network/server_environment.h
         src/updater/update_verify.cpp
         src/updater/update_verify.h
         src/tests/ranking_service_smoke.cpp)
+
+add_executable(network_error_smoke
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/network/network_error.cpp
+        src/network/network_error.h
+        src/tests/network_error_smoke.cpp)
 
 add_executable(play_note_draw_queue_smoke
         src/models/data_models.h
@@ -647,6 +701,12 @@ add_executable(play_flow_controller_smoke
         src/gameplay/input_handler.h
         src/gameplay/judge_system.cpp
         src/gameplay/judge_system.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
+        src/gameplay/performance_system.cpp
+        src/gameplay/performance_system.h
         src/gameplay/scoring_ruleset_runtime.cpp
         src/gameplay/scoring_ruleset_runtime.h
         src/gameplay/score_system.cpp
@@ -694,8 +754,6 @@ add_executable(editor_flow_controller_smoke
         src/scenes/editor/editor_timing_panel.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
-        src/gameplay/chart_identity_store.cpp
-        src/gameplay/chart_identity_store.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/models/data_models.h
@@ -866,14 +924,18 @@ set(RAYTHM_SMOKE_TARGETS
         song_loader_smoke
         song_select_state_smoke
         settings_io_smoke
-        upload_mapping_store_smoke
+        localization_smoke
         local_catalog_database_smoke
+        local_content_index_smoke
         mv_storage_smoke
         input_handler_smoke
         timing_engine_smoke
+        chart_judge_events_smoke
         judge_system_smoke
         score_system_smoke
+        performance_system_smoke
         ranking_service_smoke
+        network_error_smoke
         play_note_draw_queue_smoke
         play_chart_filter_smoke
         play_flow_controller_smoke
@@ -910,8 +972,8 @@ target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)
 target_link_libraries(update_version_smoke PRIVATE winhttp)
 target_link_libraries(song_loader_smoke PRIVATE sqlite3)
-target_link_libraries(upload_mapping_store_smoke PRIVATE sqlite3 crypt32)
 target_link_libraries(local_catalog_database_smoke PRIVATE sqlite3 raylib)
+target_link_libraries(local_content_index_smoke PRIVATE sqlite3)
 target_link_libraries(song_select_state_smoke PRIVATE raylib)
 target_link_libraries(settings_io_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)

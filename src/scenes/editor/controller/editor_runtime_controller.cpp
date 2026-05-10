@@ -30,7 +30,8 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
             context.transport,
             &context.state,
             context.space_playback_start_tick,
-            context.hitsound_path);
+            context.hitsound_path,
+            context.hitsounds);
     }
 
     if (context.ctrl_down && context.z_pressed && !context.mv_script_editor_active) {
@@ -40,13 +41,13 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
             context.state.undo();
         }
         editor_scene_sync::sync_after_history_change(context.sync_context);
-        editor_transport_service::sync(context.transport, &context.state, context.hitsound_path, true);
+        editor_transport_service::sync(context.transport, &context.state, context.hitsound_path, context.hitsounds, true);
     }
 
     if (context.ctrl_down && context.y_pressed && !context.mv_script_editor_active) {
         context.state.redo();
         editor_scene_sync::sync_after_history_change(context.sync_context);
-        editor_transport_service::sync(context.transport, &context.state, context.hitsound_path, true);
+        editor_transport_service::sync(context.transport, &context.state, context.hitsound_path, context.hitsounds, true);
     }
 
     if (!metadata_input_active &&
@@ -85,6 +86,7 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
         context.snap_division,
         context.selected_note_index,
         context.drag_state,
+        context.palette,
     });
 
     context.selected_note_index = timeline_result.selected_note_index;
@@ -100,13 +102,15 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
                 context.transport,
                 &context.state,
                 context.space_playback_start_tick,
-                context.hitsound_path);
+                context.hitsound_path,
+                context.hitsounds);
         }
         editor_transport_service::seek_to_tick(
             context.transport,
             &context.state,
             timeline_result.seek_tick,
-            context.hitsound_path);
+            context.hitsound_path,
+            context.hitsounds);
         if (was_playing || timeline_result.scroll_seek_if_paused) {
             result.scroll_to_tick = context.transport.playback_tick;
         }
@@ -123,6 +127,12 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
         context.selected_note_index = context.state.data().notes.empty()
             ? std::nullopt
             : std::optional<size_t>(context.state.data().notes.size() - 1);
+    }
+
+    if (timeline_result.note_to_modify_index.has_value() && timeline_result.note_to_modify.has_value()) {
+        if (context.state.modify_note(*timeline_result.note_to_modify_index, *timeline_result.note_to_modify)) {
+            context.selected_note_index = timeline_result.note_to_modify_index;
+        }
     }
 
     return result;

@@ -13,6 +13,7 @@
 #include "app_paths.h"
 #include "network/http_client.h"
 #include "network/json_helpers.h"
+#include "network/network_error.h"
 
 namespace {
 namespace fs = std::filesystem;
@@ -42,12 +43,27 @@ std::optional<auth::public_user> parse_user_object(const std::string& content) {
     }
 
     const bool email_verified = json::extract_bool(content, "emailVerified").value_or(false);
+    std::vector<auth::external_link> external_links;
+    if (const std::optional<std::string> links_array = json::extract_array(content, "externalLinks");
+        links_array.has_value()) {
+        for (const std::string& link_object : json::extract_objects_from_array(*links_array)) {
+            const std::string url = json::extract_string(link_object, "url").value_or("");
+            if (url.empty()) {
+                continue;
+            }
+            external_links.push_back({
+                .label = json::extract_string(link_object, "label").value_or(""),
+                .url = url,
+            });
+        }
+    }
 
     return auth::public_user{
         .id = *id,
         .email = *email,
         .display_name = *display_name,
         .email_verified = email_verified,
+        .external_links = std::move(external_links),
     };
 }
 
@@ -128,9 +144,16 @@ std::optional<auth::community_song_upload> parse_community_song_upload(const std
 
     return auth::community_song_upload{
         .id = *id,
+        .client_song_id = json::extract_string(object, "clientSongId").value_or(""),
         .title = *title,
         .artist = json::extract_string(object, "artist").value_or(""),
+        .genre = json::extract_string(object, "genre").value_or(""),
+        .content_source = json::extract_string(object, "contentSource").value_or("community"),
         .visibility = json::extract_string(object, "visibility").value_or("public"),
+        .base_bpm = json::extract_float(object, "baseBpm").value_or(0.0f),
+        .duration_seconds = json::extract_float(object, "durationSec").value_or(0.0f),
+        .preview_start_ms = json::extract_int(object, "previewStartMs").value_or(0),
+        .song_version = json::extract_int(object, "songVersion").value_or(0),
     };
 }
 
@@ -149,19 +172,30 @@ std::optional<auth::community_chart_upload> parse_community_chart_upload(const s
     const std::optional<std::string> song_object = json::extract_object(object, "song");
     return auth::community_chart_upload{
         .id = *id,
-        .song_id = json::extract_string(object, "songId").value_or(""),
+        .client_chart_id = json::extract_string(object, "clientChartId").value_or(""),
+        .song_id = json::extract_string(object, "songId")
+            .value_or(song_object.has_value() ? json::extract_string(*song_object, "id").value_or("") : ""),
+        .client_song_id = json::extract_string(object, "clientSongId").value_or(""),
         .song_title = song_object.has_value() ? json::extract_string(*song_object, "title").value_or("") : "",
         .difficulty_name = json::extract_string(object, "difficultyName").value_or(""),
         .chart_author = json::extract_string(object, "chartAuthor").value_or(""),
+        .content_source = json::extract_string(object, "contentSource").value_or("community"),
         .visibility = json::extract_string(object, "visibility").value_or("public"),
+        .key_count = json::extract_int(object, "keyCount").value_or(0),
+        .level = json::extract_float(object, "calculatedLevel").value_or(0.0f),
+        .note_count = json::extract_int(object, "noteCount").value_or(0),
+        .min_bpm = json::extract_float(object, "minBpm").value_or(0.0f),
+        .max_bpm = json::extract_float(object, "maxBpm").value_or(0.0f),
+        .difficulty_ruleset_id = json::extract_string(object, "difficultyRulesetId").value_or(""),
+        .difficulty_ruleset_version = json::extract_int(object, "difficultyRulesetVersion").value_or(0),
     };
 }
 
 std::optional<auth::profile_ranking_record> parse_profile_ranking_record(const std::string& object) {
-    const std::optional<std::string> chart_id = json::extract_string(object, "chart_id");
-    const std::optional<std::string> song_id = json::extract_string(object, "song_id");
-    const std::optional<std::string> song_title = json::extract_string(object, "song_title");
-    const std::optional<std::string> difficulty_name = json::extract_string(object, "difficulty_name");
+    const std::optional<std::string> chart_id = json::extract_string(object, "chartId");
+    const std::optional<std::string> song_id = json::extract_string(object, "songId");
+    const std::optional<std::string> song_title = json::extract_string(object, "songTitle");
+    const std::optional<std::string> difficulty_name = json::extract_string(object, "difficultyName");
     const std::optional<int> score = json::extract_int(object, "score");
     const std::optional<int> placement = json::extract_int(object, "placement");
     if (!chart_id.has_value() || !song_id.has_value() || !song_title.has_value() ||
@@ -174,16 +208,17 @@ std::optional<auth::profile_ranking_record> parse_profile_ranking_record(const s
         .song_id = *song_id,
         .song_title = *song_title,
         .artist = json::extract_string(object, "artist").value_or(""),
+        .genre = json::extract_string(object, "genre").value_or(""),
         .difficulty_name = *difficulty_name,
-        .chart_author = json::extract_string(object, "chart_author").value_or(""),
-        .clear_rank = json::extract_string(object, "clear_rank").value_or(""),
-        .recorded_at = json::extract_string(object, "recorded_at").value_or(""),
-        .submitted_at = json::extract_string(object, "submitted_at").value_or(""),
+        .chart_author = json::extract_string(object, "chartAuthor").value_or(""),
+        .clear_rank = json::extract_string(object, "clearRank").value_or(""),
+        .recorded_at = json::extract_string(object, "recordedAt").value_or(""),
+        .submitted_at = json::extract_string(object, "submittedAt").value_or(""),
         .score = *score,
         .placement = *placement,
-        .max_combo = json::extract_int(object, "max_combo").value_or(0),
+        .max_combo = json::extract_int(object, "maxCombo").value_or(0),
         .accuracy = json::extract_float(object, "accuracy").value_or(0.0f),
-        .is_full_combo = json::extract_bool(object, "is_full_combo").value_or(false),
+        .is_full_combo = json::extract_bool(object, "isFullCombo").value_or(false),
     };
 }
 
@@ -202,56 +237,33 @@ void parse_profile_ranking_array(const std::string& body,
     }
 }
 
-std::string parse_error_message(const std::string& body, std::string fallback) {
-    const std::optional<std::string> message = json::extract_string(body, "message");
-    return message.value_or(std::move(fallback));
+network::error_classification classify_response_error(const http_response& response, std::string fallback) {
+    return network::classify_http_error(response.status_code, response.body, std::move(fallback), response.retry_after);
 }
 
-std::string migrate_legacy_server_url(const std::string& server_url) {
-    const std::string normalized = auth::normalize_server_url(server_url);
-    return normalized;
+std::string parse_error_message(const http_response& response, std::string fallback) {
+    return classify_response_error(response, std::move(fallback)).message;
 }
 
-void push_candidate_server_url(std::vector<std::string>& urls, const std::string& server_url) {
-    const std::string normalized = auth::normalize_server_url(server_url);
-    if (normalized.empty()) {
-        return;
-    }
-
-    for (const std::string& existing : urls) {
-        if (existing == normalized) {
-            return;
-        }
-    }
-    urls.push_back(normalized);
+template <typename Result>
+void apply_error_classification(Result& result, const network::error_classification& error) {
+    result.message = error.message;
+    result.maintenance = error.is_maintenance();
+    result.retry_after = error.retry_after;
 }
 
-std::vector<std::string> candidate_server_urls(const std::string& server_url) {
-    std::vector<std::string> urls;
-    push_candidate_server_url(urls, server_url);
-
-    const std::string normalized = auth::normalize_server_url(server_url);
-    if (normalized == auth::normalize_server_url(auth::kDefaultServerUrl)) {
-        push_candidate_server_url(urls, auth::kLanServerUrl);
-    } else if (normalized == auth::normalize_server_url(auth::kLanServerUrl) ||
-               normalized == auth::normalize_server_url(auth::kLegacyLanServerUrl)) {
-        push_candidate_server_url(urls, auth::kDefaultServerUrl);
-    }
-
-    return urls;
+auth::operation_result make_operation_http_error(const http_response& response, std::string fallback) {
+    auth::operation_result result{
+        .success = false,
+        .message = {},
+        .session_data = std::nullopt,
+    };
+    apply_error_classification(result, classify_response_error(response, std::move(fallback)));
+    return result;
 }
 
 bool server_urls_match(const std::string& lhs, const std::string& rhs) {
-    const std::vector<std::string> lhs_candidates = candidate_server_urls(lhs);
-    const std::vector<std::string> rhs_candidates = candidate_server_urls(rhs);
-    for (const std::string& lhs_candidate : lhs_candidates) {
-        for (const std::string& rhs_candidate : rhs_candidates) {
-            if (lhs_candidate == rhs_candidate) {
-                return true;
-            }
-        }
-    }
-    return false;
+    return auth::normalize_server_url(lhs) == auth::normalize_server_url(rhs);
 }
 
 bool write_session_file(const auth::session& session_data) {
@@ -262,14 +274,24 @@ bool write_session_file(const auth::session& session_data) {
     }
 
     output << "{\n";
-    output << "  \"serverUrl\": \"" << json::escape_string(migrate_legacy_server_url(session_data.server_url)) << "\",\n";
+    output << "  \"serverUrl\": \"" << json::escape_string(auth::normalize_server_url(session_data.server_url)) << "\",\n";
     output << "  \"accessToken\": \"" << json::escape_string(session_data.access_token) << "\",\n";
     output << "  \"refreshToken\": \"" << json::escape_string(session_data.refresh_token) << "\",\n";
     output << "  \"user\": {\n";
     output << "    \"id\": \"" << json::escape_string(session_data.user.id) << "\",\n";
     output << "    \"email\": \"" << json::escape_string(session_data.user.email) << "\",\n";
     output << "    \"displayName\": \"" << json::escape_string(session_data.user.display_name) << "\",\n";
-    output << "    \"emailVerified\": " << (session_data.user.email_verified ? "true" : "false") << "\n";
+    output << "    \"emailVerified\": " << (session_data.user.email_verified ? "true" : "false") << ",\n";
+    output << "    \"externalLinks\": [";
+    for (size_t i = 0; i < session_data.user.external_links.size(); ++i) {
+        const auth::external_link& link = session_data.user.external_links[i];
+        if (i > 0) {
+            output << ", ";
+        }
+        output << "{\"label\":\"" << json::escape_string(link.label)
+               << "\",\"url\":\"" << json::escape_string(link.url) << "\"}";
+    }
+    output << "]\n";
     output << "  }\n";
     output << "}\n";
     return output.good();
@@ -307,7 +329,7 @@ bool write_trusted_device_token(const std::string& server_url, const std::string
     }
 
     output << "{\n";
-    output << "  \"serverUrl\": \"" << json::escape_string(migrate_legacy_server_url(server_url)) << "\",\n";
+    output << "  \"serverUrl\": \"" << json::escape_string(auth::normalize_server_url(server_url)) << "\",\n";
     output << "  \"email\": \"" << json::escape_string(json::trim(email)) << "\",\n";
     output << "  \"trustedDeviceToken\": \"" << json::escape_string(token) << "\"\n";
     output << "}\n";
@@ -343,14 +365,7 @@ http_response send_authenticated_request(const auth::session& session_data,
         headers.emplace_back("Content-Type", "application/json");
     }
 
-    http_response last_response;
-    for (const std::string& server_url : candidate_server_urls(session_data.server_url)) {
-        last_response = send_request(method, build_auth_url(server_url, path), body, headers);
-        if (last_response.error_message.empty()) {
-            return last_response;
-        }
-    }
-    return last_response;
+    return send_request(method, build_auth_url(session_data.server_url, path), body, headers);
 }
 
 auth::operation_result parse_auth_response(const http_response& response,
@@ -366,11 +381,7 @@ auth::operation_result parse_auth_response(const http_response& response,
     }
 
     if (response.status_code < 200 || response.status_code >= 300) {
-        return {
-            .success = false,
-            .message = parse_error_message(response.body, "Authentication request failed."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(response, "Authentication request failed.");
     }
 
     if (const std::optional<auth::operation_result> verification = parse_verification_required_response(response.body);
@@ -410,32 +421,21 @@ auth::operation_result parse_auth_response(const http_response& response,
     }, *session_data);
 }
 
-auth::operation_result send_auth_json_with_fallback(const std::string& server_url,
-                                                    std::string_view path,
-                                                    const std::string& body,
-                                                    std::string success_message,
-                                                    const std::string& email_for_device = {}) {
-    auth::operation_result last_result{
-        .success = false,
-        .message = "Server URL is required.",
-        .session_data = std::nullopt,
-    };
-    for (const std::string& candidate_url : candidate_server_urls(server_url)) {
-        const http_response response = send_request(
-            "POST",
-            build_auth_url(candidate_url, path),
-            body,
-            {
-                {"Accept", "application/json"},
-                {"Content-Type", "application/json"},
-                {"User-Agent", "raythm/0.1"},
-            });
-        last_result = parse_auth_response(response, candidate_url, success_message, email_for_device);
-        if (response.error_message.empty()) {
-            return last_result;
-        }
-    }
-    return last_result;
+auth::operation_result send_auth_json(const std::string& server_url,
+                                      std::string_view path,
+                                      const std::string& body,
+                                      std::string success_message,
+                                      const std::string& email_for_device = {}) {
+    const http_response response = send_request(
+        "POST",
+        build_auth_url(server_url, path),
+        body,
+        {
+            {"Accept", "application/json"},
+            {"Content-Type", "application/json"},
+            {"User-Agent", "raythm/0.1"},
+        });
+    return parse_auth_response(response, server_url, success_message, email_for_device);
 }
 
 }  // namespace
@@ -470,7 +470,7 @@ std::optional<session> load_saved_session() {
     }
 
     session loaded{
-        .server_url = migrate_legacy_server_url(*server_url),
+        .server_url = normalize_server_url(*server_url),
         .access_token = *access_token,
         .refresh_token = *refresh_token,
         .user = *user,
@@ -490,6 +490,7 @@ session_summary load_session_summary() {
             .email = {},
             .display_name = {},
             .email_verified = false,
+            .external_links = {},
         };
     }
 
@@ -499,6 +500,7 @@ session_summary load_session_summary() {
         .email = stored->user.email,
         .display_name = stored->user.display_name,
         .email_verified = stored->user.email_verified,
+        .external_links = stored->user.external_links,
     };
 }
 
@@ -537,7 +539,7 @@ operation_result register_user(const std::string& server_url,
         "\"password\":\"" + json::escape_string(password) + "\""
         "}";
 
-    return send_auth_json_with_fallback(
+    return send_auth_json(
         normalized_server_url,
         "/auth/register",
         body,
@@ -568,7 +570,7 @@ operation_result login_user(const std::string& server_url,
                : "") +
         "}";
 
-    return send_auth_json_with_fallback(
+    return send_auth_json(
         normalized_server_url,
         "/auth/login",
         body,
@@ -586,7 +588,7 @@ operation_result verify_email_code(const std::string& server_url,
         "\"code\":\"" + json::escape_string(json::trim(code)) + "\""
         "}";
 
-    return send_auth_json_with_fallback(
+    return send_auth_json(
         normalized_server_url,
         "/auth/verify-email",
         body,
@@ -604,7 +606,7 @@ operation_result verify_login_code(const std::string& server_url,
         "\"code\":\"" + json::escape_string(json::trim(code)) + "\""
         "}";
 
-    return send_auth_json_with_fallback(
+    return send_auth_json(
         normalized_server_url,
         "/auth/verify-login",
         body,
@@ -625,21 +627,15 @@ operation_result resend_verification_code(const std::string& server_url,
         "\"purpose\":\"" + purpose_text + "\""
         "}";
 
-    http_response response;
-    for (const std::string& candidate_url : candidate_server_urls(normalized_server_url)) {
-        response = send_request(
-            "POST",
-            build_auth_url(candidate_url, "/auth/resend-code"),
-            body,
-            {
-                {"Accept", "application/json"},
-                {"Content-Type", "application/json"},
-                {"User-Agent", "raythm/0.1"},
-            });
-        if (response.error_message.empty()) {
-            break;
-        }
-    }
+    const http_response response = send_request(
+        "POST",
+        build_auth_url(normalized_server_url, "/auth/resend-code"),
+        body,
+        {
+            {"Accept", "application/json"},
+            {"Content-Type", "application/json"},
+            {"User-Agent", "raythm/0.1"},
+        });
 
     if (!response.error_message.empty()) {
         return {
@@ -649,15 +645,11 @@ operation_result resend_verification_code(const std::string& server_url,
         };
     }
     if (response.status_code < 200 || response.status_code >= 300) {
-        return {
-            .success = false,
-            .message = parse_error_message(response.body, "Failed to resend code."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(response, "Failed to resend code.");
     }
     return {
         .success = true,
-        .message = parse_error_message(response.body, "Verification code sent."),
+        .message = parse_error_message(response, "Verification code sent."),
         .session_data = std::nullopt,
     };
 }
@@ -672,23 +664,16 @@ operation_result restore_saved_session() {
         };
     }
 
-    http_response me_response;
-    std::string active_server_url = stored->server_url;
-    for (const std::string& candidate_url : candidate_server_urls(stored->server_url)) {
-        me_response = send_request(
-            "GET",
-            build_auth_url(candidate_url, "/me"),
-            {},
-            {
-                {"Accept", "application/json"},
-                {"Authorization", "Bearer " + stored->access_token},
-                {"User-Agent", "raythm/0.1"},
-            });
-        active_server_url = candidate_url;
-        if (me_response.error_message.empty()) {
-            break;
-        }
-    }
+    const std::string active_server_url = normalize_server_url(stored->server_url);
+    const http_response me_response = send_request(
+        "GET",
+        build_auth_url(active_server_url, "/me"),
+        {},
+        {
+            {"Accept", "application/json"},
+            {"Authorization", "Bearer " + stored->access_token},
+            {"User-Agent", "raythm/0.1"},
+        });
 
     if (me_response.error_message.empty() && me_response.status_code >= 200 && me_response.status_code < 300) {
         const std::optional<public_user> user = parse_me_response(me_response.body);
@@ -721,11 +706,7 @@ operation_result restore_saved_session() {
     }
 
     if (me_response.status_code != 401) {
-        return {
-            .success = false,
-            .message = parse_error_message(me_response.body, "Failed to restore session."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(me_response, "Failed to restore session.");
     }
 
     const std::string refresh_body =
@@ -753,11 +734,7 @@ operation_result restore_saved_session() {
 
     if (refresh_response.status_code < 200 || refresh_response.status_code >= 300) {
         clear_saved_session();
-        return {
-            .success = false,
-            .message = parse_error_message(refresh_response.body, "Saved session expired."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(refresh_response, "Saved session expired.");
     }
 
     const std::optional<session> refreshed = parse_auth_session_response(refresh_response.body, active_server_url);
@@ -822,11 +799,7 @@ operation_result logout_saved_session() {
     if (response.status_code != 204 &&
         (response.status_code < 200 || response.status_code >= 300) &&
         response.status_code != 401) {
-        return {
-            .success = false,
-            .message = parse_error_message(response.body, "Failed to log out."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(response, "Failed to log out.");
     }
 
     clear_saved_session();
@@ -894,11 +867,7 @@ operation_result delete_saved_account(const std::string& password) {
 
     if (response.status_code != 204 &&
         (response.status_code < 200 || response.status_code >= 300)) {
-        return {
-            .success = false,
-            .message = parse_error_message(response.body, "Failed to delete account."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(response, "Failed to delete account.");
     }
 
     clear_saved_session();
@@ -908,6 +877,87 @@ operation_result delete_saved_account(const std::string& password) {
         .message = "Account deleted.",
         .session_data = std::nullopt,
     };
+}
+
+operation_result update_profile_external_links(const std::vector<external_link>& links) {
+    std::optional<session> stored = load_saved_session();
+    if (!stored.has_value()) {
+        return {
+            .success = false,
+            .message = "Login required.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    std::ostringstream body;
+    body << "{\"externalLinks\":[";
+    bool first = true;
+    for (const external_link& link : links) {
+        const std::string url = json::trim(link.url);
+        if (url.empty()) {
+            continue;
+        }
+        if (!first) {
+            body << ',';
+        }
+        first = false;
+        body << "{\"label\":\"" << json::escape_string(json::trim(link.label))
+             << "\",\"url\":\"" << json::escape_string(url) << "\"}";
+    }
+    body << "]}";
+
+    auto send_update = [&](const session& session_data) {
+        return send_authenticated_request(
+            session_data,
+            "PUT",
+            "/me/profile/external-links",
+            body.str());
+    };
+
+    http_response response = send_update(*stored);
+    if (response.error_message.empty() && response.status_code == 401) {
+        const operation_result restored = restore_saved_session();
+        if (restored.success && restored.session_data.has_value()) {
+            stored = restored.session_data;
+            response = send_update(*stored);
+        }
+    }
+
+    if (!response.error_message.empty()) {
+        return {
+            .success = false,
+            .message = response.error_message,
+            .session_data = std::nullopt,
+        };
+    }
+    if (response.status_code < 200 || response.status_code >= 300) {
+        return make_operation_http_error(response, "Failed to save profile links.");
+    }
+
+    const std::optional<public_user> user = parse_me_response(response.body);
+    if (!user.has_value()) {
+        return {
+            .success = false,
+            .message = "Server returned an unexpected profile response.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    session updated = *stored;
+    updated.user = *user;
+    if (!write_session_file(updated)) {
+        return {
+            .success = false,
+            .message = "Profile links saved, but the local session could not be updated.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    return finish_with_session({
+        .success = true,
+        .message = "Profile links saved.",
+        .session_data = std::nullopt,
+    }, updated);
 }
 
 my_uploads_result fetch_my_community_uploads() {
@@ -946,7 +996,9 @@ my_uploads_result fetch_my_community_uploads() {
             return result;
         }
         if (response.status_code < 200 || response.status_code >= 300) {
-            result.message = parse_error_message(response.body, "Failed to load uploaded songs.");
+            apply_error_classification(
+                result,
+                classify_response_error(response, "Failed to load uploaded songs."));
             return result;
         }
 
@@ -979,7 +1031,9 @@ my_uploads_result fetch_my_community_uploads() {
             return result;
         }
         if (response.status_code < 200 || response.status_code >= 300) {
-            result.message = parse_error_message(response.body, "Failed to load uploaded charts.");
+            apply_error_classification(
+                result,
+                classify_response_error(response, "Failed to load uploaded charts."));
             return result;
         }
 
@@ -1030,12 +1084,14 @@ profile_rankings_result fetch_my_profile_rankings() {
         return result;
     }
     if (response.status_code < 200 || response.status_code >= 300) {
-        result.message = parse_error_message(response.body, "Failed to load profile rankings.");
+        apply_error_classification(
+            result,
+            classify_response_error(response, "Failed to load profile rankings."));
         return result;
     }
 
-    parse_profile_ranking_array(response.body, "recent_records", result.recent_records);
-    parse_profile_ranking_array(response.body, "first_place_records", result.first_place_records);
+    parse_profile_ranking_array(response.body, "recentRecords", result.recent_records);
+    parse_profile_ranking_array(response.body, "firstPlaceRecords", result.first_place_records);
     result.success = true;
     result.message = "Profile rankings loaded.";
     return result;
@@ -1071,11 +1127,7 @@ operation_result delete_community_song_upload(const std::string& song_id) {
         };
     }
     if (response.status_code != 204 && (response.status_code < 200 || response.status_code >= 300)) {
-        return {
-            .success = false,
-            .message = parse_error_message(response.body, "Failed to delete uploaded song."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(response, "Failed to delete uploaded song.");
     }
     return {
         .success = true,
@@ -1114,11 +1166,7 @@ operation_result delete_community_chart_upload(const std::string& chart_id) {
         };
     }
     if (response.status_code != 204 && (response.status_code < 200 || response.status_code >= 300)) {
-        return {
-            .success = false,
-            .message = parse_error_message(response.body, "Failed to delete uploaded chart."),
-            .session_data = std::nullopt,
-        };
+        return make_operation_http_error(response, "Failed to delete uploaded chart.");
     }
     return {
         .success = true,

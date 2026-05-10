@@ -6,6 +6,7 @@
 #include <thread>
 #include <utility>
 
+#include "network/server_environment.h"
 #include "ui_notice.h"
 
 namespace {
@@ -47,6 +48,7 @@ void refresh_auth_state(song_select::auth_state& auth_state) {
     auth_state.email = summary.email;
     auth_state.display_name = summary.display_name;
     auth_state.email_verified = summary.email_verified;
+    auth_state.external_links = summary.external_links;
 }
 
 void start_restore(controller& controller_state, song_select::login_dialog_state&) {
@@ -64,7 +66,7 @@ void start_request(controller& controller_state,
     }
 
     controller_state.request_active = true;
-    const std::string server_url = auth::kDefaultServerUrl;
+    const std::string server_url = server_environment::active_server_url();
     const std::string display_name = dialog_state.display_name_input.value;
     const std::string email = dialog_state.email_input.value;
     const std::string password = dialog_state.password_input.value;

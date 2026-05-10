@@ -5,11 +5,17 @@
 #include <cmath>
 #include <string>
 
+#include "localization/localization.h"
 #include "raylib.h"
 #include "settings/settings_layout.h"
 #include "ui_draw.h"
 
 namespace {
+using localization::text_key;
+
+const char* ltr(text_key key) {
+    return localization::tr(key);
+}
 
 constexpr std::array<int, 4> kFrameRateOptions = {120, 144, 240, 0};
 constexpr float kMinNoteSpeed = 0.010f;
@@ -76,7 +82,8 @@ void settings_gameplay_page::update() {
 }
 
 void settings_gameplay_page::draw() const {
-    const char* labels[] = {"Note Speed", "Camera Angle", "Lane Width", "Note Height"};
+    const char* labels[] = {ltr(text_key::note_speed), ltr(text_key::camera_angle), ltr(text_key::lane_width),
+                            ltr(text_key::note_height)};
     const std::string values[] = {
         TextFormat("%.1f", settings_.note_speed * kNoteSpeedDisplayScale),
         TextFormat("%.0f deg", settings_.camera_angle_degrees),
@@ -114,7 +121,7 @@ void settings_gameplay_page::draw() const {
         columns.second.height
     };
 
-    ui::draw_text_in_rect("Global Offset", 22, columns.first, g_theme->text, ui::text_align::left);
+    ui::draw_text_in_rect(ltr(text_key::global_offset), 22, columns.first, g_theme->text, ui::text_align::left);
     ui::draw_text_in_rect(global_offset_label.c_str(), 22, value_rect, g_theme->text_dim, ui::text_align::right);
     ui::draw_button(settings::double_arrow_left_rect(settings::kGameplayRows[4]), "<<", 22);
     ui::draw_button(settings::single_arrow_left_rect(settings::kGameplayRows[4]), "<", 22);
@@ -155,7 +162,7 @@ void settings_audio_page::update() {
 }
 
 void settings_audio_page::draw() const {
-    const char* labels[] = {"BGM Volume", "SE Volume"};
+    const char* labels[] = {ltr(text_key::bgm_volume), ltr(text_key::se_volume)};
     const std::string values[] = {
         TextFormat("%d%%", static_cast<int>(std::round(settings_.bgm_volume * 100.0f))),
         TextFormat("%d%%", static_cast<int>(std::round(settings_.se_volume * 100.0f))),
@@ -193,6 +200,32 @@ void settings_video_page::update() {
             kFrameRateOptions[static_cast<std::size_t>(std::clamp(index, 0, static_cast<int>(kFrameRateOptions.size()) - 1))];
     }
 
+}
+
+void settings_video_page::draw() const {
+    const std::string fps_label = settings_.target_fps == 0 ? ltr(text_key::unlimited) : std::to_string(settings_.target_fps);
+    ui::draw_slider_relative(settings::kGeneralRows[0], ltr(text_key::frame_rate), fps_label.c_str(),
+                             static_cast<float>(settings::fps_option_index(settings_.target_fps)) / 3.0f,
+                             settings::kSliderLeftInset, settings::kSliderRightInset,
+                             settings::kLayer, 22, settings::kSliderTopOffset);
+}
+
+settings_system_page::settings_system_page(game_settings& settings, const settings_runtime_applier& runtime_applier)
+    : settings_(settings), runtime_applier_(runtime_applier) {
+}
+
+void settings_system_page::reset_interaction() {
+}
+
+void settings_system_page::update() {
+    if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[0]), settings::kLayer) ||
+        ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[0]), settings::kLayer)) {
+        settings_.ui_locale = settings_.ui_locale == localization::locale::english
+                                  ? localization::locale::japanese
+                                  : localization::locale::english;
+        runtime_applier_.apply_locale(settings_.ui_locale);
+    }
+
     if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[1]), settings::kLayer) ||
         ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[1]), settings::kLayer)) {
         settings_.fullscreen = !settings_.fullscreen;
@@ -206,14 +239,15 @@ void settings_video_page::update() {
     }
 }
 
-void settings_video_page::draw() const {
-    const std::string fps_label = settings_.target_fps == 0 ? "Unlimited" : std::to_string(settings_.target_fps);
-    ui::draw_slider_relative(settings::kGeneralRows[0], "Frame Rate", fps_label.c_str(),
-                             static_cast<float>(settings::fps_option_index(settings_.target_fps)) / 3.0f,
-                             settings::kSliderLeftInset, settings::kSliderRightInset,
-                             settings::kLayer, 22, settings::kSliderTopOffset);
-    ui::draw_value_selector(settings::kGeneralRows[1], "Display", settings_.fullscreen ? "Fullscreen" : "Windowed", settings::kLayer);
-    ui::draw_value_selector(settings::kGeneralRows[2], "Theme", settings_.dark_mode ? "Dark" : "Light", settings::kLayer);
+void settings_system_page::draw() const {
+    ui::draw_value_selector(settings::kGeneralRows[0], ltr(text_key::language),
+                            localization::locale_display_name(settings_.ui_locale), settings::kLayer);
+    ui::draw_value_selector(settings::kGeneralRows[1], ltr(text_key::display),
+                            settings_.fullscreen ? ltr(text_key::fullscreen) : ltr(text_key::windowed),
+                            settings::kLayer);
+    ui::draw_value_selector(settings::kGeneralRows[2], ltr(text_key::theme),
+                            settings_.dark_mode ? ltr(text_key::dark) : ltr(text_key::light),
+                            settings::kLayer);
 }
 
 settings_key_config_page::settings_key_config_page(game_settings& settings) : settings_(settings) {

@@ -326,6 +326,20 @@ void title_scene::update_play_mode(float dt) {
             .enter_home = [this]() { enter_home_mode(false); },
             .sync_media = [this]() { sync_play_media(); },
             .request_ranking_reload = [this]() { request_play_ranking_reload(); },
+            .open_update_catalog = [this](bool include_chart) {
+                const song_select::song_entry* song = song_select::selected_song(play_state_);
+                if (song == nullptr) {
+                    return;
+                }
+                const auto filtered = song_select::filtered_charts_for_selected_song(play_state_);
+                const song_select::chart_option* chart = song_select::selected_chart_for(play_state_, filtered);
+                title_online_view::select_local_update_target(
+                    online_state_,
+                    song->song.meta.song_id,
+                    include_chart && chart != nullptr ? chart->meta.chart_id : "",
+                    true);
+                enter_online_mode();
+            },
         });
 }
 
@@ -399,6 +413,7 @@ void title_scene::update_common_animation(float dt) {
     poll_scoring_ruleset_warm();
     poll_create_upload();
     if (profile_controller_.poll().content_changed) {
+        auth_overlay::refresh_auth_state(play_state_.auth);
         title_online_view::reload_catalog(online_state_);
         request_play_catalog_reload("", "", mode_ == hub_mode::play || mode_ == hub_mode::create);
     }
@@ -557,6 +572,7 @@ bool title_scene::handle_home_input(bool suppress_pointer_this_frame) {
 void title_scene::update_settings_mode(float dt) {
     if (settings_overlay_.closing()) {
         if (settings_overlay_.closed()) {
+            auth_overlay::refresh_auth_state(play_state_.auth);
             const hub_mode return_mode = settings_return_mode_;
             switch (return_mode) {
                 case hub_mode::title:

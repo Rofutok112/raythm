@@ -6,6 +6,7 @@
 #include "app_paths.h"
 #include "audio_manager.h"
 #include "audio_waveform.h"
+#include "chart_judge_events.h"
 #include "chart_level_cache.h"
 #include "game_settings.h"
 #include "path_utils.h"
@@ -49,14 +50,6 @@ double calculate_song_end_ms(const chart_data& chart, const timing_engine& engin
     return std::max(engine.tick_to_ms(last_tick) + 5000.0, audio.get_bgm_length_seconds() * 1000.0);
 }
 
-int calculate_total_judge_points(const chart_data& chart) {
-    int total = 0;
-    for (const note_data& note : chart.notes) {
-        total += note.type == note_type::hold ? 2 : 1;
-    }
-    return total;
-}
-
 std::vector<float> build_mv_waveform(const std::filesystem::path& audio_path) {
     constexpr std::size_t kMvWaveformSegmentCount = 512;
 
@@ -67,6 +60,38 @@ std::vector<float> build_mv_waveform(const std::filesystem::path& audio_path) {
         waveform.push_back(peak.amplitude);
     }
     return waveform;
+}
+
+std::string audio_asset_path(const char* file_name) {
+    const std::filesystem::path path = app_paths::audio_root() / file_name;
+    return std::filesystem::exists(path) ? path_utils::to_utf8(path) : "";
+}
+
+play_hitsound_paths load_hitsound_paths() {
+    return {
+        audio_asset_path("HitSound_Tap.mp3"),
+        audio_asset_path("HitSound_RayTap.mp3"),
+        audio_asset_path("HitSound_Release.mp3"),
+        audio_asset_path("HitSound_RayRelease.mp3"),
+        audio_asset_path("HitSound_Stay.mp3"),
+        audio_asset_path("HitSound_RayStay.mp3"),
+    };
+}
+
+void preload_hitsounds(audio_manager& audio, const play_hitsound_paths& hitsounds) {
+    const std::string* paths[] = {
+        &hitsounds.tap,
+        &hitsounds.ray_tap,
+        &hitsounds.release,
+        &hitsounds.ray_release,
+        &hitsounds.stay,
+        &hitsounds.ray_stay,
+    };
+    for (const std::string* path : paths) {
+        if (path != nullptr && !path->empty()) {
+            audio.preload_se(*path);
+        }
+    }
 }
 
 }  // namespace
@@ -94,8 +119,12 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
         }
     }
 
-    const std::filesystem::path hitsound_path = app_paths::audio_root() / "hitsound.mp3";
-    state.hitsound_path = std::filesystem::exists(hitsound_path) ? path_utils::to_utf8(hitsound_path) : "";
+    state.hitsounds = load_hitsound_paths();
+    state.hitsound_path = state.hitsounds.tap;
+    if (state.hitsound_path.empty()) {
+        state.hitsound_path = audio_asset_path("hitsound.mp3");
+        state.hitsounds.tap = state.hitsound_path;
+    }
 
     if (state.chart_data.has_value()) {
         state.key_count = state.chart_data->meta.key_count;
@@ -126,6 +155,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
         return state;
     }
 
+    state.chart_data->meta.song_id = state.song_data->meta.song_id;
     state.chart_data = play_chart_filter::prepare_chart_for_playback(*state.chart_data, state.start_tick);
 
     state.input_handler = input_handler(g_settings.keys);
@@ -141,7 +171,8 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     if (!state.editor_resume_state.has_value()) {
         ranking_service::refresh_scoring_ruleset_cache_for_chart_start(state.chart_data->meta, false);
     }
-    state.score_system.init(calculate_total_judge_points(*state.chart_data));
+    state.score_system.init(chart_judge_events::count(*state.chart_data, state.timing_engine));
+    state.performance_system.init(*state.chart_data, state.timing_engine);
     state.gauge = gauge{};
 
     audio_manager& audio = audio_manager::instance();
@@ -149,9 +180,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
         path_utils::join_utf8(state.song_data->directory, state.song_data->meta.audio_file);
     audio.load_bgm(path_utils::to_utf8(audio_path));
     audio.set_bgm_volume(g_settings.bgm_volume);
-    if (!state.hitsound_path.empty()) {
-        audio.preload_se(state.hitsound_path);
-    }
+    preload_hitsounds(audio, state.hitsounds);
     state.mv_waveform = build_mv_waveform(audio_path);
     if (state.start_ms > 0.0) {
         audio.seek_bgm(state.start_ms / 1000.0);

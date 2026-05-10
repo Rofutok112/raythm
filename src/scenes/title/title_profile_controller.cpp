@@ -14,6 +14,7 @@ title_profile_view::activity_item to_activity_item(const auth::profile_ranking_r
     return {
         .song_title = record.song_title,
         .artist = record.artist,
+        .genre = record.genre,
         .difficulty_name = record.difficulty_name,
         .local_summary = "Score " + std::to_string(record.score),
         .online_summary = "Online #" + std::to_string(record.placement) + " / " + std::to_string(record.score),
@@ -89,6 +90,31 @@ title_profile_controller::poll_result title_profile_controller::poll() {
     }
 
     if (!state_.deleting || delete_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        if (!state_.saving_links ||
+            save_links_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+            return result;
+        }
+
+        auth::operation_result save_result;
+        try {
+            save_result = save_links_future_.get();
+        } catch (const std::exception& ex) {
+            save_result.success = false;
+            save_result.message = ex.what();
+        } catch (...) {
+            save_result.success = false;
+            save_result.message = "Saving profile links failed.";
+        }
+
+        state_.saving_links = false;
+        ui::notify(save_result.message,
+                   save_result.success ? ui::notice_tone::success : ui::notice_tone::error,
+                   3.0f);
+        if (save_result.success) {
+            state_.settings_links_initialized = false;
+            result.content_changed = true;
+        }
+
         return result;
     }
 
@@ -137,6 +163,9 @@ title_profile_controller::input_result title_profile_controller::handle_input(bo
     case title_profile_view::command_type::delete_chart:
         start_delete_chart(command.id);
         return {.consumed = true};
+    case title_profile_view::command_type::save_external_links:
+        start_save_external_links(command.external_links);
+        return {.consumed = true};
     case title_profile_view::command_type::close:
         return {.consumed = true};
     case title_profile_view::command_type::none:
@@ -184,6 +213,23 @@ void title_profile_controller::request_reload() {
             }
 
             promise.set_value(std::move(loaded));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
+}
+
+void title_profile_controller::start_save_external_links(std::vector<auth::external_link> links) {
+    if (state_.saving_links) {
+        return;
+    }
+
+    state_.saving_links = true;
+    std::promise<auth::operation_result> promise;
+    save_links_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), links = std::move(links)]() mutable {
+        try {
+            promise.set_value(auth::update_profile_external_links(links));
         } catch (...) {
             promise.set_exception(std::current_exception());
         }

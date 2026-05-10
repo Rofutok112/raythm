@@ -57,7 +57,9 @@ struct catalog_load_result {
     std::vector<song_select::song_entry> local_songs;
     std::string catalog_server_url;
     std::string catalog_status_message;
+    std::string catalog_retry_after;
     bool catalog_request_failed = false;
+    bool catalog_maintenance = false;
     bool official_has_more = false;
     bool community_has_more = false;
 };
@@ -146,7 +148,9 @@ struct state {
     bool download_in_progress = false;
     std::string catalog_server_url;
     std::string catalog_status_message;
+    std::string catalog_retry_after;
     bool catalog_request_failed = false;
+    bool catalog_maintenance = false;
     bool detail_open = false;
     float detail_transition = 0.0f;
     bool reload_preserve_view = false;
@@ -154,6 +158,12 @@ struct state {
     catalog_mode reload_restore_mode = catalog_mode::official;
     std::string reload_restore_song_id;
     std::string reload_restore_chart_id;
+    bool pending_select_detail_open = false;
+    std::string pending_select_local_song_id;
+    std::string pending_select_local_chart_id;
+    bool preview_bar_dragging = false;
+    bool preview_bar_resume_after_drag = false;
+    double preview_bar_drag_position_seconds = 0.0;
 };
 
 struct layout {
@@ -202,6 +212,10 @@ const song_select::song_entry* preview_song(const state& state);
 bool needs_download(const song_entry_state& song);
 bool can_open_local(const state& state);
 std::string selected_song_id(const state& state);
+void select_local_update_target(state& state,
+                                const std::string& local_song_id,
+                                const std::string& local_chart_id,
+                                bool open_detail);
 
 layout make_layout(float anim_t, Rectangle origin_rect);
 update_result update(state& state, float anim_t, Rectangle origin_rect, float dt);

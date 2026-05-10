@@ -12,6 +12,7 @@ struct remote_song_payload {
     std::string id;
     std::string title;
     std::string artist;
+    std::string genre;
     float base_bpm = 0.0f;
     float duration_seconds = 0.0f;
     int preview_start_ms = 0;
@@ -26,11 +27,19 @@ struct remote_chart_payload {
     std::string song_id;
     int key_count = 0;
     std::string difficulty_name;
+    int chart_version = 0;
     float level = 0.0f;
     std::string chart_author;
     int format_version = 0;
     int resolution = 0;
     int offset = 0;
+    int note_count = 0;
+    float min_bpm = 0.0f;
+    float max_bpm = 0.0f;
+    std::string difficulty_ruleset_id;
+    int difficulty_ruleset_version = 0;
+    std::string chart_fingerprint;
+    std::string chart_sha256;
     std::string content_source;
 };
 
@@ -39,14 +48,18 @@ struct remote_catalog_fetch_result {
     std::vector<remote_chart_payload> charts;
     std::string server_url;
     bool success = false;
+    bool maintenance = false;
     std::string error_message;
+    std::string retry_after;
 };
 
 struct remote_song_page_fetch_result {
     std::vector<remote_song_payload> songs;
     std::string server_url;
     bool success = false;
+    bool maintenance = false;
     std::string error_message;
+    std::string retry_after;
     int total = 0;
     int page = 1;
     int page_size = 0;
@@ -56,7 +69,9 @@ struct remote_chart_page_fetch_result {
     std::vector<remote_chart_payload> charts;
     std::string server_url;
     bool success = false;
+    bool maintenance = false;
     std::string error_message;
+    std::string retry_after;
     int total = 0;
     int page = 1;
     int page_size = 0;
@@ -67,15 +82,19 @@ struct remote_song_lookup_result {
     remote_song_payload song;
     std::string server_url;
     bool success = false;
+    bool maintenance = false;
     bool not_found = false;
     std::string error_message;
+    std::string retry_after;
 };
 
 struct remote_binary_fetch_result {
     std::vector<unsigned char> bytes;
     std::string content_type;
     bool success = false;
+    bool maintenance = false;
     std::string error_message;
+    std::string retry_after;
 };
 
 using remote_binary_progress_callback = std::function<void(size_t bytes_received, size_t total_bytes)>;

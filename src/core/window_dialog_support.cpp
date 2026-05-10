@@ -30,8 +30,9 @@ namespace window_dialog_support {
 
 namespace {
 
-int g_last_windowed_width = 1920;
-int g_last_windowed_height = 1080;
+int g_last_windowed_width = 1280;
+int g_last_windowed_height = 720;
+int g_reserved_top_chrome_height = 0;
 
 }
 
@@ -50,6 +51,10 @@ void minimize_window() {
         ShowWindow(hwnd, SW_MINIMIZE);
     }
 #endif
+}
+
+void set_reserved_top_chrome_height(int pixels) {
+    g_reserved_top_chrome_height = std::max(0, pixels);
 }
 
 int current_monitor_width() {
@@ -115,6 +120,7 @@ RECT monitor_work_rect(HWND hwnd) {
 void apply_windowed_layout(int client_width, int client_height) {
     const int safe_client_width = std::max(1, client_width);
     const int safe_client_height = std::max(1, client_height);
+    const int full_client_height = safe_client_height + g_reserved_top_chrome_height;
     g_last_windowed_width = safe_client_width;
     g_last_windowed_height = safe_client_height;
 
@@ -124,7 +130,7 @@ void apply_windowed_layout(int client_width, int client_height) {
     const int work_width = std::max(1L, work.right - work.left);
     const int work_height = std::max(1L, work.bottom - work.top);
 
-    RECT desired_rect = {0, 0, safe_client_width, safe_client_height};
+    RECT desired_rect = {0, 0, safe_client_width, full_client_height};
     const DWORD style = static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_STYLE));
     const DWORD ex_style = static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
     AdjustWindowRectEx(&desired_rect, style, FALSE, ex_style);
@@ -140,7 +146,7 @@ void apply_windowed_layout(int client_width, int client_height) {
                  SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 #else
     const int width = std::min(safe_client_width, GetMonitorWidth(GetCurrentMonitor()));
-    const int height = std::min(safe_client_height, GetMonitorHeight(GetCurrentMonitor()));
+    const int height = std::min(full_client_height, GetMonitorHeight(GetCurrentMonitor()));
     SetWindowSize(width, height);
 #endif
 }
@@ -153,14 +159,14 @@ void set_fullscreen(bool fullscreen, int windowed_client_width, int windowed_cli
         if (fullscreen) {
             SetWindowSize(safe_width, safe_height);
         } else {
-            apply_windowed_layout(g_last_windowed_width, g_last_windowed_height);
+            apply_windowed_layout(safe_width, safe_height);
         }
         return;
     }
 
     if (fullscreen) {
         g_last_windowed_width = GetScreenWidth();
-        g_last_windowed_height = GetScreenHeight();
+        g_last_windowed_height = std::max(1, GetScreenHeight() - g_reserved_top_chrome_height);
     } else if (windowed_client_width > 0 && windowed_client_height > 0) {
         g_last_windowed_width = windowed_client_width;
         g_last_windowed_height = windowed_client_height;

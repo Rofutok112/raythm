@@ -29,7 +29,7 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    if (result.fast_count != 1 || result.slow_count != 3) {
+    if (result.fast_count != 0 || result.slow_count != 3) {
         std::cerr << "Fast/slow aggregation failed\n";
         return EXIT_FAILURE;
     }
@@ -58,7 +58,7 @@ int main() {
     ruleset_score.on_judge({judge_result::perfect, 0.0, 0});
     const result_data ruleset_result = ruleset_score.get_result_data();
     if (ruleset_result.scoring_ruleset_version != "smoke-ruleset" ||
-        ruleset_result.scoring_accepted_input != "note_results_v1" ||
+        ruleset_result.scoring_accepted_input != "noteResultsV1" ||
         ruleset_result.score != 123456) {
         std::cerr << "Score result should retain the ruleset used during play\n";
         return EXIT_FAILURE;
@@ -145,6 +145,36 @@ int main() {
     if (!(fc_lower_accuracy.get_live_accuracy() < non_fc_high_accuracy.get_live_accuracy()) ||
         !(fc_lower_accuracy.get_score() > non_fc_high_accuracy.get_score())) {
         std::cerr << "Score should reward sustained combo more than raw accuracy alone\n";
+        return EXIT_FAILURE;
+    }
+
+    score_system note_result_normalization;
+    note_result_normalization.init(4);
+    note_result_normalization.on_judge({
+        .result = judge_result::perfect,
+        .offset_ms = 0.0,
+        .lane = 0,
+        .event_index = 0,
+    });
+    note_result_normalization.on_judge({
+        .result = judge_result::great,
+        .offset_ms = 5.0,
+        .lane = 1,
+        .event_index = 2,
+    });
+    note_result_normalization.on_judge({
+        .result = judge_result::miss,
+        .offset_ms = 10.0,
+        .lane = 1,
+        .event_index = 2,
+    });
+    const result_data normalized = note_result_normalization.get_result_data();
+    if (normalized.note_results.size() != 2 ||
+        normalized.note_results[0].event_index != 0 ||
+        normalized.note_results[1].event_index != 2 ||
+        normalized.note_results[1].result != judge_result::great ||
+        normalized.judge_counts[static_cast<size_t>(judge_result::miss)] != 0) {
+        std::cerr << "Online note results should stay sorted without double-counting duplicate events\n";
         return EXIT_FAILURE;
     }
 

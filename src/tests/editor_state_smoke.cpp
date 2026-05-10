@@ -56,6 +56,14 @@ int main() {
         std::cerr << "has_note_overlap returned an unexpected result\n";
         return EXIT_FAILURE;
     }
+    note_data wide_overlap{note_type::tap, 700, 1, 700};
+    wide_overlap.lane_width = 2;
+    note_data wide_clear{note_type::tap, 240, 0, 240};
+    wide_clear.lane_width = 2;
+    if (!state.has_note_overlap(wide_overlap) || state.has_note_overlap(wide_clear)) {
+        std::cerr << "has_note_overlap should account for wide lane ranges\n";
+        return EXIT_FAILURE;
+    }
 
     state.add_note({note_type::tap, 240, 1, 240});
     if (state.data().notes.size() != 3 || !state.can_undo() || state.can_redo() || !state.is_dirty()) {

@@ -4,12 +4,23 @@
 
 namespace {
 editor_timeline_note make_timeline_note(const note_data& note) {
-    return {
-        note.type == note_type::hold ? editor_timeline_note_type::hold : editor_timeline_note_type::tap,
-        note.tick,
-        note.lane,
-        note.end_tick
-    };
+    editor_timeline_note_type type = editor_timeline_note_type::tap;
+    switch (note.type) {
+        case note_type::tap:
+            type = editor_timeline_note_type::tap;
+            break;
+        case note_type::hold:
+            type = editor_timeline_note_type::hold;
+            break;
+        case note_type::release:
+            type = editor_timeline_note_type::release;
+            break;
+        case note_type::stay:
+            type = editor_timeline_note_type::stay;
+            break;
+    }
+
+    return {type, note.tick, note.lane, note.end_tick, note.is_ray, note_lane_width(note)};
 }
 }
 
