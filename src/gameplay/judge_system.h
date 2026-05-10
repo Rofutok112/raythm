@@ -60,10 +60,6 @@ private:
     void resolve_stay_notes(double current_ms, const input_handler& input);
     void resolve_hold_completions(double current_ms);
     void resolve_auto_misses(double current_ms);
-    void advance_lane_head_index(int lane);
-    void advance_lane_event_head_index(int lane);
-    void advance_note_lane_head_indices(const note_data& note);
-    void advance_event_lane_head_indices(const chart_judge_event& event);
     input_session* session_for_id(input_session_id session_id);
     const input_session* session_for_id(input_session_id session_id) const;
     input_session_id begin_input_session(const input_event& event);
@@ -101,12 +97,6 @@ private:
     std::vector<bool> standalone_release_events_;
     std::vector<bool> event_completed_;
     std::vector<double> completed_wide_press_absorb_until_ms_;
-    // Each lane keeps its own ordered note list and next unresolved head index.
-    std::array<std::vector<size_t>, kMaxLanes> lane_note_indices_;
-    std::array<std::vector<size_t>, kMaxLanes> lane_event_indices_;
-    std::array<size_t, kMaxLanes> lane_head_indices_ = {};
-    std::array<size_t, kMaxLanes> lane_event_head_indices_ = {};
-    std::array<std::optional<size_t>, kMaxLanes> active_hold_indices_;
     std::array<std::optional<input_session_id>, kMaxLanes> held_input_session_by_lane_;
     std::vector<input_session> input_sessions_;
     std::vector<active_hold_session> active_hold_sessions_;
