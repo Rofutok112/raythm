@@ -351,6 +351,15 @@ void judge_system::resolve_stay_notes(double current_ms, const input_handler& in
         if (current_ms < descriptor.time_ms || descriptor.kind != chart_judge_event_kind::stay) {
             continue;
         }
+        if (is_hold_contained_stay_event(event_index)) {
+            if (is_hold_contained_stay_held(descriptor, input)) {
+                judge_emit_options options;
+                options.play_hitsound = false;
+                options.show_feedback = false;
+                complete_event(event_index, judge_result::perfect, 0.0, options);
+            }
+            continue;
+        }
         for (int lane = descriptor.lane;
              lane < descriptor.lane + std::max(1, descriptor.lane_width) && lane < kMaxLanes;
              ++lane) {
@@ -595,6 +604,37 @@ bool judge_system::release_overlaps_hold_tail(const chart_judge_event& release) 
     return false;
 }
 
+bool judge_system::is_hold_contained_stay_event(size_t event_descriptor_index) const {
+    if (event_descriptor_index >= event_descriptors_.size()) {
+        return false;
+    }
+
+    return event_descriptors_[event_descriptor_index].role == chart_judge_event_role::hold_stay;
+}
+
+bool judge_system::is_hold_contained_stay_held(const chart_judge_event& descriptor,
+                                               const input_handler& input) const {
+    if (descriptor.role != chart_judge_event_role::hold_stay ||
+        descriptor.containing_hold_note_index < 0 ||
+        static_cast<size_t>(descriptor.containing_hold_note_index) >= note_states_.size()) {
+        return false;
+    }
+
+    const note_state& hold_state = note_states_[static_cast<size_t>(descriptor.containing_hold_note_index)];
+    if (!hold_state.is_holding() || hold_state.note_ref.type != note_type::hold) {
+        return false;
+    }
+
+    for (int lane = hold_state.note_ref.lane;
+         lane <= note_last_lane(hold_state.note_ref) && lane < kMaxLanes;
+         ++lane) {
+        if (lane >= 0 && input.is_lane_held(lane)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool judge_system::try_absorb_completed_wide_press(const input_event& event, input_session_id input_id) {
     if (event.lane < 0 || event.lane >= kMaxLanes) {
         return false;
@@ -700,6 +740,9 @@ std::vector<size_t> judge_system::find_press_candidates(int lane, double timesta
             descriptor.kind != chart_judge_event_kind::stay) {
             continue;
         }
+        if (is_hold_contained_stay_event(descriptor_index)) {
+            continue;
+        }
 
         const double offset_ms = timestamp_ms - descriptor.time_ms;
         if (descriptor.kind == chart_judge_event_kind::stay && offset_ms < 0.0) {
@@ -789,6 +832,9 @@ std::vector<size_t> judge_system::find_early_release_stay_candidates(int lane, d
             continue;
         }
         if (descriptor.kind != chart_judge_event_kind::stay) {
+            continue;
+        }
+        if (is_hold_contained_stay_event(event_index)) {
             continue;
         }
         const double offset_ms = timestamp_ms - descriptor.time_ms;
@@ -955,7 +1001,8 @@ void judge_system::emit_judge(judge_result result, double offset_ms, int lane,
         display_lane = descriptor.lane;
         if (descriptor.role == chart_judge_event_role::release) {
             hitsound_type = note_type::release;
-        } else if (descriptor.role == chart_judge_event_role::stay) {
+        } else if (descriptor.role == chart_judge_event_role::stay ||
+                   descriptor.role == chart_judge_event_role::hold_stay) {
             hitsound_type = note_type::stay;
         }
     }
