@@ -17,16 +17,9 @@ bool same_judgement_time(double left_ms, double right_ms) {
 void judge_system::init(const std::vector<note_data>& notes, const timing_engine& engine) {
     note_states_.clear();
     note_states_.reserve(notes.size());
-    for (std::vector<size_t>& lane_indices : lane_note_indices_) {
-        lane_indices.clear();
-    }
-    for (std::vector<size_t>& lane_indices : lane_event_indices_) {
-        lane_indices.clear();
-    }
-    lane_head_indices_.fill(0);
-    lane_event_head_indices_.fill(0);
-    active_hold_indices_.fill(std::nullopt);
-    armed_release_event_indices_.fill(std::nullopt);
+    held_input_session_by_lane_.fill(std::nullopt);
+    input_sessions_.clear();
+    active_hold_sessions_.clear();
     judge_events_.clear();
     event_descriptor_indices_by_event_index_.clear();
 
@@ -37,12 +30,10 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
         state.target_ms = engine.tick_to_ms(note.tick);
         state.end_target_ms = engine.tick_to_ms(note.type == note_type::hold ? note.end_tick : note.tick);
         note_states_.push_back(state);
-        if ((note.type == note_type::tap || note.type == note_type::hold) &&
-            note.lane >= 0 && note.lane < kMaxLanes) {
-            for (int lane = note.lane; lane <= note_last_lane(note) && lane < kMaxLanes; ++lane) {
-                lane_note_indices_[static_cast<size_t>(lane)].push_back(i);
-            }
-        }
+    }
+    active_hold_sessions_.resize(note_states_.size());
+    for (size_t i = 0; i < active_hold_sessions_.size(); ++i) {
+        active_hold_sessions_[i].note_index = i;
     }
 
     chart_data chart;
@@ -57,11 +48,6 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
         if (event.event_index >= 0 &&
             static_cast<size_t>(event.event_index) < event_descriptor_indices_by_event_index_.size()) {
             event_descriptor_indices_by_event_index_[static_cast<size_t>(event.event_index)] = i;
-        }
-        if (event.lane >= 0 && event.lane < kMaxLanes) {
-            for (int lane = event.lane; lane < event.lane + std::max(1, event.lane_width) && lane < kMaxLanes; ++lane) {
-                lane_event_indices_[static_cast<size_t>(lane)].push_back(i);
-            }
         }
         if (event.note_index >= note_states_.size()) {
             continue;
@@ -177,15 +163,21 @@ void judge_system::complete_due_hold_before(int lane, double timestamp_ms) {
         return;
     }
 
-    const std::optional<size_t> active_hold = active_hold_indices_[static_cast<size_t>(lane)];
-    if (!active_hold.has_value()) {
+    const std::optional<input_session_id> input_id = held_input_session_by_lane_[static_cast<size_t>(lane)];
+    const input_session* input = input_id.has_value() ? session_for_id(*input_id) : nullptr;
+    if (input == nullptr || !input->active_hold_note_index.has_value()) {
         return;
     }
 
-    const note_state& state = note_states_[*active_hold];
+    const size_t note_index = *input->active_hold_note_index;
+    if (note_index >= note_states_.size()) {
+        return;
+    }
+
+    const note_state& state = note_states_[note_index];
     // 同じレーンで tail 通過後に押された場合は、先に前の hold を完了扱いにする。
     if (state.is_holding() && timestamp_ms >= state.end_target_ms) {
-        complete_held_note(*active_hold, false);
+        complete_held_note(note_index, false);
     }
 }
 
@@ -194,7 +186,12 @@ void judge_system::handle_hold_release(const input_event& event) {
         return;
     }
 
-    const std::vector<size_t> release_candidates = find_release_candidates(event.lane, event.timestamp_ms);
+    input_session* input = release_input_session(event);
+    const std::optional<input_session_id> input_id = input != nullptr
+                                                        ? std::optional<input_session_id>(input->id)
+                                                        : std::nullopt;
+
+    const std::vector<size_t> release_candidates = find_release_candidates(event.lane, event.timestamp_ms, input_id);
     if (!release_candidates.empty()) {
         size_t representative_candidate = 0;
         for (size_t i = 0; i < release_candidates.size(); ++i) {
@@ -235,20 +232,19 @@ void judge_system::handle_hold_release(const input_event& event) {
 
         const chart_judge_event& descriptor = event_descriptors_[release_candidates.front()];
         const double offset_ms = event.timestamp_ms - descriptor.time_ms;
-        std::optional<size_t>& active_hold = active_hold_indices_[static_cast<size_t>(event.lane)];
-        if (active_hold.has_value() &&
-            note_states_[*active_hold].is_holding() &&
-            note_covers_lane(note_states_[*active_hold].note_ref, event.lane) &&
-            event.timestamp_ms >= note_states_[*active_hold].end_target_ms - kBadWindowMs) {
-            const size_t note_index = *active_hold;
+        if (input != nullptr &&
+            input->active_hold_note_index.has_value() &&
+            *input->active_hold_note_index < note_states_.size() &&
+            note_states_[*input->active_hold_note_index].is_holding() &&
+            event.timestamp_ms >= note_states_[*input->active_hold_note_index].end_target_ms - kBadWindowMs) {
+            const size_t note_index = *input->active_hold_note_index;
             note_states_[note_index].progress = note_progress_state::completed;
             clear_active_hold_for_note(note_index);
         }
         return;
     }
 
-    std::optional<size_t>& active_hold = active_hold_indices_[static_cast<size_t>(event.lane)];
-    if (!active_hold.has_value()) {
+    if (input == nullptr || !input->active_hold_note_index.has_value()) {
         const std::vector<size_t> stay_candidates = find_early_release_stay_candidates(event.lane, event.timestamp_ms);
         for (size_t i = 0; i < stay_candidates.size(); ++i) {
             const size_t event_index = stay_candidates[i];
@@ -262,14 +258,20 @@ void judge_system::handle_hold_release(const input_event& event) {
         return;
     }
 
-    note_state& state = note_states_[*active_hold];
+    const size_t note_index = *input->active_hold_note_index;
+    note_state& state = note_states_[note_index];
     if (!state.is_holding()) {
-        active_hold.reset();
+        input->active_hold_note_index.reset();
         return;
     }
 
     if (event.timestamp_ms >= state.end_target_ms) {
-        complete_held_note(*active_hold, false);
+        complete_held_note(note_index, false);
+        return;
+    }
+
+    deactivate_hold_lane(note_index, event.lane, input->id);
+    if (has_active_hold_for_note(note_index)) {
         return;
     }
 
@@ -277,7 +279,7 @@ void judge_system::handle_hold_release(const input_event& event) {
     const double release_offset_ms = event.timestamp_ms - state.end_target_ms;
     state.progress = note_progress_state::completed;
     state.result = evaluate_hold_release_offset(release_offset_ms);
-    clear_active_hold_for_note(*active_hold);
+    clear_active_hold_for_note(note_index);
     if (const std::optional<size_t> tail_descriptor_index =
             descriptor_index_for_event_index(state.tail_event_index); !tail_descriptor_index.has_value() ||
             !mark_event_completed(*tail_descriptor_index)) {
@@ -293,15 +295,20 @@ void judge_system::handle_press(const input_event& event) {
         return;
     }
 
+    const input_session_id input_id = begin_input_session(event);
+
     complete_due_hold_before(event.lane, event.timestamp_ms);
 
-    if (try_absorb_completed_wide_press(event)) {
+    if (try_absorb_completed_wide_press(event, input_id)) {
         return;
     }
 
     const std::vector<size_t> candidate_indices = find_press_candidates(event.lane, event.timestamp_ms);
     if (candidate_indices.empty()) {
-        arm_release_candidate(event.lane, event.timestamp_ms);
+        if (try_adopt_active_wide_hold_lane(event, input_id)) {
+            return;
+        }
+        arm_release_candidate(input_id, event.timestamp_ms);
         return;
     }
 
@@ -325,9 +332,8 @@ void judge_system::handle_press(const input_event& event) {
             result == judge_result::perfect) {
             completed_wide_press_absorb_until_ms_[candidate_index] = descriptor.time_ms + kPerfectWindowMs;
         }
-        advance_note_lane_head_indices(candidate.note_ref);
         if (candidate.is_holding()) {
-            active_hold_indices_[static_cast<size_t>(event.lane)] = descriptor.note_index;
+            activate_hold_lane(descriptor.note_index, event.lane, input_id);
         }
         judge_emit_options options;
         options.play_hitsound = i == 0;
@@ -337,156 +343,218 @@ void judge_system::handle_press(const input_event& event) {
 }
 
 void judge_system::resolve_stay_notes(double current_ms, const input_handler& input) {
-    for (int lane = 0; lane < kMaxLanes; ++lane) {
-        const std::vector<size_t>& lane_indices = lane_event_indices_[static_cast<size_t>(lane)];
-        for (size_t i = lane_event_head_indices_[static_cast<size_t>(lane)]; i < lane_indices.size(); ++i) {
-            const size_t event_index = lane_indices[i];
-            if (event_completed_[event_index]) {
-                continue;
-            }
-            const chart_judge_event& descriptor = event_descriptors_[event_index];
-            if (current_ms < descriptor.time_ms) {
-                break;
-            }
-            if (descriptor.kind != chart_judge_event_kind::stay) {
-                continue;
-            }
-            if (input.is_lane_held(lane)) {
+    for (size_t event_index = 0; event_index < event_descriptors_.size(); ++event_index) {
+        if (event_completed_[event_index]) {
+            continue;
+        }
+        const chart_judge_event& descriptor = event_descriptors_[event_index];
+        if (current_ms < descriptor.time_ms || descriptor.kind != chart_judge_event_kind::stay) {
+            continue;
+        }
+        for (int lane = descriptor.lane;
+             lane < descriptor.lane + std::max(1, descriptor.lane_width) && lane < kMaxLanes;
+             ++lane) {
+            if (lane >= 0 && input.is_lane_held(lane)) {
                 complete_event(event_index, judge_result::perfect, 0.0);
+                break;
             }
         }
     }
 }
 
 void judge_system::resolve_hold_completions(double current_ms) {
-    for (int lane = 0; lane < kMaxLanes; ++lane) {
-        const std::optional<size_t> active_hold = active_hold_indices_[static_cast<size_t>(lane)];
-        if (!active_hold.has_value()) {
+    for (const active_hold_session& session : active_hold_sessions_) {
+        if (!session.active || session.note_index >= note_states_.size()) {
             continue;
         }
 
         // hold 中のノートが tail まで到達したら完了。tail 側も独立した判定として加点する。
-        if (note_states_[*active_hold].is_holding() &&
-            note_states_[*active_hold].tail_event_index >= 0 &&
-            current_ms >= note_states_[*active_hold].end_target_ms) {
-            complete_held_note(*active_hold, true);
+        if (note_states_[session.note_index].is_holding() &&
+            note_states_[session.note_index].tail_event_index >= 0 &&
+            current_ms >= note_states_[session.note_index].end_target_ms) {
+            complete_held_note(session.note_index, true);
         }
     }
 }
 
 void judge_system::resolve_auto_misses(double current_ms) {
-    for (int lane = 0; lane < kMaxLanes; ++lane) {
-        const std::vector<size_t>& lane_indices = lane_note_indices_[static_cast<size_t>(lane)];
-        size_t& head_index = lane_head_indices_[static_cast<size_t>(lane)];
+    for (note_state& state : note_states_) {
+        if (state.is_judged()) {
+            continue;
+        }
 
-        while (head_index < lane_indices.size()) {
-            note_state& state = note_states_[lane_indices[head_index]];
-            if (state.is_judged()) {
-                ++head_index;
-                continue;
-            }
+        const double offset_ms = current_ms - state.target_ms;
+        if (offset_ms <= kBadWindowMs) {
+            continue;
+        }
 
-            const double offset_ms = current_ms - state.target_ms;
-            if (offset_ms <= kBadWindowMs) {
-                break;
+        // head が最大判定幅を超えたら、そのノートはもう叩けない。
+        state.progress = note_progress_state::completed;
+        state.result = judge_result::miss;
+        if (const std::optional<size_t> head_descriptor_index =
+                descriptor_index_for_event_index(state.head_event_index); head_descriptor_index.has_value()) {
+            mark_event_completed(*head_descriptor_index);
+        }
+        emit_judge(judge_result::miss, offset_ms, state.note_ref.lane, state.head_event_index);
+        if (state.note_ref.type == note_type::hold && state.tail_event_index >= 0) {
+            if (const std::optional<size_t> tail_descriptor_index =
+                    descriptor_index_for_event_index(state.tail_event_index); tail_descriptor_index.has_value()) {
+                mark_event_completed(*tail_descriptor_index);
             }
-
-            // head が最大判定幅を超えたら、そのノートはもう叩けない。
-            state.progress = note_progress_state::completed;
-            state.result = judge_result::miss;
-            if (const std::optional<size_t> head_descriptor_index =
-                    descriptor_index_for_event_index(state.head_event_index); head_descriptor_index.has_value()) {
-                mark_event_completed(*head_descriptor_index);
-            }
-            emit_judge(judge_result::miss, offset_ms, state.note_ref.lane, state.head_event_index);
-            if (state.note_ref.type == note_type::hold && state.tail_event_index >= 0) {
-                if (const std::optional<size_t> tail_descriptor_index =
-                        descriptor_index_for_event_index(state.tail_event_index); tail_descriptor_index.has_value()) {
-                    mark_event_completed(*tail_descriptor_index);
-                }
-                judge_emit_options options;
-                options.play_hitsound = false;
-                options.show_feedback = false;
-                emit_judge(judge_result::miss, current_ms - state.end_target_ms, state.note_ref.lane,
-                           state.tail_event_index, options);
-            }
-            ++head_index;
+            judge_emit_options options;
+            options.play_hitsound = false;
+            options.show_feedback = false;
+            emit_judge(judge_result::miss, current_ms - state.end_target_ms, state.note_ref.lane,
+                       state.tail_event_index, options);
         }
     }
 
-    for (int lane = 0; lane < kMaxLanes; ++lane) {
-        const std::vector<size_t>& lane_indices = lane_event_indices_[static_cast<size_t>(lane)];
-        for (size_t i = lane_event_head_indices_[static_cast<size_t>(lane)]; i < lane_indices.size(); ++i) {
-            const size_t event_index = lane_indices[i];
-            if (event_completed_[event_index]) {
-                continue;
-            }
-            const chart_judge_event& descriptor = event_descriptors_[event_index];
-            if (current_ms - descriptor.time_ms <= kBadWindowMs) {
-                break;
-            }
-            if (descriptor.kind == chart_judge_event_kind::press) {
-                continue;
-            }
-            complete_event(event_index, judge_result::miss, current_ms - descriptor.time_ms);
+    for (size_t event_index = 0; event_index < event_descriptors_.size(); ++event_index) {
+        if (event_completed_[event_index]) {
+            continue;
         }
+        const chart_judge_event& descriptor = event_descriptors_[event_index];
+        if (current_ms - descriptor.time_ms <= kBadWindowMs ||
+            descriptor.kind == chart_judge_event_kind::press) {
+            continue;
+        }
+        complete_event(event_index, judge_result::miss, current_ms - descriptor.time_ms);
     }
 }
 
-void judge_system::advance_lane_head_index(int lane) {
-    if (lane < 0 || lane >= kMaxLanes) {
+judge_system::input_session* judge_system::session_for_id(input_session_id session_id) {
+    if (session_id >= input_sessions_.size()) {
+        return nullptr;
+    }
+    return &input_sessions_[session_id];
+}
+
+const judge_system::input_session* judge_system::session_for_id(input_session_id session_id) const {
+    if (session_id >= input_sessions_.size()) {
+        return nullptr;
+    }
+    return &input_sessions_[session_id];
+}
+
+judge_system::input_session_id judge_system::begin_input_session(const input_event& event) {
+    const input_session_id session_id = input_sessions_.size();
+    input_session session;
+    session.id = session_id;
+    session.lane = event.lane;
+    session.press_ms = event.timestamp_ms;
+    input_sessions_.push_back(session);
+    held_input_session_by_lane_[static_cast<size_t>(event.lane)] = session_id;
+    return session_id;
+}
+
+judge_system::input_session* judge_system::release_input_session(const input_event& event) {
+    const std::optional<input_session_id> session_id = held_input_session_by_lane_[static_cast<size_t>(event.lane)];
+    if (!session_id.has_value()) {
+        return nullptr;
+    }
+
+    input_session* session = session_for_id(*session_id);
+    held_input_session_by_lane_[static_cast<size_t>(event.lane)].reset();
+    if (session == nullptr || !session->held) {
+        return nullptr;
+    }
+    session->held = false;
+    session->release_ms = event.timestamp_ms;
+    return session;
+}
+
+judge_system::active_hold_session* judge_system::active_hold_session_for_note(size_t note_index) {
+    if (note_index >= active_hold_sessions_.size()) {
+        return nullptr;
+    }
+    active_hold_session& session = active_hold_sessions_[note_index];
+    return session.active ? &session : nullptr;
+}
+
+const judge_system::active_hold_session* judge_system::active_hold_session_for_note(size_t note_index) const {
+    if (note_index >= active_hold_sessions_.size()) {
+        return nullptr;
+    }
+    const active_hold_session& session = active_hold_sessions_[note_index];
+    return session.active ? &session : nullptr;
+}
+
+bool judge_system::activate_hold_lane(size_t note_index, int lane, input_session_id input_id) {
+    input_session* input = session_for_id(input_id);
+    if (note_index >= note_states_.size() ||
+        note_index >= active_hold_sessions_.size() ||
+        lane < 0 ||
+        lane >= kMaxLanes ||
+        input == nullptr ||
+        !input->held ||
+        input->lane != lane ||
+        !note_states_[note_index].is_holding() ||
+        !note_covers_lane(note_states_[note_index].note_ref, lane)) {
+        return false;
+    }
+
+    active_hold_session& session = active_hold_sessions_[note_index];
+    session.active = true;
+    session.note_index = note_index;
+    session.adopted_sessions[static_cast<size_t>(lane)] = input_id;
+    input->active_hold_note_index = note_index;
+    return true;
+}
+
+void judge_system::deactivate_hold_lane(size_t note_index, int lane, input_session_id input_id) {
+    active_hold_session* session = active_hold_session_for_note(note_index);
+    if (session == nullptr || lane < 0 || lane >= kMaxLanes) {
         return;
     }
 
-    const std::vector<size_t>& lane_indices = lane_note_indices_[static_cast<size_t>(lane)];
-    size_t& head_index = lane_head_indices_[static_cast<size_t>(lane)];
-    while (head_index < lane_indices.size() && note_states_[lane_indices[head_index]].is_judged()) {
-        ++head_index;
-    }
-}
-
-void judge_system::advance_lane_event_head_index(int lane) {
-    if (lane < 0 || lane >= kMaxLanes) {
+    std::optional<input_session_id>& adopted_session = session->adopted_sessions[static_cast<size_t>(lane)];
+    if (!adopted_session.has_value() || *adopted_session != input_id) {
         return;
     }
 
-    const std::vector<size_t>& lane_indices = lane_event_indices_[static_cast<size_t>(lane)];
-    size_t& head_index = lane_event_head_indices_[static_cast<size_t>(lane)];
-    while (head_index < lane_indices.size() && event_completed_[lane_indices[head_index]]) {
-        ++head_index;
+    adopted_session.reset();
+    if (input_session* input = session_for_id(input_id); input != nullptr &&
+        input->active_hold_note_index.has_value() &&
+        *input->active_hold_note_index == note_index) {
+        input->active_hold_note_index.reset();
     }
-}
-
-void judge_system::advance_note_lane_head_indices(const note_data& note) {
-    for (int lane = note.lane; lane <= note_last_lane(note) && lane < kMaxLanes; ++lane) {
-        if (lane >= 0) {
-            advance_lane_head_index(lane);
-        }
-    }
-}
-
-void judge_system::advance_event_lane_head_indices(const chart_judge_event& event) {
-    for (int lane = event.lane; lane < event.lane + std::max(1, event.lane_width) && lane < kMaxLanes; ++lane) {
-        if (lane >= 0) {
-            advance_lane_event_head_index(lane);
-        }
-    }
+    session->active = has_active_hold_for_note(note_index);
 }
 
 void judge_system::clear_active_hold_for_note(size_t note_index) {
     if (note_index >= note_states_.size()) {
         return;
     }
-    const note_data& note = note_states_[note_index].note_ref;
-    for (int lane = note.lane; lane <= note_last_lane(note) && lane < kMaxLanes; ++lane) {
-        if (lane < 0) {
+    if (note_index < active_hold_sessions_.size()) {
+        for (const std::optional<input_session_id>& input_id : active_hold_sessions_[note_index].adopted_sessions) {
+            if (input_id.has_value()) {
+                if (input_session* input = session_for_id(*input_id); input != nullptr &&
+                    input->active_hold_note_index.has_value() &&
+                    *input->active_hold_note_index == note_index) {
+                    input->active_hold_note_index.reset();
+                }
+            }
+        }
+        active_hold_sessions_[note_index].active = false;
+        active_hold_sessions_[note_index].adopted_sessions.fill(std::nullopt);
+    }
+}
+
+bool judge_system::has_active_hold_for_note(size_t note_index) const {
+    const active_hold_session* session = active_hold_session_for_note(note_index);
+    if (session == nullptr) {
+        return false;
+    }
+    for (const std::optional<input_session_id>& input_id : session->adopted_sessions) {
+        if (!input_id.has_value()) {
             continue;
         }
-        std::optional<size_t>& active_hold = active_hold_indices_[static_cast<size_t>(lane)];
-        if (active_hold.has_value() && *active_hold == note_index) {
-            active_hold.reset();
+        const input_session* input = session_for_id(*input_id);
+        if (input != nullptr && input->held) {
+            return true;
         }
     }
+    return false;
 }
 
 bool judge_system::mark_event_completed(size_t event_descriptor_index) {
@@ -496,7 +564,6 @@ bool judge_system::mark_event_completed(size_t event_descriptor_index) {
 
     event_completed_[event_descriptor_index] = true;
     clear_armed_release_event(event_descriptor_index);
-    advance_event_lane_head_indices(event_descriptors_[event_descriptor_index]);
     return true;
 }
 
@@ -528,7 +595,7 @@ bool judge_system::release_overlaps_hold_tail(const chart_judge_event& release) 
     return false;
 }
 
-bool judge_system::try_absorb_completed_wide_press(const input_event& event) {
+bool judge_system::try_absorb_completed_wide_press(const input_event& event, input_session_id input_id) {
     if (event.lane < 0 || event.lane >= kMaxLanes) {
         return false;
     }
@@ -570,9 +637,47 @@ bool judge_system::try_absorb_completed_wide_press(const input_event& event) {
     if (descriptor.role == chart_judge_event_role::hold_head &&
         descriptor.note_index < note_states_.size() &&
         note_states_[descriptor.note_index].is_holding()) {
-        active_hold_indices_[static_cast<size_t>(event.lane)] = descriptor.note_index;
+        activate_hold_lane(descriptor.note_index, event.lane, input_id);
     }
     return true;
+}
+
+bool judge_system::try_adopt_active_wide_hold_lane(const input_event& event, input_session_id input_id) {
+    const input_session* input = session_for_id(input_id);
+    if (event.lane < 0 || event.lane >= kMaxLanes ||
+        input == nullptr ||
+        input->active_hold_note_index.has_value()) {
+        return false;
+    }
+
+    std::optional<size_t> adopted_note_index;
+    double adopted_end_ms = 0.0;
+    for (const active_hold_session& session : active_hold_sessions_) {
+        if (!session.active || session.note_index >= note_states_.size()) {
+            continue;
+        }
+
+        const note_state& state = note_states_[session.note_index];
+        if (!state.is_holding() ||
+            state.note_ref.type != note_type::hold ||
+            note_lane_width(state.note_ref) <= 1 ||
+            !note_covers_lane(state.note_ref, event.lane) ||
+            event.timestamp_ms < state.target_ms ||
+            event.timestamp_ms >= state.end_target_ms) {
+            continue;
+        }
+
+        if (!adopted_note_index.has_value() || state.end_target_ms < adopted_end_ms) {
+            adopted_note_index = session.note_index;
+            adopted_end_ms = state.end_target_ms;
+        }
+    }
+
+    if (!adopted_note_index.has_value()) {
+        return false;
+    }
+
+    return activate_hold_lane(*adopted_note_index, event.lane, input_id);
 }
 
 std::vector<size_t> judge_system::find_press_candidates(int lane, double timestamp_ms) {
@@ -581,13 +686,14 @@ std::vector<size_t> judge_system::find_press_candidates(int lane, double timesta
         return candidates;
     }
 
-    const std::vector<size_t>& lane_indices = lane_event_indices_[static_cast<size_t>(lane)];
     std::optional<double> target_time_ms;
     double best_abs_offset = kBadWindowMs + 1.0;
-    for (size_t i = lane_event_head_indices_[static_cast<size_t>(lane)]; i < lane_indices.size(); ++i) {
-        const size_t descriptor_index = lane_indices[i];
+    for (size_t descriptor_index = 0; descriptor_index < event_descriptors_.size(); ++descriptor_index) {
         const chart_judge_event& descriptor = event_descriptors_[descriptor_index];
         if (event_completed_[descriptor_index]) {
+            continue;
+        }
+        if (lane < descriptor.lane || lane >= descriptor.lane + std::max(1, descriptor.lane_width)) {
             continue;
         }
         if (descriptor.kind != chart_judge_event_kind::press &&
@@ -598,10 +704,6 @@ std::vector<size_t> judge_system::find_press_candidates(int lane, double timesta
         const double offset_ms = timestamp_ms - descriptor.time_ms;
         if (descriptor.kind == chart_judge_event_kind::stay && offset_ms < 0.0) {
             continue;
-        }
-        if (offset_ms < -kBadWindowMs) {
-            // 同レーン内は時間順なので、ここで早すぎるなら後続ノートもまだ早い。
-            break;
         }
         if (!is_in_judgement_window(offset_ms)) {
             continue;
@@ -620,38 +722,39 @@ std::vector<size_t> judge_system::find_press_candidates(int lane, double timesta
     return candidates;
 }
 
-std::vector<size_t> judge_system::find_release_candidates(int lane, double timestamp_ms) {
+std::vector<size_t> judge_system::find_release_candidates(int lane, double timestamp_ms,
+                                                          std::optional<input_session_id> input_id) {
     std::vector<size_t> candidates;
     if (lane < 0 || lane >= kMaxLanes) {
         return candidates;
     }
 
-    const std::vector<size_t>& lane_indices = lane_event_indices_[static_cast<size_t>(lane)];
     std::optional<double> target_time_ms;
     double best_abs_offset = kBadWindowMs + 1.0;
-    for (size_t i = lane_event_head_indices_[static_cast<size_t>(lane)]; i < lane_indices.size(); ++i) {
-        const size_t descriptor_index = lane_indices[i];
+    for (size_t descriptor_index = 0; descriptor_index < event_descriptors_.size(); ++descriptor_index) {
         const chart_judge_event& descriptor = event_descriptors_[descriptor_index];
         if (event_completed_[descriptor_index] ||
             descriptor.kind != chart_judge_event_kind::release) {
             continue;
         }
+        if (lane < descriptor.lane || lane >= descriptor.lane + std::max(1, descriptor.lane_width)) {
+            continue;
+        }
         if (descriptor.role == chart_judge_event_role::hold_tail) {
-            const std::optional<size_t>& active_hold = active_hold_indices_[static_cast<size_t>(lane)];
-            if (!active_hold.has_value() || *active_hold != descriptor.note_index ||
-                !note_states_[*active_hold].is_holding()) {
+            const input_session* input = input_id.has_value() ? session_for_id(*input_id) : nullptr;
+            if (input == nullptr ||
+                !input->active_hold_note_index.has_value() ||
+                *input->active_hold_note_index != descriptor.note_index ||
+                !note_states_[descriptor.note_index].is_holding()) {
                 continue;
             }
         } else if (descriptor.role == chart_judge_event_role::release &&
                    is_standalone_release_event(descriptor_index) &&
-                   !release_event_is_armed(descriptor_index, lane)) {
+                   !release_event_is_armed(descriptor_index, input_id)) {
             continue;
         }
 
         const double offset_ms = timestamp_ms - descriptor.time_ms;
-        if (offset_ms < -kBadWindowMs) {
-            break;
-        }
         if (!is_in_judgement_window(offset_ms)) {
             continue;
         }
@@ -677,13 +780,14 @@ std::vector<size_t> judge_system::find_early_release_stay_candidates(int lane, d
 
     std::optional<double> target_time_ms;
     double best_abs_offset = kBadWindowMs + 1.0;
-    const std::vector<size_t>& lane_indices = lane_event_indices_[static_cast<size_t>(lane)];
-    for (size_t i = lane_event_head_indices_[static_cast<size_t>(lane)]; i < lane_indices.size(); ++i) {
-        const size_t event_index = lane_indices[i];
+    for (size_t event_index = 0; event_index < event_descriptors_.size(); ++event_index) {
         if (event_completed_[event_index]) {
             continue;
         }
         const chart_judge_event& descriptor = event_descriptors_[event_index];
+        if (lane < descriptor.lane || lane >= descriptor.lane + std::max(1, descriptor.lane_width)) {
+            continue;
+        }
         if (descriptor.kind != chart_judge_event_kind::stay) {
             continue;
         }
@@ -704,22 +808,22 @@ std::vector<size_t> judge_system::find_early_release_stay_candidates(int lane, d
     return candidates;
 }
 
-void judge_system::arm_release_candidate(int lane, double timestamp_ms) {
-    if (lane < 0 || lane >= kMaxLanes) {
+void judge_system::arm_release_candidate(input_session_id input_id, double timestamp_ms) {
+    input_session* input = session_for_id(input_id);
+    if (input == nullptr || input->lane < 0 || input->lane >= kMaxLanes) {
         return;
     }
 
     std::optional<size_t> target_event_index;
     double best_abs_offset = kBadWindowMs + 1.0;
-    const std::vector<size_t>& lane_indices = lane_event_indices_[static_cast<size_t>(lane)];
-    for (size_t i = lane_event_head_indices_[static_cast<size_t>(lane)]; i < lane_indices.size(); ++i) {
-        const size_t event_index = lane_indices[i];
+    for (size_t event_index = 0; event_index < event_descriptors_.size(); ++event_index) {
         if (event_completed_[event_index]) {
             continue;
         }
         const chart_judge_event& descriptor = event_descriptors_[event_index];
-        if (timestamp_ms < descriptor.time_ms - kBadWindowMs) {
-            break;
+        if (input->lane < descriptor.lane ||
+            input->lane >= descriptor.lane + std::max(1, descriptor.lane_width)) {
+            continue;
         }
         if (descriptor.role != chart_judge_event_role::release ||
             !is_standalone_release_event(event_index)) {
@@ -739,7 +843,7 @@ void judge_system::arm_release_candidate(int lane, double timestamp_ms) {
     }
 
     if (target_event_index.has_value()) {
-        armed_release_event_indices_[static_cast<size_t>(lane)] = *target_event_index;
+        input->armed_release_event_index = *target_event_index;
     }
 }
 
@@ -750,18 +854,22 @@ bool judge_system::is_standalone_release_event(size_t event_descriptor_index) co
     return standalone_release_events_[event_descriptor_index];
 }
 
-bool judge_system::release_event_is_armed(size_t event_descriptor_index, int lane) const {
-    if (lane < 0 || lane >= kMaxLanes) {
+bool judge_system::release_event_is_armed(size_t event_descriptor_index,
+                                          std::optional<input_session_id> input_id) const {
+    if (!input_id.has_value()) {
         return false;
     }
-    const std::optional<size_t>& armed_event = armed_release_event_indices_[static_cast<size_t>(lane)];
-    return armed_event.has_value() && *armed_event == event_descriptor_index;
+    const input_session* input = session_for_id(*input_id);
+    return input != nullptr &&
+           input->armed_release_event_index.has_value() &&
+           *input->armed_release_event_index == event_descriptor_index;
 }
 
 void judge_system::clear_armed_release_event(size_t event_descriptor_index) {
-    for (std::optional<size_t>& armed_event : armed_release_event_indices_) {
-        if (armed_event.has_value() && *armed_event == event_descriptor_index) {
-            armed_event.reset();
+    for (input_session& input : input_sessions_) {
+        if (input.armed_release_event_index.has_value() &&
+            *input.armed_release_event_index == event_descriptor_index) {
+            input.armed_release_event_index.reset();
         }
     }
 }
@@ -771,7 +879,6 @@ void judge_system::complete_held_note(size_t note_index, bool emit_display_judge
     clear_active_hold_for_note(note_index);
     state.result = judge_result::perfect;
     state.progress = note_progress_state::completed;
-    advance_note_lane_head_indices(state.note_ref);
     if (state.tail_event_index < 0) {
         return;
     }
@@ -810,14 +917,20 @@ void judge_system::complete_event(size_t event_descriptor_index, judge_result re
         clear_active_hold_for_note(descriptor.note_index);
     }
     if (descriptor.role == chart_judge_event_role::release) {
-        std::optional<size_t>& active_hold = active_hold_indices_[static_cast<size_t>(descriptor.lane)];
-        if (active_hold.has_value() &&
-            note_states_[*active_hold].is_holding() &&
-            std::fabs(note_states_[*active_hold].end_target_ms - descriptor.time_ms) <= 0.5) {
-            const size_t note_index = *active_hold;
-            note_states_[note_index].progress = note_progress_state::completed;
-            note_states_[note_index].result = result;
-            clear_active_hold_for_note(note_index);
+        for (active_hold_session& session : active_hold_sessions_) {
+            if (!session.active || session.note_index >= note_states_.size()) {
+                continue;
+            }
+            note_state& hold_state = note_states_[session.note_index];
+            if (!hold_state.is_holding() ||
+                !note_covers_lane(hold_state.note_ref, descriptor.lane) ||
+                std::fabs(hold_state.end_target_ms - descriptor.time_ms) > 0.5) {
+                continue;
+            }
+            hold_state.progress = note_progress_state::completed;
+            hold_state.result = result;
+            clear_active_hold_for_note(session.note_index);
+            break;
         }
     }
     emit_judge(result, offset_ms, descriptor.lane, descriptor.event_index, options);
