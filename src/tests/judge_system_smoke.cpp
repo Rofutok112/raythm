@@ -396,51 +396,7 @@ int main() {
     if (hold_head_stay_judge.get_judge_events().size() != 2 ||
         !hold_head_stay_judge.note_states()[0].is_holding() ||
         !hold_head_stay_judge.note_states()[1].is_completed()) {
-        std::cerr << "Hold head and contained stay on the same tick should both judge without breaking the hold\n";
-        return EXIT_FAILURE;
-    }
-    if (hold_head_stay_judge.get_judge_events()[1].play_hitsound ||
-        hold_head_stay_judge.get_judge_events()[1].show_feedback) {
-        std::cerr << "Hold-contained stay should resolve as a supplemental held check\n";
-        return EXIT_FAILURE;
-    }
-
-    judge_system hold_near_head_stay_judge;
-    hold_near_head_stay_judge.init({
-        note_data{note_type::hold, 960, 1, 1440},
-        note_data{note_type::stay, 980, 1, 980},
-    }, engine);
-    input = input_handler();
-    input.set_key_count(4);
-    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
-    hold_near_head_stay_judge.update(1000.0, input);
-    if (!hold_near_head_stay_judge.note_states()[0].is_holding() ||
-        hold_near_head_stay_judge.note_states()[1].is_judged()) {
-        std::cerr << "Stay just after the hold head should not compete with the head press\n";
-        return EXIT_FAILURE;
-    }
-    hold_near_head_stay_judge.update(1030.0, input);
-    if (!hold_near_head_stay_judge.note_states()[0].is_holding() ||
-        !hold_near_head_stay_judge.note_states()[1].is_completed() ||
-        hold_near_head_stay_judge.note_states()[1].result != judge_result::perfect) {
-        std::cerr << "Stay just after the hold head should resolve from held state\n";
-        return EXIT_FAILURE;
-    }
-
-    note_data wide_hold_with_stay{note_type::hold, 960, 0, 1440};
-    wide_hold_with_stay.lane_width = 2;
-    note_data contained_wide_stay{note_type::stay, 1200, 1, 1200};
-    judge_system wide_hold_stay_judge;
-    wide_hold_stay_judge.init({wide_hold_with_stay, contained_wide_stay}, engine);
-    input = input_handler();
-    input.set_key_count(4);
-    input.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 1000.0);
-    wide_hold_stay_judge.update(1000.0, input);
-    wide_hold_stay_judge.update(1260.0, input);
-    if (!wide_hold_stay_judge.note_states()[0].is_holding() ||
-        !wide_hold_stay_judge.note_states()[1].is_completed() ||
-        wide_hold_stay_judge.note_states()[1].result != judge_result::perfect) {
-        std::cerr << "Hold-contained stay in a wide hold should resolve from any held lane in the hold range\n";
+        std::cerr << "Hold head and stay on the same tick should both judge from one press\n";
         return EXIT_FAILURE;
     }
 

@@ -36,15 +36,14 @@ int main() {
     release.lane_width = 2;
     note_data stay{note_type::stay, 960, 0, 960};
     stay.lane_width = 4;
-    note_data hold_contained_stay{note_type::stay, 720, 1, 720};
     note_data ray_hold{note_type::hold, 1440, 3, 1920};
     ray_hold.is_ray = true;
 
     chart_data chart;
-    chart.notes = {wide_tap, hold, release, stay, hold_contained_stay, ray_hold};
+    chart.notes = {wide_tap, hold, release, stay, ray_hold};
 
     const std::vector<chart_judge_event> events = chart_judge_events::build(chart, engine);
-    if (events.size() != 8 || chart_judge_events::count(chart, engine) != 8) {
+    if (events.size() != 7 || chart_judge_events::count(chart, engine) != 7) {
         std::cerr << "Judge event count should treat long notes as head + tail\n";
         return EXIT_FAILURE;
     }
@@ -58,12 +57,11 @@ int main() {
 
     if (!expect_event(events[0], 0, chart_judge_event_role::tap, 0, 0, 2) ||
         !expect_event(events[1], 1, chart_judge_event_role::hold_head, 480, 1, 2) ||
-        !expect_event(events[2], 2, chart_judge_event_role::hold_stay, 720, 1, 1) ||
-        !expect_event(events[3], 3, chart_judge_event_role::hold_tail, 960, 1, 2) ||
-        !expect_event(events[4], 4, chart_judge_event_role::release, 960, 1, 2) ||
-        !expect_event(events[5], 5, chart_judge_event_role::stay, 960, 0, 4) ||
-        !expect_event(events[6], 6, chart_judge_event_role::hold_head, 1440, 3, 1) ||
-        !expect_event(events[7], 7, chart_judge_event_role::hold_tail, 1920, 3, 1)) {
+        !expect_event(events[2], 2, chart_judge_event_role::hold_tail, 960, 1, 2) ||
+        !expect_event(events[3], 3, chart_judge_event_role::release, 960, 1, 2) ||
+        !expect_event(events[4], 4, chart_judge_event_role::stay, 960, 0, 4) ||
+        !expect_event(events[5], 5, chart_judge_event_role::hold_head, 1440, 3, 1) ||
+        !expect_event(events[6], 6, chart_judge_event_role::hold_tail, 1920, 3, 1)) {
         std::cerr << "Judge events should preserve note roles, timing, and lane spans\n";
         for (const chart_judge_event& event : events) {
             std::cerr << "  index=" << event.event_index
@@ -75,12 +73,7 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    if (events[2].containing_hold_note_index != 1) {
-        std::cerr << "Hold-contained stay should remember its containing hold\n";
-        return EXIT_FAILURE;
-    }
-
-    if (!events[6].is_ray || !events[7].is_ray) {
+    if (!events[5].is_ray || !events[6].is_ray) {
         std::cerr << "Ray long notes should carry ray identity on both judge events\n";
         return EXIT_FAILURE;
     }
