@@ -455,6 +455,29 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    judge_system hold_head_near_stay_judge;
+    hold_head_near_stay_judge.init({
+        note_data{note_type::hold, 960, 1, 1440},
+        note_data{note_type::stay, 1000, 1, 1000},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+    hold_head_near_stay_judge.update(1000.0, input);
+    if (!hold_head_near_stay_judge.note_states()[0].is_holding() ||
+        hold_head_near_stay_judge.note_states()[0].is_completed() ||
+        hold_head_near_stay_judge.note_states()[1].is_completed()) {
+        std::cerr << "Stay just after a hold head should not steal or break the hold head judge\n";
+        return EXIT_FAILURE;
+    }
+    hold_head_near_stay_judge.update(1050.0, input);
+    if (!hold_head_near_stay_judge.note_states()[0].is_holding() ||
+        !hold_head_near_stay_judge.note_states()[1].is_completed() ||
+        hold_head_near_stay_judge.note_states()[1].result != judge_result::perfect) {
+        std::cerr << "Stay just after a hold head should resolve while the hold remains active\n";
+        return EXIT_FAILURE;
+    }
+
     judge_system stay_release_judge;
     stay_release_judge.init({
         note_data{note_type::stay, 960, 2, 960},
