@@ -17,7 +17,6 @@ enum class chart_judge_event_role {
     hold_tail,
     release,
     stay,
-    hold_stay,
 };
 
 struct chart_judge_event {
@@ -30,7 +29,6 @@ struct chart_judge_event {
     int lane = 0;
     int lane_width = 1;
     bool is_ray = false;
-    int containing_hold_note_index = -1;
 };
 
 namespace chart_judge_events {

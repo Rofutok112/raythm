@@ -14,8 +14,7 @@ void append_event(std::vector<chart_judge_event>& events,
                   const note_data& note,
                   chart_judge_event_kind kind,
                   chart_judge_event_role role,
-                  int tick,
-                  int containing_hold_note_index = -1) {
+                  int tick) {
     events.push_back({
         -1,
         note_index,
@@ -26,41 +25,13 @@ void append_event(std::vector<chart_judge_event>& events,
         note.lane,
         note_lane_width(note),
         note.is_ray,
-        containing_hold_note_index,
     });
-}
-
-int find_containing_hold_note_index(const std::vector<note_data>& notes, size_t stay_note_index) {
-    if (stay_note_index >= notes.size()) {
-        return -1;
-    }
-
-    const note_data& stay = notes[stay_note_index];
-    if (stay.type != note_type::stay) {
-        return -1;
-    }
-
-    const int stay_last_lane = note_last_lane(stay);
-    for (size_t note_index = 0; note_index < notes.size(); ++note_index) {
-        const note_data& hold = notes[note_index];
-        if (hold.type != note_type::hold) {
-            continue;
-        }
-        if (stay.tick < hold.tick || stay.tick >= hold.end_tick) {
-            continue;
-        }
-        if (stay.lane >= hold.lane && stay_last_lane <= note_last_lane(hold)) {
-            return static_cast<int>(note_index);
-        }
-    }
-    return -1;
 }
 
 void append_note_events(std::vector<chart_judge_event>& events,
                         const timing_engine& engine,
                         size_t note_index,
-                        const std::vector<note_data>& notes) {
-    const note_data& note = notes[note_index];
+                        const note_data& note) {
     switch (note.type) {
         case note_type::tap:
             append_event(events, engine, note_index, note, chart_judge_event_kind::press,
@@ -80,14 +51,8 @@ void append_note_events(std::vector<chart_judge_event>& events,
             break;
 
         case note_type::stay:
-            if (const int containing_hold_note_index = find_containing_hold_note_index(notes, note_index);
-                containing_hold_note_index >= 0) {
-                append_event(events, engine, note_index, note, chart_judge_event_kind::stay,
-                             chart_judge_event_role::hold_stay, note.tick, containing_hold_note_index);
-            } else {
-                append_event(events, engine, note_index, note, chart_judge_event_kind::stay,
-                             chart_judge_event_role::stay, note.tick);
-            }
+            append_event(events, engine, note_index, note, chart_judge_event_kind::stay,
+                         chart_judge_event_role::stay, note.tick);
             break;
     }
 }
@@ -114,7 +79,7 @@ std::vector<chart_judge_event> build(const chart_data& chart, const timing_engin
     events.reserve(chart.notes.size() * 2);
 
     for (size_t note_index = 0; note_index < chart.notes.size(); ++note_index) {
-        append_note_events(events, engine, note_index, chart.notes);
+        append_note_events(events, engine, note_index, chart.notes[note_index]);
     }
 
     sort_and_assign_event_indices(events);

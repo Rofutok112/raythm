@@ -39,6 +39,7 @@ private:
         double release_ms = 0.0;
         bool held = true;
         std::optional<size_t> armed_release_event_index;
+        std::optional<size_t> armed_stay_event_index;
         std::optional<size_t> active_hold_note_index;
     };
 
@@ -73,19 +74,18 @@ private:
     bool mark_event_completed(size_t event_descriptor_index);
     std::optional<size_t> descriptor_index_for_event_index(int event_index) const;
     bool release_overlaps_hold_tail(const chart_judge_event& release) const;
-    bool is_hold_contained_stay_event(size_t event_descriptor_index) const;
-    bool is_hold_contained_stay_held(const chart_judge_event& descriptor,
-                                     const input_handler& input) const;
     bool try_absorb_completed_wide_press(const input_event& event, input_session_id input_id);
     bool try_adopt_active_wide_hold_lane(const input_event& event, input_session_id input_id);
     std::vector<size_t> find_press_candidates(int lane, double timestamp_ms);
     std::vector<size_t> find_release_candidates(int lane, double timestamp_ms,
                                                 std::optional<input_session_id> input_id);
-    std::vector<size_t> find_early_release_stay_candidates(int lane, double timestamp_ms);
-    void arm_release_candidate(input_session_id input_id, double timestamp_ms);
+    bool arm_release_candidate(input_session_id input_id, double timestamp_ms);
+    void arm_stay_candidate(input_session_id input_id, double timestamp_ms);
+    bool complete_armed_stay_candidate(input_session* input, const input_event& event);
     bool is_standalone_release_event(size_t event_descriptor_index) const;
     bool release_event_is_armed(size_t event_descriptor_index, std::optional<input_session_id> input_id) const;
     void clear_armed_release_event(size_t event_descriptor_index);
+    void clear_armed_stay_event(size_t event_descriptor_index);
     void complete_held_note(size_t note_index, bool emit_display_judge);
     void complete_event(size_t event_descriptor_index, judge_result result, double offset_ms);
     void complete_event(size_t event_descriptor_index, judge_result result, double offset_ms,
