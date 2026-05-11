@@ -451,7 +451,13 @@ int main() {
     if (hold_head_stay_judge.get_judge_events().size() != 2 ||
         !hold_head_stay_judge.note_states()[0].is_holding() ||
         !hold_head_stay_judge.note_states()[1].is_completed()) {
-        std::cerr << "Hold head and stay on the same tick should both judge from one press\n";
+        std::cerr << "Hold head and contained stay on the same tick should both judge without breaking the hold\n";
+        return EXIT_FAILURE;
+    }
+    if (!hold_head_stay_judge.get_judge_events()[1].play_hitsound ||
+        hold_head_stay_judge.get_judge_events()[1].show_feedback ||
+        hold_head_stay_judge.get_judge_events()[1].hitsound_type != note_type::stay) {
+        std::cerr << "Hold-contained stay should play Stay SE without replacing judge feedback\n";
         return EXIT_FAILURE;
     }
 
@@ -493,6 +499,41 @@ int main() {
         late_hold_head_across_stay_judge.note_states()[1].result != judge_result::perfect) {
         std::cerr << "Late perfect hold head press should stay prioritized even after crossing a nearby stay\n";
         return EXIT_FAILURE;
+    }
+
+    judge_system hold_tail_dense_stays_judge;
+    hold_tail_dense_stays_judge.init({
+        note_data{note_type::hold, 960, 1, 1440},
+        note_data{note_type::stay, 1320, 1, 1320},
+        note_data{note_type::stay, 1380, 1, 1380},
+        note_data{note_type::stay, 1430, 1, 1430},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+    hold_tail_dense_stays_judge.update(1000.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1510.0);
+    hold_tail_dense_stays_judge.update(1510.0, input);
+    if (!hold_tail_dense_stays_judge.note_states()[0].is_completed() ||
+        hold_tail_dense_stays_judge.note_states()[0].result != judge_result::perfect ||
+        !hold_tail_dense_stays_judge.note_states()[1].is_completed() ||
+        !hold_tail_dense_stays_judge.note_states()[2].is_completed() ||
+        !hold_tail_dense_stays_judge.note_states()[3].is_completed()) {
+        std::cerr << "Releasing at a hold tail should complete all passed contained stays and the tail\n";
+        return EXIT_FAILURE;
+    }
+    for (size_t note_index = 1; note_index <= 3; ++note_index) {
+        if (hold_tail_dense_stays_judge.note_states()[note_index].result != judge_result::perfect) {
+            std::cerr << "Passed contained stays near the hold tail should not become misses\n";
+            return EXIT_FAILURE;
+        }
+    }
+    hold_tail_dense_stays_judge.update(1700.0, input);
+    for (const note_state& state : hold_tail_dense_stays_judge.note_states()) {
+        if (state.result != judge_result::perfect) {
+            std::cerr << "Completed tail-adjacent contained stays should not miss later\n";
+            return EXIT_FAILURE;
+        }
     }
 
     judge_system stay_release_judge;

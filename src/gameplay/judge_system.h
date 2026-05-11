@@ -61,6 +61,7 @@ private:
     void resolve_stay_notes(double current_ms, const input_handler& input);
     void resolve_hold_completions(double current_ms);
     void resolve_auto_misses(double current_ms);
+    void complete_due_hold_contained_stays(size_t hold_note_index, double timestamp_ms);
     input_session* session_for_id(input_session_id session_id);
     const input_session* session_for_id(input_session_id session_id) const;
     input_session_id begin_input_session(const input_event& event);
@@ -74,6 +75,9 @@ private:
     bool mark_event_completed(size_t event_descriptor_index);
     std::optional<size_t> descriptor_index_for_event_index(int event_index) const;
     bool release_overlaps_hold_tail(const chart_judge_event& release) const;
+    bool is_hold_contained_stay_event(size_t event_descriptor_index) const;
+    bool is_hold_contained_stay_held(const chart_judge_event& descriptor,
+                                     const input_handler& input) const;
     bool try_absorb_completed_wide_press(const input_event& event, input_session_id input_id);
     bool try_adopt_active_wide_hold_lane(const input_event& event, input_session_id input_id);
     std::vector<size_t> find_press_candidates(int lane, double timestamp_ms);

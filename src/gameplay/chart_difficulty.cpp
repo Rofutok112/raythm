@@ -690,7 +690,9 @@ std::vector<event_difficulty> calculate_event_difficulties(const chart_data& dat
     const std::vector<chart_judge_event> judge_events = chart_judge_events::build(data, engine);
     for (const chart_judge_event& event : judge_events) {
         const double head_ms = event.time_ms;
-        const float local_difficulty = event.role == chart_judge_event_role::stay
+        const bool is_stay_event = event.role == chart_judge_event_role::stay ||
+                                   event.role == chart_judge_event_role::hold_stay;
+        const float local_difficulty = is_stay_event
                                            ? 0.0f
                                            : std::max(0.0f, local_difficulty_at(events, holds, transitions,
                                                                                head_ms, data.meta.key_count));
