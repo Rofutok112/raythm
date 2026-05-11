@@ -671,8 +671,8 @@ std::vector<size_t> judge_system::find_press_candidates(int lane, double timesta
         return candidates;
     }
 
-    std::optional<double> press_target_time_ms;
-    double best_press_abs_offset = kBadWindowMs + 1.0;
+    std::optional<double> target_time_ms;
+    double best_abs_offset = kBadWindowMs + 1.0;
     for (size_t descriptor_index = 0; descriptor_index < event_descriptors_.size(); ++descriptor_index) {
         const chart_judge_event& descriptor = event_descriptors_[descriptor_index];
         if (event_completed_[descriptor_index]) {
@@ -681,78 +681,26 @@ std::vector<size_t> judge_system::find_press_candidates(int lane, double timesta
         if (lane < descriptor.lane || lane >= descriptor.lane + std::max(1, descriptor.lane_width)) {
             continue;
         }
-        if (descriptor.kind != chart_judge_event_kind::press) {
+        if (descriptor.kind != chart_judge_event_kind::press &&
+            descriptor.kind != chart_judge_event_kind::stay) {
             continue;
         }
 
         const double offset_ms = timestamp_ms - descriptor.time_ms;
+        if (descriptor.kind == chart_judge_event_kind::stay && offset_ms < 0.0) {
+            continue;
+        }
         if (!is_in_judgement_window(offset_ms)) {
             continue;
         }
 
         const double abs_offset = std::fabs(offset_ms);
-        if (abs_offset < best_press_abs_offset) {
-            press_target_time_ms = descriptor.time_ms;
-            best_press_abs_offset = abs_offset;
-        }
-    }
-
-    if (press_target_time_ms.has_value()) {
-        for (size_t descriptor_index = 0; descriptor_index < event_descriptors_.size(); ++descriptor_index) {
-            const chart_judge_event& descriptor = event_descriptors_[descriptor_index];
-            if (event_completed_[descriptor_index]) {
-                continue;
-            }
-            if (lane < descriptor.lane || lane >= descriptor.lane + std::max(1, descriptor.lane_width)) {
-                continue;
-            }
-            if (descriptor.kind != chart_judge_event_kind::press &&
-                descriptor.kind != chart_judge_event_kind::stay) {
-                continue;
-            }
-            if (!same_judgement_time(descriptor.time_ms, *press_target_time_ms)) {
-                continue;
-            }
-
-            const double offset_ms = timestamp_ms - descriptor.time_ms;
-            if (descriptor.kind == chart_judge_event_kind::stay && offset_ms < 0.0) {
-                continue;
-            }
-            if (!is_in_judgement_window(offset_ms)) {
-                continue;
-            }
-
-            candidates.push_back(descriptor_index);
-        }
-        return candidates;
-    }
-
-    std::optional<double> stay_target_time_ms;
-    double best_stay_abs_offset = kBadWindowMs + 1.0;
-    for (size_t descriptor_index = 0; descriptor_index < event_descriptors_.size(); ++descriptor_index) {
-        const chart_judge_event& descriptor = event_descriptors_[descriptor_index];
-        if (event_completed_[descriptor_index]) {
-            continue;
-        }
-        if (lane < descriptor.lane || lane >= descriptor.lane + std::max(1, descriptor.lane_width)) {
-            continue;
-        }
-        if (descriptor.kind != chart_judge_event_kind::stay) {
-            continue;
-        }
-
-        const double offset_ms = timestamp_ms - descriptor.time_ms;
-        if (offset_ms < 0.0 || !is_in_judgement_window(offset_ms)) {
-            continue;
-        }
-
-        const double abs_offset = std::fabs(offset_ms);
-        if (abs_offset < best_stay_abs_offset) {
-            stay_target_time_ms = descriptor.time_ms;
-            best_stay_abs_offset = abs_offset;
+        if (abs_offset < best_abs_offset) {
+            target_time_ms = descriptor.time_ms;
+            best_abs_offset = abs_offset;
             candidates.clear();
             candidates.push_back(descriptor_index);
-        } else if (stay_target_time_ms.has_value() && same_judgement_time(descriptor.time_ms, *stay_target_time_ms)) {
+        } else if (target_time_ms.has_value() && same_judgement_time(descriptor.time_ms, *target_time_ms)) {
             candidates.push_back(descriptor_index);
         }
     }

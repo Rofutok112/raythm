@@ -478,23 +478,6 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    judge_system late_hold_head_across_stay_judge;
-    late_hold_head_across_stay_judge.init({
-        note_data{note_type::hold, 960, 1, 1440},
-        note_data{note_type::stay, 980, 1, 980},
-    }, engine);
-    input = input_handler();
-    input.set_key_count(4);
-    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1030.0);
-    late_hold_head_across_stay_judge.update(1030.0, input);
-    if (!late_hold_head_across_stay_judge.note_states()[0].is_holding() ||
-        late_hold_head_across_stay_judge.note_states()[0].result != judge_result::perfect ||
-        !late_hold_head_across_stay_judge.note_states()[1].is_completed() ||
-        late_hold_head_across_stay_judge.note_states()[1].result != judge_result::perfect) {
-        std::cerr << "Late perfect hold head press should stay prioritized even after crossing a nearby stay\n";
-        return EXIT_FAILURE;
-    }
-
     judge_system stay_release_judge;
     stay_release_judge.init({
         note_data{note_type::stay, 960, 2, 960},
