@@ -30,6 +30,7 @@
 #include "ui_clip.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
+#include "platform/window_chrome.h"
 
 namespace {
 
@@ -38,6 +39,9 @@ constexpr const char* kTitleLoopPath = "assets/audio/title_loop.mp3";
 constexpr float kHomeAnimSpeed = 6.5f;
 constexpr float kAccountChipInteractiveThreshold = 0.2f;
 constexpr float kPlayViewAnimSpeed = 6.0f;
+constexpr float kStartupProgressMin = 0.08f;
+constexpr float kStartupProgressCatalog = 0.68f;
+constexpr float kStartupProgressScoring = 0.88f;
 constexpr ui::draw_layer kTitleModalLayer = ui::draw_layer::modal;
 
 std::string make_avatar_label(const auth::session_summary& summary) {
@@ -222,6 +226,56 @@ void title_scene::poll_play_catalog_reload() {
         sync_play_media();
     } else if (result.sync_create_preview) {
         title_play_session::sync_preview(play_state_, audio_controller_.preview());
+    }
+}
+
+void title_scene::update_startup_loading() {
+    if (!startup_loading_) {
+        return;
+    }
+
+    if (!startup_catalog_requested_) {
+        startup_catalog_requested_ = true;
+        startup_loading_message_ = "Loading local catalog...";
+        request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
+                                    mode_ == hub_mode::play || mode_ == hub_mode::create,
+                                    consume_startup_level_calculation());
+        return;
+    }
+
+    if (play_data_controller_.catalog_loading()) {
+        startup_loading_message_ = "Loading local catalog...";
+        return;
+    }
+
+    if (!play_state_.catalog_loaded_once) {
+        return;
+    }
+
+    if (!startup_scoring_requested_) {
+        startup_scoring_requested_ = true;
+        startup_load_failed_ = !play_state_.load_errors.empty();
+        startup_loading_message_ = "Preparing scoring cache...";
+        title_online_view::reload_catalog(online_state_);
+        if (play_state_.auth.logged_in) {
+            auth_overlay::start_restore(auth_controller_, play_state_.login_dialog);
+        }
+        request_scoring_ruleset_warm(true);
+        return;
+    }
+
+    if (play_data_controller_.scoring_ruleset_loading()) {
+        startup_loading_message_ = "Preparing scoring cache...";
+        return;
+    }
+
+    startup_loading_ = false;
+    startup_load_complete_ = true;
+    startup_loading_message_ = startup_load_failed_ ? "Catalog loaded with warnings." : "Ready.";
+    if (startup_load_failed_) {
+        home_status_message_ = play_state_.load_errors.empty()
+            ? "Catalog loaded with warnings."
+            : play_state_.load_errors.front();
     }
 }
 
@@ -644,23 +698,12 @@ title_audio_policy::hub_mode title_scene::current_audio_mode() const {
 }
 
 void title_scene::on_enter() {
-    const bool calculate_startup_levels = consume_startup_level_calculation();
-    song_select::catalog_data startup_catalog;
-    try {
-        startup_catalog = song_select::load_catalog(calculate_startup_levels);
-    } catch (const std::exception& ex) {
-        startup_catalog.load_errors = {ex.what()};
-    } catch (...) {
-        startup_catalog.load_errors = {"Failed to load song catalog."};
-    }
-
     audio_controller_.configure(kTitleIntroPath, kTitleLoopPath);
     audio_controller_.on_enter();
     song_select::reset_for_enter(play_state_);
     play_data_controller_.reset(play_state_);
     auth_overlay::refresh_auth_state(play_state_.auth);
     profile_controller_.reset();
-    request_scoring_ruleset_warm(true);
     play_state_.recent_result_offset = recent_result_offset_;
     if (play_intro_fade_) {
         intro_fade_.restart(scene_fade::direction::in, 1.0f, 1.0f);
@@ -680,15 +723,13 @@ void title_scene::on_enter() {
     play_entry_origin_rect_ = {};
     settings_overlay_.open();
     play_state_.login_dialog.open = false;
-    title_online_view::reload_catalog(online_state_);
-    song_select::apply_catalog(play_state_, std::move(startup_catalog), preferred_song_id_, preferred_chart_id_);
-    if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
-        play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
-        sync_play_media();
-    }
-    if (play_state_.auth.logged_in) {
-        auth_overlay::start_restore(auth_controller_, play_state_.login_dialog);
-    }
+    startup_loading_ = true;
+    startup_catalog_requested_ = false;
+    startup_scoring_requested_ = false;
+    startup_load_complete_ = false;
+    startup_load_failed_ = false;
+    startup_progress_visual_ = kStartupProgressMin;
+    startup_loading_message_ = "Initializing audio...";
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
 }
 
@@ -716,6 +757,7 @@ void title_scene::update(float dt) {
         ui::register_hit_region(profile_controller_.bounds(), kTitleModalLayer);
     }
     update_common_animation(dt);
+    update_startup_loading();
 
     if (transitioning_to_song_select_) {
         transition_fade_.update(dt);
@@ -752,6 +794,11 @@ void title_scene::update(float dt) {
         return;
     }
 
+    if (startup_loading_) {
+        update_title_quit(dt);
+        return;
+    }
+
     if (handle_profile_input()) {
         return;
     }
@@ -785,6 +832,7 @@ void title_scene::update(float dt) {
         home_menu_anim_ >= kAccountChipInteractiveThreshold && ui::is_hovered(settings_chip_rect);
     const bool left_click_for_home =
         IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+        !window_chrome::is_pointer_over_chrome() &&
         !account_hovered &&
         !refresh_hovered &&
         !settings_hovered;
@@ -850,10 +898,16 @@ void title_scene::draw() {
             .now = GetTime(),
         });
 
-        title_home_view::draw(home_menu_anim_, play_view_anim_, home_menu_selected_index_, home_status_message_);
+        if (!startup_loading_) {
+            title_home_view::draw(home_menu_anim_, play_view_anim_, home_menu_selected_index_, home_status_message_);
+        }
     }
 
-    if (mode_ == hub_mode::settings) {
+    if (startup_loading_) {
+        draw_startup_loading(GetFrameTime());
+    } else if (startup_load_failed_ && mode_ == hub_mode::title) {
+        draw_startup_status();
+    } else if (mode_ == hub_mode::settings) {
         settings_overlay_.draw();
     } else if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
         title_play_view::draw(play_state_, audio_controller_.preview(),
@@ -890,10 +944,12 @@ void title_scene::draw() {
 
     ui::flush_draw_queue();
 
-    if (intro_hold_t_ > 0.0f) {
-        ui::draw_fullscreen_overlay(BLACK);
-    } else {
-        intro_fade_.draw();
+    if (!startup_loading_) {
+        if (intro_hold_t_ > 0.0f) {
+            ui::draw_fullscreen_overlay(BLACK);
+        } else {
+            intro_fade_.draw();
+        }
     }
     if (transitioning_to_song_select_) {
         transition_fade_.draw();
@@ -905,4 +961,36 @@ void title_scene::draw() {
 
     ClearBackground(BLACK);
     virtual_screen::draw_to_screen();
+}
+
+void title_scene::draw_startup_loading(float dt) {
+    const Rectangle panel = {690.0f, 702.0f, 540.0f, 112.0f};
+    const Rectangle label_rect = {panel.x, panel.y, panel.width, 38.0f};
+    const Rectangle detail_rect = {panel.x, panel.y + 36.0f, panel.width, 28.0f};
+    const Rectangle bar_rect = {panel.x + 2.0f, panel.y + 82.0f, panel.width - 4.0f, 8.0f};
+    float base_progress = kStartupProgressMin;
+    if (startup_catalog_requested_) {
+        base_progress = kStartupProgressCatalog;
+    }
+    if (startup_scoring_requested_) {
+        base_progress = kStartupProgressScoring;
+    }
+    if (startup_load_complete_) {
+        base_progress = 1.0f;
+    }
+    startup_progress_visual_ = tween::damp(startup_progress_visual_, base_progress, dt, 5.0f, 0.0005f);
+    const float progress = std::clamp(startup_progress_visual_, 0.0f, 1.0f);
+
+    ui::draw_text_in_rect("raythm", 28, label_rect, g_theme->text);
+    ui::draw_text_in_rect(startup_loading_message_.c_str(), 18, detail_rect,
+                          startup_load_failed_ ? g_theme->error : g_theme->text_muted);
+    ui::draw_progress_bar(bar_rect, progress, with_alpha(g_theme->row, 180),
+                          startup_load_failed_ ? g_theme->error : g_theme->accent,
+                          with_alpha(g_theme->border, 180), 1.5f, 1.5f);
+}
+
+void title_scene::draw_startup_status() const {
+    const Rectangle status_rect = {520.0f, 704.0f, 880.0f, 34.0f};
+    ui::draw_text_in_rect(startup_loading_message_.c_str(), 18, status_rect,
+                          startup_load_failed_ ? g_theme->error : g_theme->text_muted);
 }

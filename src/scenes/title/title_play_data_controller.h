@@ -22,6 +22,8 @@ public:
 
     void reset(song_select::state& state);
 
+    [[nodiscard]] bool catalog_loading() const;
+    [[nodiscard]] bool scoring_ruleset_loading() const;
     [[nodiscard]] bool upload_in_progress() const;
 
     void request_catalog_reload(song_select::state& state,
