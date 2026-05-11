@@ -145,7 +145,9 @@ play_scene::play_scene(scene_manager& manager, song_data song, std::string chart
     request_.key_count = key_count;
     request_.song_data = std::move(song);
     request_.selected_chart_path = std::move(chart_path);
-    request_.selected_chart_level = chart_level;
+    if (chart_level > 0.0f) {
+        request_.selected_chart_level = chart_level;
+    }
 }
 
 play_scene::play_scene(scene_manager& manager, song_data song, chart_data chart, int start_tick,
@@ -505,7 +507,8 @@ void play_scene::apply_navigation(play_navigation_request navigation) {
                     manager_, *state_.song_data, *state_.chart_data, state_.start_tick, std::move(*state_.editor_resume_state)));
             } else if (state_.song_data.has_value() && state_.selected_chart_path.has_value()) {
                 manager_.change_scene(std::make_unique<play_scene>(
-                    manager_, *state_.song_data, *state_.selected_chart_path, state_.key_count));
+                    manager_, *state_.song_data, *state_.selected_chart_path, state_.key_count,
+                    state_.chart_data.has_value() ? state_.chart_data->meta.level : 0.0f));
             } else {
                 manager_.change_scene(std::make_unique<play_scene>(manager_, state_.key_count));
             }

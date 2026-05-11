@@ -19,6 +19,7 @@ struct transfer_result {
 struct song_export_request {
     song_entry song;
     std::string save_path;
+    song_meta export_meta;
 };
 
 struct chart_import_request {

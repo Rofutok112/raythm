@@ -172,9 +172,6 @@ void title_settings_overlay::draw() const {
         }
     }
 
-    draw_marquee_text(localization::tr(localization::text_key::settings_hint_back), settings::kSidebarHintRect.x,
-                      settings::kSidebarHintRect.y, 20, theme.text_muted,
-                      settings::kSidebarHintRect.width, GetTime());
     ui::draw_button(settings::kBackRect, localization::tr(localization::text_key::back), 22);
 
     const settings::page_descriptor& descriptor = settings::page_descriptor_for(current_page_);
