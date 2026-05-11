@@ -234,6 +234,9 @@ void judge_system::handle_hold_release(const input_event& event) {
     }
 
     if (input == nullptr || !input->active_hold_note_index.has_value()) {
+        if (complete_armed_stay_candidate(input, event)) {
+            return;
+        }
         return;
     }
 
@@ -287,7 +290,9 @@ void judge_system::handle_press(const input_event& event) {
         if (try_adopt_active_wide_hold_lane(event, input_id)) {
             return;
         }
-        arm_release_candidate(input_id, event.timestamp_ms);
+        if (!arm_release_candidate(input_id, event.timestamp_ms)) {
+            arm_stay_candidate(input_id, event.timestamp_ms);
+        }
         return;
     }
 
@@ -543,6 +548,7 @@ bool judge_system::mark_event_completed(size_t event_descriptor_index) {
 
     event_completed_[event_descriptor_index] = true;
     clear_armed_release_event(event_descriptor_index);
+    clear_armed_stay_event(event_descriptor_index);
     return true;
 }
 
@@ -751,10 +757,10 @@ std::vector<size_t> judge_system::find_release_candidates(int lane, double times
     return candidates;
 }
 
-void judge_system::arm_release_candidate(input_session_id input_id, double timestamp_ms) {
+bool judge_system::arm_release_candidate(input_session_id input_id, double timestamp_ms) {
     input_session* input = session_for_id(input_id);
     if (input == nullptr || input->lane < 0 || input->lane >= kMaxLanes) {
-        return;
+        return false;
     }
 
     std::optional<size_t> target_event_index;
@@ -787,7 +793,76 @@ void judge_system::arm_release_candidate(input_session_id input_id, double times
 
     if (target_event_index.has_value()) {
         input->armed_release_event_index = *target_event_index;
+        return true;
     }
+    return false;
+}
+
+void judge_system::arm_stay_candidate(input_session_id input_id, double timestamp_ms) {
+    input_session* input = session_for_id(input_id);
+    if (input == nullptr || input->lane < 0 || input->lane >= kMaxLanes) {
+        return;
+    }
+
+    std::optional<size_t> target_event_index;
+    double best_abs_offset = kBadWindowMs + 1.0;
+    for (size_t event_index = 0; event_index < event_descriptors_.size(); ++event_index) {
+        if (event_completed_[event_index]) {
+            continue;
+        }
+        const chart_judge_event& descriptor = event_descriptors_[event_index];
+        if (input->lane < descriptor.lane ||
+            input->lane >= descriptor.lane + std::max(1, descriptor.lane_width)) {
+            continue;
+        }
+        if (descriptor.kind != chart_judge_event_kind::stay) {
+            continue;
+        }
+
+        const double offset_ms = timestamp_ms - descriptor.time_ms;
+        if (offset_ms > 0.0 || offset_ms < -kBadWindowMs) {
+            continue;
+        }
+
+        const double abs_offset = std::fabs(offset_ms);
+        if (abs_offset < best_abs_offset) {
+            target_event_index = event_index;
+            best_abs_offset = abs_offset;
+        }
+    }
+
+    if (target_event_index.has_value()) {
+        input->armed_stay_event_index = *target_event_index;
+    }
+}
+
+bool judge_system::complete_armed_stay_candidate(input_session* input, const input_event& event) {
+    if (input == nullptr || !input->armed_stay_event_index.has_value()) {
+        return false;
+    }
+
+    const size_t event_index = *input->armed_stay_event_index;
+    if (event_index >= event_descriptors_.size() || event_completed_[event_index]) {
+        input->armed_stay_event_index.reset();
+        return false;
+    }
+
+    const chart_judge_event& descriptor = event_descriptors_[event_index];
+    if (descriptor.kind != chart_judge_event_kind::stay ||
+        event.lane < descriptor.lane ||
+        event.lane >= descriptor.lane + std::max(1, descriptor.lane_width)) {
+        return false;
+    }
+
+    const double offset_ms = event.timestamp_ms - descriptor.time_ms;
+    if (offset_ms < -kBadWindowMs) {
+        return false;
+    }
+
+    const double judged_offset_ms = offset_ms < 0.0 ? offset_ms : 0.0;
+    const judge_result result = offset_ms < 0.0 ? evaluate_stay_offset(offset_ms) : judge_result::perfect;
+    complete_event(event_index, result, judged_offset_ms);
+    return true;
 }
 
 bool judge_system::is_standalone_release_event(size_t event_descriptor_index) const {
@@ -813,6 +888,15 @@ void judge_system::clear_armed_release_event(size_t event_descriptor_index) {
         if (input.armed_release_event_index.has_value() &&
             *input.armed_release_event_index == event_descriptor_index) {
             input.armed_release_event_index.reset();
+        }
+    }
+}
+
+void judge_system::clear_armed_stay_event(size_t event_descriptor_index) {
+    for (input_session& input : input_sessions_) {
+        if (input.armed_stay_event_index.has_value() &&
+            *input.armed_stay_event_index == event_descriptor_index) {
+            input.armed_stay_event_index.reset();
         }
     }
 }

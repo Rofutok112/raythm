@@ -363,6 +363,38 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    judge_system stay_dedicated_early_release_judge;
+    stay_dedicated_early_release_judge.init({note_data{note_type::stay, 960, 0, 960}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 900.0);
+    stay_dedicated_early_release_judge.update(900.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 940.0);
+    stay_dedicated_early_release_judge.update(940.0, input);
+    if (!stay_dedicated_early_release_judge.note_states()[0].is_completed() ||
+        stay_dedicated_early_release_judge.note_states()[0].result != judge_result::perfect) {
+        std::cerr << "Dedicated stay input should still judge when released inside the early window\n";
+        return EXIT_FAILURE;
+    }
+
+    judge_system stay_dedicated_late_release_judge;
+    stay_dedicated_late_release_judge.init({note_data{note_type::stay, 960, 0, 960}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 900.0);
+    stay_dedicated_late_release_judge.update(900.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1000.0);
+    stay_dedicated_late_release_judge.update(1000.0, input);
+    const std::optional<judge_event> stay_dedicated_late_release =
+        stay_dedicated_late_release_judge.get_last_judge();
+    if (!stay_dedicated_late_release_judge.note_states()[0].is_completed() ||
+        stay_dedicated_late_release_judge.note_states()[0].result != judge_result::perfect ||
+        !stay_dedicated_late_release.has_value() ||
+        stay_dedicated_late_release->offset_ms != 0.0) {
+        std::cerr << "Dedicated stay input released after the target should count as held through the stay\n";
+        return EXIT_FAILURE;
+    }
+
     judge_system tap_before_stay_release_judge;
     tap_before_stay_release_judge.init({
         note_data{note_type::tap, 840, 0, 840},
