@@ -78,7 +78,6 @@ private:
     std::vector<size_t> find_press_candidates(int lane, double timestamp_ms);
     std::vector<size_t> find_release_candidates(int lane, double timestamp_ms,
                                                 std::optional<input_session_id> input_id);
-    std::vector<size_t> find_early_release_stay_candidates(int lane, double timestamp_ms);
     void arm_release_candidate(input_session_id input_id, double timestamp_ms);
     bool is_standalone_release_event(size_t event_descriptor_index) const;
     bool release_event_is_armed(size_t event_descriptor_index, std::optional<input_session_id> input_id) const;

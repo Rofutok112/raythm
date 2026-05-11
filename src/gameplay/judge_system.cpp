@@ -219,17 +219,6 @@ void judge_system::handle_hold_release(const input_event& event) {
             }
             complete_event(release_candidate, result, offset_ms, options);
         }
-        const std::vector<size_t> stay_candidates = find_early_release_stay_candidates(event.lane, event.timestamp_ms);
-        for (size_t i = 0; i < stay_candidates.size(); ++i) {
-            const size_t event_index = stay_candidates[i];
-            const chart_judge_event& descriptor = event_descriptors_[event_index];
-            const double offset_ms = event.timestamp_ms - descriptor.time_ms;
-            judge_emit_options options;
-            options.play_hitsound = false;
-            options.show_feedback = false;
-            complete_event(event_index, evaluate_stay_offset(offset_ms), offset_ms, options);
-        }
-
         const chart_judge_event& descriptor = event_descriptors_[release_candidates.front()];
         const double offset_ms = event.timestamp_ms - descriptor.time_ms;
         if (input != nullptr &&
@@ -245,16 +234,6 @@ void judge_system::handle_hold_release(const input_event& event) {
     }
 
     if (input == nullptr || !input->active_hold_note_index.has_value()) {
-        const std::vector<size_t> stay_candidates = find_early_release_stay_candidates(event.lane, event.timestamp_ms);
-        for (size_t i = 0; i < stay_candidates.size(); ++i) {
-            const size_t event_index = stay_candidates[i];
-            const chart_judge_event& descriptor = event_descriptors_[event_index];
-            const double offset_ms = event.timestamp_ms - descriptor.time_ms;
-            judge_emit_options options;
-            options.play_hitsound = i == 0;
-            options.show_feedback = i == 0;
-            complete_event(event_index, evaluate_stay_offset(offset_ms), offset_ms, options);
-        }
         return;
     }
 
@@ -767,42 +746,6 @@ std::vector<size_t> judge_system::find_release_candidates(int lane, double times
             candidates.push_back(descriptor_index);
         } else if (target_time_ms.has_value() && same_judgement_time(descriptor.time_ms, *target_time_ms)) {
             candidates.push_back(descriptor_index);
-        }
-    }
-    return candidates;
-}
-
-std::vector<size_t> judge_system::find_early_release_stay_candidates(int lane, double timestamp_ms) {
-    std::vector<size_t> candidates;
-    if (lane < 0 || lane >= kMaxLanes) {
-        return candidates;
-    }
-
-    std::optional<double> target_time_ms;
-    double best_abs_offset = kBadWindowMs + 1.0;
-    for (size_t event_index = 0; event_index < event_descriptors_.size(); ++event_index) {
-        if (event_completed_[event_index]) {
-            continue;
-        }
-        const chart_judge_event& descriptor = event_descriptors_[event_index];
-        if (lane < descriptor.lane || lane >= descriptor.lane + std::max(1, descriptor.lane_width)) {
-            continue;
-        }
-        if (descriptor.kind != chart_judge_event_kind::stay) {
-            continue;
-        }
-        const double offset_ms = timestamp_ms - descriptor.time_ms;
-        if (offset_ms >= 0.0 || !is_in_judgement_window(offset_ms)) {
-            continue;
-        }
-        const double abs_offset = std::fabs(offset_ms);
-        if (abs_offset < best_abs_offset) {
-            target_time_ms = descriptor.time_ms;
-            best_abs_offset = abs_offset;
-            candidates.clear();
-            candidates.push_back(event_index);
-        } else if (target_time_ms.has_value() && same_judgement_time(descriptor.time_ms, *target_time_ms)) {
-            candidates.push_back(event_index);
         }
     }
     return candidates;

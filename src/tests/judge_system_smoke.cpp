@@ -363,6 +363,29 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    judge_system tap_before_stay_release_judge;
+    tap_before_stay_release_judge.init({
+        note_data{note_type::tap, 840, 0, 840},
+        note_data{note_type::stay, 960, 0, 960},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 880.0);
+    tap_before_stay_release_judge.update(880.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 940.0);
+    tap_before_stay_release_judge.update(940.0, input);
+    if (!tap_before_stay_release_judge.note_states()[0].is_completed() ||
+        tap_before_stay_release_judge.note_states()[1].is_completed()) {
+        std::cerr << "Tap release before a stay should not judge the stay\n";
+        return EXIT_FAILURE;
+    }
+    tap_before_stay_release_judge.update(1170.0, input);
+    if (!tap_before_stay_release_judge.note_states()[1].is_completed() ||
+        tap_before_stay_release_judge.note_states()[1].result != judge_result::miss) {
+        std::cerr << "Unheld stay should miss after its own window, not on the preceding release\n";
+        return EXIT_FAILURE;
+    }
+
     judge_system tap_stay_judge;
     tap_stay_judge.init({
         note_data{note_type::tap, 960, 0, 960},
@@ -411,10 +434,16 @@ int main() {
     stay_release_judge.update(900.0, input);
     input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 950.0);
     stay_release_judge.update(950.0, input);
-    if (stay_release_judge.get_judge_events().size() != 2 ||
-        !stay_release_judge.note_states()[0].is_completed() ||
+    if (stay_release_judge.get_judge_events().size() != 1 ||
+        stay_release_judge.note_states()[0].is_completed() ||
         !stay_release_judge.note_states()[1].is_completed()) {
-        std::cerr << "Stay and release should both judge from one release\n";
+        std::cerr << "Release before a stay should only judge the release note\n";
+        return EXIT_FAILURE;
+    }
+    stay_release_judge.update(1170.0, input);
+    if (!stay_release_judge.note_states()[0].is_completed() ||
+        stay_release_judge.note_states()[0].result != judge_result::miss) {
+        std::cerr << "Stay stacked with a release should still miss independently when unheld\n";
         return EXIT_FAILURE;
     }
 
