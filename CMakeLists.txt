@@ -296,6 +296,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/local_catalog_database.h
         src/scenes/song_select/song_select_confirmation_dialog.cpp
         src/scenes/song_select/song_select_confirmation_dialog.h
+        src/scenes/song_select/song_export_identity.cpp
+        src/scenes/song_select/song_export_identity.h
         src/scenes/song_select/song_import_export_service.cpp
         src/scenes/song_select/song_import_export_service.h
         src/scenes/song_select/song_select_command_controller.cpp
@@ -534,6 +536,12 @@ add_executable(song_select_state_smoke
         src/scenes/song_select/song_select_state.cpp
         src/scenes/song_select/song_select_state.h
         src/tests/song_select_state_smoke.cpp)
+
+add_executable(song_export_identity_smoke
+        src/models/data_models.h
+        src/scenes/song_select/song_export_identity.cpp
+        src/scenes/song_select/song_export_identity.h
+        src/tests/song_export_identity_smoke.cpp)
 
 add_executable(settings_io_smoke
         src/core/app_paths.cpp
@@ -923,6 +931,7 @@ set(RAYTHM_SMOKE_TARGETS
         editor_meter_map_smoke
         song_loader_smoke
         song_select_state_smoke
+        song_export_identity_smoke
         settings_io_smoke
         localization_smoke
         local_catalog_database_smoke

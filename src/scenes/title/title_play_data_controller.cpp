@@ -30,6 +30,14 @@ void title_play_data_controller::reset(song_select::state& state) {
     upload_in_progress_ = false;
 }
 
+bool title_play_data_controller::catalog_loading() const {
+    return catalog_loading_;
+}
+
+bool title_play_data_controller::scoring_ruleset_loading() const {
+    return scoring_ruleset_loading_;
+}
+
 bool title_play_data_controller::upload_in_progress() const {
     return upload_in_progress_;
 }

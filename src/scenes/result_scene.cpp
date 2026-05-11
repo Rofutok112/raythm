@@ -101,7 +101,7 @@ void result_scene::return_to_song_select() const {
 }
 
 void result_scene::retry_chart() {
-    manager_.change_scene(std::make_unique<play_scene>(manager_, song_, chart_path_, key_count_));
+    manager_.change_scene(std::make_unique<play_scene>(manager_, song_, chart_path_, key_count_, chart_.level));
 }
 
 void result_scene::update(float dt) {

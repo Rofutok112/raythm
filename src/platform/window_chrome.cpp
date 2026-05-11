@@ -691,6 +691,14 @@ bool is_state_transitioning() {
 #endif
 }
 
+bool is_pointer_over_chrome() {
+    if (!g_enabled || IsWindowFullscreen()) {
+        return false;
+    }
+    const Vector2 mouse = GetMousePosition();
+    return CheckCollisionPointRec(mouse, titlebar_rect());
+}
+
 void minimize() {
 #ifdef _WIN32
     if (g_hwnd != nullptr) {

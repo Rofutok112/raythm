@@ -61,6 +61,9 @@ private:
     void update_create_mode(float dt);
     void update_settings_mode(float dt);
     void update_common_animation(float dt);
+    void update_startup_loading();
+    void draw_startup_loading(float dt);
+    void draw_startup_status() const;
     [[nodiscard]] title_play_transfer_controller::catalog_callbacks play_transfer_callbacks();
     bool handle_account_input();
     bool handle_settings_button_input();
@@ -103,6 +106,13 @@ private:
     std::optional<song_select::recent_result_offset> recent_result_offset_;
     bool start_in_play_view_ = false;
     bool start_in_create_view_ = false;
+    bool startup_loading_ = false;
+    bool startup_catalog_requested_ = false;
+    bool startup_scoring_requested_ = false;
+    bool startup_load_complete_ = false;
+    bool startup_load_failed_ = false;
+    float startup_progress_visual_ = 0.0f;
+    std::string startup_loading_message_;
     bool suppress_home_pointer_until_release_ = false;
     hub_mode mode_ = hub_mode::title;
     hub_mode settings_return_mode_ = hub_mode::home;

@@ -31,6 +31,7 @@
 #include "file_dialog.h"
 #include "path_utils.h"
 #include "song_loader.h"
+#include "song_select/song_export_identity.h"
 #include "song_writer.h"
 #include "title/local_content_index.h"
 
@@ -320,16 +321,15 @@ transfer_result export_chart_package(const state& state, int song_index, int cha
         return result;
     }
 
-    const std::string default_name = sanitize_file_stem(
-        chart.meta.chart_id.empty() ? chart.meta.difficulty : chart.meta.chart_id,
-        "chart") + ".rchart";
+    const chart_data export_chart = make_export_chart_copy(*parsed.data);
+    const std::string default_name = sanitize_file_stem(export_chart.meta.chart_id, "chart") + ".rchart";
     const std::string save_path = file_dialog::save_chart_package_file(default_name);
     if (save_path.empty()) {
         result.cancelled = true;
         return result;
     }
 
-    if (!chart_serializer::serialize(*parsed.data, save_path)) {
+    if (!chart_serializer::serialize(export_chart, save_path)) {
         result.message = "Failed to export the chart package.";
         return result;
     }
@@ -511,7 +511,8 @@ std::optional<song_export_request> prepare_song_export(const state& state, int s
     }
 
     const song_entry& song = state.songs[static_cast<size_t>(song_index)];
-    const std::string default_name = sanitize_file_stem(song.song.meta.song_id, "song") + ".rpack";
+    const song_meta export_meta = make_export_song_meta_copy(song.song.meta);
+    const std::string default_name = sanitize_file_stem(export_meta.song_id, "song") + ".rpack";
     const std::string save_path = file_dialog::save_song_package_file(default_name);
     if (save_path.empty()) {
         return std::nullopt;
@@ -520,6 +521,7 @@ std::optional<song_export_request> prepare_song_export(const state& state, int s
     return song_export_request{
         .song = song,
         .save_path = save_path,
+        .export_meta = export_meta,
     };
 }
 
@@ -544,7 +546,10 @@ transfer_result export_song_package(const song_export_request& request) {
         return result;
     }
 
-    if (!song_writer::write_song_json(request.song.song.meta, path_utils::to_utf8(staging.path())) ||
+    const song_meta export_meta = request.export_meta.song_id.empty()
+        ? make_export_song_meta_copy(request.song.song.meta)
+        : request.export_meta;
+    if (!song_writer::write_song_json(export_meta, path_utils::to_utf8(staging.path())) ||
         !copy_file_into_directory(audio_source, staging.path(), path_utils::from_utf8(request.song.song.meta.audio_file))) {
         result.message = "Failed to export the song package.";
         return result;
