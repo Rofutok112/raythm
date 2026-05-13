@@ -150,6 +150,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/platform/window_chrome.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
+        src/gameplay/chart_file_storage.cpp
+        src/gameplay/chart_file_storage.h
         src/gameplay/chart_difficulty.cpp
         src/gameplay/chart_difficulty.h
         src/gameplay/chart_judge_events.cpp
@@ -468,6 +470,14 @@ add_executable(chart_parser_smoke
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
         src/tests/chart_parser_smoke.cpp
+        src/models/data_models.h)
+
+add_executable(chart_file_storage_smoke
+        src/gameplay/chart_file_storage.cpp
+        src/gameplay/chart_file_storage.h
+        src/gameplay/chart_parser.cpp
+        src/gameplay/chart_parser.h
+        src/tests/chart_file_storage_smoke.cpp
         src/models/data_models.h)
 
 add_executable(chart_serializer_smoke
@@ -925,6 +935,7 @@ set(RAYTHM_APP_TARGETS
 )
 set(RAYTHM_SMOKE_TARGETS
         chart_parser_smoke
+        chart_file_storage_smoke
         chart_serializer_smoke
         chart_difficulty_smoke
         editor_state_smoke
