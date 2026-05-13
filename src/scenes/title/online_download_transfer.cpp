@@ -16,8 +16,7 @@
 #include <vector>
 
 #include "app_paths.h"
-#include "chart_parser.h"
-#include "chart_serializer.h"
+#include "chart_file_storage.h"
 #include "network/json_helpers.h"
 #include "path_utils.h"
 #include "song_writer.h"
@@ -63,32 +62,6 @@ bool write_binary_file(const std::filesystem::path& path,
         return false;
     }
 
-    return true;
-}
-
-bool write_chart_file(const std::filesystem::path& path,
-                      const std::vector<unsigned char>& bytes,
-                      std::string& error_message) {
-    std::filesystem::create_directories(path.parent_path());
-    const std::filesystem::path temp_path = path.parent_path() / (path.filename().string() + ".download.tmp");
-    if (!write_binary_file(temp_path, bytes, error_message)) {
-        return false;
-    }
-
-    const chart_parse_result parsed = chart_parser::parse(path_utils::to_utf8(temp_path));
-    if (!parsed.success || !parsed.data.has_value()) {
-        std::filesystem::remove(temp_path);
-        error_message = parsed.errors.empty() ? "Downloaded chart file was invalid." : parsed.errors.front();
-        return false;
-    }
-
-    if (!chart_serializer::serialize(*parsed.data, path_utils::to_utf8(path))) {
-        std::filesystem::remove(temp_path);
-        error_message = "Failed to write downloaded chart data to disk.";
-        return false;
-    }
-
-    std::filesystem::remove(temp_path);
     return true;
 }
 
@@ -409,9 +382,10 @@ download_song_result download_chart_file(const song_entry_state song,
 
     std::string error_message;
     app_paths::ensure_directories();
-    if (!write_chart_file(app_paths::song_chart_path(local_song_id, local_chart_id),
-                          chart_fetch.bytes,
-                          error_message)) {
+    if (!chart_file_storage::write_validated_raw_chart_file(
+            app_paths::song_chart_path(local_song_id, local_chart_id),
+            chart_fetch.bytes,
+            error_message)) {
         result.message = error_message;
         return result;
     }

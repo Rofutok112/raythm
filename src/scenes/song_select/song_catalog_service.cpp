@@ -6,6 +6,7 @@
 #include <optional>
 #include <system_error>
 #include <unordered_map>
+#include <utility>
 
 #include "app_paths.h"
 #include "chart_fingerprint.h"
@@ -280,6 +281,26 @@ verification_result cached_result_for(const verification_cache_record* cached,
     return {status, source_status};
 }
 
+verification_result mark_manifest_unavailable(verification_cache& cache,
+                                              const std::string& key,
+                                              std::string server_url,
+                                              std::string content_id,
+                                              std::string song_id,
+                                              std::string signature,
+                                              content_hashes local_hashes = {}) {
+    cache[key] = verification_cache_record{
+        .server_url = std::move(server_url),
+        .chart_id = std::move(content_id),
+        .song_id = std::move(song_id),
+        .status = content_status::local,
+        .content_source = {},
+        .file_signature = std::move(signature),
+        .local_hashes = std::move(local_hashes),
+        .server_hashes = {},
+    };
+    return {};
+}
+
 bool is_verified_status(content_status status) {
     return status == content_status::official ||
            status == content_status::community ||
@@ -329,7 +350,20 @@ verification_result verify_song_content_source(const song_data& song,
         return cached_result_for(cached, signature);
     }
     if (!request.manifest.has_value() || !request.manifest->available) {
-        return cached_result_for(cached, signature);
+        std::optional<content_hashes> local_hashes;
+        if (should_reuse_cached_hashes(cached, signature) && song_hashes_present(cached->local_hashes)) {
+            local_hashes = cached->local_hashes;
+        } else {
+            local_hashes = compute_song_hashes(song);
+        }
+        return mark_manifest_unavailable(
+            cache,
+            key,
+            server_url,
+            song_cache_id,
+            remote_song_id,
+            signature,
+            local_hashes.value_or(content_hashes{}));
     }
 
     const ranking_client::song_manifest& manifest = *request.manifest;
@@ -409,7 +443,20 @@ verification_result verify_chart_content_source(const song_data& song,
         return cached_result_for(cached, signature);
     }
     if (!request.manifest.has_value() || !request.manifest->available) {
-        return cached_result_for(cached, signature);
+        std::optional<content_hashes> local_hashes;
+        if (should_reuse_cached_hashes(cached, signature) && chart_hashes_present(cached->local_hashes)) {
+            local_hashes = cached->local_hashes;
+        } else {
+            local_hashes = compute_chart_hashes(chart_path);
+        }
+        return mark_manifest_unavailable(
+            cache,
+            key,
+            server_url,
+            chart.meta.chart_id,
+            remote_song_id,
+            signature,
+            local_hashes.value_or(content_hashes{}));
     }
 
     const ranking_client::chart_manifest& manifest = *request.manifest;
