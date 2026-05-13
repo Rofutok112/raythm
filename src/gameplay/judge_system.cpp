@@ -190,12 +190,6 @@ void judge_system::handle_hold_release(const input_event& event) {
     const std::optional<input_session_id> input_id = input != nullptr
                                                         ? std::optional<input_session_id>(input->id)
                                                         : std::nullopt;
-    if (input != nullptr &&
-        input->active_hold_note_index.has_value() &&
-        *input->active_hold_note_index < note_states_.size() &&
-        note_states_[*input->active_hold_note_index].is_holding()) {
-        complete_due_hold_contained_stays(*input->active_hold_note_index, event.timestamp_ms);
-    }
 
     const std::vector<size_t> release_candidates = find_release_candidates(event.lane, event.timestamp_ms, input_id);
     if (!release_candidates.empty()) {
@@ -341,18 +335,10 @@ void judge_system::resolve_stay_notes(double current_ms, const input_handler& in
         if (current_ms < descriptor.time_ms || descriptor.kind != chart_judge_event_kind::stay) {
             continue;
         }
-        if (is_hold_contained_stay_event(event_index)) {
-            if (is_hold_contained_stay_held(descriptor, input)) {
-                judge_emit_options options;
-                options.show_feedback = false;
-                complete_event(event_index, judge_result::perfect, 0.0, options);
-            }
-            continue;
-        }
         for (int lane = descriptor.lane;
              lane < descriptor.lane + std::max(1, descriptor.lane_width) && lane < kMaxLanes;
              ++lane) {
-            if (lane >= 0 && input.is_lane_held(lane)) {
+            if (lane_is_held_for_stay(input, lane, descriptor.time_ms)) {
                 complete_event(event_index, judge_result::perfect, 0.0);
                 break;
             }
@@ -372,31 +358,6 @@ void judge_system::resolve_hold_completions(double current_ms) {
             current_ms >= note_states_[session.note_index].end_target_ms) {
             complete_held_note(session.note_index, true);
         }
-    }
-}
-
-void judge_system::complete_due_hold_contained_stays(size_t hold_note_index, double timestamp_ms) {
-    if (hold_note_index >= note_states_.size() ||
-        !note_states_[hold_note_index].is_holding()) {
-        return;
-    }
-
-    for (size_t event_index = 0; event_index < event_descriptors_.size(); ++event_index) {
-        if (event_completed_[event_index]) {
-            continue;
-        }
-
-        const chart_judge_event& descriptor = event_descriptors_[event_index];
-        if (descriptor.role != chart_judge_event_role::hold_stay ||
-            descriptor.containing_hold_note_index < 0 ||
-            static_cast<size_t>(descriptor.containing_hold_note_index) != hold_note_index ||
-            descriptor.time_ms > timestamp_ms) {
-            continue;
-        }
-
-        judge_emit_options options;
-        options.show_feedback = false;
-        complete_event(event_index, judge_result::perfect, 0.0, options);
     }
 }
 
@@ -580,6 +541,30 @@ bool judge_system::has_active_hold_for_note(size_t note_index) const {
     return false;
 }
 
+bool judge_system::lane_is_held_for_stay(const input_handler& input, int lane, double timestamp_ms) const {
+    if (lane < 0 || lane >= kMaxLanes) {
+        return false;
+    }
+
+    return input.is_lane_held(lane) || lane_was_held_at(lane, timestamp_ms);
+}
+
+bool judge_system::lane_was_held_at(int lane, double timestamp_ms) const {
+    if (lane < 0 || lane >= kMaxLanes) {
+        return false;
+    }
+
+    for (const input_session& input : input_sessions_) {
+        if (input.lane != lane || input.press_ms > timestamp_ms) {
+            continue;
+        }
+        if (input.held || input.release_ms >= timestamp_ms) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool judge_system::mark_event_completed(size_t event_descriptor_index) {
     if (event_descriptor_index >= event_descriptors_.size() || event_completed_[event_descriptor_index]) {
         return false;
@@ -613,37 +598,6 @@ bool judge_system::release_overlaps_hold_tail(const chart_judge_event& release) 
         }
         const int descriptor_last_lane = descriptor.lane + std::max(1, descriptor.lane_width) - 1;
         if (descriptor.lane <= release_last_lane && release.lane <= descriptor_last_lane) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool judge_system::is_hold_contained_stay_event(size_t event_descriptor_index) const {
-    if (event_descriptor_index >= event_descriptors_.size()) {
-        return false;
-    }
-
-    return event_descriptors_[event_descriptor_index].role == chart_judge_event_role::hold_stay;
-}
-
-bool judge_system::is_hold_contained_stay_held(const chart_judge_event& descriptor,
-                                               const input_handler& input) const {
-    if (descriptor.role != chart_judge_event_role::hold_stay ||
-        descriptor.containing_hold_note_index < 0 ||
-        static_cast<size_t>(descriptor.containing_hold_note_index) >= note_states_.size()) {
-        return false;
-    }
-
-    const note_state& hold_state = note_states_[static_cast<size_t>(descriptor.containing_hold_note_index)];
-    if (!hold_state.is_holding() || hold_state.note_ref.type != note_type::hold) {
-        return false;
-    }
-
-    for (int lane = hold_state.note_ref.lane;
-         lane <= note_last_lane(hold_state.note_ref) && lane < kMaxLanes;
-         ++lane) {
-        if (lane >= 0 && input.is_lane_held(lane)) {
             return true;
         }
     }
@@ -780,10 +734,6 @@ std::vector<size_t> judge_system::find_press_candidates(int lane, double timesta
                 descriptor.kind != chart_judge_event_kind::stay) {
                 continue;
             }
-            if (descriptor.kind == chart_judge_event_kind::stay &&
-                is_hold_contained_stay_event(descriptor_index)) {
-                continue;
-            }
             if (!same_judgement_time(descriptor.time_ms, *press_target_time_ms)) {
                 continue;
             }
@@ -814,10 +764,6 @@ std::vector<size_t> judge_system::find_press_candidates(int lane, double timesta
         if (descriptor.kind != chart_judge_event_kind::stay) {
             continue;
         }
-        if (is_hold_contained_stay_event(descriptor_index)) {
-            continue;
-        }
-
         const double offset_ms = timestamp_ms - descriptor.time_ms;
         if (offset_ms < 0.0 || !is_in_judgement_window(offset_ms)) {
             continue;
@@ -947,10 +893,6 @@ void judge_system::arm_stay_candidate(input_session_id input_id, double timestam
         if (descriptor.kind != chart_judge_event_kind::stay) {
             continue;
         }
-        if (is_hold_contained_stay_event(event_index)) {
-            continue;
-        }
-
         const double offset_ms = timestamp_ms - descriptor.time_ms;
         if (offset_ms > 0.0 || offset_ms < -kBadWindowMs) {
             continue;
@@ -981,7 +923,6 @@ bool judge_system::complete_armed_stay_candidate(input_session* input, const inp
 
     const chart_judge_event& descriptor = event_descriptors_[event_index];
     if (descriptor.kind != chart_judge_event_kind::stay ||
-        is_hold_contained_stay_event(event_index) ||
         event.lane < descriptor.lane ||
         event.lane >= descriptor.lane + std::max(1, descriptor.lane_width)) {
         return false;
@@ -1115,8 +1056,7 @@ void judge_system::emit_judge(judge_result result, double offset_ms, int lane,
         display_lane = descriptor.lane;
         if (descriptor.role == chart_judge_event_role::release) {
             hitsound_type = note_type::release;
-        } else if (descriptor.role == chart_judge_event_role::stay ||
-                   descriptor.role == chart_judge_event_role::hold_stay) {
+        } else if (descriptor.role == chart_judge_event_role::stay) {
             hitsound_type = note_type::stay;
         }
     }
