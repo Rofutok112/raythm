@@ -11,21 +11,23 @@ namespace title_online_view {
 namespace {
 
 constexpr Rectangle kBackRect = {72.0f, 57.0f, 147.0f, 57.0f};
-constexpr Rectangle kOfficialTabRect = {279.0f, 60.0f, 192.0f, 57.0f};
-constexpr Rectangle kCommunityTabRect = {483.0f, 60.0f, 219.0f, 57.0f};
-constexpr Rectangle kOwnedTabRect = {714.0f, 60.0f, 162.0f, 57.0f};
-constexpr Rectangle kContentRect = {90.0f, 147.0f, 1740.0f, 852.0f};
-constexpr Rectangle kDetailLeftRect = {108.0f, 162.0f, 504.0f, 822.0f};
-constexpr Rectangle kDetailRightRect = {705.0f, 162.0f, 1107.0f, 822.0f};
-constexpr Rectangle kHeroJacketRect = {138.0f, 261.0f, 405.0f, 405.0f};
-constexpr Rectangle kPreviewBarRect = {138.0f, 757.5f, 405.0f, 12.0f};
-constexpr Rectangle kPreviewPlayRect = {138.0f, 793.5f, 189.0f, 60.0f};
-constexpr Rectangle kPrimaryActionRect = {138.0f, 865.5f, 189.0f, 60.0f};
-constexpr Rectangle kChartListRect = {750.0f, 204.0f, 1020.0f, 732.0f};
+constexpr Rectangle kOfficialTabRect = {24.0f, 160.0f, 214.0f, 58.0f};
+constexpr Rectangle kCommunityTabRect = {24.0f, 220.0f, 214.0f, 58.0f};
+constexpr Rectangle kOwnedTabRect = {24.0f, 280.0f, 214.0f, 58.0f};
+constexpr Rectangle kContentRect = {310.0f, 150.0f, 1140.0f, 880.0f};
+constexpr Rectangle kSidebarRect = {50.0f, 150.0f, 240.0f, 880.0f};
+constexpr Rectangle kPreviewPanelRect = {1462.0f, 150.0f, 408.0f, 880.0f};
+constexpr Rectangle kDetailLeftRect = {332.0f, 174.0f, 408.0f, 830.0f};
+constexpr Rectangle kDetailRightRect = {766.0f, 174.0f, 594.0f, 830.0f};
+constexpr Rectangle kHeroJacketRect = {358.0f, 220.0f, 356.0f, 356.0f};
+constexpr Rectangle kPreviewBarRect = {358.0f, 670.0f, 356.0f, 12.0f};
+constexpr Rectangle kPreviewPlayRect = {478.0f, 710.0f, 116.0f, 54.0f};
+constexpr Rectangle kPrimaryActionRect = {358.0f, 910.0f, 356.0f, 58.0f};
+constexpr Rectangle kChartListRect = {786.0f, 286.0f, 554.0f, 612.0f};
 constexpr Rectangle kFallbackOriginRect = {1140.0f, 564.0f, 240.0f, 90.0f};
 constexpr float kSearchLeftGap = 36.0f;
 constexpr float kSearchRightGap = 27.0f;
-constexpr float kSearchY = 60.0f;
+constexpr float kSearchY = 82.0f;
 constexpr float kSearchHeight = 57.0f;
 constexpr Vector2 kSeedBackOffset = {-672.0f, -297.0f};
 constexpr Vector2 kSeedOfficialTabOffset = {-414.0f, -291.0f};
@@ -99,8 +101,8 @@ Rectangle left_pane_full_width_button_rect(Rectangle content_rect,
 
 Rectangle browse_search_rect() {
     const Rectangle refresh_rect = title_layout::refresh_chip_rect();
-    const float left = kOwnedTabRect.x + kOwnedTabRect.width + kSearchLeftGap;
-    const float right = refresh_rect.x - kSearchRightGap;
+    const float left = 360.0f;
+    const float right = refresh_rect.x - kSearchRightGap - 30.0f;
     return {
         left,
         kSearchY,
@@ -145,6 +147,8 @@ layout make_layout(float anim_t, Rectangle origin_rect) {
         tween::lerp(seed_owned_tab, kOwnedTabRect, t),
         tween::lerp(seed_search, search_rect, t),
         current_content,
+        tween::lerp(seed_content, kSidebarRect, t),
+        tween::lerp(seed_detail_right, kPreviewPanelRect, t),
         detail::song_list_viewport(current_content),
         current_detail_left,
         current_detail_right,

@@ -1,6 +1,7 @@
 #include "network/json_helpers.h"
 
 #include <cctype>
+#include <utility>
 
 namespace network::json {
 namespace {
@@ -304,6 +305,56 @@ std::vector<std::string> extract_objects_from_array(const std::string& array_con
         }
     }
     return objects;
+}
+
+std::vector<std::string> extract_strings_from_array(const std::string& array_content) {
+    std::vector<std::string> strings;
+    size_t index = 0;
+    while (index < array_content.size()) {
+        while (index < array_content.size() &&
+               (std::isspace(static_cast<unsigned char>(array_content[index])) ||
+                array_content[index] == '[' || array_content[index] == ',')) {
+            ++index;
+        }
+        if (index >= array_content.size() || array_content[index] == ']') {
+            break;
+        }
+        if (array_content[index] != '"') {
+            ++index;
+            continue;
+        }
+
+        std::string value;
+        bool escaping = false;
+        ++index;
+        for (; index < array_content.size(); ++index) {
+            const char ch = array_content[index];
+            if (escaping) {
+                switch (ch) {
+                    case 'n': value += '\n'; break;
+                    case 'r': value += '\r'; break;
+                    case 't': value += '\t'; break;
+                    default: value += ch; break;
+                }
+                escaping = false;
+                continue;
+            }
+
+            if (ch == '\\') {
+                escaping = true;
+                continue;
+            }
+
+            if (ch == '"') {
+                strings.push_back(std::move(value));
+                ++index;
+                break;
+            }
+
+            value += ch;
+        }
+    }
+    return strings;
 }
 
 }  // namespace network::json

@@ -23,6 +23,7 @@ namespace {
 constexpr int kInitialSongPageSize = 12;
 constexpr int kSongPageSize = 12;
 constexpr int kChartPageSize = 8;
+constexpr int kDiscoveryShelfSize = 12;
 
 struct local_song_ref {
     const song_select::song_entry* song = nullptr;
@@ -70,6 +71,8 @@ song_select::song_entry make_remote_song_entry(const remote_song_payload& song, 
     entry.song.meta.title = song.title;
     entry.song.meta.artist = song.artist;
     entry.song.meta.genre = song.genre;
+    entry.song.meta.genres = song.genres;
+    entry.song.meta.keywords = song.keywords;
     entry.song.meta.base_bpm = song.base_bpm;
     entry.song.meta.duration_seconds = song.duration_seconds;
     entry.song.meta.audio_url = make_absolute_remote_url(server_url, song.audio_url);
@@ -77,6 +80,7 @@ song_select::song_entry make_remote_song_entry(const remote_song_payload& song, 
     entry.song.meta.preview_start_ms = song.preview_start_ms;
     entry.song.meta.preview_start_seconds = static_cast<float>(song.preview_start_ms) / 1000.0f;
     entry.song.meta.song_version = song.song_version;
+    entry.song.meta.chart_count = song.chart_count;
     entry.song.directory.clear();
     return entry;
 }
@@ -117,6 +121,9 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
     state_entry.song.song.meta.preview_start_seconds =
         static_cast<float>(remote_song.preview_start_ms) / 1000.0f;
     state_entry.song.song.meta.duration_seconds = remote_song.duration_seconds;
+    state_entry.song.song.meta.genres = remote_song.genres;
+    state_entry.song.song.meta.keywords = remote_song.keywords;
+    state_entry.song.song.meta.chart_count = remote_song.chart_count;
     state_entry.installed = true;
     state_entry.installed_local_song_id = local_song.song.meta.song_id;
     state_entry.update_available = local_song.song.meta.song_version < remote_song.song_version;
@@ -153,6 +160,42 @@ void append_song_page(std::vector<song_entry_state>& target, std::vector<song_en
             target.push_back(std::move(item));
         }
     }
+}
+
+const char* shelf_key_for_view(discovery_view view) {
+    switch (view) {
+    case discovery_view::overview:
+        return "";
+    case discovery_view::new_arrivals:
+        return "new";
+    case discovery_view::rising:
+        return "rising";
+    case discovery_view::hidden_gems:
+        return "hidden_gems";
+    case discovery_view::recommended:
+        return "recommended";
+    case discovery_view::needs_charts:
+        return "needs_charts";
+    }
+    return "";
+}
+
+std::vector<discovery_shelf_state> build_discovery_shelves(
+    const remote_discovery_fetch_result& discovery,
+    const local_song_lookup& local_lookup) {
+    std::vector<discovery_shelf_state> shelves;
+    shelves.reserve(discovery.shelves.size());
+    for (const remote_discovery_shelf_payload& remote_shelf : discovery.shelves) {
+        discovery_shelf_state shelf;
+        shelf.key = remote_shelf.key;
+        shelf.title = remote_shelf.title;
+        shelf.songs.reserve(remote_shelf.songs.size());
+        for (const remote_song_payload& remote_song : remote_shelf.songs) {
+            shelf.songs.push_back(build_song_state(remote_song, discovery.server_url, local_lookup));
+        }
+        shelves.push_back(std::move(shelf));
+    }
+    return shelves;
 }
 
 void append_chart_page(song_entry_state& song_state,
@@ -536,37 +579,27 @@ std::vector<song_entry_state> load_owned_songs(const std::vector<song_select::so
     return owned;
 }
 
-catalog_load_result load_catalog_result() {
+catalog_load_result load_catalog_result(source_filter source) {
     const song_select::catalog_data local_catalog = song_select::load_catalog(true);
 
-    const remote_song_page_fetch_result official_page =
-        fetch_remote_song_page(catalog_mode::official, 1, kInitialSongPageSize);
-    const std::string preferred_server = official_page.success ? official_page.server_url : "";
-    const remote_song_page_fetch_result community_page =
-        fetch_remote_song_page(catalog_mode::community, 1, kInitialSongPageSize, preferred_server);
+    const remote_discovery_fetch_result discovery =
+        fetch_remote_discovery(source, kDiscoveryShelfSize);
 
     catalog_load_result result;
     result.local_songs = local_catalog.songs;
-    result.catalog_request_failed = !official_page.success && !community_page.success;
-    result.catalog_status_message = official_page.success ? community_page.error_message : official_page.error_message;
-    result.catalog_maintenance = official_page.success ? community_page.maintenance : official_page.maintenance;
-    result.catalog_retry_after = official_page.success ? community_page.retry_after : official_page.retry_after;
-    result.catalog_server_url = official_page.success ? official_page.server_url : community_page.server_url;
-    result.official_has_more = official_page.success &&
-                               static_cast<int>(official_page.songs.size()) < official_page.total;
-    result.community_has_more = community_page.success &&
-                                static_cast<int>(community_page.songs.size()) < community_page.total;
+    result.catalog_request_failed = !discovery.success;
+    result.catalog_status_message = discovery.error_message;
+    result.catalog_maintenance = discovery.maintenance;
+    result.catalog_retry_after = discovery.retry_after;
+    result.catalog_server_url = discovery.server_url;
+    result.official_has_more = false;
+    result.community_has_more = false;
 
     const local_content_index::snapshot index = local_content_index::load_snapshot();
-    const local_song_lookup official_lookup =
-        build_local_lookup(local_catalog.songs, official_page.server_url, index);
-    const local_song_lookup community_lookup =
-        build_local_lookup(local_catalog.songs, community_page.server_url, index);
-    for (const remote_song_payload& song : official_page.songs) {
-        result.official_songs.push_back(build_song_state(song, official_page.server_url, official_lookup));
-    }
-    for (const remote_song_payload& song : community_page.songs) {
-        result.community_songs.push_back(build_song_state(song, community_page.server_url, community_lookup));
+    const local_song_lookup local_lookup =
+        build_local_lookup(local_catalog.songs, discovery.server_url, index);
+    if (discovery.success) {
+        result.discovery_shelves = build_discovery_shelves(discovery, local_lookup);
     }
 
     return result;
@@ -592,6 +625,40 @@ void start_owned_reload(state& state) {
 }
 
 }  // namespace
+
+namespace detail {
+
+void rebuild_visible_discovery_songs(state& state) {
+    state.official_songs.clear();
+    const std::string target_key = shelf_key_for_view(state.view);
+    std::vector<std::string> seen_song_ids;
+
+    auto append_unique = [&](const song_entry_state& song) {
+        const std::string& song_id = song.song.song.meta.song_id;
+        if (std::find(seen_song_ids.begin(), seen_song_ids.end(), song_id) != seen_song_ids.end()) {
+            return;
+        }
+        seen_song_ids.push_back(song_id);
+        state.official_songs.push_back(song);
+    };
+
+    for (const discovery_shelf_state& shelf : state.discovery_shelves) {
+        if (!target_key.empty() && shelf.key != target_key) {
+            continue;
+        }
+        for (const song_entry_state& song : shelf.songs) {
+            append_unique(song);
+        }
+    }
+
+    state.mode = catalog_mode::official;
+    state.song_scroll_y = 0.0f;
+    state.song_scroll_y_target = 0.0f;
+    state.chart_scroll_y = 0.0f;
+    state.chart_scroll_y_target = 0.0f;
+}
+
+}  // namespace detail
 
 jacket_cache::~jacket_cache() {
     clear();
@@ -693,6 +760,7 @@ void reload_catalog(state& state, bool preserve_view) {
         state.official_songs.clear();
         state.community_songs.clear();
         state.owned_songs.clear();
+        state.discovery_shelves.clear();
         state.local_songs.clear();
         state.song_scroll_y = 0.0f;
         state.song_scroll_y_target = 0.0f;
@@ -703,9 +771,10 @@ void reload_catalog(state& state, bool preserve_view) {
     }
     std::promise<catalog_load_result> promise;
     state.catalog_future = promise.get_future();
-    std::thread([promise = std::move(promise)]() mutable {
+    const source_filter source = state.source;
+    std::thread([promise = std::move(promise), source]() mutable {
         try {
-            promise.set_value(load_catalog_result());
+            promise.set_value(load_catalog_result(source));
         } catch (...) {
             promise.set_exception(std::current_exception());
         }
@@ -740,18 +809,14 @@ bool poll_catalog(state& state) {
     state.catalog_request_failed = result.catalog_request_failed;
     state.catalog_maintenance = result.catalog_maintenance;
     state.local_songs = std::move(result.local_songs);
+    state.discovery_shelves = std::move(result.discovery_shelves);
     state.official_songs = std::move(result.official_songs);
     state.community_songs = std::move(result.community_songs);
     state.owned_songs = std::move(result.owned_songs);
     state.official_has_more = result.official_has_more;
     state.community_has_more = result.community_has_more;
 
-    if (state.official_songs.empty() && !state.community_songs.empty() && !state.reload_preserve_view) {
-        state.mode = catalog_mode::community;
-    } else if (state.community_songs.empty() && !state.official_songs.empty() && !state.reload_preserve_view) {
-        state.mode = catalog_mode::official;
-    }
-
+    detail::rebuild_visible_discovery_songs(state);
     detail::ensure_selection_valid(state);
     apply_reload_restore(state);
     apply_pending_select(state);

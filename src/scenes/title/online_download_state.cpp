@@ -12,7 +12,7 @@
 namespace title_online_view {
 namespace {
 
-constexpr float kSongCardHeight = 256.0f;
+constexpr float kSongCardHeight = 154.0f;
 constexpr float kSongGridGapX = 18.0f;
 constexpr float kSongGridGapY = 19.0f;
 constexpr float kChartCardHeight = 92.0f;
@@ -31,6 +31,27 @@ bool contains_case_insensitive(const std::string& haystack, const std::string& n
         return true;
     }
     return to_lower_ascii(haystack).find(to_lower_ascii(needle)) != std::string::npos;
+}
+
+bool contains_any_case_insensitive(const std::vector<std::string>& haystacks, const std::string& needle) {
+    return std::any_of(haystacks.begin(), haystacks.end(), [&](const std::string& haystack) {
+        return contains_case_insensitive(haystack, needle);
+    });
+}
+
+float parse_filter_float(const std::string& value, float fallback) {
+    if (value.empty()) {
+        return fallback;
+    }
+    try {
+        size_t parsed = 0;
+        const float result = std::stof(value, &parsed);
+        if (parsed == value.size()) {
+            return result;
+        }
+    } catch (...) {
+    }
+    return fallback;
 }
 
 float song_list_content_height(int count) {
@@ -54,14 +75,6 @@ float chart_list_content_height(int count) {
 namespace detail {
 
 const std::vector<song_entry_state>& active_songs(const state& state) {
-    switch (state.mode) {
-    case catalog_mode::official:
-        return state.official_songs;
-    case catalog_mode::community:
-        return state.community_songs;
-    case catalog_mode::owned:
-        return state.owned_songs;
-    }
     return state.official_songs;
 }
 
@@ -74,11 +87,61 @@ std::vector<int> filtered_indices(const state& state) {
         const song_entry_state& song = songs[static_cast<size_t>(index)];
         if (state.search_input.value.empty() ||
             contains_case_insensitive(song.song.song.meta.title, state.search_input.value) ||
-            contains_case_insensitive(song.song.song.meta.artist, state.search_input.value)) {
+            contains_case_insensitive(song.song.song.meta.artist, state.search_input.value) ||
+            contains_case_insensitive(song.song.song.meta.genre, state.search_input.value) ||
+            contains_any_case_insensitive(song.song.song.meta.genres, state.search_input.value) ||
+            contains_any_case_insensitive(song.song.song.meta.keywords, state.search_input.value)) {
             indices.push_back(index);
         }
     }
 
+    return indices;
+}
+
+std::vector<int> filtered_chart_indices(const state& state) {
+    std::vector<int> indices;
+    const song_entry_state* song = selected_song(state);
+    if (song == nullptr) {
+        return indices;
+    }
+
+    indices.reserve(song->charts.size());
+    const std::string& query = state.chart_search_input.value;
+    const float min_level = parse_filter_float(state.min_level_input.value, -1.0f);
+    const float max_level = parse_filter_float(state.max_level_input.value, 1000.0f);
+    const float min_bpm = parse_filter_float(state.min_bpm_input.value, -1.0f);
+    const float max_bpm = parse_filter_float(state.max_bpm_input.value, 10000.0f);
+    for (int index = 0; index < static_cast<int>(song->charts.size()); ++index) {
+        const chart_entry_state& chart = song->charts[static_cast<size_t>(index)];
+        if (state.chart_key_filter > 0 && chart.chart.meta.key_count != state.chart_key_filter) {
+            continue;
+        }
+        if (state.chart_download_filter == 1 && !chart.installed) {
+            continue;
+        }
+        if (state.chart_download_filter == 2 && chart.installed) {
+            continue;
+        }
+        if (chart.chart.meta.level < min_level || chart.chart.meta.level > max_level) {
+            continue;
+        }
+        const float chart_min_bpm = chart.chart.min_bpm > 0.0f ? chart.chart.min_bpm : song->song.song.meta.base_bpm;
+        const float chart_max_bpm = chart.chart.max_bpm > 0.0f ? chart.chart.max_bpm : song->song.song.meta.base_bpm;
+        if (chart_max_bpm < min_bpm || chart_min_bpm > max_bpm) {
+            continue;
+        }
+        const std::string key_label = key_mode_label(chart.chart.meta.key_count);
+        const std::string level_label = TextFormat("lv %.1f", chart.chart.meta.level);
+        const std::string bpm_label = format_bpm_range(chart.chart.min_bpm, chart.chart.max_bpm);
+        if (query.empty() ||
+            contains_case_insensitive(chart.chart.meta.difficulty, query) ||
+            contains_case_insensitive(chart.chart.meta.chart_author, query) ||
+            contains_case_insensitive(key_label, query) ||
+            contains_case_insensitive(level_label, query) ||
+            contains_case_insensitive(bpm_label, query)) {
+            indices.push_back(index);
+        }
+    }
     return indices;
 }
 
@@ -158,11 +221,11 @@ void ensure_selection_valid(state& state) {
         selected_song_index = indices.front();
     }
 
-    const auto& charts = songs[static_cast<size_t>(selected_song_index)].charts;
-    if (charts.empty()) {
+    const auto chart_indices = filtered_chart_indices(state);
+    if (chart_indices.empty()) {
         selected_chart_index = 0;
-    } else {
-        selected_chart_index = std::clamp(selected_chart_index, 0, static_cast<int>(charts.size()) - 1);
+    } else if (std::find(chart_indices.begin(), chart_indices.end(), selected_chart_index) == chart_indices.end()) {
+        selected_chart_index = chart_indices.front();
     }
 }
 
@@ -240,9 +303,10 @@ int hit_test_chart_list(const state& state, Rectangle area, Vector2 point) {
         return -1;
     }
 
-    for (int index = 0; index < static_cast<int>(song->charts.size()); ++index) {
-        if (CheckCollisionPointRec(point, chart_row_rect(area, index, state.chart_scroll_y))) {
-            return index;
+    const auto indices = filtered_chart_indices(state);
+    for (int display_index = 0; display_index < static_cast<int>(indices.size()); ++display_index) {
+        if (CheckCollisionPointRec(point, chart_row_rect(area, display_index, state.chart_scroll_y))) {
+            return indices[static_cast<size_t>(display_index)];
         }
     }
     return -1;
@@ -362,12 +426,16 @@ const song_entry_state* selected_song(const state& state) {
 
 const chart_entry_state* selected_chart(const state& state) {
     const song_entry_state* song = selected_song(state);
-    if (song == nullptr || song->charts.empty()) {
+    const auto indices = detail::filtered_chart_indices(state);
+    if (song == nullptr || indices.empty()) {
         return nullptr;
     }
 
     const int selected_chart_index = detail::selected_chart_index_ref(state);
     if (selected_chart_index < 0 || selected_chart_index >= static_cast<int>(song->charts.size())) {
+        return nullptr;
+    }
+    if (std::find(indices.begin(), indices.end(), selected_chart_index) == indices.end()) {
         return nullptr;
     }
     return &song->charts[static_cast<size_t>(selected_chart_index)];

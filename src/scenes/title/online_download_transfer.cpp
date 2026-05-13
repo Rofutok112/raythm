@@ -88,10 +88,23 @@ std::optional<song_meta> parse_downloaded_song_metadata(const std::string& metad
     meta.title = trim_ascii(json::extract_string(metadata_json, "title").value_or(""));
     meta.artist = trim_ascii(json::extract_string(metadata_json, "artist").value_or(""));
     meta.genre = trim_ascii(json::extract_string(metadata_json, "genre").value_or(""));
+    if (const std::optional<std::string> genres = json::extract_array(metadata_json, "genres")) {
+        meta.genres = json::extract_strings_from_array(*genres);
+    }
+    if (meta.genre.empty() && !meta.genres.empty()) {
+        meta.genre = meta.genres.front();
+    }
+    if (meta.genres.empty() && !meta.genre.empty()) {
+        meta.genres.push_back(meta.genre);
+    }
+    if (const std::optional<std::string> keywords = json::extract_array(metadata_json, "keywords")) {
+        meta.keywords = json::extract_strings_from_array(*keywords);
+    }
     meta.audio_file = trim_ascii(json::extract_string(metadata_json, "audioFile").value_or(""));
     meta.jacket_file = trim_ascii(json::extract_string(metadata_json, "jacketFile").value_or(""));
     meta.base_bpm = json::extract_float(metadata_json, "baseBpm").value_or(0.0f);
     meta.duration_seconds = json::extract_float(metadata_json, "durationSec").value_or(0.0f);
+    meta.chart_count = std::max(0, json::extract_int(metadata_json, "chartCount").value_or(0));
     meta.preview_start_ms = json::extract_int(metadata_json, "previewStartMs").value_or(0);
     meta.preview_start_seconds = static_cast<float>(meta.preview_start_ms) / 1000.0f;
     meta.song_version = json::extract_int(metadata_json, "songVersion").value_or(

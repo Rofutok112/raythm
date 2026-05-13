@@ -54,6 +54,170 @@ bool switch_mode(state& state, catalog_mode new_mode, update_result& result) {
     return true;
 }
 
+Rectangle sidebar_button_rect(Rectangle sidebar, int index) {
+    constexpr float kSidebarXInset = 14.0f;
+    constexpr float kSidebarDiscoveryTitleY = 32.0f;
+    constexpr float kSidebarTitleToButtonGap = 42.0f;
+    constexpr float kSidebarButtonHeight = 54.0f;
+    constexpr float kSidebarButtonGap = 8.0f;
+    return {
+        sidebar.x + kSidebarXInset,
+        sidebar.y + kSidebarDiscoveryTitleY + kSidebarTitleToButtonGap +
+            static_cast<float>(index) * (kSidebarButtonHeight + kSidebarButtonGap),
+        sidebar.width - kSidebarXInset * 2.0f,
+        kSidebarButtonHeight,
+    };
+}
+
+Rectangle source_button_rect(Rectangle sidebar, int index) {
+    constexpr float kSidebarXInset = 14.0f;
+    constexpr float kSidebarButtonHeight = 54.0f;
+    constexpr float kSidebarButtonGap = 8.0f;
+    constexpr float kSourceTitleY = 520.0f;
+    constexpr float kSidebarTitleToButtonGap = 42.0f;
+    return {
+        sidebar.x + kSidebarXInset,
+        sidebar.y + kSourceTitleY + kSidebarTitleToButtonGap +
+            static_cast<float>(index) * (kSidebarButtonHeight + kSidebarButtonGap),
+        sidebar.width - kSidebarXInset * 2.0f,
+        kSidebarButtonHeight,
+    };
+}
+
+Rectangle preview_open_button_rect(Rectangle panel) {
+    constexpr float kPreviewPanelInset = 24.0f;
+    constexpr float kPreviewOpenButtonBottom = 28.0f;
+    constexpr float kPreviewOpenButtonHeight = 58.0f;
+    return {
+        panel.x + kPreviewPanelInset,
+        panel.y + panel.height - kPreviewOpenButtonBottom - kPreviewOpenButtonHeight,
+        panel.width - kPreviewPanelInset * 2.0f,
+        kPreviewOpenButtonHeight,
+    };
+}
+
+Rectangle preview_play_button_rect(Rectangle panel) {
+    constexpr float kPreviewPlayY = 438.0f;
+    constexpr float kPreviewPlayWidth = 116.0f;
+    constexpr float kPreviewPlayHeight = 54.0f;
+    return {
+        panel.x + panel.width * 0.5f - kPreviewPlayWidth * 0.5f,
+        panel.y + kPreviewPlayY,
+        kPreviewPlayWidth,
+        kPreviewPlayHeight,
+    };
+}
+
+Rectangle preview_prev_button_rect(Rectangle panel) {
+    constexpr float kPreviewPlayY = 438.0f;
+    constexpr float kPreviewButtonWidth = 90.0f;
+    constexpr float kPreviewButtonHeight = 54.0f;
+    constexpr float kPreviewButtonGap = 8.0f;
+    return {
+        panel.x + panel.width * 0.5f - 58.0f - kPreviewButtonGap - kPreviewButtonWidth,
+        panel.y + kPreviewPlayY,
+        kPreviewButtonWidth,
+        kPreviewButtonHeight,
+    };
+}
+
+Rectangle preview_next_button_rect(Rectangle panel) {
+    constexpr float kPreviewPlayY = 438.0f;
+    constexpr float kPreviewButtonWidth = 90.0f;
+    constexpr float kPreviewButtonHeight = 54.0f;
+    constexpr float kPreviewButtonGap = 8.0f;
+    return {
+        panel.x + panel.width * 0.5f + 58.0f + kPreviewButtonGap,
+        panel.y + kPreviewPlayY,
+        kPreviewButtonWidth,
+        kPreviewButtonHeight,
+    };
+}
+
+Rectangle preview_bar_rect(Rectangle panel) {
+    constexpr float kPreviewPanelInset = 24.0f;
+    constexpr float kPreviewBarY = 506.0f;
+    constexpr float kPreviewBarHeight = 12.0f;
+    return {
+        panel.x + kPreviewPanelInset,
+        panel.y + kPreviewBarY,
+        panel.width - kPreviewPanelInset * 2.0f,
+        kPreviewBarHeight,
+    };
+}
+
+Rectangle chart_filter_button_rect(Rectangle chart_list, int index) {
+    return {
+        chart_list.x + static_cast<float>(index) * 74.0f,
+        chart_list.y - 78.0f,
+        66.0f,
+        28.0f,
+    };
+}
+
+bool switch_discovery_view(state& state, discovery_view view, update_result& result) {
+    if (state.view == view) {
+        return false;
+    }
+    state.view = view;
+    state.detail_open = false;
+    detail::rebuild_visible_discovery_songs(state);
+    detail::ensure_selection_valid(state);
+    result.song_selection_changed = true;
+    return true;
+}
+
+bool switch_source_filter(state& state, source_filter source, update_result& result) {
+    if (state.source == source) {
+        return false;
+    }
+    state.source = source;
+    state.view = discovery_view::overview;
+    state.detail_open = false;
+    reset_browse_scrolls(state);
+    reload_catalog(state);
+    result.song_selection_changed = true;
+    return true;
+}
+
+bool handle_sidebar_clicks(state& state,
+                           const layout& current,
+                           update_result& result) {
+    if (state.detail_open || !IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        return false;
+    }
+
+    if (ui::is_clicked(sidebar_button_rect(current.sidebar_rect, 0))) {
+        return switch_discovery_view(state, discovery_view::overview, result);
+    }
+    if (ui::is_clicked(sidebar_button_rect(current.sidebar_rect, 1))) {
+        return switch_discovery_view(state, discovery_view::new_arrivals, result);
+    }
+    if (ui::is_clicked(sidebar_button_rect(current.sidebar_rect, 2))) {
+        return switch_discovery_view(state, discovery_view::rising, result);
+    }
+    if (ui::is_clicked(sidebar_button_rect(current.sidebar_rect, 3))) {
+        return switch_discovery_view(state, discovery_view::hidden_gems, result);
+    }
+    if (ui::is_clicked(sidebar_button_rect(current.sidebar_rect, 4))) {
+        return switch_discovery_view(state, discovery_view::recommended, result);
+    }
+    if (ui::is_clicked(sidebar_button_rect(current.sidebar_rect, 5))) {
+        return switch_discovery_view(state, discovery_view::needs_charts, result);
+    }
+
+    if (ui::is_clicked(source_button_rect(current.sidebar_rect, 0))) {
+        return switch_source_filter(state, source_filter::all, result);
+    }
+    if (ui::is_clicked(source_button_rect(current.sidebar_rect, 1))) {
+        return switch_source_filter(state, source_filter::official, result);
+    }
+    if (ui::is_clicked(source_button_rect(current.sidebar_rect, 2))) {
+        return switch_source_filter(state, source_filter::community, result);
+    }
+    return false;
+}
+
 bool handle_song_click(state& state,
                        Rectangle song_list_rect,
                        Vector2 mouse,
@@ -96,9 +260,11 @@ bool handle_chart_click(state& state,
     }
 
     if (!state.download_in_progress) {
-        for (int index = 0; index < static_cast<int>(song->charts.size()); ++index) {
+        const auto chart_indices = detail::filtered_chart_indices(state);
+        for (int display_index = 0; display_index < static_cast<int>(chart_indices.size()); ++display_index) {
+            const int index = chart_indices[static_cast<size_t>(display_index)];
             const chart_entry_state& chart = song->charts[static_cast<size_t>(index)];
-            const Rectangle card = detail::chart_row_rect(chart_list_rect, index, state.chart_scroll_y);
+            const Rectangle card = detail::chart_row_rect(chart_list_rect, display_index, state.chart_scroll_y);
             if (!detail::can_download_chart(*song, chart) ||
                 !CheckCollisionPointRec(mouse, detail::chart_download_icon_rect(card))) {
                 continue;
@@ -173,6 +339,37 @@ bool handle_detail_actions(state& state,
         return true;
     }
 
+    if (ui::is_clicked(chart_filter_button_rect(current.chart_list_rect, 0))) {
+        state.chart_key_filter = 0;
+        reset_chart_scroll(state);
+        return true;
+    }
+    if (ui::is_clicked(chart_filter_button_rect(current.chart_list_rect, 1))) {
+        state.chart_key_filter = 4;
+        reset_chart_scroll(state);
+        return true;
+    }
+    if (ui::is_clicked(chart_filter_button_rect(current.chart_list_rect, 2))) {
+        state.chart_key_filter = 6;
+        reset_chart_scroll(state);
+        return true;
+    }
+    if (ui::is_clicked(chart_filter_button_rect(current.chart_list_rect, 3))) {
+        state.chart_download_filter = 0;
+        reset_chart_scroll(state);
+        return true;
+    }
+    if (ui::is_clicked(chart_filter_button_rect(current.chart_list_rect, 4))) {
+        state.chart_download_filter = 1;
+        reset_chart_scroll(state);
+        return true;
+    }
+    if (ui::is_clicked(chart_filter_button_rect(current.chart_list_rect, 5))) {
+        state.chart_download_filter = 2;
+        reset_chart_scroll(state);
+        return true;
+    }
+
     if (song != nullptr && !state.download_in_progress && ui::is_clicked(current.primary_action_rect)) {
         const chart_entry_state* chart = selected_chart(state);
         if (needs_download(*song)) {
@@ -188,8 +385,77 @@ bool handle_detail_actions(state& state,
     return false;
 }
 
+bool handle_preview_panel_actions(state& state,
+                                  const layout& current,
+                                  Vector2 mouse,
+                                  bool left_pressed,
+                                  update_result& result) {
+    if (state.detail_open) {
+        return false;
+    }
+    const song_entry_state* song = selected_song(state);
+    if (song == nullptr) {
+        return false;
+    }
+
+    const Rectangle bar = preview_bar_rect(current.preview_panel_rect);
+    if (left_pressed && CheckCollisionPointRec(mouse, bar)) {
+        state.preview_bar_dragging = true;
+        state.preview_bar_resume_after_drag = audio_manager::instance().is_preview_playing();
+        state.preview_bar_drag_position_seconds = audio_manager::instance().get_preview_position_seconds();
+        audio_manager::instance().pause_preview();
+    }
+    if (state.preview_bar_dragging) {
+        const double preview_length = detail::preview_display_length_seconds(*song);
+        if (preview_length > 0.0 && audio_manager::instance().is_preview_loaded()) {
+            const float ratio = std::clamp((mouse.x - bar.x) / bar.width, 0.0f, 1.0f);
+            state.preview_bar_drag_position_seconds = preview_length * static_cast<double>(ratio);
+        }
+        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            return true;
+        }
+        audio_manager::instance().seek_preview(state.preview_bar_drag_position_seconds);
+        if (state.preview_bar_resume_after_drag) {
+            audio_manager::instance().play_preview(false);
+        }
+        state.preview_bar_dragging = false;
+        state.preview_bar_resume_after_drag = false;
+    }
+
+    if (ui::is_clicked(preview_play_button_rect(current.preview_panel_rect))) {
+        result.action = audio_manager::instance().is_preview_playing()
+            ? requested_action::stop_preview
+            : requested_action::restart_preview;
+        return true;
+    }
+    if (ui::is_clicked(preview_prev_button_rect(current.preview_panel_rect)) ||
+        ui::is_clicked(preview_next_button_rect(current.preview_panel_rect))) {
+        const auto indices = detail::filtered_indices(state);
+        int& selected_song_index = detail::selected_song_index_ref(state);
+        const auto selected_it = std::find(indices.begin(), indices.end(), selected_song_index);
+        if (!indices.empty() && selected_it != indices.end()) {
+            const int display_index = static_cast<int>(selected_it - indices.begin());
+            const int delta = ui::is_clicked(preview_next_button_rect(current.preview_panel_rect)) ? 1 : -1;
+            const int next_display_index =
+                std::clamp(display_index + delta, 0, static_cast<int>(indices.size()) - 1);
+            if (next_display_index != display_index) {
+                selected_song_index = indices[static_cast<size_t>(next_display_index)];
+                detail::selected_chart_index_ref(state) = 0;
+                result.song_selection_changed = true;
+            }
+        }
+        return true;
+    }
+    if (ui::is_clicked(preview_open_button_rect(current.preview_panel_rect))) {
+        state.detail_open = true;
+        request_charts_for_selected_song(state);
+        return true;
+    }
+    return false;
+}
+
 void handle_keyboard_navigation(state& state, update_result& result) {
-    if (state.search_input.active) {
+    if (state.search_input.active || state.chart_search_input.active) {
         return;
     }
 
@@ -222,24 +488,29 @@ void handle_keyboard_navigation(state& state, update_result& result) {
 
         if (IsKeyPressed(KEY_ENTER) && selected_song(state) != nullptr) {
             state.detail_open = true;
+            request_charts_for_selected_song(state);
         }
     }
 
     const song_entry_state* song = selected_song(state);
-    if (state.detail_open && song != nullptr && !song->charts.empty()) {
-        int next_chart_index = selected_chart_index;
+    const auto chart_indices = detail::filtered_chart_indices(state);
+    if (state.detail_open && song != nullptr && !chart_indices.empty()) {
+        auto selected_it = std::find(chart_indices.begin(), chart_indices.end(), selected_chart_index);
+        int display_index = selected_it == chart_indices.end() ? 0 : static_cast<int>(selected_it - chart_indices.begin());
+
+        int next_display_index = display_index;
         if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) {
-            next_chart_index = std::max(0, selected_chart_index - 1);
+            next_display_index = std::max(0, display_index - 1);
         } else if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) {
-            next_chart_index = std::min(static_cast<int>(song->charts.size()) - 1, selected_chart_index + 1);
+            next_display_index = std::min(static_cast<int>(chart_indices.size()) - 1, display_index + 1);
         } else if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
-            next_chart_index = std::max(0, selected_chart_index - detail::kChartGridColumns);
+            next_display_index = std::max(0, display_index - detail::kChartGridColumns);
         } else if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
-            next_chart_index = std::min(static_cast<int>(song->charts.size()) - 1,
-                                        selected_chart_index + detail::kChartGridColumns);
+            next_display_index = std::min(static_cast<int>(chart_indices.size()) - 1,
+                                          display_index + detail::kChartGridColumns);
         }
-        if (next_chart_index != selected_chart_index) {
-            selected_chart_index = next_chart_index;
+        if (next_display_index != display_index) {
+            selected_chart_index = chart_indices[static_cast<size_t>(next_display_index)];
             result.chart_selection_changed = true;
         }
     }
@@ -253,7 +524,7 @@ void update_scroll_positions(state& state,
                              float dt) {
     const int filtered_song_count = static_cast<int>(detail::filtered_indices(state).size());
     const song_entry_state* song = selected_song(state);
-    const int chart_count = song != nullptr ? static_cast<int>(song->charts.size()) : 0;
+    const int chart_count = static_cast<int>(detail::filtered_chart_indices(state).size());
 
     if (!state.detail_open && CheckCollisionPointRec(mouse, song_list_rect) && wheel != 0.0f) {
         state.song_scroll_y_target -= wheel * 54.0f;
@@ -299,13 +570,7 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
         return result;
     }
 
-    if (ui::is_clicked(current.official_tab_rect) && switch_mode(state, catalog_mode::official, result)) {
-        return result;
-    }
-    if (ui::is_clicked(current.community_tab_rect) && switch_mode(state, catalog_mode::community, result)) {
-        return result;
-    }
-    if (ui::is_clicked(current.owned_tab_rect) && switch_mode(state, catalog_mode::owned, result)) {
+    if (handle_sidebar_clicks(state, current, result)) {
         return result;
     }
 
@@ -322,6 +587,10 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
     }
 
     if (handle_detail_actions(state, current, mouse, left_pressed, result)) {
+        return result;
+    }
+
+    if (handle_preview_panel_actions(state, current, mouse, left_pressed, result)) {
         return result;
     }
 
