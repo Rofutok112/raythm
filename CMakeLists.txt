@@ -458,6 +458,19 @@ add_executable(raythm_updater
 set_target_properties(raythm_launcher PROPERTIES OUTPUT_NAME "Launcher")
 set_target_properties(raythm_updater PROPERTIES OUTPUT_NAME "Updater")
 
+add_executable(font_atlas_generator
+        src/font_atlas/font_atlas_generator.cpp)
+add_custom_target(generate_ui_font_atlas
+        COMMAND font_atlas_generator
+                "${CMAKE_SOURCE_DIR}/assets/fonts/MPLUS1p-Medium.ttf"
+                "${CMAKE_SOURCE_DIR}/assets/fonts/japanese_full.txt"
+                "${CMAKE_SOURCE_DIR}/assets/fonts/ui_sdf"
+        DEPENDS
+                font_atlas_generator
+                "${CMAKE_SOURCE_DIR}/assets/fonts/MPLUS1p-Medium.ttf"
+                "${CMAKE_SOURCE_DIR}/assets/fonts/japanese_full.txt"
+        VERBATIM)
+
 if(WIN32)
     set_target_properties(raythm_launcher PROPERTIES WIN32_EXECUTABLE TRUE)
     set_target_properties(raythm_updater PROPERTIES WIN32_EXECUTABLE TRUE)
@@ -990,6 +1003,7 @@ target_include_directories(audio_manager_smoke PRIVATE ${RAYTHM_BASS_DIR})
 target_link_libraries(raythm PRIVATE raylib sqlite3 ${RAYTHM_BASS_IMPORT_LIB} comdlg32 crypt32 winhttp)
 target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)
+target_link_libraries(font_atlas_generator PRIVATE raylib)
 target_link_libraries(update_version_smoke PRIVATE winhttp)
 target_link_libraries(song_loader_smoke PRIVATE sqlite3)
 target_link_libraries(local_catalog_database_smoke PRIVATE sqlite3 raylib)

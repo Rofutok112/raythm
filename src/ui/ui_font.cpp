@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <set>
 #include <string>
 #include <vector>
@@ -21,12 +22,14 @@ constexpr float kUiAuthoringScale1080p = 1920.0f / 1280.0f;
 
 struct loaded_font {
     std::string path;
+    std::string atlas_metadata_path;
     Font font = {};
     bool loaded = false;
     float size_scale = 1.0f;
     float spacing_offset = 0.0f;
     bool sdf = false;
     bool prefer_sdf = false;
+    bool prebuilt_atlas = false;
 };
 
 loaded_font g_ui_font;
@@ -94,6 +97,14 @@ std::string find_ui_font_path() {
     });
 }
 
+std::string find_ui_font_atlas_metadata_path() {
+    const std::filesystem::path path = app_paths::assets_root() / "fonts" / "ui_sdf.rfont";
+    if (std::filesystem::exists(path)) {
+        return path_utils::to_utf8(path);
+    }
+    return {};
+}
+
 void unload_loaded_font(loaded_font& target) {
     if (target.loaded) {
         UnloadFont(target.font);
@@ -101,6 +112,7 @@ void unload_loaded_font(loaded_font& target) {
     target.font = {};
     target.loaded = false;
     target.sdf = false;
+    target.prebuilt_atlas = false;
 }
 
 std::vector<int> loaded_codepoint_vector() {
@@ -175,7 +187,94 @@ bool load_sdf_font(loaded_font& target, const std::vector<int>& codepoints) {
     return true;
 }
 
+bool load_prebuilt_sdf_font(loaded_font& target) {
+    if (!g_sdf_shader_loaded || target.atlas_metadata_path.empty()) {
+        return false;
+    }
+
+    const std::filesystem::path metadata_path = path_utils::from_utf8(target.atlas_metadata_path);
+    std::ifstream in(metadata_path, std::ios::binary);
+    if (!in) {
+        return false;
+    }
+
+    std::string magic;
+    std::getline(in, magic);
+    if (magic != "raythm-rfont-sdf-v1") {
+        return false;
+    }
+
+    std::string token;
+    std::string texture_filename;
+    int base_size = 0;
+    int glyph_padding = 0;
+    int glyph_count = 0;
+    if (!(in >> token >> texture_filename) || token != "texture") {
+        return false;
+    }
+    if (!(in >> token >> base_size) || token != "baseSize" || base_size <= 0) {
+        return false;
+    }
+    if (!(in >> token >> glyph_padding) || token != "glyphPadding" || glyph_padding < 0) {
+        return false;
+    }
+    if (!(in >> token >> glyph_count) || token != "glyphCount" || glyph_count <= 0) {
+        return false;
+    }
+
+    GlyphInfo* glyphs = static_cast<GlyphInfo*>(MemAlloc(sizeof(GlyphInfo) * static_cast<size_t>(glyph_count)));
+    Rectangle* recs = static_cast<Rectangle*>(MemAlloc(sizeof(Rectangle) * static_cast<size_t>(glyph_count)));
+    if (glyphs == nullptr || recs == nullptr) {
+        MemFree(glyphs);
+        MemFree(recs);
+        return false;
+    }
+
+    for (int i = 0; i < glyph_count; ++i) {
+        GlyphInfo glyph = {};
+        Rectangle rec = {};
+        if (!(in >> token
+              >> glyph.value
+              >> rec.x >> rec.y >> rec.width >> rec.height
+              >> glyph.offsetX >> glyph.offsetY >> glyph.advanceX) ||
+            token != "glyph") {
+            MemFree(glyphs);
+            MemFree(recs);
+            return false;
+        }
+        glyphs[i] = glyph;
+        recs[i] = rec;
+    }
+
+    const std::filesystem::path texture_path = metadata_path.parent_path() / path_utils::from_utf8(texture_filename);
+    Texture2D texture = LoadTexture(path_utils::to_utf8(texture_path).c_str());
+    if (texture.id == 0) {
+        MemFree(glyphs);
+        MemFree(recs);
+        return false;
+    }
+
+    Font next_font = {};
+    next_font.baseSize = base_size;
+    next_font.glyphCount = glyph_count;
+    next_font.glyphPadding = glyph_padding;
+    next_font.texture = texture;
+    next_font.glyphs = glyphs;
+    next_font.recs = recs;
+
+    SetTextureFilter(next_font.texture, TEXTURE_FILTER_BILINEAR);
+    unload_loaded_font(target);
+    target.font = next_font;
+    target.loaded = true;
+    target.sdf = true;
+    target.prebuilt_atlas = true;
+    return true;
+}
+
 void rebuild_one_font(loaded_font& target) {
+    if (target.prebuilt_atlas) {
+        return;
+    }
     if (target.path.empty() || g_loaded_codepoints.empty()) {
         return;
     }
@@ -209,12 +308,14 @@ void initialize_text_font() {
         g_sdf_shader_loaded = g_sdf_shader.id > 0;
     }
 
-    g_ui_font = {.path = find_ui_font_path(), .size_scale = kBodyFontSizeScale,
+    g_ui_font = {.path = find_ui_font_path(), .atlas_metadata_path = find_ui_font_atlas_metadata_path(), .size_scale = kBodyFontSizeScale,
                  .spacing_offset = 0.0f, .prefer_sdf = true};
     g_loaded_codepoints.clear();
     seed_ascii_codepoints();
 
-    rebuild_fonts();
+    if (!load_prebuilt_sdf_font(g_ui_font)) {
+        rebuild_fonts();
+    }
     if (!g_ui_font.loaded) {
         g_ui_font.font = GetFontDefault();
     }
@@ -228,6 +329,7 @@ void shutdown_text_font() {
         g_sdf_shader_loaded = false;
     }
     g_ui_font.path.clear();
+    g_ui_font.atlas_metadata_path.clear();
     g_loaded_codepoints.clear();
 }
 
@@ -326,6 +428,9 @@ float display_spacing(float font_size, float spacing) {
 }
 
 void ensure_text_glyphs(const char* text) {
+    if (g_ui_font.prebuilt_atlas) {
+        return;
+    }
     bool changed = false;
     int codepoint_count = 0;
     int* codepoints = LoadCodepoints(text, &codepoint_count);
@@ -347,6 +452,9 @@ void ensure_text_glyphs(const char* text) {
 }
 
 void preload_text_glyphs(const std::vector<std::string>& texts) {
+    if (g_ui_font.prebuilt_atlas) {
+        return;
+    }
     bool changed = false;
     for (const std::string& text : texts) {
         if (text.empty()) {
