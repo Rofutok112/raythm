@@ -254,6 +254,24 @@ inline void enqueue_text_in_rect(const char* text, int font_size, Rectangle rect
     });
 }
 
+inline void enqueue_body_text_in_rect(const char* text, int font_size, Rectangle rect, Color color,
+                                      text_align align = text_align::center,
+                                      draw_layer layer = draw_layer::base) {
+    const std::string text_copy = text != nullptr ? text : "";
+    enqueue_draw_command(layer, [text_copy, font_size, rect, color, align]() {
+        draw_body_text_in_rect(text_copy.c_str(), font_size, rect, color, align);
+    });
+}
+
+inline void enqueue_display_text_in_rect(const char* text, int font_size, Rectangle rect, Color color,
+                                         text_align align = text_align::center,
+                                         draw_layer layer = draw_layer::base) {
+    const std::string text_copy = text != nullptr ? text : "";
+    enqueue_draw_command(layer, [text_copy, font_size, rect, color, align]() {
+        draw_display_text_in_rect(text_copy.c_str(), font_size, rect, color, align);
+    });
+}
+
 // ── ラベル付き値 ────────────────────────────────────────
 
 // 左にラベル、右に値を表示する行。設定画面やリザルト画面の統計行に使用。

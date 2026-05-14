@@ -654,7 +654,7 @@ void draw() {
 
     const Color text_color = g_theme->text;
     const Color muted = g_theme->text_secondary;
-    ui::draw_text_f("raythm", 28.0f, 8.0f, 16, text_color);
+    ui::draw_text_display("raythm", {28.0f, 8.0f}, 16.0f, 0.0f, text_color);
     ui::draw_rect_f({12.0f, 10.0f, 3.0f, 16.0f}, g_theme->accent);
     ui::draw_rect_f({17.0f, 14.0f, 3.0f, 8.0f}, g_theme->fast);
     ui::draw_rect_f({7.0f, 14.0f, 3.0f, 8.0f}, g_theme->accent);

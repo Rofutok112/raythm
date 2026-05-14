@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "raylib.h"
+#include "localization/localization.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select/song_catalog_service.h"
@@ -26,6 +27,7 @@
 #include "title/title_play_mode_controller.h"
 #include "title/seamless_song_select_view.h"
 #include "theme.h"
+#include "ui/ui_font.h"
 #include "ui_notice.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
@@ -41,6 +43,7 @@ constexpr float kAccountChipInteractiveThreshold = 0.2f;
 constexpr float kPlayViewAnimSpeed = 6.0f;
 constexpr float kStartupProgressMin = 0.08f;
 constexpr float kStartupProgressCatalog = 0.68f;
+constexpr float kStartupProgressFonts = 0.78f;
 constexpr float kStartupProgressScoring = 0.88f;
 constexpr ui::draw_layer kTitleModalLayer = ui::draw_layer::modal;
 
@@ -135,6 +138,78 @@ bool consume_startup_level_calculation() {
     }
     consumed = true;
     return true;
+}
+
+void append_literal_with_translation(std::vector<std::string>& texts, const char* literal) {
+    texts.emplace_back(literal);
+    const char* translated = localization::tr_literal(literal);
+    if (translated != nullptr) {
+        texts.emplace_back(translated);
+    }
+}
+
+void append_common_localized_texts(std::vector<std::string>& texts) {
+    for (int i = 0; i < localization::text_key_count(); ++i) {
+        const auto key = static_cast<localization::text_key>(i);
+        texts.emplace_back(localization::tr(key, localization::locale::english));
+        texts.emplace_back(localization::tr(key, localization::locale::japanese));
+    }
+
+    constexpr const char* kLiterals[] = {
+        "PLAY", "MULTIPLAY", "BROWSE", "CREATE",
+        "Solo song select.", "Room battles soon.", "Browse and download.",
+        "Create, import, export.", "This route is still warming up.",
+        "HOME", "CREATE TOOLS", "ACCOUNT", "SETTINGS",
+        "Manage account", "Verified profile", "Email verification pending",
+        "SONG", "CHARTS", "Overview", "Rising", "Hidden gems", "Recommended",
+        "Needs charts", "Source", "Official", "Community", "Mine", "Search",
+        "songs / artists / tags", "Find charts to download", "Downloaded",
+        "Not downloaded", "Open Song", "Open Local", "Remove Local",
+        "Download Chart", "Open Chart", "Loading local catalog...",
+        "Preparing UI text...", "Preparing scoring cache...", "Ready.",
+        "Catalog loaded with warnings."
+    };
+    for (const char* literal : kLiterals) {
+        append_literal_with_translation(texts, literal);
+    }
+}
+
+std::vector<std::string> startup_font_preload_texts(const song_select::state& state) {
+    std::vector<std::string> texts = {
+        "Home", "Overview", "Rising", "Hidden gems", "Recommended", "Needs charts",
+        "Source", "Official", "Community", "Mine", "Search", "songs / artists / tags",
+        "SONG", "CHARTS", "Find charts to download", "All", "Downloaded",
+        "Not downloaded", "Level", "Keys", "BPM", "Open Song", "Open Local",
+        "Remove Local", "Download Chart", "Open Chart", "Loading local catalog...",
+        "Preparing scoring cache...", "Ready.", "Catalog loaded with warnings.",
+        "No songs found", "No songs found yet.", "JACKET", "Settings", "Profile",
+        "Recent Activity", "Rankings", "Max Combo", "Accuracy",
+        "あいうえおかきくけこさしすせそたちつてとなにぬねの",
+        "はひふへほまみむめもやゆよらりるれろわをん",
+        "アイウエオカキクケコサシスセソタチツテトナニヌネノ",
+        "ハヒフヘホマミムメモヤユヨラリルレロワヲン",
+        "がぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ",
+        "ガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポ",
+        "ー・、。！？「」（）[]/ feat. Lv. charts plays notes by"
+    };
+    append_common_localized_texts(texts);
+
+    for (const song_select::song_entry& song : state.songs) {
+        texts.push_back(song.song.meta.title);
+        texts.push_back(song.song.meta.artist);
+        texts.push_back(song.song.meta.genre);
+        for (const std::string& genre : song.song.meta.genres) {
+            texts.push_back(genre);
+        }
+        for (const std::string& keyword : song.song.meta.keywords) {
+            texts.push_back(keyword);
+        }
+        for (const song_select::chart_option& chart : song.charts) {
+            texts.push_back(chart.meta.difficulty);
+            texts.push_back(chart.meta.chart_author);
+        }
+    }
+    return texts;
 }
 
 }  // namespace
@@ -249,6 +324,19 @@ void title_scene::update_startup_loading() {
     }
 
     if (!play_state_.catalog_loaded_once) {
+        return;
+    }
+
+    if (!startup_fonts_preload_started_) {
+        startup_fonts_preload_started_ = true;
+        startup_loading_message_ = "Preparing UI text...";
+        return;
+    }
+
+    if (!startup_fonts_preloaded_) {
+        startup_loading_message_ = "Preparing UI text...";
+        ui::preload_text_glyphs(startup_font_preload_texts(play_state_));
+        startup_fonts_preloaded_ = true;
         return;
     }
 
@@ -725,6 +813,8 @@ void title_scene::on_enter() {
     play_state_.login_dialog.open = false;
     startup_loading_ = true;
     startup_catalog_requested_ = false;
+    startup_fonts_preload_started_ = false;
+    startup_fonts_preloaded_ = false;
     startup_scoring_requested_ = false;
     startup_load_complete_ = false;
     startup_load_failed_ = false;
@@ -972,6 +1062,9 @@ void title_scene::draw_startup_loading(float dt) {
     if (startup_catalog_requested_) {
         base_progress = kStartupProgressCatalog;
     }
+    if (startup_fonts_preload_started_) {
+        base_progress = kStartupProgressFonts;
+    }
     if (startup_scoring_requested_) {
         base_progress = kStartupProgressScoring;
     }
@@ -981,7 +1074,7 @@ void title_scene::draw_startup_loading(float dt) {
     startup_progress_visual_ = tween::damp(startup_progress_visual_, base_progress, dt, 5.0f, 0.0005f);
     const float progress = std::clamp(startup_progress_visual_, 0.0f, 1.0f);
 
-    ui::draw_text_in_rect("raythm", 28, label_rect, g_theme->text);
+    ui::draw_display_text_in_rect("raythm", 28, label_rect, g_theme->text);
     ui::draw_text_in_rect(startup_loading_message_.c_str(), 18, detail_rect,
                           startup_load_failed_ ? g_theme->error : g_theme->text_muted);
     ui::draw_progress_bar(bar_rect, progress, with_alpha(g_theme->row, 180),

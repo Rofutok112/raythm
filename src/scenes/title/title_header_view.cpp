@@ -4,7 +4,6 @@
 #include <cmath>
 
 #include "title/title_layout.h"
-#include "localization/localization.h"
 #include "theme.h"
 #include "tween.h"
 #include "ui_draw.h"
@@ -122,50 +121,52 @@ namespace title_header_view {
 void draw(const draw_config& config) {
     const auto& t = *g_theme;
 
-    const Vector2 closed_title_pos = ui::text_position("raythm", 124,
-                                                       {config.closed_header_rect.x, config.closed_header_rect.y,
-                                                        config.closed_header_rect.width, kClosedTitleHeight},
-                                                       ui::text_align::center);
+    const Vector2 closed_title_pos = ui::display_text_position("raythm", 124,
+                                                               {config.closed_header_rect.x, config.closed_header_rect.y,
+                                                                config.closed_header_rect.width, kClosedTitleHeight},
+                                                               ui::text_align::center);
     const Rectangle title_play_header_rect = title_layout::play_header_rect();
-    const Vector2 home_title_pos = ui::text_position("raythm", 124,
-                                                     {config.open_header_rect.x, config.open_header_rect.y,
-                                                      config.open_header_rect.width, kOpenTitleHeight},
-                                                     ui::text_align::left);
-    const Vector2 play_title_pos = ui::text_position("raythm", 108,
-                                                     {title_play_header_rect.x, title_play_header_rect.y,
-                                                      title_play_header_rect.width, kPlayTitleHeight},
-                                                     ui::text_align::left);
+    const Vector2 home_title_pos = ui::display_text_position("raythm", 124,
+                                                             {config.open_header_rect.x, config.open_header_rect.y,
+                                                              config.open_header_rect.width, kOpenTitleHeight},
+                                                             ui::text_align::left);
+    const Vector2 play_title_pos = ui::display_text_position("raythm", 108,
+                                                             {title_play_header_rect.x, title_play_header_rect.y,
+                                                              title_play_header_rect.width, kPlayTitleHeight},
+                                                             ui::text_align::left);
     const Vector2 title_pos =
         tween::lerp(tween::lerp(closed_title_pos, home_title_pos, config.menu_t), play_title_pos, config.play_t);
 
-    const Vector2 closed_subtitle_pos = ui::text_position("trace the line before the beat disappears", 30,
-                                                          {config.closed_header_rect.x + kSubtitleInsetX,
-                                                           config.closed_header_rect.y + kClosedSubtitleOffsetY,
-                                                           config.closed_header_rect.width - kSubtitleInsetX,
-                                                           kSubtitleHeight},
-                                                          ui::text_align::center);
-    const Vector2 home_subtitle_pos = ui::text_position("trace the line before the beat disappears", 30,
-                                                        {config.open_header_rect.x + kSubtitleInsetX,
-                                                         config.open_header_rect.y + kOpenSubtitleOffsetY,
-                                                         config.open_header_rect.width - kSubtitleInsetX,
-                                                         kSubtitleHeight},
-                                                        ui::text_align::left);
-    const Vector2 play_subtitle_pos = ui::text_position("trace the line before the beat disappears", 24,
-                                                        {title_play_header_rect.x + kPlaySubtitleInsetX,
-                                                         title_play_header_rect.y + kPlaySubtitleOffsetY,
-                                                         title_play_header_rect.width - kPlaySubtitleInsetX,
-                                                         kPlaySubtitleHeight},
-                                                        ui::text_align::left);
+    const Vector2 closed_subtitle_pos = ui::display_text_position("trace the line before the beat disappears", 30,
+                                                                  {config.closed_header_rect.x + kSubtitleInsetX,
+                                                                   config.closed_header_rect.y + kClosedSubtitleOffsetY,
+                                                                   config.closed_header_rect.width - kSubtitleInsetX,
+                                                                   kSubtitleHeight},
+                                                                  ui::text_align::center);
+    const Vector2 home_subtitle_pos = ui::display_text_position("trace the line before the beat disappears", 30,
+                                                                {config.open_header_rect.x + kSubtitleInsetX,
+                                                                 config.open_header_rect.y + kOpenSubtitleOffsetY,
+                                                                 config.open_header_rect.width - kSubtitleInsetX,
+                                                                 kSubtitleHeight},
+                                                                ui::text_align::left);
+    const Vector2 play_subtitle_pos = ui::display_text_position("trace the line before the beat disappears", 24,
+                                                                {title_play_header_rect.x + kPlaySubtitleInsetX,
+                                                                 title_play_header_rect.y + kPlaySubtitleOffsetY,
+                                                                 title_play_header_rect.width - kPlaySubtitleInsetX,
+                                                                 kPlaySubtitleHeight},
+                                                                ui::text_align::left);
     const Vector2 subtitle_pos =
         tween::lerp(tween::lerp(closed_subtitle_pos, home_subtitle_pos, config.menu_t), play_subtitle_pos, config.play_t);
+    const float title_font_size = std::lerp(124.0f, 108.0f, config.play_t);
+    const float subtitle_font_size = std::lerp(30.0f, 24.0f, config.play_t);
 
     const float title_visibility = std::clamp(1.0f - config.play_t * 1.35f, 0.0f, 1.0f);
     const Color title_color = with_alpha(t.text, static_cast<unsigned char>(255.0f * title_visibility));
     const Color subtitle_color = with_alpha(t.text_dim, static_cast<unsigned char>(255.0f * title_visibility));
     if (title_visibility > 0.01f) {
-        ui::draw_text_f("raythm", title_pos.x, title_pos.y, 124, title_color);
-        ui::draw_text_f(localization::tr_literal("trace the line before the beat disappears"),
-                        subtitle_pos.x, subtitle_pos.y, 30, subtitle_color);
+        ui::draw_text_display("raythm", title_pos, title_font_size, 0.0f, title_color);
+        ui::draw_text_display("trace the line before the beat disappears",
+                              subtitle_pos, subtitle_font_size, 0.0f, subtitle_color);
     }
 
     if (config.menu_t <= 0.01f) {

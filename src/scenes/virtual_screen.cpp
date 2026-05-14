@@ -38,7 +38,7 @@ void init() {
     render_target_ = LoadRenderTexture(kDesignWidth, kDesignHeight);
     ui_render_target_ = LoadRenderTexture(kDesignWidth * kUiRenderScale, kDesignHeight * kUiRenderScale);
     SetTextureFilter(render_target_.texture, TEXTURE_FILTER_POINT);
-    SetTextureFilter(ui_render_target_.texture, TEXTURE_FILTER_POINT);
+    SetTextureFilter(ui_render_target_.texture, TEXTURE_FILTER_BILINEAR);
     active_mode_ = render_mode::none;
     present_mode_ = render_mode::standard;
     initialized_ = true;
