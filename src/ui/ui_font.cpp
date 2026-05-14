@@ -16,14 +16,19 @@ namespace ui {
 
 namespace {
 
-constexpr int kFontBaseSize = 48;
-constexpr float kCustomFontSizeScale = 0.8f;
-constexpr float kCustomFontSpacingOffset = 2.0f;
+constexpr int kFontBaseSize = 64;
+constexpr float kBodyFontSizeScale = 1.0f;
 constexpr float kUiAuthoringScale1080p = 1920.0f / 1280.0f;
 
-std::string g_font_path;
-Font g_font = {};
-bool g_font_loaded = false;
+struct loaded_font {
+    std::string path;
+    Font font = {};
+    bool loaded = false;
+    float size_scale = 1.0f;
+    float spacing_offset = 0.0f;
+};
+
+loaded_font g_ui_font;
 font_locale_mode g_font_mode = font_locale_mode::automatic;
 std::set<int> g_loaded_codepoints;
 
@@ -62,64 +67,53 @@ bool contains_non_ascii_bytes(const char* text) {
     return false;
 }
 
-bool should_use_custom_font(const char* text) {
-    if (!g_font_loaded) {
-        return false;
-    }
-    return contains_non_ascii_bytes(text);
-}
-
-std::string find_font_path() {
-    const std::filesystem::path japanese_font = app_paths::assets_root() / "fonts" / "mihiPixelmoji_v1.1.ttf";
-    if (std::filesystem::exists(japanese_font)) {
-        return path_utils::to_utf8(japanese_font);
-    }
-
-    std::vector<std::filesystem::path> candidates;
-    const std::filesystem::path assets_root = app_paths::assets_root();
-    if (!std::filesystem::exists(assets_root)) {
-        return {};
-    }
-
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(assets_root)) {
-        if (!entry.is_regular_file()) {
-            continue;
-        }
-
-        std::string ext = entry.path().extension().string();
-        std::ranges::transform(ext, ext.begin(),
-                               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (ext == ".ttf" || ext == ".otf") {
-            candidates.push_back(entry.path());
+std::string first_existing_font(std::initializer_list<std::filesystem::path> paths) {
+    for (const std::filesystem::path& path : paths) {
+        if (std::filesystem::exists(path)) {
+            return path_utils::to_utf8(path);
         }
     }
-
-    if (candidates.empty()) {
-        return {};
-    }
-
-    std::ranges::sort(candidates);
-    return path_utils::to_utf8(candidates.front());
+    return {};
 }
 
-void rebuild_font() {
-    if (g_font_path.empty() || g_loaded_codepoints.empty()) {
+std::string find_ui_font_path() {
+    const std::filesystem::path assets = app_paths::assets_root() / "fonts";
+    const std::filesystem::path windows_fonts = "C:/Windows/Fonts";
+    return first_existing_font({
+        assets / "MPLUS1p-Medium.ttf",
+        assets / "NotoSansJP-Regular.ttf",
+        windows_fonts / "segoeui.ttf",
+    });
+}
+
+void unload_loaded_font(loaded_font& target) {
+    if (target.loaded) {
+        UnloadFont(target.font);
+    }
+    target.font = {};
+    target.loaded = false;
+}
+
+void rebuild_one_font(loaded_font& target) {
+    if (target.path.empty() || g_loaded_codepoints.empty()) {
         return;
     }
 
     std::vector<int> codepoints(g_loaded_codepoints.begin(), g_loaded_codepoints.end());
-    Font next_font = LoadFontEx(g_font_path.c_str(), kFontBaseSize,
+    Font next_font = LoadFontEx(target.path.c_str(), kFontBaseSize,
                                 codepoints.data(), static_cast<int>(codepoints.size()));
     if (next_font.texture.id == 0) {
         return;
     }
 
-    SetTextureFilter(next_font.texture, TEXTURE_FILTER_POINT);
-    if (g_font_loaded) {
-        UnloadFont(g_font);
-    }
-    g_font = next_font;
-    g_font_loaded = true;
+    SetTextureFilter(next_font.texture, TEXTURE_FILTER_BILINEAR);
+    unload_loaded_font(target);
+    target.font = next_font;
+    target.loaded = true;
+}
+
+void rebuild_fonts() {
+    rebuild_one_font(g_ui_font);
 }
 
 void seed_ascii_codepoints() {
@@ -135,40 +129,36 @@ void set_font_locale_mode(font_locale_mode mode) {
 }
 
 void initialize_text_font() {
-    g_font_path = find_font_path();
+    g_ui_font = {.path = find_ui_font_path(), .size_scale = kBodyFontSizeScale, .spacing_offset = 0.0f};
     g_loaded_codepoints.clear();
     seed_ascii_codepoints();
 
-    if (g_font_path.empty()) {
-        g_font = GetFontDefault();
-        g_font_loaded = false;
-        return;
-    }
-
-    rebuild_font();
-    if (!g_font_loaded) {
-        g_font = GetFontDefault();
+    rebuild_fonts();
+    if (!g_ui_font.loaded) {
+        g_ui_font.font = GetFontDefault();
     }
 }
 
 void shutdown_text_font() {
-    if (g_font_loaded) {
-        UnloadFont(g_font);
-    }
-    g_font = {};
-    g_font_loaded = false;
-    g_font_path.clear();
+    unload_loaded_font(g_ui_font);
+    g_ui_font.path.clear();
     g_loaded_codepoints.clear();
 }
 
 Font text_font() {
-    return g_font_loaded ? g_font : GetFontDefault();
+    return g_ui_font.loaded ? g_ui_font.font : GetFontDefault();
 }
 
 Font text_font_for_text(const char* text) {
-    if (should_use_custom_font(text)) {
-        return g_font;
-    }
+    (void)text;
+    return text_font();
+}
+
+Font body_font() {
+    return g_ui_font.loaded ? g_ui_font.font : text_font();
+}
+
+Font display_font() {
     return GetFontDefault();
 }
 
@@ -177,34 +167,48 @@ float text_layout_font_size(float font_size) {
 }
 
 float text_font_size_for_text(const char* text, float font_size) {
+    (void)text;
     const float scaled_font_size = text_layout_font_size(font_size);
-    if (should_use_custom_font(text)) {
-        return snap_custom_font_size(scaled_font_size * kCustomFontSizeScale);
-    }
-    return snap_default_font_size(scaled_font_size);
+    return snap_custom_font_size(scaled_font_size * (g_ui_font.loaded ? g_ui_font.size_scale : 1.0f));
 }
 
 float text_spacing_for_text(const char* text, float font_size, float spacing) {
-    if (should_use_custom_font(text)) {
-        return spacing + kCustomFontSpacingOffset;
+    (void)font_size;
+    if (spacing != 0.0f) {
+        return snap_custom_font_size(text_layout_font_size(spacing));
     }
+    if (text_font_for_text(text).texture.id == GetFontDefault().texture.id) {
+        const Font font = GetFontDefault();
+        return font.baseSize > 0 ? snap_default_font_size(font_size) / static_cast<float>(font.baseSize) : 0.0f;
+    }
+    return std::max(1.0f, std::round(current_ui_authoring_scale()));
+}
 
+float body_font_size(float font_size) {
+    return snap_default_font_size(text_layout_font_size(font_size) * g_ui_font.size_scale);
+}
+
+float body_spacing(float spacing) {
+    if (spacing != 0.0f) {
+        return snap_custom_font_size(text_layout_font_size(spacing));
+    }
+    return g_ui_font.loaded ? std::max(1.0f, std::round(current_ui_authoring_scale())) : 0.0f;
+}
+
+float display_font_size(float font_size) {
+    return snap_default_font_size(text_layout_font_size(font_size));
+}
+
+float display_spacing(float font_size, float spacing) {
     if (spacing != 0.0f) {
         return snap_default_font_size(text_layout_font_size(spacing));
     }
-
-    const Font font = text_font_for_text(text);
-    if (font.texture.id == GetFontDefault().texture.id && font.baseSize > 0) {
-        return snap_default_font_size(font_size) / static_cast<float>(font.baseSize);
-    }
-    return 0.0f;
+    const Font font = GetFontDefault();
+    return font.baseSize > 0 ? snap_default_font_size(text_layout_font_size(font_size)) / static_cast<float>(font.baseSize)
+                             : 0.0f;
 }
 
 void ensure_text_glyphs(const char* text) {
-    if (!should_use_custom_font(text)) {
-        return;
-    }
-
     int codepoint_count = 0;
     int* codepoints = LoadCodepoints(text, &codepoint_count);
     if (codepoints == nullptr) {
@@ -221,7 +225,7 @@ void ensure_text_glyphs(const char* text) {
     UnloadCodepoints(codepoints);
 
     if (changed) {
-        rebuild_font();
+        rebuild_fonts();
     }
 }
 
@@ -243,12 +247,45 @@ void draw_text_auto(const char* text, Vector2 position, float font_size, float s
 
     ensure_text_glyphs(text);
     const float adjusted_font_size = text_font_size_for_text(text, font_size);
-    const bool uses_custom_font = should_use_custom_font(text);
-    const Vector2 draw_position = uses_custom_font
-                                      ? Vector2{snap_custom_coordinate(position.x), snap_custom_coordinate(position.y)}
-                                      : Vector2{snap_default_coordinate(position.x), snap_default_coordinate(position.y)};
+    const Vector2 draw_position = {snap_default_coordinate(position.x), snap_default_coordinate(position.y)};
     DrawTextEx(text_font_for_text(text), text, draw_position, adjusted_font_size,
                text_spacing_for_text(text, adjusted_font_size, spacing), color);
+}
+
+Vector2 measure_body_text_size(const char* text, float font_size, float spacing) {
+    if (text == nullptr || *text == '\0') {
+        return {0.0f, font_size};
+    }
+    ensure_text_glyphs(text);
+    const float adjusted_font_size = body_font_size(font_size);
+    return MeasureTextEx(body_font(), text, adjusted_font_size, body_spacing(spacing));
+}
+
+Vector2 measure_display_text_size(const char* text, float font_size, float spacing) {
+    if (text == nullptr || *text == '\0') {
+        return {0.0f, font_size};
+    }
+    const float adjusted_font_size = display_font_size(font_size);
+    return MeasureTextEx(display_font(), text, adjusted_font_size, display_spacing(font_size, spacing));
+}
+
+void draw_text_body(const char* text, Vector2 position, float font_size, float spacing, Color color) {
+    if (text == nullptr || *text == '\0') {
+        return;
+    }
+    ensure_text_glyphs(text);
+    const float adjusted_font_size = body_font_size(font_size);
+    const Vector2 draw_position = {snap_default_coordinate(position.x), snap_default_coordinate(position.y)};
+    DrawTextEx(body_font(), text, draw_position, adjusted_font_size, body_spacing(spacing), color);
+}
+
+void draw_text_display(const char* text, Vector2 position, float font_size, float spacing, Color color) {
+    if (text == nullptr || *text == '\0') {
+        return;
+    }
+    const float adjusted_font_size = display_font_size(font_size);
+    const Vector2 draw_position = {snap_custom_coordinate(position.x), snap_custom_coordinate(position.y)};
+    DrawTextEx(display_font(), text, draw_position, adjusted_font_size, display_spacing(font_size, spacing), color);
 }
 
 }  // namespace ui

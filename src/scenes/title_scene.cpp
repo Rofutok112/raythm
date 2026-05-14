@@ -981,7 +981,7 @@ void title_scene::draw_startup_loading(float dt) {
     startup_progress_visual_ = tween::damp(startup_progress_visual_, base_progress, dt, 5.0f, 0.0005f);
     const float progress = std::clamp(startup_progress_visual_, 0.0f, 1.0f);
 
-    ui::draw_text_in_rect("raythm", 28, label_rect, g_theme->text);
+    ui::draw_display_text_in_rect("raythm", 28, label_rect, g_theme->text);
     ui::draw_text_in_rect(startup_loading_message_.c_str(), 18, detail_rect,
                           startup_load_failed_ ? g_theme->error : g_theme->text_muted);
     ui::draw_progress_bar(bar_rect, progress, with_alpha(g_theme->row, 180),

@@ -387,6 +387,75 @@ void draw_level_range_slider(Rectangle chart_list, const state& state, unsigned 
     ui::draw_rect_f({max_x - 5.0f, track.y - 7.0f, 10.0f, 22.0f}, with_alpha(g_theme->accent, alpha));
 }
 
+void draw_browse_body_text_in_rect(const char* text,
+                            int font_size,
+                            Rectangle rect,
+                            Color color,
+                            ui::text_align align = ui::text_align::center) {
+    ui::draw_body_text_in_rect(text, font_size, rect, color, align);
+}
+
+void draw_browse_body_text_f(const char* text, float x, float y, int font_size, Color color) {
+    ui::draw_text_body(text, {x, y}, static_cast<float>(font_size), 0.0f, color);
+}
+
+void draw_body_marquee_text(const char* text,
+                            Rectangle clip_rect,
+                            int font_size,
+                            Color color,
+                            double time,
+                            ui::text_align align = ui::text_align::left) {
+    if (text == nullptr || *text == '\0' || clip_rect.width <= 0.0f || clip_rect.height <= 0.0f) {
+        return;
+    }
+
+    const float text_width = ui::measure_body_text_size(text, static_cast<float>(font_size), 0.0f).x;
+    const float draw_y = clip_rect.y + (clip_rect.height - ui::text_layout_font_size(static_cast<float>(font_size))) * 0.5f;
+    if (text_width <= clip_rect.width) {
+        float draw_x = clip_rect.x;
+        if (align == ui::text_align::center) {
+            draw_x = clip_rect.x + (clip_rect.width - text_width) * 0.5f;
+        } else if (align == ui::text_align::right) {
+            draw_x = clip_rect.x + clip_rect.width - text_width;
+        }
+        ui::begin_scissor_rect(clip_rect);
+        draw_browse_body_text_f(text, draw_x, draw_y, font_size, color);
+        EndScissorMode();
+        return;
+    }
+
+    constexpr float kScrollSpeed = 42.0f;
+    constexpr float kPauseSeconds = 1.0f;
+    const float overflow = text_width - clip_rect.width;
+    const float travel_time = overflow / kScrollSpeed;
+    const float cycle = travel_time + kPauseSeconds * 2.0f;
+    const float cycle_t = static_cast<float>(std::fmod(time, static_cast<double>(std::max(cycle, 0.001f))));
+    float offset = 0.0f;
+    if (cycle_t > kPauseSeconds && cycle_t < kPauseSeconds + travel_time) {
+        offset = (cycle_t - kPauseSeconds) * kScrollSpeed;
+    } else if (cycle_t >= kPauseSeconds + travel_time) {
+        offset = overflow;
+    }
+    ui::begin_scissor_rect(clip_rect);
+    draw_browse_body_text_f(text, clip_rect.x - offset, draw_y, font_size, color);
+    EndScissorMode();
+}
+
+void draw_body_marquee_text(const char* text,
+                            float x,
+                            float y,
+                            int font_size,
+                            Color color,
+                            float max_width,
+                            double time) {
+    draw_body_marquee_text(text,
+                           {x, y, max_width, ui::text_layout_font_size(static_cast<float>(font_size))},
+                           font_size,
+                           color,
+                           time,
+                           ui::text_align::left);
+}
+
 ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_state& state,
                                              const char* label, const char* placeholder,
                                              int font_size, size_t max_length,
@@ -560,7 +629,7 @@ ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_stat
     ui::update_text_input_scroll(state, text_rect.width - 8.0f, font_size);
 
     if (show_label) {
-        ui::draw_text_in_rect(label, font_size, label_rect,
+        draw_browse_body_text_in_rect(label, font_size, label_rect,
                               with_alpha(t.text_secondary, alpha), ui::text_align::left);
     }
 
@@ -578,10 +647,10 @@ ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_stat
     const float cursor_height = text_rect.height - 16.0f;
 
     if (!state.active && !state.value.empty()) {
-        draw_marquee_text(display_value.c_str(), text_rect.x, text_y, font_size, text_color,
+        draw_body_marquee_text(display_value.c_str(), text_rect.x, text_y, font_size, text_color,
                           text_rect.width, GetTime());
     } else if (!state.active) {
-        ui::draw_text_f(display_value.c_str(), text_rect.x, text_y, font_size, text_color);
+        draw_browse_body_text_f(display_value.c_str(), text_rect.x, text_y, font_size, text_color);
     } else {
         ui::begin_scissor_rect(text_rect);
 
@@ -598,7 +667,7 @@ ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_stat
                                with_alpha(t.row_selected, alpha));
         }
 
-        ui::draw_text_f(state.value.c_str(), text_rect.x - state.scroll_x, text_y, font_size, with_alpha(t.text, alpha));
+        draw_browse_body_text_f(state.value.c_str(), text_rect.x - state.scroll_x, text_y, font_size, with_alpha(t.text, alpha));
 
         const double blink = GetTime() * 1.6;
         if (std::fmod(blink, 1.0) < 0.6) {
@@ -784,7 +853,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     constexpr float kSidebarTitleY = 32.0f;
     constexpr float kSourceTitleY = 520.0f;
     constexpr float kSidebarDividerY = 488.0f;
-    ui::draw_text_in_rect("DISCOVERY", 15,
+    draw_browse_body_text_in_rect("DISCOVERY", 15,
                           {current.sidebar_rect.x + 24.0f, current.sidebar_rect.y + kSidebarTitleY,
                            current.sidebar_rect.width - 48.0f, 20.0f},
                           with_alpha(t.accent, grid_alpha), ui::text_align::left);
@@ -809,7 +878,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     ui::draw_line_ex({current.sidebar_rect.x + 24.0f, current.sidebar_rect.y + kSidebarDividerY},
                      {current.sidebar_rect.x + current.sidebar_rect.width - 24.0f, current.sidebar_rect.y + kSidebarDividerY},
                      1.2f, with_alpha(t.border_active, grid_alpha));
-    ui::draw_text_in_rect("SOURCE", 15,
+    draw_browse_body_text_in_rect("SOURCE", 15,
                           {current.sidebar_rect.x + 24.0f, current.sidebar_rect.y + kSourceTitleY,
                            current.sidebar_rect.width - 48.0f, 20.0f},
                           with_alpha(t.accent, grid_alpha), ui::text_align::left);
@@ -834,16 +903,16 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     const std::string content_caption = state.view == discovery_view::overview
         ? "Overview"
         : view_label(state.view);
-    ui::draw_text_in_rect(content_caption.c_str(), 17,
+    draw_browse_body_text_in_rect(content_caption.c_str(), 17,
                           {current.content_rect.x + 12.0f, current.content_rect.y + 6.0f,
                            current.content_rect.width * 0.52f, 20.0f},
                           with_alpha(loading ? t.text : t.text_secondary, grid_alpha), ui::text_align::left);
-    ui::draw_text_in_rect(TextFormat("%d songs", static_cast<int>(indices.size())),
+    draw_browse_body_text_in_rect(TextFormat("%d songs", static_cast<int>(indices.size())),
                           14,
                           {current.content_rect.x + current.content_rect.width * 0.46f, current.content_rect.y + 8.0f,
                            current.content_rect.width * 0.5f - 12.0f, 16.0f},
                           with_alpha(t.text_muted, grid_alpha), ui::text_align::right);
-    ui::draw_text_in_rect("Press Esc to return to the grid",
+    draw_browse_body_text_in_rect("Press Esc to return to the grid",
                           14,
                           {current.content_rect.x + current.content_rect.width * 0.46f, current.content_rect.y + 8.0f,
                            current.content_rect.width * 0.5f - 12.0f, 16.0f},
@@ -894,7 +963,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                 : state.catalog_maintenance
                     ? "Server maintenance"
                 : (state.catalog_request_failed ? "Could not reach raythm-Server." : "No songs found.");
-            ui::draw_text_in_rect(empty_title,
+            draw_browse_body_text_in_rect(empty_title,
                                   26, {placeholder.x, placeholder.y + 8.0f, placeholder.width, 28.0f},
                                   with_alpha(t.text, grid_alpha), ui::text_align::center);
             if (!loading && state.catalog_request_failed) {
@@ -903,12 +972,12 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                     : state.catalog_maintenance
                         ? "Online features are temporarily unavailable. Please try again later."
                         : "Check the server URL and confirm raythm-Server is running.";
-                ui::draw_text_in_rect(detail.c_str(),
+                draw_browse_body_text_in_rect(detail.c_str(),
                                       14, {placeholder.x + 20.0f, placeholder.y + 42.0f, placeholder.width - 40.0f, 16.0f},
                                       with_alpha(t.text_muted, grid_alpha), ui::text_align::center);
                 if (!state.catalog_server_url.empty()) {
                     const std::string server_label = "Tried: " + state.catalog_server_url;
-                    ui::draw_text_in_rect(server_label.c_str(),
+                    draw_browse_body_text_in_rect(server_label.c_str(),
                                           12, {placeholder.x + 20.0f, placeholder.y + 58.0f, placeholder.width - 40.0f, 14.0f},
                                           with_alpha(t.text_hint, grid_alpha), ui::text_align::center);
                 }
@@ -925,7 +994,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             }
             if (static_cast<size_t>(display_index) < shelf_headers_for_song.size() &&
                 !shelf_headers_for_song[static_cast<size_t>(display_index)].empty()) {
-                ui::draw_text_in_rect(shelf_headers_for_song[static_cast<size_t>(display_index)].c_str(),
+                draw_browse_body_text_in_rect(shelf_headers_for_song[static_cast<size_t>(display_index)].c_str(),
                                       15,
                                       {card.x + 10.0f, card.y - 28.0f, card.width - 20.0f, 20.0f},
                                       with_alpha(t.text, grid_alpha), ui::text_align::left);
@@ -958,7 +1027,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                     const unsigned char placeholder_alpha =
                         static_cast<unsigned char>(static_cast<float>(grid_alpha) * selected_placeholder_t);
                     ui::draw_rect_f(jacket_rect, with_alpha(t.bg_alt, row_alpha));
-                    ui::draw_text_in_rect("JACKET", 18, jacket_rect, with_alpha(t.text_muted, placeholder_alpha),
+                    draw_browse_body_text_in_rect("JACKET", 18, jacket_rect, with_alpha(t.text_muted, placeholder_alpha),
                                           ui::text_align::center);
                 }
                 ui::draw_rect_lines(jacket_rect, 1.0f, with_alpha(t.border_image, grid_alpha));
@@ -967,16 +1036,16 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             const std::string badge_label = detail::song_status_label(song);
             if (!badge_label.empty()) {
                 const Rectangle badge_rect = {card.x + card.width - 90.0f, card.y + 12.0f, 72.0f, 18.0f};
-                ui::draw_text_in_rect(badge_label.c_str(), 12, badge_rect,
+                draw_browse_body_text_in_rect(badge_label.c_str(), 12, badge_rect,
                                       with_alpha(detail::song_status_color(song), grid_alpha), ui::text_align::right);
             }
 
-            draw_marquee_text(song.song.song.meta.title.c_str(),
+            draw_body_marquee_text(song.song.song.meta.title.c_str(),
                               {jacket_rect.x + jacket_rect.width + 16.0f, jacket_rect.y,
                                card.width - jacket_rect.width - 48.0f, 28.0f},
                               18, with_alpha(t.text, grid_alpha), now);
             const std::string card_subtitle = song_subtitle(song.song.song.meta);
-            draw_marquee_text(card_subtitle.c_str(),
+            draw_body_marquee_text(card_subtitle.c_str(),
                               {jacket_rect.x + jacket_rect.width + 16.0f, jacket_rect.y + 28.0f,
                                card.width - jacket_rect.width - 48.0f, 22.0f},
                               13, with_alpha(t.text_muted, grid_alpha), now);
@@ -998,7 +1067,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                     const Rectangle tag_rect = {tag_x, y, width, 20.0f};
                     ui::draw_rect_f(tag_rect, with_alpha(button_base, row_alpha));
                     ui::draw_rect_lines(tag_rect, 1.0f, with_alpha(tag_color, grid_alpha));
-                    ui::draw_text_in_rect(label.c_str(), 11, tag_rect,
+                    draw_browse_body_text_in_rect(label.c_str(), 11, tag_rect,
                                           with_alpha(tag_color, grid_alpha), ui::text_align::center);
                     tag_x += width + 7.0f;
                 }
@@ -1008,12 +1077,12 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             const float footer_x = card.x + 16.0f;
             const float footer_y = card.y + card.height - 28.0f;
             if (song.song.song.meta.has_play_count) {
-                ui::draw_text_in_rect(format_count_label("plays", song.song.song.meta.play_count),
+                draw_browse_body_text_in_rect(format_count_label("plays", song.song.song.meta.play_count),
                                       12,
                                       {footer_x, footer_y, 88.0f, 16.0f},
                                       with_alpha(t.text_muted, grid_alpha), ui::text_align::left);
             }
-            ui::draw_text_in_rect(TextFormat("charts %d", std::max(song.song.song.meta.chart_count,
+            draw_browse_body_text_in_rect(TextFormat("charts %d", std::max(song.song.song.meta.chart_count,
                                                                     static_cast<int>(song.charts.size()))),
                                   12,
                                   {footer_x + (song.song.song.meta.has_play_count ? 96.0f : 0.0f),
@@ -1052,15 +1121,15 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                            jacket_rect, {0.0f, 0.0f}, 0.0f, with_alpha(WHITE, alpha));
         } else {
             ui::draw_rect_f(jacket_rect, with_alpha(t.bg_alt, selected_row_alpha));
-            ui::draw_text_in_rect("JACKET", 24, jacket_rect, with_alpha(t.text_muted, alpha), ui::text_align::center);
+            draw_browse_body_text_in_rect("JACKET", 24, jacket_rect, with_alpha(t.text_muted, alpha), ui::text_align::center);
         }
         ui::draw_rect_lines(jacket_rect, 1.4f, with_alpha(t.border_image, alpha));
 
-        draw_marquee_text(song->song.song.meta.title.c_str(),
+        draw_body_marquee_text(song->song.song.meta.title.c_str(),
                           {current.preview_panel_rect.x + 26.0f, jacket_rect.y + jacket_rect.height + 24.0f,
                            current.preview_panel_rect.width - 52.0f, 38.0f},
                           25, with_alpha(t.text, alpha), now, ui::text_align::center);
-        draw_marquee_text(song->song.song.meta.artist.c_str(),
+        draw_body_marquee_text(song->song.song.meta.artist.c_str(),
                           {current.preview_panel_rect.x + 26.0f, jacket_rect.y + jacket_rect.height + 62.0f,
                            current.preview_panel_rect.width - 52.0f, 26.0f},
                           17, with_alpha(t.text_secondary, alpha), now, ui::text_align::center);
@@ -1079,7 +1148,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         ui::draw_rect_f(bar, with_alpha(t.bg_alt, normal_row_alpha));
         ui::draw_rect_f({bar.x, bar.y, bar.width * preview_ratio, bar.height}, with_alpha(t.accent, alpha));
         ui::draw_rect_lines(bar, 1.0f, with_alpha(t.border_light, alpha));
-        ui::draw_text_in_rect(
+        draw_browse_body_text_in_rect(
             TextFormat("%s / %s",
                        detail::format_time_label(preview_position).c_str(),
                        preview_length > 0.0 ? detail::format_time_label(preview_length).c_str() : "--:--"),
@@ -1087,7 +1156,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             {bar.x, bar.y + 16.0f, bar.width, 18.0f},
             with_alpha(t.text_muted, alpha), ui::text_align::right);
 
-        ui::draw_text_in_rect("GENRES", 13,
+        draw_browse_body_text_in_rect("GENRES", 13,
                               {current.preview_panel_rect.x + 24.0f, bar.y + 42.0f, 140.0f, 18.0f},
                               with_alpha(t.accent, alpha), ui::text_align::left);
         const auto draw_preview_tag_row = [&](const std::vector<std::string>& labels,
@@ -1118,23 +1187,23 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                 const Rectangle tag_rect = {x, row_y, width, 30.0f};
                 ui::draw_rect_f(tag_rect, with_alpha(button_base, normal_row_alpha));
                 ui::draw_rect_lines(tag_rect, 1.0f, with_alpha(color, alpha));
-                ui::draw_text_in_rect(label.c_str(), 13, tag_rect,
+                draw_browse_body_text_in_rect(label.c_str(), 13, tag_rect,
                                       with_alpha(color, alpha), ui::text_align::center);
                 x += width + 8.0f;
             }
         };
         draw_preview_tag_row(genre_labels(song->song.song.meta), bar.y + 64.0f, t.accent, 1, 2);
-        ui::draw_text_in_rect("KEYWORDS", 13,
+        draw_browse_body_text_in_rect("KEYWORDS", 13,
                               {current.preview_panel_rect.x + 24.0f, bar.y + 152.0f, 140.0f, 18.0f},
                               with_alpha(t.accent, alpha), ui::text_align::left);
         draw_preview_tag_row(song->song.song.meta.keywords, bar.y + 174.0f, t.fast, 2, 2);
         const auto draw_preview_stat = [&](Rectangle rect, const char* label, const char* value, Color accent) {
             ui::draw_rect_f(rect, with_alpha(button_base, normal_row_alpha));
             ui::draw_rect_lines(rect, 1.0f, with_alpha(accent, alpha));
-            ui::draw_text_in_rect(label, 11,
+            draw_browse_body_text_in_rect(label, 11,
                                   {rect.x + 10.0f, rect.y + 7.0f, rect.width - 20.0f, 14.0f},
                                   with_alpha(t.text_muted, alpha), ui::text_align::left);
-            ui::draw_text_in_rect(value, 17,
+            draw_browse_body_text_in_rect(value, 17,
                                   {rect.x + 10.0f, rect.y + 22.0f, rect.width - 20.0f, 20.0f},
                                   with_alpha(t.text, alpha), ui::text_align::right);
         };
@@ -1159,7 +1228,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     ui::draw_rect_f(current.detail_right_rect, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * detail_content_t / 2.0f)));
     ui::draw_rect_lines(current.detail_right_rect, 1.2f, with_alpha(t.border_light, detail_alpha));
 
-    ui::draw_text_in_rect("SONG", 16,
+    draw_browse_body_text_in_rect("SONG", 16,
                           {current.detail_left_rect.x + 28.0f, current.detail_left_rect.y + 22.0f,
                            120.0f, 22.0f},
                           with_alpha(t.text, detail_alpha), ui::text_align::left);
@@ -1177,7 +1246,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                 static_cast<unsigned char>(static_cast<float>(alpha) * hero_placeholder_t);
             ui::draw_rect_f(animated_jacket_rect, with_alpha(t.bg_alt, selected_row_alpha));
             if (placeholder_alpha > 0) {
-                ui::draw_text_in_rect("JACKET", 26, animated_jacket_rect,
+                draw_browse_body_text_in_rect("JACKET", 26, animated_jacket_rect,
                                       with_alpha(t.text_muted, placeholder_alpha), ui::text_align::center);
             }
         }
@@ -1207,9 +1276,9 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         title_rect.width,
         27.0f
     };
-    draw_marquee_text(song->song.song.meta.title.c_str(), title_rect, 27, with_alpha(t.text, detail_alpha), now);
+    draw_body_marquee_text(song->song.song.meta.title.c_str(), title_rect, 27, with_alpha(t.text, detail_alpha), now);
     const std::string detail_subtitle = song_subtitle(song->song.song.meta);
-    draw_marquee_text(detail_subtitle.c_str(), artist_rect, 17,
+    draw_body_marquee_text(detail_subtitle.c_str(), artist_rect, 17,
                       with_alpha(t.text_secondary, detail_alpha), now);
 
     const auto draw_source_badge = [&](content_status status, Rectangle rect) {
@@ -1220,7 +1289,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         const Color color = status == content_status::official ? t.success : t.slow;
         ui::draw_rect_f(rect, with_alpha(button_base, normal_row_alpha));
         ui::draw_rect_lines(rect, 1.0f, with_alpha(color, detail_alpha));
-        ui::draw_text_in_rect(label, 13, rect, with_alpha(color, detail_alpha), ui::text_align::center);
+        draw_browse_body_text_in_rect(label, 13, rect, with_alpha(color, detail_alpha), ui::text_align::center);
     };
     draw_source_badge(song->song.source_status, {song_info_rect.x, artist_rect.y + 42.0f, 84.0f, 28.0f});
 
@@ -1246,7 +1315,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             const Rectangle tag_rect = {tag_x, tag_y, width, 32.0f};
             ui::draw_rect_f(tag_rect, with_alpha(button_base, normal_row_alpha));
             ui::draw_rect_lines(tag_rect, 1.0f, with_alpha(color, detail_alpha));
-            ui::draw_text_in_rect(label.c_str(), 13, tag_rect,
+            draw_browse_body_text_in_rect(label.c_str(), 13, tag_rect,
                                   with_alpha(color, detail_alpha), ui::text_align::center);
             tag_x += width + 8.0f;
             drew_any = true;
@@ -1260,15 +1329,15 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     const float keyword_y = draw_tag_row(genre_labels(song->song.song.meta), genre_y, t.accent, 1);
     draw_tag_row(song->song.song.meta.keywords, keyword_y, t.fast, 2);
     const float stats_y = song_info_rect.y + 276.0f;
-    ui::draw_text_in_rect(TextFormat("BPM %.0f", song->song.song.meta.base_bpm), 14,
+    draw_browse_body_text_in_rect(TextFormat("BPM %.0f", song->song.song.meta.base_bpm), 14,
                           {song_info_rect.x, stats_y, 96.0f, 28.0f},
                           with_alpha(t.text, detail_alpha), ui::text_align::center);
     ui::draw_rect_lines({song_info_rect.x, stats_y, 96.0f, 28.0f}, 1.0f, with_alpha(t.border_light, detail_alpha));
-    ui::draw_text_in_rect(detail::format_time_label(detail::preview_display_length_seconds(*song)).c_str(), 14,
+    draw_browse_body_text_in_rect(detail::format_time_label(detail::preview_display_length_seconds(*song)).c_str(), 14,
                           {song_info_rect.x + 110.0f, stats_y, 84.0f, 28.0f},
                           with_alpha(t.text, detail_alpha), ui::text_align::center);
     ui::draw_rect_lines({song_info_rect.x + 110.0f, stats_y, 84.0f, 28.0f}, 1.0f, with_alpha(t.border_light, detail_alpha));
-    ui::draw_text_in_rect(TextFormat("charts %d", std::max(song->song.song.meta.chart_count,
+    draw_browse_body_text_in_rect(TextFormat("charts %d", std::max(song->song.song.meta.chart_count,
                                                            static_cast<int>(song->charts.size()))),
                           14,
                           {song_info_rect.x + 208.0f, stats_y, 110.0f, 28.0f},
@@ -1287,7 +1356,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                      current.preview_bar_rect.width * preview_ratio, current.preview_bar_rect.height},
                     with_alpha(t.accent, detail_alpha));
     ui::draw_rect_lines(current.preview_bar_rect, 1.0f, with_alpha(t.border_light, detail_alpha));
-    ui::draw_text_in_rect(
+    draw_browse_body_text_in_rect(
         TextFormat("%s / %s",
                    detail::format_time_label(preview_position).c_str(),
                    preview_length > 0.0 ? detail::format_time_label(preview_length).c_str() : "--:--"),
@@ -1326,7 +1395,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         ui::draw_rect_f({progress_rect.x, progress_rect.y, progress_rect.width * progress_ratio, progress_rect.height},
                         with_alpha(t.accent, detail_alpha));
         ui::draw_rect_lines(progress_rect, 1.0f, with_alpha(t.border_light, detail_alpha));
-        ui::draw_text_in_rect(TextFormat("%d%%", static_cast<int>(std::round(progress_ratio * 100.0f))),
+        draw_browse_body_text_in_rect(TextFormat("%d%%", static_cast<int>(std::round(progress_ratio * 100.0f))),
                               12,
                               {progress_rect.x, progress_rect.y - 16.0f, progress_rect.width, 14.0f},
                               with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
@@ -1347,11 +1416,11 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         current.chart_list_rect.width * 0.64f,
         42.0f,
     };
-    ui::draw_text_in_rect("CHARTS", 15,
+    draw_browse_body_text_in_rect("CHARTS", 15,
                           {current.chart_list_rect.x, current.chart_list_rect.y - 298.0f,
                            110.0f, 24.0f},
                           with_alpha(t.text, detail_alpha), ui::text_align::left);
-    ui::draw_text_in_rect("Find charts to download", 12,
+    draw_browse_body_text_in_rect("Find charts to download", 12,
                           {current.chart_list_rect.x, current.chart_list_rect.y - 274.0f,
                            180.0f, 18.0f},
                           with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
@@ -1378,14 +1447,14 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                             with_alpha(chart_filters_active(state) ? t.text_secondary : t.text_muted, detail_alpha),
                             1.0f);
 
-    ui::draw_text_in_rect("LEVEL", 12,
+    draw_browse_body_text_in_rect("LEVEL", 12,
                           {current.chart_list_rect.x, current.chart_list_rect.y - 120.0f, 86.0f, 18.0f},
                           with_alpha(t.text, detail_alpha), ui::text_align::left);
     draw_song_search_input(chart_level_min_input_rect(current.chart_list_rect),
                            state.min_level_input, "", "1",
                            12, 4, button_base, button_hover, button_selected,
                            normal_row_alpha, hover_row_alpha, selected_row_alpha, detail_alpha);
-    ui::draw_text_in_rect("-", 13,
+    draw_browse_body_text_in_rect("-", 13,
                           {current.chart_list_rect.x + 76.0f, current.chart_list_rect.y - 98.0f, 14.0f, 28.0f},
                           with_alpha(t.text_muted, detail_alpha));
     draw_song_search_input(chart_level_max_input_rect(current.chart_list_rect),
@@ -1394,7 +1463,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                            normal_row_alpha, hover_row_alpha, selected_row_alpha, detail_alpha);
     draw_level_range_slider(current.chart_list_rect, state, detail_alpha);
 
-    ui::draw_text_in_rect("KEYS", 12,
+    draw_browse_body_text_in_rect("KEYS", 12,
                           {current.chart_list_rect.x + kChartKeyGroupX, current.chart_list_rect.y - 120.0f, 86.0f, 18.0f},
                           with_alpha(t.text, detail_alpha), ui::text_align::left);
     const char* key_labels[] = {"ALL", "4K", "5K", "6K", "7K"};
@@ -1432,7 +1501,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         ? std::max(song->song.song.meta.chart_count, static_cast<int>(song->charts.size()))
         : static_cast<int>(song->charts.size());
     const int filtered_chart_count = static_cast<int>(chart_indices.size());
-    ui::draw_text_in_rect(
+    draw_browse_body_text_in_rect(
         !chart_filters_active(state)
             ? TextFormat("%d items", visible_chart_count)
             : TextFormat("%d / %d items", filtered_chart_count, visible_chart_count),
@@ -1455,7 +1524,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             : (song->charts_failed ? "Could not load charts."
                                    : (song->charts.empty() ? "No charts found."
                                                            : "No charts match."));
-        ui::draw_text_in_rect(chart_empty, 28, placeholder, with_alpha(t.text, detail_alpha), ui::text_align::center);
+        draw_browse_body_text_in_rect(chart_empty, 28, placeholder, with_alpha(t.text, detail_alpha), ui::text_align::center);
     }
 
     for (int display_index = 0; display_index < static_cast<int>(chart_indices.size()); ++display_index) {
@@ -1477,12 +1546,12 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                             with_alpha(selected ? t.border_active : t.border_light, detail_alpha));
 
         const float row_mid_y = card.y + (card.height - 18.0f) * 0.5f;
-        ui::draw_text_in_rect(detail::key_mode_label(item.chart.meta.key_count).c_str(),
+        draw_browse_body_text_in_rect(detail::key_mode_label(item.chart.meta.key_count).c_str(),
                               15,
                               {card.x + 24.0f, row_mid_y, 44.0f, 18.0f},
                               with_alpha(detail::key_mode_color(item.chart.meta.key_count), detail_alpha),
                               ui::text_align::left);
-        ui::draw_text_in_rect(item.chart.meta.difficulty.c_str(),
+        draw_browse_body_text_in_rect(item.chart.meta.difficulty.c_str(),
                               15,
                               {card.x + 72.0f, row_mid_y, 180.0f, 18.0f},
                               with_alpha(detail::key_mode_color(item.chart.meta.key_count), detail_alpha),
@@ -1490,7 +1559,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         const std::string chart_badge = detail::chart_status_label(item);
         const bool can_download_chart = !state.download_in_progress && detail::can_download_chart(*song, item);
         if (!chart_badge.empty() && !can_download_chart) {
-            ui::draw_text_in_rect(chart_badge.c_str(), 12,
+            draw_browse_body_text_in_rect(chart_badge.c_str(), 12,
                                   {card.x + card.width - 78.0f, card.y + 14.0f, 62.0f, 14.0f},
                                   with_alpha(item.update_available ? t.accent : t.text_muted, detail_alpha),
                                   ui::text_align::right);
@@ -1500,13 +1569,13 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                                       item.update_available,
                                       detail_alpha);
         }
-        ui::draw_text_in_rect(TextFormat("Lv.%.1f", item.chart.meta.level), 15,
+        draw_browse_body_text_in_rect(TextFormat("Lv.%.1f", item.chart.meta.level), 15,
                               {card.x + 268.0f, row_mid_y, 90.0f, 18.0f},
                               with_alpha(t.text, detail_alpha), ui::text_align::left);
-        ui::draw_text_in_rect(TextFormat("%d notes", item.chart.note_count), 13,
+        draw_browse_body_text_in_rect(TextFormat("%d notes", item.chart.note_count), 13,
                               {card.x + 408.0f, row_mid_y + 1.0f, 130.0f, 16.0f},
                               with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
-        ui::draw_text_in_rect(TextFormat("by %s", item.chart.meta.chart_author.empty()
+        draw_browse_body_text_in_rect(TextFormat("by %s", item.chart.meta.chart_author.empty()
                                                    ? "Unknown"
                                                    : item.chart.meta.chart_author.c_str()),
                               13,
@@ -1528,7 +1597,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         const Color source_color = chart_source_status_color(item);
         ui::draw_rect_f(source_badge, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
         ui::draw_rect_lines(source_badge, 1.0f, with_alpha(source_color, detail_alpha));
-        ui::draw_text_in_rect(source_label, 13, source_badge, with_alpha(source_color, detail_alpha),
+        draw_browse_body_text_in_rect(source_label, 13, source_badge, with_alpha(source_color, detail_alpha),
                               ui::text_align::center);
     }
 }
