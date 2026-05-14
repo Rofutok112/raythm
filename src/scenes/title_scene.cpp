@@ -291,10 +291,16 @@ void title_scene::update_startup_loading() {
         return;
     }
 
+    if (!startup_fonts_preload_started_) {
+        startup_fonts_preload_started_ = true;
+        startup_loading_message_ = "Preparing UI text...";
+        return;
+    }
+
     if (!startup_fonts_preloaded_) {
-        startup_fonts_preloaded_ = true;
         startup_loading_message_ = "Preparing UI text...";
         ui::preload_text_glyphs(startup_font_preload_texts(play_state_));
+        startup_fonts_preloaded_ = true;
         return;
     }
 
@@ -771,6 +777,7 @@ void title_scene::on_enter() {
     play_state_.login_dialog.open = false;
     startup_loading_ = true;
     startup_catalog_requested_ = false;
+    startup_fonts_preload_started_ = false;
     startup_fonts_preloaded_ = false;
     startup_scoring_requested_ = false;
     startup_load_complete_ = false;
@@ -1019,7 +1026,7 @@ void title_scene::draw_startup_loading(float dt) {
     if (startup_catalog_requested_) {
         base_progress = kStartupProgressCatalog;
     }
-    if (startup_fonts_preloaded_) {
+    if (startup_fonts_preload_started_) {
         base_progress = kStartupProgressFonts;
     }
     if (startup_scoring_requested_) {

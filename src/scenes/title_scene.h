@@ -108,6 +108,7 @@ private:
     bool start_in_create_view_ = false;
     bool startup_loading_ = false;
     bool startup_catalog_requested_ = false;
+    bool startup_fonts_preload_started_ = false;
     bool startup_fonts_preloaded_ = false;
     bool startup_scoring_requested_ = false;
     bool startup_load_complete_ = false;
