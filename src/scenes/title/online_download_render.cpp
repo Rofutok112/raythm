@@ -1059,7 +1059,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                         continue;
                     }
                     const Color tag_color = keyword ? keyword_color_for_label(label) : genre_color_for_label(label);
-                    const float width = std::clamp(ui::measure_text_size(label.c_str(), 11.0f).x + 16.0f,
+                    const float width = std::clamp(ui::measure_body_text_size(label.c_str(), 11.0f).x + 16.0f,
                                                    58.0f, 118.0f);
                     if (tag_x + width > max_x) {
                         break;
@@ -1175,7 +1175,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                 const Color color = color_mode == 1 ? genre_color_for_label(label)
                     : color_mode == 2             ? keyword_color_for_label(label)
                                                   : fallback_color;
-                const float width = std::clamp(ui::measure_text_size(label.c_str(), 13.0f).x + 22.0f, 70.0f, 150.0f);
+                const float width = std::clamp(ui::measure_body_text_size(label.c_str(), 13.0f).x + 22.0f, 70.0f, 150.0f);
                 if (x + width > max_x) {
                     ++row;
                     if (row >= max_rows) {
@@ -1307,7 +1307,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             const Color color = color_mode == 1 ? genre_color_for_label(label)
                 : color_mode == 2             ? keyword_color_for_label(label)
                                               : fallback_color;
-            const float width = std::clamp(ui::measure_text_size(label.c_str(), 13.0f).x + 22.0f, 70.0f, 150.0f);
+            const float width = std::clamp(ui::measure_body_text_size(label.c_str(), 13.0f).x + 22.0f, 70.0f, 150.0f);
             if (tag_x + width > song_info_rect.x + song_info_rect.width) {
                 tag_x = song_info_rect.x;
                 tag_y += 40.0f;
