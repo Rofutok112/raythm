@@ -1038,19 +1038,19 @@ if(MINGW)
     endforeach()
 endif()
 
-# bass.dll を実行ファイルと同じディレクトリにコピー
-add_custom_command(TARGET raythm POST_BUILD
+add_custom_target(raythm_runtime_files
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+        $<TARGET_FILE_DIR:raythm>
+        $<TARGET_FILE_DIR:raythm>/assets
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${RAYTHM_RUNTIME_DLLS}
         $<TARGET_FILE_DIR:raythm>
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/assets/audio
-        $<TARGET_FILE_DIR:raythm>/assets/audio
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/assets/fonts
-        $<TARGET_FILE_DIR:raythm>/assets/fonts
+        ${CMAKE_SOURCE_DIR}/assets
+        $<TARGET_FILE_DIR:raythm>/assets
         COMMAND_EXPAND_LISTS
 )
+add_dependencies(raythm raythm_runtime_files)
 
 add_custom_command(TARGET audio_manager_smoke POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -1060,8 +1060,7 @@ add_custom_command(TARGET audio_manager_smoke POST_BUILD
 
 install(TARGETS raythm raythm_launcher raythm_updater RUNTIME DESTINATION .)
 install(FILES ${RAYTHM_RUNTIME_DLLS} DESTINATION .)
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets/audio DESTINATION assets)
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets/fonts DESTINATION assets)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets DESTINATION .)
 
 if(WIN32)
     set(CPACK_PACKAGE_NAME "raythm")
