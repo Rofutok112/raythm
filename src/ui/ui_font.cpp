@@ -326,13 +326,13 @@ float display_spacing(float font_size, float spacing) {
 }
 
 void ensure_text_glyphs(const char* text) {
+    bool changed = false;
     int codepoint_count = 0;
     int* codepoints = LoadCodepoints(text, &codepoint_count);
     if (codepoints == nullptr) {
         return;
     }
 
-    bool changed = false;
     for (int i = 0; i < codepoint_count; ++i) {
         if (codepoints[i] < 32) {
             continue;
@@ -340,6 +340,31 @@ void ensure_text_glyphs(const char* text) {
         changed = g_loaded_codepoints.insert(codepoints[i]).second || changed;
     }
     UnloadCodepoints(codepoints);
+
+    if (changed) {
+        rebuild_fonts();
+    }
+}
+
+void preload_text_glyphs(const std::vector<std::string>& texts) {
+    bool changed = false;
+    for (const std::string& text : texts) {
+        if (text.empty()) {
+            continue;
+        }
+        int codepoint_count = 0;
+        int* codepoints = LoadCodepoints(text.c_str(), &codepoint_count);
+        if (codepoints == nullptr) {
+            continue;
+        }
+        for (int i = 0; i < codepoint_count; ++i) {
+            if (codepoints[i] < 32) {
+                continue;
+            }
+            changed = g_loaded_codepoints.insert(codepoints[i]).second || changed;
+        }
+        UnloadCodepoints(codepoints);
+    }
 
     if (changed) {
         rebuild_fonts();

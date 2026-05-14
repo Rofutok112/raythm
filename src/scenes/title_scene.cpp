@@ -26,6 +26,7 @@
 #include "title/title_play_mode_controller.h"
 #include "title/seamless_song_select_view.h"
 #include "theme.h"
+#include "ui/ui_font.h"
 #include "ui_notice.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
@@ -41,6 +42,7 @@ constexpr float kAccountChipInteractiveThreshold = 0.2f;
 constexpr float kPlayViewAnimSpeed = 6.0f;
 constexpr float kStartupProgressMin = 0.08f;
 constexpr float kStartupProgressCatalog = 0.68f;
+constexpr float kStartupProgressFonts = 0.78f;
 constexpr float kStartupProgressScoring = 0.88f;
 constexpr ui::draw_layer kTitleModalLayer = ui::draw_layer::modal;
 
@@ -135,6 +137,43 @@ bool consume_startup_level_calculation() {
     }
     consumed = true;
     return true;
+}
+
+std::vector<std::string> startup_font_preload_texts(const song_select::state& state) {
+    std::vector<std::string> texts = {
+        "Home", "Overview", "Rising", "Hidden gems", "Recommended", "Needs charts",
+        "Source", "Official", "Community", "Mine", "Search", "songs / artists / tags",
+        "SONG", "CHARTS", "Find charts to download", "All", "Downloaded",
+        "Not downloaded", "Level", "Keys", "BPM", "Open Song", "Open Local",
+        "Remove Local", "Download Chart", "Open Chart", "Loading local catalog...",
+        "Preparing scoring cache...", "Ready.", "Catalog loaded with warnings.",
+        "No songs found", "No songs found yet.", "JACKET", "Settings", "Profile",
+        "Recent Activity", "Rankings", "Max Combo", "Accuracy",
+        "あいうえおかきくけこさしすせそたちつてとなにぬねの",
+        "はひふへほまみむめもやゆよらりるれろわをん",
+        "アイウエオカキクケコサシスセソタチツテトナニヌネノ",
+        "ハヒフヘホマミムメモヤユヨラリルレロワヲン",
+        "がぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ",
+        "ガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポ",
+        "ー・、。！？「」（）[]/ feat. Lv. charts plays notes by"
+    };
+
+    for (const song_select::song_entry& song : state.songs) {
+        texts.push_back(song.song.meta.title);
+        texts.push_back(song.song.meta.artist);
+        texts.push_back(song.song.meta.genre);
+        for (const std::string& genre : song.song.meta.genres) {
+            texts.push_back(genre);
+        }
+        for (const std::string& keyword : song.song.meta.keywords) {
+            texts.push_back(keyword);
+        }
+        for (const song_select::chart_option& chart : song.charts) {
+            texts.push_back(chart.meta.difficulty);
+            texts.push_back(chart.meta.chart_author);
+        }
+    }
+    return texts;
 }
 
 }  // namespace
@@ -249,6 +288,13 @@ void title_scene::update_startup_loading() {
     }
 
     if (!play_state_.catalog_loaded_once) {
+        return;
+    }
+
+    if (!startup_fonts_preloaded_) {
+        startup_fonts_preloaded_ = true;
+        startup_loading_message_ = "Preparing UI text...";
+        ui::preload_text_glyphs(startup_font_preload_texts(play_state_));
         return;
     }
 
@@ -725,6 +771,7 @@ void title_scene::on_enter() {
     play_state_.login_dialog.open = false;
     startup_loading_ = true;
     startup_catalog_requested_ = false;
+    startup_fonts_preloaded_ = false;
     startup_scoring_requested_ = false;
     startup_load_complete_ = false;
     startup_load_failed_ = false;
@@ -971,6 +1018,9 @@ void title_scene::draw_startup_loading(float dt) {
     float base_progress = kStartupProgressMin;
     if (startup_catalog_requested_) {
         base_progress = kStartupProgressCatalog;
+    }
+    if (startup_fonts_preloaded_) {
+        base_progress = kStartupProgressFonts;
     }
     if (startup_scoring_requested_) {
         base_progress = kStartupProgressScoring;

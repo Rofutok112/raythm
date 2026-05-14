@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "raylib.h"
 
@@ -35,6 +36,7 @@ float body_spacing(float spacing = 0.0f);
 float display_font_size(float font_size);
 float display_spacing(float font_size, float spacing = 0.0f);
 void ensure_text_glyphs(const char* text);
+void preload_text_glyphs(const std::vector<std::string>& texts);
 Vector2 measure_text_size(text_role role, const char* text, float font_size, float spacing = 0.0f);
 Vector2 measure_text_size(const char* text, float font_size, float spacing = 0.0f);
 Vector2 measure_body_text_size(const char* text, float font_size, float spacing = 0.0f);
