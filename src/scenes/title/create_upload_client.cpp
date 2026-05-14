@@ -694,8 +694,15 @@ upload_request_result send_song_upload_request(const auth::session& session,
     std::vector<multipart_field> fields;
     fields.push_back({"title", meta.title});
     fields.push_back({"artist", meta.artist});
-    if (!meta.genre.empty()) {
-        fields.push_back({"genre", meta.genre});
+    std::vector<std::string> genres = meta.genres;
+    if (genres.empty() && !meta.genre.empty()) {
+        genres.push_back(meta.genre);
+    }
+    for (const std::string& genre : genres) {
+        push_string_field(fields, "genres", genre);
+    }
+    for (const std::string& keyword : meta.keywords) {
+        push_string_field(fields, "keywords", keyword);
     }
     fields.push_back({"baseBpm", format_float_field(meta.base_bpm)});
     if (meta.duration_seconds > 0.0f) {

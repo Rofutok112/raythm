@@ -8,11 +8,12 @@
 
 namespace title_online_view::detail {
 
-inline constexpr int kSongGridColumns = 4;
-inline constexpr int kChartGridColumns = 2;
+inline constexpr int kSongGridColumns = 3;
+inline constexpr int kChartGridColumns = 1;
 
 const std::vector<song_entry_state>& active_songs(const state& state);
 std::vector<int> filtered_indices(const state& state);
+std::vector<int> filtered_chart_indices(const state& state);
 
 int& selected_song_index_ref(state& state);
 const int& selected_song_index_ref(const state& state);
@@ -20,6 +21,7 @@ int& selected_chart_index_ref(state& state);
 const int& selected_chart_index_ref(const state& state);
 
 void ensure_selection_valid(state& state);
+void rebuild_visible_discovery_songs(state& state);
 
 float max_song_scroll(Rectangle area, int count);
 Rectangle song_row_rect(Rectangle area, int display_index, float scroll_y);
@@ -32,7 +34,6 @@ int hit_test_chart_list(const state& state, Rectangle area, Vector2 point);
 
 std::string key_mode_label(int key_count);
 Color key_mode_color(int key_count);
-std::string format_bpm_range(float min_bpm, float max_bpm);
 std::string song_status_label(const song_entry_state& song);
 Color song_status_color(const song_entry_state& song);
 std::string chart_status_label(const chart_entry_state& chart);

@@ -21,6 +21,28 @@ enum class catalog_mode {
     owned,
 };
 
+enum class discovery_view {
+    overview,
+    new_arrivals,
+    rising,
+    hidden_gems,
+    recommended,
+    needs_charts,
+};
+
+enum class source_filter {
+    all,
+    official,
+    community,
+};
+
+enum class chart_source_filter {
+    all,
+    official,
+    community,
+    mine,
+};
+
 enum class requested_action {
     none,
     primary,
@@ -33,6 +55,7 @@ enum class requested_action {
 struct chart_entry_state {
     song_select::chart_option chart;
     std::string installed_local_chart_id;
+    std::string uploader_id;
     bool installed = false;
     bool update_available = false;
 };
@@ -50,7 +73,14 @@ struct song_entry_state {
     int next_chart_page = 1;
 };
 
+struct discovery_shelf_state {
+    std::string key;
+    std::string title;
+    std::vector<song_entry_state> songs;
+};
+
 struct catalog_load_result {
+    std::vector<discovery_shelf_state> discovery_shelves;
     std::vector<song_entry_state> official_songs;
     std::vector<song_entry_state> community_songs;
     std::vector<song_entry_state> owned_songs;
@@ -112,8 +142,11 @@ struct state {
     std::vector<song_entry_state> official_songs;
     std::vector<song_entry_state> community_songs;
     std::vector<song_entry_state> owned_songs;
+    std::vector<discovery_shelf_state> discovery_shelves;
     std::vector<song_select::song_entry> local_songs;
     catalog_mode mode = catalog_mode::official;
+    discovery_view view = discovery_view::overview;
+    source_filter source = source_filter::all;
     int official_selected_song_index = 0;
     int community_selected_song_index = 0;
     int owned_selected_song_index = 0;
@@ -125,6 +158,12 @@ struct state {
     float chart_scroll_y = 0.0f;
     float chart_scroll_y_target = 0.0f;
     ui::text_input_state search_input;
+    ui::text_input_state chart_search_input;
+    ui::text_input_state min_level_input;
+    ui::text_input_state max_level_input;
+    chart_source_filter chart_source = chart_source_filter::all;
+    int chart_key_filter = 0;
+    int chart_download_filter = 0;
     jacket_cache jackets;
     std::future<catalog_load_result> catalog_future;
     std::future<remote_song_page_fetch_result> song_page_future;
@@ -173,6 +212,8 @@ struct layout {
     Rectangle owned_tab_rect;
     Rectangle search_rect;
     Rectangle content_rect;
+    Rectangle sidebar_rect;
+    Rectangle preview_panel_rect;
     Rectangle song_grid_rect;
     Rectangle detail_left_rect;
     Rectangle detail_right_rect;

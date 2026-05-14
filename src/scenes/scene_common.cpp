@@ -42,13 +42,27 @@ void draw_scene_background(const ui_theme& theme) {
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, theme.bg, theme.bg_alt);
 }
 
-void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Color color, double time) {
+void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Color color, double time,
+                       ui::text_align align) {
     if (text == nullptr || *text == '\0' || clip_rect.width <= 0.0f || clip_rect.height <= 0.0f) {
         return;
     }
 
     const float text_width = measure_text_width(text, font_size);
-    const float draw_x = clip_rect.x;
+    float draw_x = clip_rect.x;
+    if (text_width <= clip_rect.width) {
+        switch (align) {
+        case ui::text_align::left:
+            draw_x = clip_rect.x;
+            break;
+        case ui::text_align::center:
+            draw_x = clip_rect.x + (clip_rect.width - text_width) * 0.5f;
+            break;
+        case ui::text_align::right:
+            draw_x = clip_rect.x + clip_rect.width - text_width;
+            break;
+        }
+    }
     const float draw_y = clip_rect.y;
     constexpr float kEdgeSlack = 2.0f;
 
@@ -85,5 +99,5 @@ void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Col
 
 void draw_marquee_text(const char* text, float x, float y, int font_size, Color color, float max_width, double time) {
     draw_marquee_text(text, {x, y, max_width, ui::text_layout_font_size(static_cast<float>(font_size))},
-                      font_size, color, time);
+                      font_size, color, time, ui::text_align::left);
 }

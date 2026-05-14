@@ -38,7 +38,9 @@ inline float snap_pixel(float value) {
 }
 
 inline float snap_stroke_width(float width) {
-    return std::max(1.0f, std::round(width));
+    const float screen_scale = std::max(0.001f, virtual_screen::design_to_screen_scale());
+    const float min_visible_width = std::ceil(1.0f / screen_scale);
+    return std::max(min_visible_width, std::round(width));
 }
 
 inline Rectangle snap_rect(Rectangle rect) {
@@ -59,7 +61,9 @@ inline void draw_text_f(const char* text, float x, float y, int font_size, Color
 
 // float 座標で DrawLine を呼び出す。
 inline void draw_line_f(float x1, float y1, float x2, float y2, Color color) {
-    DrawLine(to_i(x1), to_i(y1), to_i(x2), to_i(y2), color);
+    DrawLineEx({snap_pixel(x1), snap_pixel(y1)},
+               {snap_pixel(x2), snap_pixel(y2)},
+               snap_stroke_width(1.0f), color);
 }
 
 inline void draw_line_ex(Vector2 start, Vector2 end, float thick, Color color) {
