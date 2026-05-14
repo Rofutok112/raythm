@@ -112,6 +112,10 @@ Color genre_color_for_label(const std::string& label) {
     return kPalette[hash % (sizeof(kPalette) / sizeof(kPalette[0]))];
 }
 
+Color keyword_color_for_label(const std::string& label) {
+    return genre_color_for_label("keyword:" + label);
+}
+
 std::string song_subtitle(const song_meta& meta) {
     return meta.artist;
 }
@@ -968,29 +972,39 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             }
 
             draw_marquee_text(song.song.song.meta.title.c_str(),
-                              {jacket_rect.x + jacket_rect.width + 16.0f, card.y + 24.0f,
+                              {jacket_rect.x + jacket_rect.width + 16.0f, jacket_rect.y,
                                card.width - jacket_rect.width - 48.0f, 28.0f},
                               18, with_alpha(t.text, grid_alpha), now);
             const std::string card_subtitle = song_subtitle(song.song.song.meta);
             draw_marquee_text(card_subtitle.c_str(),
-                              {jacket_rect.x + jacket_rect.width + 16.0f, card.y + 52.0f,
+                              {jacket_rect.x + jacket_rect.width + 16.0f, jacket_rect.y + 28.0f,
                                card.width - jacket_rect.width - 48.0f, 22.0f},
                               13, with_alpha(t.text_muted, grid_alpha), now);
-            const std::string first_genre = genre_summary(song.song.song.meta);
-            if (!first_genre.empty()) {
-                const Color genre_color = genre_color_for_label(primary_genre_label(song.song.song.meta));
-                const Rectangle genre_tag_rect = {
-                    jacket_rect.x + jacket_rect.width + 16.0f,
-                    card.y + 82.0f,
-                    std::clamp(ui::measure_text_size(first_genre.c_str(), 12.0f).x + 18.0f, 70.0f,
-                               card.width - jacket_rect.width - 48.0f),
-                    24.0f,
-                };
-                ui::draw_rect_f(genre_tag_rect, with_alpha(button_base, row_alpha));
-                ui::draw_rect_lines(genre_tag_rect, 1.0f, with_alpha(genre_color, grid_alpha));
-                ui::draw_text_in_rect(first_genre.c_str(), 12, genre_tag_rect,
-                                      with_alpha(genre_color, grid_alpha), ui::text_align::center);
-            }
+            const auto draw_card_tag_row = [&](const std::vector<std::string>& labels,
+                                               float y,
+                                               bool keyword) {
+                float tag_x = jacket_rect.x + jacket_rect.width + 16.0f;
+                const float max_x = card.x + card.width - 18.0f;
+                for (const std::string& label : labels) {
+                    if (label.empty()) {
+                        continue;
+                    }
+                    const Color tag_color = keyword ? keyword_color_for_label(label) : genre_color_for_label(label);
+                    const float width = std::clamp(ui::measure_text_size(label.c_str(), 11.0f).x + 16.0f,
+                                                   58.0f, 118.0f);
+                    if (tag_x + width > max_x) {
+                        break;
+                    }
+                    const Rectangle tag_rect = {tag_x, y, width, 20.0f};
+                    ui::draw_rect_f(tag_rect, with_alpha(button_base, row_alpha));
+                    ui::draw_rect_lines(tag_rect, 1.0f, with_alpha(tag_color, grid_alpha));
+                    ui::draw_text_in_rect(label.c_str(), 11, tag_rect,
+                                          with_alpha(tag_color, grid_alpha), ui::text_align::center);
+                    tag_x += width + 7.0f;
+                }
+            };
+            draw_card_tag_row(genre_labels(song.song.song.meta), jacket_rect.y + 54.0f, false);
+            draw_card_tag_row(song.song.song.meta.keywords, jacket_rect.y + 78.0f, true);
             const float footer_x = card.x + 16.0f;
             const float footer_y = card.y + card.height - 28.0f;
             if (song.song.song.meta.has_play_count) {
@@ -1079,7 +1093,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         const auto draw_preview_tag_row = [&](const std::vector<std::string>& labels,
                                               float y,
                                               Color fallback_color,
-                                              bool color_by_label,
+                                              int color_mode,
                                               int max_rows) {
             float x = current.preview_panel_rect.x + 24.0f;
             float row_y = y;
@@ -1089,7 +1103,9 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                 if (label.empty()) {
                     continue;
                 }
-                const Color color = color_by_label ? genre_color_for_label(label) : fallback_color;
+                const Color color = color_mode == 1 ? genre_color_for_label(label)
+                    : color_mode == 2             ? keyword_color_for_label(label)
+                                                  : fallback_color;
                 const float width = std::clamp(ui::measure_text_size(label.c_str(), 13.0f).x + 22.0f, 70.0f, 150.0f);
                 if (x + width > max_x) {
                     ++row;
@@ -1107,11 +1123,11 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                 x += width + 8.0f;
             }
         };
-        draw_preview_tag_row(genre_labels(song->song.song.meta), bar.y + 64.0f, t.accent, true, 2);
+        draw_preview_tag_row(genre_labels(song->song.song.meta), bar.y + 64.0f, t.accent, 1, 2);
         ui::draw_text_in_rect("KEYWORDS", 13,
                               {current.preview_panel_rect.x + 24.0f, bar.y + 152.0f, 140.0f, 18.0f},
                               with_alpha(t.accent, alpha), ui::text_align::left);
-        draw_preview_tag_row(song->song.song.meta.keywords, bar.y + 174.0f, t.fast, false, 2);
+        draw_preview_tag_row(song->song.song.meta.keywords, bar.y + 174.0f, t.fast, 2, 2);
         const auto draw_preview_stat = [&](Rectangle rect, const char* label, const char* value, Color accent) {
             ui::draw_rect_f(rect, with_alpha(button_base, normal_row_alpha));
             ui::draw_rect_lines(rect, 1.0f, with_alpha(accent, alpha));
@@ -1211,7 +1227,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     const auto draw_tag_row = [&](const std::vector<std::string>& labels,
                                   float start_y,
                                   Color fallback_color,
-                                  bool color_by_label) {
+                                  int color_mode) {
         float tag_x = song_info_rect.x;
         float tag_y = start_y;
         bool drew_any = false;
@@ -1219,7 +1235,9 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             if (label.empty()) {
                 return;
             }
-            const Color color = color_by_label ? genre_color_for_label(label) : fallback_color;
+            const Color color = color_mode == 1 ? genre_color_for_label(label)
+                : color_mode == 2             ? keyword_color_for_label(label)
+                                              : fallback_color;
             const float width = std::clamp(ui::measure_text_size(label.c_str(), 13.0f).x + 22.0f, 70.0f, 150.0f);
             if (tag_x + width > song_info_rect.x + song_info_rect.width) {
                 tag_x = song_info_rect.x;
@@ -1239,8 +1257,8 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         return drew_any ? tag_y + 40.0f : start_y;
     };
     const float genre_y = artist_rect.y + 80.0f;
-    const float keyword_y = draw_tag_row(genre_labels(song->song.song.meta), genre_y, t.accent, true);
-    draw_tag_row(song->song.song.meta.keywords, keyword_y, t.fast, false);
+    const float keyword_y = draw_tag_row(genre_labels(song->song.song.meta), genre_y, t.accent, 1);
+    draw_tag_row(song->song.song.meta.keywords, keyword_y, t.fast, 2);
     const float stats_y = song_info_rect.y + 276.0f;
     ui::draw_text_in_rect(TextFormat("BPM %.0f", song->song.song.meta.base_bpm), 14,
                           {song_info_rect.x, stats_y, 96.0f, 28.0f},
