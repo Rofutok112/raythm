@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "data_models.h"
 #include "scene.h"
@@ -40,11 +41,14 @@ private:
     // Song metadata inputs
     ui::text_input_state title_input_;
     ui::text_input_state artist_input_;
-    ui::text_input_state genre_input_;
+    ui::text_input_state genre_search_input_;
+    ui::text_input_state keyword_input_;
     ui::text_input_state bpm_input_;
     ui::text_input_state audio_path_input_;
     ui::text_input_state jacket_path_input_;
     ui::text_input_state preview_ms_input_;
+    std::vector<std::string> selected_genres_;
+    std::vector<std::string> selected_keywords_;
     square_image_picker::state jacket_picker_;
     std::string jacket_crop_source_;
 

@@ -36,6 +36,13 @@ enum class source_filter {
     community,
 };
 
+enum class chart_source_filter {
+    all,
+    official,
+    community,
+    mine,
+};
+
 enum class requested_action {
     none,
     primary,
@@ -48,6 +55,7 @@ enum class requested_action {
 struct chart_entry_state {
     song_select::chart_option chart;
     std::string installed_local_chart_id;
+    std::string uploader_id;
     bool installed = false;
     bool update_available = false;
 };
@@ -153,8 +161,7 @@ struct state {
     ui::text_input_state chart_search_input;
     ui::text_input_state min_level_input;
     ui::text_input_state max_level_input;
-    ui::text_input_state min_bpm_input;
-    ui::text_input_state max_bpm_input;
+    chart_source_filter chart_source = chart_source_filter::all;
     int chart_key_filter = 0;
     int chart_download_filter = 0;
     jacket_cache jackets;

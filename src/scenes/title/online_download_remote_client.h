@@ -21,6 +21,8 @@ struct remote_song_payload {
     int preview_start_ms = 0;
     int song_version = 0;
     int chart_count = 0;
+    int play_count = 0;
+    bool has_play_count = false;
     std::string content_source;
     std::string audio_url;
     std::string jacket_url;
@@ -45,6 +47,7 @@ struct remote_chart_payload {
     std::string chart_fingerprint;
     std::string chart_sha256;
     std::string content_source;
+    std::string uploader_id;
 };
 
 struct remote_catalog_fetch_result {

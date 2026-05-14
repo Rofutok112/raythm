@@ -461,6 +461,10 @@ std::optional<remote_song_payload> parse_remote_song(const std::string& object) 
     if (const auto keywords_array = json::extract_array(object, "keywords")) {
         keywords = json::extract_strings_from_array(*keywords_array);
     }
+    std::optional<int> play_count = json::extract_int(object, "playCount");
+    if (!play_count.has_value()) {
+        play_count = json::extract_int(object, "plays");
+    }
 
     return remote_song_payload{
         .id = *id,
@@ -474,6 +478,8 @@ std::optional<remote_song_payload> parse_remote_song(const std::string& object) 
         .preview_start_ms = json::extract_int(object, "previewStartMs").value_or(0),
         .song_version = json::extract_int(object, "songVersion").value_or(0),
         .chart_count = json::extract_int(object, "chartCount").value_or(0),
+        .play_count = play_count.has_value() ? std::max(0, *play_count) : 0,
+        .has_play_count = play_count.has_value(),
         .content_source = json::extract_string(object, "contentSource").value_or("community"),
         .audio_url = json::extract_string(object, "audioUrl").value_or(""),
         .jacket_url = json::extract_string(object, "jacketUrl").value_or(""),
@@ -486,6 +492,10 @@ std::optional<remote_chart_payload> parse_remote_chart(const std::string& object
     const std::optional<std::string> difficulty_name = json::extract_string(object, "difficultyName");
     if (!id.has_value() || !song_id.has_value() || !difficulty_name.has_value()) {
         return std::nullopt;
+    }
+    std::string uploader_id;
+    if (const std::optional<std::string> uploader_object = json::extract_object(object, "uploader")) {
+        uploader_id = json::extract_string(*uploader_object, "id").value_or("");
     }
 
     return remote_chart_payload{
@@ -507,6 +517,7 @@ std::optional<remote_chart_payload> parse_remote_chart(const std::string& object
         .chart_fingerprint = json::extract_string(object, "chartFingerprint").value_or(""),
         .chart_sha256 = json::extract_string(object, "chartSha256").value_or(""),
         .content_source = json::extract_string(object, "contentSource").value_or("community"),
+        .uploader_id = std::move(uploader_id),
     };
 }
 

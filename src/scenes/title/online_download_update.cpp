@@ -11,6 +11,15 @@
 namespace title_online_view {
 namespace {
 
+constexpr float kChartLevelWidth = 264.0f;
+constexpr float kChartFilterGroupGap = 22.0f;
+constexpr float kChartKeyGroupX = kChartLevelWidth + kChartFilterGroupGap;
+constexpr float kChartKeyButtonWidth = 44.0f;
+constexpr float kChartKeyButtonStep = 52.0f;
+constexpr float kChartKeyGroupWidth = kChartKeyButtonWidth + kChartKeyButtonStep * 4.0f;
+constexpr float kChartClearButtonX = kChartKeyGroupX + kChartKeyGroupWidth + kChartFilterGroupGap;
+constexpr float kChartClearButtonWidth = 68.0f;
+
 void reset_chart_scroll(state& state) {
     state.chart_scroll_y = 0.0f;
     state.chart_scroll_y_target = 0.0f;
@@ -97,7 +106,7 @@ Rectangle preview_open_button_rect(Rectangle panel) {
 }
 
 Rectangle preview_play_button_rect(Rectangle panel) {
-    constexpr float kPreviewPlayY = 438.0f;
+    constexpr float kPreviewPlayY = 400.0f;
     constexpr float kPreviewPlayWidth = 116.0f;
     constexpr float kPreviewPlayHeight = 54.0f;
     return {
@@ -109,7 +118,7 @@ Rectangle preview_play_button_rect(Rectangle panel) {
 }
 
 Rectangle preview_prev_button_rect(Rectangle panel) {
-    constexpr float kPreviewPlayY = 438.0f;
+    constexpr float kPreviewPlayY = 400.0f;
     constexpr float kPreviewButtonWidth = 90.0f;
     constexpr float kPreviewButtonHeight = 54.0f;
     constexpr float kPreviewButtonGap = 8.0f;
@@ -122,7 +131,7 @@ Rectangle preview_prev_button_rect(Rectangle panel) {
 }
 
 Rectangle preview_next_button_rect(Rectangle panel) {
-    constexpr float kPreviewPlayY = 438.0f;
+    constexpr float kPreviewPlayY = 400.0f;
     constexpr float kPreviewButtonWidth = 90.0f;
     constexpr float kPreviewButtonHeight = 54.0f;
     constexpr float kPreviewButtonGap = 8.0f;
@@ -136,7 +145,7 @@ Rectangle preview_next_button_rect(Rectangle panel) {
 
 Rectangle preview_bar_rect(Rectangle panel) {
     constexpr float kPreviewPanelInset = 24.0f;
-    constexpr float kPreviewBarY = 506.0f;
+    constexpr float kPreviewBarY = 468.0f;
     constexpr float kPreviewBarHeight = 12.0f;
     return {
         panel.x + kPreviewPanelInset,
@@ -153,6 +162,114 @@ Rectangle chart_filter_button_rect(Rectangle chart_list, int index) {
         66.0f,
         28.0f,
     };
+}
+
+Rectangle chart_source_button_rect(Rectangle chart_list, int index) {
+    return {
+        chart_list.x + static_cast<float>(index) * ((chart_list.width - 18.0f) / 4.0f + 6.0f),
+        chart_list.y - 242.0f,
+        (chart_list.width - 18.0f) / 4.0f,
+        46.0f,
+    };
+}
+
+Rectangle chart_key_button_rect(Rectangle chart_list, int index) {
+    return {
+        chart_list.x + kChartKeyGroupX + static_cast<float>(index) * kChartKeyButtonStep,
+        chart_list.y - 98.0f,
+        kChartKeyButtonWidth,
+        28.0f,
+    };
+}
+
+Rectangle chart_status_button_rect(Rectangle chart_list, int index) {
+    return {
+        chart_list.x + static_cast<float>(index) * ((chart_list.width - 12.0f) / 3.0f + 6.0f),
+        chart_list.y - 184.0f,
+        (chart_list.width - 12.0f) / 3.0f,
+        42.0f,
+    };
+}
+
+Rectangle chart_clear_button_rect(Rectangle chart_list) {
+    return {
+        chart_list.x + kChartClearButtonX,
+        chart_list.y - 98.0f,
+        kChartClearButtonWidth,
+        28.0f,
+    };
+}
+
+Rectangle chart_level_min_input_rect(Rectangle chart_list) {
+    return {chart_list.x, chart_list.y - 98.0f, 66.0f, 28.0f};
+}
+
+Rectangle chart_level_max_input_rect(Rectangle chart_list) {
+    return {chart_list.x + 104.0f, chart_list.y - 98.0f, 66.0f, 28.0f};
+}
+
+Rectangle chart_level_slider_rect(Rectangle chart_list) {
+    return {chart_list.x, chart_list.y - 41.0f, kChartLevelWidth, 8.0f};
+}
+
+void clear_chart_filters(state& state) {
+    state.chart_search_input.value.clear();
+    state.chart_search_input.cursor = 0;
+    state.min_level_input.value.clear();
+    state.min_level_input.cursor = 0;
+    state.max_level_input.value.clear();
+    state.max_level_input.cursor = 0;
+    state.chart_source = chart_source_filter::all;
+    state.chart_key_filter = 0;
+    state.chart_download_filter = 0;
+    reset_chart_scroll(state);
+}
+
+float chart_level_value(const std::string& value, float fallback) {
+    if (value.empty()) {
+        return fallback;
+    }
+    try {
+        size_t parsed = 0;
+        const float result = std::stof(value, &parsed);
+        if (parsed == value.size()) {
+            return std::clamp(result, 1.0f, 10.0f);
+        }
+    } catch (...) {
+    }
+    return fallback;
+}
+
+void set_level_input(ui::text_input_state& input, float value) {
+    const int rounded = static_cast<int>(std::round(std::clamp(value, 1.0f, 10.0f)));
+    input.value = std::to_string(rounded);
+    input.cursor = ui::utf8_codepoint_count(input.value);
+    input.has_selection = false;
+    input.selection_anchor = input.cursor;
+}
+
+bool update_level_range_from_slider(state& state, Rectangle chart_list, Vector2 mouse) {
+    const Rectangle slider = chart_level_slider_rect(chart_list);
+    const Rectangle hit_rect = {slider.x - 8.0f, slider.y - 16.0f, slider.width + 16.0f, 40.0f};
+    if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT) || !CheckCollisionPointRec(mouse, hit_rect)) {
+        return false;
+    }
+
+    float min_level = chart_level_value(state.min_level_input.value, 1.0f);
+    float max_level = chart_level_value(state.max_level_input.value, 10.0f);
+    if (min_level > max_level) {
+        std::swap(min_level, max_level);
+    }
+    const float value = 1.0f + std::clamp((mouse.x - slider.x) / slider.width, 0.0f, 1.0f) * 9.0f;
+    if (std::fabs(value - min_level) <= std::fabs(value - max_level)) {
+        min_level = std::min(value, max_level);
+    } else {
+        max_level = std::max(value, min_level);
+    }
+    set_level_input(state.min_level_input, min_level);
+    set_level_input(state.max_level_input, max_level);
+    reset_chart_scroll(state);
+    return true;
 }
 
 bool switch_discovery_view(state& state, discovery_view view, update_result& result) {
@@ -339,32 +456,70 @@ bool handle_detail_actions(state& state,
         return true;
     }
 
-    if (ui::is_clicked(chart_filter_button_rect(current.chart_list_rect, 0))) {
+    if (ui::is_clicked(chart_source_button_rect(current.chart_list_rect, 0))) {
+        state.chart_source = chart_source_filter::all;
+        reset_chart_scroll(state);
+        return true;
+    }
+    if (ui::is_clicked(chart_source_button_rect(current.chart_list_rect, 1))) {
+        state.chart_source = chart_source_filter::official;
+        reset_chart_scroll(state);
+        return true;
+    }
+    if (ui::is_clicked(chart_source_button_rect(current.chart_list_rect, 2))) {
+        state.chart_source = chart_source_filter::community;
+        reset_chart_scroll(state);
+        return true;
+    }
+    if (ui::is_clicked(chart_source_button_rect(current.chart_list_rect, 3))) {
+        state.chart_source = chart_source_filter::mine;
+        reset_chart_scroll(state);
+        return true;
+    }
+    if (ui::is_clicked(chart_clear_button_rect(current.chart_list_rect))) {
+        clear_chart_filters(state);
+        return true;
+    }
+    if (update_level_range_from_slider(state, current.chart_list_rect, mouse)) {
+        return true;
+    }
+
+    if (ui::is_clicked(chart_key_button_rect(current.chart_list_rect, 0))) {
         state.chart_key_filter = 0;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_filter_button_rect(current.chart_list_rect, 1))) {
+    if (ui::is_clicked(chart_key_button_rect(current.chart_list_rect, 1))) {
         state.chart_key_filter = 4;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_filter_button_rect(current.chart_list_rect, 2))) {
+    if (ui::is_clicked(chart_key_button_rect(current.chart_list_rect, 2))) {
+        state.chart_key_filter = 5;
+        reset_chart_scroll(state);
+        return true;
+    }
+    if (ui::is_clicked(chart_key_button_rect(current.chart_list_rect, 3))) {
         state.chart_key_filter = 6;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_filter_button_rect(current.chart_list_rect, 3))) {
+    if (ui::is_clicked(chart_key_button_rect(current.chart_list_rect, 4))) {
+        state.chart_key_filter = 7;
+        reset_chart_scroll(state);
+        return true;
+    }
+    if (ui::is_clicked(chart_status_button_rect(current.chart_list_rect, 0))) {
         state.chart_download_filter = 0;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_filter_button_rect(current.chart_list_rect, 4))) {
+    if (ui::is_clicked(chart_status_button_rect(current.chart_list_rect, 1))) {
         state.chart_download_filter = 1;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_filter_button_rect(current.chart_list_rect, 5))) {
+    if (ui::is_clicked(chart_status_button_rect(current.chart_list_rect, 2))) {
         state.chart_download_filter = 2;
         reset_chart_scroll(state);
         return true;
@@ -455,7 +610,8 @@ bool handle_preview_panel_actions(state& state,
 }
 
 void handle_keyboard_navigation(state& state, update_result& result) {
-    if (state.search_input.active || state.chart_search_input.active) {
+    if (state.search_input.active || state.chart_search_input.active ||
+        state.min_level_input.active || state.max_level_input.active) {
         return;
     }
 

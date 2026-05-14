@@ -65,6 +65,10 @@ const song_select::song_entry* find_local_song(const std::vector<song_select::so
     return nullptr;
 }
 
+content_status source_status_from_remote(const std::string& content_source) {
+    return content_source == "official" ? content_status::official : content_status::community;
+}
+
 song_select::song_entry make_remote_song_entry(const remote_song_payload& song, const std::string& server_url) {
     song_select::song_entry entry;
     entry.song.meta.song_id = song.id;
@@ -81,6 +85,9 @@ song_select::song_entry make_remote_song_entry(const remote_song_payload& song, 
     entry.song.meta.preview_start_seconds = static_cast<float>(song.preview_start_ms) / 1000.0f;
     entry.song.meta.song_version = song.song_version;
     entry.song.meta.chart_count = song.chart_count;
+    entry.song.meta.play_count = song.play_count;
+    entry.song.meta.has_play_count = song.has_play_count;
+    entry.source_status = source_status_from_remote(song.content_source);
     entry.song.directory.clear();
     return entry;
 }
@@ -124,6 +131,9 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
     state_entry.song.song.meta.genres = remote_song.genres;
     state_entry.song.song.meta.keywords = remote_song.keywords;
     state_entry.song.song.meta.chart_count = remote_song.chart_count;
+    state_entry.song.song.meta.play_count = remote_song.play_count;
+    state_entry.song.song.meta.has_play_count = remote_song.has_play_count;
+    state_entry.song.source_status = source_status_from_remote(remote_song.content_source);
     state_entry.installed = true;
     state_entry.installed_local_song_id = local_song.song.meta.song_id;
     state_entry.update_available = local_song.song.meta.song_version < remote_song.song_version;
@@ -144,6 +154,7 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
         state_entry.charts.push_back({
             remote_chart,
             chart.meta.chart_id,
+            {},
             true,
             false,
         });
@@ -262,6 +273,7 @@ void append_chart_page(song_entry_state& song_state,
                 chart.max_bpm > 0.0f ? chart.max_bpm : song_state.song.song.meta.base_bpm,
             },
             installed_local_chart_id,
+            chart.uploader_id,
             local_chart_installed,
             chart_update_available,
         });

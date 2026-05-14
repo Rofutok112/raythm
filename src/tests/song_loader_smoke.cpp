@@ -186,7 +186,8 @@ int main() {
     written_meta.song_id = "external-local-id";
     written_meta.title = "Written Song";
     written_meta.artist = "Codex";
-    written_meta.genre = "Artcore";
+    written_meta.genres = {"Artcore", "Drum and bass"};
+    written_meta.keywords = {"Boss song"};
     written_meta.duration_seconds = 123.0f;
     written_meta.base_bpm = 128.0f;
     written_meta.audio_file = "audio.ogg";
@@ -204,8 +205,16 @@ int main() {
             std::cerr << "Expected song writer to persist songId in song.json\n";
             ok = false;
         }
-        if (written_content.find("\"genre\": \"Artcore\"") == std::string::npos) {
-            std::cerr << "Expected song writer to persist genre in song.json\n";
+        if (written_content.find("\"genres\": [\"Artcore\", \"Drum and bass\"]") == std::string::npos) {
+            std::cerr << "Expected song writer to persist genres in song.json\n";
+            ok = false;
+        }
+        if (written_content.find("\"keywords\": [\"Boss song\"]") == std::string::npos) {
+            std::cerr << "Expected song writer to persist keywords in song.json\n";
+            ok = false;
+        }
+        if (written_content.find("\"genre\"") != std::string::npos) {
+            std::cerr << "Expected song writer to omit legacy genre in song.json\n";
             ok = false;
         }
         if (written_content.find("\"durationSec\": 123") == std::string::npos) {

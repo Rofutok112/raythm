@@ -75,7 +75,6 @@ bool song_writer::write_song_json(const song_meta& meta, const std::string& dire
         genres.push_back(meta.genre);
     }
     if (!genres.empty()) {
-        out << "  \"genre\": \"" << escape_json_string(genres.front()) << "\",\n";
         write_string_array(out, "genres", genres, true);
     }
     if (!meta.keywords.empty()) {

@@ -25,6 +25,8 @@ struct song_meta {
     int preview_start_ms = 0;
     int song_version = 0;
     int chart_count = 0;
+    int play_count = 0;
+    bool has_play_count = false;
 };
 
 // 曲一覧で扱う読み込み済み楽曲データ。

@@ -2,11 +2,11 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cmath>
 #include <string>
 #include <vector>
 
 #include "audio_manager.h"
+#include "network/auth_client.h"
 #include "theme.h"
 
 namespace title_online_view {
@@ -15,9 +15,9 @@ namespace {
 constexpr float kSongCardHeight = 154.0f;
 constexpr float kSongGridGapX = 18.0f;
 constexpr float kSongGridGapY = 19.0f;
-constexpr float kChartCardHeight = 92.0f;
+constexpr float kChartCardHeight = 64.0f;
 constexpr float kChartGridGapX = 22.0f;
-constexpr float kChartGridGapY = 18.0f;
+constexpr float kChartGridGapY = 10.0f;
 
 std::string to_lower_ascii(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
@@ -107,12 +107,24 @@ std::vector<int> filtered_chart_indices(const state& state) {
 
     indices.reserve(song->charts.size());
     const std::string& query = state.chart_search_input.value;
-    const float min_level = parse_filter_float(state.min_level_input.value, -1.0f);
-    const float max_level = parse_filter_float(state.max_level_input.value, 1000.0f);
-    const float min_bpm = parse_filter_float(state.min_bpm_input.value, -1.0f);
-    const float max_bpm = parse_filter_float(state.max_bpm_input.value, 10000.0f);
+    const float min_level = parse_filter_float(state.min_level_input.value, 1.0f);
+    const float max_level = parse_filter_float(state.max_level_input.value, 10.0f);
+    const std::optional<auth::session> session =
+        state.chart_source == chart_source_filter::mine ? auth::load_saved_session() : std::nullopt;
     for (int index = 0; index < static_cast<int>(song->charts.size()); ++index) {
         const chart_entry_state& chart = song->charts[static_cast<size_t>(index)];
+        if (state.chart_source == chart_source_filter::official &&
+            chart.chart.source_status != content_status::official) {
+            continue;
+        }
+        if (state.chart_source == chart_source_filter::community &&
+            chart.chart.source_status != content_status::community) {
+            continue;
+        }
+        if (state.chart_source == chart_source_filter::mine &&
+            (!session.has_value() || chart.uploader_id != session->user.id)) {
+            continue;
+        }
         if (state.chart_key_filter > 0 && chart.chart.meta.key_count != state.chart_key_filter) {
             continue;
         }
@@ -125,20 +137,13 @@ std::vector<int> filtered_chart_indices(const state& state) {
         if (chart.chart.meta.level < min_level || chart.chart.meta.level > max_level) {
             continue;
         }
-        const float chart_min_bpm = chart.chart.min_bpm > 0.0f ? chart.chart.min_bpm : song->song.song.meta.base_bpm;
-        const float chart_max_bpm = chart.chart.max_bpm > 0.0f ? chart.chart.max_bpm : song->song.song.meta.base_bpm;
-        if (chart_max_bpm < min_bpm || chart_min_bpm > max_bpm) {
-            continue;
-        }
         const std::string key_label = key_mode_label(chart.chart.meta.key_count);
         const std::string level_label = TextFormat("lv %.1f", chart.chart.meta.level);
-        const std::string bpm_label = format_bpm_range(chart.chart.min_bpm, chart.chart.max_bpm);
         if (query.empty() ||
             contains_case_insensitive(chart.chart.meta.difficulty, query) ||
             contains_case_insensitive(chart.chart.meta.chart_author, query) ||
             contains_case_insensitive(key_label, query) ||
-            contains_case_insensitive(level_label, query) ||
-            contains_case_insensitive(bpm_label, query)) {
+            contains_case_insensitive(level_label, query)) {
             indices.push_back(index);
         }
     }
@@ -266,11 +271,13 @@ Rectangle chart_row_rect(Rectangle area, int index, float scroll_y) {
 }
 
 Rectangle chart_download_icon_rect(Rectangle chart_card) {
+    constexpr float kIconWidth = 30.0f;
+    constexpr float kIconHeight = 26.0f;
     return {
         chart_card.x + chart_card.width - 46.0f,
-        chart_card.y + 12.0f,
-        30.0f,
-        26.0f,
+        chart_card.y + (chart_card.height - kIconHeight) * 0.5f,
+        kIconWidth,
+        kIconHeight,
     };
 }
 
@@ -313,22 +320,23 @@ int hit_test_chart_list(const state& state, Rectangle area, Vector2 point) {
 }
 
 std::string key_mode_label(int key_count) {
-    return key_count == 6 ? "6K" : "4K";
+    return key_count > 0 ? TextFormat("%dK", key_count) : "-";
 }
 
 Color key_mode_color(int key_count) {
     const auto& theme = *g_theme;
-    return key_count == 6 ? theme.rank_c : theme.rank_b;
-}
-
-std::string format_bpm_range(float min_bpm, float max_bpm) {
-    if (min_bpm <= 0.0f && max_bpm <= 0.0f) {
-        return "-";
+    switch (key_count) {
+    case 4:
+        return theme.rank_b;
+    case 5:
+        return theme.rank_a;
+    case 6:
+        return theme.rank_c;
+    case 7:
+        return theme.rank_s;
+    default:
+        return theme.text_secondary;
     }
-    if (std::fabs(max_bpm - min_bpm) < 0.05f) {
-        return TextFormat("%.0f", min_bpm);
-    }
-    return TextFormat("%.0f-%.0f", min_bpm, max_bpm);
 }
 
 std::string song_status_label(const song_entry_state& song) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "raylib.h"
+#include "ui_layout.h"
 
 struct ui_theme;
 
@@ -16,7 +17,8 @@ void draw_scene_frame(const char* title, const char* subtitle, Color accent);
 void draw_scene_background(const ui_theme& theme);
 
 // clip_rect 内でピクセル単位にクリップしながらマーキー表示する。
-void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Color color, double time);
+void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Color color, double time,
+                       ui::text_align align = ui::text_align::left);
 
 // テキストが max_width に収まらない場合、自動的に左右にスクロールするマーキー表示を行う。
 // 収まる場合はそのまま描画する。time にはアニメーションの基準時刻（GetTime() 等）を渡す。
