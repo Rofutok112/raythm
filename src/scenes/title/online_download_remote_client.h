@@ -67,8 +67,8 @@ struct remote_song_page_fetch_result {
     bool maintenance = false;
     std::string error_message;
     std::string retry_after;
-    int total = 0;
-    int page = 1;
+    bool has_more = false;
+    std::string next_cursor;
     int page_size = 0;
 };
 
@@ -79,8 +79,8 @@ struct remote_chart_page_fetch_result {
     bool maintenance = false;
     std::string error_message;
     std::string retry_after;
-    int total = 0;
-    int page = 1;
+    bool has_more = false;
+    std::string next_cursor;
     int page_size = 0;
     std::string song_id;
 };
@@ -128,13 +128,13 @@ remote_discovery_fetch_result fetch_remote_discovery(
     const std::string& preferred_server_url = "");
 remote_song_page_fetch_result fetch_remote_song_page(
     catalog_mode mode,
-    int page,
+    const std::string& cursor,
     int page_size,
     const std::string& preferred_server_url = "");
 remote_chart_page_fetch_result fetch_remote_chart_page(
     const std::string& server_url,
     const std::string& song_id,
-    int page,
+    const std::string& cursor,
     int page_size);
 remote_song_lookup_result fetch_remote_song_by_id(
     const std::string& song_id,
