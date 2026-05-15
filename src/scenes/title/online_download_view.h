@@ -70,7 +70,7 @@ struct song_entry_state {
     bool charts_loading = false;
     bool charts_has_more = false;
     bool charts_failed = false;
-    int next_chart_page = 1;
+    std::string next_chart_cursor;
 };
 
 struct discovery_shelf_state {
@@ -177,8 +177,8 @@ struct state {
     bool catalog_loaded_once = false;
     bool official_has_more = false;
     bool community_has_more = false;
-    int official_next_page = 1;
-    int community_next_page = 1;
+    std::string official_next_cursor;
+    std::string community_next_cursor;
     bool song_page_loading = false;
     catalog_mode song_page_mode = catalog_mode::official;
     bool chart_page_loading = false;

@@ -110,18 +110,27 @@ void apply_error_classification(Result& result, const network::error_classificat
     result.retry_after = error.retry_after;
 }
 
-std::string build_paged_url(const std::string& server_url, const std::string& path, int page) {
+std::string build_cursor_page_url(const std::string& server_url,
+                                  const std::string& path,
+                                  const std::string& cursor,
+                                  int page_size) {
     std::ostringstream stream;
-    stream << server_url << path << "?page=" << page << "&pageSize=" << kRemotePageSize;
+    stream << server_url << path << "?pageSize=" << page_size;
+    if (!cursor.empty()) {
+        stream << "&cursor=" << cursor;
+    }
     return stream.str();
 }
 
 std::string build_song_page_url(const std::string& server_url,
                                 catalog_mode mode,
-                                int page,
+                                const std::string& cursor,
                                 int page_size) {
     std::ostringstream stream;
-    stream << server_url << "/songs?page=" << page << "&pageSize=" << page_size;
+    stream << server_url << "/songs?pageSize=" << page_size;
+    if (!cursor.empty()) {
+        stream << "&cursor=" << cursor;
+    }
     if (mode == catalog_mode::official) {
         stream << "&contentSource=official";
     } else if (mode == catalog_mode::community) {
@@ -169,10 +178,13 @@ std::string build_source_song_url(const std::string& server_url,
 
 std::string build_chart_page_url(const std::string& server_url,
                                  const std::string& song_id,
-                                 int page,
+                                 const std::string& cursor,
                                  int page_size) {
     std::ostringstream stream;
-    stream << server_url << "/charts?page=" << page << "&pageSize=" << page_size;
+    stream << server_url << "/charts?pageSize=" << page_size;
+    if (!cursor.empty()) {
+        stream << "&cursor=" << cursor;
+    }
     if (!song_id.empty()) {
         stream << "&songId=" << song_id;
     }
@@ -556,11 +568,11 @@ std::optional<remote_chart_payload> parse_remote_chart(const std::string& object
 
 remote_song_fetch_result fetch_remote_songs(const std::string& server_url) {
     remote_song_fetch_result result;
-    int page = 1;
-    int total = -1;
+    std::string cursor;
 
     while (true) {
-        const http_response response = send_request("GET", build_paged_url(server_url, "/songs", page));
+        const http_response response = send_request("GET",
+                                                    build_cursor_page_url(server_url, "/songs", cursor, kRemotePageSize));
         if (!response.error_message.empty()) {
             result.error_message = response.error_message;
             return result;
@@ -588,12 +600,12 @@ remote_song_fetch_result fetch_remote_songs(const std::string& server_url) {
             }
         }
 
-        total = json::extract_int(response.body, "total").value_or(static_cast<int>(result.songs.size()));
-        if (result.songs.empty() || static_cast<int>(result.songs.size()) >= total ||
-            static_cast<int>(objects.size()) < kRemotePageSize) {
+        const bool has_more = json::extract_bool(response.body, "hasMore").value_or(false);
+        const std::string next_cursor = json::extract_string(response.body, "nextCursor").value_or("");
+        if (!has_more || next_cursor.empty() || objects.empty()) {
             break;
         }
-        ++page;
+        cursor = next_cursor;
     }
 
     result.success = true;
@@ -602,14 +614,13 @@ remote_song_fetch_result fetch_remote_songs(const std::string& server_url) {
 
 remote_song_page_fetch_result fetch_remote_song_page_from_server(const std::string& server_url,
                                                                  catalog_mode mode,
-                                                                 int page,
+                                                                 const std::string& cursor,
                                                                  int page_size) {
     remote_song_page_fetch_result result;
     result.server_url = server_url;
-    result.page = page;
     result.page_size = page_size;
 
-    const http_response response = send_request("GET", build_song_page_url(server_url, mode, page, page_size));
+    const http_response response = send_request("GET", build_song_page_url(server_url, mode, cursor, page_size));
     if (!response.error_message.empty()) {
         result.error_message = response.error_message;
         return result;
@@ -637,18 +648,19 @@ remote_song_page_fetch_result fetch_remote_song_page_from_server(const std::stri
         }
     }
 
-    result.total = json::extract_int(response.body, "total").value_or(static_cast<int>(result.songs.size()));
+    result.has_more = json::extract_bool(response.body, "hasMore").value_or(false);
+    result.next_cursor = json::extract_string(response.body, "nextCursor").value_or("");
     result.success = true;
     return result;
 }
 
 remote_chart_fetch_result fetch_remote_charts(const std::string& server_url) {
     remote_chart_fetch_result result;
-    int page = 1;
-    int total = -1;
+    std::string cursor;
 
     while (true) {
-        const http_response response = send_request("GET", build_paged_url(server_url, "/charts", page));
+        const http_response response = send_request("GET",
+                                                    build_cursor_page_url(server_url, "/charts", cursor, kRemotePageSize));
         if (!response.error_message.empty()) {
             result.error_message = response.error_message;
             return result;
@@ -676,12 +688,12 @@ remote_chart_fetch_result fetch_remote_charts(const std::string& server_url) {
             }
         }
 
-        total = json::extract_int(response.body, "total").value_or(static_cast<int>(result.charts.size()));
-        if (result.charts.empty() || static_cast<int>(result.charts.size()) >= total ||
-            static_cast<int>(objects.size()) < kRemotePageSize) {
+        const bool has_more = json::extract_bool(response.body, "hasMore").value_or(false);
+        const std::string next_cursor = json::extract_string(response.body, "nextCursor").value_or("");
+        if (!has_more || next_cursor.empty() || objects.empty()) {
             break;
         }
-        ++page;
+        cursor = next_cursor;
     }
 
     result.success = true;
@@ -690,15 +702,14 @@ remote_chart_fetch_result fetch_remote_charts(const std::string& server_url) {
 
 remote_chart_page_fetch_result fetch_remote_chart_page_from_server(const std::string& server_url,
                                                                    const std::string& song_id,
-                                                                   int page,
+                                                                   const std::string& cursor,
                                                                    int page_size) {
     remote_chart_page_fetch_result result;
     result.server_url = server_url;
     result.song_id = song_id;
-    result.page = page;
     result.page_size = page_size;
 
-    const http_response response = send_request("GET", build_chart_page_url(server_url, song_id, page, page_size));
+    const http_response response = send_request("GET", build_chart_page_url(server_url, song_id, cursor, page_size));
     if (!response.error_message.empty()) {
         result.error_message = response.error_message;
         return result;
@@ -726,7 +737,8 @@ remote_chart_page_fetch_result fetch_remote_chart_page_from_server(const std::st
         }
     }
 
-    result.total = json::extract_int(response.body, "total").value_or(static_cast<int>(result.charts.size()));
+    result.has_more = json::extract_bool(response.body, "hasMore").value_or(false);
+    result.next_cursor = json::extract_string(response.body, "nextCursor").value_or("");
     result.success = true;
     return result;
 }
@@ -947,14 +959,13 @@ remote_discovery_fetch_result fetch_remote_discovery(source_filter source,
 }
 
 remote_song_page_fetch_result fetch_remote_song_page(catalog_mode mode,
-                                                     int page,
+                                                     const std::string& cursor,
                                                      int page_size,
                                                      const std::string& preferred_server_url) {
     remote_song_page_fetch_result result;
-    result.page = page;
     result.page_size = page_size;
     for (const std::string& server_url : prioritize_server_url(preferred_server_url)) {
-        result = fetch_remote_song_page_from_server(server_url, mode, page, page_size);
+        result = fetch_remote_song_page_from_server(server_url, mode, cursor, page_size);
         if (result.success) {
             return result;
         }
@@ -970,9 +981,9 @@ remote_song_page_fetch_result fetch_remote_song_page(catalog_mode mode,
 
 remote_chart_page_fetch_result fetch_remote_chart_page(const std::string& server_url,
                                                        const std::string& song_id,
-                                                       int page,
+                                                       const std::string& cursor,
                                                        int page_size) {
-    return fetch_remote_chart_page_from_server(server_url, song_id, page, page_size);
+    return fetch_remote_chart_page_from_server(server_url, song_id, cursor, page_size);
 }
 
 remote_song_lookup_result fetch_remote_song_by_id(const std::string& song_id,

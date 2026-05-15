@@ -111,7 +111,7 @@ song_entry_state build_song_state(const remote_song_payload& remote_song,
     state_entry.charts_loading = false;
     state_entry.charts_has_more = false;
     state_entry.charts_failed = false;
-    state_entry.next_chart_page = 1;
+    state_entry.next_chart_cursor.clear();
     return state_entry;
 }
 
@@ -141,7 +141,7 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
     state_entry.charts_loading = false;
     state_entry.charts_has_more = false;
     state_entry.charts_failed = false;
-    state_entry.next_chart_page = 1;
+    state_entry.next_chart_cursor.clear();
     state_entry.charts.reserve(local_song.charts.size());
     for (const song_select::chart_option& chart : local_song.charts) {
         song_select::chart_option remote_chart = chart;
@@ -312,8 +312,8 @@ std::vector<song_entry_state>& songs_for_mode(state& state, catalog_mode mode) {
     return state.official_songs;
 }
 
-int& next_page_ref(state& state, catalog_mode mode) {
-    return mode == catalog_mode::community ? state.community_next_page : state.official_next_page;
+std::string& next_cursor_ref(state& state, catalog_mode mode) {
+    return mode == catalog_mode::community ? state.community_next_cursor : state.official_next_cursor;
 }
 
 bool& has_more_ref(state& state, catalog_mode mode) {
@@ -760,8 +760,8 @@ void reload_catalog(state& state, bool preserve_view) {
     state.catalog_maintenance = false;
     state.catalog_status_message.clear();
     state.catalog_retry_after.clear();
-    state.official_next_page = 2;
-    state.community_next_page = 2;
+    state.official_next_cursor.clear();
+    state.community_next_cursor.clear();
     state.official_has_more = false;
     state.community_has_more = false;
     state.song_page_loading = false;
@@ -848,13 +848,13 @@ void request_next_song_page(state& state, catalog_mode mode) {
 
     state.song_page_loading = true;
     state.song_page_mode = mode;
-    const int page = next_page_ref(state, mode);
+    const std::string cursor = next_cursor_ref(state, mode);
     const std::string server_url = state.catalog_server_url;
     std::promise<remote_song_page_fetch_result> promise;
     state.song_page_future = promise.get_future();
-    std::thread([promise = std::move(promise), mode, page, server_url]() mutable {
+    std::thread([promise = std::move(promise), mode, cursor, server_url]() mutable {
         try {
-            promise.set_value(fetch_remote_song_page(mode, page, kSongPageSize, server_url));
+            promise.set_value(fetch_remote_song_page(mode, cursor, kSongPageSize, server_url));
         } catch (...) {
             promise.set_exception(std::current_exception());
         }
@@ -896,11 +896,9 @@ bool poll_song_page(state& state) {
     }
 
     append_song_page(songs_for_mode(state, state.song_page_mode), std::move(page_items));
-    has_more_ref(state, state.song_page_mode) =
-        static_cast<int>(songs_for_mode(state, state.song_page_mode).size()) < page_result.total &&
-        !page_result.songs.empty();
+    has_more_ref(state, state.song_page_mode) = page_result.has_more && !page_result.next_cursor.empty();
     if (has_more_ref(state, state.song_page_mode)) {
-        next_page_ref(state, state.song_page_mode) += 1;
+        next_cursor_ref(state, state.song_page_mode) = page_result.next_cursor;
     }
     detail::ensure_selection_valid(state);
     apply_reload_restore(state);
@@ -930,13 +928,13 @@ void request_charts_for_selected_song(state& state) {
     state.chart_page_mode = state.mode;
     state.chart_page_song_id = song->song.song.meta.song_id;
     const std::string server_url = state.catalog_server_url;
-    const int page = song->next_chart_page;
+    const std::string cursor = song->next_chart_cursor;
     std::promise<remote_chart_page_fetch_result> promise;
     state.chart_page_future = promise.get_future();
     const std::string song_id = state.chart_page_song_id;
-    std::thread([promise = std::move(promise), server_url, page, song_id]() mutable {
+    std::thread([promise = std::move(promise), server_url, cursor, song_id]() mutable {
         try {
-            promise.set_value(fetch_remote_chart_page(server_url, song_id, page, kChartPageSize));
+            promise.set_value(fetch_remote_chart_page(server_url, song_id, cursor, kChartPageSize));
         } catch (...) {
             promise.set_exception(std::current_exception());
         }
@@ -974,11 +972,10 @@ bool poll_chart_page(state& state) {
     }
 
     append_chart_page(*song, state.local_songs, page_result);
-    song->charts_has_more = static_cast<int>(song->charts.size()) < page_result.total &&
-                            !page_result.charts.empty();
+    song->charts_has_more = page_result.has_more && !page_result.next_cursor.empty();
     song->charts_loaded = !song->charts_has_more;
     if (song->charts_has_more) {
-        song->next_chart_page += 1;
+        song->next_chart_cursor = page_result.next_cursor;
     }
     detail::ensure_selection_valid(state);
     apply_reload_restore(state);
