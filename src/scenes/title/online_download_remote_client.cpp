@@ -3,6 +3,7 @@
 #include <optional>
 #include <sstream>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -486,6 +487,38 @@ std::optional<remote_song_payload> parse_remote_song(const std::string& object) 
     };
 }
 
+std::optional<remote_song_payload> parse_discovery_song_item(
+    const std::string& item_object,
+    const std::optional<std::string>& songs_object,
+    std::unordered_map<std::string, remote_song_payload>& song_cache) {
+    if (const auto song = parse_remote_song(item_object)) {
+        return song;
+    }
+
+    const std::string song_id = json::extract_string(item_object, "songId").value_or("");
+    if (song_id.empty() || !songs_object.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto cached = song_cache.find(song_id);
+    if (cached != song_cache.end()) {
+        return cached->second;
+    }
+
+    const std::optional<std::string> song_object = json::extract_object(*songs_object, song_id);
+    if (!song_object.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto song = parse_remote_song(*song_object);
+    if (!song.has_value()) {
+        return std::nullopt;
+    }
+
+    song_cache.emplace(song_id, *song);
+    return song;
+}
+
 std::optional<remote_chart_payload> parse_remote_chart(const std::string& object) {
     const auto id = json::extract_string(object, "id");
     const std::optional<std::string> song_id = json::extract_string(object, "songId");
@@ -762,6 +795,8 @@ remote_discovery_fetch_result fetch_remote_discovery_from_server(const std::stri
         return result;
     }
 
+    const std::optional<std::string> songs_object = json::extract_object(response.body, "songs");
+    std::unordered_map<std::string, remote_song_payload> song_cache;
     const std::vector<std::string> shelf_objects = json::extract_objects_from_array(*shelves_array);
     for (const std::string& shelf_object : shelf_objects) {
         remote_discovery_shelf_payload shelf;
@@ -775,7 +810,7 @@ remote_discovery_fetch_result fetch_remote_discovery_from_server(const std::stri
         if (items_array.has_value()) {
             const std::vector<std::string> item_objects = json::extract_objects_from_array(*items_array);
             for (const std::string& item_object : item_objects) {
-                const auto song = parse_remote_song(item_object);
+                const auto song = parse_discovery_song_item(item_object, songs_object, song_cache);
                 if (song.has_value()) {
                     shelf.songs.push_back(*song);
                 }
