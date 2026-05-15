@@ -31,10 +31,6 @@ constexpr Rectangle kChartListRect = {
     416.0f,
 };
 constexpr Rectangle kFallbackOriginRect = {1140.0f, 564.0f, 240.0f, 90.0f};
-constexpr float kSearchLeftGap = 36.0f;
-constexpr float kSearchRightGap = 27.0f;
-constexpr float kSearchY = 82.0f;
-constexpr float kSearchHeight = 57.0f;
 constexpr Vector2 kSeedBackOffset = {-672.0f, -297.0f};
 constexpr Vector2 kSeedOfficialTabOffset = {-414.0f, -291.0f};
 constexpr Vector2 kSeedCommunityTabOffset = {-198.0f, -291.0f};
@@ -104,14 +100,14 @@ Rectangle left_pane_full_width_button_rect(Rectangle content_rect,
     };
 }
 
-Rectangle browse_search_rect() {
-    const Rectangle refresh_rect = title_layout::refresh_chip_rect();
-    const float left = 360.0f;
-    const float right = refresh_rect.x - kSearchRightGap - 30.0f;
+Rectangle sidebar_search_rect(Rectangle sidebar) {
+    constexpr float kSearchInsetX = 14.0f;
+    constexpr float kSearchTop = 22.0f;
+    constexpr float kSearchHeight = 54.0f;
     return {
-        left,
-        kSearchY,
-        std::max(0.0f, right - left),
+        sidebar.x + kSearchInsetX,
+        sidebar.y + kSearchTop,
+        sidebar.width - kSearchInsetX * 2.0f,
         kSearchHeight,
     };
 }
@@ -121,18 +117,19 @@ Rectangle browse_search_rect() {
 layout make_layout(float anim_t, Rectangle origin_rect) {
     const float t = tween::ease_out_cubic(anim_t);
     const Rectangle origin = resolve_origin_rect(origin_rect);
-    const Rectangle search_rect = browse_search_rect();
+    const Rectangle target_search = sidebar_search_rect(kSidebarRect);
 
     const Rectangle seed_back = centered_scaled_rect(origin, kBackRect, 0.9f, kSeedBackOffset);
     const Rectangle seed_official_tab = centered_scaled_rect(origin, kOfficialTabRect, 0.84f, kSeedOfficialTabOffset);
     const Rectangle seed_community_tab = centered_scaled_rect(origin, kCommunityTabRect, 0.84f, kSeedCommunityTabOffset);
     const Rectangle seed_owned_tab = centered_scaled_rect(origin, kOwnedTabRect, 0.84f, kSeedOwnedTabOffset);
-    const Rectangle seed_search = centered_scaled_rect(origin, search_rect, 0.86f, kSeedSearchOffset);
+    const Rectangle seed_search = centered_scaled_rect(origin, target_search, 0.86f, kSeedSearchOffset);
     const Rectangle seed_content = centered_scaled_rect(origin, kContentRect, 0.84f, kSeedContentOffset);
     const Rectangle seed_detail_left = centered_scaled_rect(origin, kDetailLeftRect, 0.78f, kSeedDetailLeftOffset);
     const Rectangle seed_detail_right = centered_scaled_rect(origin, kDetailRightRect, 0.8f, kSeedDetailRightOffset);
     const Rectangle seed_chart_list = centered_scaled_rect(origin, kChartListRect, 0.84f, kSeedChartListOffset);
     const Rectangle current_content = tween::lerp(seed_content, kContentRect, t);
+    const Rectangle current_sidebar = tween::lerp(seed_content, kSidebarRect, t);
     const Rectangle current_detail_left = tween::lerp(seed_detail_left, kDetailLeftRect, t);
     const Rectangle current_detail_right = tween::lerp(seed_detail_right, kDetailRightRect, t);
     const Rectangle current_jacket =
@@ -156,9 +153,9 @@ layout make_layout(float anim_t, Rectangle origin_rect) {
         tween::lerp(seed_official_tab, kOfficialTabRect, t),
         tween::lerp(seed_community_tab, kCommunityTabRect, t),
         tween::lerp(seed_owned_tab, kOwnedTabRect, t),
-        tween::lerp(seed_search, search_rect, t),
+        tween::lerp(seed_search, sidebar_search_rect(current_sidebar), t),
         current_content,
-        tween::lerp(seed_content, kSidebarRect, t),
+        current_sidebar,
         tween::lerp(seed_detail_right, kPreviewPanelRect, t),
         detail::song_list_viewport(current_content),
         current_detail_left,

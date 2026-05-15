@@ -2,7 +2,9 @@
 
 #include <array>
 #include <cstddef>
+#include <future>
 #include <string>
+#include <vector>
 
 class audio;
 
@@ -17,6 +19,11 @@ struct audio_clock_snapshot {
 
 class audio_manager final {
 public:
+    struct async_preview_load_result {
+        bool completed = false;
+        bool loaded = false;
+    };
+
     static audio_manager& instance();
 
     audio_manager(const audio_manager&) = delete;
@@ -47,6 +54,9 @@ public:
     double get_output_buffer_seconds() const;
 
     bool load_preview(const std::string& file_path);
+    bool request_preview_load(const std::string& file_path);
+    async_preview_load_result poll_preview_load();
+    bool is_preview_loading() const;
     void play_preview(bool restart = true);
     void pause_preview();
     void stop_preview();
@@ -78,6 +88,10 @@ private:
     ~audio_manager();
 
     struct managed_voice;
+    struct preview_load_payload {
+        unsigned int generation = 0;
+        unsigned long handle = 0;
+    };
 
     void retain_legacy_client();
     void release_legacy_client();
@@ -108,5 +122,10 @@ private:
     float se_volume_ = 1.0f;
     unsigned long bgm_handle_ = 0;
     unsigned long preview_handle_ = 0;
+    std::future<preview_load_payload> preview_load_future_;
+    std::vector<std::future<preview_load_payload>> stale_preview_load_futures_;
+    unsigned int preview_load_generation_ = 0;
+    unsigned int active_preview_load_generation_ = 0;
+    bool preview_loading_ = false;
     int next_se_voice_id_ = 1;
 };

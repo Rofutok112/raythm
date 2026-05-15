@@ -4,8 +4,10 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "core/app_paths.h"
@@ -30,6 +32,7 @@ struct loaded_font {
     bool sdf = false;
     bool prefer_sdf = false;
     bool prebuilt_atlas = false;
+    bool dynamic_glyphs = true;
 };
 
 loaded_font g_ui_font;
@@ -37,6 +40,10 @@ Shader g_sdf_shader = {};
 bool g_sdf_shader_loaded = false;
 font_locale_mode g_font_mode = font_locale_mode::automatic;
 std::set<int> g_loaded_codepoints;
+std::unordered_map<int, int> g_ui_glyph_indices;
+int g_ui_fallback_glyph_index = 0;
+
+constexpr const char8_t* kExtraUiGlyphs = u8"✓✕×○●◎◇◆□■△▲▽▼◀▶↑↓←→…‥・ー〜～／＼｜（）[]{}「」『』【】";
 
 constexpr const char* kSdfFragmentShader = R"(
 #version 330
@@ -105,6 +112,39 @@ std::string find_ui_font_atlas_metadata_path() {
     return {};
 }
 
+std::string find_ui_font_charset_path() {
+    const std::filesystem::path path = app_paths::assets_root() / "fonts" / "japanese_full.txt";
+    if (std::filesystem::exists(path)) {
+        return path_utils::to_utf8(path);
+    }
+    return {};
+}
+
+std::string read_text_file(const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return {};
+    }
+    std::ostringstream out;
+    out << in.rdbuf();
+    return out.str();
+}
+
+void index_ui_font_glyphs(const Font& font) {
+    g_ui_glyph_indices.clear();
+    g_ui_fallback_glyph_index = 0;
+    if (font.glyphs == nullptr || font.glyphCount <= 0) {
+        return;
+    }
+    g_ui_glyph_indices.reserve(static_cast<size_t>(font.glyphCount));
+    for (int i = 0; i < font.glyphCount; ++i) {
+        g_ui_glyph_indices[font.glyphs[i].value] = i;
+        if (font.glyphs[i].value == '?') {
+            g_ui_fallback_glyph_index = i;
+        }
+    }
+}
+
 void unload_loaded_font(loaded_font& target) {
     if (target.loaded) {
         UnloadFont(target.font);
@@ -113,6 +153,11 @@ void unload_loaded_font(loaded_font& target) {
     target.loaded = false;
     target.sdf = false;
     target.prebuilt_atlas = false;
+    target.dynamic_glyphs = true;
+    if (&target == &g_ui_font) {
+        g_ui_glyph_indices.clear();
+        g_ui_fallback_glyph_index = 0;
+    }
 }
 
 std::vector<int> loaded_codepoint_vector() {
@@ -128,10 +173,15 @@ bool load_regular_font(loaded_font& target, const std::vector<int>& codepoints) 
     }
 
     SetTextureFilter(next_font.texture, TEXTURE_FILTER_BILINEAR);
+    const bool dynamic_glyphs = target.dynamic_glyphs;
     unload_loaded_font(target);
     target.font = next_font;
     target.loaded = true;
     target.sdf = false;
+    target.dynamic_glyphs = dynamic_glyphs;
+    if (&target == &g_ui_font) {
+        index_ui_font_glyphs(target.font);
+    }
     return true;
 }
 
@@ -180,10 +230,15 @@ bool load_sdf_font(loaded_font& target, const std::vector<int>& codepoints) {
     }
 
     SetTextureFilter(next_font.texture, TEXTURE_FILTER_BILINEAR);
+    const bool dynamic_glyphs = target.dynamic_glyphs;
     unload_loaded_font(target);
     target.font = next_font;
     target.loaded = true;
     target.sdf = true;
+    target.dynamic_glyphs = dynamic_glyphs;
+    if (&target == &g_ui_font) {
+        index_ui_font_glyphs(target.font);
+    }
     return true;
 }
 
@@ -200,6 +255,9 @@ bool load_prebuilt_sdf_font(loaded_font& target) {
 
     std::string magic;
     std::getline(in, magic);
+    if (!magic.empty() && magic.back() == '\r') {
+        magic.pop_back();
+    }
     if (magic != "raythm-rfont-sdf-v1") {
         return false;
     }
@@ -268,7 +326,135 @@ bool load_prebuilt_sdf_font(loaded_font& target) {
     target.loaded = true;
     target.sdf = true;
     target.prebuilt_atlas = true;
+    target.dynamic_glyphs = false;
+    if (&target == &g_ui_font) {
+        index_ui_font_glyphs(target.font);
+    }
     return true;
+}
+
+int prebuilt_glyph_index(int codepoint) {
+    const auto it = g_ui_glyph_indices.find(codepoint);
+    if (it != g_ui_glyph_indices.end()) {
+        return it->second;
+    }
+    return g_ui_fallback_glyph_index;
+}
+
+float prebuilt_glyph_advance(const Font& font, int index, float scale_factor, float spacing) {
+    if (index < 0 || index >= font.glyphCount) {
+        return spacing;
+    }
+    const GlyphInfo& glyph = font.glyphs[index];
+    return (glyph.advanceX == 0 ? font.recs[index].width : static_cast<float>(glyph.advanceX)) * scale_factor + spacing;
+}
+
+Vector2 measure_prebuilt_text(const char* text, float font_size, float spacing) {
+    Vector2 text_size = {0.0f, 0.0f};
+    const Font font = g_ui_font.font;
+    if (font.texture.id == 0 || text == nullptr || text[0] == '\0' || font.baseSize <= 0) {
+        return text_size;
+    }
+
+    const int size = TextLength(text);
+    int temp_byte_counter = 0;
+    int byte_counter = 0;
+    float text_width = 0.0f;
+    float temp_text_width = 0.0f;
+    float text_height = font_size;
+    const float scale_factor = font_size / static_cast<float>(font.baseSize);
+
+    for (int i = 0; i < size;) {
+        ++byte_counter;
+        int codepoint_byte_count = 0;
+        const int codepoint = GetCodepointNext(&text[i], &codepoint_byte_count);
+        const int index = prebuilt_glyph_index(codepoint);
+        i += codepoint_byte_count;
+
+        if (codepoint != '\n') {
+            if (index >= 0 && index < font.glyphCount) {
+                const GlyphInfo& glyph = font.glyphs[index];
+                if (glyph.advanceX > 0) {
+                    text_width += static_cast<float>(glyph.advanceX);
+                } else {
+                    text_width += font.recs[index].width + static_cast<float>(glyph.offsetX);
+                }
+            }
+        } else {
+            if (temp_text_width < text_width) {
+                temp_text_width = text_width;
+            }
+            byte_counter = 0;
+            text_width = 0.0f;
+            text_height += font_size;
+        }
+
+        if (temp_byte_counter < byte_counter) {
+            temp_byte_counter = byte_counter;
+        }
+    }
+
+    if (temp_text_width < text_width) {
+        temp_text_width = text_width;
+    }
+    text_size.x = temp_text_width * scale_factor + static_cast<float>(std::max(0, temp_byte_counter - 1)) * spacing;
+    text_size.y = text_height;
+    return text_size;
+}
+
+void draw_prebuilt_codepoint(const Font& font, int index, Vector2 position, float font_size, Color tint) {
+    if (index < 0 || index >= font.glyphCount || font.baseSize <= 0) {
+        return;
+    }
+
+    const float scale_factor = font_size / static_cast<float>(font.baseSize);
+    const Rectangle dst_rec = {
+        position.x + static_cast<float>(font.glyphs[index].offsetX) * scale_factor -
+            static_cast<float>(font.glyphPadding) * scale_factor,
+        position.y + static_cast<float>(font.glyphs[index].offsetY) * scale_factor -
+            static_cast<float>(font.glyphPadding) * scale_factor,
+        (font.recs[index].width + 2.0f * static_cast<float>(font.glyphPadding)) * scale_factor,
+        (font.recs[index].height + 2.0f * static_cast<float>(font.glyphPadding)) * scale_factor,
+    };
+    const Rectangle src_rec = {
+        font.recs[index].x - static_cast<float>(font.glyphPadding),
+        font.recs[index].y - static_cast<float>(font.glyphPadding),
+        font.recs[index].width + 2.0f * static_cast<float>(font.glyphPadding),
+        font.recs[index].height + 2.0f * static_cast<float>(font.glyphPadding),
+    };
+    DrawTexturePro(font.texture, src_rec, dst_rec, {0.0f, 0.0f}, 0.0f, tint);
+}
+
+void draw_prebuilt_text(const char* text, Vector2 position, float font_size, float spacing, Color color) {
+    const Font font = g_ui_font.font;
+    if (font.texture.id == 0 || text == nullptr || text[0] == '\0' || font.baseSize <= 0) {
+        return;
+    }
+
+    const int size = TextLength(text);
+    const float scale_factor = font_size / static_cast<float>(font.baseSize);
+    float text_offset_y = 0.0f;
+    float text_offset_x = 0.0f;
+    for (int i = 0; i < size;) {
+        int codepoint_byte_count = 0;
+        const int codepoint = GetCodepointNext(&text[i], &codepoint_byte_count);
+        const int index = prebuilt_glyph_index(codepoint);
+
+        if (codepoint == '\n') {
+            text_offset_y += font_size;
+            text_offset_x = 0.0f;
+        } else {
+            if (codepoint != ' ' && codepoint != '\t') {
+                draw_prebuilt_codepoint(font, index,
+                                        {position.x + text_offset_x, position.y + text_offset_y},
+                                        font_size,
+                                        color);
+            }
+            text_offset_x += prebuilt_glyph_advance(font, index, scale_factor, spacing);
+        }
+
+        i += codepoint_byte_count;
+    }
 }
 
 void rebuild_one_font(loaded_font& target) {
@@ -296,6 +482,34 @@ void seed_ascii_codepoints() {
     }
 }
 
+bool seed_japanese_full_codepoints() {
+    const std::string charset_path = find_ui_font_charset_path();
+    if (charset_path.empty()) {
+        return false;
+    }
+
+    const std::string charset_text = read_text_file(path_utils::from_utf8(charset_path));
+    if (charset_text.empty()) {
+        return false;
+    }
+
+    bool changed = false;
+    const std::string combined_text = charset_text + reinterpret_cast<const char*>(kExtraUiGlyphs);
+    int codepoint_count = 0;
+    int* codepoints = LoadCodepoints(combined_text.c_str(), &codepoint_count);
+    if (codepoints == nullptr) {
+        return false;
+    }
+    for (int i = 0; i < codepoint_count; ++i) {
+        if (codepoints[i] < 32) {
+            continue;
+        }
+        changed = g_loaded_codepoints.insert(codepoints[i]).second || changed;
+    }
+    UnloadCodepoints(codepoints);
+    return changed;
+}
+
 }  // namespace
 
 void set_font_locale_mode(font_locale_mode mode) {
@@ -313,7 +527,13 @@ void initialize_text_font() {
     g_loaded_codepoints.clear();
     seed_ascii_codepoints();
 
-    if (!load_prebuilt_sdf_font(g_ui_font)) {
+    if (load_prebuilt_sdf_font(g_ui_font)) {
+        TraceLog(LOG_INFO, "raythm ui font: loaded prebuilt atlas %s", g_ui_font.atlas_metadata_path.c_str());
+    } else {
+        TraceLog(LOG_WARNING, "raythm ui font: prebuilt atlas unavailable; building fallback atlas once at startup");
+        if (g_font_mode == font_locale_mode::japanese_ui && seed_japanese_full_codepoints()) {
+            g_ui_font.dynamic_glyphs = false;
+        }
         rebuild_fonts();
     }
     if (!g_ui_font.loaded) {
@@ -428,7 +648,7 @@ float display_spacing(float font_size, float spacing) {
 }
 
 void ensure_text_glyphs(const char* text) {
-    if (g_ui_font.prebuilt_atlas) {
+    if (!g_ui_font.dynamic_glyphs) {
         return;
     }
     bool changed = false;
@@ -452,7 +672,7 @@ void ensure_text_glyphs(const char* text) {
 }
 
 void preload_text_glyphs(const std::vector<std::string>& texts) {
-    if (g_ui_font.prebuilt_atlas) {
+    if (!g_ui_font.dynamic_glyphs) {
         return;
     }
     bool changed = false;
@@ -492,6 +712,9 @@ Vector2 measure_text_size(text_role role, const char* text, float font_size, flo
         ensure_text_glyphs(text);
     }
     const float adjusted_font_size = text_font_size(role, font_size);
+    if (role == text_role::ui_body && !g_ui_glyph_indices.empty()) {
+        return measure_prebuilt_text(text, adjusted_font_size, text_spacing(role, font_size, spacing));
+    }
     return MeasureTextEx(text_font(role), text, adjusted_font_size,
                          text_spacing(role, font_size, spacing));
 }
@@ -521,8 +744,12 @@ void draw_text(text_role role, const char* text, Vector2 position, float font_si
     if (use_sdf_shader) {
         BeginShaderMode(g_sdf_shader);
     }
-    DrawTextEx(text_font(role), text, draw_position, adjusted_font_size,
-               text_spacing(role, font_size, spacing), color);
+    if (role == text_role::ui_body && !g_ui_glyph_indices.empty()) {
+        draw_prebuilt_text(text, draw_position, adjusted_font_size, text_spacing(role, font_size, spacing), color);
+    } else {
+        DrawTextEx(text_font(role), text, draw_position, adjusted_font_size,
+                   text_spacing(role, font_size, spacing), color);
+    }
     if (use_sdf_shader) {
         EndShaderMode();
     }

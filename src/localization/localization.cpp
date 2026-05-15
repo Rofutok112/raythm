@@ -108,6 +108,7 @@ constexpr literal_translation kLiteralTranslations[] = {
     {"MULTIPLAY", "マルチプレイ"},
     {"BROWSE", "ブラウズ"},
     {"CREATE", "作成"},
+    {"Search", "検索"},
     {"Solo song select.", "ひとりで曲を選択"},
     {"Room battles soon.", "ルーム対戦は準備中"},
     {"Browse and download.", "曲を探してダウンロード"},

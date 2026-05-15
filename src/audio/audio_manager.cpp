@@ -2,9 +2,12 @@
 
 #include <array>
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <cstdint>
 #include <filesystem>
+#include <future>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -54,6 +57,13 @@ std::string lowercase_ascii(std::string value) {
 bool is_remote_stream_url(const std::string& file_path) {
     const std::string lowered = lowercase_ascii(file_path);
     return lowered.rfind("http://", 0) == 0 || lowered.rfind("https://", 0) == 0;
+}
+
+unsigned long create_stream_from_path(const std::string& file_path) {
+    if (is_remote_stream_url(file_path)) {
+        return BASS_StreamCreateURL(file_path.c_str(), 0, BASS_STREAM_PRESCAN, nullptr, nullptr);
+    }
+    return BASS_StreamCreateFile(FALSE, file_path.c_str(), 0, 0, 0);
 }
 
 bool is_pinned_se_sample_path(const std::string& file_path) {
@@ -152,6 +162,25 @@ bool audio_manager::initialize() {
 void audio_manager::shutdown() {
     stop_all_se();
     free_se_samples();
+    if (preview_loading_ && preview_load_future_.valid()) {
+        preview_load_future_.wait();
+        const preview_load_payload loaded = preview_load_future_.get();
+        if (loaded.handle != 0) {
+            BASS_StreamFree(loaded.handle);
+        }
+    }
+    for (std::future<preview_load_payload>& stale_future : stale_preview_load_futures_) {
+        if (!stale_future.valid()) {
+            continue;
+        }
+        stale_future.wait();
+        const preview_load_payload loaded = stale_future.get();
+        if (loaded.handle != 0) {
+            BASS_StreamFree(loaded.handle);
+        }
+    }
+    stale_preview_load_futures_.clear();
+    preview_loading_ = false;
     free_voice(bgm_handle_);
     free_voice(preview_handle_);
 
@@ -311,9 +340,96 @@ bool audio_manager::load_preview(const std::string& file_path) {
     if (!ensure_initialized()) {
         return false;
     }
+    ++preview_load_generation_;
+    active_preview_load_generation_ = preview_load_generation_;
+    if (preview_load_future_.valid()) {
+        stale_preview_load_futures_.push_back(std::move(preview_load_future_));
+    }
+    preview_loading_ = false;
     replace_voice(preview_handle_, file_path);
     apply_preview_volume();
     return is_voice_loaded(preview_handle_);
+}
+
+bool audio_manager::request_preview_load(const std::string& file_path) {
+    if (!ensure_initialized()) {
+        return false;
+    }
+
+    ++preview_load_generation_;
+    active_preview_load_generation_ = preview_load_generation_;
+    if (preview_load_future_.valid()) {
+        stale_preview_load_futures_.push_back(std::move(preview_load_future_));
+    }
+
+    stop_voice(preview_handle_);
+    free_voice(preview_handle_);
+    preview_loading_ = true;
+    const std::string source = file_path;
+    const unsigned int generation = active_preview_load_generation_;
+    std::promise<preview_load_payload> promise;
+    preview_load_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), source, generation]() mutable {
+        try {
+            promise.set_value({
+                generation,
+                create_stream_from_path(source),
+            });
+        } catch (...) {
+            promise.set_value({generation, 0});
+        }
+    }).detach();
+    return true;
+}
+
+audio_manager::async_preview_load_result audio_manager::poll_preview_load() {
+    async_preview_load_result result;
+    for (auto it = stale_preview_load_futures_.begin(); it != stale_preview_load_futures_.end();) {
+        if (!it->valid() || it->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            if (it->valid()) {
+                const preview_load_payload stale = it->get();
+                if (stale.handle != 0) {
+                    BASS_StreamFree(stale.handle);
+                }
+            }
+            it = stale_preview_load_futures_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    if (!preview_loading_ || !preview_load_future_.valid()) {
+        return result;
+    }
+    if (preview_load_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return result;
+    }
+
+    result.completed = true;
+    preview_loading_ = false;
+    preview_load_payload loaded;
+    try {
+        loaded = preview_load_future_.get();
+    } catch (...) {
+        loaded = {};
+    }
+
+    if (loaded.generation != preview_load_generation_) {
+        if (loaded.handle != 0) {
+            BASS_StreamFree(loaded.handle);
+        }
+        return result;
+    }
+
+    free_voice(preview_handle_);
+    preview_handle_ = loaded.handle;
+    apply_preview_volume();
+    result.loaded = is_voice_loaded(preview_handle_);
+    return result;
+}
+
+bool audio_manager::is_preview_loading() const {
+    return preview_loading_;
 }
 
 void audio_manager::play_preview(bool restart) {
@@ -329,6 +445,12 @@ void audio_manager::stop_preview() {
 }
 
 void audio_manager::unload_preview() {
+    ++preview_load_generation_;
+    active_preview_load_generation_ = preview_load_generation_;
+    if (preview_load_future_.valid()) {
+        stale_preview_load_futures_.push_back(std::move(preview_load_future_));
+    }
+    preview_loading_ = false;
     stop_voice(preview_handle_);
     free_voice(preview_handle_);
 }
@@ -607,10 +729,7 @@ bool audio_manager::ensure_initialized() {
 }
 
 unsigned long audio_manager::create_stream(const std::string& file_path) const {
-    if (is_remote_stream_url(file_path)) {
-        return BASS_StreamCreateURL(file_path.c_str(), 0, BASS_STREAM_PRESCAN, nullptr, nullptr);
-    }
-    return BASS_StreamCreateFile(FALSE, file_path.c_str(), 0, 0, 0);
+    return create_stream_from_path(file_path);
 }
 
 void audio_manager::replace_voice(unsigned long& handle, const std::string& file_path) const {

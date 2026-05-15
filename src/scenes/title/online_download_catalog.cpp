@@ -773,6 +773,8 @@ void reload_catalog(state& state, bool preserve_view) {
         state.community_songs.clear();
         state.owned_songs.clear();
         state.discovery_shelves.clear();
+        state.overview_shelf_scroll_x.clear();
+        state.overview_shelf_scroll_x_target.clear();
         state.local_songs.clear();
         state.song_scroll_y = 0.0f;
         state.song_scroll_y_target = 0.0f;

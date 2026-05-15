@@ -15,6 +15,15 @@ namespace {
 constexpr float kSongCardHeight = 154.0f;
 constexpr float kSongGridGapX = 18.0f;
 constexpr float kSongGridGapY = 19.0f;
+constexpr float kOverviewShelfHeaderHeight = 34.0f;
+constexpr float kOverviewShelfArrowLaneWidth = 42.0f;
+constexpr float kOverviewShelfArrowGap = 8.0f;
+constexpr float kSidebarXInset = 14.0f;
+constexpr float kSidebarDiscoveryTitleY = 106.0f;
+constexpr float kSidebarSourceTitleY = 594.0f;
+constexpr float kSidebarTitleToButtonGap = 42.0f;
+constexpr float kSidebarButtonHeight = 54.0f;
+constexpr float kSidebarButtonGap = 8.0f;
 constexpr float kChartCardHeight = 64.0f;
 constexpr float kChartGridGapX = 22.0f;
 constexpr float kChartGridGapY = 10.0f;
@@ -37,6 +46,25 @@ bool contains_any_case_insensitive(const std::vector<std::string>& haystacks, co
     return std::any_of(haystacks.begin(), haystacks.end(), [&](const std::string& haystack) {
         return contains_case_insensitive(haystack, needle);
     });
+}
+
+std::vector<int> active_song_indices_for_shelf(const state& state, const discovery_shelf_state& shelf) {
+    std::vector<int> indices;
+    const auto& songs = detail::active_songs(state);
+    for (const song_entry_state& shelf_song : shelf.songs) {
+        const std::string& song_id = shelf_song.song.song.meta.song_id;
+        if (song_id.empty()) {
+            continue;
+        }
+        const auto it = std::find_if(songs.begin(), songs.end(), [&](const song_entry_state& song) {
+            return song.song.song.meta.song_id == song_id;
+        });
+        if (it == songs.end()) {
+            continue;
+        }
+        indices.push_back(static_cast<int>(it - songs.begin()));
+    }
+    return indices;
 }
 
 float parse_filter_float(const std::string& value, float fallback) {
@@ -62,6 +90,37 @@ float song_list_content_height(int count) {
     return static_cast<float>(rows) * (kSongCardHeight + kSongGridGapY) - kSongGridGapY;
 }
 
+float overview_shelf_card_width(Rectangle area) {
+    return (area.width - kOverviewShelfArrowLaneWidth * 2.0f - kOverviewShelfArrowGap * 2.0f -
+            static_cast<float>(detail::kSongGridColumns - 1) * kSongGridGapX) /
+        static_cast<float>(detail::kSongGridColumns);
+}
+
+float overview_shelf_card_y(Rectangle area, int shelf_row, float scroll_y) {
+    return area.y + static_cast<float>(shelf_row) * (kOverviewShelfHeaderHeight + kSongCardHeight + kSongGridGapY) +
+        kOverviewShelfHeaderHeight - scroll_y;
+}
+
+Rectangle overview_shelf_card_rect(Rectangle area, int shelf_row, int item_index, float row_scroll, float scroll_y) {
+    const float width = overview_shelf_card_width(area);
+    return {
+        area.x + kOverviewShelfArrowLaneWidth + kOverviewShelfArrowGap +
+            (static_cast<float>(item_index) - row_scroll) * (width + kSongGridGapX),
+        overview_shelf_card_y(area, shelf_row, scroll_y),
+        width,
+        kSongCardHeight
+    };
+}
+
+float overview_song_list_content_height(const state& state) {
+    const std::vector<detail::overview_shelf_row> rows = detail::overview_shelf_rows(state);
+    if (rows.empty()) {
+        return 0.0f;
+    }
+    return static_cast<float>(rows.size()) * (kOverviewShelfHeaderHeight + kSongCardHeight) +
+        static_cast<float>(rows.size() - 1) * kSongGridGapY;
+}
+
 float chart_list_content_height(int count) {
     if (count <= 0) {
         return 0.0f;
@@ -78,10 +137,55 @@ const std::vector<song_entry_state>& active_songs(const state& state) {
     return state.official_songs;
 }
 
+bool uses_overview_shelves(const state& state) {
+    return state.view == discovery_view::overview && state.search_input.value.empty() &&
+        !state.discovery_shelves.empty();
+}
+
+std::vector<overview_shelf_row> overview_shelf_rows(const state& state) {
+    std::vector<overview_shelf_row> rows;
+    if (!uses_overview_shelves(state)) {
+        return rows;
+    }
+
+    for (const discovery_shelf_state& shelf : state.discovery_shelves) {
+        if (shelf.key == "fresh_charts") {
+            continue;
+        }
+        const std::vector<int> shelf_indices = active_song_indices_for_shelf(state, shelf);
+        if (shelf_indices.empty()) {
+            continue;
+        }
+
+        const int total_count = static_cast<int>(shelf_indices.size());
+        const auto scroll_it = state.overview_shelf_scroll_x.find(shelf.key);
+        const float raw_scroll = scroll_it == state.overview_shelf_scroll_x.end() ? 0.0f : scroll_it->second;
+        const float max_scroll = static_cast<float>(std::max(0, total_count - kSongGridColumns));
+
+        overview_shelf_row row;
+        row.key = shelf.key;
+        row.total_count = total_count;
+        row.scroll_x = std::clamp(raw_scroll, 0.0f, max_scroll);
+        row.song_indices = std::move(shelf_indices);
+        rows.push_back(std::move(row));
+    }
+    return rows;
+}
+
 std::vector<int> filtered_indices(const state& state) {
     std::vector<int> indices;
     const auto& songs = active_songs(state);
     indices.reserve(songs.size());
+
+    if (state.view == discovery_view::overview && state.search_input.value.empty() &&
+        !state.discovery_shelves.empty()) {
+        for (const overview_shelf_row& row : overview_shelf_rows(state)) {
+            indices.insert(indices.end(), row.song_indices.begin(), row.song_indices.end());
+        }
+        if (!indices.empty()) {
+            return indices;
+        }
+    }
 
     for (int index = 0; index < static_cast<int>(songs.size()); ++index) {
         const song_entry_state& song = songs[static_cast<size_t>(index)];
@@ -238,6 +342,13 @@ float max_song_scroll(Rectangle area, int count) {
     return std::max(0.0f, song_list_content_height(count) - area.height + 4.0f);
 }
 
+float max_song_scroll(const state& state, Rectangle area, int count) {
+    if (detail::uses_overview_shelves(state)) {
+        return std::max(0.0f, overview_song_list_content_height(state) - area.height + 4.0f);
+    }
+    return max_song_scroll(area, count);
+}
+
 Rectangle song_row_rect(Rectangle area, int display_index, float scroll_y) {
     const float width =
         (area.width - static_cast<float>(kSongGridColumns - 1) * kSongGridGapX) /
@@ -249,6 +360,71 @@ Rectangle song_row_rect(Rectangle area, int display_index, float scroll_y) {
         area.y + static_cast<float>(row) * (kSongCardHeight + kSongGridGapY) - scroll_y,
         width,
         kSongCardHeight
+    };
+}
+
+Rectangle song_row_rect(const state& state, Rectangle area, int display_index, float scroll_y) {
+    if (!detail::uses_overview_shelves(state)) {
+        return song_row_rect(area, display_index, scroll_y);
+    }
+
+    const std::vector<overview_shelf_row> rows = overview_shelf_rows(state);
+    int remaining_index = display_index;
+    for (int row = 0; row < static_cast<int>(rows.size()); ++row) {
+        const overview_shelf_row& shelf_row = rows[static_cast<size_t>(row)];
+        const int row_count = static_cast<int>(shelf_row.song_indices.size());
+        if (remaining_index < row_count) {
+            return overview_shelf_card_rect(area, row, remaining_index, shelf_row.scroll_x, scroll_y);
+        }
+        remaining_index -= row_count;
+    }
+    return song_row_rect(area, display_index, scroll_y);
+}
+
+Rectangle overview_shelf_track_rect(Rectangle area) {
+    return {
+        area.x + kOverviewShelfArrowLaneWidth + kOverviewShelfArrowGap,
+        area.y,
+        area.width - kOverviewShelfArrowLaneWidth * 2.0f - kOverviewShelfArrowGap * 2.0f,
+        area.height
+    };
+}
+
+Rectangle overview_shelf_prev_button_rect(Rectangle area, int shelf_row, float scroll_y) {
+    return {
+        area.x,
+        overview_shelf_card_y(area, shelf_row, scroll_y),
+        kOverviewShelfArrowLaneWidth,
+        kSongCardHeight
+    };
+}
+
+Rectangle overview_shelf_next_button_rect(Rectangle area, int shelf_row, float scroll_y) {
+    return {
+        area.x + area.width - kOverviewShelfArrowLaneWidth,
+        overview_shelf_card_y(area, shelf_row, scroll_y),
+        kOverviewShelfArrowLaneWidth,
+        kSongCardHeight
+    };
+}
+
+Rectangle sidebar_button_rect(Rectangle sidebar, int index) {
+    return {
+        sidebar.x + kSidebarXInset,
+        sidebar.y + kSidebarDiscoveryTitleY + kSidebarTitleToButtonGap +
+            static_cast<float>(index) * (kSidebarButtonHeight + kSidebarButtonGap),
+        sidebar.width - kSidebarXInset * 2.0f,
+        kSidebarButtonHeight,
+    };
+}
+
+Rectangle source_button_rect(Rectangle sidebar, int index) {
+    return {
+        sidebar.x + kSidebarXInset,
+        sidebar.y + kSidebarSourceTitleY + kSidebarTitleToButtonGap +
+            static_cast<float>(index) * (kSidebarButtonHeight + kSidebarButtonGap),
+        sidebar.width - kSidebarXInset * 2.0f,
+        kSidebarButtonHeight,
     };
 }
 
@@ -297,7 +473,7 @@ int hit_test_song_list(const state& state, Rectangle area, Vector2 point) {
     }
 
     for (int display_index = 0; display_index < static_cast<int>(indices.size()); ++display_index) {
-        if (CheckCollisionPointRec(point, song_row_rect(area, display_index, state.song_scroll_y))) {
+        if (CheckCollisionPointRec(point, song_row_rect(state, area, display_index, state.song_scroll_y))) {
             return indices[static_cast<size_t>(display_index)];
         }
     }
