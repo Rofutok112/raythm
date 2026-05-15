@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "audio_manager.h"
+#include "localization/localization.h"
 #include "platform/windows_input_source.h"
 #include "scene_common.h"
 #include "tween.h"
@@ -84,6 +85,28 @@ std::string primary_genre_label(const song_meta& meta) {
         return meta.genres.front();
     }
     return meta.genre;
+}
+
+std::string shelf_display_title(const std::string& key) {
+    if (key == "rising") {
+        return "RISING THIS WEEK";
+    }
+    if (key == "hidden_gems") {
+        return "HIDDEN GEMS";
+    }
+    if (key == "fresh_charts") {
+        return "FRESH CHARTS";
+    }
+    if (key == "new") {
+        return "NEW ARRIVALS";
+    }
+    if (key == "needs_charts") {
+        return "NEEDS CHARTS";
+    }
+    if (key == "recommended") {
+        return "RECOMMENDED";
+    }
+    return "DISCOVERY";
 }
 
 Color genre_color_for_label(const std::string& label) {
@@ -176,36 +199,6 @@ const char* source_label(source_filter source) {
         return "Community";
     }
     return "";
-}
-
-Rectangle sidebar_button_rect(Rectangle sidebar, int index) {
-    constexpr float kSidebarXInset = 14.0f;
-    constexpr float kSidebarDiscoveryTitleY = 32.0f;
-    constexpr float kSidebarTitleToButtonGap = 42.0f;
-    constexpr float kSidebarButtonHeight = 54.0f;
-    constexpr float kSidebarButtonGap = 8.0f;
-    return {
-        sidebar.x + kSidebarXInset,
-        sidebar.y + kSidebarDiscoveryTitleY + kSidebarTitleToButtonGap +
-            static_cast<float>(index) * (kSidebarButtonHeight + kSidebarButtonGap),
-        sidebar.width - kSidebarXInset * 2.0f,
-        kSidebarButtonHeight,
-    };
-}
-
-Rectangle source_button_rect(Rectangle sidebar, int index) {
-    constexpr float kSidebarXInset = 14.0f;
-    constexpr float kSidebarButtonHeight = 54.0f;
-    constexpr float kSidebarButtonGap = 8.0f;
-    constexpr float kSourceTitleY = 520.0f;
-    constexpr float kSidebarTitleToButtonGap = 42.0f;
-    return {
-        sidebar.x + kSidebarXInset,
-        sidebar.y + kSourceTitleY + kSidebarTitleToButtonGap +
-            static_cast<float>(index) * (kSidebarButtonHeight + kSidebarButtonGap),
-        sidebar.width - kSidebarXInset * 2.0f,
-        kSidebarButtonHeight,
-    };
 }
 
 Rectangle preview_open_button_rect(Rectangle panel) {
@@ -418,9 +411,8 @@ void draw_body_marquee_text(const char* text,
         } else if (align == ui::text_align::right) {
             draw_x = clip_rect.x + clip_rect.width - text_width;
         }
-        ui::begin_scissor_rect(clip_rect);
+        ui::scoped_clip_rect clip_scope(clip_rect);
         draw_browse_body_text_f(text, draw_x, draw_y, font_size, color);
-        EndScissorMode();
         return;
     }
 
@@ -436,9 +428,8 @@ void draw_body_marquee_text(const char* text,
     } else if (cycle_t >= kPauseSeconds + travel_time) {
         offset = overflow;
     }
-    ui::begin_scissor_rect(clip_rect);
+    ui::scoped_clip_rect clip_scope(clip_rect);
     draw_browse_body_text_f(text, clip_rect.x - offset, draw_y, font_size, color);
-    EndScissorMode();
 }
 
 void draw_body_marquee_text(const char* text,
@@ -483,7 +474,7 @@ ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_stat
     const Rectangle content_rect = ui::inset(visual, ui::edge_insets::symmetric(0.0f, 14.0f));
     constexpr float kLabelWidth = 108.0f;
     constexpr float kLabelGap = 14.0f;
-    const bool show_label = !state.active && state.value.empty();
+    const bool show_label = label != nullptr && *label != '\0' && !state.active && state.value.empty();
     const Rectangle label_rect = {content_rect.x, content_rect.y, kLabelWidth, content_rect.height};
     const Rectangle text_rect = {
         show_label ? content_rect.x + kLabelWidth + kLabelGap : content_rect.x,
@@ -652,7 +643,7 @@ ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_stat
     } else if (!state.active) {
         draw_browse_body_text_f(display_value.c_str(), text_rect.x, text_y, font_size, text_color);
     } else {
-        ui::begin_scissor_rect(text_rect);
+        ui::scoped_clip_rect clip_scope(text_rect);
 
         if (state.has_selection) {
             const auto [selection_start, selection_end] = ui::text_input_selection_range(state);
@@ -678,7 +669,6 @@ ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_stat
                                with_alpha(t.text, alpha));
         }
 
-        EndScissorMode();
     }
 
     return result;
@@ -842,17 +832,17 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                             with_alpha(button_base, normal_row_alpha),
                             with_alpha(button_hover, hover_row_alpha),
                             with_alpha(t.text, alpha), 1.5f);
-    draw_song_search_input(current.search_rect, state.search_input, "SEARCH", "songs / artists / tags",
-                           16, 64,
-                           button_base, button_hover, button_selected,
-                           normal_row_alpha, hover_row_alpha, selected_row_alpha,
-                           alpha);
 
     ui::draw_rect_f(current.sidebar_rect, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * grid_fade_t / 2.0f)));
     ui::draw_rect_lines(current.sidebar_rect, 1.2f, with_alpha(t.border_light, grid_alpha));
-    constexpr float kSidebarTitleY = 32.0f;
-    constexpr float kSourceTitleY = 520.0f;
-    constexpr float kSidebarDividerY = 488.0f;
+    draw_song_search_input(current.search_rect, state.search_input, "", localization::tr_literal("Search"),
+                           14, 64,
+                           button_base, button_hover, button_selected,
+                           normal_row_alpha, hover_row_alpha, selected_row_alpha,
+                           grid_alpha);
+    constexpr float kSidebarTitleY = 106.0f;
+    constexpr float kSourceTitleY = 594.0f;
+    constexpr float kSidebarDividerY = 562.0f;
     draw_browse_body_text_in_rect("DISCOVERY", 15,
                           {current.sidebar_rect.x + 24.0f, current.sidebar_rect.y + kSidebarTitleY,
                            current.sidebar_rect.width - 48.0f, 20.0f},
@@ -867,7 +857,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     };
     for (int index = 0; index < 6; ++index) {
         const bool active = state.view == views[index];
-        ui::draw_button_colored(sidebar_button_rect(current.sidebar_rect, index),
+        ui::draw_button_colored(detail::sidebar_button_rect(current.sidebar_rect, index),
                                 view_label(views[index]), 14,
                                 with_alpha(active ? button_selected : button_base,
                                            static_cast<unsigned char>((active ? selected_row_alpha : normal_row_alpha) * grid_fade_t)),
@@ -889,7 +879,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     };
     for (int index = 0; index < 3; ++index) {
         const bool active = state.source == sources[index];
-        ui::draw_button_colored(source_button_rect(current.sidebar_rect, index),
+        ui::draw_button_colored(detail::source_button_rect(current.sidebar_rect, index),
                                 source_label(sources[index]), 14,
                                 with_alpha(active ? button_selected : button_base,
                                            static_cast<unsigned char>((active ? selected_row_alpha : normal_row_alpha) * grid_fade_t)),
@@ -920,31 +910,6 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
 
     Rectangle source_jacket_rect = current.hero_jacket_rect;
     bool selected_card_drawn = false;
-    std::vector<std::string> shelf_headers_for_song;
-    shelf_headers_for_song.reserve(indices.size());
-    if (state.view == discovery_view::overview && state.search_input.value.empty()) {
-        for (const discovery_shelf_state& shelf : state.discovery_shelves) {
-            bool first_in_shelf = true;
-            for (const song_entry_state& shelf_song : shelf.songs) {
-                const auto it = std::find_if(indices.begin(), indices.end(), [&](int song_index) {
-                    return song_index >= 0 && song_index < static_cast<int>(songs.size()) &&
-                           songs[static_cast<size_t>(song_index)].song.song.meta.song_id ==
-                               shelf_song.song.song.meta.song_id;
-                });
-                if (it == indices.end()) {
-                    continue;
-                }
-                const size_t display_index = static_cast<size_t>(it - indices.begin());
-                if (shelf_headers_for_song.size() <= display_index) {
-                    shelf_headers_for_song.resize(display_index + 1);
-                }
-                if (first_in_shelf) {
-                    shelf_headers_for_song[display_index] = shelf.title;
-                    first_in_shelf = false;
-                }
-            }
-        }
-    }
     {
         ui::scoped_clip_rect song_clip(current.song_grid_rect);
         if (indices.empty() && grid_alpha > 0) {
@@ -984,21 +949,69 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             }
         }
 
+        const std::vector<detail::overview_shelf_row> overview_rows = detail::overview_shelf_rows(state);
+        for (int shelf_row = 0; shelf_row < static_cast<int>(overview_rows.size()); ++shelf_row) {
+            const detail::overview_shelf_row& row = overview_rows[static_cast<size_t>(shelf_row)];
+            const Rectangle prev_arrow = detail::overview_shelf_prev_button_rect(
+                current.song_grid_rect, shelf_row, state.song_scroll_y);
+            const Rectangle arrow = detail::overview_shelf_next_button_rect(
+                current.song_grid_rect, shelf_row, state.song_scroll_y);
+            if (arrow.y + arrow.height < current.song_grid_rect.y - 4.0f ||
+                arrow.y > current.song_grid_rect.y + current.song_grid_rect.height + 4.0f) {
+                continue;
+            }
+
+            const float row_top = arrow.y - 34.0f;
+            draw_browse_body_text_in_rect(shelf_display_title(row.key).c_str(),
+                                  15,
+                                  {current.song_grid_rect.x + 10.0f, row_top + 7.0f,
+                                   current.song_grid_rect.width - 70.0f, 20.0f},
+                                  with_alpha(t.text, grid_alpha), ui::text_align::left);
+            if (row.total_count > detail::kSongGridColumns) {
+                const auto target_it = state.overview_shelf_scroll_x_target.find(row.key);
+                const float target_scroll = target_it == state.overview_shelf_scroll_x_target.end()
+                    ? row.scroll_x
+                    : target_it->second;
+                const bool can_prev = target_scroll > 0.001f || row.scroll_x > 0.001f;
+                const bool can_next = target_scroll < static_cast<float>(row.total_count - detail::kSongGridColumns) - 0.001f ||
+                    row.scroll_x < static_cast<float>(row.total_count - detail::kSongGridColumns) - 0.001f;
+                const auto draw_shelf_arrow = [&](Rectangle rect, const char* label, bool enabled) {
+                    const bool hovered = enabled && ui::is_hovered(rect);
+                    const unsigned char arrow_alpha = static_cast<unsigned char>(
+                        (enabled ? (hovered ? hover_row_alpha : normal_row_alpha) : normal_row_alpha / 3) * grid_fade_t);
+                    ui::draw_rect_f(rect, with_alpha(hovered ? button_hover : button_base, arrow_alpha));
+                    ui::draw_rect_lines(rect, 1.15f, with_alpha(hovered ? t.border_active : t.border_light,
+                                                               enabled ? grid_alpha : static_cast<unsigned char>(grid_alpha / 3)));
+                    draw_browse_body_text_in_rect(label,
+                                          31,
+                                          {rect.x, rect.y + rect.height * 0.5f - 22.0f, rect.width, 44.0f},
+                                          with_alpha(enabled ? t.text : t.text_muted,
+                                                     enabled ? grid_alpha : static_cast<unsigned char>(grid_alpha / 3)),
+                                          ui::text_align::center);
+                };
+                draw_shelf_arrow(prev_arrow, "<", can_prev);
+                draw_shelf_arrow(arrow, ">", can_next);
+            }
+        }
+
         for (int display_index = 0; display_index < static_cast<int>(indices.size()); ++display_index) {
             const int song_index = indices[static_cast<size_t>(display_index)];
             const song_entry_state& song = songs[static_cast<size_t>(song_index)];
-            const Rectangle card = detail::song_row_rect(current.song_grid_rect, display_index, state.song_scroll_y);
+            Rectangle card = detail::song_row_rect(state, current.song_grid_rect, display_index, state.song_scroll_y);
             if (card.y + card.height < current.song_grid_rect.y - 4.0f ||
                 card.y > current.song_grid_rect.y + current.song_grid_rect.height + 4.0f) {
                 continue;
             }
-            if (static_cast<size_t>(display_index) < shelf_headers_for_song.size() &&
-                !shelf_headers_for_song[static_cast<size_t>(display_index)].empty()) {
-                draw_browse_body_text_in_rect(shelf_headers_for_song[static_cast<size_t>(display_index)].c_str(),
-                                      15,
-                                      {card.x + 10.0f, card.y - 28.0f, card.width - 20.0f, 20.0f},
-                                      with_alpha(t.text, grid_alpha), ui::text_align::left);
+            const Rectangle track = detail::uses_overview_shelves(state)
+                ? detail::overview_shelf_track_rect(current.song_grid_rect)
+                : current.song_grid_rect;
+            if (card.x + card.width < track.x - 4.0f || card.x > track.x + track.width + 4.0f) {
+                continue;
             }
+            const Rectangle card_clip = detail::uses_overview_shelves(state)
+                ? Rectangle{track.x, card.y, track.width, card.height}
+                : current.song_grid_rect;
+            ui::scoped_clip_rect card_clip_scope(card_clip);
 
             const bool selected = song_index == detail::selected_song_index_ref(state);
             const bool hovered = ui::is_hovered(card);
@@ -1101,7 +1114,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         const int display_index = selected_song_display_index(state);
         if (display_index >= 0) {
             source_jacket_rect =
-                song_card_jacket_rect(detail::song_row_rect(current.song_grid_rect, display_index, state.song_scroll_y));
+                song_card_jacket_rect(detail::song_row_rect(state, current.song_grid_rect, display_index, state.song_scroll_y));
         }
     }
 

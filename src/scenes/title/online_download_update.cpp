@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include "audio_manager.h"
 #include "tween.h"
@@ -61,36 +62,6 @@ bool switch_mode(state& state, catalog_mode new_mode, update_result& result) {
     detail::ensure_selection_valid(state);
     result.song_selection_changed = true;
     return true;
-}
-
-Rectangle sidebar_button_rect(Rectangle sidebar, int index) {
-    constexpr float kSidebarXInset = 14.0f;
-    constexpr float kSidebarDiscoveryTitleY = 32.0f;
-    constexpr float kSidebarTitleToButtonGap = 42.0f;
-    constexpr float kSidebarButtonHeight = 54.0f;
-    constexpr float kSidebarButtonGap = 8.0f;
-    return {
-        sidebar.x + kSidebarXInset,
-        sidebar.y + kSidebarDiscoveryTitleY + kSidebarTitleToButtonGap +
-            static_cast<float>(index) * (kSidebarButtonHeight + kSidebarButtonGap),
-        sidebar.width - kSidebarXInset * 2.0f,
-        kSidebarButtonHeight,
-    };
-}
-
-Rectangle source_button_rect(Rectangle sidebar, int index) {
-    constexpr float kSidebarXInset = 14.0f;
-    constexpr float kSidebarButtonHeight = 54.0f;
-    constexpr float kSidebarButtonGap = 8.0f;
-    constexpr float kSourceTitleY = 520.0f;
-    constexpr float kSidebarTitleToButtonGap = 42.0f;
-    return {
-        sidebar.x + kSidebarXInset,
-        sidebar.y + kSourceTitleY + kSidebarTitleToButtonGap +
-            static_cast<float>(index) * (kSidebarButtonHeight + kSidebarButtonGap),
-        sidebar.width - kSidebarXInset * 2.0f,
-        kSidebarButtonHeight,
-    };
 }
 
 Rectangle preview_open_button_rect(Rectangle panel) {
@@ -300,36 +271,36 @@ bool switch_source_filter(state& state, source_filter source, update_result& res
 bool handle_sidebar_clicks(state& state,
                            const layout& current,
                            update_result& result) {
-    if (state.detail_open || !IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    if (state.detail_open || !IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
         return false;
     }
 
-    if (ui::is_clicked(sidebar_button_rect(current.sidebar_rect, 0))) {
+    if (ui::is_clicked(detail::sidebar_button_rect(current.sidebar_rect, 0))) {
         return switch_discovery_view(state, discovery_view::overview, result);
     }
-    if (ui::is_clicked(sidebar_button_rect(current.sidebar_rect, 1))) {
+    if (ui::is_clicked(detail::sidebar_button_rect(current.sidebar_rect, 1))) {
         return switch_discovery_view(state, discovery_view::new_arrivals, result);
     }
-    if (ui::is_clicked(sidebar_button_rect(current.sidebar_rect, 2))) {
+    if (ui::is_clicked(detail::sidebar_button_rect(current.sidebar_rect, 2))) {
         return switch_discovery_view(state, discovery_view::rising, result);
     }
-    if (ui::is_clicked(sidebar_button_rect(current.sidebar_rect, 3))) {
+    if (ui::is_clicked(detail::sidebar_button_rect(current.sidebar_rect, 3))) {
         return switch_discovery_view(state, discovery_view::hidden_gems, result);
     }
-    if (ui::is_clicked(sidebar_button_rect(current.sidebar_rect, 4))) {
+    if (ui::is_clicked(detail::sidebar_button_rect(current.sidebar_rect, 4))) {
         return switch_discovery_view(state, discovery_view::recommended, result);
     }
-    if (ui::is_clicked(sidebar_button_rect(current.sidebar_rect, 5))) {
+    if (ui::is_clicked(detail::sidebar_button_rect(current.sidebar_rect, 5))) {
         return switch_discovery_view(state, discovery_view::needs_charts, result);
     }
 
-    if (ui::is_clicked(source_button_rect(current.sidebar_rect, 0))) {
+    if (ui::is_clicked(detail::source_button_rect(current.sidebar_rect, 0))) {
         return switch_source_filter(state, source_filter::all, result);
     }
-    if (ui::is_clicked(source_button_rect(current.sidebar_rect, 1))) {
+    if (ui::is_clicked(detail::source_button_rect(current.sidebar_rect, 1))) {
         return switch_source_filter(state, source_filter::official, result);
     }
-    if (ui::is_clicked(source_button_rect(current.sidebar_rect, 2))) {
+    if (ui::is_clicked(detail::source_button_rect(current.sidebar_rect, 2))) {
         return switch_source_filter(state, source_filter::community, result);
     }
     return false;
@@ -360,6 +331,57 @@ bool handle_song_click(state& state,
         request_charts_for_selected_song(state);
     }
     return true;
+}
+
+bool handle_overview_shelf_paging(state& state,
+                                  Rectangle song_list_rect,
+                                  Vector2 mouse,
+                                  bool left_pressed,
+                                  update_result& result) {
+    if (state.detail_open || !left_pressed || !detail::uses_overview_shelves(state)) {
+        return false;
+    }
+
+    const std::vector<detail::overview_shelf_row> rows = detail::overview_shelf_rows(state);
+    for (int shelf_row = 0; shelf_row < static_cast<int>(rows.size()); ++shelf_row) {
+        const detail::overview_shelf_row& row = rows[static_cast<size_t>(shelf_row)];
+        if (row.total_count <= detail::kSongGridColumns) {
+            continue;
+        }
+
+        const float max_offset = static_cast<float>(std::max(0, row.total_count - detail::kSongGridColumns));
+        const auto target_it = state.overview_shelf_scroll_x_target.find(row.key);
+        const float target = target_it == state.overview_shelf_scroll_x_target.end() ? row.scroll_x : target_it->second;
+
+        if (CheckCollisionPointRec(mouse, detail::overview_shelf_prev_button_rect(
+                                              song_list_rect, shelf_row, state.song_scroll_y))) {
+            state.overview_shelf_scroll_x_target[row.key] = std::max(0.0f, target - 1.0f);
+            result.song_selection_changed = true;
+            return true;
+        }
+
+        if (CheckCollisionPointRec(mouse, detail::overview_shelf_next_button_rect(
+                                              song_list_rect, shelf_row, state.song_scroll_y))) {
+            state.overview_shelf_scroll_x_target[row.key] = std::min(max_offset, target + 1.0f);
+            result.song_selection_changed = true;
+            return true;
+        }
+    }
+    return false;
+}
+
+void update_overview_shelf_scrolls(state& state, float dt) {
+    if (!detail::uses_overview_shelves(state)) {
+        return;
+    }
+
+    for (const detail::overview_shelf_row& row : detail::overview_shelf_rows(state)) {
+        const float max_offset = static_cast<float>(std::max(0, row.total_count - detail::kSongGridColumns));
+        float& target = state.overview_shelf_scroll_x_target[row.key];
+        target = std::clamp(target, 0.0f, max_offset);
+        float& current = state.overview_shelf_scroll_x[row.key];
+        current = tween::damp(current, target, dt, 14.0f, 0.001f);
+    }
 }
 
 bool handle_chart_click(state& state,
@@ -689,10 +711,10 @@ void update_scroll_positions(state& state,
     }
 
     state.song_scroll_y_target = std::clamp(state.song_scroll_y_target, 0.0f,
-                                            detail::max_song_scroll(song_list_rect, filtered_song_count));
+                                            detail::max_song_scroll(state, song_list_rect, filtered_song_count));
     state.song_scroll_y = tween::damp(state.song_scroll_y, state.song_scroll_y_target, dt, 12.0f, 0.5f);
     if (!state.detail_open &&
-        state.song_scroll_y_target >= std::max(0.0f, detail::max_song_scroll(song_list_rect, filtered_song_count) - 120.0f)) {
+        state.song_scroll_y_target >= std::max(0.0f, detail::max_song_scroll(state, song_list_rect, filtered_song_count) - 120.0f)) {
         request_next_song_page(state, state.mode);
     }
 
@@ -716,6 +738,7 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
     const float detail_target = state.detail_open ? 1.0f : 0.0f;
     const float detail_lerp_speed = state.detail_open ? 6.5f : 10.0f;
     state.detail_transition = tween::damp(state.detail_transition, detail_target, dt, detail_lerp_speed, 0.002f);
+    update_overview_shelf_scrolls(state, dt);
 
     if (ui::is_clicked(current.back_rect)) {
         result.back_requested = true;
@@ -733,6 +756,10 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
     detail::ensure_selection_valid(state);
 
     const Rectangle song_list_rect = current.song_grid_rect;
+
+    if (handle_overview_shelf_paging(state, song_list_rect, mouse, left_pressed, result)) {
+        return result;
+    }
 
     if (handle_song_click(state, song_list_rect, mouse, left_pressed, result)) {
         return result;

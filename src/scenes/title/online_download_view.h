@@ -155,6 +155,8 @@ struct state {
     int owned_selected_chart_index = 0;
     float song_scroll_y = 0.0f;
     float song_scroll_y_target = 0.0f;
+    std::unordered_map<std::string, float> overview_shelf_scroll_x;
+    std::unordered_map<std::string, float> overview_shelf_scroll_x_target;
     float chart_scroll_y = 0.0f;
     float chart_scroll_y_target = 0.0f;
     ui::text_input_state search_input;
