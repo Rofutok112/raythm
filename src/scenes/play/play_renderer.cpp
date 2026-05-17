@@ -19,7 +19,6 @@ namespace {
 constexpr float kLaneGap = 0.2f;
 constexpr float kJudgeLineGlowHeight = 0.04f;
 constexpr float kResultFadeMaxAlpha = 0.65f;
-constexpr float kUiFontScale = 1.5f;
 constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
 constexpr Rectangle kPausePanelRect = ui::center(kScreenRect, 630.0f, 480.0f);
 constexpr Rectangle kPauseTitleRect = {kPausePanelRect.x, kPausePanelRect.y, kPausePanelRect.width, 96.0f};
@@ -123,7 +122,7 @@ float measure_play_text_width(const char* text, int font_size) {
     if (text == nullptr || *text == '\0') {
         return 0.0f;
     }
-    return ui::measure_display_text_size(text, static_cast<float>(font_size), 0.0f).x;
+    return ui::measure_body_text_size(text, static_cast<float>(font_size), 0.0f).x;
 }
 
 void draw_play_text_clipped(const char* text, float x, float y, int font_size, Color color, Rectangle clip_rect) {
@@ -132,7 +131,7 @@ void draw_play_text_clipped(const char* text, float x, float y, int font_size, C
     }
 
     ui::scoped_clip_rect clip_scope(clip_rect);
-    ui::draw_text_display(text, {x, y}, static_cast<float>(font_size), 0.0f, color);
+    ui::draw_text_body(text, {x, y}, static_cast<float>(font_size), 0.0f, color);
 }
 
 void draw_play_marquee_text(const char* text, Rectangle clip_rect, int font_size, Color color, double time) {
@@ -166,10 +165,6 @@ void draw_play_marquee_text(const char* text, Rectangle clip_rect, int font_size
     }
 
     draw_play_text_clipped(text, clip_rect.x - offset, draw_y, font_size, color, clip_rect);
-}
-
-int ui_font(int font_size) {
-    return static_cast<int>(std::lround(static_cast<float>(font_size) * kUiFontScale));
 }
 
 void draw_note_plane(float center_x, float y, float center_z, float width, float length, Color fill) {
@@ -548,13 +543,13 @@ void draw_song_info_panel(const play_session_state& state, const Texture2D* jack
         } else {
             ui::draw_rect_f(kSongInfoJacketRect, with_alpha(g_theme->section, 235));
             ui::draw_rect_lines(kSongInfoJacketRect, 2.0f, with_alpha(g_theme->border_light, 220));
-            ui::draw_display_text_in_rect("NO JACKET", ui_font(16), kSongInfoJacketRect,
-                                          g_theme->text_muted, ui::text_align::center);
+            ui::draw_body_text_in_rect("NO JACKET", 16, kSongInfoJacketRect,
+                                       g_theme->text_muted, ui::text_align::center);
         }
 
-        draw_play_marquee_text(title.c_str(), kSongInfoTitleRect, ui_font(25), g_theme->text, GetTime());
+        draw_play_marquee_text(title.c_str(), kSongInfoTitleRect, 25, g_theme->text, GetTime());
         if (!difficulty.empty()) {
-            draw_play_marquee_text(difficulty.c_str(), kSongInfoDifficultyRect, ui_font(20),
+            draw_play_marquee_text(difficulty.c_str(), kSongInfoDifficultyRect, 20,
                                    g_theme->text_secondary, GetTime());
         }
     });
@@ -658,20 +653,20 @@ bool should_draw_note_in_pass(note_type type, int pass) {
 void draw_hud(const play_session_state& state) {
     const result_data result = state.score_system.get_result_data();
     const float live_accuracy = state.score_system.get_live_accuracy();
-    ui::enqueue_display_text_in_rect(TextFormat("SCORE %07d", result.score), ui_font(30),
-                                     kScoreRect, g_theme->hud_score, ui::text_align::left);
-    ui::enqueue_display_text_in_rect(TextFormat("RC %.2f", state.performance_system.current_rc()), ui_font(24),
-                                     kRcRect, g_theme->text_secondary, ui::text_align::left);
+    ui::enqueue_body_text_in_rect(TextFormat("SCORE %07d", result.score), 30,
+                                  kScoreRect, g_theme->hud_score, ui::text_align::left);
+    ui::enqueue_body_text_in_rect(TextFormat("RC %.2f", state.performance_system.current_rc()), 24,
+                                  kRcRect, g_theme->text_secondary, ui::text_align::left);
 
-    ui::enqueue_display_text_in_rect(TextFormat("FPS: %d", GetFPS()), ui_font(20),
-                                     kFpsRect, g_theme->hud_fps, ui::text_align::right);
-    ui::enqueue_display_text_in_rect(TextFormat("%.2f%%", live_accuracy), ui_font(30),
-                                     kTimeRect, g_theme->hud_time);
+    ui::enqueue_body_text_in_rect(TextFormat("FPS: %d", GetFPS()), 20,
+                                  kFpsRect, g_theme->hud_fps, ui::text_align::right);
+    ui::enqueue_body_text_in_rect(TextFormat("%.2f%%", live_accuracy), 30,
+                                  kTimeRect, g_theme->hud_time);
 
     if (state.combo_display > 0) {
-        ui::enqueue_display_text_in_rect(TextFormat("%03d", state.combo_display), ui_font(86),
+        ui::enqueue_display_text_in_rect(TextFormat("%03d", state.combo_display), 86,
                                          kComboNumberRect, g_theme->hud_combo);
-        ui::enqueue_display_text_in_rect("COMBO", ui_font(24), kComboLabelRect, g_theme->hud_combo);
+        ui::enqueue_display_text_in_rect("COMBO", 24, kComboLabelRect, g_theme->hud_combo);
     }
 }
 
@@ -718,8 +713,8 @@ void draw_low_health_vignette(const play_session_state& state) {
 void draw_pause_overlay() {
     ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
     ui::enqueue_panel(kPausePanelRect, ui::draw_layer::modal);
-    ui::enqueue_display_text_in_rect("PAUSED", ui_font(42), kPauseTitleRect, g_theme->text,
-                                     ui::text_align::center, ui::draw_layer::modal);
+    ui::enqueue_body_text_in_rect("PAUSED", 42, kPauseTitleRect, g_theme->text,
+                                  ui::text_align::center, ui::draw_layer::modal);
 
     const std::array<Rectangle, 3> buttons = play_renderer::pause_button_rects();
     const char* labels[] = {"RESUME", "RESTART", "SONG SELECT"};
@@ -732,12 +727,12 @@ void draw_pause_overlay() {
             const Rectangle visual = pressed ? ui::inset(button, 1.5f) : button;
             ui::draw_rect_f(visual, lerp_color(g_theme->row, g_theme->row_hover, hovered ? 1.0f : 0.0f));
             ui::draw_rect_lines(visual, 2.0f, g_theme->border);
-            ui::draw_display_text_in_rect(label, ui_font(24), visual, g_theme->text);
+            ui::draw_body_text_in_rect(label, 24, visual, g_theme->text);
         });
     }
 
-    ui::enqueue_display_text_in_rect("ESC: Resume", ui_font(20), kPauseHintRect, g_theme->text_muted,
-                                     ui::text_align::left, ui::draw_layer::modal);
+    ui::enqueue_body_text_in_rect("ESC: Resume", 20, kPauseHintRect, g_theme->text_muted,
+                                  ui::text_align::left, ui::draw_layer::modal);
 }
 
 void draw_judge_feedback(const play_session_state& state) {
@@ -747,7 +742,7 @@ void draw_judge_feedback(const play_session_state& state) {
 
     const Color color = Fade(judge_color(state.display_judge->result),
                              std::min(state.judge_feedback_timer / 1.0f, 1.0f));
-    ui::enqueue_display_text_in_rect(judge_text(state.display_judge->result), ui_font(42), kJudgeFeedbackRect, color);
+    ui::enqueue_display_text_in_rect(judge_text(state.display_judge->result), 42, kJudgeFeedbackRect, color);
 }
 
 void draw_intro_overlay(const play_session_state& state) {
@@ -761,9 +756,9 @@ void draw_failure_overlay(const play_session_state& state) {
     const float fade_progress = std::clamp(elapsed / play_session_constants::kFailureFadeDurationSeconds, 0.0f, 0.7f);
     const unsigned char alpha = static_cast<unsigned char>(fade_progress * 255.0f);
     ui::enqueue_fullscreen_overlay({0, 0, 0, alpha}, ui::draw_layer::overlay);
-    ui::enqueue_display_text_in_rect("FAILED...", ui_font(44), kFailureTextRect,
-                                     Fade(g_theme->hud_failure_text, std::min(fade_progress * 1.15f, 1.0f)),
-                                     ui::text_align::center, ui::draw_layer::modal);
+    ui::enqueue_body_text_in_rect("FAILED...", 44, kFailureTextRect,
+                                  Fade(g_theme->hud_failure_text, std::min(fade_progress * 1.15f, 1.0f)),
+                                  ui::text_align::center, ui::draw_layer::modal);
 }
 
 void draw_result_transition_overlay(const play_session_state& state) {
@@ -788,9 +783,9 @@ std::array<Rectangle, 3> pause_button_rects() {
 
 void draw_status(const play_session_state& state) {
     draw_scene_background(*g_theme);
-    ui::draw_text_display("Play", {144.0f, 135.0f}, ui_font(44), 0.0f, g_theme->error);
-    ui::draw_text_display(state.status_text.c_str(), {144.0f, 255.0f}, ui_font(28), 0.0f, g_theme->text);
-    ui::draw_text_display("ESC: Back to Song Select", {144.0f, 337.5f}, ui_font(22), 0.0f, g_theme->text_hint);
+    ui::draw_text_body("Play", {144.0f, 135.0f}, 44.0f, 0.0f, g_theme->error);
+    ui::draw_text_body(state.status_text.c_str(), {144.0f, 255.0f}, 28.0f, 0.0f, g_theme->text);
+    ui::draw_text_body("ESC: Back to Song Select", {144.0f, 337.5f}, 22.0f, 0.0f, g_theme->text_hint);
 }
 
 void draw_world_background() {

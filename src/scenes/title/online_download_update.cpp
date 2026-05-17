@@ -1,7 +1,11 @@
 #include "title/online_download_internal.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <exception>
+#include <future>
+#include <thread>
 #include <vector>
 
 #include "audio_manager.h"
@@ -12,14 +16,9 @@
 namespace title_online_view {
 namespace {
 
-constexpr float kChartLevelWidth = 264.0f;
-constexpr float kChartFilterGroupGap = 22.0f;
-constexpr float kChartKeyGroupX = kChartLevelWidth + kChartFilterGroupGap;
+constexpr float kChartLevelWidth = 250.0f;
 constexpr float kChartKeyButtonWidth = 44.0f;
-constexpr float kChartKeyButtonStep = 52.0f;
-constexpr float kChartKeyGroupWidth = kChartKeyButtonWidth + kChartKeyButtonStep * 4.0f;
-constexpr float kChartClearButtonX = kChartKeyGroupX + kChartKeyGroupWidth + kChartFilterGroupGap;
-constexpr float kChartClearButtonWidth = 68.0f;
+constexpr float kChartKeyButtonStep = 50.0f;
 
 void reset_chart_scroll(state& state) {
     state.chart_scroll_y = 0.0f;
@@ -136,51 +135,57 @@ Rectangle chart_filter_button_rect(Rectangle chart_list, int index) {
 }
 
 Rectangle chart_source_button_rect(Rectangle chart_list, int index) {
+    const float button_width = (chart_list.width - 52.0f) * 0.5f;
+    const float x = chart_list.x + 20.0f + static_cast<float>(index % 2) * (button_width + 12.0f);
+    const float y = chart_list.y + 124.0f + static_cast<float>(index / 2) * 42.0f;
     return {
-        chart_list.x + static_cast<float>(index) * ((chart_list.width - 18.0f) / 4.0f + 6.0f),
-        chart_list.y - 242.0f,
-        (chart_list.width - 18.0f) / 4.0f,
-        46.0f,
+        x,
+        y,
+        button_width,
+        36.0f,
     };
 }
 
 Rectangle chart_key_button_rect(Rectangle chart_list, int index) {
+    const float group_width = kChartKeyButtonWidth + kChartKeyButtonStep * 4.0f;
     return {
-        chart_list.x + kChartKeyGroupX + static_cast<float>(index) * kChartKeyButtonStep,
-        chart_list.y - 98.0f,
+        chart_list.x + (chart_list.width - group_width) * 0.5f + static_cast<float>(index) * kChartKeyButtonStep,
+        chart_list.y + 470.0f,
         kChartKeyButtonWidth,
-        28.0f,
+        30.0f,
     };
 }
 
 Rectangle chart_status_button_rect(Rectangle chart_list, int index) {
     return {
-        chart_list.x + static_cast<float>(index) * ((chart_list.width - 12.0f) / 3.0f + 6.0f),
-        chart_list.y - 184.0f,
-        (chart_list.width - 12.0f) / 3.0f,
-        42.0f,
+        chart_list.x + 20.0f + static_cast<float>(index) * ((chart_list.width - 52.0f) / 3.0f + 6.0f),
+        chart_list.y + 262.0f,
+        (chart_list.width - 52.0f) / 3.0f,
+        36.0f,
     };
 }
 
 Rectangle chart_clear_button_rect(Rectangle chart_list) {
     return {
-        chart_list.x + kChartClearButtonX,
-        chart_list.y - 98.0f,
-        kChartClearButtonWidth,
-        28.0f,
+        chart_list.x + 20.0f,
+        chart_list.y + chart_list.height - 64.0f,
+        chart_list.width - 40.0f,
+        42.0f,
     };
 }
 
 Rectangle chart_level_min_input_rect(Rectangle chart_list) {
-    return {chart_list.x, chart_list.y - 98.0f, 66.0f, 28.0f};
+    const float group_x = chart_list.x + (chart_list.width - 188.0f) * 0.5f;
+    return {group_x, chart_list.y + 358.0f, 66.0f, 30.0f};
 }
 
 Rectangle chart_level_max_input_rect(Rectangle chart_list) {
-    return {chart_list.x + 104.0f, chart_list.y - 98.0f, 66.0f, 28.0f};
+    const float group_x = chart_list.x + (chart_list.width - 188.0f) * 0.5f;
+    return {group_x + 122.0f, chart_list.y + 358.0f, 66.0f, 30.0f};
 }
 
 Rectangle chart_level_slider_rect(Rectangle chart_list) {
-    return {chart_list.x, chart_list.y - 41.0f, kChartLevelWidth, 8.0f};
+    return {chart_list.x + (chart_list.width - kChartLevelWidth) * 0.5f, chart_list.y + 412.0f, kChartLevelWidth, 8.0f};
 }
 
 void clear_chart_filters(state& state) {
@@ -478,70 +483,71 @@ bool handle_detail_actions(state& state,
         return true;
     }
 
-    if (ui::is_clicked(chart_source_button_rect(current.chart_list_rect, 0))) {
+    const Rectangle filter_panel = current.detail_left_rect;
+    if (ui::is_clicked(chart_source_button_rect(filter_panel, 0))) {
         state.chart_source = chart_source_filter::all;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_source_button_rect(current.chart_list_rect, 1))) {
+    if (ui::is_clicked(chart_source_button_rect(filter_panel, 1))) {
         state.chart_source = chart_source_filter::official;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_source_button_rect(current.chart_list_rect, 2))) {
+    if (ui::is_clicked(chart_source_button_rect(filter_panel, 2))) {
         state.chart_source = chart_source_filter::community;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_source_button_rect(current.chart_list_rect, 3))) {
+    if (ui::is_clicked(chart_source_button_rect(filter_panel, 3))) {
         state.chart_source = chart_source_filter::mine;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_clear_button_rect(current.chart_list_rect))) {
+    if (ui::is_clicked(chart_clear_button_rect(filter_panel))) {
         clear_chart_filters(state);
         return true;
     }
-    if (update_level_range_from_slider(state, current.chart_list_rect, mouse)) {
+    if (update_level_range_from_slider(state, filter_panel, mouse)) {
         return true;
     }
 
-    if (ui::is_clicked(chart_key_button_rect(current.chart_list_rect, 0))) {
+    if (ui::is_clicked(chart_key_button_rect(filter_panel, 0))) {
         state.chart_key_filter = 0;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_key_button_rect(current.chart_list_rect, 1))) {
+    if (ui::is_clicked(chart_key_button_rect(filter_panel, 1))) {
         state.chart_key_filter = 4;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_key_button_rect(current.chart_list_rect, 2))) {
+    if (ui::is_clicked(chart_key_button_rect(filter_panel, 2))) {
         state.chart_key_filter = 5;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_key_button_rect(current.chart_list_rect, 3))) {
+    if (ui::is_clicked(chart_key_button_rect(filter_panel, 3))) {
         state.chart_key_filter = 6;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_key_button_rect(current.chart_list_rect, 4))) {
+    if (ui::is_clicked(chart_key_button_rect(filter_panel, 4))) {
         state.chart_key_filter = 7;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_status_button_rect(current.chart_list_rect, 0))) {
+    if (ui::is_clicked(chart_status_button_rect(filter_panel, 0))) {
         state.chart_download_filter = 0;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_status_button_rect(current.chart_list_rect, 1))) {
+    if (ui::is_clicked(chart_status_button_rect(filter_panel, 1))) {
         state.chart_download_filter = 1;
         reset_chart_scroll(state);
         return true;
     }
-    if (ui::is_clicked(chart_status_button_rect(current.chart_list_rect, 2))) {
+    if (ui::is_clicked(chart_status_button_rect(filter_panel, 2))) {
         state.chart_download_filter = 2;
         reset_chart_scroll(state);
         return true;
@@ -727,6 +733,81 @@ void update_scroll_positions(state& state,
     }
 }
 
+std::string selected_ranking_chart_id(const state& state) {
+    const chart_entry_state* chart = selected_chart(state);
+    return chart != nullptr ? chart->chart.meta.chart_id : "";
+}
+
+void request_selected_chart_ranking(state& state) {
+    if (!state.detail_open) {
+        return;
+    }
+
+    const std::string chart_id = selected_ranking_chart_id(state);
+    if (chart_id.empty()) {
+        state.ranking_requested_chart_id.clear();
+        state.ranking_loaded_chart_id.clear();
+        state.ranking_listing = {};
+        state.ranking_listing.ranking_source = ranking_service::source::online;
+        state.ranking_listing.available = false;
+        state.ranking_listing.message = "Select a chart to view global ranking.";
+        return;
+    }
+
+    if (state.ranking_loading && state.ranking_requested_chart_id == chart_id) {
+        return;
+    }
+    if (!state.ranking_loading && state.ranking_loaded_chart_id == chart_id) {
+        return;
+    }
+
+    state.ranking_requested_chart_id = chart_id;
+    state.ranking_loaded_chart_id.clear();
+    state.ranking_loading = true;
+    state.ranking_listing = {};
+    state.ranking_listing.ranking_source = ranking_service::source::online;
+    state.ranking_listing.available = false;
+    state.ranking_listing.message = "Loading global ranking...";
+    std::promise<ranking_service::listing> promise;
+    state.ranking_future = promise.get_future();
+    std::thread([promise = std::move(promise), chart_id]() mutable {
+        try {
+            promise.set_value(ranking_service::load_chart_ranking(chart_id, ranking_service::source::online, 10));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
+}
+
+void poll_selected_chart_ranking(state& state) {
+    if (!state.ranking_loading) {
+        return;
+    }
+    if (state.ranking_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+
+    ranking_service::listing listing;
+    try {
+        listing = state.ranking_future.get();
+    } catch (const std::exception& ex) {
+        listing.ranking_source = ranking_service::source::online;
+        listing.available = false;
+        listing.message = ex.what();
+    } catch (...) {
+        listing.ranking_source = ranking_service::source::online;
+        listing.available = false;
+        listing.message = "Could not load global ranking.";
+    }
+    const std::string completed_chart_id = state.ranking_requested_chart_id;
+    state.ranking_loading = false;
+    if (completed_chart_id == selected_ranking_chart_id(state)) {
+        state.ranking_loaded_chart_id = completed_chart_id;
+        state.ranking_listing = std::move(listing);
+    }
+    request_selected_chart_ranking(state);
+}
+
 }  // namespace
 
 update_result update(state& state, float anim_t, Rectangle origin_rect, float dt) {
@@ -754,6 +835,8 @@ update_result update(state& state, float anim_t, Rectangle origin_rect, float dt
     }
 
     detail::ensure_selection_valid(state);
+    poll_selected_chart_ranking(state);
+    request_selected_chart_ranking(state);
 
     const Rectangle song_list_rect = current.song_grid_rect;
 

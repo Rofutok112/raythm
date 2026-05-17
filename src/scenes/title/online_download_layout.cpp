@@ -17,18 +17,19 @@ constexpr Rectangle kOwnedTabRect = {24.0f, 280.0f, 214.0f, 58.0f};
 constexpr Rectangle kContentRect = {310.0f, 150.0f, 1140.0f, 880.0f};
 constexpr Rectangle kSidebarRect = {50.0f, 150.0f, 240.0f, 880.0f};
 constexpr Rectangle kPreviewPanelRect = {1462.0f, 150.0f, 408.0f, 880.0f};
-constexpr Rectangle kDetailLeftRect = {32.0f, 174.0f, 716.0f, 830.0f};
-constexpr Rectangle kDetailRightRect = {780.0f, 174.0f, 1108.0f, 830.0f};
-constexpr Rectangle kHeroJacketRect = {72.0f, 250.0f, 296.0f, 296.0f};
-constexpr Rectangle kPreviewBarRect = {220.0f, 670.0f, 320.0f, 12.0f};
-constexpr Rectangle kPreviewPlayRect = {72.0f, 646.0f, 106.0f, 54.0f};
-constexpr Rectangle kPrimaryActionRect = {72.0f, 910.0f, 410.0f, 58.0f};
+constexpr Rectangle kDetailLeftRect = {32.0f, 174.0f, 310.0f, 830.0f};
+constexpr Rectangle kDetailRightRect = {366.0f, 174.0f, 780.0f, 830.0f};
+constexpr Rectangle kDetailPreviewRect = {1168.0f, 174.0f, 720.0f, 830.0f};
+constexpr Rectangle kHeroJacketRect = {1198.0f, 210.0f, 212.0f, 212.0f};
+constexpr Rectangle kPreviewBarRect = {1198.0f, 500.0f, 660.0f, 12.0f};
+constexpr Rectangle kPreviewPlayRect = {1450.0f, 536.0f, 154.0f, 54.0f};
+constexpr Rectangle kPrimaryActionRect = {1538.0f, 934.0f, 320.0f, 58.0f};
 constexpr float kDetailPanelInset = 24.0f;
 constexpr Rectangle kChartListRect = {
     kDetailRightRect.x + kDetailPanelInset,
-    kDetailRightRect.y + 320.0f,
+    kDetailRightRect.y + 86.0f,
     kDetailRightRect.width - kDetailPanelInset * 2.0f,
-    416.0f,
+    690.0f,
 };
 constexpr Rectangle kFallbackOriginRect = {1140.0f, 564.0f, 240.0f, 90.0f};
 constexpr Vector2 kSeedBackOffset = {-672.0f, -297.0f};
@@ -39,6 +40,7 @@ constexpr Vector2 kSeedSearchOffset = {477.0f, -288.0f};
 constexpr Vector2 kSeedContentOffset = {144.0f, 72.0f};
 constexpr Vector2 kSeedDetailLeftOffset = {-357.0f, 99.0f};
 constexpr Vector2 kSeedDetailRightOffset = {279.0f, 99.0f};
+constexpr Vector2 kSeedDetailPreviewOffset = {520.0f, 99.0f};
 constexpr Vector2 kSeedChartListOffset = {297.0f, 66.0f};
 
 constexpr float kPreviewBarBottomInset = (kContentRect.y + kContentRect.height) - kPreviewBarRect.y;
@@ -127,24 +129,30 @@ layout make_layout(float anim_t, Rectangle origin_rect) {
     const Rectangle seed_content = centered_scaled_rect(origin, kContentRect, 0.84f, kSeedContentOffset);
     const Rectangle seed_detail_left = centered_scaled_rect(origin, kDetailLeftRect, 0.78f, kSeedDetailLeftOffset);
     const Rectangle seed_detail_right = centered_scaled_rect(origin, kDetailRightRect, 0.8f, kSeedDetailRightOffset);
+    const Rectangle seed_detail_preview = centered_scaled_rect(origin, kDetailPreviewRect, 0.8f, kSeedDetailPreviewOffset);
     const Rectangle seed_chart_list = centered_scaled_rect(origin, kChartListRect, 0.84f, kSeedChartListOffset);
     const Rectangle current_content = tween::lerp(seed_content, kContentRect, t);
     const Rectangle current_sidebar = tween::lerp(seed_content, kSidebarRect, t);
     const Rectangle current_detail_left = tween::lerp(seed_detail_left, kDetailLeftRect, t);
     const Rectangle current_detail_right = tween::lerp(seed_detail_right, kDetailRightRect, t);
-    const Rectangle current_jacket =
-        centered_left_pane_jacket_rect(current_detail_left, tween::lerp(0.82f, 1.0f, t));
-    const Rectangle current_preview_bar = left_pane_preview_bar_rect(current_detail_left);
+    const Rectangle current_detail_preview = tween::lerp(seed_detail_preview, kDetailPreviewRect, t);
+    const Rectangle current_jacket = tween::lerp(centered_scaled_rect(origin, kHeroJacketRect, 0.82f), kHeroJacketRect, t);
+    const Rectangle current_preview_bar = {
+        current_detail_preview.x + 30.0f,
+        current_detail_preview.y + 326.0f,
+        current_detail_preview.width - 60.0f,
+        kPreviewBarRect.height,
+    };
     const Rectangle current_preview_play = {
-        current_detail_left.x + 40.0f,
-        current_detail_left.y + 472.0f,
+        current_detail_preview.x + current_detail_preview.width * 0.5f - kPreviewPlayRect.width * 0.5f,
+        current_detail_preview.y + 362.0f,
         kPreviewPlayRect.width,
         kPreviewPlayRect.height,
     };
     const Rectangle current_primary = {
-        current_detail_left.x + 40.0f,
-        current_detail_left.y + current_detail_left.height - 94.0f,
-        410.0f,
+        current_detail_preview.x + current_detail_preview.width - 350.0f,
+        current_detail_preview.y + current_detail_preview.height - 70.0f,
+        320.0f,
         kPrimaryActionRect.height,
     };
 
@@ -160,6 +168,7 @@ layout make_layout(float anim_t, Rectangle origin_rect) {
         detail::song_list_viewport(current_content),
         current_detail_left,
         current_detail_right,
+        current_detail_preview,
         current_jacket,
         current_preview_bar,
         current_preview_play,

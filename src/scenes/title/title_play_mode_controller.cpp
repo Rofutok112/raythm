@@ -32,6 +32,14 @@ void title_play_mode_controller::update(scene_manager& manager,
         title_play_session::start_selected_chart(manager, state, preview_controller);
         return;
     }
+    if (result.preview_toggle_requested) {
+        if (preview_controller.is_playing()) {
+            preview_controller.pause();
+        } else {
+            preview_controller.resume(song_select::selected_song(state));
+        }
+        return;
+    }
     if (result.update_song_requested) {
         callbacks.open_update_catalog(false);
         return;
