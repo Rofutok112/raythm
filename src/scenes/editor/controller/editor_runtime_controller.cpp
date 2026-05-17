@@ -94,6 +94,7 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
 
     editor_runtime_timeline_result result;
     result.request_apply_selected_timing = timeline_result.request_apply_selected_timing;
+    result.request_apply_selected_scroll = timeline_result.request_apply_selected_scroll;
 
     if (timeline_result.request_seek) {
         const bool was_playing = context.transport.audio_playing;

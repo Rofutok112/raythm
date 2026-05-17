@@ -206,6 +206,9 @@ void editor_scene::update(float dt) {
     if (timeline_result.request_apply_selected_timing) {
         apply_selected_timing_event();
     }
+    if (timeline_result.request_apply_selected_scroll) {
+        apply_selected_scroll_event();
+    }
     if (timeline_result.scroll_to_tick.has_value()) {
         scroll_to_tick(*timeline_result.scroll_to_tick);
     }
@@ -281,9 +284,12 @@ void editor_scene::draw() {
     editor_scene_sync::sync_timing_event_selection(make_sync_context());
     const editor_right_panel_view_result right_panel = editor_right_panel_view::draw({
         &state_->data().timing_events,
+        &state_->data().scroll_events,
         &meter_map_,
         timing_panel_.selected_event_index,
+        timing_panel_.selected_scroll_event_index,
         can_delete_selected_timing_event(),
+        can_delete_selected_scroll_event(),
         virtual_screen::get_virtual_mouse(),
     }, timing_panel_);
     const editor_timing_panel_update_result update_result = editor_panel_controller::update_timing_panel(
@@ -296,17 +302,32 @@ void editor_scene::draw() {
     if (update_result.select_timing_event_index.has_value()) {
         select_timing_event(update_result.select_timing_event_index, true);
     }
+    if (update_result.select_scroll_event_index.has_value()) {
+        select_scroll_event(update_result.select_scroll_event_index, true);
+    }
     if (update_result.request_add_bpm) {
         add_timing_event(timing_event_type::bpm);
     }
     if (update_result.request_add_meter) {
         add_timing_event(timing_event_type::meter);
     }
+    if (update_result.request_add_speed) {
+        add_scroll_event(scroll_event_type::speed);
+    }
+    if (update_result.request_add_stop) {
+        add_scroll_event(scroll_event_type::stop);
+    }
     if (update_result.request_delete_selected) {
         delete_selected_timing_event();
     }
+    if (update_result.request_delete_selected_scroll) {
+        delete_selected_scroll_event();
+    }
     if (update_result.request_apply_selected) {
         apply_selected_timing_event();
+    }
+    if (update_result.request_apply_selected_scroll) {
+        apply_selected_scroll_event();
     }
 
     const std::string playback_status = editor_transport_service::playback_status_text(transport_);
@@ -512,8 +533,21 @@ void editor_scene::select_timing_event(std::optional<size_t> index, bool scroll_
     if (scroll_into_view && index.has_value() && *index < state_->data().timing_events.size()) {
         scroll_to_tick(state_->data().timing_events[*index].tick);
     }
+    timing_panel_.selected_scroll_event_index.reset();
     editor_scene_sync_context sync_context = make_sync_context();
     editor_timing_selection_service::select_event(sync_context, index, scroll_into_view, timing_panel_.list_scroll_offset);
+}
+
+void editor_scene::select_scroll_event(std::optional<size_t> index, bool scroll_into_view) {
+    timing_panel_.selected_event_index.reset();
+    timing_panel_.selected_scroll_event_index = index;
+    timing_panel_.active_input_field = editor_timing_input_field::none;
+    timing_panel_.input_error.clear();
+    timing_panel_.bar_pick_mode = false;
+    editor_scene_sync::load_scroll_event_inputs(make_sync_context());
+    if (scroll_into_view && index.has_value() && *index < state_->data().scroll_events.size()) {
+        scroll_to_tick(state_->data().scroll_events[*index].tick);
+    }
 }
 
 void editor_scene::scroll_to_tick(int tick) {
@@ -539,6 +573,25 @@ bool editor_scene::apply_selected_timing_event() {
     return true;
 }
 
+bool editor_scene::apply_selected_scroll_event() {
+    editor_scene_sync::sync_timing_event_selection(make_sync_context());
+    const editor_timing_edit_result result = editor_timing_edit_service::apply_selected_scroll({
+        *state_,
+        meter_map_,
+        timing_panel_,
+        default_timing_event_tick(),
+    });
+    if (!result.success) {
+        return false;
+    }
+    editor_scene_sync::load_scroll_event_inputs(make_sync_context());
+    timing_panel_.input_error.clear();
+    if (result.scroll_to_tick.has_value()) {
+        scroll_to_tick(*result.scroll_to_tick);
+    }
+    return true;
+}
+
 void editor_scene::add_timing_event(timing_event_type type) {
     const editor_timing_edit_result result = editor_timing_edit_service::add_event({
         *state_,
@@ -550,6 +603,19 @@ void editor_scene::add_timing_event(timing_event_type type) {
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
     if (result.selected_event_index.has_value()) {
         select_timing_event(result.selected_event_index, true);
+    }
+}
+
+void editor_scene::add_scroll_event(scroll_event_type type) {
+    const editor_timing_edit_result result = editor_timing_edit_service::add_scroll_event({
+        *state_,
+        meter_map_,
+        timing_panel_,
+        default_timing_event_tick(),
+    }, type);
+    editor_scene_sync::sync_after_timing_change(make_sync_context());
+    if (result.selected_scroll_event_index.has_value()) {
+        select_scroll_event(result.selected_scroll_event_index, true);
     }
 }
 
@@ -568,8 +634,28 @@ void editor_scene::delete_selected_timing_event() {
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
 }
 
+void editor_scene::delete_selected_scroll_event() {
+    editor_scene_sync::sync_timing_event_selection(make_sync_context());
+    const editor_timing_edit_result result = editor_timing_edit_service::delete_selected_scroll({
+        *state_,
+        meter_map_,
+        timing_panel_,
+        default_timing_event_tick(),
+    });
+    if (!result.success) {
+        return;
+    }
+    timing_panel_.selected_scroll_event_index.reset();
+    editor_scene_sync::load_scroll_event_inputs(make_sync_context());
+    timing_panel_.input_error.clear();
+}
+
 bool editor_scene::can_delete_selected_timing_event() const {
     return editor_timing_edit_service::can_delete_selected({*state_, timing_panel_});
+}
+
+bool editor_scene::can_delete_selected_scroll_event() const {
+    return editor_timing_edit_service::can_delete_selected_scroll({*state_, timing_panel_});
 }
 
 bool editor_scene::has_active_metadata_input() const {
@@ -616,6 +702,7 @@ void editor_scene::draw_timeline() const {
         transport_.audio_loaded,
         transport_.playback_tick,
         selected_note_index_,
+        timing_panel_.selected_scroll_event_index,
         preview_note,
         preview_note.has_value() && state_->has_note_overlap(*preview_note, preview_ignore_index),
         viewport_model(),

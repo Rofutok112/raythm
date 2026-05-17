@@ -187,6 +187,61 @@ private:
     timing_event after_;
 };
 
+class add_scroll_event_command final : public editor_command {
+public:
+    add_scroll_event_command(chart_data& chart, scroll_event event) : chart_(chart), event_(std::move(event)) {}
+
+    void execute() override {
+        chart_.scroll_events.push_back(event_);
+    }
+
+    void undo() override {
+        chart_.scroll_events.pop_back();
+    }
+
+private:
+    chart_data& chart_;
+    scroll_event event_;
+};
+
+class remove_scroll_event_command final : public editor_command {
+public:
+    remove_scroll_event_command(chart_data& chart, size_t index) : chart_(chart), index_(index), removed_(chart.scroll_events[index]) {}
+
+    void execute() override {
+        chart_.scroll_events.erase(chart_.scroll_events.begin() + static_cast<std::ptrdiff_t>(index_));
+    }
+
+    void undo() override {
+        chart_.scroll_events.insert(chart_.scroll_events.begin() + static_cast<std::ptrdiff_t>(index_), removed_);
+    }
+
+private:
+    chart_data& chart_;
+    size_t index_ = 0;
+    scroll_event removed_;
+};
+
+class modify_scroll_event_command final : public editor_command {
+public:
+    modify_scroll_event_command(chart_data& chart, size_t index, scroll_event updated)
+        : chart_(chart), index_(index), before_(chart.scroll_events[index]), after_(std::move(updated)) {}
+
+    void execute() override {
+        chart_.scroll_events[index_] = after_;
+    }
+
+    void undo() override {
+        chart_.scroll_events[index_] = before_;
+    }
+
+private:
+    chart_data& chart_;
+    size_t index_ = 0;
+    scroll_event before_;
+    scroll_event after_;
+};
+
 class modify_metadata_command final : public editor_command {
 public:
     modify_metadata_command(chart_data& chart, timing_engine& engine, chart_meta updated, bool clear_notes)
@@ -316,6 +371,31 @@ bool editor_state::modify_timing_event(size_t index, timing_event event) {
     }
 
     history_.push(std::make_unique<modify_timing_event_command>(chart_, timing_engine_, index, std::move(event)));
+    sync_dirty_flag();
+    return true;
+}
+
+void editor_state::add_scroll_event(scroll_event event) {
+    history_.push(std::make_unique<add_scroll_event_command>(chart_, std::move(event)));
+    sync_dirty_flag();
+}
+
+bool editor_state::remove_scroll_event(size_t index) {
+    if (index >= chart_.scroll_events.size()) {
+        return false;
+    }
+
+    history_.push(std::make_unique<remove_scroll_event_command>(chart_, index));
+    sync_dirty_flag();
+    return true;
+}
+
+bool editor_state::modify_scroll_event(size_t index, scroll_event event) {
+    if (index >= chart_.scroll_events.size()) {
+        return false;
+    }
+
+    history_.push(std::make_unique<modify_scroll_event_command>(chart_, index, std::move(event)));
     sync_dirty_flag();
     return true;
 }

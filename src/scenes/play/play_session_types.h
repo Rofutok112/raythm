@@ -11,6 +11,7 @@
 #include "performance_system.h"
 #include "score_system.h"
 #include "song_loader.h"
+#include "play_scroll_map.h"
 #include "timing_engine.h"
 
 namespace play_session_constants {
@@ -114,6 +115,7 @@ struct play_session_state {
     gauge gauge;
     input_handler input_handler;
     timing_engine timing_engine;
+    play_scroll_map scroll_map;
     judge_system judge_system;
     std::optional<chart_data> chart_data;
     std::optional<song_data> song_data;

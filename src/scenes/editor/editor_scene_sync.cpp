@@ -18,6 +18,12 @@ void sync_timing_event_selection(editor_scene_sync_context context) {
             ? std::nullopt
             : std::optional<size_t>(context.state.data().timing_events.size() - 1);
     }
+    if (context.timing_panel.selected_scroll_event_index.has_value() &&
+        *context.timing_panel.selected_scroll_event_index >= context.state.data().scroll_events.size()) {
+        context.timing_panel.selected_scroll_event_index = context.state.data().scroll_events.empty()
+            ? std::nullopt
+            : std::optional<size_t>(context.state.data().scroll_events.size() - 1);
+    }
 }
 
 void clear_timing_event_inputs(editor_scene_sync_context context) {
@@ -26,11 +32,26 @@ void clear_timing_event_inputs(editor_scene_sync_context context) {
     context.timing_panel.inputs.meter_bar.value.clear();
     context.timing_panel.inputs.meter_numerator.value.clear();
     context.timing_panel.inputs.meter_denominator.value.clear();
+    context.timing_panel.inputs.scroll_start_bar.value.clear();
+    context.timing_panel.inputs.scroll_duration.value.clear();
+    context.timing_panel.inputs.scroll_multiplier.value.clear();
     context.timing_panel.inputs.bpm_bar.active = false;
     context.timing_panel.inputs.bpm_value.active = false;
     context.timing_panel.inputs.meter_bar.active = false;
     context.timing_panel.inputs.meter_numerator.active = false;
     context.timing_panel.inputs.meter_denominator.active = false;
+    context.timing_panel.inputs.scroll_start_bar.active = false;
+    context.timing_panel.inputs.scroll_duration.active = false;
+    context.timing_panel.inputs.scroll_multiplier.active = false;
+}
+
+void clear_scroll_event_inputs(editor_scene_sync_context context) {
+    context.timing_panel.inputs.scroll_start_bar.value.clear();
+    context.timing_panel.inputs.scroll_duration.value.clear();
+    context.timing_panel.inputs.scroll_multiplier.value.clear();
+    context.timing_panel.inputs.scroll_start_bar.active = false;
+    context.timing_panel.inputs.scroll_duration.active = false;
+    context.timing_panel.inputs.scroll_multiplier.active = false;
 }
 
 void load_timing_event_inputs(editor_scene_sync_context context) {
@@ -46,6 +67,9 @@ void load_timing_event_inputs(editor_scene_sync_context context) {
     context.timing_panel.inputs.meter_bar.active = false;
     context.timing_panel.inputs.meter_numerator.active = false;
     context.timing_panel.inputs.meter_denominator.active = false;
+    context.timing_panel.inputs.scroll_start_bar.active = false;
+    context.timing_panel.inputs.scroll_duration.active = false;
+    context.timing_panel.inputs.scroll_multiplier.active = false;
 
     const timing_event& event = context.state.data().timing_events[*context.timing_panel.selected_event_index];
     context.timing_panel.inputs.bpm_bar.value = context.meter_map.bar_beat_label(event.tick);
@@ -55,18 +79,38 @@ void load_timing_event_inputs(editor_scene_sync_context context) {
     context.timing_panel.inputs.meter_denominator.value = std::to_string(event.denominator);
 }
 
+void load_scroll_event_inputs(editor_scene_sync_context context) {
+    sync_timing_event_selection(context);
+    if (!context.timing_panel.selected_scroll_event_index.has_value() ||
+        *context.timing_panel.selected_scroll_event_index >= context.state.data().scroll_events.size()) {
+        clear_scroll_event_inputs(context);
+        return;
+    }
+
+    context.timing_panel.inputs.scroll_start_bar.active = false;
+    context.timing_panel.inputs.scroll_duration.active = false;
+    context.timing_panel.inputs.scroll_multiplier.active = false;
+
+    const scroll_event& event = context.state.data().scroll_events[*context.timing_panel.selected_scroll_event_index];
+    context.timing_panel.inputs.scroll_start_bar.value = context.meter_map.bar_beat_label(event.tick);
+    context.timing_panel.inputs.scroll_duration.value = std::to_string(event.duration);
+    context.timing_panel.inputs.scroll_multiplier.value = TextFormat("%.2f", event.multiplier);
+}
+
 void sync_after_history_change(editor_scene_sync_context context) {
     context.selected_note_index.reset();
     sync_timing_event_selection(context);
     sync_metadata_inputs(context);
     context.meter_map.rebuild(context.state.data());
     load_timing_event_inputs(context);
+    load_scroll_event_inputs(context);
     context.timing_panel.input_error.clear();
 }
 
 void sync_after_timing_change(editor_scene_sync_context context) {
     context.meter_map.rebuild(context.state.data());
     load_timing_event_inputs(context);
+    load_scroll_event_inputs(context);
     context.timing_panel.input_error.clear();
 }
 

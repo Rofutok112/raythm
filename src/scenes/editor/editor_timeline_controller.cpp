@@ -183,6 +183,16 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             timing_panel.bar_pick_mode = false;
             timing_panel.active_input_field = editor_timing_input_field::none;
             result.request_apply_selected_timing = true;
+        } else if (context.left_pressed && context.timeline_hovered && timing_panel.selected_scroll_event_index.has_value() &&
+            context.state != nullptr && context.meter_map != nullptr &&
+            *timing_panel.selected_scroll_event_index < context.state->data().scroll_events.size()) {
+            const int tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
+            const editor_meter_map::bar_beat_position position = context.meter_map->bar_beat_at_tick(tick);
+            timing_panel.inputs.scroll_start_bar.value =
+                std::to_string(position.measure) + ":" + std::to_string(position.beat);
+            timing_panel.bar_pick_mode = false;
+            timing_panel.active_input_field = editor_timing_input_field::none;
+            result.request_apply_selected_scroll = true;
         } else if (context.right_pressed || context.escape_pressed) {
             timing_panel.bar_pick_mode = false;
             timing_panel.active_input_field = editor_timing_input_field::none;

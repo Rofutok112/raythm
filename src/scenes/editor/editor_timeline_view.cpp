@@ -98,6 +98,39 @@ void draw_waveform(const editor_timeline_view_model& model, Rectangle content, c
                         with_alpha(t.accent, secondary_alpha));
     }
 }
+
+void draw_scroll_events(const editor_timeline_view_model& model, Rectangle content, const ui_theme& t) {
+    for (size_t i = 0; i < model.scroll_events.size(); ++i) {
+        const editor_timeline_scroll_event& event = model.scroll_events[i];
+        if (event.duration <= 0 || event.tick > model.max_tick || event.tick + event.duration < model.min_tick) {
+            continue;
+        }
+
+        const float start_y = model.metrics.tick_to_y(event.tick);
+        const float end_y = model.metrics.tick_to_y(event.tick + event.duration);
+        const float top = std::min(start_y, end_y);
+        const float height = std::max(8.0f, std::fabs(end_y - start_y));
+        const Rectangle band = {content.x, top, content.width, height};
+        const bool selected = model.selected_scroll_event_index.has_value() && *model.selected_scroll_event_index == i;
+        const Color base = event.type == scroll_event_type::speed
+            ? Color{26, 188, 196, 255}
+            : Color{238, 92, 64, 255};
+        ui::draw_rect_f(band, with_alpha(base, selected ? 86 : 46));
+        ui::draw_rect_lines(band, selected ? 2.5f : 1.2f, with_alpha(base, selected ? 235 : 150));
+
+        if (event.type == scroll_event_type::stop) {
+            for (float x = band.x - band.height; x < band.x + band.width; x += 18.0f) {
+                DrawLineEx({x, band.y + band.height}, {x + band.height, band.y}, 2.0f,
+                           with_alpha(base, selected ? 185 : 110));
+            }
+        }
+
+        const char* label = event.type == scroll_event_type::speed
+            ? TextFormat("%.2fx", event.multiplier)
+            : "STOP";
+        ui::draw_text_f(label, band.x + 10.0f, band.y + 4.0f, 15, selected ? t.text : t.text_secondary);
+    }
+}
 }
 
 Rectangle editor_timeline_metrics::content_rect() const {
@@ -207,6 +240,7 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
         ui::scoped_clip_rect clip_scope(content);
 
         draw_waveform(model, content, t);
+        draw_scroll_events(model, content, t);
 
         for (int lane = 0; lane < std::max(1, model.metrics.key_count); ++lane) {
             const Rectangle rect = model.metrics.lane_rect(lane);

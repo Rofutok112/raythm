@@ -24,6 +24,13 @@ struct editor_timeline_note {
     int lane_width = 1;
 };
 
+struct editor_timeline_scroll_event {
+    scroll_event_type type = scroll_event_type::speed;
+    int tick = 0;
+    int duration = 0;
+    float multiplier = 1.0f;
+};
+
 struct editor_timeline_note_draw_info {
     Rectangle head_rect = {};
     Rectangle body_rect = {};
@@ -58,8 +65,10 @@ struct editor_timeline_metrics {
 struct editor_timeline_view_model {
     editor_timeline_metrics metrics;
     std::vector<editor_meter_map::grid_line> grid_lines;
+    std::vector<editor_timeline_scroll_event> scroll_events;
     std::vector<editor_timeline_note> notes;
     std::optional<size_t> selected_note_index;
+    std::optional<size_t> selected_scroll_event_index;
     std::optional<int> playback_tick;
     const audio_waveform_summary* waveform_summary = nullptr;
     const timing_engine* timing_engine = nullptr;

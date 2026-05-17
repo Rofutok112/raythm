@@ -17,6 +17,7 @@ struct editor_timeline_presenter_model {
     bool audio_loaded = false;
     int playback_tick = 0;
     std::optional<size_t> selected_note_index;
+    std::optional<size_t> selected_scroll_event_index;
     std::optional<note_data> preview_note;
     bool preview_has_overlap = false;
     editor_timeline_viewport_model viewport;
