@@ -223,11 +223,16 @@ void draw(const song_select::state& state,
                       artist_rect,
                       18, with_alpha(t.text_secondary, config.alpha), config.now);
     if (chart != nullptr) {
-        ui::draw_text_in_rect(TextFormat("%s  Lv.%.1f", chart->meta.difficulty.c_str(), chart->meta.level),
+        const Rectangle difficulty_rect = {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartDifficultyOffsetY,
+                                           config.chart_detail_rect.width - 78.0f, kChartDifficultyHeight};
+        ui::draw_text_in_rect(chart->meta.difficulty.c_str(),
                               18,
-                              {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartDifficultyOffsetY,
-                               config.chart_detail_rect.width, kChartDifficultyHeight},
+                              difficulty_rect,
                               with_alpha(t.text, config.alpha), ui::text_align::left);
+        draw_difficulty_level_badge(
+            chart->meta.level,
+            {difficulty_rect.x + difficulty_rect.width + 8.0f, difficulty_rect.y + 1.0f, 70.0f, 22.0f},
+            13, config.alpha);
         content_status_badge::draw_compound(
             chart_status_badge_rect(config.chart_detail_rect),
             chart->source_status, chart->status, config.alpha, 12);
@@ -275,10 +280,10 @@ void draw(const song_select::state& state,
                                row.y + kChartTitleOffsetY + 1.0f,
                                kChartStatusWidth, kStatusBadgeHeight},
                               item.source_status, item.status, config.alpha, 10);
-        ui::draw_text_in_rect(TextFormat("Lv.%.1f", item.meta.level), 13,
-                              {row.x + kChartTextPaddingX, row.y + kChartLevelOffsetY,
-                               row.width - kChartRightReserved, kChartLevelHeight},
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
+        draw_difficulty_level_badge(item.meta.level,
+                                    {row.x + kChartTextPaddingX, row.y + kChartLevelOffsetY - 1.0f,
+                                     64.0f, 19.0f},
+                                    11, config.alpha);
         ui::draw_text_in_rect(key_mode_label(item.meta.key_count).c_str(), 13,
                               {row.x + row.width - kChartBadgeRightInset, row.y + kChartBadgeOffsetY,
                                kChartBadgeWidth, kChartBadgeHeight},

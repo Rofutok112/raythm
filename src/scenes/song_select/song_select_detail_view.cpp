@@ -163,13 +163,14 @@ void draw_song_details(const state& state, const preview_controller& preview_con
         const float key_x = detail_x + content_offset_x + chart_offset_x;
         const float key_y = layout::kJacketRect.y + 126.0f;
         const float difficulty_x = key_x + 54.0f;
-        const float difficulty_width = detail_max_width - 54.0f;
-        const std::string difficulty_label =
-            selected_chart->meta.difficulty + "  Lv." + TextFormat("%.1f", selected_chart->meta.level);
+        const float difficulty_width = detail_max_width - 132.0f;
         ui::draw_text_f(key_mode_label(selected_chart->meta.key_count).c_str(), key_x, key_y, 28,
                         with_alpha(key_mode_color(selected_chart->meta.key_count), chart_alpha));
-        draw_marquee_text(difficulty_label.c_str(), difficulty_x, key_y, 28,
+        draw_marquee_text(selected_chart->meta.difficulty.c_str(), difficulty_x, key_y, 28,
                           with_alpha(theme.text, chart_alpha), difficulty_width, now);
+        draw_difficulty_level_badge(selected_chart->meta.level,
+                                    {difficulty_x + difficulty_width + 8.0f, key_y + 3.0f, 72.0f, 26.0f},
+                                    13, chart_alpha);
         content_status_badge::draw_compound(
             {difficulty_x, layout::kJacketRect.y + 158.0f, 100.0f, 22.0f},
             selected_chart->source_status, selected_chart->status, chart_alpha, 11);

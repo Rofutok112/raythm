@@ -61,12 +61,18 @@ std::vector<std::string> genre_labels(const song_meta& meta) {
 
 Color tag_color_for_label(const std::string& label) {
     constexpr Color kPalette[] = {
-        {128, 84, 222, 255},
-        {38, 145, 202, 255},
-        {32, 174, 126, 255},
-        {198, 63, 139, 255},
-        {196, 93, 62, 255},
-        {176, 172, 40, 255},
+        {147, 94, 226, 255},
+        {38, 167, 216, 255},
+        {214, 143, 43, 255},
+        {132, 204, 45, 255},
+        {216, 78, 133, 255},
+        {62, 126, 220, 255},
+        {39, 181, 154, 255},
+        {218, 91, 61, 255},
+        {190, 181, 48, 255},
+        {162, 103, 231, 255},
+        {65, 190, 96, 255},
+        {212, 94, 172, 255},
     };
     unsigned int hash = 2166136261u;
     for (unsigned char ch : label) {
@@ -171,12 +177,11 @@ void draw_chart_row(const song_select::chart_option& chart,
     ui::draw_text_in_rect(key_mode_label(chart.meta.key_count).c_str(), 13,
                           {row.x + 14.0f, row.y + 7.0f, 44.0f, 18.0f},
                           with_alpha(key_color, config.alpha), ui::text_align::left);
-    ui::draw_text_in_rect(TextFormat("Lv.%.1f", chart.meta.level), 13,
-                          {row.x + 68.0f, row.y + 7.0f, 72.0f, 18.0f},
-                          with_alpha(t.text, config.alpha), ui::text_align::left);
+    draw_difficulty_level_badge(chart.meta.level, {row.x + 68.0f, row.y + 5.0f, 70.0f, 22.0f},
+                                12, config.alpha);
     ui::draw_text_in_rect(chart.meta.difficulty.c_str(), 13,
                           {row.x + 152.0f, row.y + 7.0f, 132.0f, 18.0f},
-                          with_alpha(key_color, config.alpha), ui::text_align::left);
+                          with_alpha(t.text, config.alpha), ui::text_align::left);
     ui::draw_text_in_rect(chart.meta.chart_author.empty() ? "-" : chart.meta.chart_author.c_str(), 12,
                           {row.x + 306.0f, row.y + 7.0f, 152.0f, 18.0f},
                           with_alpha(t.text_secondary, config.alpha), ui::text_align::left);
