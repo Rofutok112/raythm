@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 
 #include "theme.h"
 #include "ui_clip.h"
@@ -40,6 +41,57 @@ void draw_scene_frame(const char* title, const char* subtitle, Color accent) {
 void draw_scene_background(const ui_theme& theme) {
     ClearBackground(theme.bg);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, theme.bg, theme.bg_alt);
+}
+
+Color difficulty_level_color(float level) {
+    struct level_stop {
+        float level;
+        Color color;
+    };
+    static constexpr level_stop kStops[] = {
+        {1.0f, {80, 188, 82, 255}},
+        {3.0f, {186, 211, 43, 255}},
+        {5.0f, {232, 166, 41, 255}},
+        {6.5f, {235, 92, 58, 255}},
+        {7.7f, {223, 49, 120, 255}},
+        {8.5f, {158, 65, 223, 255}},
+        {10.0f, {106, 54, 168, 255}},
+        {12.0f, {58, 38, 84, 255}},
+    };
+
+    if (level <= kStops[0].level) {
+        return kStops[0].color;
+    }
+    for (size_t i = 1; i < std::size(kStops); ++i) {
+        if (level <= kStops[i].level) {
+            const level_stop& from = kStops[i - 1];
+            const level_stop& to = kStops[i];
+            const float t = std::clamp((level - from.level) / (to.level - from.level), 0.0f, 1.0f);
+            return lerp_color(from.color, to.color, t);
+        }
+    }
+    return kStops[std::size(kStops) - 1].color;
+}
+
+void draw_difficulty_level_badge(float level, Rectangle rect, int font_size, unsigned char alpha) {
+    if (rect.width <= 0.0f || rect.height <= 0.0f || alpha == 0) {
+        return;
+    }
+    const Color base = difficulty_level_color(level);
+    const Color accent = lerp_color(base, WHITE, level >= 10.0f ? 0.22f : 0.0f);
+    const Color fill = with_alpha(accent, static_cast<unsigned char>((static_cast<int>(alpha) * 28) / 255));
+    const Color border = with_alpha(accent, static_cast<unsigned char>((static_cast<int>(alpha) * 190) / 255));
+    const Color text_color = with_alpha(accent, alpha);
+
+    ui::draw_rect_f(rect, fill);
+    ui::draw_rect_lines(rect, 1.2f, border);
+
+    const char* label = TextFormat("Lv.%.1f", level);
+    const Vector2 text_size = ui::measure_text_size(label, static_cast<float>(font_size), 0.0f);
+    ui::draw_text_auto(label,
+                       {rect.x + (rect.width - text_size.x) * 0.5f,
+                        rect.y + (rect.height - text_size.y) * 0.5f - 1.0f},
+                       static_cast<float>(font_size), 0.0f, text_color);
 }
 
 void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Color color, double time,

@@ -81,6 +81,7 @@ void judge_system::update(double current_ms, const input_handler& input) {
         process_input_event(event);
     }
 
+    resolve_hold_heads_from_nearby_stays(current_ms, input);
     resolve_stay_notes(current_ms, input);
     resolve_hold_completions(current_ms);
     resolve_auto_misses(current_ms);
@@ -326,6 +327,46 @@ void judge_system::handle_press(const input_event& event) {
     }
 }
 
+void judge_system::resolve_hold_heads_from_nearby_stays(double current_ms, const input_handler& input) {
+    for (size_t event_index = 0; event_index < event_descriptors_.size(); ++event_index) {
+        if (event_completed_[event_index]) {
+            continue;
+        }
+
+        const chart_judge_event& descriptor = event_descriptors_[event_index];
+        if (descriptor.kind != chart_judge_event_kind::press ||
+            descriptor.role != chart_judge_event_role::hold_head ||
+            current_ms < descriptor.time_ms ||
+            current_ms - descriptor.time_ms > kBadWindowMs ||
+            descriptor.note_index >= note_states_.size() ||
+            !has_held_nearby_stay(input, descriptor)) {
+            continue;
+        }
+
+        for (int lane = descriptor.lane;
+             lane < descriptor.lane + std::max(1, descriptor.lane_width) && lane < kMaxLanes;
+             ++lane) {
+            if (!input.is_lane_held(lane) || !lane_was_held_at(lane, descriptor.time_ms)) {
+                continue;
+            }
+
+            const std::optional<input_session_id> input_id = held_input_session_by_lane_[static_cast<size_t>(lane)];
+            note_state& state = note_states_[descriptor.note_index];
+            state.progress = note_progress_state::holding;
+            state.result = judge_result::perfect;
+            mark_event_completed(event_index);
+            if (input_id.has_value()) {
+                activate_hold_lane(descriptor.note_index, lane, *input_id);
+            }
+
+            judge_emit_options options;
+            options.play_hitsound = false;
+            emit_judge(judge_result::perfect, 0.0, lane, descriptor.event_index, options);
+            break;
+        }
+    }
+}
+
 void judge_system::resolve_stay_notes(double current_ms, const input_handler& input) {
     for (size_t event_index = 0; event_index < event_descriptors_.size(); ++event_index) {
         if (event_completed_[event_index]) {
@@ -560,6 +601,32 @@ bool judge_system::lane_was_held_at(int lane, double timestamp_ms) const {
         }
         if (input.held || input.release_ms >= timestamp_ms) {
             return true;
+        }
+    }
+    return false;
+}
+
+bool judge_system::has_held_nearby_stay(const input_handler& input, const chart_judge_event& hold_head) const {
+    for (const chart_judge_event& descriptor : event_descriptors_) {
+        if (descriptor.kind != chart_judge_event_kind::stay) {
+            continue;
+        }
+        if (std::fabs(descriptor.time_ms - hold_head.time_ms) > kBadWindowMs) {
+            continue;
+        }
+        if (hold_head.lane >= descriptor.lane + std::max(1, descriptor.lane_width) ||
+            descriptor.lane >= hold_head.lane + std::max(1, hold_head.lane_width)) {
+            continue;
+        }
+
+        for (int lane = std::max(hold_head.lane, descriptor.lane);
+             lane < std::min(hold_head.lane + std::max(1, hold_head.lane_width),
+                             descriptor.lane + std::max(1, descriptor.lane_width)) &&
+             lane < kMaxLanes;
+             ++lane) {
+            if (input.is_lane_held(lane) && lane_was_held_at(lane, descriptor.time_ms)) {
+                return true;
+            }
         }
     }
     return false;

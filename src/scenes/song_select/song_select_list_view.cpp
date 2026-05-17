@@ -115,8 +115,9 @@ void draw_chart_rows(const song_select::state& state,
                         key_mode_color(chart.meta.key_count));
         draw_marquee_text(chart.meta.difficulty.c_str(), difficulty_rect, 18,
                           child_selected ? theme.text : theme.text_secondary, now);
-        ui::draw_text_in_rect(TextFormat("Lv.%.1f", chart.meta.level), 17, level_rect,
-                              child_selected ? theme.text_secondary : theme.text_muted, ui::text_align::left);
+        draw_difficulty_level_badge(chart.meta.level,
+                                    {level_rect.x, level_rect.y - 1.0f, 64.0f, 21.0f},
+                                    11, 255);
         draw_marquee_text(chart.meta.chart_author.c_str(), author_rect, 14, theme.text_muted, now);
         content_status_badge::draw_compound({rank_rect.x - 96.0f, baseline_y - 1.0f, 90.0f, 18.0f},
                                             chart.source_status, chart.status, 255, 9);

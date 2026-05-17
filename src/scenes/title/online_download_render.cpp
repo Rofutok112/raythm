@@ -1351,13 +1351,16 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     draw_compact_preview_tags("KEYWORDS", song->song.song.meta.keywords, detail_title_rect.y + 170.0f, 2);
     if (chart != nullptr) {
         draw_browse_body_text_in_rect(
-            TextFormat("%s  %s  Lv.%.1f",
+            TextFormat("%s  %s",
                        detail::key_mode_label(chart->chart.meta.key_count).c_str(),
-                       chart->chart.meta.difficulty.c_str(),
-                       chart->chart.meta.level),
+                       chart->chart.meta.difficulty.c_str()),
             13,
-            {detail_title_rect.x, detail_title_rect.y + 82.0f, detail_title_rect.width * 0.6f, 24.0f},
-            with_alpha(detail::key_mode_color(chart->chart.meta.key_count), detail_alpha), ui::text_align::left);
+            {detail_title_rect.x, detail_title_rect.y + 82.0f, detail_title_rect.width * 0.42f, 24.0f},
+            with_alpha(t.text, detail_alpha), ui::text_align::left);
+        draw_difficulty_level_badge(chart->chart.meta.level,
+                                    {detail_title_rect.x + detail_title_rect.width * 0.43f,
+                                     detail_title_rect.y + 82.0f, 70.0f, 21.0f},
+                                    12, detail_alpha);
         draw_browse_body_text_in_rect(
             TextFormat("by %s", chart->chart.meta.chart_author.empty() ? "Unknown" : chart->chart.meta.chart_author.c_str()),
             12,
@@ -1632,7 +1635,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         draw_browse_body_text_in_rect(item.chart.meta.difficulty.c_str(),
                               15,
                               {card.x + 72.0f, row_mid_y, 150.0f, 18.0f},
-                              with_alpha(detail::key_mode_color(item.chart.meta.key_count), detail_alpha),
+                              with_alpha(t.text, detail_alpha),
                               ui::text_align::left);
         const std::string chart_badge = detail::chart_status_label(item);
         const bool can_download_chart = !state.download_in_progress && detail::can_download_chart(*song, item);
@@ -1647,9 +1650,9 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                                       item.update_available,
                                       detail_alpha);
         }
-        draw_browse_body_text_in_rect(TextFormat("Lv.%.1f", item.chart.meta.level), 15,
-                              {card.x + 242.0f, row_mid_y, 76.0f, 18.0f},
-                              with_alpha(t.text, detail_alpha), ui::text_align::left);
+        draw_difficulty_level_badge(item.chart.meta.level,
+                                    {card.x + 242.0f, row_mid_y - 2.0f, 70.0f, 22.0f},
+                                    12, detail_alpha);
         draw_browse_body_text_in_rect(TextFormat("%d notes", item.chart.note_count), 13,
                               {card.x + 330.0f, row_mid_y + 1.0f, 110.0f, 16.0f},
                               with_alpha(t.text_muted, detail_alpha), ui::text_align::left);

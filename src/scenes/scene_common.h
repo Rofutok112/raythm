@@ -16,6 +16,12 @@ void draw_scene_frame(const char* title, const char* subtitle, Color accent);
 // テーマ色に基づく全画面背景を描画する。
 void draw_scene_background(const ui_theme& theme);
 
+// Lv に応じた難易度表示色。低Lvは緑、高Lvは紫から暗紫へ寄せる。
+Color difficulty_level_color(float level);
+
+// Lv 表示用の色付きバッジを描画する。
+void draw_difficulty_level_badge(float level, Rectangle rect, int font_size, unsigned char alpha);
+
 // clip_rect 内でピクセル単位にクリップしながらマーキー表示する。
 void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Color color, double time,
                        ui::text_align align = ui::text_align::left);

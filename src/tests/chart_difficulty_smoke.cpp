@@ -141,6 +141,17 @@ chart_data make_tap_stream_chart() {
     return make_chart("tap_stream", std::move(notes));
 }
 
+chart_data make_rhythm_chart(bool irregular) {
+    std::vector<note_data> notes;
+    const int lanes[] = {0, 1, 2, 3};
+    int tick = 0;
+    for (int i = 0; i < 32; ++i) {
+        notes.push_back({note_type::tap, tick, lanes[i % 4], 0});
+        tick += irregular ? (i % 4 == 0 ? 60 : (i % 4 == 1 ? 180 : 120)) : 120;
+    }
+    return make_chart(irregular ? "irregular_rhythm" : "straight_rhythm", std::move(notes));
+}
+
 chart_data with_added_stays(chart_data data) {
     const int lanes[] = {3, 2, 1, 0};
     for (int i = 0; i < 16; ++i) {
@@ -151,6 +162,15 @@ chart_data with_added_stays(chart_data data) {
 
 bool approx(float actual, float expected, float tolerance = 0.05f) {
     return std::fabs(actual - expected) <= tolerance;
+}
+
+float factor_value(const chart_difficulty::difficulty_breakdown& breakdown, const std::string& name) {
+    for (const chart_difficulty::difficulty_factor_breakdown& factor : breakdown.factors) {
+        if (factor.name == name) {
+            return factor.average_value;
+        }
+    }
+    return -1.0f;
 }
 
 }  // namespace
@@ -168,6 +188,28 @@ int main() {
     }
     if (hard_level <= easy_level) {
         std::cerr << "Expected hard chart level to exceed easy chart level\n";
+        return EXIT_FAILURE;
+    }
+
+    const chart_difficulty::difficulty_breakdown hard_breakdown = chart_difficulty::calculate_breakdown(hard);
+    if (!approx(hard_breakdown.raw_rating, chart_difficulty::calculate_rating(hard), 0.001f) ||
+        !approx(hard_breakdown.level, hard_level, 0.001f) ||
+        hard_breakdown.factors.empty()) {
+        std::cerr << "Expected breakdown to expose the same rating, level, and factor rows\n";
+        return EXIT_FAILURE;
+    }
+    if (hard_breakdown.average_local_difficulty <= 0.0f || hard_breakdown.average_coupling < 1.0f) {
+        std::cerr << "Expected breakdown local difficulty and coupling summaries to be positive\n";
+        return EXIT_FAILURE;
+    }
+
+    const chart_difficulty::difficulty_breakdown straight_rhythm =
+        chart_difficulty::calculate_breakdown(make_rhythm_chart(false));
+    const chart_difficulty::difficulty_breakdown irregular_rhythm =
+        chart_difficulty::calculate_breakdown(make_rhythm_chart(true));
+    if (factor_value(straight_rhythm, "rhythm") < 0.0f ||
+        factor_value(irregular_rhythm, "rhythm") <= factor_value(straight_rhythm, "rhythm")) {
+        std::cerr << "Expected rhythm breakdown to expose higher rhythm strain for uneven timing\n";
         return EXIT_FAILURE;
     }
 
@@ -221,9 +263,15 @@ int main() {
 
     const float one_hand_stream = chart_difficulty::calculate_rating(make_one_hand_stream_chart());
     const float balanced_stream = chart_difficulty::calculate_rating(make_balanced_stream_chart());
+    const float cross_hand_stream = chart_difficulty::calculate_rating(make_split_shape_chart());
     if (one_hand_stream <= balanced_stream * 0.95f) {
         std::cerr << "Expected one-hand stream burden to stay visible against balanced streams: "
                   << one_hand_stream << " <= " << balanced_stream << "\n";
+        return EXIT_FAILURE;
+    }
+    if (cross_hand_stream >= one_hand_stream) {
+        std::cerr << "Expected wide cross-hand jumps not to rate above same-hand motion: "
+                  << cross_hand_stream << " >= " << one_hand_stream << "\n";
         return EXIT_FAILURE;
     }
 
@@ -238,9 +286,9 @@ int main() {
     const chart_data stay_free = make_tap_stream_chart();
     const float stay_free_rating = chart_difficulty::calculate_rating(stay_free);
     const float with_stays_rating = chart_difficulty::calculate_rating(with_added_stays(stay_free));
-    if (!approx(with_stays_rating, stay_free_rating, 0.001f)) {
-        std::cerr << "Expected stay notes not to affect rating: "
-                  << with_stays_rating << " != " << stay_free_rating << "\n";
+    if (with_stays_rating <= stay_free_rating || with_stays_rating >= stay_free_rating * 1.75f) {
+        std::cerr << "Expected stay notes to add lighter-than-tap rhythm pressure: "
+                  << with_stays_rating << " vs " << stay_free_rating << "\n";
         return EXIT_FAILURE;
     }
 

@@ -478,6 +478,44 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    judge_system early_hold_head_from_stay_judge;
+    early_hold_head_from_stay_judge.init({
+        note_data{note_type::hold, 960, 1, 1440},
+        note_data{note_type::stay, 960, 1, 960},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 835.0);
+    early_hold_head_from_stay_judge.update(835.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+    early_hold_head_from_stay_judge.update(1000.0, input);
+    if (!early_hold_head_from_stay_judge.note_states()[0].is_holding() ||
+        !early_hold_head_from_stay_judge.note_states()[1].is_completed() ||
+        early_hold_head_from_stay_judge.note_states()[0].result != judge_result::perfect ||
+        early_hold_head_from_stay_judge.note_states()[1].result != judge_result::perfect) {
+        std::cerr << "Hold head next to a held stay should start even when the press was slightly early\n";
+        return EXIT_FAILURE;
+    }
+
+    judge_system early_hold_head_from_near_stay_judge;
+    early_hold_head_from_near_stay_judge.init({
+        note_data{note_type::hold, 960, 1, 1440},
+        note_data{note_type::stay, 816, 1, 816},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 835.0);
+    early_hold_head_from_near_stay_judge.update(835.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+    early_hold_head_from_near_stay_judge.update(1000.0, input);
+    if (!early_hold_head_from_near_stay_judge.note_states()[0].is_holding() ||
+        !early_hold_head_from_near_stay_judge.note_states()[1].is_completed() ||
+        early_hold_head_from_near_stay_judge.note_states()[0].result != judge_result::perfect ||
+        early_hold_head_from_near_stay_judge.note_states()[1].result != judge_result::perfect) {
+        std::cerr << "Hold head near a held stay should start from the continuous held input\n";
+        return EXIT_FAILURE;
+    }
+
     judge_system late_hold_head_across_stay_judge;
     late_hold_head_across_stay_judge.init({
         note_data{note_type::hold, 960, 1, 1440},

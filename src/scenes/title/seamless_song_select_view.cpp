@@ -3,14 +3,18 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "audio_manager.h"
+#include "chart_difficulty.h"
 #include "platform/windows_input_source.h"
 #include "ranking_service.h"
 #include "raylib.h"
 #include "scene_common.h"
+#include "song_loader.h"
 #include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_layout.h"
 #include "song_select/song_select_login_dialog.h"
@@ -33,12 +37,12 @@ constexpr Rectangle kPlayMainColumnRect = {390.0f, 146.0f, 820.0f, 850.0f};
 constexpr Rectangle kPlayRankingColumnRect = {1228.0f, 146.0f, 650.0f, 850.0f};
 constexpr Rectangle kPlayJacketRect = {1258.0f, 182.0f, 212.0f, 212.0f};
 constexpr Rectangle kPlayChartDetailRect = {1494.0f, 186.0f, 350.0f, 246.0f};
-constexpr Rectangle kPlayMetaRect = {1258.0f, 472.0f, 590.0f, 12.0f};
+constexpr Rectangle kPlayMetaRect = {1258.0f, 418.0f, 590.0f, 10.0f};
 constexpr Rectangle kPlayChartButtonsRect = {414.0f, 205.0f, 772.0f, 740.0f};
-constexpr Rectangle kPlayRankingHeaderRect = {1256.0f, 598.0f, 596.0f, 26.0f};
-constexpr Rectangle kPlayRankingSourceLocalRect = {1394.0f, 632.0f, 134.0f, 34.0f};
-constexpr Rectangle kPlayRankingSourceOnlineRect = {1256.0f, 632.0f, 134.0f, 34.0f};
-constexpr Rectangle kPlayRankingListRect = {1256.0f, 674.0f, 596.0f, 218.0f};
+constexpr Rectangle kPlayRankingHeaderRect = {1256.0f, 616.0f, 596.0f, 26.0f};
+constexpr Rectangle kPlayRankingSourceLocalRect = {1394.0f, 650.0f, 134.0f, 34.0f};
+constexpr Rectangle kPlayRankingSourceOnlineRect = {1256.0f, 650.0f, 134.0f, 34.0f};
+constexpr Rectangle kPlayRankingListRect = {1256.0f, 692.0f, 596.0f, 200.0f};
 constexpr Rectangle kCreateSongColumnRect = {99.0f, 162.0f, 507.0f, 756.0f};
 constexpr Rectangle kCreateMainColumnRect = {657.0f, 150.0f, 603.0f, 780.0f};
 constexpr Rectangle kCreateRankingColumnRect = {1317.0f, 153.0f, 507.0f, 774.0f};
@@ -91,12 +95,18 @@ std::vector<std::string> genre_labels(const song_meta& meta) {
 
 Color tag_color_for_label(const std::string& label) {
     constexpr Color kPalette[] = {
-        {128, 84, 222, 255},
-        {38, 145, 202, 255},
-        {32, 174, 126, 255},
-        {198, 63, 139, 255},
-        {196, 93, 62, 255},
-        {176, 172, 40, 255},
+        {147, 94, 226, 255},
+        {38, 167, 216, 255},
+        {214, 143, 43, 255},
+        {132, 204, 45, 255},
+        {216, 78, 133, 255},
+        {62, 126, 220, 255},
+        {39, 181, 154, 255},
+        {218, 91, 61, 255},
+        {190, 181, 48, 255},
+        {162, 103, 231, 255},
+        {65, 190, 96, 255},
+        {212, 94, 172, 255},
     };
     unsigned int hash = 2166136261u;
     for (unsigned char ch : label) {
@@ -148,7 +158,7 @@ Rectangle best_score_rect(Rectangle ranking_column) {
 Rectangle preview_prev_button_rect(const title_play_view::layout& current) {
     return {
         current.ranking_column.x + 30.0f,
-        current.ranking_column.y + 390.0f,
+        current.ranking_column.y + 308.0f,
         174.0f,
         48.0f,
     };
@@ -157,7 +167,7 @@ Rectangle preview_prev_button_rect(const title_play_view::layout& current) {
 Rectangle preview_play_button_rect(const title_play_view::layout& current) {
     return {
         current.ranking_column.x + current.ranking_column.width * 0.5f - 77.0f,
-        current.ranking_column.y + 387.0f,
+        current.ranking_column.y + 305.0f,
         154.0f,
         54.0f,
     };
@@ -166,7 +176,7 @@ Rectangle preview_play_button_rect(const title_play_view::layout& current) {
 Rectangle preview_next_button_rect(const title_play_view::layout& current) {
     return {
         current.ranking_column.x + current.ranking_column.width - 204.0f,
-        current.ranking_column.y + 390.0f,
+        current.ranking_column.y + 308.0f,
         174.0f,
         48.0f,
     };
@@ -538,6 +548,165 @@ double selected_preview_length_seconds(const song_select::song_entry* song) {
     return song != nullptr ? static_cast<double>(song->song.meta.duration_seconds) : 0.0;
 }
 
+const char* difficulty_factor_label(const std::string& name) {
+    if (name == "density") {
+        return "Density";
+    }
+    if (name == "stream") {
+        return "Stream";
+    }
+    if (name == "pattern") {
+        return "Pattern";
+    }
+    if (name == "read") {
+        return "Read";
+    }
+    if (name == "rhythm") {
+        return "Rhythm";
+    }
+    if (name == "overlap") {
+        return "LN Mix";
+    }
+    if (name == "hold_conflict") {
+        return "LN Hand";
+    }
+    if (name == "hand") {
+        return "Hand";
+    }
+    if (name == "stamina") {
+        return "Stamina";
+    }
+    if (name == "release") {
+        return "Release";
+    }
+    if (name == "jump") {
+        return "Motion";
+    }
+    if (name == "chord") {
+        return "Chord";
+    }
+    if (name == "hold") {
+        return "Hold";
+    }
+    if (name == "balance") {
+        return "Balance";
+    }
+    return name.c_str();
+}
+
+Color difficulty_factor_color(const std::string& name) {
+    if (name == "density") {
+        return {240, 186, 70, 255};
+    }
+    if (name == "stream" || name == "stamina") {
+        return {70, 190, 230, 255};
+    }
+    if (name == "pattern" || name == "rhythm") {
+        return {168, 106, 245, 255};
+    }
+    if (name == "release" || name == "hold" || name == "hold_conflict") {
+        return {236, 105, 142, 255};
+    }
+    if (name == "overlap" || name == "read") {
+        return {74, 205, 158, 255};
+    }
+    if (name == "hand" || name == "balance") {
+        return {245, 132, 78, 255};
+    }
+    if (name == "jump" || name == "chord") {
+        return {96, 145, 238, 255};
+    }
+    return g_theme->accent;
+}
+
+std::optional<chart_difficulty::difficulty_breakdown> cached_difficulty_breakdown(const song_select::chart_option* chart) {
+    static std::unordered_map<std::string, std::optional<chart_difficulty::difficulty_breakdown>> cache;
+    if (chart == nullptr || chart->path.empty()) {
+        return std::nullopt;
+    }
+
+    const auto found = cache.find(chart->path);
+    if (found != cache.end()) {
+        return found->second;
+    }
+
+    const chart_parse_result parsed = song_loader::load_chart(chart->path);
+    if (!parsed.success || !parsed.data.has_value()) {
+        cache.emplace(chart->path, std::nullopt);
+        return std::nullopt;
+    }
+    auto breakdown = chart_difficulty::calculate_breakdown(*parsed.data);
+    cache.emplace(chart->path, breakdown);
+    return breakdown;
+}
+
+void draw_difficulty_breakdown(Rectangle rect,
+                               const song_select::chart_option* chart,
+                               unsigned char alpha,
+                               unsigned char normal_row_alpha) {
+    const auto& t = *g_theme;
+    ui::draw_text_in_rect("DIFFICULTY FACTORS", 11,
+                          {rect.x, rect.y, rect.width, 15.0f},
+                          with_alpha(t.text_muted, alpha), ui::text_align::left);
+
+    const std::optional<chart_difficulty::difficulty_breakdown> breakdown = cached_difficulty_breakdown(chart);
+    if (!breakdown.has_value() || breakdown->factors.empty()) {
+        ui::draw_text_in_rect("-", 13,
+                              {rect.x, rect.y + 20.0f, rect.width, 24.0f},
+                              with_alpha(t.text_muted, alpha), ui::text_align::left);
+        return;
+    }
+
+    constexpr int kVisibleRows = 5;
+    constexpr float kRowHeight = 14.0f;
+    constexpr float kLabelWidth = 88.0f;
+    constexpr float kValueWidth = 34.0f;
+    constexpr float kFullBarContribution = 36.0f;
+    std::vector<const chart_difficulty::difficulty_factor_breakdown*> visible_factors;
+    visible_factors.reserve(kVisibleRows);
+    const chart_difficulty::difficulty_factor_breakdown* rhythm_factor = nullptr;
+    for (const chart_difficulty::difficulty_factor_breakdown& factor : breakdown->factors) {
+        if (factor.name == "rhythm") {
+            rhythm_factor = &factor;
+        }
+        if (static_cast<int>(visible_factors.size()) < kVisibleRows) {
+            visible_factors.push_back(&factor);
+        }
+    }
+    if (rhythm_factor != nullptr &&
+        std::find(visible_factors.begin(), visible_factors.end(), rhythm_factor) == visible_factors.end()) {
+        if (visible_factors.empty()) {
+            visible_factors.push_back(rhythm_factor);
+        } else {
+            visible_factors.back() = rhythm_factor;
+        }
+    }
+
+    const int rows = static_cast<int>(visible_factors.size());
+    for (int i = 0; i < rows; ++i) {
+        const chart_difficulty::difficulty_factor_breakdown& factor = *visible_factors[static_cast<size_t>(i)];
+        const float row_y = rect.y + 20.0f + static_cast<float>(i) * kRowHeight;
+        const Rectangle label_rect = {rect.x, row_y - 1.0f, kLabelWidth, kRowHeight};
+        const Rectangle bar_track = {
+            rect.x + kLabelWidth,
+            row_y + 3.0f,
+            rect.width - kLabelWidth - kValueWidth,
+            7.0f,
+        };
+        const Rectangle value_rect = {bar_track.x + bar_track.width + 6.0f, row_y - 1.0f,
+                                      kValueWidth - 6.0f, kRowHeight};
+        const float ratio = std::clamp(factor.average_contribution / kFullBarContribution, 0.0f, 1.0f);
+        const Color factor_color = difficulty_factor_color(factor.name);
+        ui::draw_text_in_rect(difficulty_factor_label(factor.name), 10, label_rect,
+                              with_alpha(factor_color, alpha), ui::text_align::left);
+        ui::draw_rect_f(bar_track, with_alpha(t.bg_alt, normal_row_alpha));
+        ui::draw_rect_f({bar_track.x, bar_track.y, bar_track.width * ratio, bar_track.height},
+                        with_alpha(factor_color, alpha));
+        ui::draw_text_in_rect(TextFormat("%.1f", factor.average_contribution), 9, value_rect,
+                              with_alpha(t.text_muted, alpha), ui::text_align::right);
+    }
+}
+
 void draw_preview_and_start_panel(const title_play_view::layout& current,
                                   const song_select::state& state,
                                   const song_select::preview_controller& preview_controller,
@@ -580,13 +749,16 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
                           15, with_alpha(t.text_secondary, alpha), GetTime());
         if (chart != nullptr) {
             ui::draw_text_in_rect(
-                TextFormat("%dK  %s  Lv.%.1f",
+                TextFormat("%dK  %s",
                            chart->meta.key_count > 0 ? chart->meta.key_count : 4,
-                           chart->meta.difficulty.c_str(),
-                           chart->meta.level),
+                           chart->meta.difficulty.c_str()),
                 13,
-                {title_rect.x, title_rect.y + 82.0f, title_rect.width * 0.62f, 24.0f},
-                with_alpha(t.accent, alpha), ui::text_align::left);
+                {title_rect.x, title_rect.y + 82.0f, title_rect.width * 0.42f, 24.0f},
+                with_alpha(t.text, alpha), ui::text_align::left);
+            draw_difficulty_level_badge(chart->meta.level,
+                                        {title_rect.x + title_rect.width * 0.43f, title_rect.y + 82.0f,
+                                         70.0f, 21.0f},
+                                        12, alpha);
             ui::draw_text_in_rect(
                 TextFormat("by %s", chart->meta.chart_author.empty() ? "Unknown" : chart->meta.chart_author.c_str()),
                 12,
@@ -643,7 +815,7 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
                    format_duration_label(static_cast<float>(pos)).c_str(),
                    length > 0.0 ? format_duration_label(static_cast<float>(length)).c_str() : "--:--"),
         12,
-        {progress.x, progress.y + 14.0f, progress.width, 16.0f},
+        {progress.x, progress.y + 11.0f, progress.width, 16.0f},
         with_alpha(t.text_muted, alpha), ui::text_align::right);
 
     const Rectangle prev_button = preview_prev_button_rect(current);
@@ -652,6 +824,10 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
     draw_transport_skip_button(prev_button, false, alpha);
     draw_transport_toggle_button(play_button, audio_manager::instance().is_preview_playing(), alpha);
     draw_transport_skip_button(next_button, true, alpha);
+
+    draw_difficulty_breakdown(
+        {panel.x + 28.0f, panel.y + 370.0f, panel.width - 56.0f, 76.0f},
+        chart, alpha, normal_row_alpha);
 
     const Rectangle best = best_score_rect(panel);
     ui::draw_rect_f(best, with_alpha(button_base, normal_row_alpha));
