@@ -20,9 +20,57 @@
 namespace title_online_view {
 namespace {
 
-constexpr float kChartLevelWidth = 250.0f;
+constexpr float kChartLevelWidth = 220.0f;
 constexpr float kChartKeyButtonWidth = 44.0f;
 constexpr float kChartKeyButtonStep = 50.0f;
+constexpr float kChartFilterMinLevel = 0.0f;
+constexpr float kChartFilterUsefulMaxLevel = 15.0f;
+constexpr float kChartFilterMaxLevel = 99.0f;
+constexpr float kChartFilterUsefulTrack = 0.97f;
+
+float level_filter_t(float level) {
+    const float clamped = std::clamp(level, kChartFilterMinLevel, kChartFilterMaxLevel);
+    if (clamped <= kChartFilterUsefulMaxLevel) {
+        return ((clamped - kChartFilterMinLevel) / (kChartFilterUsefulMaxLevel - kChartFilterMinLevel)) *
+               kChartFilterUsefulTrack;
+    }
+    return 1.0f;
+}
+
+Rectangle level_filter_chip_rect(Rectangle range, float level) {
+    const float x = range.x + range.width * level_filter_t(level);
+    return {x - 24.0f, range.y - 4.0f, 48.0f, 28.0f};
+}
+
+std::string level_filter_label(float level) {
+    if (level >= kChartFilterMaxLevel - 0.05f) {
+        return "\xE2\x88\x9E";
+    }
+    return TextFormat("%.1f", level);
+}
+
+void draw_level_filter_gradient(Rectangle rect, unsigned char alpha) {
+    constexpr int kSegments = 48;
+    for (int i = 0; i < kSegments; ++i) {
+        const float from_level = kChartFilterUsefulMaxLevel * (static_cast<float>(i) / kSegments);
+        const float to_level = kChartFilterUsefulMaxLevel * (static_cast<float>(i + 1) / kSegments);
+        const float from_t = level_filter_t(from_level);
+        const float to_t = level_filter_t(to_level);
+        const Rectangle segment = {
+            rect.x + rect.width * from_t,
+            rect.y,
+            std::max(1.0f, rect.width * (to_t - from_t)),
+            rect.height,
+        };
+        DrawRectangleGradientH(static_cast<int>(segment.x), static_cast<int>(segment.y),
+                               static_cast<int>(std::ceil(segment.width)), static_cast<int>(segment.height),
+                               with_alpha(difficulty_level_color(from_level), alpha),
+                               with_alpha(difficulty_level_color(to_level), alpha));
+    }
+    const float useful_end_x = rect.x + rect.width * level_filter_t(kChartFilterUsefulMaxLevel);
+    ui::draw_rect_f({useful_end_x, rect.y, rect.x + rect.width - useful_end_x, rect.height},
+                    with_alpha({34, 38, 46, 255}, alpha));
+}
 
 Rectangle song_card_jacket_rect(Rectangle card) {
     const float jacket_size = std::min(card.height - 42.0f, 96.0f);
@@ -354,13 +402,17 @@ Rectangle chart_level_max_input_rect(Rectangle chart_list) {
 }
 
 Rectangle chart_level_slider_rect(Rectangle chart_list) {
-    return {chart_list.x + (chart_list.width - kChartLevelWidth) * 0.5f, chart_list.y + 412.0f, kChartLevelWidth, 8.0f};
+    return {chart_list.x + (chart_list.width - kChartLevelWidth) * 0.5f, chart_list.y + 372.0f, kChartLevelWidth, 24.0f};
 }
 
+float chart_level_value(const std::string& value, float fallback);
+
 bool chart_filters_active(const state& state) {
+    const float min_level = chart_level_value(state.min_level_input.value, kChartFilterMinLevel);
+    const float max_level = chart_level_value(state.max_level_input.value, kChartFilterMaxLevel);
     return !state.chart_search_input.value.empty() ||
-        !state.min_level_input.value.empty() ||
-        !state.max_level_input.value.empty() ||
+        std::fabs(min_level - kChartFilterMinLevel) > 0.001f ||
+        std::fabs(max_level - kChartFilterMaxLevel) > 0.001f ||
         state.chart_source != chart_source_filter::all ||
         state.chart_key_filter != 0 ||
         state.chart_download_filter != 0;
@@ -392,7 +444,7 @@ float chart_level_value(const std::string& value, float fallback) {
         size_t parsed = 0;
         const float result = std::stof(value, &parsed);
         if (parsed == value.size()) {
-            return std::clamp(result, 1.0f, 10.0f);
+            return std::clamp(result, 0.0f, 99.0f);
         }
     } catch (...) {
     }
@@ -400,21 +452,28 @@ float chart_level_value(const std::string& value, float fallback) {
 }
 
 void draw_level_range_slider(Rectangle chart_list, const state& state, unsigned char alpha) {
-    float min_level = chart_level_value(state.min_level_input.value, 1.0f);
-    float max_level = chart_level_value(state.max_level_input.value, 10.0f);
+    float min_level = chart_level_value(state.min_level_input.value, kChartFilterMinLevel);
+    float max_level = chart_level_value(state.max_level_input.value, kChartFilterMaxLevel);
     if (min_level > max_level) {
         std::swap(min_level, max_level);
     }
-    const Rectangle track = chart_level_slider_rect(chart_list);
-    const float min_t = (min_level - 1.0f) / 9.0f;
-    const float max_t = (max_level - 1.0f) / 9.0f;
-    const float min_x = track.x + track.width * min_t;
-    const float max_x = track.x + track.width * max_t;
+    const Rectangle range = chart_level_slider_rect(chart_list);
+    const Rectangle track = {range.x, range.y + 5.0f, range.width, 14.0f};
     ui::draw_rect_f(track, with_alpha(g_theme->slider_track, alpha));
-    ui::draw_rect_f({min_x, track.y, std::max(0.0f, max_x - min_x), track.height},
-                    with_alpha(g_theme->accent, alpha));
-    ui::draw_rect_f({min_x - 5.0f, track.y - 7.0f, 10.0f, 22.0f}, with_alpha(g_theme->accent, alpha));
-    ui::draw_rect_f({max_x - 5.0f, track.y - 7.0f, 10.0f, 22.0f}, with_alpha(g_theme->accent, alpha));
+    draw_level_filter_gradient(track, static_cast<unsigned char>(alpha / 2));
+
+    const auto draw_chip = [&](float level, bool max_chip) {
+        const Rectangle rect = level_filter_chip_rect(range, level);
+        const Color tone = max_chip && level >= kChartFilterMaxLevel - 0.05f
+                               ? g_theme->text_muted
+                               : difficulty_level_color(level);
+        const std::string label = level_filter_label(level);
+        ui::draw_rect_f(rect, with_alpha(lerp_color(g_theme->bg_alt, tone, 0.18f), alpha));
+        ui::draw_rect_lines(rect, 1.1f, with_alpha(tone, alpha));
+        ui::draw_body_text_in_rect(label.c_str(), 11, rect, with_alpha(tone, alpha));
+    };
+    draw_chip(min_level, false);
+    draw_chip(max_level, true);
 }
 
 void draw_browse_body_text_in_rect(const char* text,
@@ -1534,18 +1593,6 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     draw_browse_body_text_in_rect(localization::tr_literal("LEVEL"), 12,
                           {filter_panel.x + 20.0f, filter_panel.y + 336.0f, filter_panel.width - 40.0f, 18.0f},
                           with_alpha(t.accent, detail_alpha), ui::text_align::left);
-    draw_song_search_input(chart_level_min_input_rect(filter_panel),
-                           state.min_level_input, "", "1",
-                           12, 4, button_base, button_hover, button_selected,
-                           normal_row_alpha, hover_row_alpha, selected_row_alpha, detail_alpha);
-    const Rectangle min_level_rect = chart_level_min_input_rect(filter_panel);
-    draw_browse_body_text_in_rect("-", 13,
-                          {min_level_rect.x + 76.0f, filter_panel.y + 358.0f, 18.0f, 30.0f},
-                          with_alpha(t.text_muted, detail_alpha));
-    draw_song_search_input(chart_level_max_input_rect(filter_panel),
-                           state.max_level_input, "", "10",
-                           12, 4, button_base, button_hover, button_selected,
-                           normal_row_alpha, hover_row_alpha, selected_row_alpha, detail_alpha);
     draw_level_range_slider(filter_panel, state, detail_alpha);
 
     draw_browse_body_text_in_rect(localization::tr_literal("KEYS"), 12,

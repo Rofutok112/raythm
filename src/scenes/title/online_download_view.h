@@ -164,6 +164,8 @@ struct state {
     ui::text_input_state chart_search_input;
     ui::text_input_state min_level_input;
     ui::text_input_state max_level_input;
+    bool chart_level_filter_dragging = false;
+    bool chart_level_filter_dragging_min = false;
     chart_source_filter chart_source = chart_source_filter::all;
     int chart_key_filter = 0;
     int chart_download_filter = 0;

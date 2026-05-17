@@ -16,9 +16,38 @@
 namespace title_online_view {
 namespace {
 
-constexpr float kChartLevelWidth = 250.0f;
+constexpr float kChartLevelWidth = 220.0f;
 constexpr float kChartKeyButtonWidth = 44.0f;
 constexpr float kChartKeyButtonStep = 50.0f;
+constexpr float kChartFilterMinLevel = 0.0f;
+constexpr float kChartFilterUsefulMaxLevel = 15.0f;
+constexpr float kChartFilterMaxLevel = 99.0f;
+constexpr float kChartFilterUsefulTrack = 0.97f;
+
+float level_filter_t(float level) {
+    const float clamped = std::clamp(level, kChartFilterMinLevel, kChartFilterMaxLevel);
+    if (clamped <= kChartFilterUsefulMaxLevel) {
+        return ((clamped - kChartFilterMinLevel) / (kChartFilterUsefulMaxLevel - kChartFilterMinLevel)) *
+               kChartFilterUsefulTrack;
+    }
+    return 1.0f;
+}
+
+float level_from_filter_t(float t) {
+    const float clamped = std::clamp(t, 0.0f, 1.0f);
+    if (clamped > kChartFilterUsefulTrack) {
+        return kChartFilterMaxLevel;
+    }
+    const float level = kChartFilterMinLevel +
+                        (clamped / kChartFilterUsefulTrack) *
+                            (kChartFilterUsefulMaxLevel - kChartFilterMinLevel);
+    return std::round(level * 10.0f) / 10.0f;
+}
+
+Rectangle level_filter_chip_rect(Rectangle range, float level) {
+    const float x = range.x + range.width * level_filter_t(level);
+    return {x - 24.0f, range.y - 4.0f, 48.0f, 28.0f};
+}
 
 void reset_chart_scroll(state& state) {
     state.chart_scroll_y = 0.0f;
@@ -185,7 +214,7 @@ Rectangle chart_level_max_input_rect(Rectangle chart_list) {
 }
 
 Rectangle chart_level_slider_rect(Rectangle chart_list) {
-    return {chart_list.x + (chart_list.width - kChartLevelWidth) * 0.5f, chart_list.y + 412.0f, kChartLevelWidth, 8.0f};
+    return {chart_list.x + (chart_list.width - kChartLevelWidth) * 0.5f, chart_list.y + 372.0f, kChartLevelWidth, 24.0f};
 }
 
 void clear_chart_filters(state& state) {
@@ -195,6 +224,8 @@ void clear_chart_filters(state& state) {
     state.min_level_input.cursor = 0;
     state.max_level_input.value.clear();
     state.max_level_input.cursor = 0;
+    state.chart_level_filter_dragging = false;
+    state.chart_level_filter_dragging_min = false;
     state.chart_source = chart_source_filter::all;
     state.chart_key_filter = 0;
     state.chart_download_filter = 0;
@@ -209,16 +240,22 @@ float chart_level_value(const std::string& value, float fallback) {
         size_t parsed = 0;
         const float result = std::stof(value, &parsed);
         if (parsed == value.size()) {
-            return std::clamp(result, 1.0f, 10.0f);
+            return std::clamp(result, kChartFilterMinLevel, kChartFilterMaxLevel);
         }
     } catch (...) {
     }
     return fallback;
 }
 
-void set_level_input(ui::text_input_state& input, float value) {
-    const int rounded = static_cast<int>(std::round(std::clamp(value, 1.0f, 10.0f)));
-    input.value = std::to_string(rounded);
+void set_level_input(ui::text_input_state& input, float value, float default_value) {
+    const float clamped = std::clamp(value, kChartFilterMinLevel, kChartFilterMaxLevel);
+    if (std::fabs(clamped - default_value) <= 0.05f) {
+        input.value.clear();
+    } else if (clamped >= kChartFilterMaxLevel - 0.05f) {
+        input.value = TextFormat("%.0f", kChartFilterMaxLevel);
+    } else {
+        input.value = TextFormat("%.1f", clamped);
+    }
     input.cursor = ui::utf8_codepoint_count(input.value);
     input.has_selection = false;
     input.selection_anchor = input.cursor;
@@ -226,24 +263,38 @@ void set_level_input(ui::text_input_state& input, float value) {
 
 bool update_level_range_from_slider(state& state, Rectangle chart_list, Vector2 mouse) {
     const Rectangle slider = chart_level_slider_rect(chart_list);
-    const Rectangle hit_rect = {slider.x - 8.0f, slider.y - 16.0f, slider.width + 16.0f, 40.0f};
-    if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT) || !CheckCollisionPointRec(mouse, hit_rect)) {
-        return false;
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        state.chart_level_filter_dragging = false;
     }
-
-    float min_level = chart_level_value(state.min_level_input.value, 1.0f);
-    float max_level = chart_level_value(state.max_level_input.value, 10.0f);
+    float min_level = chart_level_value(state.min_level_input.value, kChartFilterMinLevel);
+    float max_level = chart_level_value(state.max_level_input.value, kChartFilterMaxLevel);
     if (min_level > max_level) {
         std::swap(min_level, max_level);
     }
-    const float value = 1.0f + std::clamp((mouse.x - slider.x) / slider.width, 0.0f, 1.0f) * 9.0f;
-    if (std::fabs(value - min_level) <= std::fabs(value - max_level)) {
+
+    const Rectangle min_chip = level_filter_chip_rect(slider, min_level);
+    const Rectangle max_chip = level_filter_chip_rect(slider, max_level);
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (CheckCollisionPointRec(mouse, max_chip)) {
+            state.chart_level_filter_dragging = true;
+            state.chart_level_filter_dragging_min = false;
+        } else if (CheckCollisionPointRec(mouse, min_chip)) {
+            state.chart_level_filter_dragging = true;
+            state.chart_level_filter_dragging_min = true;
+        }
+    }
+    if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT) || !state.chart_level_filter_dragging) {
+        return false;
+    }
+
+    const float value = level_from_filter_t(std::clamp((mouse.x - slider.x) / slider.width, 0.0f, 1.0f));
+    if (state.chart_level_filter_dragging_min) {
         min_level = std::min(value, max_level);
     } else {
         max_level = std::max(value, min_level);
     }
-    set_level_input(state.min_level_input, min_level);
-    set_level_input(state.max_level_input, max_level);
+    set_level_input(state.min_level_input, min_level, kChartFilterMinLevel);
+    set_level_input(state.max_level_input, max_level, kChartFilterMaxLevel);
     reset_chart_scroll(state);
     return true;
 }

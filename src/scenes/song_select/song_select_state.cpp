@@ -304,8 +304,10 @@ void reset_for_enter(state& state) {
     state.play_search_input = {};
     state.chart_source = chart_source_filter::all;
     state.chart_key_filter = 0;
-    state.chart_min_level = 1.0f;
-    state.chart_max_level = 10.0f;
+    state.chart_min_level = 0.0f;
+    state.chart_max_level = 99.0f;
+    state.chart_level_filter_dragging = false;
+    state.chart_level_filter_dragging_min = false;
     state.preview_bar_dragging = false;
     state.preview_bar_resume_after_drag = false;
     state.preview_bar_drag_position_seconds = 0.0;
@@ -360,8 +362,10 @@ void apply_catalog(state& state, catalog_data catalog,
     state.play_search_input = {};
     state.chart_source = chart_source_filter::all;
     state.chart_key_filter = 0;
-    state.chart_min_level = 1.0f;
-    state.chart_max_level = 10.0f;
+    state.chart_min_level = 0.0f;
+    state.chart_max_level = 99.0f;
+    state.chart_level_filter_dragging = false;
+    state.chart_level_filter_dragging_min = false;
     state.preview_bar_dragging = false;
     state.preview_bar_resume_after_drag = false;
     state.preview_bar_drag_position_seconds = 0.0;
@@ -441,8 +445,8 @@ bool apply_chart_filters(state& state,
                          int key_filter,
                          float min_level,
                          float max_level) {
-    min_level = std::clamp(min_level, 1.0f, 10.0f);
-    max_level = std::clamp(max_level, 1.0f, 10.0f);
+    min_level = std::clamp(min_level, 0.0f, 15.0f);
+    max_level = std::clamp(max_level, 0.0f, 99.0f);
     if (min_level > max_level) {
         std::swap(min_level, max_level);
     }
@@ -483,7 +487,7 @@ bool apply_chart_filters(state& state,
 }
 
 bool clear_chart_filters(state& state) {
-    return apply_chart_filters(state, chart_source_filter::all, 0, 1.0f, 10.0f);
+    return apply_chart_filters(state, chart_source_filter::all, 0, 0.0f, 99.0f);
 }
 
 void open_song_context_menu(state& state, int song_index, Rectangle rect) {
