@@ -133,6 +133,10 @@ void present_virtual_screen() {
     virtual_screen::draw_to_screen();
 }
 
+void present_virtual_screen_overlay() {
+    virtual_screen::draw_to_screen(true);
+}
+
 }  // namespace
 
 play_scene::play_scene(scene_manager& manager, int key_count) : scene(manager) {
@@ -458,13 +462,19 @@ void play_scene::draw() {
     }
     EndMode3D();
 
+    virtual_screen::end();
+
+    present_virtual_screen();
+
+    virtual_screen::begin_ui();
+    ClearBackground(BLANK);
     rebuild_hit_regions();
     ui::begin_draw_queue();
     play_renderer::draw_overlay(state_, jacket_texture_loaded_ ? &jacket_texture_ : nullptr);
     ui::flush_draw_queue();
     virtual_screen::end();
 
-    present_virtual_screen();
+    present_virtual_screen_overlay();
 }
 
 double play_scene::get_visual_ms() const {

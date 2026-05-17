@@ -29,6 +29,7 @@ struct layout {
 struct update_result {
     bool back_requested = false;
     bool play_requested = false;
+    bool preview_toggle_requested = false;
     bool song_selection_changed = false;
     bool chart_selection_changed = false;
     bool ranking_source_changed = false;
@@ -52,7 +53,7 @@ struct update_result {
 
 layout make_layout(float anim_t, Rectangle origin_rect);
 update_result update(song_select::state& state, mode view_mode, float anim_t, Rectangle origin_rect, float dt);
-void draw(const song_select::state& state,
+void draw(song_select::state& state,
           const song_select::preview_controller& preview_controller,
           mode view_mode,
           float anim_t,

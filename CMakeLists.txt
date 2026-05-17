@@ -255,6 +255,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_profile_controller.h
         src/scenes/title/title_header_view.cpp
         src/scenes/title/title_header_view.h
+        src/scenes/title/create_tools_view.cpp
+        src/scenes/title/create_tools_view.h
         src/scenes/title/create_upload_client.cpp
         src/scenes/title/create_upload_client.h
         src/scenes/title/local_content_database.cpp

@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ranking_service.h"
 #include "raylib.h"
 #include "song_select/song_preview_controller.h"
 #include "song_select/song_select_state.h"
@@ -172,6 +173,7 @@ struct state {
     std::future<remote_chart_page_fetch_result> chart_page_future;
     std::future<std::vector<song_entry_state>> owned_future;
     std::future<download_song_result> download_future;
+    std::future<ranking_service::listing> ranking_future;
     std::shared_ptr<download_progress_state> download_progress;
     bool catalog_loading = false;
     bool catalog_loaded_once = false;
@@ -187,6 +189,10 @@ struct state {
     bool owned_loading = false;
     bool owned_loaded_once = false;
     bool download_in_progress = false;
+    bool ranking_loading = false;
+    std::string ranking_requested_chart_id;
+    std::string ranking_loaded_chart_id;
+    ranking_service::listing ranking_listing;
     std::string catalog_server_url;
     std::string catalog_status_message;
     std::string catalog_retry_after;
@@ -219,6 +225,7 @@ struct layout {
     Rectangle song_grid_rect;
     Rectangle detail_left_rect;
     Rectangle detail_right_rect;
+    Rectangle detail_preview_rect;
     Rectangle hero_jacket_rect;
     Rectangle preview_bar_rect;
     Rectangle preview_play_rect;
