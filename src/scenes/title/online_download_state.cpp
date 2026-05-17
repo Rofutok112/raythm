@@ -211,8 +211,8 @@ std::vector<int> filtered_chart_indices(const state& state) {
 
     indices.reserve(song->charts.size());
     const std::string& query = state.chart_search_input.value;
-    const float min_level = parse_filter_float(state.min_level_input.value, 1.0f);
-    const float max_level = parse_filter_float(state.max_level_input.value, 10.0f);
+    const float min_level = parse_filter_float(state.min_level_input.value, 0.0f);
+    const float max_level = parse_filter_float(state.max_level_input.value, 99.0f);
     const std::optional<auth::session> session =
         state.chart_source == chart_source_filter::mine ? auth::load_saved_session() : std::nullopt;
     for (int index = 0; index < static_cast<int>(song->charts.size()); ++index) {

@@ -246,7 +246,7 @@ std::vector<note_event> build_note_events(const chart_data& data, const timing_e
                 break;
             }
             case note_type::release:
-                events.push_back({start_ms, representative_lane, note_event::kind::tap, 1.0f});
+                events.push_back({start_ms, representative_lane, note_event::kind::release, 1.0f});
                 break;
             case note_type::stay:
                 events.push_back({start_ms, representative_lane, note_event::kind::stay,
@@ -904,143 +904,374 @@ float local_difficulty_at(const std::vector<note_event>& events, const std::vect
     return local_difficulty_components_at(events, holds, transitions, center_ms, key_count, tempo_pressure).total;
 }
 
+struct chart_moment {
+    double time_ms = 0.0;
+    float press[2] = {0.0f, 0.0f};
+    float release[2] = {0.0f, 0.0f};
+    float stay[2] = {0.0f, 0.0f};
+    float active_hold[2] = {0.0f, 0.0f};
+    int press_mask[2] = {0, 0};
+    int release_mask[2] = {0, 0};
+    int active_hold_mask[2] = {0, 0};
+    float visual_layers = 0.0f;
+    int chord_count = 0;
+};
+
+struct hand_state {
+    double previous_time_ms = -1.0;
+    int previous_lane = -1;
+    float fatigue = 0.0f;
+};
+
+struct reading_model_result {
+    float raw_rating = 0.0f;
+    float level = 0.0f;
+    float density = 0.0f;
+    float stream = 0.0f;
+    float hand = 0.0f;
+    float stamina = 0.0f;
+    float hold_conflict = 0.0f;
+    float release = 0.0f;
+    float pattern = 0.0f;
+    float read = 0.0f;
+    float rhythm = 0.0f;
+    float tempo = 0.0f;
+    float rest_pressure = 0.0f;
+    float local_average = 0.0f;
+};
+
+float raw_rating_from_level(float level) {
+    if (level <= 0.0f) {
+        return 0.0f;
+    }
+    return std::pow(10.0f, (level + 6.5f) / 3.0f);
+}
+
+float hand_operation_weight(const chart_moment& moment, int hand) {
+    return moment.press[hand] + 0.45f * moment.release[hand] + 0.08f * moment.stay[hand];
+}
+
+float hand_sequential_press_weight(const chart_moment& moment, int hand) {
+    return moment.press[hand] <= 1.0f ? moment.press[hand] : 1.0f + 0.35f * (moment.press[hand] - 1.0f);
+}
+
+float hand_sequential_weight(const chart_moment& moment, int hand) {
+    const float press = hand_sequential_press_weight(moment, hand);
+    return press + 0.45f * moment.release[hand] + 0.08f * moment.stay[hand];
+}
+
+int bit_count(int mask) {
+    int count = 0;
+    while (mask != 0) {
+        count += mask & 1;
+        mask >>= 1;
+    }
+    return count;
+}
+
+float active_hold_load_for_hand_before(const std::vector<hold_interval>& holds, double time_ms, int hand, int key_count) {
+    float load = 0.0f;
+    for (const hold_interval& hold : holds) {
+        if (hold.start_ms < time_ms - 0.5 && time_ms < hold.end_ms &&
+            hand_for_lane(hold.lane, key_count) == hand) {
+            load += hold.effort_weight;
+        }
+    }
+    return load;
+}
+
+int active_hold_mask_for_hand_before(const std::vector<hold_interval>& holds, double time_ms, int hand, int key_count) {
+    int mask = 0;
+    const int hand_start = hand == 0 ? 0 : key_count / 2;
+    for (const hold_interval& hold : holds) {
+        if (hold.start_ms < time_ms - 0.5 && time_ms < hold.end_ms &&
+            hand_for_lane(hold.lane, key_count) == hand) {
+            mask |= 1 << std::max(0, hold.lane - hand_start);
+        }
+    }
+    return mask;
+}
+
+std::vector<chart_moment> build_chart_moments(const difficulty_context& context, int key_count) {
+    std::vector<chart_moment> moments;
+    size_t i = 0;
+    while (i < context.events.size()) {
+        chart_moment moment;
+        moment.time_ms = context.events[i].time_ms;
+        for (int hand = 0; hand < 2; ++hand) {
+            moment.active_hold[hand] =
+                active_hold_load_for_hand_before(context.holds, moment.time_ms, hand, key_count);
+            moment.active_hold_mask[hand] =
+                active_hold_mask_for_hand_before(context.holds, moment.time_ms, hand, key_count);
+        }
+
+        bool has_stay = false;
+        bool has_non_stay_event = false;
+        while (i < context.events.size() && std::abs(context.events[i].time_ms - moment.time_ms) <= kChordMergeMs) {
+            const note_event& event = context.events[i];
+            const int hand = hand_for_lane(event.lane, key_count);
+            const int hand_start = hand == 0 ? 0 : key_count / 2;
+            const int lane_bit = 1 << std::max(0, event.lane - hand_start);
+            const float effort = event_effort_weight(event);
+            switch (event.type) {
+                case note_event::kind::tap:
+                case note_event::kind::hold_head:
+                    moment.press[hand] += effort;
+                    moment.press_mask[hand] |= lane_bit;
+                    ++moment.chord_count;
+                    moment.visual_layers += 1.0f;
+                    has_non_stay_event = true;
+                    break;
+                case note_event::kind::hold_tail:
+                case note_event::kind::release:
+                    moment.release[hand] += effort;
+                    moment.release_mask[hand] |= lane_bit;
+                    moment.visual_layers += 1.0f;
+                    has_non_stay_event = true;
+                    break;
+                case note_event::kind::stay:
+                    moment.stay[hand] += 0.08f;
+                    if (moment.active_hold[hand] <= 0.0f) {
+                        moment.visual_layers += 1.0f;
+                    }
+                    has_stay = true;
+                    break;
+            }
+            ++i;
+        }
+        const bool stay_only_on_hold = has_stay && !has_non_stay_event &&
+                                       (moment.active_hold[0] > 0.0f || moment.active_hold[1] > 0.0f);
+        if (!stay_only_on_hold) {
+            for (int hand = 0; hand < 2; ++hand) {
+                if (moment.active_hold[hand] > 0.0f) {
+                    moment.visual_layers += 1.0f;
+                }
+            }
+        }
+        moments.push_back(moment);
+    }
+    return moments;
+}
+
+float window_hand_rate(const std::vector<chart_moment>& moments, size_t center_index, int hand, double radius_ms) {
+    float sum = 0.0f;
+    for (const chart_moment& moment : moments) {
+        if (std::abs(moment.time_ms - moments[center_index].time_ms) <= radius_ms) {
+            sum += hand_sequential_weight(moment, hand);
+        }
+    }
+    return sum / static_cast<float>((radius_ms * 2.0) / 1000.0);
+}
+
+float window_visual_load(const std::vector<chart_moment>& moments, size_t center_index, double radius_ms) {
+    float sum = 0.0f;
+    for (const chart_moment& moment : moments) {
+        if (std::abs(moment.time_ms - moments[center_index].time_ms) <= radius_ms) {
+            sum += moment.visual_layers + 0.35f * static_cast<float>(std::max(0, moment.chord_count - 1));
+        }
+    }
+    return sum / static_cast<float>((radius_ms * 2.0) / 1000.0);
+}
+
+float release_collision_load(const std::vector<chart_moment>& moments, size_t index, int hand) {
+    const chart_moment& moment = moments[index];
+    if (moment.release[hand] <= 0.0f) {
+        return 0.0f;
+    }
+
+    float collision = moment.release[hand] * (0.35f + 0.35f * moment.press[hand]);
+    for (size_t other = 0; other < moments.size(); ++other) {
+        if (other == index || std::abs(moments[other].time_ms - moment.time_ms) > 140.0) {
+            continue;
+        }
+        collision += moment.release[hand] * moments[other].press[hand] *
+                     (1.0f - static_cast<float>(std::abs(moments[other].time_ms - moment.time_ms) / 140.0)) * 0.55f;
+    }
+    return collision;
+}
+
+reading_model_result calculate_reading_model(const chart_data& data) {
+    reading_model_result result;
+    if (data.notes.empty() || data.meta.key_count <= 0 || data.meta.resolution <= 0) {
+        return result;
+    }
+
+    timing_engine engine;
+    engine.init(data.timing_events, data.meta.resolution, data.meta.offset);
+
+    const difficulty_context context = build_difficulty_context(data, engine);
+    const std::vector<chart_moment> moments = build_chart_moments(context, data.meta.key_count);
+    if (moments.empty()) {
+        return result;
+    }
+
+    const double total_ms = std::max(1.0, total_chart_length_ms(context.events, context.holds));
+    const float duration_seconds = static_cast<float>(total_ms / 1000.0);
+    float operation_sum = 0.0f;
+    float release_sum = 0.0f;
+    float hold_conflict_sum = 0.0f;
+    float pattern_sum = 0.0f;
+    float read_peak = 0.0f;
+    float peak_hand_rate = 0.0f;
+    float long_stream_peak = 0.0f;
+    float local_sum = 0.0f;
+    float local_weight_sum = 0.0f;
+    double rest_ms = 0.0;
+    hand_state hands[2];
+
+    for (size_t i = 0; i < moments.size(); ++i) {
+        const chart_moment& moment = moments[i];
+        float moment_local = 0.0f;
+        read_peak = std::max(read_peak, window_visual_load(moments, i, 500.0));
+
+        for (int hand = 0; hand < 2; ++hand) {
+            const float op = hand_sequential_weight(moment, hand);
+            const float fatigue_press = hand_sequential_press_weight(moment, hand);
+            const float real_press = moment.press[hand];
+            const float hand_rate = window_hand_rate(moments, i, hand, 400.0);
+            const float long_rate = window_hand_rate(moments, i, hand, 2100.0);
+            peak_hand_rate = std::max(peak_hand_rate, hand_rate);
+            long_stream_peak = std::max(long_stream_peak, std::max(0.0f, long_rate - 2.6f));
+
+            const int lanes_for_hand = hand_lane_count(hand, data.meta.key_count);
+            const float occupied_ratio =
+                std::clamp(moment.active_hold[hand] / static_cast<float>(std::max(1, lanes_for_hand)), 0.0f, 1.0f);
+            const int free_lanes = std::max(0, lanes_for_hand - bit_count(moment.active_hold_mask[hand]));
+            const float availability_penalty = occupied_ratio * (free_lanes <= 1 ? 1.65f : 1.0f);
+            hold_conflict_sum += (real_press + 1.15f * moment.release[hand]) * availability_penalty;
+            hold_conflict_sum += release_collision_load(moments, i, hand) * (1.0f + 0.5f * occupied_ratio);
+
+            if (hands[hand].previous_time_ms >= 0.0 && real_press > 0.0f) {
+                const double dt_seconds = std::max(0.001, (moment.time_ms - hands[hand].previous_time_ms) / 1000.0);
+                const int current_lane = moment.press_mask[hand] == 0
+                                             ? hands[hand].previous_lane
+                                             : bit_count(moment.press_mask[hand]) == 1
+                                                   ? static_cast<int>(std::log2(static_cast<double>(moment.press_mask[hand])))
+                                                   : hands[hand].previous_lane;
+                const bool same_lane = current_lane == hands[hand].previous_lane;
+                const float speed = static_cast<float>(1.0 / std::max(0.035, dt_seconds));
+                if (dt_seconds <= 0.32) {
+                    pattern_sum += real_press * speed * (same_lane ? 0.18f : 0.11f);
+                    if (current_lane >= 0 && hands[hand].previous_lane >= 0 && current_lane != hands[hand].previous_lane) {
+                        pattern_sum += real_press * speed * 0.08f;
+                    }
+                }
+            }
+
+            if (real_press > 0.0f) {
+                if (hands[hand].previous_time_ms >= 0.0) {
+                    const float rest_seconds =
+                        static_cast<float>((moment.time_ms - hands[hand].previous_time_ms) / 1000.0);
+                    hands[hand].fatigue = std::max(
+                        0.0f,
+                        hands[hand].fatigue - rest_seconds * (moment.active_hold[hand] > 0.0f ? 0.45f : 1.55f));
+                    if (rest_seconds > 0.45f && moment.active_hold[hand] <= 0.0f) {
+                        rest_ms += (rest_seconds - 0.45f) * 1000.0;
+                    }
+                }
+                hands[hand].fatigue += fatigue_press * (0.16f + 0.02f * hand_rate + 0.08f * occupied_ratio);
+                hands[hand].previous_time_ms = moment.time_ms;
+                if (bit_count(moment.press_mask[hand]) == 1) {
+                    hands[hand].previous_lane = static_cast<int>(std::log2(static_cast<double>(moment.press_mask[hand])));
+                }
+            } else if (hands[hand].previous_time_ms >= 0.0) {
+                const float rest_seconds =
+                    static_cast<float>((moment.time_ms - hands[hand].previous_time_ms) / 1000.0);
+                hands[hand].fatigue = std::max(
+                    0.0f,
+                    hands[hand].fatigue - rest_seconds * (moment.active_hold[hand] > 0.0f ? 0.30f : 1.20f));
+            }
+
+            operation_sum += op;
+            release_sum += moment.release[hand];
+            moment_local += op + 0.40f * hand_rate + 0.35f * hands[hand].fatigue + 0.75f * availability_penalty;
+            result.stamina = std::max(result.stamina, hands[hand].fatigue);
+        }
+
+        if (moment.chord_count >= 2) {
+            const int left_chord = bit_count(moment.press_mask[0]);
+            const int right_chord = bit_count(moment.press_mask[1]);
+            const int one_hand_chord = std::max(left_chord, right_chord);
+            pattern_sum += 0.85f * static_cast<float>(moment.chord_count - 1) +
+                           0.45f * static_cast<float>(std::max(0, one_hand_chord - 1));
+        }
+
+        double weight_ms = 1.0;
+        if (i + 1 < moments.size()) {
+            weight_ms = std::max(1.0, moments[i + 1].time_ms - moment.time_ms);
+        }
+        local_sum += moment_local * static_cast<float>(weight_ms);
+        local_weight_sum += static_cast<float>(weight_ms);
+    }
+
+    result.density = operation_sum / std::max(0.1f, duration_seconds);
+    result.stream = peak_hand_rate;
+    result.hand = peak_hand_rate;
+    result.hold_conflict = hold_conflict_sum / std::max(0.1f, duration_seconds);
+    result.release = release_sum / std::max(0.1f, duration_seconds);
+    result.pattern = pattern_sum / std::max(0.1f, duration_seconds);
+    result.read = read_peak;
+    result.rhythm = local_rhythm_factor(context.events, total_ms * 0.5);
+    for (const note_event& event : context.events) {
+        result.rhythm = std::max(result.rhythm, local_rhythm_factor(context.events, event.time_ms));
+    }
+    result.tempo = context.tempo_pressure;
+    const float rest_ratio = static_cast<float>(std::clamp(rest_ms / total_ms, 0.0, 1.0));
+    result.rest_pressure = 1.0f - rest_ratio;
+    result.local_average = local_weight_sum > 0.0f ? local_sum / local_weight_sum : 0.0f;
+
+    const float level =
+        0.30f +
+        0.25f * result.density +
+        0.22f * std::max(0.0f, result.hand - 1.4f) +
+        0.28f * long_stream_peak +
+        0.22f * result.stamina +
+        0.50f * result.hold_conflict +
+        0.12f * result.release +
+        0.08f * result.pattern +
+        0.08f * result.read +
+        0.05f * result.rhythm +
+        0.10f * result.tempo +
+        0.20f * result.rest_pressure;
+    const float clamped_level = std::clamp(level, 0.1f, 99.0f);
+    result.level = std::round(clamped_level * 10.0f) / 10.0f;
+    result.raw_rating = raw_rating_from_level(clamped_level);
+    result.stream = long_stream_peak;
+    return result;
+}
+
 }  // namespace
 
 namespace chart_difficulty {
 
 float calculate_rating(const chart_data& data) {
-    if (data.notes.empty() || data.meta.key_count <= 0 || data.meta.resolution <= 0) {
-        return 0.0f;
-    }
-
-    timing_engine engine;
-    engine.init(data.timing_events, data.meta.resolution, data.meta.offset);
-
-    const difficulty_context context = build_difficulty_context(data, engine);
-    if (context.events.empty()) {
-        return 0.0f;
-    }
-
-    const double total_ms = std::max(1.0, total_chart_length_ms(context.events, context.holds));
-    double weighted_sum = 0.0;
-    double total_weight_ms = 0.0;
-
-    for (size_t i = 0; i < context.events.size(); ++i) {
-        const double left = (i == 0) ? 0.0 : (context.events[i - 1].time_ms + context.events[i].time_ms) * 0.5;
-        const double right = (i + 1 == context.events.size()) ? total_ms
-                                                              : (context.events[i].time_ms + context.events[i + 1].time_ms) * 0.5;
-        const double weight_ms = std::max(1.0, right - left);
-        const float local =
-            std::max(0.0f, local_difficulty_at(context.events, context.holds, context.transitions,
-                                               context.events[i].time_ms, data.meta.key_count,
-                                               context.tempo_pressure));
-        weighted_sum += std::pow(local, kPeakPower) * weight_ms;
-        total_weight_ms += weight_ms;
-    }
-
-    if (total_weight_ms <= 0.0) {
-        return 0.0f;
-    }
-
-    return kScale * static_cast<float>(std::pow(weighted_sum / total_weight_ms, 1.0 / kPeakPower));
+    return calculate_reading_model(data).raw_rating;
 }
 
 difficulty_breakdown calculate_breakdown(const chart_data& data) {
     difficulty_breakdown breakdown;
-    if (data.notes.empty() || data.meta.key_count <= 0 || data.meta.resolution <= 0) {
+    const reading_model_result result = calculate_reading_model(data);
+    if (result.raw_rating <= 0.0f) {
         return breakdown;
     }
 
-    timing_engine engine;
-    engine.init(data.timing_events, data.meta.resolution, data.meta.offset);
-
-    const difficulty_context context = build_difficulty_context(data, engine);
-    if (context.events.empty()) {
-        return breakdown;
-    }
-
-    struct factor_accumulator {
-        const char* name = "";
-        float weight = 0.0f;
-        double value_sum = 0.0;
-        double contribution_sum = 0.0;
-    };
-
-    std::array<factor_accumulator, 14> factors = {{
-        {"density", kWeightDensity},
-        {"stream", kWeightStream},
-        {"jump", kWeightJump},
-        {"hold", kWeightHold},
-        {"release", kWeightRelease},
-        {"overlap", kWeightOverlap},
-        {"pattern", kWeightPattern},
-        {"balance", kWeightBalance},
-        {"stamina", kWeightStamina},
-        {"chord", kWeightChord},
-        {"hand", kWeightHand},
-        {"hold_conflict", kWeightHoldConflict},
-        {"read", kWeightRead},
-        {"rhythm", kWeightRhythm},
-    }};
-
-    const auto add_factor_sample = [&](size_t index, float value, double weight_ms) {
-        factors[index].value_sum += static_cast<double>(value) * weight_ms;
-        factors[index].contribution_sum += static_cast<double>(value) * factors[index].weight * weight_ms;
-    };
-
-    const double total_ms = std::max(1.0, total_chart_length_ms(context.events, context.holds));
-    double total_weight_ms = 0.0;
-    double local_sum = 0.0;
-    double coupling_sum = 0.0;
-    double peak_sum = 0.0;
-
-    for (size_t i = 0; i < context.events.size(); ++i) {
-        const double left = (i == 0) ? 0.0 : (context.events[i - 1].time_ms + context.events[i].time_ms) * 0.5;
-        const double right = (i + 1 == context.events.size()) ? total_ms
-                                                              : (context.events[i].time_ms + context.events[i + 1].time_ms) * 0.5;
-        const double weight_ms = std::max(1.0, right - left);
-        const local_difficulty_components components =
-            local_difficulty_components_at(context.events, context.holds, context.transitions, context.events[i].time_ms,
-                                           data.meta.key_count, context.tempo_pressure);
-        const float local = std::max(0.0f, components.total);
-
-        add_factor_sample(0, components.density, weight_ms);
-        add_factor_sample(1, components.stream, weight_ms);
-        add_factor_sample(2, components.jump, weight_ms);
-        add_factor_sample(3, components.hold, weight_ms);
-        add_factor_sample(4, components.release, weight_ms);
-        add_factor_sample(5, components.overlap, weight_ms);
-        add_factor_sample(6, components.pattern, weight_ms);
-        add_factor_sample(7, components.balance, weight_ms);
-        add_factor_sample(8, components.stamina, weight_ms);
-        add_factor_sample(9, components.chord, weight_ms);
-        add_factor_sample(10, components.hand, weight_ms);
-        add_factor_sample(11, components.hold_conflict, weight_ms);
-        add_factor_sample(12, components.read, weight_ms);
-        add_factor_sample(13, components.rhythm, weight_ms);
-
-        local_sum += static_cast<double>(local) * weight_ms;
-        coupling_sum += static_cast<double>(components.coupling) * weight_ms;
-        peak_sum += std::pow(local, kPeakPower) * weight_ms;
-        total_weight_ms += weight_ms;
-    }
-
-    if (total_weight_ms <= 0.0) {
-        return breakdown;
-    }
-
-    breakdown.raw_rating = kScale * static_cast<float>(std::pow(peak_sum / total_weight_ms, 1.0 / kPeakPower));
+    breakdown.raw_rating = result.raw_rating;
     breakdown.level = level_from_rating(breakdown.raw_rating);
-    breakdown.average_local_difficulty = static_cast<float>(local_sum / total_weight_ms);
-    breakdown.average_coupling = static_cast<float>(coupling_sum / total_weight_ms);
-    breakdown.factors.reserve(factors.size());
-    for (const factor_accumulator& factor : factors) {
-        breakdown.factors.push_back({
-            factor.name,
-            static_cast<float>(factor.value_sum / total_weight_ms),
-            static_cast<float>(factor.contribution_sum / total_weight_ms),
-        });
-    }
+    breakdown.average_local_difficulty = result.local_average;
+    breakdown.average_coupling = 1.0f + 0.08f * result.rest_pressure;
+    breakdown.factors = {
+        {"density", result.density, 0.25f * result.density},
+        {"hand", result.hand, 0.22f * std::max(0.0f, result.hand - 1.4f)},
+        {"stream", result.stream, 0.28f * result.stream},
+        {"stamina", result.stamina, 0.22f * result.stamina},
+        {"hold_conflict", result.hold_conflict, 0.50f * result.hold_conflict},
+        {"release", result.release, 0.12f * result.release},
+        {"pattern", result.pattern, 0.08f * result.pattern},
+        {"read", result.read, 0.08f * result.read},
+        {"rhythm", result.rhythm, 0.05f * result.rhythm},
+        {"tempo", result.tempo, 0.10f * result.tempo},
+        {"rest", result.rest_pressure, 0.20f * result.rest_pressure},
+    };
     std::sort(breakdown.factors.begin(), breakdown.factors.end(),
               [](const difficulty_factor_breakdown& left, const difficulty_factor_breakdown& right) {
                   return left.average_contribution > right.average_contribution;
@@ -1087,7 +1318,7 @@ float level_from_rating(float raw_rating) {
 
     const float calibrated = 3.0f * std::log10(raw_rating) - 6.5f;
     const float rounded = std::round(calibrated * 10.0f) / 10.0f;
-    return std::clamp(rounded, 0.1f, 15.0f);
+    return std::clamp(rounded, 0.1f, 99.0f);
 }
 
 float calculate_level(const chart_data& data) {

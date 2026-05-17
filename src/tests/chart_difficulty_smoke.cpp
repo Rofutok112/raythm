@@ -277,9 +277,9 @@ int main() {
 
     const float tap_stream = chart_difficulty::calculate_rating(make_tap_stream_chart());
     const float release_stream = chart_difficulty::calculate_rating(make_release_stream_chart());
-    if (!approx(release_stream, tap_stream, 0.001f)) {
-        std::cerr << "Expected release notes to rate like tap notes: "
-                  << release_stream << " != " << tap_stream << "\n";
+    if (release_stream <= tap_stream * 0.70f || release_stream >= tap_stream * 1.45f) {
+        std::cerr << "Expected release notes to stay near tap-note pressure without being an exact press clone: "
+                  << release_stream << " vs " << tap_stream << "\n";
         return EXIT_FAILURE;
     }
 

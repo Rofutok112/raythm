@@ -38,6 +38,10 @@ constexpr Rectangle kPlayRankingColumnRect = {1228.0f, 146.0f, 650.0f, 850.0f};
 constexpr Rectangle kPlayJacketRect = {1258.0f, 182.0f, 212.0f, 212.0f};
 constexpr Rectangle kPlayChartDetailRect = {1494.0f, 186.0f, 350.0f, 246.0f};
 constexpr Rectangle kPlayMetaRect = {1258.0f, 418.0f, 590.0f, 10.0f};
+constexpr float kChartFilterMinLevel = 0.0f;
+constexpr float kChartFilterUsefulMaxLevel = 15.0f;
+constexpr float kChartFilterMaxLevel = 99.0f;
+constexpr float kChartFilterUsefulTrack = 0.97f;
 constexpr Rectangle kPlayChartButtonsRect = {414.0f, 205.0f, 772.0f, 740.0f};
 constexpr Rectangle kPlayRankingHeaderRect = {1256.0f, 616.0f, 596.0f, 26.0f};
 constexpr Rectangle kPlayRankingSourceLocalRect = {1394.0f, 650.0f, 134.0f, 34.0f};
@@ -63,6 +67,56 @@ constexpr Vector2 kSeedBackOffset = {-642.0f, -291.0f};
 constexpr Vector2 kSeedJacketOffset = {-102.0f, -39.0f};
 constexpr Vector2 kSeedMetaOffset = {15.0f, 138.0f};
 constexpr Vector2 kSeedChartDetailOffset = {228.0f, -15.0f};
+
+float level_filter_t(float level) {
+    const float clamped = std::clamp(level, kChartFilterMinLevel, kChartFilterMaxLevel);
+    if (clamped <= kChartFilterUsefulMaxLevel) {
+        return ((clamped - kChartFilterMinLevel) / (kChartFilterUsefulMaxLevel - kChartFilterMinLevel)) *
+               kChartFilterUsefulTrack;
+    }
+    return 1.0f;
+}
+
+float level_from_filter_t(float t) {
+    const float clamped = std::clamp(t, 0.0f, 1.0f);
+    if (clamped > kChartFilterUsefulTrack) {
+        return kChartFilterMaxLevel;
+    }
+    const float level = kChartFilterMinLevel +
+                        (clamped / kChartFilterUsefulTrack) *
+                            (kChartFilterUsefulMaxLevel - kChartFilterMinLevel);
+    const float rounded = std::round(level * 10.0f) / 10.0f;
+    return rounded >= kChartFilterMaxLevel - 0.5f ? kChartFilterMaxLevel : rounded;
+}
+
+Rectangle level_filter_chip_rect(Rectangle range, float level) {
+    const float t = level_filter_t(level);
+    const float x = range.x + range.width * t;
+    return {x - 24.0f, range.y - 4.0f, 48.0f, 28.0f};
+}
+
+void draw_level_filter_gradient(Rectangle rect, unsigned char alpha) {
+    constexpr int kSegments = 48;
+    for (int i = 0; i < kSegments; ++i) {
+        const float from_level = kChartFilterUsefulMaxLevel * (static_cast<float>(i) / kSegments);
+        const float to_level = kChartFilterUsefulMaxLevel * (static_cast<float>(i + 1) / kSegments);
+        const float from_t = level_filter_t(from_level);
+        const float to_t = level_filter_t(to_level);
+        const Rectangle segment = {
+            rect.x + rect.width * from_t,
+            rect.y,
+            std::max(1.0f, rect.width * (to_t - from_t)),
+            rect.height,
+        };
+        DrawRectangleGradientH(static_cast<int>(segment.x), static_cast<int>(segment.y),
+                               static_cast<int>(std::ceil(segment.width)), static_cast<int>(segment.height),
+                               with_alpha(difficulty_level_color(from_level), alpha),
+                               with_alpha(difficulty_level_color(to_level), alpha));
+    }
+    const float useful_end_x = rect.x + rect.width * level_filter_t(kChartFilterUsefulMaxLevel);
+    ui::draw_rect_f({useful_end_x, rect.y, rect.x + rect.width - useful_end_x, rect.height},
+                    with_alpha({34, 38, 46, 255}, alpha));
+}
 constexpr Vector2 kSeedChartButtonsOffset = {81.0f, 240.0f};
 constexpr Vector2 kSeedRankingHeaderOffset = {522.0f, -276.0f};
 constexpr Vector2 kSeedRankingSourceLocalOffset = {627.0f, -285.0f};
@@ -442,12 +496,20 @@ void draw_play_filter_panel(const title_play_view::layout& current,
                                 with_alpha(t.row_soft_hover, normal_row_alpha),
                                 with_alpha(t.text, alpha), 1.0f);
     };
-    const auto draw_input_box = [&](Rectangle rect, const char* label, bool active) {
-        ui::draw_rect_f(rect, with_alpha(active ? button_selected : button_base,
-                                         active ? selected_row_alpha : normal_row_alpha));
-        ui::draw_rect_lines(rect, 1.0f, with_alpha(active ? t.border_active : t.border_light, alpha));
-        ui::draw_text_in_rect(label, 11, rect, with_alpha(active ? t.text : t.text_muted, alpha),
-                              ui::text_align::center);
+    const auto level_label = [](float level) {
+        if (level >= kChartFilterMaxLevel - 0.05f) {
+            return std::string("\xE2\x88\x9E");
+        }
+        return std::string(TextFormat("%.1f", level));
+    };
+    const auto draw_level_chip = [&](Rectangle rect, float level, bool max_chip) {
+        const std::string label = level_label(level);
+        const Color tone = max_chip && level >= kChartFilterMaxLevel - 0.05f
+                               ? t.text_muted
+                               : difficulty_level_color(level);
+        ui::draw_rect_f(rect, with_alpha(lerp_color(t.bg_alt, tone, 0.18f), alpha));
+        ui::draw_rect_lines(rect, 1.1f, with_alpha(tone, alpha));
+        ui::draw_text_in_rect(label.c_str(), 11, rect, with_alpha(tone, alpha), ui::text_align::center);
     };
 
     draw_heading("SOURCE", panel.y + 92.0f);
@@ -461,22 +523,12 @@ void draw_play_filter_panel(const title_play_view::layout& current,
                 state.chart_source == song_select::chart_source_filter::community);
 
     draw_heading("LEVEL", panel.y + 208.0f);
-    const float level_group_x = panel.x + (panel.width - 188.0f) * 0.5f;
-    draw_input_box({level_group_x, panel.y + 234.0f, 66.0f, 30.0f},
-                   TextFormat("%.0f", state.chart_min_level), false);
-    ui::draw_text_in_rect("-", 13,
-                          {level_group_x + 76.0f, panel.y + 234.0f, 18.0f, 30.0f},
-                          with_alpha(t.text_muted, alpha), ui::text_align::center);
-    draw_input_box({level_group_x + 122.0f, panel.y + 234.0f, 66.0f, 30.0f},
-                   TextFormat("%.0f", state.chart_max_level), false);
-    const Rectangle range = {panel.x + 44.0f, panel.y + 288.0f, panel.width - 88.0f, 8.0f};
-    const float min_t = (state.chart_min_level - 1.0f) / 9.0f;
-    const float max_t = (state.chart_max_level - 1.0f) / 9.0f;
-    ui::draw_rect_f(range, with_alpha(t.slider_track, alpha));
-    ui::draw_rect_f({range.x + range.width * min_t, range.y, range.width * (max_t - min_t), range.height},
-                    with_alpha(t.accent, alpha));
-    DrawCircleV({range.x + range.width * min_t, range.y + range.height * 0.5f}, 8.5f, with_alpha(t.accent, alpha));
-    DrawCircleV({range.x + range.width * max_t, range.y + range.height * 0.5f}, 8.5f, with_alpha(t.accent, alpha));
+    const Rectangle range = {panel.x + 52.0f, panel.y + 250.0f, panel.width - 104.0f, 24.0f};
+    const Rectangle track = {range.x, range.y + 5.0f, range.width, 14.0f};
+    ui::draw_rect_f(track, with_alpha(t.slider_track, alpha));
+    draw_level_filter_gradient(track, static_cast<unsigned char>(alpha / 2));
+    draw_level_chip(level_filter_chip_rect(range, state.chart_min_level), state.chart_min_level, false);
+    draw_level_chip(level_filter_chip_rect(range, state.chart_max_level), state.chart_max_level, true);
 
     draw_heading("KEYS", panel.y + 342.0f);
     const char* key_labels[] = {"ALL", "4K", "5K", "6K", "7K"};
@@ -491,8 +543,8 @@ void draw_play_filter_panel(const title_play_view::layout& current,
     const bool filters_active = state.chart_source != song_select::chart_source_filter::all ||
                                 !state.play_search_input.value.empty() ||
                                 state.chart_key_filter != 0 ||
-                                std::fabs(state.chart_min_level - 1.0f) > 0.001f ||
-                                std::fabs(state.chart_max_level - 10.0f) > 0.001f;
+                                std::fabs(state.chart_min_level - kChartFilterMinLevel) > 0.001f ||
+                                std::fabs(state.chart_max_level - kChartFilterMaxLevel) > 0.001f;
     draw_button({panel.x + 18.0f, panel.y + 456.0f, panel.width - 36.0f, 42.0f}, "CLEAR FILTERS", filters_active);
 }
 
@@ -519,7 +571,7 @@ Rectangle play_filter_clear_button_rect(Rectangle panel) {
 }
 
 Rectangle play_filter_level_slider_rect(Rectangle panel) {
-    return {panel.x + 44.0f, panel.y + 288.0f, panel.width - 88.0f, 8.0f};
+    return {panel.x + 34.0f, panel.y + 252.0f, panel.width - 68.0f, 18.0f};
 }
 
 bool apply_play_filter_change(song_select::state& state,
@@ -564,6 +616,12 @@ const char* difficulty_factor_label(const std::string& name) {
     if (name == "rhythm") {
         return "Rhythm";
     }
+    if (name == "tempo") {
+        return "Tempo";
+    }
+    if (name == "rest") {
+        return "No Rest";
+    }
     if (name == "overlap") {
         return "LN Mix";
     }
@@ -601,6 +659,9 @@ Color difficulty_factor_color(const std::string& name) {
     if (name == "stream" || name == "stamina") {
         return {70, 190, 230, 255};
     }
+    if (name == "tempo") {
+        return {82, 210, 214, 255};
+    }
     if (name == "pattern" || name == "rhythm") {
         return {168, 106, 245, 255};
     }
@@ -612,6 +673,9 @@ Color difficulty_factor_color(const std::string& name) {
     }
     if (name == "hand" || name == "balance") {
         return {245, 132, 78, 255};
+    }
+    if (name == "rest") {
+        return {225, 210, 90, 255};
     }
     if (name == "jump" || name == "chord") {
         return {96, 145, 238, 255};
@@ -643,7 +707,8 @@ std::optional<chart_difficulty::difficulty_breakdown> cached_difficulty_breakdow
 void draw_difficulty_breakdown(Rectangle rect,
                                const song_select::chart_option* chart,
                                unsigned char alpha,
-                               unsigned char normal_row_alpha) {
+                               unsigned char normal_row_alpha,
+                               float chart_change_anim_t) {
     const auto& t = *g_theme;
     ui::draw_text_in_rect("DIFFICULTY FACTORS", 11,
                           {rect.x, rect.y, rect.width, 15.0f},
@@ -661,7 +726,7 @@ void draw_difficulty_breakdown(Rectangle rect,
     constexpr float kRowHeight = 14.0f;
     constexpr float kLabelWidth = 88.0f;
     constexpr float kValueWidth = 34.0f;
-    constexpr float kFullBarContribution = 36.0f;
+    constexpr float kFullBarContribution = 4.0f;
     std::vector<const chart_difficulty::difficulty_factor_breakdown*> visible_factors;
     visible_factors.reserve(kVisibleRows);
     const chart_difficulty::difficulty_factor_breakdown* rhythm_factor = nullptr;
@@ -696,12 +761,26 @@ void draw_difficulty_breakdown(Rectangle rect,
         const Rectangle value_rect = {bar_track.x + bar_track.width + 6.0f, row_y - 1.0f,
                                       kValueWidth - 6.0f, kRowHeight};
         const float ratio = std::clamp(factor.average_contribution / kFullBarContribution, 0.0f, 1.0f);
+        const float raw_reveal_t = 1.0f - std::clamp(chart_change_anim_t, 0.0f, 1.0f);
+        const float row_delay = static_cast<float>(i) * 0.045f;
+        const float reveal_t = tween::ease_out_cubic(
+            std::clamp((raw_reveal_t - row_delay) / (1.0f - row_delay), 0.0f, 1.0f));
+        const float bar_width = bar_track.width * ratio * reveal_t;
         const Color factor_color = difficulty_factor_color(factor.name);
         ui::draw_text_in_rect(difficulty_factor_label(factor.name), 10, label_rect,
                               with_alpha(factor_color, alpha), ui::text_align::left);
         ui::draw_rect_f(bar_track, with_alpha(t.bg_alt, normal_row_alpha));
-        ui::draw_rect_f({bar_track.x, bar_track.y, bar_track.width * ratio, bar_track.height},
+        ui::draw_rect_f({bar_track.x, bar_track.y, bar_width, bar_track.height},
                         with_alpha(factor_color, alpha));
+        if (chart_change_anim_t > 0.001f && bar_width > 3.0f) {
+            const Rectangle sweep = {
+                bar_track.x + std::max(0.0f, bar_width - 10.0f),
+                bar_track.y,
+                std::min(10.0f, bar_width),
+                bar_track.height,
+            };
+            ui::draw_rect_f(sweep, with_alpha(WHITE, static_cast<unsigned char>(alpha / 3)));
+        }
         ui::draw_text_in_rect(TextFormat("%.1f", factor.average_contribution), 9, value_rect,
                               with_alpha(t.text_muted, alpha), ui::text_align::right);
     }
@@ -827,7 +906,7 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
 
     draw_difficulty_breakdown(
         {panel.x + 28.0f, panel.y + 370.0f, panel.width - 56.0f, 76.0f},
-        chart, alpha, normal_row_alpha);
+        chart, alpha, normal_row_alpha, state.chart_change_anim_t);
 
     const Rectangle best = best_score_rect(panel);
     ui::draw_rect_f(best, with_alpha(button_base, normal_row_alpha));
@@ -1077,8 +1156,8 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
             if (apply_play_filter_change(state,
                                          song_select::chart_source_filter::all,
                                          0,
-                                         1.0f,
-                                         10.0f,
+                                         kChartFilterMinLevel,
+                                         kChartFilterMaxLevel,
                                          result)) {
                 return result;
             }
@@ -1096,13 +1175,21 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
 
     if (view_mode == mode::play && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
         const Rectangle slider = play_filter_level_slider_rect(current.song_column);
-        const Rectangle hit_rect = {slider.x - 10.0f, slider.y - 14.0f, slider.width + 20.0f, slider.height + 28.0f};
-        if (CheckCollisionPointRec(mouse, hit_rect)) {
+        const Rectangle min_chip = level_filter_chip_rect(slider, state.chart_min_level);
+        const Rectangle max_chip = level_filter_chip_rect(slider, state.chart_max_level);
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (CheckCollisionPointRec(mouse, max_chip)) {
+                state.chart_level_filter_dragging = true;
+                state.chart_level_filter_dragging_min = false;
+            } else if (CheckCollisionPointRec(mouse, min_chip)) {
+                state.chart_level_filter_dragging = true;
+                state.chart_level_filter_dragging_min = true;
+            }
+        }
+        if (state.chart_level_filter_dragging) {
             const float ratio = std::clamp((mouse.x - slider.x) / slider.width, 0.0f, 1.0f);
-            const float level = std::round(1.0f + ratio * 9.0f);
-            const float min_distance = std::fabs(level - state.chart_min_level);
-            const float max_distance = std::fabs(level - state.chart_max_level);
-            const bool move_min = min_distance <= max_distance;
+            const float level = level_from_filter_t(ratio);
+            const bool move_min = state.chart_level_filter_dragging_min;
             const float next_min = move_min ? std::min(level, state.chart_max_level) : state.chart_min_level;
             const float next_max = move_min ? state.chart_max_level : std::max(level, state.chart_min_level);
             if (apply_play_filter_change(state, state.chart_source, state.chart_key_filter,
@@ -1110,6 +1197,9 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
                 return result;
             }
         }
+    }
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        state.chart_level_filter_dragging = false;
     }
 
     if (view_mode == mode::play) {

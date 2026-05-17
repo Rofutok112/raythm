@@ -798,7 +798,7 @@ void append_chart_contract_fields(std::vector<multipart_field>& fields,
     push_positive_float_field(fields, "maxBpm", chart.max_bpm);
     push_positive_float_field(fields, "calculatedLevel", chart.meta.level);
     fields.push_back({"difficultyRulesetId", "raythm-local"});
-    fields.push_back({"difficultyRulesetVersion", "12"});
+    fields.push_back({"difficultyRulesetVersion", "13"});
 
     if (const std::optional<std::string> chart_sha256 = updater::compute_sha256_hex(chart_path);
         chart_sha256.has_value()) {

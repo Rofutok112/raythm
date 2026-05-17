@@ -182,8 +182,10 @@ struct state {
     ui::text_input_state play_search_input;
     chart_source_filter chart_source = chart_source_filter::all;
     int chart_key_filter = 0;
-    float chart_min_level = 1.0f;
-    float chart_max_level = 10.0f;
+    float chart_min_level = 0.0f;
+    float chart_max_level = 99.0f;
+    bool chart_level_filter_dragging = false;
+    bool chart_level_filter_dragging_min = false;
     bool preview_bar_dragging = false;
     bool preview_bar_resume_after_drag = false;
     double preview_bar_drag_position_seconds = 0.0;
