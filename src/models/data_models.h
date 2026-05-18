@@ -73,6 +73,20 @@ struct timing_event {
     int denominator = 4;
 };
 
+enum class scroll_event_type {
+    speed,
+    stop
+};
+
+// 表示スクロールに影響する区間イベント。
+// 判定時刻や音楽時間には影響しない。
+struct scroll_event {
+    scroll_event_type type = scroll_event_type::speed;
+    int tick = 0;
+    int duration = 0;
+    float multiplier = 1.0f;
+};
+
 // ノート入力の種類。
 enum class note_type {
     tap,
@@ -120,6 +134,7 @@ inline bool note_covers_lane(const note_data& note, int lane) {
 struct chart_data {
     chart_meta meta;
     std::vector<timing_event> timing_events;
+    std::vector<scroll_event> scroll_events;
     std::vector<note_data> notes;
 };
 

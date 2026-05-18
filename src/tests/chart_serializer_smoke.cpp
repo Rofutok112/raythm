@@ -38,6 +38,13 @@ bool equal_timing_event(const timing_event& left, const timing_event& right) {
            left.denominator == right.denominator;
 }
 
+bool equal_scroll_event(const scroll_event& left, const scroll_event& right) {
+    return left.type == right.type &&
+           left.tick == right.tick &&
+           left.duration == right.duration &&
+           almost_equal(left.multiplier, right.multiplier);
+}
+
 bool equal_note(const note_data& left, const note_data& right) {
     return left.type == right.type &&
            left.tick == right.tick &&
@@ -50,12 +57,19 @@ bool equal_note(const note_data& left, const note_data& right) {
 bool equal_chart_data(const chart_data& left, const chart_data& right) {
     if (!equal_chart_meta(left.meta, right.meta) ||
         left.timing_events.size() != right.timing_events.size() ||
+        left.scroll_events.size() != right.scroll_events.size() ||
         left.notes.size() != right.notes.size()) {
         return false;
     }
 
     for (size_t i = 0; i < left.timing_events.size(); ++i) {
         if (!equal_timing_event(left.timing_events[i], right.timing_events[i])) {
+            return false;
+        }
+    }
+
+    for (size_t i = 0; i < left.scroll_events.size(); ++i) {
+        if (!equal_scroll_event(left.scroll_events[i], right.scroll_events[i])) {
             return false;
         }
     }
@@ -72,6 +86,13 @@ bool equal_chart_data(const chart_data& left, const chart_data& right) {
 chart_data normalized_chart(chart_data data) {
     std::stable_sort(data.timing_events.begin(), data.timing_events.end(), [](const timing_event& left, const timing_event& right) {
         return left.tick < right.tick;
+    });
+
+    std::stable_sort(data.scroll_events.begin(), data.scroll_events.end(), [](const scroll_event& left, const scroll_event& right) {
+        if (left.tick != right.tick) {
+            return left.tick < right.tick;
+        }
+        return left.type == scroll_event_type::speed && right.type == scroll_event_type::stop;
     });
 
     std::sort(data.notes.begin(), data.notes.end(), [](const note_data& left, const note_data& right) {
@@ -117,6 +138,11 @@ int main() {
         {.type = timing_event_type::bpm, .tick = 0, .bpm = 150.0f, .numerator = 4, .denominator = 4},
     };
 
+    source.scroll_events = {
+        {.type = scroll_event_type::stop, .tick = 1440, .duration = 120, .multiplier = 0.0f},
+        {.type = scroll_event_type::speed, .tick = 960, .duration = 480, .multiplier = 0.5f},
+    };
+
     note_data wide_tap{.type = note_type::tap, .tick = 1320, .lane = 1, .end_tick = 1320};
     wide_tap.lane_width = 2;
     source.notes = {
@@ -139,12 +165,14 @@ int main() {
     bool ok = true;
 
     ok = content.find("offset=-35") != std::string::npos && ok;
-    ok = content.find("formatVersion=2") != std::string::npos && ok;
+    ok = content.find("formatVersion=3") != std::string::npos && ok;
     ok = content.find("chartId=raythm_chart_serializer_smoke") != std::string::npos && ok;
     ok = content.find("songId=") == std::string::npos && ok;
     ok = content.find("level=") == std::string::npos && ok;
     ok = expect_contains_in_order(content, "chartId=", "keyCount=") && ok;
     ok = expect_contains_in_order(content, "meter,0,4/4", "bpm,960,180.5") && ok;
+    ok = expect_contains_in_order(content, "[Scroll]", "[Notes]") && ok;
+    ok = expect_contains_in_order(content, "speed,960,480,0.5", "stop,1440,120") && ok;
     ok = expect_contains_in_order(content, "tap,480,0", "hold,480,2,840") && ok;
     ok = content.find("release,960,0,ray") != std::string::npos && ok;
     ok = content.find("stay,1200,1") != std::string::npos && ok;
@@ -204,7 +232,7 @@ int main() {
 
     chart_data expected = normalized_chart(source);
     expected.meta.song_id.clear();
-    expected.meta.format_version = 2;
+    expected.meta.format_version = 3;
     if (!equal_chart_data(expected, *reparsed.data)) {
         std::cerr << "Round-trip chart data mismatch\n";
         ok = false;

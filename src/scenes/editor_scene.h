@@ -43,11 +43,16 @@ private:
     void rebuild_hit_regions() const;
     void apply_scroll_and_zoom(float dt);
     void select_timing_event(std::optional<size_t> index, bool scroll_into_view);
+    void select_scroll_event(std::optional<size_t> index, bool scroll_into_view);
     void scroll_to_tick(int tick);
     bool apply_selected_timing_event();
+    bool apply_selected_scroll_event();
     void add_timing_event(timing_event_type type);
+    void add_scroll_event(scroll_event_type type);
     void delete_selected_timing_event();
+    void delete_selected_scroll_event();
     bool can_delete_selected_timing_event() const;
+    bool can_delete_selected_scroll_event() const;
     void draw_timeline() const;
     bool has_active_metadata_input() const;
     bool apply_metadata_changes(bool clear_notes_for_key_count_change);

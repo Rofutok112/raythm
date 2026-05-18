@@ -224,6 +224,74 @@ bool expect_wide_note_bounds_failure() {
         return error.find("width extends beyond keyCount") != std::string::npos;
     });
 }
+
+bool expect_scroll_events_success() {
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "raythm_parser_scroll_events.rchart";
+    std::ofstream output(path, std::ios::trunc);
+    output << "[Metadata]\n"
+           << "chartId=parser-scroll-events\n"
+           << "keyCount=4\n"
+           << "difficulty=Scroll\n"
+           << "chartAuthor=Codex\n"
+           << "formatVersion=3\n"
+           << "resolution=480\n"
+           << "offset=0\n\n"
+           << "[Timing]\n"
+           << "bpm,0,120\n"
+           << "meter,0,4/4\n\n"
+           << "[Scroll]\n"
+           << "speed,480,960,2.0\n"
+           << "speed,1440,120,0.0\n"
+           << "stop,1920,240\n\n"
+           << "[Notes]\n"
+           << "tap,0,0\n";
+    output.close();
+
+    const chart_parse_result result = chart_parser::parse(path.string());
+    std::filesystem::remove(path);
+    if (!result.success || !result.data.has_value() || result.data->scroll_events.size() != 3) {
+        std::cerr << "Expected scroll events to parse\n";
+        return false;
+    }
+    return result.data->scroll_events[0].type == scroll_event_type::speed &&
+           result.data->scroll_events[0].duration == 960 &&
+           result.data->scroll_events[0].multiplier == 2.0f &&
+           result.data->scroll_events[1].type == scroll_event_type::stop &&
+           result.data->scroll_events[2].type == scroll_event_type::stop;
+}
+
+bool expect_scroll_event_validation_failure() {
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "raythm_parser_bad_scroll_event.rchart";
+    std::ofstream output(path, std::ios::trunc);
+    output << "[Metadata]\n"
+           << "chartId=parser-bad-scroll-event\n"
+           << "keyCount=4\n"
+           << "difficulty=Scroll\n"
+           << "chartAuthor=Codex\n"
+           << "formatVersion=3\n"
+           << "resolution=480\n"
+           << "offset=0\n\n"
+           << "[Timing]\n"
+           << "bpm,0,120\n"
+           << "meter,0,4/4\n\n"
+           << "[Scroll]\n"
+           << "speed,480,0,1.0\n\n"
+           << "[Notes]\n"
+           << "tap,0,0\n";
+    output.close();
+
+    const chart_parse_result result = chart_parser::parse(path.string());
+    std::filesystem::remove(path);
+    if (result.success) {
+        std::cerr << "Expected bad scroll event to fail\n";
+        return false;
+    }
+    return std::any_of(result.errors.begin(), result.errors.end(), [](const std::string& error) {
+        return error.find("duration must be greater than zero") != std::string::npos;
+    });
+}
 }
 
 int main() {
@@ -237,6 +305,8 @@ int main() {
     ok = expect_server_managed_metadata_success() && ok;
     ok = expect_wide_note_success() && ok;
     ok = expect_wide_note_bounds_failure() && ok;
+    ok = expect_scroll_events_success() && ok;
+    ok = expect_scroll_event_validation_failure() && ok;
 
     if (!ok) {
         return EXIT_FAILURE;

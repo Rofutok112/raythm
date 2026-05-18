@@ -96,6 +96,16 @@ std::optional<timing_event_type> parse_timing_type(const std::string& value) {
     return std::nullopt;
 }
 
+std::optional<scroll_event_type> parse_scroll_type(const std::string& value) {
+    if (value == "speed") {
+        return scroll_event_type::speed;
+    }
+    if (value == "stop") {
+        return scroll_event_type::stop;
+    }
+    return std::nullopt;
+}
+
 std::optional<note_type> parse_note_type(const std::string& value) {
     std::string normalized = value;
     std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
@@ -239,6 +249,9 @@ chart_parse_result chart_parser::parse(const std::string& file_path) {
     chart_data data;
     data.meta = parse_metadata(sections["Metadata"], errors);
     data.timing_events = parse_timing(sections["Timing"], errors);
+    if (sections.find("Scroll") != sections.end()) {
+        data.scroll_events = parse_scroll(sections["Scroll"], errors);
+    }
     data.notes = parse_notes(sections["Notes"], errors);
 
     if (errors.empty()) {
@@ -405,6 +418,58 @@ std::vector<timing_event> chart_parser::parse_timing(const std::vector<numbered_
     return events;
 }
 
+std::vector<scroll_event> chart_parser::parse_scroll(const std::vector<numbered_line>& lines, std::vector<std::string>& errors) {
+    std::vector<scroll_event> events;
+
+    for (const numbered_line& line : lines) {
+        const std::vector<std::string> tokens = split_csv_line(line.second);
+        if (tokens.empty()) {
+            continue;
+        }
+
+        const std::optional<scroll_event_type> type = parse_scroll_type(tokens[0]);
+        if (!type.has_value()) {
+            errors.push_back(format_line_error(line.first, "Unknown scroll event type: " + tokens[0]));
+            continue;
+        }
+
+        const size_t expected_fields = *type == scroll_event_type::speed ? 4 : 3;
+        if (tokens.size() != expected_fields) {
+            errors.push_back(format_line_error(line.first, "Scroll entry has an unexpected number of fields"));
+            continue;
+        }
+
+        const std::optional<int> tick = parse_int(tokens[1]);
+        const std::optional<int> duration = parse_int(tokens[2]);
+        if (!tick.has_value() || !duration.has_value()) {
+            errors.push_back(format_line_error(line.first, "Scroll tick and duration must be integers"));
+            continue;
+        }
+
+        scroll_event event;
+        event.type = *type;
+        event.tick = *tick;
+        event.duration = *duration;
+        event.multiplier = *type == scroll_event_type::stop ? 0.0f : 1.0f;
+
+        if (*type == scroll_event_type::speed) {
+            const std::optional<float> multiplier = parse_float(tokens[3]);
+            if (!multiplier.has_value()) {
+                errors.push_back(format_line_error(line.first, "Speed multiplier must be a number"));
+                continue;
+            }
+            event.multiplier = *multiplier;
+            if (event.multiplier == 0.0f) {
+                event.type = scroll_event_type::stop;
+            }
+        }
+
+        events.push_back(event);
+    }
+
+    return events;
+}
+
 std::vector<note_data> chart_parser::parse_notes(const std::vector<numbered_line>& lines, std::vector<std::string>& errors) {
     std::vector<note_data> notes;
 
@@ -489,6 +554,24 @@ std::vector<std::string> chart_parser::validate(const chart_data& data) {
 
         if (event.type == timing_event_type::meter && (event.numerator <= 0 || event.denominator <= 0)) {
             errors.push_back("Meter event must have positive numerator and denominator");
+        }
+    }
+
+    for (const scroll_event& event : data.scroll_events) {
+        if (event.tick < 0) {
+            errors.push_back("Scroll event tick must be zero or greater");
+        }
+
+        if (event.duration <= 0) {
+            errors.push_back("Scroll event duration must be greater than zero");
+        }
+
+        if (event.type == scroll_event_type::speed && event.multiplier <= 0.0f) {
+            errors.push_back("Speed event multiplier must be greater than zero");
+        }
+
+        if (event.type == scroll_event_type::stop && event.multiplier != 0.0f) {
+            errors.push_back("Stop event multiplier must be zero");
         }
     }
 

@@ -9,9 +9,12 @@
 
 struct editor_right_panel_view_model {
     const std::vector<timing_event>* timing_events = nullptr;
+    const std::vector<scroll_event>* scroll_events = nullptr;
     const editor_meter_map* meter_map = nullptr;
     std::optional<size_t> selected_event_index;
+    std::optional<size_t> selected_scroll_event_index;
     bool delete_enabled = false;
+    bool scroll_delete_enabled = false;
     Vector2 mouse = {};
 };
 

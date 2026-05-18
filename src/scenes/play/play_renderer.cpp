@@ -819,14 +819,16 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
                     }
 
                     const Color note_color_for_type = note_draw_color(note_state, note_color);
-                    const float head_z = static_cast<float>(judgement_z + state.lane_speed * (note_state.target_ms - visual_ms));
+                    const double head_visual_ms = state.scroll_map.visual_ms_at(note_state.target_ms);
+                    const float head_z = static_cast<float>(judgement_z + state.lane_speed * (head_visual_ms - visual_ms));
                     const float center_x = note_center_x(note_state.note_ref, state.key_count);
                     const float visual_width = note_visual_width(note_state.note_ref);
                     const float body_width = note_body_width(note_state.note_ref);
                     const float hold_body_width = note_hold_body_width(note_state.note_ref);
 
                     if (note_state.note_ref.type == note_type::hold) {
-                        const double tail_target_ms = state.timing_engine.tick_to_ms(note_state.note_ref.end_tick);
+                        const double tail_target_ms =
+                            state.scroll_map.visual_ms_at(state.timing_engine.tick_to_ms(note_state.note_ref.end_tick));
                         const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_ms));
                         const float visual_head_z = note_state.is_holding() ? judgement_z : head_z;
                         const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);

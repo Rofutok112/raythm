@@ -28,6 +28,17 @@ const char* timing_type_name(timing_event_type type) {
     return "";
 }
 
+const char* scroll_type_name(scroll_event_type type) {
+    switch (type) {
+        case scroll_event_type::speed:
+            return "speed";
+        case scroll_event_type::stop:
+            return "stop";
+    }
+
+    return "";
+}
+
 const char* note_type_name(note_type type) {
     switch (type) {
         case note_type::tap:
@@ -65,7 +76,8 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
                note.is_ray ||
                note_lane_width(note) > 1;
     });
-    output << "formatVersion=" << std::max(data.meta.format_version, needs_format_v2 ? 2 : 1) << '\n';
+    const int required_format_version = data.scroll_events.empty() ? (needs_format_v2 ? 2 : 1) : 3;
+    output << "formatVersion=" << std::max(data.meta.format_version, required_format_version) << '\n';
     output << "resolution=" << data.meta.resolution << '\n';
     output << "offset=" << data.meta.offset << '\n';
     output << '\n';
@@ -86,6 +98,26 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
         output << '\n';
     }
     output << '\n';
+
+    if (!data.scroll_events.empty()) {
+        std::vector<scroll_event> sorted_scroll = data.scroll_events;
+        std::stable_sort(sorted_scroll.begin(), sorted_scroll.end(), [](const scroll_event& left, const scroll_event& right) {
+            if (left.tick != right.tick) {
+                return left.tick < right.tick;
+            }
+            return left.type == scroll_event_type::speed && right.type == scroll_event_type::stop;
+        });
+
+        output << "[Scroll]\n";
+        for (const scroll_event& event : sorted_scroll) {
+            output << scroll_type_name(event.type) << ',' << event.tick << ',' << event.duration;
+            if (event.type == scroll_event_type::speed) {
+                output << ',' << format_float(event.multiplier);
+            }
+            output << '\n';
+        }
+        output << '\n';
+    }
 
     std::vector<note_data> sorted_notes = data.notes;
     std::sort(sorted_notes.begin(), sorted_notes.end(), [](const note_data& left, const note_data& right) {

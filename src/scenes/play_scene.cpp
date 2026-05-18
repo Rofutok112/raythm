@@ -478,10 +478,11 @@ void play_scene::draw() {
 }
 
 double play_scene::get_visual_ms() const {
+    double source_ms = state_.current_ms;
     if (state_.intro_playing) {
-        return state_.start_ms - static_cast<double>(state_.intro_timer) * 1000.0;
+        source_ms = state_.start_ms - static_cast<double>(state_.intro_timer) * 1000.0;
     }
-    return state_.current_ms;
+    return state_.scroll_map.visual_ms_at(source_ms);
 }
 
 void play_scene::apply_navigation(play_navigation_request navigation) {

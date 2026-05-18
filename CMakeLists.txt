@@ -718,6 +718,9 @@ add_executable(play_note_draw_queue_smoke
         src/models/data_models.h
         src/scenes/play/play_note_draw_queue.cpp
         src/scenes/play/play_note_draw_queue.h
+        src/scenes/play/play_scroll_map.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
         src/tests/play_note_draw_queue_smoke.cpp)
 
 add_executable(play_chart_filter_smoke
@@ -816,6 +819,8 @@ add_executable(editor_timeline_controller_smoke
         src/ui/ui_clip.h
         src/ui/ui_font.cpp
         src/ui/ui_font.h
+        src/localization/localization.cpp
+        src/localization/localization.h
         src/core/app_paths.cpp
         src/core/app_paths.h
         src/scenes/virtual_screen.cpp

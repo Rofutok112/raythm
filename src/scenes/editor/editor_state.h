@@ -28,6 +28,10 @@ public:
     bool remove_timing_event(size_t index);
     bool modify_timing_event(size_t index, timing_event event);
 
+    void add_scroll_event(scroll_event event);
+    bool remove_scroll_event(size_t index);
+    bool modify_scroll_event(size_t index, scroll_event event);
+
     bool modify_metadata(chart_meta meta, bool clear_notes = false);
 
     const chart_data& data() const;

@@ -271,6 +271,7 @@ struct editor_timeline_result {
     int seek_tick = 0;
     bool scroll_seek_if_paused = false;
     bool request_apply_selected_timing = false;
+    bool request_apply_selected_scroll = false;
     std::optional<note_data> note_to_add;
     std::optional<size_t> note_to_modify_index;
     std::optional<note_data> note_to_modify;
@@ -293,8 +294,13 @@ struct editor_timing_panel_actions {
 
 struct editor_timing_panel_update_result {
     std::optional<size_t> select_timing_event_index;
+    std::optional<size_t> select_scroll_event_index;
     bool request_add_bpm = false;
     bool request_add_meter = false;
+    bool request_add_speed = false;
+    bool request_add_stop = false;
     bool request_delete_selected = false;
+    bool request_delete_selected_scroll = false;
     bool request_apply_selected = false;
+    bool request_apply_selected_scroll = false;
 };
