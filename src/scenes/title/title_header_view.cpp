@@ -7,6 +7,9 @@
 #include "theme.h"
 #include "tween.h"
 #include "ui_draw.h"
+#include "virtual_screen.h"
+
+#include "rlgl.h"
 
 namespace {
 
@@ -20,34 +23,23 @@ constexpr float kSubtitleHeight = 45.0f;
 constexpr float kPlaySubtitleInsetX = 12.0f;
 constexpr float kPlaySubtitleOffsetY = 153.0f;
 constexpr float kPlaySubtitleHeight = 36.0f;
-constexpr float kAccountBorderWidth = 3.0f;
-constexpr float kAvatarOffsetX = 18.0f;
-constexpr float kAvatarOffsetY = 13.5f;
-constexpr float kAvatarSize = 60.0f;
-constexpr float kAvatarRadius = 30.0f;
-constexpr float kAccountTextOffsetX = 96.0f;
-constexpr float kAccountTextRightReserved = 132.0f;
-constexpr float kAccountNameOffsetY = 12.0f;
-constexpr float kAccountNameHeight = 33.0f;
-constexpr float kAccountStatusOffsetY = 45.0f;
-constexpr float kAccountStatusHeight = 24.0f;
-constexpr float kAccountArrowRightInset = 36.0f;
-constexpr float kAccountArrowOffsetY = 18.0f;
-constexpr float kAccountArrowWidth = 18.0f;
-constexpr float kAccountArrowHeight = 36.0f;
-constexpr float kSettingsBorderWidth = 3.0f;
-constexpr float kRefreshIconRadius = 20.0f;
+constexpr float kTopBarHeight = 70.0f;
+constexpr float kAvatarSize = 42.0f;
+constexpr float kAvatarRadius = 21.0f;
+constexpr float kRefreshIconRadius = 15.0f;
 constexpr int kRefreshIconSegments = 24;
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kRefreshHeadRotation = 75.0f * kPi / 180.0f;
 constexpr int kSettingsGearTeeth = 8;
 
-void draw_chip_background(Rectangle rect, Color bg, Color border, unsigned char alpha) {
+void draw_top_bar_item_background(Rectangle rect, Color bg, unsigned char alpha) {
     const bool hovered = ui::is_hovered(rect);
     const bool pressed = ui::is_pressed(rect);
     const Rectangle visual = pressed ? ui::inset(rect, 1.5f) : rect;
-    ui::draw_rect_f(visual, with_alpha(hovered ? bg : g_theme->panel, alpha));
-    ui::draw_rect_lines(visual, kSettingsBorderWidth, with_alpha(border, alpha));
+    if (hovered || pressed) {
+        const float intensity = pressed ? 0.52f : 0.38f;
+        ui::draw_rect_f(visual, with_alpha(bg, static_cast<unsigned char>(static_cast<float>(alpha) * intensity)));
+    }
 }
 
 void draw_refresh_icon(Rectangle rect, Color color, unsigned char alpha) {
@@ -93,12 +85,12 @@ void draw_refresh_icon(Rectangle rect, Color color, unsigned char alpha) {
 void draw_settings_icon(Rectangle rect, Color color, unsigned char alpha) {
     const Vector2 center = {rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
     const Color icon = with_alpha(color, alpha);
-    constexpr float ring_radius = 16.0f;
-    constexpr float tooth_inner_radius = 15.0f;
-    constexpr float tooth_outer_radius = 27.0f;
-    constexpr float tooth_width = 10.0f;
+    constexpr float ring_radius = 11.0f;
+    constexpr float tooth_inner_radius = 12.0f;
+    constexpr float tooth_outer_radius = 20.0f;
+    constexpr float tooth_width = 7.0f;
 
-    DrawRing(center, ring_radius - 8.0f, ring_radius + 4.0f, 0.0f, 360.0f, 48, icon);
+    DrawRing(center, ring_radius - 5.0f, ring_radius + 2.5f, 0.0f, 360.0f, 48, icon);
 
     for (int i = 0; i < kSettingsGearTeeth; ++i) {
         const float angle = (static_cast<float>(i) / static_cast<float>(kSettingsGearTeeth)) * kPi * 2.0f;
@@ -112,6 +104,68 @@ void draw_settings_icon(Rectangle rect, Color color, unsigned char alpha) {
         };
         DrawLineEx(a, b, tooth_width, icon);
     }
+}
+
+void draw_profile_chevron(Rectangle rect, Color color, unsigned char alpha) {
+    const Color icon = with_alpha(color, alpha);
+    const Vector2 a = {rect.x + rect.width * 0.5f - 4.0f, rect.y + rect.height * 0.5f - 7.0f};
+    const Vector2 b = {rect.x + rect.width * 0.5f + 4.0f, rect.y + rect.height * 0.5f};
+    const Vector2 c = {rect.x + rect.width * 0.5f - 4.0f, rect.y + rect.height * 0.5f + 7.0f};
+    DrawLineEx(a, b, 2.5f, icon);
+    DrawLineEx(b, c, 2.5f, icon);
+}
+
+void draw_top_bar_controls(const title_header_view::draw_config& config) {
+    const auto& t = *g_theme;
+    const float bar_t = std::max(config.menu_t, config.play_t);
+    const unsigned char account_alpha = static_cast<unsigned char>(255.0f * bar_t);
+    const Rectangle visible = virtual_screen::visible_rect();
+    const Rectangle top_bar = {visible.x, visible.y, visible.width, kTopBarHeight};
+    const Color bar_color = lerp_color(t.panel, BLACK, 0.58f);
+    const Color bar_text = lerp_color(t.text, WHITE, 0.76f);
+    const Color bar_muted = lerp_color(t.text_muted, WHITE, 0.54f);
+    ui::draw_rect_f(top_bar, with_alpha(bar_color, static_cast<unsigned char>(235.0f * bar_t)));
+    ui::draw_rect_f({top_bar.x, top_bar.y + top_bar.height - 2.0f, top_bar.width, 2.0f},
+                    with_alpha(t.border, static_cast<unsigned char>(150.0f * bar_t)));
+
+    draw_top_bar_item_background(config.settings_chip_rect, t.row_hover, account_alpha);
+    const Rectangle settings_visual = ui::is_pressed(config.settings_chip_rect)
+        ? ui::inset(config.settings_chip_rect, 1.5f)
+        : config.settings_chip_rect;
+    draw_settings_icon(settings_visual,
+                       ui::is_hovered(config.settings_chip_rect) ? bar_text : bar_muted,
+                       account_alpha);
+
+    draw_top_bar_item_background(config.refresh_chip_rect, t.row_hover, account_alpha);
+    const Rectangle refresh_visual = ui::is_pressed(config.refresh_chip_rect)
+        ? ui::inset(config.refresh_chip_rect, 1.5f)
+        : config.refresh_chip_rect;
+    draw_refresh_icon(refresh_visual,
+                      ui::is_hovered(config.refresh_chip_rect) ? bar_text : bar_muted, account_alpha);
+
+    draw_top_bar_item_background(config.account_chip_rect, t.row_hover, account_alpha);
+    const Rectangle avatar_rect = {config.account_chip_rect.x + 16.0f,
+                                   config.account_chip_rect.y + 14.0f,
+                                   kAvatarSize, kAvatarSize};
+    const Vector2 avatar_center = {avatar_rect.x + avatar_rect.width * 0.5f, avatar_rect.y + avatar_rect.height * 0.5f};
+    DrawCircleV(avatar_center, kAvatarRadius, with_alpha(config.logged_in ? t.accent : t.row_selected, account_alpha));
+    ui::draw_text_in_rect(std::string(config.avatar_label).c_str(), 14, avatar_rect,
+                          with_alpha(config.logged_in ? t.panel : bar_text, account_alpha), ui::text_align::center);
+    const Rectangle account_name_rect = {
+        avatar_rect.x + avatar_rect.width + 14.0f, config.account_chip_rect.y + 8.0f,
+        config.account_chip_rect.width - 104.0f, 30.0f
+    };
+    ui::draw_text_in_rect(std::string(config.account_name).c_str(), 20, account_name_rect,
+                          with_alpha(bar_text, account_alpha), ui::text_align::left);
+    ui::draw_text_in_rect(std::string(config.account_status).c_str(),
+                          13,
+                          {avatar_rect.x + avatar_rect.width + 14.0f, config.account_chip_rect.y + 41.0f,
+                           config.account_chip_rect.width - 104.0f, 20.0f},
+                          with_alpha(config.logged_in && !config.email_verified ? t.error : bar_muted, account_alpha),
+                          ui::text_align::left);
+    draw_profile_chevron({config.account_chip_rect.x + config.account_chip_rect.width - 28.0f,
+                          config.account_chip_rect.y, 28.0f, config.account_chip_rect.height},
+                         bar_muted, account_alpha);
 }
 
 }  // namespace
@@ -169,50 +223,23 @@ void draw(const draw_config& config) {
                               subtitle_pos, subtitle_font_size, 0.0f, subtitle_color);
     }
 
+}
+
+void draw_screen_overlay(const draw_config& config) {
     if (config.menu_t <= 0.01f) {
         return;
     }
 
-    const unsigned char account_alpha = static_cast<unsigned char>(255.0f * std::max(config.menu_t, config.play_t));
-    draw_chip_background(config.settings_chip_rect, t.row_hover, t.border, account_alpha);
-    const Rectangle settings_visual = ui::is_pressed(config.settings_chip_rect)
-        ? ui::inset(config.settings_chip_rect, 1.5f)
-        : config.settings_chip_rect;
-    draw_settings_icon(settings_visual,
-                       ui::is_hovered(config.settings_chip_rect) ? t.text : t.text_secondary,
-                       account_alpha);
+    const float scale = std::max(0.001f, virtual_screen::design_to_screen_scale());
+    const Rectangle visible = virtual_screen::visible_rect();
+    const float offset_x = -visible.x * scale;
+    const float offset_y = static_cast<float>(virtual_screen::top_reserved_pixels()) - visible.y * scale;
 
-    draw_chip_background(config.refresh_chip_rect, t.row_hover, t.border, account_alpha);
-    const Rectangle refresh_visual = ui::is_pressed(config.refresh_chip_rect)
-        ? ui::inset(config.refresh_chip_rect, 1.5f)
-        : config.refresh_chip_rect;
-    draw_refresh_icon(refresh_visual, ui::is_hovered(config.refresh_chip_rect) ? t.text : t.text_secondary, account_alpha);
-
-    ui::draw_rect_f(config.account_chip_rect, with_alpha(t.panel, account_alpha));
-    ui::draw_rect_lines(config.account_chip_rect, kAccountBorderWidth, with_alpha(t.border, account_alpha));
-    const Rectangle avatar_rect = {config.account_chip_rect.x + kAvatarOffsetX,
-                                   config.account_chip_rect.y + kAvatarOffsetY,
-                                   kAvatarSize, kAvatarSize};
-    const Vector2 avatar_center = {avatar_rect.x + avatar_rect.width * 0.5f, avatar_rect.y + avatar_rect.height * 0.5f};
-    DrawCircleV(avatar_center, kAvatarRadius, with_alpha(config.logged_in ? t.accent : t.row_selected, account_alpha));
-    ui::draw_text_in_rect(std::string(config.avatar_label).c_str(), 18, avatar_rect,
-                          with_alpha(config.logged_in ? t.panel : t.text, account_alpha), ui::text_align::center);
-    const Rectangle account_name_rect = {
-        config.account_chip_rect.x + kAccountTextOffsetX, config.account_chip_rect.y + kAccountNameOffsetY,
-        config.account_chip_rect.width - kAccountTextRightReserved, kAccountNameHeight
-    };
-    draw_marquee_text(std::string(config.account_name).c_str(), account_name_rect, 18,
-                      with_alpha(t.text, account_alpha), config.now);
-    ui::draw_text_in_rect(std::string(config.account_status).c_str(),
-                          13,
-                          {config.account_chip_rect.x + kAccountTextOffsetX, config.account_chip_rect.y + kAccountStatusOffsetY,
-                           config.account_chip_rect.width - kAccountTextRightReserved, kAccountStatusHeight},
-                          with_alpha(config.logged_in && !config.email_verified ? t.error : t.text_muted, account_alpha),
-                          ui::text_align::left);
-    ui::draw_text_in_rect(">", 18,
-                          {config.account_chip_rect.x + config.account_chip_rect.width - kAccountArrowRightInset,
-                           config.account_chip_rect.y + kAccountArrowOffsetY, kAccountArrowWidth, kAccountArrowHeight},
-                          with_alpha(t.text_muted, account_alpha), ui::text_align::center);
+    rlPushMatrix();
+    rlTranslatef(offset_x, offset_y, 0.0f);
+    rlScalef(scale, scale, 1.0f);
+    draw_top_bar_controls(config);
+    rlPopMatrix();
 }
 
 }  // namespace title_header_view

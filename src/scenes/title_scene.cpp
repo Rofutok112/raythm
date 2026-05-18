@@ -966,27 +966,29 @@ void title_scene::draw() {
     const Rectangle settings_chip_rect = title_layout::settings_chip_rect();
     const Rectangle refresh_chip_rect = title_layout::refresh_chip_rect();
     const Rectangle account_chip_rect = title_layout::account_chip_rect();
+    const bool draw_title_header = mode_ != hub_mode::settings;
+    const title_header_view::draw_config header_config = {
+        .closed_header_rect = title_layout::closed_header_rect(),
+        .open_header_rect = title_layout::open_header_rect(),
+        .refresh_chip_rect = refresh_chip_rect,
+        .settings_chip_rect = settings_chip_rect,
+        .account_chip_rect = account_chip_rect,
+        .menu_t = menu_t,
+        .play_t = play_t,
+        .account_name = account_name_for(play_state_.auth),
+        .account_status = account_status_for(play_state_.auth),
+        .avatar_label = make_avatar_label(play_state_.auth),
+        .logged_in = play_state_.auth.logged_in,
+        .email_verified = play_state_.auth.email_verified,
+        .now = GetTime(),
+    };
     virtual_screen::begin_ui();
     draw_scene_background(t);
     ui::begin_draw_queue();
     const float spectrum_alpha = tween::lerp(1.0f, 0.5f, play_t);
     audio_controller_.draw_spectrum(spectrum_rect, spectrum_alpha);
-    if (mode_ != hub_mode::settings) {
-        title_header_view::draw({
-            .closed_header_rect = title_layout::closed_header_rect(),
-            .open_header_rect = title_layout::open_header_rect(),
-            .refresh_chip_rect = refresh_chip_rect,
-            .settings_chip_rect = settings_chip_rect,
-            .account_chip_rect = account_chip_rect,
-            .menu_t = menu_t,
-            .play_t = play_t,
-            .account_name = account_name_for(play_state_.auth),
-            .account_status = account_status_for(play_state_.auth),
-            .avatar_label = make_avatar_label(play_state_.auth),
-            .logged_in = play_state_.auth.logged_in,
-            .email_verified = play_state_.auth.email_verified,
-            .now = GetTime(),
-        });
+    if (draw_title_header) {
+        title_header_view::draw(header_config);
 
         if (!startup_loading_) {
             title_home_view::draw(home_menu_anim_, play_view_anim_, home_menu_selected_index_, home_status_message_);
@@ -1051,6 +1053,9 @@ void title_scene::draw() {
 
     ClearBackground(BLACK);
     virtual_screen::draw_to_screen();
+    if (draw_title_header) {
+        title_header_view::draw_screen_overlay(header_config);
+    }
 }
 
 void title_scene::draw_startup_loading(float dt) {
