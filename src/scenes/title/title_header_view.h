@@ -23,5 +23,6 @@ struct draw_config {
 };
 
 void draw(const draw_config& config);
+void draw_screen_overlay(const draw_config& config);
 
 }  // namespace title_header_view

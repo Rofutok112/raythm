@@ -2,6 +2,7 @@
 
 #include "scene_common.h"
 #include "ui_draw.h"
+#include "virtual_screen.h"
 
 namespace title_layout {
 
@@ -15,13 +16,9 @@ constexpr float kOpenHeaderHeight = 255.0f;
 constexpr Vector2 kOpenHeaderOffset = {108.0f, 126.0f};
 constexpr float kPlayHeaderY = 78.0f;
 constexpr float kSpectrumHeight = 498.0f;
-constexpr float kAccountChipWidth = 396.0f;
-constexpr float kAccountChipHeight = 87.0f;
-constexpr Vector2 kAccountChipOffset = {-42.0f, 30.0f};
-constexpr float kSettingsChipSize = 87.0f;
-constexpr float kSettingsChipGap = 18.0f;
-constexpr float kRefreshChipSize = 87.0f;
-constexpr float kRefreshChipGap = 18.0f;
+constexpr float kTopBarHeight = 70.0f;
+constexpr float kTopBarButtonSize = 70.0f;
+constexpr float kAccountChipWidth = 292.0f;
 
 }  // namespace
 
@@ -58,29 +55,33 @@ Rectangle spectrum_rect() {
 }
 
 Rectangle settings_chip_rect() {
-    const Rectangle account = account_chip_rect();
+    const Rectangle visible = virtual_screen::visible_rect();
     return {
-        account.x - kSettingsChipGap - kSettingsChipSize,
-        account.y,
-        kSettingsChipSize,
-        kSettingsChipSize
+        visible.x,
+        visible.y,
+        kTopBarButtonSize,
+        kTopBarHeight
     };
 }
 
 Rectangle refresh_chip_rect() {
-    const Rectangle settings = settings_chip_rect();
+    const Rectangle visible = virtual_screen::visible_rect();
     return {
-        settings.x - kRefreshChipGap - kRefreshChipSize,
-        settings.y,
-        kRefreshChipSize,
-        kRefreshChipSize
+        visible.x + kTopBarButtonSize,
+        visible.y,
+        kTopBarButtonSize,
+        kTopBarHeight
     };
 }
 
 Rectangle account_chip_rect() {
-    return ui::place(screen_rect(), kAccountChipWidth, kAccountChipHeight,
-                     ui::anchor::top_right, ui::anchor::top_right,
-                     kAccountChipOffset);
+    const Rectangle visible = virtual_screen::visible_rect();
+    return {
+        visible.x + visible.width - kAccountChipWidth,
+        visible.y,
+        kAccountChipWidth,
+        kTopBarHeight
+    };
 }
 
 }  // namespace title_layout
