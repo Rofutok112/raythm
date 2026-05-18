@@ -77,6 +77,10 @@ song select の一覧は [song_catalog_service.cpp](C:/Users/rento/CLionProjects
 
 して song select state に渡します。
 
+ローカルカタログDBは `song.json` 側の制作者設定 `offset` と `timingEvents`
+もキャッシュします。BPM範囲や難易度計算は、楽曲側タイミングがある場合は
+それを優先し、旧 `.rchart` 内タイミングは後方互換のフォールバックとして扱います。
+
 ## What The Loader Expects
 
 実際の読み込みは [song_loader.cpp](C:/Users/rento/CLionProjects/raythm/src/gameplay/song_loader.cpp) が担当します。
@@ -86,7 +90,9 @@ song select の一覧は [song_catalog_service.cpp](C:/Users/rento/CLionProjects
 - 譜面拡張子は `.rchart` のみ
 - 楽曲ディレクトリには `song.json` が必要
 - `song.json` には `songId`, `title`, `artist`, `audioFile`, `jacketFile`, `baseBpm`, `previewStartMs`, `songVersion` が必要
+- `song.json` には任意で `offset` と `timingEvents` を持てる。これは制作者設定の楽曲オフセットと BPM/拍子イベント
 - `.rchart` には `chartId`, `keyCount`, `difficulty`, `chartAuthor`, `formatVersion`, `resolution`, `offset` が必要
+- `.rchart` の `offset` と `[Timing]` は旧形式互換として残り、楽曲側の `offset` / `timingEvents` がない場合に使われる
 - 譜面と曲の紐づけは `songs/<songId>/charts/*.rchart` の配置とローカルカタログDBで決まり、`.rchart` 内の `songId` は使いません
 
 ## MV Package Layout

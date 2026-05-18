@@ -188,6 +188,27 @@ std::string format_float_field(float value) {
     return stream.str();
 }
 
+std::string timing_events_json_field(const std::vector<timing_event>& events) {
+    std::ostringstream stream;
+    stream << '[';
+    for (size_t index = 0; index < events.size(); ++index) {
+        const timing_event& event = events[index];
+        if (index > 0) {
+            stream << ',';
+        }
+        stream << "{\"type\":\"";
+        if (event.type == timing_event_type::bpm) {
+            stream << "bpm\",\"tick\":" << event.tick << ",\"bpm\":" << format_float_field(event.bpm);
+        } else {
+            stream << "meter\",\"tick\":" << event.tick << ",\"numerator\":" << event.numerator
+                   << ",\"denominator\":" << event.denominator;
+        }
+        stream << '}';
+    }
+    stream << ']';
+    return stream.str();
+}
+
 void push_string_field(std::vector<multipart_field>& fields,
                        const std::string& name,
                        const std::string& value) {
@@ -705,6 +726,12 @@ upload_request_result send_song_upload_request(const auth::session& session,
         push_string_field(fields, "keywords", keyword);
     }
     fields.push_back({"baseBpm", format_float_field(meta.base_bpm)});
+    if (meta.has_offset) {
+        fields.push_back({"offset", std::to_string(meta.offset)});
+    }
+    if (!meta.timing_events.empty()) {
+        fields.push_back({"timingEvents", timing_events_json_field(meta.timing_events)});
+    }
     if (meta.duration_seconds > 0.0f) {
         fields.push_back({"durationSec", std::to_string(static_cast<int>(meta.duration_seconds + 0.5f))});
     }

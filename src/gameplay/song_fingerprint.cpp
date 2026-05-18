@@ -116,6 +116,87 @@ std::optional<std::string> extract_json_number_token(std::string_view content, s
     return token_value;
 }
 
+std::optional<std::string> extract_json_array(std::string_view content, std::string_view key) {
+    const std::string token = "\"" + std::string(key) + "\"";
+    const size_t key_pos = content.find(token);
+    if (key_pos == std::string_view::npos) {
+        return std::nullopt;
+    }
+
+    const size_t colon_pos = content.find(':', key_pos + token.size());
+    if (colon_pos == std::string_view::npos) {
+        return std::nullopt;
+    }
+
+    size_t value_start = colon_pos + 1;
+    while (value_start < content.size() && std::isspace(static_cast<unsigned char>(content[value_start])) != 0) {
+        ++value_start;
+    }
+    if (value_start >= content.size() || content[value_start] != '[') {
+        return std::nullopt;
+    }
+
+    bool in_string = false;
+    bool escaped = false;
+    int depth = 0;
+    for (size_t index = value_start; index < content.size(); ++index) {
+        const char ch = content[index];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (in_string && ch == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch == '"') {
+            in_string = !in_string;
+            continue;
+        }
+        if (in_string) {
+            continue;
+        }
+        if (ch == '[') {
+            ++depth;
+        } else if (ch == ']') {
+            --depth;
+            if (depth == 0) {
+                return std::string(content.substr(value_start, index - value_start + 1));
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+std::string compact_json_token(std::string_view value) {
+    std::string result;
+    result.reserve(value.size());
+    bool in_string = false;
+    bool escaped = false;
+    for (const char ch : value) {
+        if (escaped) {
+            result.push_back(ch);
+            escaped = false;
+            continue;
+        }
+        if (in_string && ch == '\\') {
+            result.push_back(ch);
+            escaped = true;
+            continue;
+        }
+        if (ch == '"') {
+            in_string = !in_string;
+            result.push_back(ch);
+            continue;
+        }
+        if (!in_string && std::isspace(static_cast<unsigned char>(ch)) != 0) {
+            continue;
+        }
+        result.push_back(ch);
+    }
+    return result;
+}
+
 std::optional<double> parse_number(const std::string& value) {
     try {
         size_t parsed = 0;
@@ -150,6 +231,8 @@ std::string format_number(double value) {
 
 std::string canonical_string(std::string_view content) {
     const std::optional<std::string> base_bpm = extract_json_number_token(content, "baseBpm");
+    const std::optional<std::string> offset = extract_json_number_token(content, "offset");
+    const std::optional<std::string> timing_events = extract_json_array(content, "timingEvents");
     const std::optional<std::string> duration_sec = extract_json_number_token(content, "durationSec");
     const std::optional<std::string> preview_start_ms = extract_json_number_token(content, "previewStartMs");
     const std::optional<std::string> song_version = extract_json_number_token(content, "songVersion");
@@ -169,6 +252,15 @@ std::string canonical_string(std::string_view content) {
             canonical_bpm = format_number(*parsed);
         } else {
             canonical_bpm = *base_bpm;
+        }
+    }
+
+    std::string canonical_offset;
+    if (offset.has_value()) {
+        if (const std::optional<int> parsed = parse_int(*offset)) {
+            canonical_offset = std::to_string(*parsed);
+        } else {
+            canonical_offset = *offset;
         }
     }
 
@@ -194,6 +286,8 @@ std::string canonical_string(std::string_view content) {
     out << "title=" << extract_json_string(content, "title").value_or("") << '\n'
         << "artist=" << extract_json_string(content, "artist").value_or("") << '\n'
         << "baseBpm=" << canonical_bpm << '\n'
+        << "offset=" << canonical_offset << '\n'
+        << "timingEvents=" << (timing_events.has_value() ? compact_json_token(*timing_events) : "") << '\n'
         << "durationSec=" << canonical_duration << '\n'
         << "previewStartMs=" << preview_ms << '\n'
         << "songVersion=" << canonical_version;

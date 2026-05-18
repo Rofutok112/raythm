@@ -18,7 +18,7 @@ editor_header_view_result editor_header_view::draw(const editor_header_view_mode
                          t.text, model.audio_loaded ? t.text_secondary : t.text_muted, 56.0f);
 
     const ui::selector_state chart_offset = ui::draw_value_selector(
-        layout::kChartOffsetRect, "Offset", model.offset_label,
+        layout::kChartOffsetRect, "Song Offset", model.offset_label,
         16, 24.0f, 68.0f, 10.0f);
     result.offset_left_clicked = chart_offset.left.clicked;
     result.offset_right_clicked = chart_offset.right.clicked;

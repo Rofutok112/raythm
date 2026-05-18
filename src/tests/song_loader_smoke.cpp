@@ -190,6 +190,13 @@ int main() {
     written_meta.keywords = {"Boss song"};
     written_meta.duration_seconds = 123.0f;
     written_meta.base_bpm = 128.0f;
+    written_meta.offset = -25;
+    written_meta.has_offset = true;
+    written_meta.timing_events = {
+        {timing_event_type::bpm, 0, 128.0f, 4, 4},
+        {timing_event_type::meter, 0, 0.0f, 4, 4},
+        {timing_event_type::bpm, 960, 160.0f, 4, 4},
+    };
     written_meta.audio_file = "audio.ogg";
     written_meta.jacket_file = "jacket.png";
     written_meta.preview_start_ms = 0;
@@ -221,14 +228,33 @@ int main() {
             std::cerr << "Expected song writer to persist durationSec in song.json\n";
             ok = false;
         }
+        if (written_content.find("\"offset\": -25") == std::string::npos ||
+            written_content.find("\"timingEvents\"") == std::string::npos) {
+            std::cerr << "Expected song writer to persist song-level offset and timingEvents\n";
+            ok = false;
+        }
         if (written_content.find("sns") != std::string::npos) {
             std::cerr << "Expected song writer to omit legacy SNS fields\n";
             ok = false;
         }
         const song_load_result written_load_result = song_loader::load_directory(written_song_dir.string());
         if (written_load_result.songs.size() != 1 ||
-            written_load_result.songs.front().meta.duration_seconds != 123.0f) {
-            std::cerr << "Expected song loader to parse durationSec from song.json\n";
+            written_load_result.songs.front().meta.duration_seconds != 123.0f ||
+            !written_load_result.songs.front().meta.has_offset ||
+            written_load_result.songs.front().meta.offset != -25 ||
+            written_load_result.songs.front().meta.timing_events.size() != 3) {
+            std::cerr << "Expected song loader to parse durationSec, offset, and timingEvents from song.json"
+                      << " (songs=" << written_load_result.songs.size();
+            if (!written_load_result.songs.empty()) {
+                std::cerr << ", duration=" << written_load_result.songs.front().meta.duration_seconds
+                          << ", hasOffset=" << written_load_result.songs.front().meta.has_offset
+                          << ", offset=" << written_load_result.songs.front().meta.offset
+                          << ", timingCount=" << written_load_result.songs.front().meta.timing_events.size();
+            }
+            std::cerr << ")\n";
+            for (const std::string& error : written_load_result.errors) {
+                std::cerr << "  " << error << '\n';
+            }
             ok = false;
         }
     }

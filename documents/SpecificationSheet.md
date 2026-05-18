@@ -64,6 +64,8 @@ Song/
 | `title`          | `string` | 楽曲タイトル        |
 | `artist`         | `string` | アーティスト名       |
 | `baseBpm`        | `float`  | 基準BPM         |
+| `offset`         | `int`    | 制作者設定の楽曲オフセット（ms） |
+| `timingEvents`   | `array`  | BPM/拍子変更イベント |
 | `audioFile`      | `string` | 音源ファイル名       |
 | `jacketFile`     | `string` | ジャケット画像ファイル名  |
 | `previewStartMs` | `int`    | 選曲画面プレビュー開始位置 |
@@ -112,7 +114,7 @@ Song/
 | `chartAuthor`   | `string` | 譜面作者              |
 | `formatVersion` | `int`    | フォーマットバージョン       |
 | `resolution`    | `int`    | tick解像度（ファイルごと指定） |
-| `offset`        | `int`    | 譜面オフセット（ms）       |
+| `offset`        | `int`    | 旧形式互換用の譜面オフセット（ms） |
 
 `songId` は譜面ファイルには保存しない。ローカルでは
 `songs/<songId>/charts/*.rchart` の配置とカタログDB、サーバーでは
@@ -121,7 +123,11 @@ Song/
 `level` は譜面ファイルには保存しない。実行時またはサーバー側で譜面内容から
 `calculatedLevel` として計算し、表示用メタとして扱う。
 
-#### `[Timing]` — タイミングイベント（`TimingEvent`）
+#### `[Timing]` — 旧形式互換タイミングイベント（`TimingEvent`）
+
+BPM/拍子変更は楽曲固有情報として `song.json` の `timingEvents` を優先する。
+既存譜面との互換性のため、`song.json` に `timingEvents` がない場合は
+`.rchart` の `[Timing]` を使用する。
 
 | イベント種別  | パラメータ         | 説明    |
 |---------|---------------|-------|

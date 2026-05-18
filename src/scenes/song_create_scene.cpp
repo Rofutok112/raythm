@@ -148,6 +148,10 @@ bool int_filter(int codepoint, const std::string&) {
     return codepoint >= '0' && codepoint <= '9';
 }
 
+bool signed_int_filter(int codepoint, const std::string& value) {
+    return (codepoint >= '0' && codepoint <= '9') || (codepoint == '-' && value.find('-') == std::string::npos);
+}
+
 bool wide_text_filter(int codepoint, const std::string&) {
     return codepoint >= 32;
 }
@@ -339,6 +343,30 @@ std::string key_count_label(int key_count) {
     return key_count == 6 ? "6K" : "4K";
 }
 
+void ensure_base_timing_events(song_meta& meta, float base_bpm) {
+    const float bpm = std::max(base_bpm, 120.0f);
+    bool found_tick_zero_bpm = false;
+    bool found_tick_zero_meter = false;
+    for (timing_event& event : meta.timing_events) {
+        if (event.tick != 0) {
+            continue;
+        }
+        if (event.type == timing_event_type::bpm) {
+            event.bpm = bpm;
+            found_tick_zero_bpm = true;
+        } else if (event.type == timing_event_type::meter) {
+            found_tick_zero_meter = true;
+        }
+    }
+    if (!found_tick_zero_bpm) {
+        meta.timing_events.insert(meta.timing_events.begin(),
+                                  {timing_event_type::bpm, 0, bpm, 4, 4});
+    }
+    if (!found_tick_zero_meter) {
+        meta.timing_events.push_back({timing_event_type::meter, 0, 0.0f, 4, 4});
+    }
+}
+
 bool paths_match(const fs::path& left, const fs::path& right) {
     std::error_code ec;
     if (fs::exists(left, ec) && fs::exists(right, ec)) {
@@ -457,6 +485,7 @@ song_create_scene::song_create_scene(scene_manager& manager, song_data song_to_e
     selected_genres_ = normalize_genres_for_editor(meta);
     selected_keywords_ = normalize_keywords_for_editor(meta);
     bpm_input_.value = meta.base_bpm > 0.0f ? TextFormat("%.6g", meta.base_bpm) : "";
+    offset_input_.value = std::to_string(meta.has_offset ? meta.offset : 0);
     preview_ms_input_.value = std::to_string(meta.preview_start_ms);
 
     if (!meta.audio_file.empty()) {
@@ -554,8 +583,17 @@ void song_create_scene::draw_song_metadata() {
     draw_keyword_editor(make_custom_row(y, 104.0f), selected_keywords_, keyword_input_);
     y += 104.0f + kRowGap;
 
-    ui::draw_text_input(make_custom_row(y, kRowHeight), bpm_input_, "BPM", "120.0",
-                        nullptr, kLayer, 16, 16, numeric_filter, kTextInputLabelWidth);
+    {
+        const Rectangle row = make_custom_row(y, kRowHeight);
+        const float gap = 12.0f;
+        const float half_width = (row.width - gap) * 0.5f;
+        ui::draw_text_input({row.x, row.y, half_width, row.height}, bpm_input_,
+                            "Song BPM", "120.0", nullptr, kLayer, 16, 16,
+                            numeric_filter, 112.0f);
+        ui::draw_text_input({row.x + half_width + gap, row.y, half_width, row.height}, offset_input_,
+                            "Song Offset", "0", "0", kLayer, 16, 10,
+                            signed_int_filter, 128.0f);
+    }
     y += kRowHeight + kRowGap;
 
     {
@@ -698,6 +736,16 @@ bool song_create_scene::create_song() {
         }
     }
 
+    int offset_ms = 0;
+    if (!offset_input_.value.empty()) {
+        try {
+            offset_ms = std::stoi(offset_input_.value);
+        } catch (...) {
+            error_ = "Invalid song offset value.";
+            return false;
+        }
+    }
+
     const std::string song_id = generate_uuid();
     app_paths::ensure_directories();
     const fs::path song_dir = app_paths::song_dir(song_id);
@@ -732,6 +780,9 @@ bool song_create_scene::create_song() {
     meta.genre = meta.genres.empty() ? "" : meta.genres.front();
     meta.keywords = selected_keywords_;
     meta.base_bpm = base_bpm;
+    meta.offset = offset_ms;
+    meta.has_offset = true;
+    ensure_base_timing_events(meta, base_bpm);
     meta.audio_file = audio_filename;
     meta.jacket_file = jacket_filename;
     meta.preview_start_ms = preview_ms;
@@ -795,6 +846,16 @@ bool song_create_scene::save_song_edits() {
         }
     }
 
+    int offset_ms = 0;
+    if (!offset_input_.value.empty()) {
+        try {
+            offset_ms = std::stoi(offset_input_.value);
+        } catch (...) {
+            error_ = "Invalid song offset value.";
+            return false;
+        }
+    }
+
     std::string audio_filename = editing_song_->meta.audio_file;
     const fs::path current_audio_path = path_utils::join_utf8(editing_song_->directory, editing_song_->meta.audio_file);
     if (!paths_match(audio_source, current_audio_path)) {
@@ -839,6 +900,9 @@ bool song_create_scene::save_song_edits() {
     meta.genre = meta.genres.empty() ? "" : meta.genres.front();
     meta.keywords = selected_keywords_;
     meta.base_bpm = base_bpm;
+    meta.offset = offset_ms;
+    meta.has_offset = true;
+    ensure_base_timing_events(meta, base_bpm);
     meta.audio_file = audio_filename;
     meta.jacket_file = jacket_filename;
     meta.preview_start_ms = preview_ms;

@@ -589,6 +589,8 @@ add_executable(local_catalog_database_smoke
         src/core/app_paths.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
         src/scenes/song_select/local_catalog_database.cpp
         src/scenes/song_select/local_catalog_database.h
         src/scenes/song_select/song_select_state.cpp

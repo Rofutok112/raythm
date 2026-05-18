@@ -44,6 +44,7 @@ private:
     ui::text_input_state genre_search_input_;
     ui::text_input_state keyword_input_;
     ui::text_input_state bpm_input_;
+    ui::text_input_state offset_input_;
     ui::text_input_state audio_path_input_;
     ui::text_input_state jacket_path_input_;
     ui::text_input_state preview_ms_input_;

@@ -8,11 +8,21 @@ namespace {
 
 std::optional<size_t> find_key_end(const std::string& content, const std::string& key) {
     const std::string token = "\"" + key + "\"";
-    const size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
-        return std::nullopt;
+    size_t search_start = 0;
+    while (true) {
+        const size_t key_pos = content.find(token, search_start);
+        if (key_pos == std::string::npos) {
+            return std::nullopt;
+        }
+        size_t prefix = key_pos;
+        while (prefix > 0 && std::isspace(static_cast<unsigned char>(content[prefix - 1]))) {
+            --prefix;
+        }
+        if (prefix == 0 || content[prefix - 1] == '{' || content[prefix - 1] == ',') {
+            return key_pos + token.size();
+        }
+        search_start = key_pos + token.size();
     }
-    return key_pos + token.size();
 }
 
 }  // namespace

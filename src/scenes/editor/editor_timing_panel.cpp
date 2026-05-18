@@ -90,7 +90,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         ui::draw_text_in_rect(label, 16, label_rect,
                               selected ? t.text : t.text_secondary, ui::text_align::left);
 
-        const char* display_value = state.bar_pick_mode ? "Click TL" : value.c_str();
+        const char* display_value = state.bar_pick_mode ? "Pick timeline" : value.c_str();
         const Color value_color = state.bar_pick_mode ? t.accent : (value.empty() ? t.text_hint : t.text);
         ui::draw_text_in_rect(display_value, 16,
                               ui::inset(input_rect, ui::edge_insets::symmetric(0.0f, 10.0f)),
@@ -193,7 +193,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
                            t.scrollbar_track, t.scrollbar_thumb, 28.0f);
     };
 
-    draw_event_list(timing_box, "Timing Events", model.items,
+    draw_event_list(timing_box, "Song Timing", model.items,
                     state.list_scroll_offset, state.list_scrollbar_dragging,
                     state.list_scrollbar_drag_offset, false);
 
@@ -217,10 +217,10 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         timing_button_width,
         28.0f
     };
-    if (ui::draw_button(add_bpm_rect, "BPM", 14).clicked) {
+    if (ui::draw_button(add_bpm_rect, "Add BPM", 14).clicked) {
         result.add_bpm = true;
     }
-    if (ui::draw_button(add_meter_rect, "Meter", 14).clicked) {
+    if (ui::draw_button(add_meter_rect, "Add Meter", 14).clicked) {
         result.add_meter = true;
     }
     const ui::button_state delete_button = ui::draw_button_colored(
@@ -272,7 +272,10 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
     }
 
     ui::draw_section(editor_box);
-    ui::draw_text_in_rect("Event Editor", 22,
+    const char* editor_title = model.selected_scroll_event.has_value()
+        ? "Scroll Event Editor"
+        : (model.selected_event.has_value() ? "Song Timing Editor" : "Event Editor");
+    ui::draw_text_in_rect(editor_title, 22,
                           {editor_box.x + 12.0f, editor_box.y + 10.0f, editor_box.width - 24.0f, 28.0f},
                           t.text, ui::text_align::left);
 
@@ -327,7 +330,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
                                   t.error, ui::text_align::left);
         }
     } else {
-        ui::draw_text_in_rect("Select an event from either list.", 18,
+        ui::draw_text_in_rect("Select a song timing or scroll event.", 18,
                               {editor_box.x + 12.0f, editor_box.y + 54.0f, editor_box.width - 24.0f, 24.0f},
                               t.text_hint, ui::text_align::left);
     }
