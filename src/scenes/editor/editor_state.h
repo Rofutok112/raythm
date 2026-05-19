@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "editor_command.h"
 #include "timing_engine.h"
@@ -21,8 +23,11 @@ public:
     bool can_redo() const;
 
     void add_note(note_data note);
+    void add_notes(std::vector<note_data> notes);
     bool remove_note(size_t index);
+    bool remove_notes(std::vector<size_t> indices);
     bool modify_note(size_t index, note_data note);
+    bool modify_notes(std::vector<std::pair<size_t, note_data>> updates);
 
     void add_timing_event(timing_event event);
     bool remove_timing_event(size_t index);
@@ -40,6 +45,8 @@ public:
 
     int snap_tick(int raw_tick, int division) const;
     bool has_note_overlap(const note_data& note, std::optional<size_t> ignore_index = std::nullopt) const;
+    bool has_note_overlap(const note_data& note, const std::vector<size_t>& ignore_indices) const;
+    bool has_note_overlap(const std::vector<note_data>& notes, const std::vector<size_t>& ignore_indices = {}) const;
 
     bool is_dirty() const;
     const std::string& file_path() const;

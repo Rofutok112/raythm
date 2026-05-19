@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <vector>
 
 #include "theme.h"
@@ -238,8 +239,23 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
     ui::draw_rect_f(ui::inset(model.metrics.panel_rect, 10.0f), t.section);
     {
         ui::scoped_clip_rect clip_scope(content);
+        const std::set<size_t> selected_note_indices(
+            model.selected_note_indices.begin(), model.selected_note_indices.end());
 
         draw_waveform(model, content, t);
+        if (model.loop_end_tick > model.loop_start_tick &&
+            model.loop_end_tick >= model.min_tick && model.loop_start_tick <= model.max_tick) {
+            const float start_y = model.metrics.tick_to_y(model.loop_start_tick);
+            const float end_y = model.metrics.tick_to_y(model.loop_end_tick);
+            const float top = std::min(start_y, end_y);
+            const float height = std::max(8.0f, std::fabs(end_y - start_y));
+            const Rectangle band = {content.x, top, content.width, height};
+            ui::draw_rect_f(band, with_alpha(t.success, model.loop_enabled ? 38 : 18));
+            ui::draw_rect_lines(band, model.loop_enabled ? 2.0f : 1.0f,
+                                with_alpha(t.success, model.loop_enabled ? 210 : 120));
+            ui::draw_text_f(model.loop_enabled ? "LOOP" : "loop", band.x + band.width - 58.0f, band.y + 5.0f,
+                            14, model.loop_enabled ? t.text : t.text_secondary);
+        }
         draw_scroll_events(model, content, t);
 
         for (int lane = 0; lane < std::max(1, model.metrics.key_count); ++lane) {
@@ -275,7 +291,8 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             }
 
             const editor_timeline_note_draw_info info = model.metrics.note_rects(note);
-            const bool selected = model.selected_note_index.has_value() && *model.selected_note_index == i;
+            const bool selected = selected_note_indices.find(i) != selected_note_indices.end() ||
+                                  (model.selected_note_index.has_value() && *model.selected_note_index == i);
             Color head_fill = selected ? t.row_active : t.note_color;
             if (!selected && note.type == editor_timeline_note_type::release) {
                 head_fill = lerp_color(t.note_color, t.judge_great, 0.35f);

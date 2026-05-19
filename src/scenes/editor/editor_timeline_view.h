@@ -68,8 +68,12 @@ struct editor_timeline_view_model {
     std::vector<editor_timeline_scroll_event> scroll_events;
     std::vector<editor_timeline_note> notes;
     std::optional<size_t> selected_note_index;
+    std::vector<size_t> selected_note_indices;
     std::optional<size_t> selected_scroll_event_index;
     std::optional<int> playback_tick;
+    bool loop_enabled = false;
+    int loop_start_tick = 0;
+    int loop_end_tick = 0;
     const audio_waveform_summary* waveform_summary = nullptr;
     const timing_engine* timing_engine = nullptr;
     bool waveform_visible = false;

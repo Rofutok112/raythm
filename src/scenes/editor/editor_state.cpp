@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <set>
 #include <utility>
 
 namespace {
@@ -71,6 +72,25 @@ private:
     note_data note_;
 };
 
+class add_notes_command final : public editor_command {
+public:
+    add_notes_command(chart_data& chart, std::vector<note_data> notes) : chart_(chart), notes_(std::move(notes)) {}
+
+    void execute() override {
+        chart_.notes.insert(chart_.notes.end(), notes_.begin(), notes_.end());
+    }
+
+    void undo() override {
+        if (notes_.size() <= chart_.notes.size()) {
+            chart_.notes.erase(chart_.notes.end() - static_cast<std::ptrdiff_t>(notes_.size()), chart_.notes.end());
+        }
+    }
+
+private:
+    chart_data& chart_;
+    std::vector<note_data> notes_;
+};
+
 class remove_note_command final : public editor_command {
 public:
     remove_note_command(chart_data& chart, size_t index) : chart_(chart), index_(index), removed_(chart.notes[index]) {}
@@ -87,6 +107,36 @@ private:
     chart_data& chart_;
     size_t index_ = 0;
     note_data removed_;
+};
+
+class remove_notes_command final : public editor_command {
+public:
+    remove_notes_command(chart_data& chart, std::vector<size_t> indices) : chart_(chart), indices_(std::move(indices)) {
+        std::sort(indices_.begin(), indices_.end());
+        indices_.erase(std::unique(indices_.begin(), indices_.end()), indices_.end());
+        removed_.reserve(indices_.size());
+        for (const size_t index : indices_) {
+            removed_.push_back(chart_.notes[index]);
+        }
+    }
+
+    void execute() override {
+        for (size_t i = indices_.size(); i > 0; --i) {
+            const size_t index = indices_[i - 1];
+            chart_.notes.erase(chart_.notes.begin() + static_cast<std::ptrdiff_t>(index));
+        }
+    }
+
+    void undo() override {
+        for (size_t i = 0; i < indices_.size(); ++i) {
+            chart_.notes.insert(chart_.notes.begin() + static_cast<std::ptrdiff_t>(indices_[i]), removed_[i]);
+        }
+    }
+
+private:
+    chart_data& chart_;
+    std::vector<size_t> indices_;
+    std::vector<note_data> removed_;
 };
 
 class modify_note_command final : public editor_command {
@@ -107,6 +157,37 @@ private:
     size_t index_ = 0;
     note_data before_;
     note_data after_;
+};
+
+class modify_notes_command final : public editor_command {
+public:
+    modify_notes_command(chart_data& chart, std::vector<std::pair<size_t, note_data>> updates)
+        : chart_(chart), updates_(std::move(updates)) {
+        std::sort(updates_.begin(), updates_.end(), [](const auto& left, const auto& right) {
+            return left.first < right.first;
+        });
+        before_.reserve(updates_.size());
+        for (const auto& update : updates_) {
+            before_.push_back(chart_.notes[update.first]);
+        }
+    }
+
+    void execute() override {
+        for (const auto& update : updates_) {
+            chart_.notes[update.first] = update.second;
+        }
+    }
+
+    void undo() override {
+        for (size_t i = 0; i < updates_.size(); ++i) {
+            chart_.notes[updates_[i].first] = before_[i];
+        }
+    }
+
+private:
+    chart_data& chart_;
+    std::vector<std::pair<size_t, note_data>> updates_;
+    std::vector<note_data> before_;
 };
 
 class add_timing_event_command final : public editor_command {
@@ -330,6 +411,15 @@ void editor_state::add_note(note_data note) {
     sync_dirty_flag();
 }
 
+void editor_state::add_notes(std::vector<note_data> notes) {
+    if (notes.empty()) {
+        return;
+    }
+
+    history_.push(std::make_unique<add_notes_command>(chart_, std::move(notes)));
+    sync_dirty_flag();
+}
+
 bool editor_state::remove_note(size_t index) {
     if (index >= chart_.notes.size()) {
         return false;
@@ -340,12 +430,50 @@ bool editor_state::remove_note(size_t index) {
     return true;
 }
 
+bool editor_state::remove_notes(std::vector<size_t> indices) {
+    if (indices.empty()) {
+        return false;
+    }
+
+    std::sort(indices.begin(), indices.end());
+    indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+    if (std::any_of(indices.begin(), indices.end(), [this](size_t index) {
+            return index >= chart_.notes.size();
+        })) {
+        return false;
+    }
+
+    history_.push(std::make_unique<remove_notes_command>(chart_, std::move(indices)));
+    sync_dirty_flag();
+    return true;
+}
+
 bool editor_state::modify_note(size_t index, note_data note) {
     if (index >= chart_.notes.size()) {
         return false;
     }
 
     history_.push(std::make_unique<modify_note_command>(chart_, index, std::move(note)));
+    sync_dirty_flag();
+    return true;
+}
+
+bool editor_state::modify_notes(std::vector<std::pair<size_t, note_data>> updates) {
+    if (updates.empty()) {
+        return false;
+    }
+
+    std::sort(updates.begin(), updates.end(), [](const auto& left, const auto& right) {
+        return left.first < right.first;
+    });
+    for (size_t i = 0; i < updates.size(); ++i) {
+        if (updates[i].first >= chart_.notes.size() ||
+            (i > 0 && updates[i - 1].first == updates[i].first)) {
+            return false;
+        }
+    }
+
+    history_.push(std::make_unique<modify_notes_command>(chart_, std::move(updates)));
     sync_dirty_flag();
     return true;
 }
@@ -425,14 +553,23 @@ int editor_state::snap_tick(int raw_tick, int division) const {
 }
 
 bool editor_state::has_note_overlap(const note_data& note, std::optional<size_t> ignore_index) const {
+    std::vector<size_t> ignore_indices;
+    if (ignore_index.has_value()) {
+        ignore_indices.push_back(*ignore_index);
+    }
+    return has_note_overlap(note, ignore_indices);
+}
+
+bool editor_state::has_note_overlap(const note_data& note, const std::vector<size_t>& ignore_indices) const {
     if (note.lane < 0 || note.lane >= chart_.meta.key_count ||
         note_lane_width(note) <= 0 || note_last_lane(note) >= chart_.meta.key_count) {
         return true;
     }
 
+    const std::set<size_t> ignored(ignore_indices.begin(), ignore_indices.end());
     const note_span candidate = make_note_span(note);
     for (size_t i = 0; i < chart_.notes.size(); ++i) {
-        if (ignore_index.has_value() && *ignore_index == i) {
+        if (ignored.find(i) != ignored.end()) {
             continue;
         }
 
@@ -447,6 +584,22 @@ bool editor_state::has_note_overlap(const note_data& note, std::optional<size_t>
         }
     }
 
+    return false;
+}
+
+bool editor_state::has_note_overlap(const std::vector<note_data>& notes, const std::vector<size_t>& ignore_indices) const {
+    for (size_t i = 0; i < notes.size(); ++i) {
+        if (has_note_overlap(notes[i], ignore_indices)) {
+            return true;
+        }
+        for (size_t j = i + 1; j < notes.size(); ++j) {
+            if (lanes_overlap(notes[i], notes[j]) &&
+                spans_overlap(make_note_span(notes[i]), make_note_span(notes[j])) &&
+                !overlap_allowed(notes[i], notes[j])) {
+                return true;
+            }
+        }
+    }
     return false;
 }
 

@@ -126,6 +126,18 @@ editor_session_load_result load(const editor_start_request& request) {
     result.ticks_per_pixel = request.resume_state.has_value() ? request.resume_state->ticks_per_pixel : 2.0f;
     result.snap_index = request.resume_state.has_value() ? request.resume_state->snap_index : 4;
     result.selected_note_index = request.resume_state.has_value() ? request.resume_state->selected_note_index : std::nullopt;
+    result.selected_note_indices = request.resume_state.has_value() ? request.resume_state->selected_note_indices : std::vector<size_t>{};
+    if (result.selected_note_indices.empty() && result.selected_note_index.has_value()) {
+        result.selected_note_indices.push_back(*result.selected_note_index);
+    }
+    result.selected_note_indices.erase(
+        std::remove_if(result.selected_note_indices.begin(), result.selected_note_indices.end(), [&](size_t index) {
+            return index >= result.state->data().notes.size();
+        }),
+        result.selected_note_indices.end());
+    if (result.selected_note_index.has_value() && *result.selected_note_index >= result.state->data().notes.size()) {
+        result.selected_note_index.reset();
+    }
 
     if (request.resume_state.has_value()) {
         result.chart_path = result.state->file_path().empty()
@@ -169,6 +181,7 @@ editor_session_load_result load(const editor_start_request& request) {
         result.timing_panel,
         result.metadata_panel,
         result.selected_note_index,
+        result.selected_note_indices,
     };
     editor_scene_sync::sync_metadata_inputs(sync_context);
     editor_scene_sync::load_timing_event_inputs(sync_context);

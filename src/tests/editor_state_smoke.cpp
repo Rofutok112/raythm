@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include "editor/editor_state.h"
 
@@ -193,6 +194,44 @@ int main() {
         std::cerr << "state should return to clean after undoing back to the saved point\n";
         return EXIT_FAILURE;
     }
+
+    std::vector<note_data> batch_notes = {
+        {note_type::tap, 960, 0, 960},
+        {note_type::tap, 1080, 1, 1080},
+    };
+    state.add_notes(batch_notes);
+    if (state.data().notes.size() != 4 || !state.is_dirty()) {
+        std::cerr << "add_notes should append notes as one edit\n";
+        return EXIT_FAILURE;
+    }
+    if (!state.undo() || state.data().notes.size() != 2 || state.is_dirty()) {
+        std::cerr << "undo should revert add_notes as one edit\n";
+        return EXIT_FAILURE;
+    }
+    if (!state.redo() || state.data().notes.size() != 4) {
+        std::cerr << "redo should restore add_notes\n";
+        return EXIT_FAILURE;
+    }
+    if (!state.remove_notes({2, 3}) || state.data().notes.size() != 2) {
+        std::cerr << "remove_notes should remove a selected batch\n";
+        return EXIT_FAILURE;
+    }
+    if (!state.undo() || state.data().notes.size() != 4) {
+        std::cerr << "undo should restore removed batch notes\n";
+        return EXIT_FAILURE;
+    }
+    if (!state.modify_notes({{2, {note_type::tap, 1200, 0, 1200}},
+                             {3, {note_type::tap, 1320, 1, 1320}}}) ||
+        state.data().notes[2].tick != 1200 || state.data().notes[3].tick != 1320) {
+        std::cerr << "modify_notes should update a selected batch\n";
+        return EXIT_FAILURE;
+    }
+    if (state.modify_notes({{2, {note_type::tap, 1200, 0, 1200}},
+                            {2, {note_type::tap, 1320, 1, 1320}}})) {
+        std::cerr << "modify_notes should reject duplicate indices\n";
+        return EXIT_FAILURE;
+    }
+    state.mark_saved("assets/charts/editor_state_saved.rchart");
 
     state.add_note({note_type::tap, 840, 1, 840});
     if (state.can_redo()) {

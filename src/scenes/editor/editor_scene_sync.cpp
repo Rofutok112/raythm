@@ -99,6 +99,7 @@ void load_scroll_event_inputs(editor_scene_sync_context context) {
 
 void sync_after_history_change(editor_scene_sync_context context) {
     context.selected_note_index.reset();
+    context.selected_note_indices.clear();
     sync_timing_event_selection(context);
     sync_metadata_inputs(context);
     context.meter_map.rebuild(context.state.data());
@@ -117,6 +118,7 @@ void sync_after_timing_change(editor_scene_sync_context context) {
 void sync_after_metadata_change(editor_scene_sync_context context, bool key_count_changed) {
     if (key_count_changed) {
         context.selected_note_index.reset();
+        context.selected_note_indices.clear();
     }
 
     context.metadata_panel.error.clear();

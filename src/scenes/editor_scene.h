@@ -81,6 +81,8 @@ private:
     editor_timeline_viewport_state viewport_;
     bool snap_dropdown_open_ = false;
     std::optional<size_t> selected_note_index_;
+    std::vector<size_t> selected_note_indices_;
+    std::vector<note_data> clipboard_notes_;
     editor_timeline_note_drag_state timeline_drag_;
     editor_note_palette_selection note_palette_;
     metadata_panel_state metadata_panel_;

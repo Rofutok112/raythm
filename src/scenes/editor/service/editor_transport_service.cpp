@@ -30,6 +30,9 @@ editor_transport_context build_context(const editor_transport_state& transport,
         : transport.previous_audio_playing;
     context.hitsound_path = &hitsound_path;
     context.hitsounds = hitsounds;
+    context.loop_enabled = transport.loop_enabled;
+    context.loop_start_tick = transport.loop_start_tick;
+    context.loop_end_tick = transport.loop_end_tick;
     if (transport.audio_loaded && audio_manager::instance().is_bgm_loaded()) {
         context.bgm_clock = audio_manager::instance().get_bgm_clock();
         context.bgm_length_seconds = audio_manager::instance().get_bgm_length_seconds();
@@ -48,6 +51,10 @@ void apply_result(editor_transport_state& transport,
     transport.previous_playback_tick = result.previous_playback_tick;
     transport.previous_audio_playing = result.previous_audio_playing;
     transport.audio_length_tick = result.audio_length_tick;
+
+    if (result.seek_bgm_seconds.has_value() && result.loop_seeked) {
+        audio_manager::instance().seek_bgm(*result.seek_bgm_seconds);
+    }
 
     if (!result.hitsound_requests.empty()) {
         for (const editor_hitsound_request& request : result.hitsound_requests) {

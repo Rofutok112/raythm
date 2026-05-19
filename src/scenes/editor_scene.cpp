@@ -103,6 +103,10 @@ void editor_scene::on_enter() {
     viewport_.scrollbar_drag_offset = 0.0f;
     snap_dropdown_open_ = false;
     selected_note_index_ = load_result.selected_note_index;
+    selected_note_indices_ = load_result.selected_note_indices;
+    if (selected_note_indices_.empty() && selected_note_index_.has_value()) {
+        selected_note_indices_.push_back(*selected_note_index_);
+    }
     timeline_drag_ = {};
     resume_state_.reset();
 }
@@ -163,6 +167,8 @@ void editor_scene::update(float dt) {
         timing_panel_,
         timeline_drag_,
         selected_note_index_,
+        selected_note_indices_,
+        clipboard_notes_,
         transport_,
         space_playback_start_tick_,
         hitsound_path_,
@@ -172,6 +178,12 @@ void editor_scene::update(float dt) {
         IsKeyPressed(KEY_SPACE),
         IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
         IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
+        IsKeyPressed(KEY_C),
+        IsKeyPressed(KEY_V),
+        IsKeyPressed(KEY_D),
+        IsKeyPressed(KEY_L),
+        IsKeyPressed(KEY_LEFT_BRACKET),
+        IsKeyPressed(KEY_RIGHT_BRACKET),
         IsKeyPressed(KEY_Z),
         IsKeyPressed(KEY_Y),
         IsKeyPressed(KEY_DELETE),
@@ -193,6 +205,7 @@ void editor_scene::update(float dt) {
         transport_,
         space_playback_start_tick_,
         selected_note_index_,
+        selected_note_indices_,
         timeline_drag_,
         hitsound_path_,
         &hitsounds_,
@@ -205,6 +218,8 @@ void editor_scene::update(float dt) {
         IsMouseButtonPressed(MOUSE_BUTTON_RIGHT),
         IsKeyPressed(KEY_ESCAPE),
         IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT),
+        IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
+        IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
         editor_timeline_viewport::snap_division(viewport_),
         note_palette_,
     });
@@ -213,6 +228,12 @@ void editor_scene::update(float dt) {
     }
     if (timeline_result.request_apply_selected_scroll) {
         apply_selected_scroll_event();
+    }
+    if (timeline_result.selected_scroll_event_index.has_value()) {
+        select_scroll_event(timeline_result.selected_scroll_event_index, false);
+    }
+    if (timeline_result.scroll_event_modified) {
+        editor_scene_sync::load_scroll_event_inputs(make_sync_context());
     }
     if (timeline_result.scroll_to_tick.has_value()) {
         scroll_to_tick(*timeline_result.scroll_to_tick);
@@ -418,7 +439,8 @@ editor_resume_state editor_scene::build_resume_state() const {
         viewport_.ticks_per_pixel,
         viewport_.snap_index,
         waveform_visible_,
-        selected_note_index_
+        selected_note_index_,
+        selected_note_indices_
     };
 }
 
@@ -429,6 +451,7 @@ editor_scene_sync_context editor_scene::make_sync_context() {
         timing_panel_,
         metadata_panel_,
         selected_note_index_,
+        selected_note_indices_,
     };
 }
 
@@ -729,7 +752,11 @@ void editor_scene::draw_timeline() const {
         waveform_offset_ms_,
         transport_.audio_loaded,
         transport_.playback_tick,
+        transport_.loop_enabled,
+        transport_.loop_start_tick,
+        transport_.loop_end_tick,
         selected_note_index_,
+        selected_note_indices_,
         timing_panel_.selected_scroll_event_index,
         preview_note,
         preview_note.has_value() && state_->has_note_overlap(*preview_note, preview_ignore_index),
