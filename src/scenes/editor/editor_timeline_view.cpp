@@ -275,12 +275,13 @@ editor_timeline_note_draw_info editor_timeline_metrics::note_rects(const editor_
     const float start_y = tick_to_y(note.tick);
     editor_timeline_note_draw_info info;
     const float single_lane_width = lane_width();
-    const float world_to_px = single_lane_width / std::max(0.001f, g_settings.lane_width);
     const float note_body_width = std::max(single_lane_width * 0.2f, lane.width - single_lane_width * 0.08f);
     const float hold_body_width = std::max(single_lane_width * 0.18f, lane.width - single_lane_width * 0.20f);
-    const float tap_height = std::max(8.0f, world_to_px * 0.78f * g_settings.note_height);
+    const float tap_height = std::clamp(28.0f * g_settings.note_height / std::max(0.001f, ticks_per_pixel),
+                                        4.0f,
+                                        72.0f);
     const float stay_width = std::max(single_lane_width * 0.54f, note_body_width * 1.04f);
-    const float stay_height = std::max(5.0f, world_to_px * 0.28f);
+    const float stay_height = std::max(3.0f, tap_height * (0.28f / 0.78f));
 
     const float head_width = note.type == editor_timeline_note_type::stay ? stay_width : note_body_width;
     const float head_height = note.type == editor_timeline_note_type::stay ? stay_height : tap_height;
@@ -407,11 +408,10 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
 
             if (info.has_body) {
                 DrawRectangleRounded(info.body_rect, 0.4f, 6, hold_fill);
-                DrawRectangleRounded(info.tail_rect, 0.4f, 6, selected ? with_alpha(t.row_active, 230) : with_alpha(t.accent, 220));
-                ui::draw_rect_lines(info.tail_rect, 1.5f, outline);
+            } else {
+                draw_note_marker(note, info, head_fill, outline);
             }
 
-            draw_note_marker(note, info, head_fill, outline);
             if (selected) {
                 DrawRectangleRounded(info.left_resize_rect, 0.45f, 4, with_alpha(t.border_active, 210));
                 DrawRectangleRounded(info.right_resize_rect, 0.45f, 4, with_alpha(t.border_active, 210));
@@ -430,10 +430,9 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             const Color outline = model.preview_has_overlap ? t.error : t.success;
             if (info.has_body) {
                 DrawRectangleRounded(info.body_rect, 0.4f, 6, fill);
-                DrawRectangleRounded(info.tail_rect, 0.4f, 6, fill);
-                ui::draw_rect_lines(info.tail_rect, 1.5f, outline);
+            } else {
+                draw_note_marker(*model.preview_note, info, fill, outline);
             }
-            draw_note_marker(*model.preview_note, info, fill, outline);
         }
 
         if (model.playback_tick.has_value()) {

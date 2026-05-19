@@ -9,7 +9,6 @@
 #include "editor/editor_timeline_view.h"
 #include "editor/view/editor_layout.h"
 #include "editor/viewport/editor_timeline_viewport.h"
-#include "game_settings.h"
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
@@ -473,10 +472,10 @@ void draw_editor_stay_dot(Rectangle rect, Color fill, bool ray_style, bool selec
     }
 }
 
-void draw_editor_release_chevron(Rectangle note_rect, float world_to_px, Color marker, Color contour) {
-    const float width = std::max(g_settings.lane_width * world_to_px * 0.76f, note_rect.width * 0.78f);
-    const float height = g_settings.lane_width * world_to_px * 0.40f;
-    const float lift = 2.5f * world_to_px;
+void draw_editor_release_chevron(Rectangle note_rect, Color marker, Color contour) {
+    const float width = std::max(note_rect.width * 0.76f, note_rect.width * 0.78f);
+    const float height = std::max(4.0f, note_rect.height * (0.40f / 0.78f));
+    const float lift = note_rect.height * (2.5f / 0.78f);
     const Vector2 center = {note_rect.x + note_rect.width * 0.5f,
                             note_rect.y + note_rect.height * 0.5f - lift - height * 0.5f};
     const Vector2 left_outer_bottom = {center.x - width * 0.50f, center.y + height * 0.26f};
@@ -511,7 +510,7 @@ void draw_note_block(const editor_timeline_note& note,
 
     if (info.has_body) {
         draw_editor_hold_body(info.body_rect, draw_fill, note.is_ray, selected);
-        draw_editor_tap_slab(info.tail_rect, draw_fill, false, note.is_ray, selected);
+        return;
     }
 
     if (note.type == editor_timeline_note_type::stay) {
@@ -526,9 +525,7 @@ void draw_note_block(const editor_timeline_note& note,
         const Color release_base = lerp_color(release_seed, draw_fill, note.is_ray ? 0.24f : 0.16f);
         const Color marker = with_alpha(lerp_color(release_base, WHITE, 0.28f), 255);
         const Color contour = with_alpha(lerp_color(release_base, BLACK, 0.16f), 255);
-        const float world_to_px = info.head_rect.width /
-            std::max(g_settings.lane_width * 0.92f, 0.001f);
-        draw_editor_release_chevron(info.head_rect, world_to_px, marker, contour);
+        draw_editor_release_chevron(info.head_rect, marker, contour);
     }
 }
 
