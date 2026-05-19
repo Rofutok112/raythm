@@ -212,9 +212,6 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
             timeline_result.seek_tick,
             context.hitsound_path,
             context.hitsounds);
-        if (was_playing || timeline_result.scroll_seek_if_paused) {
-            result.scroll_to_tick = context.transport.playback_tick;
-        }
     }
 
     if (timeline_result.note_to_delete_index.has_value()) {

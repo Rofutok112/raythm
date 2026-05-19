@@ -290,7 +290,6 @@ struct editor_timeline_result {
     std::optional<size_t> note_to_delete_index;
     bool request_seek = false;
     int seek_tick = 0;
-    bool scroll_seek_if_paused = false;
     bool request_apply_selected_timing = false;
     bool request_apply_selected_scroll = false;
     std::optional<size_t> selected_scroll_event_index;
