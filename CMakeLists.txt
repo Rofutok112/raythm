@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 4.1)
 project(raythm)
 
 include(CTest)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY ON)
@@ -98,6 +99,31 @@ if(WIN32)
     )
     set_source_files_properties("${RAYTHM_APP_ICON_ICO}" "${RAYTHM_APP_ICON_RC}" PROPERTIES GENERATED TRUE)
 endif()
+
+set(RAYTHM_ICON_MANIFEST "${CMAKE_SOURCE_DIR}/assets/icons/raythm_icons.json")
+set(RAYTHM_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(RAYTHM_GENERATED_ICON_CPP "${RAYTHM_GENERATED_INCLUDE_DIR}/ui/icons/raythm_icons.cpp")
+set(RAYTHM_GENERATED_ICON_H "${RAYTHM_GENERATED_INCLUDE_DIR}/ui/icons/raythm_icons.h")
+
+add_custom_command(
+        OUTPUT "${RAYTHM_GENERATED_ICON_CPP}" "${RAYTHM_GENERATED_ICON_H}"
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/tools/svg2raylib.py"
+                --manifest "${RAYTHM_ICON_MANIFEST}"
+                --out "${RAYTHM_GENERATED_ICON_CPP}"
+                --header-out "${RAYTHM_GENERATED_ICON_H}"
+                --include "ui/icons/raythm_icons.h"
+                --namespace raythm_icons
+                --sdf-atlas
+                --sdf-cell-size 80
+        DEPENDS
+                "${CMAKE_SOURCE_DIR}/tools/svg2raylib.py"
+                "${RAYTHM_ICON_MANIFEST}"
+        COMMENT "Generating raylib icon drawing code"
+        VERBATIM
+)
+
+set_source_files_properties("${RAYTHM_GENERATED_ICON_CPP}" "${RAYTHM_GENERATED_ICON_H}" PROPERTIES GENERATED TRUE)
 
 add_executable(raythm WIN32 src/main.cpp
         src/audio/audio.cpp
@@ -414,6 +440,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/ui/ui_text_editor.h
         src/mv/mv_script_panel.cpp
         src/mv/mv_script_panel.h)
+
+target_sources(raythm PRIVATE "${RAYTHM_GENERATED_ICON_CPP}" "${RAYTHM_GENERATED_ICON_H}")
 
 add_executable(raythm_launcher
         src/launcher_main.cpp
@@ -993,6 +1021,7 @@ set(RAYTHM_SMOKE_TARGETS
 foreach(raythm_target IN LISTS RAYTHM_APP_TARGETS RAYTHM_SMOKE_TARGETS)
     target_include_directories(${raythm_target} PRIVATE ${RAYTHM_INCLUDE_DIRS})
 endforeach()
+target_include_directories(raythm BEFORE PRIVATE "${RAYTHM_GENERATED_INCLUDE_DIR}")
 
 foreach(raythm_target IN LISTS RAYTHM_SMOKE_TARGETS)
     target_include_directories(${raythm_target} PRIVATE ${RAYTHM_TEST_INCLUDE_DIRS})

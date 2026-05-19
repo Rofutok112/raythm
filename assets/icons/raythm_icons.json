@@ -1,0 +1,12 @@
+{
+  "icons": [
+    {
+      "name": "settings_gear",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/settings.svg"
+    },
+    {
+      "name": "refresh",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/refresh-cw.svg"
+    }
+  ]
+}

@@ -1,12 +1,12 @@
 #include "title/title_header_view.h"
 
 #include <algorithm>
-#include <cmath>
 
 #include "title/title_layout.h"
 #include "theme.h"
 #include "tween.h"
 #include "ui_draw.h"
+#include "ui/icons/raythm_icons.h"
 #include "virtual_screen.h"
 
 #include "rlgl.h"
@@ -26,11 +26,6 @@ constexpr float kPlaySubtitleHeight = 36.0f;
 constexpr float kTopBarHeight = 70.0f;
 constexpr float kAvatarSize = 42.0f;
 constexpr float kAvatarRadius = 21.0f;
-constexpr float kRefreshIconRadius = 15.0f;
-constexpr int kRefreshIconSegments = 24;
-constexpr float kPi = 3.14159265358979323846f;
-constexpr float kRefreshHeadRotation = 75.0f * kPi / 180.0f;
-constexpr int kSettingsGearTeeth = 8;
 
 void draw_top_bar_item_background(Rectangle rect, Color bg, unsigned char alpha) {
     const bool hovered = ui::is_hovered(rect);
@@ -43,67 +38,11 @@ void draw_top_bar_item_background(Rectangle rect, Color bg, unsigned char alpha)
 }
 
 void draw_refresh_icon(Rectangle rect, Color color, unsigned char alpha) {
-    const Vector2 center = {rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
-    const Color icon = with_alpha(color, alpha);
-    const float start = -0.30f * kPi;
-    const float end = 1.42f * kPi;
-    Vector2 previous = {
-        center.x + std::cos(start) * kRefreshIconRadius,
-        center.y + std::sin(start) * kRefreshIconRadius
-    };
-
-    for (int i = 1; i <= kRefreshIconSegments; ++i) {
-        const float t = static_cast<float>(i) / static_cast<float>(kRefreshIconSegments);
-        const float angle = start + (end - start) * t;
-        const Vector2 current = {
-            center.x + std::cos(angle) * kRefreshIconRadius,
-            center.y + std::sin(angle) * kRefreshIconRadius
-        };
-        DrawLineEx(previous, current, 3.0f, icon);
-        previous = current;
-    }
-
-    const Vector2 tip = {
-        center.x + std::cos(end) * kRefreshIconRadius,
-        center.y + std::sin(end) * kRefreshIconRadius
-    };
-    constexpr float kHeadLength = 13.0f;
-    constexpr float kHeadSpread = 0.62f;
-    const float head_angle = end + kPi + kRefreshHeadRotation;
-    const Vector2 wing_a = {
-        tip.x + std::cos(head_angle + kHeadSpread) * kHeadLength,
-        tip.y + std::sin(head_angle + kHeadSpread) * kHeadLength
-    };
-    const Vector2 wing_b = {
-        tip.x + std::cos(head_angle - kHeadSpread) * kHeadLength,
-        tip.y + std::sin(head_angle - kHeadSpread) * kHeadLength
-    };
-    DrawLineEx(tip, wing_a, 3.0f, icon);
-    DrawLineEx(tip, wing_b, 3.0f, icon);
+    raythm_icons::draw_refresh(ui::inset(rect, 17.0f), with_alpha(color, alpha), 3.0f);
 }
 
 void draw_settings_icon(Rectangle rect, Color color, unsigned char alpha) {
-    const Vector2 center = {rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
-    const Color icon = with_alpha(color, alpha);
-    constexpr float ring_radius = 11.0f;
-    constexpr float tooth_inner_radius = 12.0f;
-    constexpr float tooth_outer_radius = 20.0f;
-    constexpr float tooth_width = 7.0f;
-
-    DrawRing(center, ring_radius - 5.0f, ring_radius + 2.5f, 0.0f, 360.0f, 48, icon);
-
-    for (int i = 0; i < kSettingsGearTeeth; ++i) {
-        const float angle = (static_cast<float>(i) / static_cast<float>(kSettingsGearTeeth)) * kPi * 2.0f;
-        const Vector2 a = {
-            center.x + std::cos(angle) * tooth_inner_radius,
-            center.y + std::sin(angle) * tooth_inner_radius
-        };
-        const Vector2 b = {
-            center.x + std::cos(angle) * tooth_outer_radius,
-            center.y + std::sin(angle) * tooth_outer_radius
-        };
-        DrawLineEx(a, b, tooth_width, icon);
-    }
+    raythm_icons::draw_settings_gear(ui::inset(rect, 17.0f), with_alpha(color, alpha), 3.0f);
 }
 
 void draw_profile_chevron(Rectangle rect, Color color, unsigned char alpha) {
