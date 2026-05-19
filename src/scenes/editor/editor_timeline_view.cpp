@@ -426,18 +426,6 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
                 draw_note_marker(note, info, head_fill, outline);
             }
 
-            if (selected) {
-                DrawRectangleRounded(info.left_resize_rect, 0.45f, 4, with_alpha(t.border_active, 160));
-                DrawRectangleRounded(info.right_resize_rect, 0.45f, 4, with_alpha(t.border_active, 160));
-                ui::draw_rect_lines(info.left_resize_rect, 1.0f, t.text);
-                ui::draw_rect_lines(info.right_resize_rect, 1.0f, t.text);
-                if (info.has_body) {
-                    DrawRectangleRounded(info.start_resize_rect, 0.45f, 4, with_alpha(t.border_active, 150));
-                    DrawRectangleRounded(info.end_resize_rect, 0.45f, 4, with_alpha(t.border_active, 150));
-                    ui::draw_rect_lines(info.start_resize_rect, 1.0f, t.text);
-                    ui::draw_rect_lines(info.end_resize_rect, 1.0f, t.text);
-                }
-            }
         }
 
         if (model.preview_note.has_value()) {
