@@ -192,4 +192,37 @@ void save(const cache& records) {
     tx.commit();
 }
 
+void remove_song(const std::string& song_id) {
+    local_sqlite::database database = open_ready_database();
+    if (!database.valid() || song_id.empty()) {
+        return;
+    }
+
+    statement query(database.get(),
+                    "DELETE FROM content_verification_cache "
+                    "WHERE song_id = ? OR chart_id = ?;");
+    if (!query.valid()) {
+        return;
+    }
+    bind_text(query.get(), 1, song_id);
+    bind_text(query.get(), 2, "song:" + song_id);
+    sqlite3_step(query.get());
+}
+
+void remove_chart(const std::string& chart_id) {
+    local_sqlite::database database = open_ready_database();
+    if (!database.valid() || chart_id.empty()) {
+        return;
+    }
+
+    statement query(database.get(),
+                    "DELETE FROM content_verification_cache "
+                    "WHERE chart_id = ?;");
+    if (!query.valid()) {
+        return;
+    }
+    bind_text(query.get(), 1, chart_id);
+    sqlite3_step(query.get());
+}
+
 }  // namespace song_select::content_verification_cache_database

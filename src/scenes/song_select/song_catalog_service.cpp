@@ -158,29 +158,25 @@ content_hashes manifest_song_hashes(const ranking_client::song_manifest& manifes
 }
 
 bool song_hashes_present(const content_hashes& hashes) {
-    return (!hashes.song_json_fingerprint.empty() || !hashes.song_json_sha256.empty()) &&
+    return !hashes.song_json_fingerprint.empty() &&
            !hashes.audio_sha256.empty() &&
            !hashes.jacket_sha256.empty();
 }
 
 bool chart_hashes_present(const content_hashes& hashes) {
-    return !hashes.chart_fingerprint.empty() || !hashes.chart_sha256.empty();
+    return !hashes.chart_fingerprint.empty();
 }
 
 bool song_json_hash_equal(const content_hashes& left, const content_hashes& right) {
-    if (!left.song_json_fingerprint.empty() && !right.song_json_fingerprint.empty()) {
-        return left.song_json_fingerprint == right.song_json_fingerprint;
-    }
-    return !left.song_json_sha256.empty() && !right.song_json_sha256.empty() &&
-           left.song_json_sha256 == right.song_json_sha256;
+    return !left.song_json_fingerprint.empty() &&
+           !right.song_json_fingerprint.empty() &&
+           left.song_json_fingerprint == right.song_json_fingerprint;
 }
 
 bool chart_hash_equal(const content_hashes& left, const content_hashes& right) {
-    if (!left.chart_fingerprint.empty() && !right.chart_fingerprint.empty()) {
-        return left.chart_fingerprint == right.chart_fingerprint;
-    }
-    return !left.chart_sha256.empty() && !right.chart_sha256.empty() &&
-           left.chart_sha256 == right.chart_sha256;
+    return !left.chart_fingerprint.empty() &&
+           !right.chart_fingerprint.empty() &&
+           left.chart_fingerprint == right.chart_fingerprint;
 }
 
 std::string song_content_signature(const song_data& song) {
@@ -685,6 +681,10 @@ delete_result delete_song(const state& state, int song_index) {
     }
     local_content_index::remove_song_bindings(entry.song.meta.song_id);
     local_catalog_database::remove_song(entry.song.meta.song_id);
+    song_select::content_verification_cache_database::remove_song(entry.song.meta.song_id);
+    for (const chart_option& chart : entry.charts) {
+        song_select::content_verification_cache_database::remove_chart(chart.meta.chart_id);
+    }
 
     result.success = true;
     result.message = "Song deleted.";
@@ -720,6 +720,7 @@ delete_result delete_chart(const state& state, int song_index, int chart_index) 
     const std::string deleted_chart_id = charts[static_cast<size_t>(chart_index)].meta.chart_id;
     local_content_index::remove_chart_bindings(deleted_chart_id);
     local_catalog_database::remove_chart(deleted_chart_id);
+    song_select::content_verification_cache_database::remove_chart(deleted_chart_id);
 
     result.success = true;
     result.message = "Chart deleted.";

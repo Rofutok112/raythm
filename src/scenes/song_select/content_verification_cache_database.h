@@ -31,5 +31,7 @@ using cache = std::unordered_map<std::string, record>;
 
 cache load();
 void save(const cache& records);
+void remove_song(const std::string& song_id);
+void remove_chart(const std::string& chart_id);
 
 }  // namespace song_select::content_verification_cache_database
