@@ -555,6 +555,10 @@ add_executable(editor_state_smoke
         src/scenes/editor/editor_state.h
         src/scenes/editor/service/editor_note_placement_rules.cpp
         src/scenes/editor/service/editor_note_placement_rules.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/models/data_models.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
@@ -801,6 +805,10 @@ add_executable(editor_transport_controller_smoke
         src/scenes/editor/editor_state.h
         src/scenes/editor/editor_timeline_view.h
         src/scenes/editor/editor_timing_panel.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/models/data_models.h
@@ -824,6 +832,10 @@ add_executable(editor_flow_controller_smoke
         src/scenes/editor/editor_timing_panel.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/models/data_models.h
@@ -843,6 +855,10 @@ add_executable(editor_timeline_controller_smoke
         src/scenes/editor/editor_timeline_view.cpp
         src/scenes/editor/editor_timeline_view.h
         src/scenes/editor/editor_timing_panel.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/models/data_models.h

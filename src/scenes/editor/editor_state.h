@@ -54,6 +54,7 @@ public:
 
 private:
     void rebuild_timing_engine();
+    void recalculate_level();
     void sync_dirty_flag();
 
     chart_data chart_;

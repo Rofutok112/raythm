@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "chart_difficulty.h"
 #include "editor/editor_state.h"
 #include "editor/service/editor_note_placement_rules.h"
 
@@ -39,6 +40,10 @@ int main() {
 
     if (state.is_dirty()) {
         std::cerr << "freshly loaded state should not be dirty\n";
+        return EXIT_FAILURE;
+    }
+    if (!nearly_equal(state.data().meta.level, chart_difficulty::calculate_level(state.data()))) {
+        std::cerr << "loaded state should refresh auto level without becoming dirty\n";
         return EXIT_FAILURE;
     }
 
@@ -99,6 +104,10 @@ int main() {
         std::cerr << "add_note did not update history correctly\n";
         return EXIT_FAILURE;
     }
+    if (!nearly_equal(state.data().meta.level, chart_difficulty::calculate_level(state.data()))) {
+        std::cerr << "add_note should refresh auto level\n";
+        return EXIT_FAILURE;
+    }
 
     if (!state.modify_note(0, {note_type::tap, 120, 3, 120})) {
         std::cerr << "modify_note should succeed\n";
@@ -149,7 +158,8 @@ int main() {
         std::cerr << "modify_metadata should succeed\n";
         return EXIT_FAILURE;
     }
-    if (state.data().meta.resolution != 960 || state.data().meta.level != 7 || state.data().meta.offset != -12) {
+    if (state.data().meta.resolution != 960 || state.data().meta.offset != -12 ||
+        !nearly_equal(state.data().meta.level, chart_difficulty::calculate_level(state.data()))) {
         std::cerr << "modify_metadata did not update metadata\n";
         return EXIT_FAILURE;
     }
