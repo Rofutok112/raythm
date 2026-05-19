@@ -48,7 +48,9 @@ Thumbs.db
 # Local runtime settings
 settings.json
 
-tools/
+tools/*
+!tools/svg2raylib.py
+!tools/svg2raylib.md
 documents/raythm_proposal.pdf
 documents/play_screen_probe.png
 documents/play_screen_probe2.png
