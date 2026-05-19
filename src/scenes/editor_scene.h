@@ -57,8 +57,6 @@ private:
     bool has_active_metadata_input() const;
     bool apply_metadata_changes(bool clear_notes_for_key_count_change);
     bool apply_chart_offset(int offset_ms);
-    bool persist_song_timing_from_state();
-    bool persist_song_timing_and_offset_from_state();
     std::string generated_chart_id(const std::string& difficulty) const;
     bool has_blocking_modal() const;
 

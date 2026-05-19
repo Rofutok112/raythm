@@ -23,7 +23,6 @@
 #include "scene_manager.h"
 #include "settings_scene.h"
 #include "song_select/song_select_navigation.h"
-#include "song_writer.h"
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
@@ -207,10 +206,6 @@ void editor_scene::update(float dt) {
     if (shortcut_result.restore_scroll_tick.has_value()) {
         scroll_to_tick(*shortcut_result.restore_scroll_tick);
     }
-    if (shortcut_result.history_changed) {
-        persist_song_timing_and_offset_from_state();
-    }
-
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const editor_timeline_metrics metrics = timeline_metrics();
     const Rectangle content = metrics.content_rect();
@@ -708,7 +703,6 @@ bool editor_scene::apply_selected_timing_event() {
     }
     editor_scene_sync::sync_after_timing_change(make_sync_context());
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
-    persist_song_timing_from_state();
     if (result.scroll_to_tick.has_value()) {
         scroll_to_tick(*result.scroll_to_tick);
     }
@@ -743,7 +737,6 @@ void editor_scene::add_timing_event(timing_event_type type) {
     }, type);
     editor_scene_sync::sync_after_timing_change(make_sync_context());
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
-    persist_song_timing_from_state();
     if (result.selected_event_index.has_value()) {
         select_timing_event(result.selected_event_index, true);
     }
@@ -775,7 +768,6 @@ void editor_scene::delete_selected_timing_event() {
     }
     editor_scene_sync::sync_after_timing_change(make_sync_context());
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
-    persist_song_timing_from_state();
 }
 
 void editor_scene::delete_selected_scroll_event() {
@@ -828,25 +820,6 @@ bool editor_scene::apply_chart_offset(int offset_ms) {
 
     editor_scene_sync::sync_after_offset_change(make_sync_context());
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
-    return persist_song_timing_and_offset_from_state();
-}
-
-bool editor_scene::persist_song_timing_from_state() {
-    song_.meta.timing_events = state_->data().timing_events;
-    if (!song_writer::write_song_json(song_.meta, song_.directory)) {
-        return false;
-    }
-    chart_level_cache::clear();
-    return true;
-}
-
-bool editor_scene::persist_song_timing_and_offset_from_state() {
-    song_.meta.timing_events = state_->data().timing_events;
-    song_.meta.offset = state_->data().meta.offset;
-    song_.meta.has_offset = true;
-    if (!song_writer::write_song_json(song_.meta, song_.directory)) {
-        return false;
-    }
     chart_level_cache::clear();
     return true;
 }
