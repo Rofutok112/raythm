@@ -274,7 +274,7 @@ struct editor_timeline_context {
     bool left_released = false;
     bool right_pressed = false;
     bool escape_pressed = false;
-    bool alt_down = false;
+    bool shift_down = false;
     int snap_division = 1;
     editor_timeline_note_drag_state drag_state;
     editor_note_palette_selection palette;

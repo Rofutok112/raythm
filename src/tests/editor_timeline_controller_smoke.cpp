@@ -115,7 +115,16 @@ int main() {
             {state.get(), &meter_map, metrics, {lane_rect.x + lane_rect.width * 0.5f, y}, true,
              true, false, false, false, false, true, 8, {}});
         if (!result.request_seek || result.seek_tick != 720 || !result.scroll_seek_if_paused) {
-            std::cerr << "alt+left click should request seek to snapped tick\n";
+            std::cerr << "shift+left click should request seek to snapped tick\n";
+            return EXIT_FAILURE;
+        }
+
+        const editor_timeline_result dragged = editor_timeline_controller::update(
+            timing_panel,
+            {state.get(), &meter_map, metrics, {lane_rect.x + lane_rect.width * 0.5f, metrics.tick_to_y(960)}, true,
+             false, true, false, false, false, true, 8, result.drag_state});
+        if (!dragged.request_seek || dragged.seek_tick != 960 || dragged.drag_state.active) {
+            std::cerr << "shift+left drag should keep seeking while the mouse is down\n";
             return EXIT_FAILURE;
         }
     }

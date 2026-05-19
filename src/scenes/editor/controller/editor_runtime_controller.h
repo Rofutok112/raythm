@@ -57,7 +57,7 @@ struct editor_runtime_timeline_context {
     bool left_released = false;
     bool right_pressed = false;
     bool escape_pressed = false;
-    bool alt_down = false;
+    bool shift_down = false;
     bool ctrl_down = false;
     int snap_division = 1;
     editor_note_palette_selection palette;

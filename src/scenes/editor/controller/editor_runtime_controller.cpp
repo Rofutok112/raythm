@@ -178,7 +178,7 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
         context.left_released,
         context.right_pressed,
         context.escape_pressed,
-        context.alt_down,
+        context.shift_down,
         context.snap_division,
         context.drag_state,
         context.palette,

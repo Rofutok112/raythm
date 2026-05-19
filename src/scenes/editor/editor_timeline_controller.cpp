@@ -306,7 +306,7 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
         return result;
     }
 
-    if (context.alt_down && context.left_pressed) {
+    if (context.shift_down && context.timeline_hovered && (context.left_pressed || context.left_down)) {
         result.request_seek = true;
         result.seek_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
         result.scroll_seek_if_paused = true;

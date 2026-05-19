@@ -243,7 +243,7 @@ void editor_scene::update(float dt) {
         IsMouseButtonReleased(MOUSE_BUTTON_LEFT),
         IsMouseButtonPressed(MOUSE_BUTTON_RIGHT),
         IsKeyPressed(KEY_ESCAPE),
-        IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT),
+        IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
         IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
         editor_timeline_viewport::snap_division(viewport_),
         note_palette_,
