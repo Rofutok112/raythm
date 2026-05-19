@@ -289,7 +289,7 @@ editor_timeline_note_draw_info editor_timeline_metrics::note_rects(const editor_
                       start_y - head_height * 0.5f,
                       head_width,
                       head_height};
-    const float handle_width = std::min(9.0f, std::max(5.0f, lane.width * 0.18f));
+    const float handle_width = std::clamp(lane.width * 0.16f, 12.0f, 20.0f);
     const float handle_height = head_height + 8.0f;
     info.left_resize_rect = {info.head_rect.x - handle_width * 0.5f,
                              start_y - handle_height * 0.5f,
@@ -312,9 +312,9 @@ editor_timeline_note_draw_info editor_timeline_metrics::note_rects(const editor_
                           end_y - tap_height * 0.5f,
                           note_body_width,
                           tap_height};
-        const float endpoint_handle_height = std::clamp(std::min(tap_height * 0.35f, height * 0.25f),
-                                                        4.0f,
-                                                        14.0f);
+        const float endpoint_handle_height = std::clamp(std::min(tap_height * 0.55f, height * 0.30f),
+                                                        8.0f,
+                                                        22.0f);
         info.start_resize_rect = {lane.x + (lane.width - note_body_width) * 0.5f,
                                   start_y - endpoint_handle_height * 0.5f,
                                   note_body_width,
@@ -323,6 +323,14 @@ editor_timeline_note_draw_info editor_timeline_metrics::note_rects(const editor_
                                 end_y - endpoint_handle_height * 0.5f,
                                 note_body_width,
                                 endpoint_handle_height};
+        info.left_resize_rect = {info.body_rect.x - handle_width * 0.5f,
+                                 info.body_rect.y,
+                                 handle_width,
+                                 info.body_rect.height};
+        info.right_resize_rect = {info.body_rect.x + info.body_rect.width - handle_width * 0.5f,
+                                  info.body_rect.y,
+                                  handle_width,
+                                  info.body_rect.height};
         info.has_body = true;
     }
 
@@ -419,11 +427,15 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             }
 
             if (selected) {
-                if (!info.has_body) {
-                    DrawRectangleRounded(info.left_resize_rect, 0.45f, 4, with_alpha(t.border_active, 210));
-                    DrawRectangleRounded(info.right_resize_rect, 0.45f, 4, with_alpha(t.border_active, 210));
-                    ui::draw_rect_lines(info.left_resize_rect, 1.0f, t.text);
-                    ui::draw_rect_lines(info.right_resize_rect, 1.0f, t.text);
+                DrawRectangleRounded(info.left_resize_rect, 0.45f, 4, with_alpha(t.border_active, 160));
+                DrawRectangleRounded(info.right_resize_rect, 0.45f, 4, with_alpha(t.border_active, 160));
+                ui::draw_rect_lines(info.left_resize_rect, 1.0f, t.text);
+                ui::draw_rect_lines(info.right_resize_rect, 1.0f, t.text);
+                if (info.has_body) {
+                    DrawRectangleRounded(info.start_resize_rect, 0.45f, 4, with_alpha(t.border_active, 150));
+                    DrawRectangleRounded(info.end_resize_rect, 0.45f, 4, with_alpha(t.border_active, 150));
+                    ui::draw_rect_lines(info.start_resize_rect, 1.0f, t.text);
+                    ui::draw_rect_lines(info.end_resize_rect, 1.0f, t.text);
                 }
             }
         }

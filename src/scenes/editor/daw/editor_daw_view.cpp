@@ -447,13 +447,19 @@ void draw_editor_hold_body(Rectangle rect, Color fill, bool ray_style, bool sele
     }
 }
 
-void draw_editor_hold_endpoint_handles(Rectangle rect, bool preview) {
+void draw_editor_resize_affordance(Rectangle rect, Color color, float roundness = 0.45f) {
+    DrawRectangleRounded(rect, roundness, 4, with_alpha(color, 120));
+    ui::draw_rect_lines(rect, 1.0f, with_alpha(color, 230));
+}
+
+void draw_editor_note_resize_handles(const editor_timeline_note_draw_info& info, bool hold, bool preview) {
     const Color handle = preview ? g_theme->success : g_theme->accent;
-    const float height = std::clamp(rect.height * 0.04f, 3.0f, 7.0f);
-    const Rectangle top = {rect.x - 4.0f, rect.y - height * 0.5f, rect.width + 8.0f, height};
-    const Rectangle bottom = {rect.x - 4.0f, rect.y + rect.height - height * 0.5f, rect.width + 8.0f, height};
-    DrawRectangleRounded(top, 0.45f, 4, with_alpha(handle, 235));
-    DrawRectangleRounded(bottom, 0.45f, 4, with_alpha(handle, 170));
+    draw_editor_resize_affordance(info.left_resize_rect, handle);
+    draw_editor_resize_affordance(info.right_resize_rect, handle);
+    if (hold) {
+        draw_editor_resize_affordance(info.start_resize_rect, handle);
+        draw_editor_resize_affordance(info.end_resize_rect, handle);
+    }
 }
 
 void draw_editor_stay_dot(Rectangle rect, Color fill, bool ray_style, bool selected) {
@@ -520,8 +526,8 @@ void draw_note_block(const editor_timeline_note& note,
 
     if (info.has_body) {
         draw_editor_hold_body(info.body_rect, draw_fill, note.is_ray, selected);
-        if (preview) {
-            draw_editor_hold_endpoint_handles(info.body_rect, preview);
+        if (selected || preview) {
+            draw_editor_note_resize_handles(info, true, preview);
         }
         return;
     }
@@ -533,6 +539,9 @@ void draw_note_block(const editor_timeline_note& note,
 
     draw_editor_tap_slab(info.head_rect, draw_fill, note.type == editor_timeline_note_type::release,
                          note.is_ray, selected);
+    if (selected || preview) {
+        draw_editor_note_resize_handles(info, false, preview);
+    }
     if (note.type == editor_timeline_note_type::release) {
         const Color release_seed = note.is_ray ? Color{190, 112, 255, 255} : Color{255, 90, 132, 255};
         const Color release_base = lerp_color(release_seed, draw_fill, note.is_ray ? 0.24f : 0.16f);
