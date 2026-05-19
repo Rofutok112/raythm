@@ -20,7 +20,6 @@ struct editor_timeline_presenter_model {
     bool loop_enabled = false;
     int loop_start_tick = 0;
     int loop_end_tick = 0;
-    std::optional<size_t> selected_note_index;
     std::vector<size_t> selected_note_indices;
     std::optional<size_t> selected_scroll_event_index;
     std::vector<note_data> preview_notes;

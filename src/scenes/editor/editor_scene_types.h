@@ -22,7 +22,6 @@ struct editor_resume_state {
     float ticks_per_pixel = 2.0f;
     int snap_index = 4;
     bool waveform_visible = true;
-    std::optional<size_t> selected_note_index;
     std::vector<size_t> selected_note_indices;
 };
 
@@ -178,7 +177,6 @@ struct editor_session_load_result {
     float bottom_tick_target = 0.0f;
     float ticks_per_pixel = 2.0f;
     int snap_index = 4;
-    std::optional<size_t> selected_note_index;
     std::vector<size_t> selected_note_indices;
 };
 
@@ -278,7 +276,6 @@ struct editor_timeline_context {
     bool escape_pressed = false;
     bool alt_down = false;
     int snap_division = 1;
-    std::optional<size_t> selected_note_index;
     editor_timeline_note_drag_state drag_state;
     editor_note_palette_selection palette;
     std::vector<size_t> selected_note_indices;
@@ -288,7 +285,6 @@ struct editor_timeline_context {
 };
 
 struct editor_timeline_result {
-    std::optional<size_t> selected_note_index;
     std::vector<size_t> selected_note_indices;
     editor_timeline_note_drag_state drag_state;
     std::optional<size_t> note_to_delete_index;

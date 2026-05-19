@@ -12,7 +12,6 @@ struct editor_shortcut_context {
     const metadata_panel_state& metadata_panel;
     const editor_timing_panel_state& timing_panel;
     const editor_timeline_note_drag_state& timeline_drag;
-    std::optional<size_t>& selected_note_index;
     std::vector<size_t>& selected_note_indices;
     std::vector<note_data>& clipboard_notes;
     editor_transport_state& transport;
@@ -46,7 +45,6 @@ struct editor_runtime_timeline_context {
     editor_timing_panel_state& timing_panel;
     editor_transport_state& transport;
     std::optional<int>& space_playback_start_tick;
-    std::optional<size_t>& selected_note_index;
     std::vector<size_t>& selected_note_indices;
     editor_timeline_note_drag_state& drag_state;
     const std::string& hitsound_path;

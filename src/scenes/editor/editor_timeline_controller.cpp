@@ -89,9 +89,6 @@ bool contains_index(const std::vector<size_t>& indices, size_t index) {
 }
 
 std::optional<size_t> active_note_index(const editor_timeline_result& result) {
-    if (result.selected_note_index.has_value()) {
-        return result.selected_note_index;
-    }
     if (!result.selected_note_indices.empty()) {
         return result.selected_note_indices.back();
     }
@@ -273,11 +270,7 @@ std::optional<note_data> resized_note(const editor_timeline_context& context,
 editor_timeline_result editor_timeline_controller::update(editor_timing_panel_state& timing_panel,
                                                           const editor_timeline_context& context) {
     editor_timeline_result result;
-    result.selected_note_index = context.selected_note_index;
     result.selected_note_indices = sorted_unique_indices(context.selected_note_indices);
-    if (result.selected_note_indices.empty() && result.selected_note_index.has_value()) {
-        result.selected_note_indices.push_back(*result.selected_note_index);
-    }
     result.drag_state = context.drag_state;
 
     if (timing_panel.bar_pick_mode) {
@@ -323,7 +316,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
 
     if (context.left_pressed) {
         if (!context.timeline_hovered) {
-            result.selected_note_index.reset();
             result.selected_note_indices.clear();
             result.drag_state.active = false;
             return result;
@@ -358,9 +350,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
                     result.selected_note_indices.push_back(*note_index);
                     result.selected_note_indices = sorted_unique_indices(result.selected_note_indices);
                 }
-                result.selected_note_index = result.selected_note_indices.empty()
-                    ? std::nullopt
-                    : std::optional<size_t>(result.selected_note_indices.back());
                 result.drag_state.active = false;
                 return result;
             }
@@ -368,7 +357,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             if (!contains_index(result.selected_note_indices, *note_index)) {
                 result.selected_note_indices = {*note_index};
             }
-            result.selected_note_index = note_index;
             result.drag_state.active = true;
             result.drag_state.mode = editor_timeline_drag_mode::move_notes;
             result.drag_state.note_index = note_index;
@@ -408,7 +396,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
 
         if (const std::optional<size_t> scroll_index = scroll_event_at_position(context, context.mouse); scroll_index.has_value()) {
             result.selected_scroll_event_index = scroll_index;
-            result.selected_note_index.reset();
             result.selected_note_indices.clear();
             result.drag_state.active = false;
             return result;
@@ -436,7 +423,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
     if (context.right_pressed) {
         if (const std::optional<size_t> note_index = note_at_position(context, context.mouse); note_index.has_value()) {
             result.note_to_delete_index = note_index;
-            result.selected_note_index.reset();
             result.selected_note_indices.clear();
             result.drag_state.active = false;
             return result;
@@ -451,7 +437,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             result.drag_state.start_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
             result.drag_state.current_tick = result.drag_state.start_tick;
             result.selected_note_indices.clear();
-            result.selected_note_index.reset();
         }
     }
 
@@ -489,9 +474,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
     if (result.drag_state.mode == editor_timeline_drag_mode::range_select) {
         const Rectangle selection_rect = rectangle_from_points(result.drag_state.start_mouse, result.drag_state.current_mouse);
         result.selected_note_indices = sorted_unique_indices(notes_in_rectangle(context, selection_rect));
-        result.selected_note_index = result.selected_note_indices.empty()
-            ? std::nullopt
-            : std::optional<size_t>(result.selected_note_indices.back());
         result.drag_state.active = false;
         return result;
     }
@@ -540,7 +522,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             result.notes_to_modify.push_back({result.drag_state.note_indices[i], moved});
         }
         result.selected_note_indices = result.drag_state.note_indices;
-        result.selected_note_index = result.drag_state.note_index;
         return result;
     }
 
@@ -554,7 +535,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
         }
         result.note_to_modify_index = note_index;
         result.note_to_modify = note;
-        result.selected_note_index = note_index;
         return result;
     }
 

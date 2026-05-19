@@ -12,10 +12,7 @@ bool has_active_metadata_input(const metadata_panel_state& metadata_panel) {
     return metadata_panel.difficulty_input.active || metadata_panel.chart_author_input.active;
 }
 
-std::vector<size_t> normalized_selection(std::vector<size_t> indices, std::optional<size_t> fallback) {
-    if (indices.empty() && fallback.has_value()) {
-        indices.push_back(*fallback);
-    }
+std::vector<size_t> normalized_selection(std::vector<size_t> indices) {
     std::sort(indices.begin(), indices.end());
     indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
     return indices;
@@ -59,13 +56,9 @@ std::vector<note_data> shifted_notes_to_open_slot(const editor_state& state, con
     return {};
 }
 
-void select_appended_notes(const editor_state& state,
-                           size_t added_count,
-                           std::optional<size_t>& selected_note_index,
-                           std::vector<size_t>& selected_note_indices) {
+void select_appended_notes(const editor_state& state, size_t added_count, std::vector<size_t>& selected_note_indices) {
     selected_note_indices.clear();
     if (added_count == 0 || added_count > state.data().notes.size()) {
-        selected_note_index.reset();
         return;
     }
 
@@ -73,7 +66,6 @@ void select_appended_notes(const editor_state& state,
     for (size_t index = first; index < state.data().notes.size(); ++index) {
         selected_note_indices.push_back(index);
     }
-    selected_note_index = selected_note_indices.back();
 }
 
 }  // namespace
@@ -118,12 +110,12 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
     }
 
     if (!editing_blocked && context.ctrl_down && context.c_pressed) {
-        const std::vector<size_t> selection = normalized_selection(context.selected_note_indices, context.selected_note_index);
+        const std::vector<size_t> selection = normalized_selection(context.selected_note_indices);
         context.clipboard_notes = notes_for_indices(context.state, selection);
     }
 
     if (!editing_blocked && context.ctrl_down && (context.v_pressed || context.d_pressed)) {
-        const std::vector<size_t> selection = normalized_selection(context.selected_note_indices, context.selected_note_index);
+        const std::vector<size_t> selection = normalized_selection(context.selected_note_indices);
         std::vector<note_data> notes = context.d_pressed
             ? notes_for_indices(context.state, selection)
             : context.clipboard_notes;
@@ -131,7 +123,7 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
         if (can_place_notes(context.state, notes)) {
             const size_t added_count = notes.size();
             context.state.add_notes(std::move(notes));
-            select_appended_notes(context.state, added_count, context.selected_note_index, context.selected_note_indices);
+            select_appended_notes(context.state, added_count, context.selected_note_indices);
             result.history_changed = true;
         }
     }
@@ -157,18 +149,13 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
     }
 
     if (!editing_blocked && context.delete_pressed) {
-        std::vector<size_t> selection = normalized_selection(context.selected_note_indices, context.selected_note_index);
+        std::vector<size_t> selection = normalized_selection(context.selected_note_indices);
         if (!selection.empty() && context.state.remove_notes(selection)) {
-            context.selected_note_index.reset();
             context.selected_note_indices.clear();
             result.history_changed = true;
         }
     }
 
-    if (context.selected_note_index.has_value() &&
-        *context.selected_note_index >= context.state.data().notes.size()) {
-        context.selected_note_index.reset();
-    }
     context.selected_note_indices.erase(
         std::remove_if(context.selected_note_indices.begin(), context.selected_note_indices.end(), [&](size_t index) {
             return index >= context.state.data().notes.size();
@@ -193,7 +180,6 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
         context.escape_pressed,
         context.alt_down,
         context.snap_division,
-        context.selected_note_index,
         context.drag_state,
         context.palette,
         context.selected_note_indices,
@@ -202,7 +188,6 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
         context.right_released,
     });
 
-    context.selected_note_index = timeline_result.selected_note_index;
     context.selected_note_indices = timeline_result.selected_note_indices;
     context.drag_state = timeline_result.drag_state;
 
@@ -234,7 +219,6 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
 
     if (timeline_result.note_to_delete_index.has_value()) {
         if (context.state.remove_note(*timeline_result.note_to_delete_index)) {
-            context.selected_note_index.reset();
             context.selected_note_indices.clear();
         }
     }
@@ -242,22 +226,16 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
     if (timeline_result.note_to_add.has_value() &&
         !editor::note_placement_rules::has_stay_stack(context.state.data(), *timeline_result.note_to_add)) {
         context.state.add_note(*timeline_result.note_to_add);
-        context.selected_note_index = context.state.data().notes.empty()
-            ? std::nullopt
-            : std::optional<size_t>(context.state.data().notes.size() - 1);
-        context.selected_note_indices = context.selected_note_index.has_value()
-            ? std::vector<size_t>{*context.selected_note_index}
-            : std::vector<size_t>{};
+        context.selected_note_indices = context.state.data().notes.empty()
+            ? std::vector<size_t>{}
+            : std::vector<size_t>{context.state.data().notes.size() - 1};
     }
 
     if (timeline_result.note_to_modify_index.has_value() && timeline_result.note_to_modify.has_value() &&
         !editor::note_placement_rules::has_stay_stack(
             context.state.data(), *timeline_result.note_to_modify, timeline_result.note_to_modify_index)) {
         if (context.state.modify_note(*timeline_result.note_to_modify_index, *timeline_result.note_to_modify)) {
-            context.selected_note_index = timeline_result.note_to_modify_index;
-            context.selected_note_indices = context.selected_note_index.has_value()
-                ? std::vector<size_t>{*context.selected_note_index}
-                : std::vector<size_t>{};
+            context.selected_note_indices = {*timeline_result.note_to_modify_index};
         }
     }
 
@@ -274,7 +252,6 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
             !editor::note_placement_rules::has_stay_stack(context.state.data(), updated_notes, ignore_indices) &&
             context.state.modify_notes(timeline_result.notes_to_modify)) {
             context.selected_note_indices = timeline_result.selected_note_indices;
-            context.selected_note_index = timeline_result.selected_note_index;
         }
     }
 

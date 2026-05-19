@@ -53,7 +53,6 @@ void editor_timeline_presenter::draw(const editor_timeline_presenter_model& mode
         model.meter_map.visible_grid_lines(min_tick, max_tick),
         std::move(scroll_events),
         std::move(notes),
-        model.selected_note_index,
         model.selected_note_indices,
         model.selected_scroll_event_index,
         model.audio_loaded ? std::optional<int>(model.playback_tick) : std::nullopt,

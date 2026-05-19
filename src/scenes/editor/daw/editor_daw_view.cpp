@@ -254,7 +254,6 @@ editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_m
         model.meter_map.visible_grid_lines(min_tick, max_tick),
         std::move(scroll_events),
         std::move(notes),
-        model.selected_note_index,
         model.selected_note_indices,
         model.selected_scroll_event_index,
         model.audio_loaded ? std::optional<int>(model.playback_tick) : std::nullopt,
@@ -981,8 +980,7 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
                 continue;
             }
             const editor_timeline_note_draw_info info = model.metrics.note_rects(note);
-            const bool selected = selected_indices.find(index) != selected_indices.end() ||
-                                  (model.selected_note_index.has_value() && *model.selected_note_index == index);
+            const bool selected = selected_indices.find(index) != selected_indices.end();
             draw_note_block(note, info, selected, false, false);
         }
 

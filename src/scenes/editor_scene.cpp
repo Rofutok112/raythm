@@ -122,11 +122,7 @@ void editor_scene::on_enter() {
     viewport_.scrollbar_dragging = false;
     viewport_.scrollbar_drag_offset = 0.0f;
     snap_dropdown_open_ = false;
-    selected_note_index_ = load_result.selected_note_index;
     selected_note_indices_ = load_result.selected_note_indices;
-    if (selected_note_indices_.empty() && selected_note_index_.has_value()) {
-        selected_note_indices_.push_back(*selected_note_index_);
-    }
     timeline_drag_ = {};
     resume_state_.reset();
 }
@@ -202,7 +198,6 @@ void editor_scene::update(float dt) {
         metadata_panel_,
         timing_panel_,
         timeline_drag_,
-        selected_note_index_,
         selected_note_indices_,
         clipboard_notes_,
         transport_,
@@ -236,7 +231,6 @@ void editor_scene::update(float dt) {
         timing_panel_,
         transport_,
         space_playback_start_tick_,
-        selected_note_index_,
         selected_note_indices_,
         timeline_drag_,
         hitsound_path_,
@@ -348,12 +342,10 @@ void editor_scene::draw() {
         &meter_map_,
         timing_panel_.selected_event_index,
         timing_panel_.selected_scroll_event_index,
-        selected_note_indices_.empty() && selected_note_index_.has_value()
-            ? 1U
-            : selected_note_indices_.size(),
-        selected_note_indices_.empty() && !selected_note_index_.has_value()
+        selected_note_indices_.size(),
+        selected_note_indices_.empty()
             ? std::string("No notes selected")
-            : std::string(selected_note_indices_.empty() && selected_note_index_.has_value()
+            : std::string(selected_note_indices_.size() == 1
                 ? "1 note selected"
                 : TextFormat("%d notes selected", static_cast<int>(selected_note_indices_.size()))),
         can_delete_selected_timing_event(),
@@ -496,12 +488,10 @@ void editor_scene::draw() {
             &meter_map_,
             timing_panel_.selected_event_index,
             timing_panel_.selected_scroll_event_index,
-            selected_note_indices_.empty() && selected_note_index_.has_value()
-                ? 1U
-                : selected_note_indices_.size(),
-            selected_note_indices_.empty() && !selected_note_index_.has_value()
+            selected_note_indices_.size(),
+            selected_note_indices_.empty()
                 ? std::string("No notes selected")
-                : std::string(selected_note_indices_.empty() && selected_note_index_.has_value()
+                : std::string(selected_note_indices_.size() == 1
                     ? "1 note selected"
                     : TextFormat("%d notes selected", static_cast<int>(selected_note_indices_.size()))),
             can_delete_selected_timing_event(),
@@ -573,7 +563,6 @@ editor_resume_state editor_scene::build_resume_state() const {
         viewport_.ticks_per_pixel,
         viewport_.snap_index,
         waveform_visible_,
-        selected_note_index_,
         selected_note_indices_
     };
 }
@@ -584,7 +573,6 @@ editor_scene_sync_context editor_scene::make_sync_context() {
         meter_map_,
         timing_panel_,
         metadata_panel_,
-        selected_note_index_,
         selected_note_indices_,
     };
 }
@@ -753,10 +741,9 @@ int editor_scene::timeline_mouse_cursor(Vector2 mouse, const editor_timeline_met
         }
     }
 
-    std::optional<size_t> active_index = selected_note_index_;
-    if (!active_index.has_value() && !selected_note_indices_.empty()) {
-        active_index = selected_note_indices_.back();
-    }
+    const std::optional<size_t> active_index = selected_note_indices_.empty()
+        ? std::nullopt
+        : std::optional<size_t>(selected_note_indices_.back());
     if (!active_index.has_value() || *active_index >= state_->data().notes.size()) {
         return MOUSE_CURSOR_DEFAULT;
     }
@@ -989,7 +976,6 @@ void editor_scene::draw_timeline() const {
         transport_.loop_enabled,
         transport_.loop_start_tick,
         transport_.loop_end_tick,
-        selected_note_index_,
         selected_note_indices_,
         timing_panel_.selected_scroll_event_index,
         preview_notes,

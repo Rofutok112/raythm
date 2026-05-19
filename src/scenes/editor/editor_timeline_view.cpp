@@ -177,15 +177,15 @@ void draw_timeline_header(const editor_timeline_view_model& model, const ui_them
                           t.text_muted, ui::text_align::left);
 
     const char* status = model.selected_note_indices.empty()
-        ? (model.selected_note_index.has_value() ? "1 note selected" : "No selection")
-        : TextFormat("%d notes selected", static_cast<int>(model.selected_note_indices.size()));
+        ? "No selection"
+        : (model.selected_note_indices.size() == 1
+            ? "1 note selected"
+            : TextFormat("%d notes selected", static_cast<int>(model.selected_note_indices.size())));
     const Rectangle selection_badge = {header.x + header.width - 384.0f, header.y + 9.0f, 142.0f, 30.0f};
     ui::draw_rect_f(selection_badge, with_alpha(t.row, 235));
     ui::draw_rect_lines(selection_badge, 1.0f, t.border_light);
     ui::draw_text_in_rect(status, 14, selection_badge,
-                          model.selected_note_indices.empty() && !model.selected_note_index.has_value()
-                              ? t.text_muted
-                              : t.text);
+                          model.selected_note_indices.empty() ? t.text_muted : t.text);
 
     const Rectangle snap_badge = {selection_badge.x + selection_badge.width + 8.0f, selection_badge.y, 96.0f, 30.0f};
     ui::draw_rect_f(snap_badge, with_alpha(t.row, 235));
@@ -408,8 +408,7 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             }
 
             const editor_timeline_note_draw_info info = model.metrics.note_rects(note);
-            const bool selected = selected_note_indices.find(i) != selected_note_indices.end() ||
-                                  (model.selected_note_index.has_value() && *model.selected_note_index == i);
+            const bool selected = selected_note_indices.find(i) != selected_note_indices.end();
             Color head_fill = selected ? t.row_active : t.note_color;
             if (!selected && note.type == editor_timeline_note_type::release) {
                 head_fill = lerp_color(t.note_color, t.judge_great, 0.35f);
