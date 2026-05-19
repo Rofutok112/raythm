@@ -326,23 +326,27 @@ int main() {
         selection_meter_map.rebuild(selection_state->data());
         editor_timing_panel_state timing_panel;
         const editor_timeline_metrics metrics = make_metrics();
-        const Rectangle lane0_rect = metrics.lane_rect(0);
+        const Rectangle first_note_rect = metrics.note_rects(
+            {editor_timeline_note_type::tap, 480, 1, 480, false, 1}).head_rect;
         const Rectangle lane2_rect = metrics.lane_rect(2);
         editor_note_palette_selection select_tool;
         select_tool.active_tool = editor_note_palette_selection::tool::select;
         editor_timeline_result start = editor_timeline_controller::update(
             timing_panel,
             {selection_state.get(), &selection_meter_map, metrics,
-             {lane0_rect.x + lane0_rect.width * 0.5f, metrics.tick_to_y(240)}, true,
+             {first_note_rect.x + first_note_rect.width * 0.5f,
+              first_note_rect.y + first_note_rect.height * 0.5f}, true,
              true, false, false, false, false, false, 8, std::nullopt, {}, select_tool});
         editor_timeline_result finish = editor_timeline_controller::update(
             timing_panel,
             {selection_state.get(), &selection_meter_map, metrics,
-             {lane2_rect.x + lane2_rect.width * 0.5f, metrics.tick_to_y(720)}, true,
+             {lane2_rect.x + lane2_rect.width * 0.5f, metrics.tick_to_y(1080)}, true,
              false, true, true, false, false, false, 8, std::nullopt, start.drag_state, select_tool});
-        if (finish.note_to_add.has_value() || finish.selected_note_indices.size() != 1 ||
-            finish.selected_note_indices.front() != 0) {
-            std::cerr << "select tool drag should range-select notes instead of creating a note\n";
+        if (finish.note_to_add.has_value() || finish.notes_to_modify.size() != 0 ||
+            finish.selected_note_indices.size() != 2 ||
+            finish.selected_note_indices.front() != 0 ||
+            finish.selected_note_indices.back() != 1) {
+            std::cerr << "select tool drag should range-select multiple notes without moving them\n";
             return EXIT_FAILURE;
         }
     }

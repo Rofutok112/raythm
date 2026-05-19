@@ -348,6 +348,17 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
     }
 
     if (context.left_pressed) {
+        const bool select_tool_active = context.palette.active_tool == editor_note_palette_selection::tool::select;
+        if (select_tool_active) {
+            result.drag_state.active = true;
+            result.drag_state.mode = editor_timeline_drag_mode::range_select;
+            result.drag_state.start_mouse = context.mouse;
+            result.drag_state.current_mouse = context.mouse;
+            result.drag_state.start_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
+            result.drag_state.current_tick = result.drag_state.start_tick;
+            return result;
+        }
+
         if (const std::optional<size_t> selected_index = active_note_index(result); selected_index.has_value()) {
             const std::optional<editor_timeline_drag_mode> handle =
                 resize_handle_at_position(context, *selected_index, context.mouse);
@@ -433,9 +444,7 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             return result;
         }
 
-        const bool range_select_tool =
-            context.shift_down || context.palette.active_tool == editor_note_palette_selection::tool::select;
-        if (range_select_tool) {
+        if (context.shift_down) {
             result.drag_state.active = true;
             result.drag_state.mode = editor_timeline_drag_mode::range_select;
             result.drag_state.start_mouse = context.mouse;
