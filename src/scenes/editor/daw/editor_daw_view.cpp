@@ -327,15 +327,13 @@ void draw_note_block(const editor_timeline_note& note,
                      bool preview,
                      bool overlap) {
     const auto& t = *g_theme;
-    const Color tone = overlap ? t.error :
-        (note.type == editor_timeline_note_type::hold ? t.success :
-         (note.type == editor_timeline_note_type::release ? t.slow :
-          (note.type == editor_timeline_note_type::stay ? t.fast : t.accent)));
-    const Color fill = selected ? with_alpha(tone, 235) : with_alpha(tone, preview ? 145 : 195);
-    const Color outline = selected ? t.text : with_alpha(tone, 245);
+    constexpr Color kRayNoteColor = {174, 96, 255, 255};
+    const Color tone = overlap ? t.error : (note.is_ray ? kRayNoteColor : WHITE);
+    const Color fill = selected ? with_alpha(tone, 245) : with_alpha(tone, preview ? 150 : 220);
+    const Color outline = selected ? t.accent : with_alpha(tone, note.is_ray ? 255 : 210);
 
     if (info.has_body) {
-        ui::draw_rect_f(info.body_rect, with_alpha(tone, selected ? 135 : 80));
+        ui::draw_rect_f(info.body_rect, with_alpha(tone, selected ? 145 : 90));
         ui::draw_rect_lines(info.body_rect, selected ? 2.0f : 1.0f, with_alpha(outline, 205));
         ui::draw_rect_f(info.tail_rect, fill);
         ui::draw_rect_lines(info.tail_rect, selected ? 2.0f : 1.0f, outline);
@@ -343,10 +341,6 @@ void draw_note_block(const editor_timeline_note& note,
 
     ui::draw_rect_f(info.head_rect, fill);
     ui::draw_rect_lines(info.head_rect, selected ? 2.4f : 1.2f, outline);
-    if (note.is_ray) {
-        ui::draw_rect_f({info.head_rect.x, info.head_rect.y - 5.0f, info.head_rect.width, 3.0f},
-                        selected ? t.text : with_alpha(t.text_secondary, 180));
-    }
 }
 
 }  // namespace
@@ -635,11 +629,7 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
     draw_icon_button(layout::kBackButtonRect, raythm_icons::draw_chevron_left, false, t.text);
     draw_icon_button(layout::kSettingsButtonRect, raythm_icons::draw_settings_gear, false, t.text);
 
-    ui::draw_text_in_rect("raythm", 20, {content.x + 168.0f, content.y + 3.0f, 100.0f, 22.0f},
-                          t.text, ui::text_align::left);
-    ui::draw_text_in_rect("DAW Chart Editor", 13, {content.x + 168.0f, content.y + 28.0f, 150.0f, 18.0f},
-                          t.accent, ui::text_align::left);
-    const Rectangle meta_button = {content.x + 318.0f, content.y + 8.0f, 86.0f, 34.0f};
+    const Rectangle meta_button = {content.x + 168.0f, content.y + 8.0f, 86.0f, 34.0f};
     const Rectangle timing_button = {meta_button.x + meta_button.width + 8.0f, meta_button.y, 94.0f, 34.0f};
     result.metadata_modal_requested = ui::draw_button_colored(
         meta_button, "META", 13, t.row, t.row_hover, t.text_secondary, 1.2f).clicked;
@@ -728,6 +718,7 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
                model.loop_enabled ? t.success : t.text_secondary);
 
     const Rectangle arrange = {content.x, content.y + 62.0f, content.width, content.height - 62.0f};
+    const Rectangle ruler = {content.x + content.width + 10.0f, arrange.y, 66.0f, arrange.height};
     {
         ui::scoped_clip_rect clip_scope(arrange);
         draw_waveform(model, arrange);
@@ -738,9 +729,6 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
             lane_rect.height = arrange.height;
             ui::draw_rect_f(lane_rect, lane % 2 == 0 ? with_alpha(t.row, 28) : with_alpha(t.section, 36));
             ui::draw_rect_lines(lane_rect, 1.0f, with_alpha(t.border_light, 150));
-            ui::draw_text_in_rect(TextFormat("%d", lane + 1), 15,
-                                  {lane_rect.x + 8.0f, arrange.y + 8.0f, lane_rect.width - 16.0f, 18.0f},
-                                  t.text_hint, ui::text_align::left);
         }
 
         if (model.loop_end_tick > model.loop_start_tick &&
@@ -771,10 +759,8 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
             ui::draw_line_f(arrange.x, y, arrange.x + arrange.width, y,
                             line.major ? t.editor_grid_major : t.editor_grid_minor);
             if (line.major) {
-                ui::draw_rect_f({arrange.x, y - 12.0f, 64.0f, 24.0f}, with_alpha(t.panel, 220));
-                ui::draw_text_in_rect(TextFormat("%d:%d", line.measure, line.beat), 13,
-                                      {arrange.x + 7.0f, y - 10.0f, 50.0f, 20.0f},
-                                      t.text_secondary, ui::text_align::left);
+                ui::draw_line_f(arrange.x, y + 1.0f, arrange.x + arrange.width, y + 1.0f,
+                                t.editor_grid_major_glow);
             }
         }
 
@@ -819,15 +805,13 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
         if (model.playback_tick.has_value()) {
             const float y = model.metrics.tick_to_y(*model.playback_tick);
             DrawLineEx({arrange.x, y}, {arrange.x + arrange.width, y}, 3.0f, t.accent);
-            ui::draw_rect_f({arrange.x, y - 5.0f, 64.0f, 10.0f}, t.accent);
         }
     }
 
-    const Rectangle ruler = {content.x, content.y, content.width, 50.0f};
     ui::draw_rect_f(ruler, with_alpha(t.section, 235));
     ui::draw_rect_lines(ruler, 1.0f, t.border_light);
-    ui::draw_text_in_rect("RULER", 12, {ruler.x + 10.0f, ruler.y + 6.0f, 60.0f, 16.0f},
-                          t.text_muted, ui::text_align::left);
+    ui::draw_text_in_rect("BAR", 11, {ruler.x, ruler.y + 8.0f, ruler.width, 16.0f},
+                          t.text_muted);
     for (const editor_meter_map::grid_line& line : model.grid_lines) {
         if (!line.major) {
             continue;
@@ -836,8 +820,10 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
         if (y < arrange.y || y > arrange.y + arrange.height) {
             continue;
         }
-        const float x = ruler.x + 80.0f + std::fmod(static_cast<float>(line.measure) * 74.0f, ruler.width - 120.0f);
-        ui::draw_text_in_rect(TextFormat("%d", line.measure), 13, {x, ruler.y + 24.0f, 34.0f, 18.0f}, t.text_secondary);
+        const Rectangle tag = {ruler.x + 6.0f, y - 11.0f, ruler.width - 12.0f, 22.0f};
+        ui::draw_rect_f(tag, with_alpha(t.panel, 225));
+        ui::draw_rect_lines(tag, 1.0f, with_alpha(t.border_light, 190));
+        ui::draw_text_in_rect(TextFormat("%d:%d", line.measure, line.beat), 12, tag, t.text_secondary);
     }
 
     ui::draw_rect_f(track, t.scrollbar_track);
