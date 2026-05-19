@@ -357,6 +357,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select_scene.h
         src/scenes/editor/controller/editor_runtime_controller.cpp
         src/scenes/editor/controller/editor_runtime_controller.h
+        src/scenes/editor/daw/editor_daw_view.cpp
+        src/scenes/editor/daw/editor_daw_view.h
         src/scenes/editor/editor_flow_controller.cpp
         src/scenes/editor/editor_flow_controller.h
         src/scenes/editor/view/editor_cursor_hud_view.cpp

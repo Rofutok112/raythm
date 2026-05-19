@@ -6,6 +6,7 @@
 
 #include "audio_manager.h"
 #include "editor/controller/editor_runtime_controller.h"
+#include "editor/daw/editor_daw_view.h"
 #include "editor/view/editor_cursor_hud_view.h"
 #include "editor/editor_flow_controller.h"
 #include "editor/service/editor_chart_identity_service.h"
@@ -13,12 +14,8 @@
 #include "editor/service/editor_transport_service.h"
 #include "editor/service/editor_timing_edit_service.h"
 #include "editor/service/editor_timing_selection_service.h"
-#include "editor/view/editor_header_view.h"
 #include "editor/view/editor_layout.h"
-#include "editor/view/editor_left_panel_view.h"
 #include "editor/view/editor_modal_view.h"
-#include "editor/view/editor_right_panel_view.h"
-#include "editor/view/editor_timeline_presenter.h"
 #include "editor/viewport/editor_timeline_viewport.h"
 #include "editor/editor_session_loader.h"
 #include "chart_level_cache.h"
@@ -278,15 +275,7 @@ void editor_scene::draw() {
     ui::begin_draw_queue();
     draw_scene_background(t);
 
-    ui::draw_panel(layout::kLeftPanelRect);
-    ui::draw_panel(layout::kTimelineRect);
-    ui::draw_panel(layout::kRightPanelRect);
-    ui::draw_panel(layout::kHeaderRect);
-
-    ui::draw_button_colored(layout::kBackButtonRect, "BACK", 20, t.row, t.row_hover, t.text);
-    ui::draw_button_colored(layout::kSettingsButtonRect, "SETTINGS", 18, t.row, t.row_hover, t.text);
-
-    const editor_left_panel_view_result left_panel = editor_left_panel_view::draw({
+    const editor_left_panel_view_result left_panel = editor::daw::draw_left_panel({
         song_.meta.title.c_str(),
         !state_->file_path().empty(),
         state_->is_dirty(),
@@ -316,7 +305,7 @@ void editor_scene::draw() {
     draw_timeline();
 
     editor_scene_sync::sync_timing_event_selection(make_sync_context());
-    const editor_right_panel_view_result right_panel = editor_right_panel_view::draw({
+    const editor_right_panel_view_result right_panel = editor::daw::draw_right_panel({
         &state_->data().timing_events,
         &state_->data().scroll_events,
         &meter_map_,
@@ -376,7 +365,7 @@ void editor_scene::draw() {
     const std::string loop_label = loop_region_label(transport_, meter_map_);
     const std::string offset_label =
         (state_->data().meta.offset > 0 ? "+" : "") + std::to_string(state_->data().meta.offset) + " ms";
-    const editor_header_view_result header_result = editor_header_view::draw({
+    const editor_header_view_result header_result = editor::daw::draw_header({
         playback_status.c_str(),
         transport_.audio_loaded,
         transport_.audio_playing,
@@ -774,7 +763,7 @@ void editor_scene::draw_timeline() const {
         timeline_drag_.active && timeline_drag_.mode != editor_timeline_drag_mode::create
             ? timeline_drag_.note_index
             : std::nullopt;
-    editor_timeline_presenter::draw({
+    editor::daw::draw_timeline({
         *state_,
         meter_map_,
         &waveform_summary_,
