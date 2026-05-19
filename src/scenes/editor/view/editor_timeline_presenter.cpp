@@ -42,6 +42,12 @@ void editor_timeline_presenter::draw(const editor_timeline_presenter_model& mode
         scroll_events.push_back({event.type, event.tick, event.duration, event.multiplier});
     }
 
+    std::vector<editor_timeline_scroll_automation_point> scroll_automation;
+    scroll_automation.reserve(model.state.data().scroll_automation.size());
+    for (const scroll_automation_point& point : model.state.data().scroll_automation) {
+        scroll_automation.push_back({point.tick, point.multiplier, point.curve_to_next});
+    }
+
     std::vector<editor_timeline_note> preview_notes;
     preview_notes.reserve(model.preview_notes.size());
     for (const note_data& note : model.preview_notes) {
@@ -52,6 +58,7 @@ void editor_timeline_presenter::draw(const editor_timeline_presenter_model& mode
         metrics,
         model.meter_map.visible_grid_lines(min_tick, max_tick),
         std::move(scroll_events),
+        std::move(scroll_automation),
         std::move(notes),
         model.selected_note_indices,
         model.selected_scroll_event_index,

@@ -22,12 +22,9 @@ struct timing_modal_result {
 
 editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model& model);
 
-editor_right_panel_view_result draw_right_panel(const editor_right_panel_view_model& model,
-                                                editor_timing_panel_state& timing_state);
-
 editor_header_view_result draw_header(const editor_header_view_model& model, Rectangle snap_menu_rect);
 
-void draw_timeline(const editor_timeline_presenter_model& model);
+editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_model& model);
 
 metadata_modal_result draw_metadata_modal(const editor_left_panel_view_model& model);
 

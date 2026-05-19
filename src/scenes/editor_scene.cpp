@@ -352,44 +352,27 @@ void editor_scene::draw() {
         apply_metadata_changes(false);
     }
 
-    draw_timeline();
+    const editor_right_panel_view_result timeline_panel = draw_timeline();
 
     editor_scene_sync::sync_timing_event_selection(make_sync_context());
-    const editor_right_panel_view_result right_panel = editor::daw::draw_right_panel({
-        &state_->data().timing_events,
-        &state_->data().scroll_events,
-        &state_->data().scroll_automation,
-        &meter_map_,
-        timing_panel_.selected_event_index,
-        timing_panel_.selected_scroll_event_index,
-        selected_note_indices_.size(),
-        selected_note_indices_.empty()
-            ? std::string("No notes selected")
-            : std::string(selected_note_indices_.size() == 1
-                ? "1 note selected"
-                : TextFormat("%d notes selected", static_cast<int>(selected_note_indices_.size()))),
-        can_delete_selected_timing_event(),
-        can_delete_selected_scroll_event(),
-        virtual_screen::get_virtual_mouse(),
-    }, timing_panel_);
-    if (right_panel.scroll_automation_point_to_add.has_value()) {
-        state_->add_scroll_automation_point(*right_panel.scroll_automation_point_to_add);
+    if (timeline_panel.scroll_automation_point_to_add.has_value()) {
+        state_->add_scroll_automation_point(*timeline_panel.scroll_automation_point_to_add);
         select_scroll_event(state_->data().scroll_automation.empty()
                                 ? std::nullopt
                                 : std::optional<size_t>(state_->data().scroll_automation.size() - 1),
                             true);
     }
-    if (right_panel.scroll_automation_point_to_modify.has_value()) {
-        state_->modify_scroll_automation_point(right_panel.scroll_automation_point_to_modify->first,
-                                               right_panel.scroll_automation_point_to_modify->second);
-        select_scroll_event(right_panel.scroll_automation_point_to_modify->first, false);
+    if (timeline_panel.scroll_automation_point_to_modify.has_value()) {
+        state_->modify_scroll_automation_point(timeline_panel.scroll_automation_point_to_modify->first,
+                                               timeline_panel.scroll_automation_point_to_modify->second);
+        select_scroll_event(timeline_panel.scroll_automation_point_to_modify->first, false);
     }
     const editor_timing_panel_update_result update_result = editor_panel_controller::update_timing_panel(
         metadata_panel_,
         timing_panel_,
         {
-            right_panel.panel_result,
-            right_panel.clicked_outside_editor,
+            timeline_panel.panel_result,
+            timeline_panel.clicked_outside_editor,
         });
     if (update_result.select_timing_event_index.has_value()) {
         select_timing_event(update_result.select_timing_event_index, true);
@@ -768,19 +751,6 @@ int editor_scene::timeline_mouse_cursor(Vector2 mouse, const editor_timeline_met
         return MOUSE_CURSOR_DEFAULT;
     }
 
-    if (timing_panel_.selected_scroll_event_index.has_value() &&
-        *timing_panel_.selected_scroll_event_index < state_->data().scroll_events.size()) {
-        const scroll_event& event = state_->data().scroll_events[*timing_panel_.selected_scroll_event_index];
-        const Rectangle content = metrics.content_rect();
-        const float start_y = metrics.tick_to_y(event.tick);
-        const float end_y = metrics.tick_to_y(event.tick + event.duration);
-        const Rectangle start_handle = {content.x, start_y - 4.0f, content.width, 8.0f};
-        const Rectangle end_handle = {content.x, end_y - 4.0f, content.width, 8.0f};
-        if (CheckCollisionPointRec(mouse, start_handle) || CheckCollisionPointRec(mouse, end_handle)) {
-            return MOUSE_CURSOR_RESIZE_NS;
-        }
-    }
-
     const std::optional<size_t> active_index = selected_note_indices_.empty()
         ? std::nullopt
         : std::optional<size_t>(selected_note_indices_.back());
@@ -996,7 +966,7 @@ bool editor_scene::apply_chart_offset(int offset_ms) {
     return true;
 }
 
-void editor_scene::draw_timeline() const {
+editor_right_panel_view_result editor_scene::draw_timeline() {
     const std::vector<note_data> preview_notes = dragged_notes();
     std::vector<size_t> preview_ignore_indices;
     if (timeline_drag_.active && timeline_drag_.mode == editor_timeline_drag_mode::move_notes) {
@@ -1021,7 +991,7 @@ void editor_scene::draw_timeline() const {
             std::fabs(timeline_drag_.current_mouse.y - timeline_drag_.start_mouse.y)
         };
     }
-    editor::daw::draw_timeline({
+    return editor::daw::draw_timeline({
         *state_,
         meter_map_,
         &waveform_summary_,

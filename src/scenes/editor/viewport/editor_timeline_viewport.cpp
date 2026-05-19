@@ -13,7 +13,7 @@ namespace layout = editor::layout;
 constexpr float kTimelinePadding = 18.0f;
 constexpr float kLaneGap = 6.0f;
 constexpr float kScrollbarWidth = 48.0f;
-constexpr float kScrollbarGap = 76.0f;
+constexpr float kScrollbarGap = 194.0f;
 constexpr float kMinTicksPerPixel = 0.9f;
 constexpr float kMaxTicksPerPixel = 28.0f;
 constexpr float kScrollWheelViewportRatio = 0.10f;
@@ -49,6 +49,9 @@ float editor_timeline_viewport::content_tick_span(const editor_timeline_viewport
     }
     for (const timing_event& event : model.state->data().timing_events) {
         max_tick = std::max(max_tick, event.tick);
+    }
+    for (const scroll_automation_point& point : model.state->data().scroll_automation) {
+        max_tick = std::max(max_tick, point.tick);
     }
     max_tick = std::max(max_tick, model.audio_length_tick);
 

@@ -16,6 +16,7 @@
 #include "ui_text_input.h"
 #include "ui/icons/raythm_icons.h"
 #include "ui_layout.h"
+#include "virtual_screen.h"
 
 namespace {
 namespace layout = editor::layout;
@@ -304,6 +305,12 @@ editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_m
         scroll_events.push_back({event.type, event.tick, event.duration, event.multiplier});
     }
 
+    std::vector<editor_timeline_scroll_automation_point> scroll_automation;
+    scroll_automation.reserve(model.state.data().scroll_automation.size());
+    for (const scroll_automation_point& point : model.state.data().scroll_automation) {
+        scroll_automation.push_back({point.tick, point.multiplier, point.curve_to_next});
+    }
+
     std::vector<editor_timeline_note> preview_notes;
     preview_notes.reserve(model.preview_notes.size());
     for (const note_data& note : model.preview_notes) {
@@ -314,6 +321,7 @@ editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_m
         metrics,
         model.meter_map.visible_grid_lines(min_tick, max_tick),
         std::move(scroll_events),
+        std::move(scroll_automation),
         std::move(notes),
         model.selected_note_indices,
         model.selected_scroll_event_index,
@@ -926,8 +934,9 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
     return result;
 }
 
-void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
+editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_model& presenter_model) {
     const auto& t = *g_theme;
+    editor_right_panel_view_result result;
     const editor_timeline_view_model model = make_timeline_model(presenter_model);
     const Rectangle panel = model.metrics.panel_rect;
     const Rectangle content = model.metrics.content_rect();
@@ -939,7 +948,8 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
 
     const Rectangle arrange = content;
     const Rectangle minimap = track;
-    const Rectangle ruler = {track.x + track.width + 8.0f, arrange.y, 60.0f, arrange.height};
+    const Rectangle automation = {track.x + track.width + 8.0f, arrange.y, 110.0f, arrange.height};
+    const Rectangle ruler = {automation.x + automation.width + 8.0f, arrange.y, 60.0f, arrange.height};
     const Rectangle ruler_labels = {ruler.x, arrange.y, ruler.width, arrange.height};
     {
         ui::scoped_clip_rect clip_scope(arrange);
@@ -985,28 +995,6 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
             }
         }
 
-        for (size_t index = 0; index < model.scroll_events.size(); ++index) {
-            const editor_timeline_scroll_event& event = model.scroll_events[index];
-            if (event.duration <= 0 || event.tick > model.max_tick || event.tick + event.duration < model.min_tick) {
-                continue;
-            }
-            const float start_y = model.metrics.tick_to_y(event.tick);
-            const float end_y = model.metrics.tick_to_y(event.tick + event.duration);
-            const bool selected = model.selected_scroll_event_index.has_value() &&
-                                  *model.selected_scroll_event_index == index;
-            const Color tone = event.type == scroll_event_type::speed ? t.fast : t.error;
-            const Rectangle band = {arrange.x, std::min(start_y, end_y), arrange.width,
-                                    std::max(8.0f, std::fabs(end_y - start_y))};
-            ui::draw_rect_f(band, with_alpha(tone, selected ? 92 : 42));
-            ui::draw_rect_lines(band, selected ? 2.0f : 1.0f, with_alpha(tone, selected ? 230 : 140));
-            ui::draw_text_in_rect(event.type == scroll_event_type::speed
-                                      ? TextFormat("Speed %.2fx", event.multiplier)
-                                      : "Stop",
-                                  13,
-                                  {band.x + band.width - 130.0f, band.y + 4.0f, 118.0f, 18.0f},
-                                  selected ? t.text : t.text_secondary, ui::text_align::right);
-        }
-
         const std::set<size_t> preview_indices(model.preview_note_indices.begin(), model.preview_note_indices.end());
         for (size_t index = 0; index < model.notes.size(); ++index) {
             if (preview_indices.find(index) != preview_indices.end()) {
@@ -1040,6 +1028,83 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
 
     draw_chart_minimap(model, minimap);
 
+    ui::draw_rect_f(automation, with_alpha(t.section, 235));
+    ui::draw_rect_lines(automation, 1.0f, t.border_light);
+    ui::draw_text_in_rect("AUTO", 11, {automation.x, automation.y + 8.0f, automation.width, 16.0f},
+                          t.text_muted);
+    const Rectangle automation_graph = ui::inset(automation, ui::edge_insets{28.0f, 8.0f, 10.0f, 8.0f});
+    for (int i = 0; i <= 3; ++i) {
+        const float x = automation_graph.x + automation_graph.width * static_cast<float>(i) / 3.0f;
+        ui::draw_line_f(x, automation_graph.y, x, automation_graph.y + automation_graph.height,
+                        with_alpha(t.border_light, i == 1 ? 165 : 80));
+    }
+    std::vector<std::pair<size_t, editor_timeline_scroll_automation_point>> sorted_points;
+    sorted_points.reserve(model.scroll_automation.size());
+    for (size_t index = 0; index < model.scroll_automation.size(); ++index) {
+        sorted_points.push_back({index, model.scroll_automation[index]});
+    }
+    std::stable_sort(sorted_points.begin(), sorted_points.end(), [](const auto& left, const auto& right) {
+        return left.second.tick < right.second.tick;
+    });
+    auto point_x = [&](float multiplier) {
+        const float t_value = std::clamp(multiplier / 3.0f, 0.0f, 1.0f);
+        return automation_graph.x + t_value * automation_graph.width;
+    };
+    auto point_at_mouse = [&](Vector2 mouse, scroll_automation_curve curve) {
+        scroll_automation_point point;
+        point.tick = std::max(0, model.metrics.y_to_tick(mouse.y));
+        point.multiplier = std::round(
+            std::clamp((mouse.x - automation_graph.x) / automation_graph.width, 0.0f, 1.0f) * 300.0f) / 100.0f;
+        point.curve_to_next = curve;
+        return point;
+    };
+    for (size_t index = 1; index < sorted_points.size(); ++index) {
+        const auto& previous = sorted_points[index - 1].second;
+        const auto& current = sorted_points[index].second;
+        const Vector2 from = {point_x(previous.multiplier), model.metrics.tick_to_y(previous.tick)};
+        const Vector2 to = {point_x(current.multiplier), model.metrics.tick_to_y(current.tick)};
+        DrawLineEx(from, to, 2.0f, with_alpha(t.fast, 220));
+    }
+    std::optional<size_t> hovered_point;
+    for (size_t reverse = sorted_points.size(); reverse > 0; --reverse) {
+        const size_t sorted_index = reverse - 1;
+        const size_t point_index = sorted_points[sorted_index].first;
+        const auto& point = sorted_points[sorted_index].second;
+        const Vector2 pos = {point_x(point.multiplier), model.metrics.tick_to_y(point.tick)};
+        if (pos.y < automation.y || pos.y > automation.y + automation.height) {
+            continue;
+        }
+        const bool selected = model.selected_scroll_event_index.has_value() &&
+                              *model.selected_scroll_event_index == point_index;
+        const Rectangle hit = {pos.x - 8.0f, pos.y - 8.0f, 16.0f, 16.0f};
+        if (!hovered_point.has_value() && CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), hit)) {
+            hovered_point = point_index;
+        }
+        DrawCircleV(pos, selected ? 7.0f : 5.5f, selected ? t.accent : t.fast);
+        DrawCircleLines(static_cast<int>(pos.x), static_cast<int>(pos.y), selected ? 8.0f : 6.5f,
+                        selected ? t.text : with_alpha(t.text, 170));
+    }
+    const Vector2 mouse = virtual_screen::get_virtual_mouse();
+    const bool automation_hovered = CheckCollisionPointRec(mouse, automation_graph);
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && automation_hovered) {
+        if (hovered_point.has_value()) {
+            result.panel_result.selected_scroll_event_index = hovered_point;
+        } else {
+            result.scroll_automation_point_to_add = point_at_mouse(mouse, scroll_automation_curve::linear);
+        }
+    }
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && automation_hovered &&
+        model.selected_scroll_event_index.has_value() &&
+        *model.selected_scroll_event_index < model.scroll_automation.size()) {
+        result.scroll_automation_point_to_modify = std::make_pair(
+            *model.selected_scroll_event_index,
+            point_at_mouse(mouse, model.scroll_automation[*model.selected_scroll_event_index].curve_to_next));
+    }
+    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && hovered_point.has_value()) {
+        result.panel_result.selected_scroll_event_index = hovered_point;
+        result.panel_result.delete_selected_scroll = true;
+    }
+
     ui::draw_rect_f(ruler, with_alpha(t.section, 235));
     ui::draw_rect_lines(ruler, 1.0f, t.border_light);
     draw_waveform(model, ui::inset(ruler, 4.0f));
@@ -1058,6 +1123,7 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
         ui::draw_rect_lines(tag, 1.0f, with_alpha(t.border_light, 190));
         ui::draw_text_in_rect(TextFormat("%d:%d", line.measure, line.beat), 12, tag, t.text_secondary);
     }
+    return result;
 }
 
 metadata_modal_result draw_metadata_modal(const editor_left_panel_view_model& model) {

@@ -31,6 +31,12 @@ struct editor_timeline_scroll_event {
     float multiplier = 1.0f;
 };
 
+struct editor_timeline_scroll_automation_point {
+    int tick = 0;
+    float multiplier = 1.0f;
+    scroll_automation_curve curve_to_next = scroll_automation_curve::hold;
+};
+
 struct editor_timeline_note_draw_info {
     Rectangle head_rect = {};
     Rectangle body_rect = {};
@@ -67,6 +73,7 @@ struct editor_timeline_view_model {
     editor_timeline_metrics metrics;
     std::vector<editor_meter_map::grid_line> grid_lines;
     std::vector<editor_timeline_scroll_event> scroll_events;
+    std::vector<editor_timeline_scroll_automation_point> scroll_automation;
     std::vector<editor_timeline_note> notes;
     std::vector<size_t> selected_note_indices;
     std::optional<size_t> selected_scroll_event_index;

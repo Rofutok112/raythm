@@ -13,6 +13,7 @@
 #include "editor/editor_panel_controller.h"
 #include "editor/editor_scene_sync.h"
 #include "editor/editor_scene_types.h"
+#include "editor/view/editor_right_panel_view.h"
 #include "editor/viewport/editor_timeline_viewport.h"
 #include "raylib.h"
 #include "scene.h"
@@ -58,7 +59,7 @@ private:
     void delete_selected_scroll_event();
     bool can_delete_selected_timing_event() const;
     bool can_delete_selected_scroll_event() const;
-    void draw_timeline() const;
+    editor_right_panel_view_result draw_timeline();
     bool has_active_metadata_input() const;
     bool apply_metadata_changes(bool clear_notes_for_key_count_change);
     bool apply_chart_offset(int offset_ms);
