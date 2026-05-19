@@ -326,49 +326,110 @@ void draw_waveform(const editor_timeline_view_model& model, Rectangle content) {
     }
 }
 
+Color editor_note_tone(editor_timeline_note_type type, bool is_ray, const ui_theme& t) {
+    if (is_ray) {
+        return {174, 96, 255, 255};
+    }
+    switch (type) {
+        case editor_timeline_note_type::release:
+            return {255, 105, 148, 255};
+        case editor_timeline_note_type::stay:
+            return {70, 236, 224, 255};
+        case editor_timeline_note_type::tap:
+        case editor_timeline_note_type::hold:
+            return WHITE;
+    }
+    return t.text;
+}
+
+void draw_editor_tap_slab(Rectangle rect, Color fill, Color outline, bool selected) {
+    ui::draw_rect_f(rect, fill);
+    const float border_width = selected ? 2.4f : 1.2f;
+    ui::draw_rect_lines(rect, border_width, outline);
+
+    const float rim_height = std::clamp(rect.height * 0.16f, 1.5f, 4.0f);
+    const float side_width = std::clamp(rect.width * 0.055f, 1.5f, 4.0f);
+    ui::draw_rect_f({rect.x, rect.y, rect.width, rim_height}, with_alpha(WHITE, fill.a / 3));
+    ui::draw_rect_f({rect.x, rect.y + rect.height - rim_height, rect.width, rim_height},
+                    with_alpha(BLACK, fill.a / 10));
+    ui::draw_rect_f({rect.x, rect.y, side_width, rect.height}, with_alpha(WHITE, fill.a / 5));
+    ui::draw_rect_f({rect.x + rect.width - side_width, rect.y, side_width, rect.height},
+                    with_alpha(BLACK, fill.a / 12));
+}
+
+void draw_editor_stay_dot(Rectangle rect, Color fill, Color outline, bool selected) {
+    const Vector2 center = rect_center(rect);
+    const float bar_width = std::max(12.0f, rect.width * 1.04f);
+    const float bar_height = std::clamp(rect.height * 0.46f, 6.0f, 14.0f);
+    const Rectangle bar = {center.x - bar_width * 0.5f, center.y - bar_height * 0.5f,
+                           bar_width, bar_height};
+    const float cap_width = std::clamp(bar_width * 0.055f, 2.0f, 5.0f);
+    const float cap_height = bar_height * 1.55f;
+    const Rectangle left_cap = {bar.x, center.y - cap_height * 0.5f, cap_width, cap_height};
+    const Rectangle right_cap = {bar.x + bar.width - cap_width, center.y - cap_height * 0.5f,
+                                 cap_width, cap_height};
+
+    DrawRectangleRounded(bar, 0.65f, 8, fill);
+    ui::draw_rect_f(left_cap, with_alpha(WHITE, fill.a / 5));
+    ui::draw_rect_f(right_cap, with_alpha(BLACK, fill.a / 9));
+    ui::draw_rect_lines(bar, selected ? 2.2f : 1.2f, outline);
+    ui::draw_rect_lines(left_cap, 1.0f, with_alpha(outline, 170));
+    ui::draw_rect_lines(right_cap, 1.0f, with_alpha(outline, 170));
+}
+
+void draw_editor_release_chevron(Rectangle rect, Color marker, Color contour) {
+    const Vector2 center = rect_center(rect);
+    const float width = std::max(12.0f, rect.width * 0.72f);
+    const float height = std::clamp(rect.height * 0.72f, 10.0f, 24.0f);
+    const Vector2 left_outer_bottom = {center.x - width * 0.50f, center.y + height * 0.26f};
+    const Vector2 left_outer_top = {center.x - width * 0.50f, center.y + height * 0.02f};
+    const Vector2 center_top = {center.x, center.y - height * 0.36f};
+    const Vector2 center_bottom = {center.x, center.y - height * 0.08f};
+    const Vector2 right_outer_top = {center.x + width * 0.50f, center.y + height * 0.02f};
+    const Vector2 right_outer_bottom = {center.x + width * 0.50f, center.y + height * 0.26f};
+
+    DrawTriangle(left_outer_bottom, left_outer_top, center_top, marker);
+    DrawTriangle(left_outer_bottom, center_top, center_bottom, marker);
+    DrawTriangle(center_bottom, center_top, right_outer_top, marker);
+    DrawTriangle(center_bottom, right_outer_top, right_outer_bottom, marker);
+
+    const float line_width = std::clamp(height * 0.10f, 1.6f, 2.8f);
+    DrawLineEx(left_outer_bottom, left_outer_top, line_width, contour);
+    DrawLineEx(left_outer_top, center_top, line_width, contour);
+    DrawLineEx(center_top, right_outer_top, line_width, contour);
+    DrawLineEx(right_outer_top, right_outer_bottom, line_width, contour);
+    DrawLineEx(right_outer_bottom, center_bottom, line_width, contour);
+    DrawLineEx(center_bottom, left_outer_bottom, line_width, contour);
+}
+
 void draw_note_block(const editor_timeline_note& note,
                      const editor_timeline_note_draw_info& info,
                      bool selected,
                      bool preview,
                      bool overlap) {
     const auto& t = *g_theme;
-    constexpr Color kRayNoteColor = {174, 96, 255, 255};
-    const Color tone = overlap ? t.error : (note.is_ray ? kRayNoteColor : WHITE);
+    const Color tone = overlap ? t.error : editor_note_tone(note.type, note.is_ray, t);
     const Color fill = selected ? with_alpha(tone, 245) : with_alpha(tone, preview ? 150 : 220);
     const Color outline = selected ? t.accent : with_alpha(tone, note.is_ray ? 255 : 210);
 
     if (info.has_body) {
-        ui::draw_rect_f(info.body_rect, with_alpha(tone, selected ? 145 : 90));
+        ui::draw_rect_f(info.body_rect, with_alpha(tone, selected ? 150 : 100));
         ui::draw_rect_lines(info.body_rect, selected ? 2.0f : 1.0f, with_alpha(outline, 205));
-        ui::draw_rect_f(info.tail_rect, fill);
-        ui::draw_rect_lines(info.tail_rect, selected ? 2.0f : 1.0f, outline);
+        draw_editor_tap_slab(info.tail_rect, fill, outline, selected);
     }
 
-    ui::draw_rect_f(info.head_rect, fill);
-    ui::draw_rect_lines(info.head_rect, selected ? 2.4f : 1.2f, outline);
-
-    const Color marker = note.is_ray ? WHITE : t.bg;
-    const Color marker_outline = note.is_ray ? with_alpha(t.bg, 220) : with_alpha(WHITE, 160);
-    const Rectangle marker_rect = ui::inset(info.head_rect, 5.0f);
-    const Vector2 center = rect_center(marker_rect);
     if (note.type == editor_timeline_note_type::stay) {
-        const float radius = std::max(3.0f, std::min(marker_rect.width, marker_rect.height) * 0.28f);
-        const Rectangle bar = {marker_rect.x, center.y - 1.4f, marker_rect.width, 2.8f};
-        DrawRectangleRounded(bar, 0.7f, 4, marker);
-        DrawCircleV(center, radius, marker);
-        DrawCircleLines(static_cast<int>(std::lround(center.x)), static_cast<int>(std::lround(center.y)),
-                        radius, marker_outline);
-    } else if (note.type == editor_timeline_note_type::release) {
-        const float half_width = std::max(4.0f, marker_rect.width * 0.34f);
-        const float tip_y = marker_rect.y + 2.0f;
-        const float wing_y = marker_rect.y + marker_rect.height * 0.5f;
-        DrawTriangle({center.x, tip_y},
-                     {center.x - half_width, wing_y},
-                     {center.x + half_width, wing_y},
-                     marker);
-        const Rectangle stem = {center.x - 2.0f, wing_y - 1.0f, 4.0f,
-                                std::max(4.0f, marker_rect.y + marker_rect.height - wing_y)};
-        DrawRectangleRounded(stem, 0.4f, 4, marker);
+        draw_editor_stay_dot(info.head_rect, fill, outline, selected);
+        return;
+    }
+
+    draw_editor_tap_slab(info.head_rect, fill, outline, selected);
+    if (note.type == editor_timeline_note_type::release) {
+        const Color marker = note.is_ray ? with_alpha(WHITE, selected ? 255 : 235)
+                                         : with_alpha(lerp_color(tone, WHITE, 0.52f), selected ? 255 : 235);
+        const Color contour = note.is_ray ? with_alpha(t.bg, 220)
+                                          : with_alpha(lerp_color(tone, BLACK, 0.22f), 220);
+        draw_editor_release_chevron(info.head_rect, marker, contour);
     }
 }
 
