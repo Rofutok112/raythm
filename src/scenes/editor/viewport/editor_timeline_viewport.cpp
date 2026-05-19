@@ -19,7 +19,7 @@ constexpr float kMaxTicksPerPixel = 28.0f;
 constexpr float kScrollWheelViewportRatio = 0.10f;
 constexpr float kNoteHeadHeight = 14.0f;
 constexpr float kTimelineLeadInTicks = 960.0f;
-constexpr float kPlaybackFollowViewportRatio = 0.35f;
+constexpr float kPlaybackFollowViewportRatio = 0.5f;
 constexpr std::array<int, 11> kSnapDivisions = {1, 2, 3, 4, 8, 12, 16, 24, 32, 64, 128};
 constexpr std::array<const char*, 11> kSnapLabels = {"1/1", "1/2", "1/3", "1/4", "1/8", "1/12", "1/16", "1/24", "1/32", "1/64", "1/128"};
 }
