@@ -79,6 +79,7 @@ struct editor_timeline_view_model {
     bool waveform_visible = false;
     int waveform_offset_ms = 0;
     std::optional<editor_timeline_note> preview_note;
+    std::optional<size_t> preview_note_index;
     bool preview_has_overlap = false;
     int min_tick = 0;
     int max_tick = 0;

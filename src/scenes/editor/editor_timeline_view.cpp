@@ -386,6 +386,9 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
         }
 
         for (size_t i = 0; i < model.notes.size(); ++i) {
+            if (model.preview_note_index.has_value() && *model.preview_note_index == i) {
+                continue;
+            }
             const editor_timeline_note& note = model.notes[i];
             if (note.lane < 0 || note.lane >= model.metrics.key_count) {
                 continue;

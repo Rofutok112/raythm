@@ -64,6 +64,7 @@ void editor_timeline_presenter::draw(const editor_timeline_presenter_model& mode
         model.waveform_visible,
         model.waveform_offset_ms,
         preview_note,
+        model.preview_note_index,
         model.preview_has_overlap,
         min_tick,
         max_tick,

@@ -283,6 +283,7 @@ editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_m
         model.waveform_visible,
         model.waveform_offset_ms,
         preview_note,
+        model.preview_note_index,
         model.preview_has_overlap,
         min_tick,
         max_tick,
@@ -446,6 +447,15 @@ void draw_editor_hold_body(Rectangle rect, Color fill, bool ray_style, bool sele
     }
 }
 
+void draw_editor_hold_endpoint_handles(Rectangle rect, bool preview) {
+    const Color handle = preview ? g_theme->success : g_theme->accent;
+    const float height = std::clamp(rect.height * 0.04f, 3.0f, 7.0f);
+    const Rectangle top = {rect.x - 4.0f, rect.y - height * 0.5f, rect.width + 8.0f, height};
+    const Rectangle bottom = {rect.x - 4.0f, rect.y + rect.height - height * 0.5f, rect.width + 8.0f, height};
+    DrawRectangleRounded(top, 0.45f, 4, with_alpha(handle, 235));
+    DrawRectangleRounded(bottom, 0.45f, 4, with_alpha(handle, 170));
+}
+
 void draw_editor_stay_dot(Rectangle rect, Color fill, bool ray_style, bool selected) {
     const Color stay_base = ray_style
                                 ? lerp_color(WHITE, {224, 214, 255, 255}, 0.14f)
@@ -510,6 +520,9 @@ void draw_note_block(const editor_timeline_note& note,
 
     if (info.has_body) {
         draw_editor_hold_body(info.body_rect, draw_fill, note.is_ray, selected);
+        if (selected || preview) {
+            draw_editor_hold_endpoint_handles(info.body_rect, preview);
+        }
         return;
     }
 
@@ -998,6 +1011,9 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
         }
 
         for (size_t index = 0; index < model.notes.size(); ++index) {
+            if (model.preview_note_index.has_value() && *model.preview_note_index == index) {
+                continue;
+            }
             const editor_timeline_note& note = model.notes[index];
             if (note.lane < 0 || note.lane >= model.metrics.key_count) {
                 continue;
