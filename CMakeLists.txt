@@ -320,8 +320,6 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_create_scene.h
         src/scenes/song_select/song_catalog_service.cpp
         src/scenes/song_select/song_catalog_service.h
-        src/scenes/song_select/content_verification_cache_database.cpp
-        src/scenes/song_select/content_verification_cache_database.h
         src/scenes/song_select/local_catalog_database.cpp
         src/scenes/song_select/local_catalog_database.h
         src/scenes/song_select/song_select_confirmation_dialog.cpp

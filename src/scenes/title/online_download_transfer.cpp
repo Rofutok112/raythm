@@ -20,7 +20,6 @@
 #include "network/json_helpers.h"
 #include "path_utils.h"
 #include "song_writer.h"
-#include "song_select/content_verification_cache_database.h"
 #include "title/local_content_index.h"
 #include "title/online_download_remote_client.h"
 #include "ui_notice.h"
@@ -381,7 +380,6 @@ download_song_result download_song_package(const song_entry_state song,
         .remote_song_id = result.song_id,
         .origin = origin,
     });
-    song_select::content_verification_cache_database::remove_song(local_song_id);
 
     result.success = true;
     result.message = song.installed ? "Song updated." : "Song downloaded.";
@@ -467,7 +465,6 @@ download_song_result download_chart_file(const song_entry_state song,
         .remote_chart_version = chart.chart.meta.chart_version,
         .origin = local_content_index::online_origin::downloaded,
     });
-    song_select::content_verification_cache_database::remove_chart(local_chart_id);
 
     result.success = true;
     result.message = "Chart downloaded.";
