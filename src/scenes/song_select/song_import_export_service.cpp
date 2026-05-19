@@ -280,6 +280,7 @@ bool copy_file_into_directory(const fs::path& source_path, const fs::path& desti
 void apply_song_timing_to_chart(const song_meta& song, chart_data& chart) {
     if (!song.timing_events.empty()) {
         chart.timing_events = song.timing_events;
+        chart.meta.resolution = 480;
     }
     if (song.has_offset) {
         chart.meta.offset = song.offset;

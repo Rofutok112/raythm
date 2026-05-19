@@ -28,6 +28,7 @@ std::optional<song_data> load_sample_song() {
 void apply_song_timing_to_chart(const song_data& song, chart_data& chart) {
     if (!song.meta.timing_events.empty()) {
         chart.timing_events = song.meta.timing_events;
+        chart.meta.resolution = 480;
     }
     if (song.meta.has_offset) {
         chart.meta.offset = song.meta.offset;

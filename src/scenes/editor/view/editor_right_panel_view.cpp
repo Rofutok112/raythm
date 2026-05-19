@@ -11,7 +11,7 @@ namespace {
 namespace layout = editor::layout;
 
 const char* timing_event_type_label(timing_event_type type) {
-    return type == timing_event_type::bpm ? "BPM" : "Meter";
+    return type == timing_event_type::bpm ? "BPM" : "Time Sig";
 }
 
 const char* scroll_event_type_label(scroll_event_type type) {

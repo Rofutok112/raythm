@@ -9,7 +9,7 @@
 
 namespace {
 const char* timing_event_type_label(timing_event_type type) {
-    return type == timing_event_type::bpm ? "BPM" : "Meter";
+    return type == timing_event_type::bpm ? "BPM" : "Time Sig";
 }
 
 const char* scroll_event_type_label(scroll_event_type type) {
@@ -193,7 +193,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
                            t.scrollbar_track, t.scrollbar_thumb, 28.0f);
     };
 
-    draw_event_list(timing_box, "Song Timing", model.items,
+    draw_event_list(timing_box, "BPM / Time Signature", model.items,
                     state.list_scroll_offset, state.list_scrollbar_dragging,
                     state.list_scrollbar_drag_offset, false);
 
@@ -220,7 +220,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
     if (ui::draw_button(add_bpm_rect, "Add BPM", 14).clicked) {
         result.add_bpm = true;
     }
-    if (ui::draw_button(add_meter_rect, "Add Meter", 14).clicked) {
+    if (ui::draw_button(add_meter_rect, "Add Time Sig", 14).clicked) {
         result.add_meter = true;
     }
     const ui::button_state delete_button = ui::draw_button_colored(
@@ -274,7 +274,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
     ui::draw_section(editor_box);
     const char* editor_title = model.selected_scroll_event.has_value()
         ? "Scroll Event Editor"
-        : (model.selected_event.has_value() ? "Song Timing Editor" : "Event Editor");
+        : (model.selected_event.has_value() ? "BPM / Time Signature Editor" : "Event Editor");
     ui::draw_text_in_rect(editor_title, 22,
                           {editor_box.x + 12.0f, editor_box.y + 10.0f, editor_box.width - 24.0f, 28.0f},
                           t.text, ui::text_align::left);

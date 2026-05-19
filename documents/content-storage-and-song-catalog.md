@@ -90,9 +90,9 @@ song select の一覧は [song_catalog_service.cpp](C:/Users/rento/CLionProjects
 - 譜面拡張子は `.rchart` のみ
 - 楽曲ディレクトリには `song.json` が必要
 - `song.json` には `songId`, `title`, `artist`, `audioFile`, `jacketFile`, `baseBpm`, `previewStartMs`, `songVersion` が必要
-- `song.json` には任意で `offset` と `timingEvents` を持てる。これは制作者設定の楽曲オフセットと BPM/拍子イベント
+- `song.json` には任意で `offset`, `timingEvents` を持てる。楽曲タイミングは480 PPQ固定で、旧 `timingResolution` は参照しない
 - `.rchart` には `chartId`, `keyCount`, `difficulty`, `chartAuthor`, `formatVersion`, `resolution`, `offset` が必要
-- `.rchart` の `offset` と `[Timing]` は旧形式互換として残り、楽曲側の `offset` / `timingEvents` がない場合に使われる
+- `.rchart` の `resolution`, `offset`, `[Timing]` は旧形式互換として残り、楽曲側の `offset` / `timingEvents` がない場合に使われる
 - 譜面と曲の紐づけは `songs/<songId>/charts/*.rchart` の配置とローカルカタログDBで決まり、`.rchart` 内の `songId` は使いません
 
 ## MV Package Layout

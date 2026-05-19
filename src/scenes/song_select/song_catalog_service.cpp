@@ -566,6 +566,7 @@ std::pair<float, float> collect_bpm_range(const chart_data& chart) {
 chart_data chart_with_song_timing(const song_data& song, chart_data chart) {
     if (!song.meta.timing_events.empty()) {
         chart.timing_events = song.meta.timing_events;
+        chart.meta.resolution = 480;
     }
     if (song.meta.has_offset) {
         chart.meta.offset = song.meta.offset;

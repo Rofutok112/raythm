@@ -113,7 +113,7 @@ Song/
 | `difficulty`    | `string` | 難易度名              |
 | `chartAuthor`   | `string` | 譜面作者              |
 | `formatVersion` | `int`    | フォーマットバージョン       |
-| `resolution`    | `int`    | tick解像度（ファイルごと指定） |
+| `resolution`    | `int`    | 旧形式互換用の譜面tick解像度 |
 | `offset`        | `int`    | 旧形式互換用の譜面オフセット（ms） |
 
 `songId` は譜面ファイルには保存しない。ローカルでは
@@ -125,9 +125,9 @@ Song/
 
 #### `[Timing]` — 旧形式互換タイミングイベント（`TimingEvent`）
 
-BPM/拍子変更は楽曲固有情報として `song.json` の `timingEvents` を優先する。
+BPM/拍子変更は楽曲固有情報として `song.json` の `timingEvents` を優先する。楽曲タイミングは480 PPQ固定で扱い、`song.json` の旧 `timingResolution` フィールドは参照しない。
 既存譜面との互換性のため、`song.json` に `timingEvents` がない場合は
-`.rchart` の `[Timing]` を使用する。
+`.rchart` の `resolution` と `[Timing]` を使用する。
 
 | イベント種別  | パラメータ         | 説明    |
 |---------|---------------|-------|

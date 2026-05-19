@@ -32,6 +32,7 @@ chart_data make_new_chart_data(const editor_start_request& request) {
     data.meta.song_id = request.song.meta.song_id;
     if (!request.song.meta.timing_events.empty()) {
         data.timing_events = request.song.meta.timing_events;
+        data.meta.resolution = 480;
     } else {
         data.timing_events = {
             {timing_event_type::bpm, 0, std::max(request.song.meta.base_bpm, 120.0f), 4, 4},
@@ -47,6 +48,7 @@ chart_data make_new_chart_data(const editor_start_request& request) {
 void apply_song_timing_to_chart(const song_data& song, chart_data& chart) {
     if (!song.meta.timing_events.empty()) {
         chart.timing_events = song.meta.timing_events;
+        chart.meta.resolution = 480;
     }
     if (song.meta.has_offset) {
         chart.meta.offset = song.meta.offset;

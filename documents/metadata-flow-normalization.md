@@ -20,10 +20,11 @@ runtime convenience derived from it.
 directory name.
 
 Song-authored timing fields also live in `song.json` when present:
-`offset` is the creator-authored song timeline offset, and `timingEvents`
-contains BPM/meter events. Older charts may still carry `.rchart` timing and
-offset data; runtime code uses song-level values first and falls back to chart
-values for compatibility.
+song timing events are authored at a fixed 480 PPQ resolution, `offset` is the
+creator-authored song timeline offset, and `timingEvents` contains BPM/meter
+events. The legacy `timingResolution` field in `song.json` is ignored. Older charts may still carry
+`.rchart` resolution, timing, and offset data; runtime code uses song-level
+values first and falls back to chart values for compatibility.
 
 ## Chart Metadata
 
@@ -35,8 +36,8 @@ Authoritative fields:
 
 `chart_meta` contains chart identity, authored metadata, and a runtime-only
 parent song ID:
-`chartId`, `keyCount`, `difficulty`, `chartAuthor`, `formatVersion`,
-and `resolution` are serialized in `.rchart`; legacy `offset` may still be
+`chartId`, `keyCount`, `difficulty`, `chartAuthor`, and `formatVersion`
+are serialized in `.rchart`; legacy `resolution` and `offset` may still be
 serialized for compatibility. `songId` is filled from the parent song
 folder/catalog row after loading.
 

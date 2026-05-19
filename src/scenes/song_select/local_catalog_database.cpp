@@ -21,6 +21,8 @@ using local_sqlite::column_text;
 using local_sqlite::exec;
 using local_sqlite::statement;
 
+constexpr const char* kCatalogStatusSchema = "source-v3";
+
 void ensure_optional_schema(sqlite3* database) {
     exec(database, "ALTER TABLE local_songs ADD COLUMN genre TEXT NOT NULL DEFAULT '';");
     exec(database, "ALTER TABLE local_songs ADD COLUMN duration_seconds REAL NOT NULL DEFAULT 0;");
@@ -353,7 +355,7 @@ catalog_data load_cached_catalog() {
         current_catalog_signature()) {
         return catalog;
     }
-    if (local_sqlite::metadata_value(database.get(), "local_catalog.status_schema").value_or("") != "source-v2") {
+    if (local_sqlite::metadata_value(database.get(), "local_catalog.status_schema").value_or("") != kCatalogStatusSchema) {
         return catalog;
     }
 
@@ -455,7 +457,7 @@ void replace_catalog(const std::vector<song_entry>& songs) {
         }
     }
     local_sqlite::put_metadata(database.get(), "local_catalog.signature", current_catalog_signature());
-    local_sqlite::put_metadata(database.get(), "local_catalog.status_schema", "source-v2");
+    local_sqlite::put_metadata(database.get(), "local_catalog.status_schema", kCatalogStatusSchema);
     tx.commit();
 }
 
