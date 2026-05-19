@@ -608,7 +608,9 @@ bool handle_detail_actions(state& state,
         const chart_entry_state* chart = selected_chart(state);
         if (needs_download(*song)) {
             result.action = requested_action::primary;
-        } else if (chart != nullptr && chart->installed && chart->update_available) {
+        } else if (chart != nullptr &&
+                   chart->installed &&
+                   (chart->update_available || chart->chart.status == content_status::modified)) {
             result.action = requested_action::download_chart;
         } else {
             result.action = requested_action::open_local;

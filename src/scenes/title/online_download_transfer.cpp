@@ -191,6 +191,7 @@ void mark_song_downloaded(std::vector<song_entry_state>& songs, const std::strin
 
         song.installed = true;
         song.update_available = false;
+        song.song.status = song.song.source_status;
         song.charts_loaded = true;
         song.charts_loading = false;
         song.charts_has_more = false;
@@ -210,6 +211,7 @@ void mark_chart_downloaded(std::vector<song_entry_state>& songs,
             if (chart.chart.meta.chart_id == chart_id) {
                 chart.installed = true;
                 chart.update_available = false;
+                chart.chart.status = chart.chart.source_status;
             }
         }
     }
@@ -472,7 +474,9 @@ download_song_result download_chart_file(const song_entry_state song,
 }  // namespace
 
 bool needs_download(const song_entry_state& song) {
-    return !song.installed || song.update_available;
+    return !song.installed ||
+           song.update_available ||
+           song.song.status == content_status::modified;
 }
 
 void start_download(state& state) {
@@ -516,7 +520,9 @@ void start_chart_download(state& state) {
         ui::notify("Download the song first.", ui::notice_tone::error, 2.6f);
         return;
     }
-    if (chart->installed && !chart->update_available) {
+    if (chart->installed &&
+        !chart->update_available &&
+        chart->chart.status != content_status::modified) {
         return;
     }
 
