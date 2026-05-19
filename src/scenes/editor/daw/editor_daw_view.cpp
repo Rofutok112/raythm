@@ -1064,7 +1064,7 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
         const float y = model.metrics.tick_to_y(tick);
         if (y >= automation_graph.y && y <= automation_graph.y + automation_graph.height) {
             ui::draw_line_f(automation_graph.x, y, automation_graph.x + automation_graph.width, y,
-                            with_alpha(t.editor_grid_snap, 95));
+                            with_alpha(t.editor_grid_snap, 165));
         }
     }
     for (const editor_meter_map::grid_line& line : model.grid_lines) {
@@ -1073,11 +1073,10 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
             continue;
         }
         const Color color = line.major ? t.editor_grid_major : t.editor_grid_minor;
-        ui::draw_line_f(automation_graph.x, y, automation_graph.x + automation_graph.width, y,
-                        with_alpha(color, line.major ? 210 : 135));
+        ui::draw_line_f(automation_graph.x, y, automation_graph.x + automation_graph.width, y, color);
         if (line.major) {
             ui::draw_line_f(automation_graph.x, y + 1.0f, automation_graph.x + automation_graph.width, y + 1.0f,
-                            with_alpha(t.editor_grid_major_glow, 180));
+                            t.editor_grid_major_glow);
         }
     }
     std::vector<std::pair<size_t, editor_timeline_scroll_automation_point>> sorted_points;
