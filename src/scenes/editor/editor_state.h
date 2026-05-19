@@ -39,6 +39,10 @@ public:
 
     bool modify_metadata(chart_meta meta, bool clear_notes = false);
 
+    void refresh_auto_level();
+    bool level_needs_refresh() const;
+    size_t level_refresh_generation() const;
+
     const chart_data& data() const;
 
     const timing_engine& engine() const;
@@ -54,13 +58,15 @@ public:
 
 private:
     void rebuild_timing_engine();
-    void recalculate_level();
+    void mark_level_dirty();
     void sync_dirty_flag();
 
     chart_data chart_;
     command_history history_;
     timing_engine timing_engine_;
     bool dirty_ = false;
+    bool level_dirty_ = false;
+    size_t level_refresh_generation_ = 0;
     std::string file_path_;
     size_t saved_history_index_ = 0;
 };

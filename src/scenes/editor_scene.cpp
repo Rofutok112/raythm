@@ -33,6 +33,7 @@
 
 namespace {
 namespace layout = editor::layout;
+constexpr double kLevelRefreshDebounceSeconds = 0.25;
 
 Rectangle snap_dropdown_menu_rect() {
     return layout::snap_dropdown_menu_rect(static_cast<int>(editor_timeline_viewport::snap_labels().size()));
@@ -268,6 +269,7 @@ void editor_scene::update(float dt) {
 
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_);
     apply_scroll_and_zoom(dt);
+    refresh_chart_level_when_idle();
     update_mouse_cursor(virtual_screen::get_virtual_mouse(), timeline_metrics());
 }
 
@@ -543,7 +545,10 @@ void editor_scene::draw() {
     virtual_screen::draw_to_screen();
 }
 
-chart_data editor_scene::make_chart_data_for_save() const {
+chart_data editor_scene::make_chart_data_for_save() {
+    state_->refresh_auto_level();
+    pending_level_refresh_generation_ = state_->level_refresh_generation();
+    level_refresh_after_time_ = 0.0;
     chart_data data = state_->data();
     if (state_->file_path().empty()) {
         data.meta.chart_id = generated_chart_id(data.meta.difficulty);
@@ -886,6 +891,27 @@ void editor_scene::delete_selected_timing_event() {
     }
     editor_scene_sync::sync_after_timing_change(make_sync_context());
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
+}
+
+void editor_scene::refresh_chart_level_when_idle() {
+    if (!state_->level_needs_refresh()) {
+        return;
+    }
+
+    const size_t generation = state_->level_refresh_generation();
+    const double now = GetTime();
+    if (generation != pending_level_refresh_generation_) {
+        pending_level_refresh_generation_ = generation;
+        level_refresh_after_time_ = now + kLevelRefreshDebounceSeconds;
+    }
+    if (timeline_drag_.active) {
+        level_refresh_after_time_ = now + kLevelRefreshDebounceSeconds;
+        return;
+    }
+    if (now >= level_refresh_after_time_) {
+        state_->refresh_auto_level();
+        level_refresh_after_time_ = 0.0;
+    }
 }
 
 void editor_scene::delete_selected_scroll_event() {

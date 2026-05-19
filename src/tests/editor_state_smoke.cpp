@@ -104,8 +104,14 @@ int main() {
         std::cerr << "add_note did not update history correctly\n";
         return EXIT_FAILURE;
     }
-    if (!nearly_equal(state.data().meta.level, chart_difficulty::calculate_level(state.data()))) {
-        std::cerr << "add_note should refresh auto level\n";
+    if (!state.level_needs_refresh()) {
+        std::cerr << "add_note should mark auto level dirty\n";
+        return EXIT_FAILURE;
+    }
+    state.refresh_auto_level();
+    if (state.level_needs_refresh() ||
+        !nearly_equal(state.data().meta.level, chart_difficulty::calculate_level(state.data()))) {
+        std::cerr << "refresh_auto_level should update pending auto level\n";
         return EXIT_FAILURE;
     }
 
@@ -158,11 +164,11 @@ int main() {
         std::cerr << "modify_metadata should succeed\n";
         return EXIT_FAILURE;
     }
-    if (state.data().meta.resolution != 960 || state.data().meta.offset != -12 ||
-        !nearly_equal(state.data().meta.level, chart_difficulty::calculate_level(state.data()))) {
+    if (state.data().meta.resolution != 960 || state.data().meta.offset != -12 || !state.level_needs_refresh()) {
         std::cerr << "modify_metadata did not update metadata\n";
         return EXIT_FAILURE;
     }
+    state.refresh_auto_level();
 
     if (!nearly_equal(state.engine().tick_to_ms(480), 188.0)) {
         std::cerr << "timing engine was not rebuilt after metadata change\n";

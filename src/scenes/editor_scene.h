@@ -31,7 +31,7 @@ public:
     void draw() override;
 
 private:
-    chart_data make_chart_data_for_save() const;
+    chart_data make_chart_data_for_save();
     editor_resume_state build_resume_state() const;
     editor_scene_sync_context make_sync_context();
     editor_timeline_viewport_model viewport_model() const;
@@ -45,6 +45,7 @@ private:
     void apply_flow_result(const editor_flow_result& result);
     void rebuild_hit_regions() const;
     void apply_scroll_and_zoom(float dt);
+    void refresh_chart_level_when_idle();
     void select_timing_event(std::optional<size_t> index, bool scroll_into_view);
     void select_scroll_event(std::optional<size_t> index, bool scroll_into_view);
     void scroll_to_tick(int tick);
@@ -90,4 +91,6 @@ private:
     unsaved_changes_dialog_state unsaved_changes_dialog_;
     bool metadata_modal_open_ = false;
     bool timing_modal_open_ = false;
+    size_t pending_level_refresh_generation_ = 0;
+    double level_refresh_after_time_ = 0.0;
 };

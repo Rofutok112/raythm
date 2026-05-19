@@ -410,7 +410,7 @@ void editor_state::load(chart_data data, std::string file_path) {
     saved_history_index_ = 0;
     dirty_ = false;
     rebuild_timing_engine();
-    recalculate_level();
+    refresh_auto_level();
 }
 
 void editor_state::mark_saved(std::string file_path) {
@@ -425,7 +425,7 @@ void editor_state::mark_saved(std::string file_path) {
 bool editor_state::undo() {
     const bool changed = history_.undo();
     if (changed) {
-        recalculate_level();
+        mark_level_dirty();
         sync_dirty_flag();
     }
     return changed;
@@ -434,7 +434,7 @@ bool editor_state::undo() {
 bool editor_state::redo() {
     const bool changed = history_.redo();
     if (changed) {
-        recalculate_level();
+        mark_level_dirty();
         sync_dirty_flag();
     }
     return changed;
@@ -450,7 +450,7 @@ bool editor_state::can_redo() const {
 
 void editor_state::add_note(note_data note) {
     history_.push(std::make_unique<add_note_command>(chart_, std::move(note)));
-    recalculate_level();
+    mark_level_dirty();
     sync_dirty_flag();
 }
 
@@ -460,7 +460,7 @@ void editor_state::add_notes(std::vector<note_data> notes) {
     }
 
     history_.push(std::make_unique<add_notes_command>(chart_, std::move(notes)));
-    recalculate_level();
+    mark_level_dirty();
     sync_dirty_flag();
 }
 
@@ -470,7 +470,7 @@ bool editor_state::remove_note(size_t index) {
     }
 
     history_.push(std::make_unique<remove_note_command>(chart_, index));
-    recalculate_level();
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -489,7 +489,7 @@ bool editor_state::remove_notes(std::vector<size_t> indices) {
     }
 
     history_.push(std::make_unique<remove_notes_command>(chart_, std::move(indices)));
-    recalculate_level();
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -504,7 +504,7 @@ bool editor_state::modify_note(size_t index, note_data note) {
     }
 
     history_.push(std::make_unique<modify_note_command>(chart_, index, std::move(note)));
-    recalculate_level();
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -531,14 +531,14 @@ bool editor_state::modify_notes(std::vector<std::pair<size_t, note_data>> update
     }
 
     history_.push(std::make_unique<modify_notes_command>(chart_, std::move(updates)));
-    recalculate_level();
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
 
 void editor_state::add_timing_event(timing_event event) {
     history_.push(std::make_unique<add_timing_event_command>(chart_, timing_engine_, std::move(event)));
-    recalculate_level();
+    mark_level_dirty();
     sync_dirty_flag();
 }
 
@@ -548,7 +548,7 @@ bool editor_state::remove_timing_event(size_t index) {
     }
 
     history_.push(std::make_unique<remove_timing_event_command>(chart_, timing_engine_, index));
-    recalculate_level();
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -563,14 +563,14 @@ bool editor_state::modify_timing_event(size_t index, timing_event event) {
     }
 
     history_.push(std::make_unique<modify_timing_event_command>(chart_, timing_engine_, index, std::move(event)));
-    recalculate_level();
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
 
 void editor_state::add_scroll_event(scroll_event event) {
     history_.push(std::make_unique<add_scroll_event_command>(chart_, std::move(event)));
-    recalculate_level();
+    mark_level_dirty();
     sync_dirty_flag();
 }
 
@@ -580,7 +580,7 @@ bool editor_state::remove_scroll_event(size_t index) {
     }
 
     history_.push(std::make_unique<remove_scroll_event_command>(chart_, index));
-    recalculate_level();
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -595,7 +595,7 @@ bool editor_state::modify_scroll_event(size_t index, scroll_event event) {
     }
 
     history_.push(std::make_unique<modify_scroll_event_command>(chart_, index, std::move(event)));
-    recalculate_level();
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -610,9 +610,22 @@ bool editor_state::modify_metadata(chart_meta meta, bool clear_notes) {
     }
 
     history_.push(std::make_unique<modify_metadata_command>(chart_, timing_engine_, std::move(meta), clear_notes));
-    recalculate_level();
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
+}
+
+void editor_state::refresh_auto_level() {
+    chart_difficulty::apply_auto_level(chart_);
+    level_dirty_ = false;
+}
+
+bool editor_state::level_needs_refresh() const {
+    return level_dirty_;
+}
+
+size_t editor_state::level_refresh_generation() const {
+    return level_refresh_generation_;
 }
 
 const chart_data& editor_state::data() const {
@@ -696,8 +709,9 @@ void editor_state::rebuild_timing_engine() {
     timing_engine_.init(chart_.timing_events, chart_.meta.resolution, chart_.meta.offset);
 }
 
-void editor_state::recalculate_level() {
-    chart_difficulty::apply_auto_level(chart_);
+void editor_state::mark_level_dirty() {
+    level_dirty_ = true;
+    ++level_refresh_generation_;
 }
 
 void editor_state::sync_dirty_flag() {
