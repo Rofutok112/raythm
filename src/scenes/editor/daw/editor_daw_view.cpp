@@ -1058,6 +1058,28 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
         ui::draw_line_f(x, automation_graph.y, x, automation_graph.y + automation_graph.height,
                         with_alpha(t.border_light, i == 1 ? 165 : 80));
     }
+    const int snap_interval = std::max(1, model.snap_interval);
+    const int first_snap_tick = std::max(0, (model.min_tick / snap_interval) * snap_interval);
+    for (int tick = first_snap_tick; tick <= model.max_tick; tick += snap_interval) {
+        const float y = model.metrics.tick_to_y(tick);
+        if (y >= automation_graph.y && y <= automation_graph.y + automation_graph.height) {
+            ui::draw_line_f(automation_graph.x, y, automation_graph.x + automation_graph.width, y,
+                            with_alpha(t.editor_grid_snap, 95));
+        }
+    }
+    for (const editor_meter_map::grid_line& line : model.grid_lines) {
+        const float y = model.metrics.tick_to_y(line.tick);
+        if (y < automation_graph.y || y > automation_graph.y + automation_graph.height) {
+            continue;
+        }
+        const Color color = line.major ? t.editor_grid_major : t.editor_grid_minor;
+        ui::draw_line_f(automation_graph.x, y, automation_graph.x + automation_graph.width, y,
+                        with_alpha(color, line.major ? 210 : 135));
+        if (line.major) {
+            ui::draw_line_f(automation_graph.x, y + 1.0f, automation_graph.x + automation_graph.width, y + 1.0f,
+                            with_alpha(t.editor_grid_major_glow, 180));
+        }
+    }
     std::vector<std::pair<size_t, editor_timeline_scroll_automation_point>> sorted_points;
     sorted_points.reserve(model.scroll_automation.size());
     for (size_t index = 0; index < model.scroll_automation.size(); ++index) {
@@ -1075,7 +1097,8 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
                     with_alpha(t.fast, 150));
     auto point_at_mouse = [&](Vector2 mouse, scroll_automation_curve curve) {
         scroll_automation_point point;
-        point.tick = std::max(0, model.metrics.y_to_tick(mouse.y));
+        const int raw_tick = std::max(0, model.metrics.y_to_tick(mouse.y));
+        point.tick = std::max(0, (raw_tick + snap_interval / 2) / snap_interval * snap_interval);
         point.multiplier = std::round(
             std::clamp((mouse.x - automation_graph.x) / automation_graph.width, 0.0f, 1.0f) * 300.0f) / 100.0f;
         point.curve_to_next = curve;
