@@ -416,13 +416,11 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             }
 
             if (selected) {
-                DrawRectangleRounded(info.left_resize_rect, 0.45f, 4, with_alpha(t.border_active, 210));
-                DrawRectangleRounded(info.right_resize_rect, 0.45f, 4, with_alpha(t.border_active, 210));
-                ui::draw_rect_lines(info.left_resize_rect, 1.0f, t.text);
-                ui::draw_rect_lines(info.right_resize_rect, 1.0f, t.text);
-                if (info.has_body) {
-                    DrawRectangleRounded(info.end_resize_rect, 0.45f, 4, with_alpha(t.border_active, 220));
-                    ui::draw_rect_lines(info.end_resize_rect, 1.0f, t.text);
+                if (!info.has_body) {
+                    DrawRectangleRounded(info.left_resize_rect, 0.45f, 4, with_alpha(t.border_active, 210));
+                    DrawRectangleRounded(info.right_resize_rect, 0.45f, 4, with_alpha(t.border_active, 210));
+                    ui::draw_rect_lines(info.left_resize_rect, 1.0f, t.text);
+                    ui::draw_rect_lines(info.right_resize_rect, 1.0f, t.text);
                 }
             }
         }

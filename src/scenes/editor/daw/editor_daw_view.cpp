@@ -520,7 +520,7 @@ void draw_note_block(const editor_timeline_note& note,
 
     if (info.has_body) {
         draw_editor_hold_body(info.body_rect, draw_fill, note.is_ray, selected);
-        if (selected || preview) {
+        if (preview) {
             draw_editor_hold_endpoint_handles(info.body_rect, preview);
         }
         return;
