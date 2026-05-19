@@ -25,6 +25,15 @@ inline constexpr Rectangle kSettingsButtonRect = ui::place(kHeaderRect, 192.0f, 
                                                            ui::anchor::center_left, ui::anchor::center_left,
                                                            Vector2{225.0f, 0.0f});
 
+inline constexpr Rectangle kEditorTitleRect = ui::place(kHeaderRect, 318.0f, 51.0f,
+                                                        ui::anchor::center_left, ui::anchor::center_left,
+                                                        Vector2{438.0f, 0.0f});
+inline constexpr Rectangle kTransportBarRect = ui::place(kHeaderRect, 486.0f, 51.0f,
+                                                         ui::anchor::center, ui::anchor::center,
+                                                         Vector2{-48.0f, 0.0f});
+inline constexpr Rectangle kLoopStatusRect = ui::place(kHeaderRect, 264.0f, 51.0f,
+                                                       ui::anchor::center_right, ui::anchor::center_right,
+                                                       Vector2{-777.0f, 0.0f});
 inline constexpr Rectangle kHeaderToolsRect = ui::place(kHeaderRect, 252.0f, 51.0f,
                                                         ui::anchor::center_right, ui::anchor::center_right,
                                                         Vector2{-27.0f, 0.0f});

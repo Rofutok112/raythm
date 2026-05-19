@@ -116,8 +116,10 @@ void draw_scroll_events(const editor_timeline_view_model& model, Rectangle conte
         const Color base = event.type == scroll_event_type::speed
             ? Color{26, 188, 196, 255}
             : Color{238, 92, 64, 255};
-        ui::draw_rect_f(band, with_alpha(base, selected ? 86 : 46));
+        ui::draw_rect_f(band, with_alpha(base, selected ? 104 : 54));
         ui::draw_rect_lines(band, selected ? 2.5f : 1.2f, with_alpha(base, selected ? 235 : 150));
+        ui::draw_rect_f({band.x, band.y - 3.0f, band.width, 6.0f}, with_alpha(base, selected ? 220 : 135));
+        ui::draw_rect_f({band.x, band.y + band.height - 3.0f, band.width, 6.0f}, with_alpha(base, selected ? 220 : 135));
 
         if (event.type == scroll_event_type::stop) {
             for (float x = band.x - band.height; x < band.x + band.width; x += 18.0f) {
@@ -130,6 +132,33 @@ void draw_scroll_events(const editor_timeline_view_model& model, Rectangle conte
             ? TextFormat("%.2fx", event.multiplier)
             : "STOP";
         ui::draw_text_f(label, band.x + 10.0f, band.y + 4.0f, 15, selected ? t.text : t.text_secondary);
+        ui::draw_text_f("Scroll Region", band.x + band.width - 112.0f, band.y + 4.0f, 13,
+                        selected ? t.text : t.text_muted);
+    }
+}
+
+void draw_ruler(const editor_timeline_view_model& model, Rectangle content, const ui_theme& t) {
+    const Rectangle ruler = {content.x, content.y, content.width, 38.0f};
+    ui::draw_rect_f(ruler, with_alpha(t.panel, 235));
+    ui::draw_rect_lines(ruler, 1.5f, t.border_light);
+    ui::draw_text_in_rect("Ruler", 13, {ruler.x + 10.0f, ruler.y + 4.0f, 54.0f, 16.0f},
+                          t.text_muted, ui::text_align::left);
+    ui::draw_text_in_rect("Measure", 13, {ruler.x + 10.0f, ruler.y + 20.0f, 72.0f, 16.0f},
+                          t.text_secondary, ui::text_align::left);
+
+    for (const editor_meter_map::grid_line& line : model.grid_lines) {
+        if (!line.major) {
+            continue;
+        }
+        const float y = model.metrics.tick_to_y(line.tick);
+        if (y < content.y || y > content.y + content.height) {
+            continue;
+        }
+        ui::draw_line_f(content.x, y, content.x + content.width, y, with_alpha(t.editor_grid_major, 210));
+        const Rectangle tag = {content.x + 84.0f, y - 11.0f, 58.0f, 22.0f};
+        ui::draw_rect_f(tag, with_alpha(t.section, 220));
+        ui::draw_rect_lines(tag, 1.0f, with_alpha(t.border_light, 210));
+        ui::draw_text_in_rect(TextFormat("%d", line.measure), 14, tag, t.text_secondary);
     }
 }
 }
@@ -253,6 +282,10 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             ui::draw_rect_f(band, with_alpha(t.success, model.loop_enabled ? 38 : 18));
             ui::draw_rect_lines(band, model.loop_enabled ? 2.0f : 1.0f,
                                 with_alpha(t.success, model.loop_enabled ? 210 : 120));
+            ui::draw_rect_f({band.x, start_y - 4.0f, band.width, 8.0f},
+                            with_alpha(t.success, model.loop_enabled ? 230 : 130));
+            ui::draw_rect_f({band.x, end_y - 4.0f, band.width, 8.0f},
+                            with_alpha(t.success, model.loop_enabled ? 230 : 130));
             ui::draw_text_f(model.loop_enabled ? "LOOP" : "loop", band.x + band.width - 58.0f, band.y + 5.0f,
                             14, model.loop_enabled ? t.text : t.text_secondary);
         }
@@ -341,6 +374,8 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             ui::draw_line_f(content.x, y, content.x + content.width, y, with_alpha(t.accent, 240));
             ui::draw_line_f(content.x, y + 1.0f, content.x + content.width, y + 1.0f, with_alpha(t.text, 170));
         }
+
+        draw_ruler(model, content, t);
     }
 
     ui::draw_scrollbar(track, model.content_height_pixels, model.scroll_offset_pixels,

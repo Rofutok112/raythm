@@ -45,10 +45,10 @@ editor_right_panel_view_result editor_right_panel_view::draw(const editor_right_
         const scroll_event& event = (*model.scroll_events)[index];
         scroll_items.push_back({
             index,
-            std::string(scroll_event_type_label(event.type)) + " " + model.meter_map->bar_beat_label(event.tick),
+            std::string("Scroll Region ") + model.meter_map->bar_beat_label(event.tick),
             event.type == scroll_event_type::speed
-                ? TextFormat("%.2fx / %dt", event.multiplier, event.duration)
-                : TextFormat("STOP / %dt", event.duration),
+                ? TextFormat("%s %.2fx / %dt", scroll_event_type_label(event.type), event.multiplier, event.duration)
+                : TextFormat("%s / %dt", scroll_event_type_label(event.type), event.duration),
             model.selected_scroll_event_index.has_value() && *model.selected_scroll_event_index == index
         });
     }

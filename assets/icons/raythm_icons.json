@@ -43,6 +43,30 @@
     {
       "name": "download",
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/download.svg"
+    },
+    {
+      "name": "repeat_2",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/repeat-2.svg"
+    },
+    {
+      "name": "mouse_pointer",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/mouse-pointer-2.svg"
+    },
+    {
+      "name": "scan",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/scan.svg"
+    },
+    {
+      "name": "copy",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/copy.svg"
+    },
+    {
+      "name": "trash_2",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/trash-2.svg"
+    },
+    {
+      "name": "layers",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/layers.svg"
     }
   ]
 }

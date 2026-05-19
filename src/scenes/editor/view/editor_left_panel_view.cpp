@@ -44,6 +44,13 @@ void draw_palette_button(Rectangle rect, note_type type, const editor_note_palet
         result.selected_note_type = type;
     }
 }
+
+void draw_tool_chip(Rectangle rect, const char* label, bool selected) {
+    const auto& t = *g_theme;
+    ui::draw_rect_f(rect, selected ? t.row_selected : t.row);
+    ui::draw_rect_lines(rect, 1.2f, selected ? t.border_active : t.border_light);
+    ui::draw_text_in_rect(label, 13, rect, selected ? t.text : t.text_muted);
+}
 }
 
 editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_panel_view_model& model) {
@@ -92,7 +99,24 @@ editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_pan
                               t.error, ui::text_align::left);
     }
 
-    const Rectangle palette_box = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 136.0f};
+    const bool ray_selected = model.note_palette.is_ray;
+    const Rectangle tools_box = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 96.0f};
+    ui::draw_section(tools_box);
+    ui::draw_text_in_rect("Tools", 22,
+                          {tools_box.x + 12.0f, tools_box.y + 10.0f, tools_box.width - 24.0f, 28.0f},
+                          t.text, ui::text_align::left);
+
+    const float tool_gap = 6.0f;
+    const float tool_width = (tools_box.width - 24.0f - tool_gap * 2.0f) / 3.0f;
+    const float tool_y = tools_box.y + 46.0f;
+    draw_tool_chip({tools_box.x + 12.0f, tool_y, tool_width, 26.0f}, "Select", true);
+    draw_tool_chip({tools_box.x + 12.0f + (tool_width + tool_gap), tool_y, tool_width, 26.0f}, "Range", false);
+    draw_tool_chip({tools_box.x + 12.0f + (tool_width + tool_gap) * 2.0f, tool_y, tool_width, 26.0f}, "Notes", false);
+    ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 74.0f, tools_box.width - 24.0f, 16.0f},
+                         "Edit", ray_selected ? "Ray lane" : palette_label(model.note_palette.type),
+                         13, t.text_muted, t.text_secondary, 46.0f);
+
+    const Rectangle palette_box = {content.x, tools_box.y + tools_box.height + 12.0f, content.width, 136.0f};
     ui::draw_section(palette_box);
     ui::draw_text_in_rect("Palette", 22,
                           {palette_box.x + 12.0f, palette_box.y + 10.0f, palette_box.width - 24.0f, 28.0f},
@@ -114,7 +138,6 @@ editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_pan
     draw_palette_button({right, second_row_y, button_width, button_height},
                         note_type::stay, model.note_palette, result);
 
-    const bool ray_selected = model.note_palette.is_ray;
     const ui::button_state ray_button = ui::draw_button_colored(
         {palette_box.x + 12.0f, second_row_y + button_height + gap, palette_box.width - 24.0f, 28.0f},
         "RAY", 14,

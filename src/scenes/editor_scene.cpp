@@ -40,6 +40,14 @@ Rectangle snap_dropdown_menu_rect() {
     return layout::snap_dropdown_menu_rect(static_cast<int>(editor_timeline_viewport::snap_labels().size()));
 }
 
+std::string loop_region_label(const editor_transport_state& transport, const editor_meter_map& meter_map) {
+    if (transport.loop_end_tick <= transport.loop_start_tick) {
+        return "Set [ ]";
+    }
+    return meter_map.bar_beat_label(transport.loop_start_tick) + " - " +
+        meter_map.bar_beat_label(transport.loop_end_tick);
+}
+
 }
 
 editor_scene::editor_scene(scene_manager& manager, song_data song, std::string chart_path)
@@ -357,17 +365,31 @@ void editor_scene::draw() {
     }
 
     const std::string playback_status = editor_transport_service::playback_status_text(transport_);
+    const std::string loop_label = loop_region_label(transport_, meter_map_);
     const std::string offset_label =
         (state_->data().meta.offset > 0 ? "+" : "") + std::to_string(state_->data().meta.offset) + " ms";
     const editor_header_view_result header_result = editor_header_view::draw({
         playback_status.c_str(),
         transport_.audio_loaded,
+        transport_.audio_playing,
         offset_label.c_str(),
         waveform_visible_,
+        transport_.loop_enabled,
+        loop_label.c_str(),
         editor_timeline_viewport::snap_labels(),
         viewport_.snap_index,
         snap_dropdown_open_,
     }, snap_dropdown_menu_rect());
+    if (header_result.playback_toggled) {
+        const std::optional<int> restore_scroll_tick = editor_transport_service::toggle_playback(
+            transport_, state_.get(), space_playback_start_tick_, hitsound_path_, &hitsounds_);
+        if (restore_scroll_tick.has_value()) {
+            scroll_to_tick(*restore_scroll_tick);
+        }
+    }
+    if (header_result.loop_toggled && transport_.loop_end_tick > transport_.loop_start_tick) {
+        transport_.loop_enabled = !transport_.loop_enabled;
+    }
     if (header_result.offset_left_clicked) {
         apply_chart_offset(std::max(-10000, state_->data().meta.offset - 5));
     } else if (header_result.offset_right_clicked) {
