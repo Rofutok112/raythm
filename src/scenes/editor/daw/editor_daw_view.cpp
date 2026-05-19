@@ -718,7 +718,8 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
                model.loop_enabled ? t.success : t.text_secondary);
 
     const Rectangle arrange = {content.x, content.y + 62.0f, content.width, content.height - 62.0f};
-    const Rectangle ruler = {content.x + content.width + 10.0f, arrange.y, 66.0f, arrange.height};
+    const Rectangle ruler = track;
+    const Rectangle ruler_labels = {ruler.x, arrange.y, ruler.width, arrange.height};
     {
         ui::scoped_clip_rect clip_scope(arrange);
         draw_waveform(model, arrange);
@@ -817,7 +818,7 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
             continue;
         }
         const float y = model.metrics.tick_to_y(line.tick);
-        if (y < arrange.y || y > arrange.y + arrange.height) {
+        if (y < ruler_labels.y || y > ruler_labels.y + ruler_labels.height) {
             continue;
         }
         const Rectangle tag = {ruler.x + 6.0f, y - 11.0f, ruler.width - 12.0f, 22.0f};
@@ -826,14 +827,15 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
         ui::draw_text_in_rect(TextFormat("%d:%d", line.measure, line.beat), 12, tag, t.text_secondary);
     }
 
-    ui::draw_rect_f(track, t.scrollbar_track);
     if (model.content_height_pixels > 1.0f) {
         const float thumb_ratio = std::clamp(content.height / model.content_height_pixels, 0.06f, 1.0f);
-        const float thumb_height = std::max(24.0f, track.height * thumb_ratio);
+        const float thumb_height = std::max(36.0f, track.height * thumb_ratio);
         const float max_scroll = std::max(1.0f, model.content_height_pixels - content.height);
         const float thumb_y = track.y + (track.height - thumb_height) *
             std::clamp(model.scroll_offset_pixels / max_scroll, 0.0f, 1.0f);
-        ui::draw_rect_f({track.x, thumb_y, track.width, thumb_height}, t.scrollbar_thumb);
+        const Rectangle viewport_box = {track.x + 4.0f, thumb_y, track.width - 8.0f, thumb_height};
+        ui::draw_rect_f(viewport_box, with_alpha(t.accent, 38));
+        ui::draw_rect_lines(viewport_box, 2.0f, with_alpha(t.accent, 210));
     }
 }
 

@@ -214,7 +214,7 @@ void draw_lane_header(const editor_timeline_view_model& model, Rectangle content
 
 Rectangle editor_timeline_metrics::content_rect() const {
     return {
-        panel_rect.x + padding,
+        panel_rect.x + padding + scrollbar_width + scrollbar_gap,
         panel_rect.y + padding,
         panel_rect.width - padding * 2.0f - scrollbar_gap - scrollbar_width,
         panel_rect.height - padding * 2.0f
@@ -222,12 +222,11 @@ Rectangle editor_timeline_metrics::content_rect() const {
 }
 
 Rectangle editor_timeline_metrics::scrollbar_track_rect() const {
-    const Rectangle content = content_rect();
     return {
-        content.x + content.width + scrollbar_gap,
-        content.y,
+        panel_rect.x + padding,
+        panel_rect.y + padding,
         scrollbar_width,
-        content.height
+        panel_rect.height - padding * 2.0f
     };
 }
 
