@@ -396,8 +396,10 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
                             line.major ? 16 : 14, line.major ? t.text : t.text_secondary);
         }
 
+        const std::set<size_t> preview_note_indices(
+            model.preview_note_indices.begin(), model.preview_note_indices.end());
         for (size_t i = 0; i < model.notes.size(); ++i) {
-            if (model.preview_note_index.has_value() && *model.preview_note_index == i) {
+            if (preview_note_indices.find(i) != preview_note_indices.end()) {
                 continue;
             }
             const editor_timeline_note& note = model.notes[i];
@@ -428,14 +430,14 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
 
         }
 
-        if (model.preview_note.has_value()) {
-            const editor_timeline_note_draw_info info = model.metrics.note_rects(*model.preview_note);
+        for (const editor_timeline_note& preview_note : model.preview_notes) {
+            const editor_timeline_note_draw_info info = model.metrics.note_rects(preview_note);
             const Color fill = model.preview_has_overlap ? with_alpha(t.error, 150) : with_alpha(t.success, 150);
             const Color outline = model.preview_has_overlap ? t.error : t.success;
             if (info.has_body) {
                 DrawRectangleRounded(info.body_rect, 0.4f, 6, fill);
             } else {
-                draw_note_marker(*model.preview_note, info, fill, outline);
+                draw_note_marker(preview_note, info, fill, outline);
             }
         }
 

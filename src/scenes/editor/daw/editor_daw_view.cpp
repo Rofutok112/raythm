@@ -272,9 +272,10 @@ editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_m
         scroll_events.push_back({event.type, event.tick, event.duration, event.multiplier});
     }
 
-    std::optional<editor_timeline_note> preview_note;
-    if (model.preview_note.has_value()) {
-        preview_note = make_timeline_note(*model.preview_note);
+    std::vector<editor_timeline_note> preview_notes;
+    preview_notes.reserve(model.preview_notes.size());
+    for (const note_data& note : model.preview_notes) {
+        preview_notes.push_back(make_timeline_note(note));
     }
 
     return {
@@ -293,8 +294,8 @@ editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_m
         &model.state.engine(),
         model.waveform_visible,
         model.waveform_offset_ms,
-        preview_note,
-        model.preview_note_index,
+        std::move(preview_notes),
+        model.preview_note_indices,
         model.preview_has_overlap,
         model.selection_rect,
         min_tick,
@@ -1003,8 +1004,9 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
                                   selected ? t.text : t.text_secondary, ui::text_align::right);
         }
 
+        const std::set<size_t> preview_indices(model.preview_note_indices.begin(), model.preview_note_indices.end());
         for (size_t index = 0; index < model.notes.size(); ++index) {
-            if (model.preview_note_index.has_value() && *model.preview_note_index == index) {
+            if (preview_indices.find(index) != preview_indices.end()) {
                 continue;
             }
             const editor_timeline_note& note = model.notes[index];
@@ -1017,9 +1019,9 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
             draw_note_block(note, info, selected, false, false);
         }
 
-        if (model.preview_note.has_value()) {
-            const editor_timeline_note_draw_info info = model.metrics.note_rects(*model.preview_note);
-            draw_note_block(*model.preview_note, info, true, true, model.preview_has_overlap);
+        for (const editor_timeline_note& preview_note : model.preview_notes) {
+            const editor_timeline_note_draw_info info = model.metrics.note_rects(preview_note);
+            draw_note_block(preview_note, info, true, true, model.preview_has_overlap);
         }
 
         if (model.selection_rect.has_value()) {

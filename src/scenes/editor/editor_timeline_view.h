@@ -79,8 +79,8 @@ struct editor_timeline_view_model {
     const timing_engine* timing_engine = nullptr;
     bool waveform_visible = false;
     int waveform_offset_ms = 0;
-    std::optional<editor_timeline_note> preview_note;
-    std::optional<size_t> preview_note_index;
+    std::vector<editor_timeline_note> preview_notes;
+    std::vector<size_t> preview_note_indices;
     bool preview_has_overlap = false;
     std::optional<Rectangle> selection_rect;
     int min_tick = 0;

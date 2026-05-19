@@ -681,6 +681,35 @@ std::optional<note_data> editor_scene::dragged_note() const {
     return note;
 }
 
+std::vector<note_data> editor_scene::dragged_notes() const {
+    if (!timeline_drag_.active) {
+        return {};
+    }
+
+    if (timeline_drag_.mode != editor_timeline_drag_mode::move_notes) {
+        if (const std::optional<note_data> note = dragged_note(); note.has_value()) {
+            return {*note};
+        }
+        return {};
+    }
+
+    const int tick_delta = timeline_drag_.current_tick - timeline_drag_.start_tick;
+    const int lane_delta = timeline_drag_.current_lane - timeline_drag_.lane;
+    std::vector<note_data> notes;
+    notes.reserve(timeline_drag_.original_notes.size());
+    for (note_data note : timeline_drag_.original_notes) {
+        note.tick = std::max(0, note.tick + tick_delta);
+        if (note.type == note_type::hold) {
+            note.end_tick = std::max(note.tick + 1, note.end_tick + tick_delta);
+        } else {
+            note.end_tick = note.tick;
+        }
+        note.lane += lane_delta;
+        notes.push_back(note);
+    }
+    return notes;
+}
+
 std::vector<size_t> editor_scene::sorted_timing_event_indices() const {
     return editor_timing_selection_service::sorted_indices(state_->data());
 }
@@ -868,14 +897,17 @@ bool editor_scene::apply_chart_offset(int offset_ms) {
 }
 
 void editor_scene::draw_timeline() const {
-    const std::optional<note_data> preview_note = dragged_note();
-    const std::optional<size_t> preview_ignore_index =
-        timeline_drag_.active && timeline_drag_.mode != editor_timeline_drag_mode::create
-            ? timeline_drag_.note_index
-            : std::nullopt;
-    const bool preview_has_overlap = preview_note.has_value() &&
-        (state_->has_note_overlap(*preview_note, preview_ignore_index) ||
-         editor::note_placement_rules::has_stay_stack(state_->data(), *preview_note, preview_ignore_index));
+    const std::vector<note_data> preview_notes = dragged_notes();
+    std::vector<size_t> preview_ignore_indices;
+    if (timeline_drag_.active && timeline_drag_.mode == editor_timeline_drag_mode::move_notes) {
+        preview_ignore_indices = timeline_drag_.note_indices;
+    } else if (timeline_drag_.active && timeline_drag_.mode != editor_timeline_drag_mode::create &&
+               timeline_drag_.note_index.has_value()) {
+        preview_ignore_indices.push_back(*timeline_drag_.note_index);
+    }
+    const bool preview_has_overlap = !preview_notes.empty() &&
+        (state_->has_note_overlap(preview_notes, preview_ignore_indices) ||
+         editor::note_placement_rules::has_stay_stack(state_->data(), preview_notes, preview_ignore_indices));
     std::optional<Rectangle> selection_rect;
     if (timeline_drag_.active && timeline_drag_.mode == editor_timeline_drag_mode::range_select) {
         selection_rect = {
@@ -899,8 +931,8 @@ void editor_scene::draw_timeline() const {
         selected_note_index_,
         selected_note_indices_,
         timing_panel_.selected_scroll_event_index,
-        preview_note,
-        preview_ignore_index,
+        preview_notes,
+        preview_ignore_indices,
         preview_has_overlap,
         selection_rect,
         viewport_model(),

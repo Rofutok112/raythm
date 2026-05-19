@@ -42,9 +42,10 @@ void editor_timeline_presenter::draw(const editor_timeline_presenter_model& mode
         scroll_events.push_back({event.type, event.tick, event.duration, event.multiplier});
     }
 
-    std::optional<editor_timeline_note> preview_note;
-    if (model.preview_note.has_value()) {
-        preview_note = make_timeline_note(*model.preview_note);
+    std::vector<editor_timeline_note> preview_notes;
+    preview_notes.reserve(model.preview_notes.size());
+    for (const note_data& note : model.preview_notes) {
+        preview_notes.push_back(make_timeline_note(note));
     }
 
     editor_timeline_view::draw({
@@ -63,8 +64,8 @@ void editor_timeline_presenter::draw(const editor_timeline_presenter_model& mode
         &model.state.engine(),
         model.waveform_visible,
         model.waveform_offset_ms,
-        preview_note,
-        model.preview_note_index,
+        std::move(preview_notes),
+        model.preview_note_indices,
         model.preview_has_overlap,
         model.selection_rect,
         min_tick,

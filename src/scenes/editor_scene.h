@@ -36,6 +36,7 @@ private:
     editor_scene_sync_context make_sync_context();
     editor_timeline_viewport_model viewport_model() const;
     std::optional<note_data> dragged_note() const;
+    std::vector<note_data> dragged_notes() const;
     std::vector<size_t> sorted_timing_event_indices() const;
     editor_timeline_metrics timeline_metrics() const;
     int default_timing_event_tick() const;

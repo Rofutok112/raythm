@@ -23,8 +23,8 @@ struct editor_timeline_presenter_model {
     std::optional<size_t> selected_note_index;
     std::vector<size_t> selected_note_indices;
     std::optional<size_t> selected_scroll_event_index;
-    std::optional<note_data> preview_note;
-    std::optional<size_t> preview_note_index;
+    std::vector<note_data> preview_notes;
+    std::vector<size_t> preview_note_indices;
     bool preview_has_overlap = false;
     std::optional<Rectangle> selection_rect;
     editor_timeline_viewport_model viewport;
