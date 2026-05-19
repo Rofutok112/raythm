@@ -57,6 +57,10 @@ inline constexpr Rectangle kUnsavedChangesRect = ui::place(kScreenRect, 684.0f, 
                                                            ui::anchor::center, ui::anchor::center);
 inline constexpr Rectangle kSaveDialogRect = ui::place(kScreenRect, 780.0f, 336.0f,
                                                        ui::anchor::center, ui::anchor::center);
+inline constexpr Rectangle kEditorMetadataModalRect = ui::place(kScreenRect, 720.0f, 430.0f,
+                                                                ui::anchor::center, ui::anchor::center);
+inline constexpr Rectangle kEditorTimingModalRect = ui::place(kScreenRect, 900.0f, 760.0f,
+                                                              ui::anchor::center, ui::anchor::center);
 
 inline Rectangle key_count_confirm_button_rect() {
     return {kMetadataConfirmRect.x + 141.0f, kMetadataConfirmRect.y + 213.0f, 156.0f, 45.0f};

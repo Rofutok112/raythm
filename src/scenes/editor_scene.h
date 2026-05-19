@@ -88,5 +88,6 @@ private:
     metadata_panel_state metadata_panel_;
     save_dialog_state save_dialog_;
     unsaved_changes_dialog_state unsaved_changes_dialog_;
-    editor_right_panel_tab right_panel_tab_ = editor_right_panel_tab::timing;
+    bool metadata_modal_open_ = false;
+    bool timing_modal_open_ = false;
 };

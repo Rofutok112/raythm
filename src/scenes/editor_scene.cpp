@@ -125,6 +125,18 @@ void editor_scene::update(float dt) {
     rebuild_hit_regions();
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_);
 
+    if ((metadata_modal_open_ || timing_modal_open_) &&
+        !metadata_panel_.key_count_confirm_open &&
+        IsKeyPressed(KEY_ESCAPE)) {
+        metadata_modal_open_ = false;
+        timing_modal_open_ = false;
+        metadata_panel_.difficulty_input.active = false;
+        metadata_panel_.chart_author_input.active = false;
+        timing_panel_.active_input_field = editor_timing_input_field::none;
+        timing_panel_.bar_pick_mode = false;
+        return;
+    }
+
     const chart_data chart_for_save = make_chart_data_for_save();
     const bool save_dialog_submit = save_dialog_.submit_requested ||
         (save_dialog_.open && ui::is_clicked(layout::save_submit_button_rect(), ui::draw_layer::modal));
@@ -265,6 +277,14 @@ void editor_scene::rebuild_hit_regions() const {
         ui::register_hit_region(layout::kScreenRect, ui::draw_layer::overlay);
         ui::register_hit_region(layout::kMetadataConfirmRect, ui::draw_layer::modal);
     }
+    if (metadata_modal_open_) {
+        ui::register_hit_region(layout::kScreenRect, ui::draw_layer::overlay);
+        ui::register_hit_region(layout::kEditorMetadataModalRect, ui::draw_layer::modal);
+    }
+    if (timing_modal_open_) {
+        ui::register_hit_region(layout::kScreenRect, ui::draw_layer::overlay);
+        ui::register_hit_region(layout::kEditorTimingModalRect, ui::draw_layer::modal);
+    }
 }
 
 void editor_scene::draw() {
@@ -387,6 +407,12 @@ void editor_scene::draw() {
     if (header_result.loop_toggled && transport_.loop_end_tick > transport_.loop_start_tick) {
         transport_.loop_enabled = !transport_.loop_enabled;
     }
+    if (header_result.metadata_modal_requested) {
+        metadata_modal_open_ = true;
+    }
+    if (header_result.timing_modal_requested) {
+        timing_modal_open_ = true;
+    }
     if (header_result.offset_left_clicked) {
         apply_chart_offset(std::max(-10000, state_->data().meta.offset - 5));
     } else if (header_result.offset_right_clicked) {
@@ -425,6 +451,84 @@ void editor_scene::draw() {
     if (save_dialog_.open) {
         const editor_modal_view_result modal_result = editor_modal_view::draw_save_dialog(save_dialog_);
         save_dialog_.submit_requested = save_dialog_.submit_requested || modal_result.save_dialog_submit_requested;
+    }
+    if (metadata_modal_open_) {
+        const editor::daw::metadata_modal_result modal_result = editor::daw::draw_metadata_modal({
+            song_.meta.title.c_str(),
+            !state_->file_path().empty(),
+            state_->is_dirty(),
+            &metadata_panel_,
+            note_palette_,
+            load_errors_.empty() ? nullptr : &load_errors_.front(),
+            now,
+        });
+        const editor_metadata_panel_result metadata_panel_result = editor_panel_controller::update_metadata_panel(
+            metadata_panel_,
+            timing_panel_,
+            {
+                modal_result.metadata_result.difficulty_result.activated ||
+                    modal_result.metadata_result.author_result.activated,
+                modal_result.metadata_result.difficulty_result.submitted ||
+                    modal_result.metadata_result.author_result.submitted ||
+                    modal_result.apply_requested,
+                modal_result.metadata_result.key_count_left_clicked ||
+                    modal_result.metadata_result.key_count_right_clicked,
+            });
+        if (metadata_panel_result.request_apply_metadata) {
+            apply_metadata_changes(false);
+        }
+        if (modal_result.close_requested) {
+            metadata_modal_open_ = false;
+            metadata_panel_.difficulty_input.active = false;
+            metadata_panel_.chart_author_input.active = false;
+        }
+    }
+    if (timing_modal_open_) {
+        const editor::daw::timing_modal_result modal_result = editor::daw::draw_timing_modal({
+            &state_->data().timing_events,
+            &state_->data().scroll_events,
+            &meter_map_,
+            timing_panel_.selected_event_index,
+            timing_panel_.selected_scroll_event_index,
+            selected_note_indices_.empty() && selected_note_index_.has_value()
+                ? 1U
+                : selected_note_indices_.size(),
+            selected_note_indices_.empty() && !selected_note_index_.has_value()
+                ? std::string("No notes selected")
+                : std::string(selected_note_indices_.empty() && selected_note_index_.has_value()
+                    ? "1 note selected"
+                    : TextFormat("%d notes selected", static_cast<int>(selected_note_indices_.size()))),
+            can_delete_selected_timing_event(),
+            can_delete_selected_scroll_event(),
+            virtual_screen::get_virtual_mouse(),
+        }, timing_panel_);
+        const editor_timing_panel_update_result update_result = editor_panel_controller::update_timing_panel(
+            metadata_panel_,
+            timing_panel_,
+            {
+                modal_result.panel_result,
+                false,
+            });
+        if (update_result.select_timing_event_index.has_value()) {
+            select_timing_event(update_result.select_timing_event_index, true);
+        }
+        if (update_result.request_add_bpm) {
+            add_timing_event(timing_event_type::bpm);
+        }
+        if (update_result.request_add_meter) {
+            add_timing_event(timing_event_type::meter);
+        }
+        if (update_result.request_delete_selected) {
+            delete_selected_timing_event();
+        }
+        if (update_result.request_apply_selected) {
+            apply_selected_timing_event();
+        }
+        if (modal_result.close_requested) {
+            timing_modal_open_ = false;
+            timing_panel_.active_input_field = editor_timing_input_field::none;
+            timing_panel_.bar_pick_mode = false;
+        }
     }
     if (metadata_panel_.key_count_confirm_open) {
         editor_modal_view::draw_key_count_confirmation(metadata_panel_.pending_key_count);
@@ -504,7 +608,8 @@ void editor_scene::apply_flow_result(const editor_flow_result& result) {
 }
 
 bool editor_scene::has_blocking_modal() const {
-    return metadata_panel_.key_count_confirm_open || save_dialog_.open || unsaved_changes_dialog_.open;
+    return metadata_panel_.key_count_confirm_open || save_dialog_.open || unsaved_changes_dialog_.open ||
+        metadata_modal_open_ || timing_modal_open_;
 }
 
 std::optional<note_data> editor_scene::dragged_note() const {

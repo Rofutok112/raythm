@@ -12,6 +12,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_text_input.h"
 #include "ui/icons/raythm_icons.h"
 #include "ui_layout.h"
 
@@ -23,6 +24,17 @@ constexpr float kPanelInset = 14.0f;
 
 bool accepts_metadata_character(int codepoint, const std::string&) {
     return codepoint >= 32 && codepoint <= 126;
+}
+
+bool accepts_float_character(int codepoint, const std::string& value) {
+    if (codepoint >= '0' && codepoint <= '9') {
+        return true;
+    }
+    return codepoint == '.' && value.find('.') == std::string::npos;
+}
+
+bool accepts_int_character(int codepoint, const std::string&) {
+    return codepoint >= '0' && codepoint <= '9';
 }
 
 const char* key_count_label(int key_count) {
@@ -90,6 +102,52 @@ void draw_badge(Rectangle rect, const char* label, Color border, Color text) {
     ui::draw_rect_f(rect, with_alpha(border, 28));
     ui::draw_rect_lines(rect, 1.0f, with_alpha(border, 190));
     ui::draw_text_in_rect(label, 13, rect, text);
+}
+
+ui::button_state draw_layer_button(Rectangle rect,
+                                   const char* label,
+                                   int font_size,
+                                   ui::draw_layer layer,
+                                   Color bg,
+                                   Color bg_hover,
+                                   Color text_color,
+                                   float border_width = 1.5f) {
+    const bool hovered = ui::is_hovered(rect, layer);
+    const bool pressed = ui::is_pressed(rect, layer);
+    const bool clicked = ui::is_clicked(rect, layer);
+    const Rectangle visual = pressed ? ui::inset(rect, 1.5f) : rect;
+    ui::draw_rect_f(visual, lerp_color(bg, bg_hover, hovered ? 1.0f : 0.0f));
+    ui::draw_rect_lines(visual, border_width, g_theme->border_light);
+    ui::draw_text_in_rect(label, font_size, visual, text_color);
+    return {hovered, pressed, clicked};
+}
+
+ui::row_state draw_layer_row(Rectangle rect,
+                             bool selected,
+                             ui::draw_layer layer,
+                             Color selected_tone) {
+    const auto& t = *g_theme;
+    const bool hovered = ui::is_hovered(rect, layer);
+    const bool pressed = ui::is_pressed(rect, layer);
+    const bool clicked = ui::is_clicked(rect, layer);
+    const Rectangle visual = pressed ? ui::inset(rect, 1.5f) : rect;
+    ui::draw_rect_f(visual, selected
+        ? panel_tint(t.row_selected, selected_tone, 0.16f)
+        : lerp_color(t.row, t.row_hover, hovered ? 1.0f : 0.0f));
+    ui::draw_rect_lines(visual, selected ? 2.0f : 1.0f, selected ? selected_tone : t.border_light);
+    return {hovered, pressed, clicked, visual};
+}
+
+void set_active_timing_input(editor_timing_panel_state& state, editor_timing_input_field field) {
+    state.active_input_field = field;
+    state.inputs.bpm_value.active = field == editor_timing_input_field::bpm_value;
+    state.inputs.meter_numerator.active = field == editor_timing_input_field::meter_numerator;
+    state.inputs.meter_denominator.active = field == editor_timing_input_field::meter_denominator;
+    state.inputs.scroll_duration.active = field == editor_timing_input_field::scroll_duration;
+    state.inputs.scroll_multiplier.active = field == editor_timing_input_field::scroll_multiplier;
+    state.inputs.bpm_bar.active = false;
+    state.inputs.meter_bar.active = false;
+    state.inputs.scroll_start_bar.active = false;
 }
 
 void draw_rail_icon(Rectangle rect,
@@ -274,7 +332,6 @@ namespace editor::daw {
 editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model& model) {
     const auto& t = *g_theme;
     editor_left_panel_view_result result;
-    metadata_panel_state& metadata_panel = *model.metadata_panel;
     const Rectangle panel = layout::kLeftPanelRect;
     const Rectangle rail = {panel.x, panel.y, kRailWidth, panel.height};
     const Rectangle content = {panel.x + kRailWidth + 10.0f, panel.y + 14.0f,
@@ -300,48 +357,29 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
     draw_badge({content.x, content.y + 62.0f, 95.0f, 24.0f}, status_label,
                model.is_dirty ? t.slow : t.success, model.is_dirty ? t.slow : t.success);
 
-    const Rectangle meta = {content.x, content.y + 104.0f, content.width, 210.0f};
-    ui::draw_section(meta);
-    ui::draw_text_in_rect("Chart Setup", 20, {meta.x + 12.0f, meta.y + 10.0f, meta.width - 24.0f, 24.0f},
-                          t.text, ui::text_align::left);
-    result.difficulty_result = ui::draw_text_input(
-        {meta.x + 12.0f, meta.y + 48.0f, meta.width - 24.0f, 34.0f},
-        metadata_panel.difficulty_input, "Diff", "Difficulty", "New",
-        ui::draw_layer::base, 16, 24, accepts_metadata_character, 58.0f);
-    result.author_result = ui::draw_text_input(
-        {meta.x + 12.0f, meta.y + 90.0f, meta.width - 24.0f, 34.0f},
-        metadata_panel.chart_author_input, "Author", "Chart author", "Unknown",
-        ui::draw_layer::base, 16, 32, accepts_metadata_character, 58.0f);
-    const ui::selector_state key_count_selector = ui::draw_value_selector(
-        {meta.x + 12.0f, meta.y + 132.0f, meta.width - 24.0f, 34.0f},
-        "Lanes", key_count_label(metadata_panel.key_count), 16, 26.0f, 58.0f, 12.0f);
-    result.key_count_left_clicked = key_count_selector.left.clicked;
-    result.key_count_right_clicked = key_count_selector.right.clicked;
-    if (!metadata_panel.error.empty()) {
-        ui::draw_text_in_rect(metadata_panel.error.c_str(), 13,
-                              {meta.x + 12.0f, meta.y + 174.0f, meta.width - 24.0f, 22.0f},
-                              t.error, ui::text_align::left);
-    }
-
-    const Rectangle palette = {content.x, meta.y + meta.height + 14.0f, content.width, 196.0f};
+    const Rectangle palette = {content.x, content.y + 112.0f, content.width, 252.0f};
     ui::draw_section(palette);
-    ui::draw_text_in_rect("Note Palette", 20,
+    ui::draw_text_in_rect("Note Palette", 22,
                           {palette.x + 12.0f, palette.y + 10.0f, palette.width - 24.0f, 24.0f},
                           t.text, ui::text_align::left);
+    ui::draw_text_in_rect("Place notes directly in the arrangement.",
+                          13,
+                          {palette.x + 12.0f, palette.y + 36.0f, palette.width - 24.0f, 18.0f},
+                          t.text_muted, ui::text_align::left);
     const float gap = 8.0f;
     const float pad_width = (palette.width - 32.0f) * 0.5f;
-    const float pad_height = 48.0f;
-    draw_palette_pad({palette.x + 12.0f, palette.y + 48.0f, pad_width, pad_height},
+    const float pad_height = 56.0f;
+    draw_palette_pad({palette.x + 12.0f, palette.y + 66.0f, pad_width, pad_height},
                      note_type::tap, model.note_palette, result);
-    draw_palette_pad({palette.x + 20.0f + pad_width, palette.y + 48.0f, pad_width, pad_height},
+    draw_palette_pad({palette.x + 20.0f + pad_width, palette.y + 66.0f, pad_width, pad_height},
                      note_type::hold, model.note_palette, result);
-    draw_palette_pad({palette.x + 12.0f, palette.y + 48.0f + pad_height + gap, pad_width, pad_height},
+    draw_palette_pad({palette.x + 12.0f, palette.y + 66.0f + pad_height + gap, pad_width, pad_height},
                      note_type::release, model.note_palette, result);
-    draw_palette_pad({palette.x + 20.0f + pad_width, palette.y + 48.0f + pad_height + gap, pad_width, pad_height},
+    draw_palette_pad({palette.x + 20.0f + pad_width, palette.y + 66.0f + pad_height + gap, pad_width, pad_height},
                      note_type::stay, model.note_palette, result);
 
     const ui::button_state ray_button = ui::draw_button_colored(
-        {palette.x + 12.0f, palette.y + 48.0f + (pad_height + gap) * 2.0f,
+        {palette.x + 12.0f, palette.y + 66.0f + (pad_height + gap) * 2.0f,
          palette.width - 24.0f, 32.0f},
         model.note_palette.is_ray ? "RAY LANE ARMED" : "RAY LANE",
         14,
@@ -351,9 +389,9 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
         model.note_palette.is_ray ? 2.0f : 1.0f);
     result.ray_toggled = ray_button.clicked;
 
-    const Rectangle ops = {content.x, palette.y + palette.height + 14.0f, content.width, 144.0f};
+    const Rectangle ops = {content.x, palette.y + palette.height + 14.0f, content.width, 164.0f};
     ui::draw_section(ops);
-    ui::draw_text_in_rect("Session Ops", 20, {ops.x + 12.0f, ops.y + 10.0f, ops.width - 24.0f, 24.0f},
+    ui::draw_text_in_rect("Edit Focus", 20, {ops.x + 12.0f, ops.y + 10.0f, ops.width - 24.0f, 24.0f},
                           t.text, ui::text_align::left);
     ui::draw_label_value({ops.x + 12.0f, ops.y + 50.0f, ops.width - 24.0f, 22.0f},
                          "Edit Target", model.note_palette.is_ray ? "Ray lane" : palette_label(model.note_palette.type),
@@ -362,6 +400,10 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
                          "Snap", "Header control", 14, t.text_muted, t.text_secondary, 78.0f);
     ui::draw_label_value({ops.x + 12.0f, ops.y + 114.0f, ops.width - 24.0f, 22.0f},
                          "Loop", "[ ] then L", 14, t.text_muted, t.text_secondary, 78.0f);
+    ui::draw_text_in_rect("Metadata and timing live in header modals.",
+                          13,
+                          {ops.x + 12.0f, ops.y + 138.0f, ops.width - 24.0f, 18.0f},
+                          t.text_hint, ui::text_align::left);
 
     if (model.load_error != nullptr) {
         ui::draw_text_in_rect(model.load_error->c_str(), 16,
@@ -381,26 +423,10 @@ editor_right_panel_view_result draw_right_panel(const editor_right_panel_view_mo
 
     ui::draw_rect_f(panel, panel_tint(t.panel, t.bg_alt, 0.14f));
     ui::draw_rect_lines(panel, 1.5f, t.border);
-    ui::draw_text_in_rect("INSPECTOR", 15, {content.x, content.y, content.width, 20.0f},
+    ui::draw_text_in_rect("SCROLL", 15, {content.x, content.y, content.width, 20.0f},
                           t.text_muted, ui::text_align::left);
-    draw_badge({content.x + content.width - 122.0f, content.y - 2.0f, 122.0f, 24.0f},
-               model.selected_note_count > 0 ? "NOTES" : "TIMING",
-               model.selected_note_count > 0 ? t.accent : t.text_muted,
-               model.selected_note_count > 0 ? t.accent : t.text_secondary);
-
-    std::vector<editor_timing_panel_item> items;
-    items.reserve(model.timing_events->size());
-    for (size_t index = 0; index < model.timing_events->size(); ++index) {
-        const timing_event& event = (*model.timing_events)[index];
-        items.push_back({
-            index,
-            std::string(timing_event_type_label(event.type)) + " " + model.meter_map->bar_beat_label(event.tick),
-            event.type == timing_event_type::bpm
-                ? TextFormat("%.1f", event.bpm)
-                : TextFormat("%d/%d", event.numerator, event.denominator),
-            model.selected_event_index.has_value() && *model.selected_event_index == index
-        });
-    }
+    draw_badge({content.x + content.width - 140.0f, content.y - 2.0f, 140.0f, 24.0f},
+               "SPEED / STOP", t.fast, t.fast);
 
     std::vector<editor_timing_panel_item> scroll_items;
     scroll_items.reserve(model.scroll_events->size());
@@ -416,24 +442,164 @@ editor_right_panel_view_result draw_right_panel(const editor_right_panel_view_mo
         });
     }
 
-    std::optional<timing_event> selected_event;
-    if (model.selected_event_index.has_value() && *model.selected_event_index < model.timing_events->size()) {
-        selected_event = (*model.timing_events)[*model.selected_event_index];
-    }
     std::optional<scroll_event> selected_scroll_event;
     if (model.selected_scroll_event_index.has_value() && *model.selected_scroll_event_index < model.scroll_events->size()) {
         selected_scroll_event = (*model.scroll_events)[*model.selected_scroll_event_index];
     }
 
-    const Rectangle timing_content = {content.x, content.y + 38.0f, content.width, content.height - 38.0f};
-    result.panel_result = editor_timing_panel::draw(
-        {timing_content, model.mouse, std::move(items), std::move(scroll_items),
-         selected_event, selected_scroll_event, model.selected_note_count, model.selected_note_summary,
-         model.delete_enabled, model.scroll_delete_enabled},
-        timing_state);
+    const Rectangle list_box = {content.x, content.y + 42.0f, content.width, 372.0f};
+    ui::draw_section(list_box);
+    ui::draw_text_in_rect("Scroll Regions", 20,
+                          {list_box.x + 12.0f, list_box.y + 10.0f, list_box.width - 24.0f, 24.0f},
+                          t.text, ui::text_align::left);
+    const Rectangle list_view = {list_box.x + 10.0f, list_box.y + 50.0f, list_box.width - 32.0f, 268.0f};
+    const Rectangle scrollbar = {list_view.x + list_view.width + 6.0f, list_view.y, 6.0f, list_view.height};
+    const float row_height = 34.0f;
+    const float row_gap = 5.0f;
+    const float content_height = scroll_items.empty()
+        ? list_view.height
+        : static_cast<float>(scroll_items.size()) * row_height +
+              static_cast<float>(std::max<int>(0, static_cast<int>(scroll_items.size()) - 1)) * row_gap;
+    const float max_scroll = std::max(0.0f, content_height - list_view.height);
+    timing_state.scroll_list_scroll_offset = std::clamp(timing_state.scroll_list_scroll_offset, 0.0f, max_scroll);
+    const ui::scrollbar_interaction scrollbar_result = ui::update_vertical_scrollbar(
+        scrollbar,
+        content_height,
+        timing_state.scroll_list_scroll_offset,
+        timing_state.scroll_list_scrollbar_dragging,
+        timing_state.scroll_list_scrollbar_drag_offset,
+        28.0f);
+    if (scrollbar_result.changed || scrollbar_result.dragging) {
+        timing_state.scroll_list_scroll_offset = scrollbar_result.scroll_offset;
+    }
+    if (CheckCollisionPointRec(model.mouse, list_view) && GetMouseWheelMove() != 0.0f) {
+        timing_state.scroll_list_scroll_offset = std::clamp(
+            timing_state.scroll_list_scroll_offset - GetMouseWheelMove() * 42.0f, 0.0f, max_scroll);
+    }
+    {
+        ui::scoped_clip_rect clip_scope(list_view);
+        float y = list_view.y - timing_state.scroll_list_scroll_offset;
+        for (const editor_timing_panel_item& item : scroll_items) {
+            const Rectangle item_rect = {list_view.x, y, list_view.width, row_height};
+            const ui::row_state row_state = ui::draw_selectable_row(item_rect, item.selected, 1.4f);
+            if (row_state.clicked) {
+                result.panel_result.selected_scroll_event_index = item.event_index;
+            }
+            ui::draw_label_value(ui::inset(row_state.visual, ui::edge_insets::symmetric(0.0f, 10.0f)),
+                                 item.label.c_str(), item.value.c_str(), 14,
+                                 item.selected ? t.text : t.text_secondary,
+                                 item.selected ? t.text : t.text_muted, 122.0f);
+            y += row_height + row_gap;
+        }
+    }
+    ui::draw_scrollbar(scrollbar, content_height, timing_state.scroll_list_scroll_offset,
+                       t.scrollbar_track, t.scrollbar_thumb, 28.0f);
 
-    const Rectangle editor_box = {timing_content.x, timing_content.y + 660.0f,
-                                  timing_content.width, timing_content.height - 660.0f};
+    const float button_gap = 8.0f;
+    const float button_width = (list_box.width - 24.0f - button_gap * 2.0f) / 3.0f;
+    const Rectangle speed_button = {list_box.x + 12.0f, list_box.y + list_box.height - 40.0f,
+                                    button_width, 28.0f};
+    const Rectangle stop_button = {speed_button.x + button_width + button_gap, speed_button.y,
+                                   button_width, 28.0f};
+    const Rectangle delete_button = {stop_button.x + button_width + button_gap, speed_button.y,
+                                     button_width, 28.0f};
+    if (ui::draw_button(speed_button, "Speed", 14).clicked) {
+        result.panel_result.add_speed = true;
+    }
+    if (ui::draw_button(stop_button, "Stop", 14).clicked) {
+        result.panel_result.add_stop = true;
+    }
+    const ui::button_state delete_state = ui::draw_button_colored(
+        delete_button, "Delete", 14,
+        model.scroll_delete_enabled ? t.row : t.section,
+        model.scroll_delete_enabled ? t.row_hover : t.section,
+        model.scroll_delete_enabled ? t.text : t.text_hint,
+        1.4f);
+    if (model.scroll_delete_enabled && delete_state.clicked) {
+        result.panel_result.delete_selected_scroll = true;
+    }
+
+    const Rectangle editor_box = {content.x, list_box.y + list_box.height + 14.0f,
+                                  content.width, content.y + content.height - (list_box.y + list_box.height + 14.0f)};
+    ui::draw_section(editor_box);
+    ui::draw_text_in_rect("Region Inspector", 20,
+                          {editor_box.x + 12.0f, editor_box.y + 10.0f, editor_box.width - 24.0f, 24.0f},
+                          t.text, ui::text_align::left);
+    if (selected_scroll_event.has_value()) {
+        const scroll_event& event = *selected_scroll_event;
+        ui::draw_label_value({editor_box.x + 12.0f, editor_box.y + 46.0f, editor_box.width - 24.0f, 22.0f},
+                             "Mode", scroll_event_type_label(event.type), 15,
+                             t.text_secondary, t.text, 72.0f);
+        auto draw_pick_row = [&](Rectangle rect, const char* label, const std::string& value,
+                                 editor_timing_input_field field) {
+            const bool selected = timing_state.active_input_field == field || timing_state.bar_pick_mode;
+            const ui::row_state row_state = ui::draw_row(
+                rect,
+                selected ? t.row_selected : t.row,
+                selected ? t.row_selected_hover : t.row_hover,
+                timing_state.bar_pick_mode ? t.accent : (selected ? t.border_active : t.border),
+                1.4f);
+            if (row_state.clicked) {
+                result.panel_result.clicked_input_row = true;
+                timing_state.active_input_field = field;
+                timing_state.bar_pick_mode = true;
+                timing_state.input_error.clear();
+                timing_state.inputs.scroll_duration.active = false;
+                timing_state.inputs.scroll_multiplier.active = false;
+            }
+            ui::draw_label_value(ui::inset(row_state.visual, ui::edge_insets::symmetric(0.0f, 10.0f)),
+                                 label, timing_state.bar_pick_mode ? "Pick timeline" : value.c_str(),
+                                 15, selected ? t.text : t.text_secondary,
+                                 timing_state.bar_pick_mode ? t.accent : t.text, 72.0f);
+        };
+        auto draw_input_row = [&](Rectangle rect, const char* label, ui::text_input_state& input,
+                                  editor_timing_input_field field, ui::text_input_filter filter,
+                                  const char* placeholder) {
+            const ui::text_input_result input_result = ui::draw_text_input(
+                rect, input, label, placeholder, nullptr,
+                ui::draw_layer::base, 15, 16, filter, 72.0f);
+            if (input_result.clicked) {
+                result.panel_result.clicked_input_row = true;
+                set_active_timing_input(timing_state, field);
+                timing_state.bar_pick_mode = false;
+                timing_state.input_error.clear();
+            }
+            if (input_result.submitted) {
+                result.panel_result.apply_selected_scroll = true;
+                set_active_timing_input(timing_state, editor_timing_input_field::none);
+                timing_state.bar_pick_mode = false;
+            } else if (input_result.deactivated && timing_state.active_input_field == field) {
+                set_active_timing_input(timing_state, editor_timing_input_field::none);
+            }
+        };
+        draw_pick_row({editor_box.x + 12.0f, editor_box.y + 82.0f, editor_box.width - 24.0f, 34.0f},
+                      "Start", timing_state.inputs.scroll_start_bar.value, editor_timing_input_field::scroll_start);
+        draw_input_row({editor_box.x + 12.0f, editor_box.y + 124.0f, editor_box.width - 24.0f, 34.0f},
+                       "Length", timing_state.inputs.scroll_duration, editor_timing_input_field::scroll_duration,
+                       accepts_int_character, "ticks");
+        if (event.type == scroll_event_type::speed) {
+            draw_input_row({editor_box.x + 12.0f, editor_box.y + 166.0f, editor_box.width - 24.0f, 34.0f},
+                           "Rate", timing_state.inputs.scroll_multiplier, editor_timing_input_field::scroll_multiplier,
+                           accepts_float_character, "1.0x");
+        }
+        const Rectangle apply_rect = {editor_box.x + 12.0f, editor_box.y + editor_box.height - 42.0f,
+                                      editor_box.width - 24.0f, 30.0f};
+        if (ui::draw_button(apply_rect, "Apply Region", 14).clicked) {
+            result.panel_result.apply_selected_scroll = true;
+        }
+        if (!timing_state.input_error.empty()) {
+            ui::draw_text_in_rect(timing_state.input_error.c_str(), 14,
+                                  {editor_box.x + 12.0f, apply_rect.y - 26.0f,
+                                   editor_box.width - 24.0f, 20.0f},
+                                  t.error, ui::text_align::left);
+        }
+    } else {
+        ui::draw_text_in_rect("Select or create a speed / stop region.", 16,
+                              {editor_box.x + 12.0f, editor_box.y + 56.0f,
+                               editor_box.width - 24.0f, 22.0f},
+                              t.text_hint, ui::text_align::left);
+    }
+
     result.clicked_outside_editor = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
                                     !CheckCollisionPointRec(model.mouse, editor_box);
     return result;
@@ -454,8 +620,14 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
                           t.text, ui::text_align::left);
     ui::draw_text_in_rect("DAW Chart Editor", 13, {content.x + 420.0f, content.y + 28.0f, 150.0f, 18.0f},
                           t.accent, ui::text_align::left);
+    const Rectangle meta_button = {content.x + 570.0f, content.y + 8.0f, 86.0f, 34.0f};
+    const Rectangle timing_button = {meta_button.x + meta_button.width + 8.0f, meta_button.y, 94.0f, 34.0f};
+    result.metadata_modal_requested = ui::draw_button_colored(
+        meta_button, "META", 13, t.row, t.row_hover, t.text_secondary, 1.2f).clicked;
+    result.timing_modal_requested = ui::draw_button_colored(
+        timing_button, "TIMING", 13, t.row, t.row_hover, t.text_secondary, 1.2f).clicked;
 
-    const Rectangle transport = {content.x + 608.0f, content.y + 1.0f, 430.0f, 50.0f};
+    const Rectangle transport = {content.x + 788.0f, content.y + 1.0f, 430.0f, 50.0f};
     ui::draw_section(transport);
     const Rectangle play_rect = {transport.x + 10.0f, transport.y + 5.0f, 40.0f, 40.0f};
     const ui::button_state play_button = model.audio_playing
@@ -658,6 +830,263 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
             std::clamp(model.scroll_offset_pixels / max_scroll, 0.0f, 1.0f);
         ui::draw_rect_f({track.x, thumb_y, track.width, thumb_height}, t.scrollbar_thumb);
     }
+}
+
+metadata_modal_result draw_metadata_modal(const editor_left_panel_view_model& model) {
+    const auto& t = *g_theme;
+    metadata_modal_result result;
+    metadata_panel_state& metadata_panel = *model.metadata_panel;
+    const Rectangle modal = layout::kEditorMetadataModalRect;
+    const Rectangle content = inset_rect(modal, 24.0f);
+
+    ui::draw_rect_f(layout::kScreenRect, g_theme->pause_overlay);
+    ui::draw_panel(modal);
+    ui::draw_text_in_rect("Chart Metadata", 28,
+                          {content.x, content.y, content.width, 32.0f},
+                          t.text, ui::text_align::left);
+    ui::draw_text_in_rect("These settings are outside the main editing surface.",
+                          15,
+                          {content.x, content.y + 34.0f, content.width, 22.0f},
+                          t.text_muted, ui::text_align::left);
+
+    const Rectangle song_box = {content.x, content.y + 76.0f, content.width, 72.0f};
+    ui::draw_section(song_box);
+    ui::draw_label_value({song_box.x + 14.0f, song_box.y + 13.0f, song_box.width - 28.0f, 22.0f},
+                         "Song", model.song_title, 16, t.text_muted, t.text, 78.0f);
+    ui::draw_label_value({song_box.x + 14.0f, song_box.y + 40.0f, song_box.width - 28.0f, 20.0f},
+                         "Status", model.is_dirty ? "Modified" : (model.has_file ? "Saved" : "Unsaved"),
+                         14, t.text_muted, model.is_dirty ? t.slow : t.success, 78.0f);
+
+    const Rectangle form = {content.x, song_box.y + song_box.height + 16.0f, content.width, 148.0f};
+    ui::draw_section(form);
+    result.metadata_result.difficulty_result = ui::draw_text_input(
+        {form.x + 16.0f, form.y + 18.0f, form.width - 32.0f, 38.0f},
+        metadata_panel.difficulty_input, "Diff", "Difficulty", "New",
+        ui::draw_layer::modal, 16, 24, accepts_metadata_character, 74.0f);
+    result.metadata_result.author_result = ui::draw_text_input(
+        {form.x + 16.0f, form.y + 66.0f, form.width - 32.0f, 38.0f},
+        metadata_panel.chart_author_input, "Author", "Chart author", "Unknown",
+        ui::draw_layer::modal, 16, 32, accepts_metadata_character, 74.0f);
+    const ui::selector_state key_count_selector = ui::draw_value_selector(
+        {form.x + 16.0f, form.y + 114.0f, form.width - 32.0f, 28.0f},
+        "Lanes", key_count_label(metadata_panel.key_count),
+        ui::draw_layer::modal, 14, 24.0f, 74.0f, 10.0f);
+    result.metadata_result.key_count_left_clicked = key_count_selector.left.clicked;
+    result.metadata_result.key_count_right_clicked = key_count_selector.right.clicked;
+
+    if (!metadata_panel.error.empty()) {
+        ui::draw_text_in_rect(metadata_panel.error.c_str(), 15,
+                              {content.x, form.y + form.height + 10.0f, content.width, 22.0f},
+                              t.error, ui::text_align::left);
+    }
+
+    const Rectangle apply_rect = {content.x + content.width - 260.0f, modal.y + modal.height - 58.0f, 116.0f, 34.0f};
+    const Rectangle close_rect = {content.x + content.width - 132.0f, apply_rect.y, 132.0f, 34.0f};
+    result.apply_requested = draw_layer_button(apply_rect, "APPLY", 14, ui::draw_layer::modal,
+                                               t.row, t.row_hover, t.text).clicked;
+    result.close_requested = draw_layer_button(close_rect, "CLOSE", 14, ui::draw_layer::modal,
+                                               t.row, t.row_hover, t.text_secondary).clicked;
+    return result;
+}
+
+timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model,
+                                      editor_timing_panel_state& timing_state) {
+    const auto& t = *g_theme;
+    timing_modal_result result;
+    const Rectangle modal = layout::kEditorTimingModalRect;
+    const Rectangle content = inset_rect(modal, 22.0f);
+
+    ui::draw_rect_f(layout::kScreenRect, g_theme->pause_overlay);
+    ui::draw_panel(modal);
+    ui::draw_text_in_rect("Timing Map", 28,
+                          {content.x, content.y, content.width, 32.0f},
+                          t.text, ui::text_align::left);
+    ui::draw_text_in_rect("BPM and meter changes are managed here.",
+                          15,
+                          {content.x, content.y + 34.0f, content.width, 22.0f},
+                          t.text_muted, ui::text_align::left);
+
+    std::vector<editor_timing_panel_item> items;
+    items.reserve(model.timing_events->size());
+    for (size_t index = 0; index < model.timing_events->size(); ++index) {
+        const timing_event& event = (*model.timing_events)[index];
+        items.push_back({
+            index,
+            std::string(timing_event_type_label(event.type)) + " " + model.meter_map->bar_beat_label(event.tick),
+            event.type == timing_event_type::bpm
+                ? TextFormat("%.1f", event.bpm)
+                : TextFormat("%d/%d", event.numerator, event.denominator),
+            model.selected_event_index.has_value() && *model.selected_event_index == index
+        });
+    }
+
+    std::optional<timing_event> selected_event;
+    if (model.selected_event_index.has_value() && *model.selected_event_index < model.timing_events->size()) {
+        selected_event = (*model.timing_events)[*model.selected_event_index];
+    }
+
+    const Rectangle list_box = {content.x, content.y + 74.0f, 390.0f, content.height - 142.0f};
+    const Rectangle editor_box = {list_box.x + list_box.width + 18.0f, list_box.y,
+                                  content.width - list_box.width - 18.0f, list_box.height};
+    ui::draw_section(list_box);
+    ui::draw_text_in_rect("Events", 20,
+                          {list_box.x + 14.0f, list_box.y + 10.0f, list_box.width - 28.0f, 24.0f},
+                          t.text, ui::text_align::left);
+
+    const Rectangle list_view = {list_box.x + 12.0f, list_box.y + 48.0f, list_box.width - 32.0f, list_box.height - 100.0f};
+    const Rectangle scrollbar = {list_view.x + list_view.width + 6.0f, list_view.y, 6.0f, list_view.height};
+    const float row_height = 34.0f;
+    const float row_gap = 5.0f;
+    const float content_height = items.empty()
+        ? list_view.height
+        : static_cast<float>(items.size()) * row_height +
+              static_cast<float>(std::max<int>(0, static_cast<int>(items.size()) - 1)) * row_gap;
+    const float max_scroll = std::max(0.0f, content_height - list_view.height);
+    timing_state.list_scroll_offset = std::clamp(timing_state.list_scroll_offset, 0.0f, max_scroll);
+    const ui::scrollbar_interaction scrollbar_result = ui::update_vertical_scrollbar(
+        scrollbar,
+        content_height,
+        timing_state.list_scroll_offset,
+        timing_state.list_scrollbar_dragging,
+        timing_state.list_scrollbar_drag_offset,
+        28.0f);
+    if (scrollbar_result.changed || scrollbar_result.dragging) {
+        timing_state.list_scroll_offset = scrollbar_result.scroll_offset;
+    }
+    if (CheckCollisionPointRec(model.mouse, list_view) && GetMouseWheelMove() != 0.0f) {
+        timing_state.list_scroll_offset = std::clamp(
+            timing_state.list_scroll_offset - GetMouseWheelMove() * 42.0f, 0.0f, max_scroll);
+    }
+    {
+        ui::scoped_clip_rect clip_scope(list_view);
+        float y = list_view.y - timing_state.list_scroll_offset;
+        for (const editor_timing_panel_item& item : items) {
+            const Rectangle item_rect = {list_view.x, y, list_view.width, row_height};
+            const ui::row_state row_state = draw_layer_row(item_rect, item.selected, ui::draw_layer::modal, t.accent);
+            if (row_state.clicked) {
+                result.panel_result.selected_event_index = item.event_index;
+            }
+            ui::draw_label_value(ui::inset(row_state.visual, ui::edge_insets::symmetric(0.0f, 10.0f)),
+                                 item.label.c_str(), item.value.c_str(), 14,
+                                 item.selected ? t.text : t.text_secondary,
+                                 item.selected ? t.text : t.text_muted, 126.0f);
+            y += row_height + row_gap;
+        }
+    }
+    ui::draw_scrollbar(scrollbar, content_height, timing_state.list_scroll_offset,
+                       t.scrollbar_track, t.scrollbar_thumb, 28.0f);
+
+    const float button_width = (list_box.width - 32.0f - 16.0f) / 3.0f;
+    const Rectangle bpm_button = {list_box.x + 12.0f, list_box.y + list_box.height - 42.0f,
+                                  button_width, 30.0f};
+    const Rectangle meter_button = {bpm_button.x + button_width + 8.0f, bpm_button.y, button_width, 30.0f};
+    const Rectangle delete_button = {meter_button.x + button_width + 8.0f, bpm_button.y, button_width, 30.0f};
+    if (draw_layer_button(bpm_button, "Add BPM", 13, ui::draw_layer::modal,
+                          t.row, t.row_hover, t.text).clicked) {
+        result.panel_result.add_bpm = true;
+    }
+    if (draw_layer_button(meter_button, "Add Meter", 13, ui::draw_layer::modal,
+                          t.row, t.row_hover, t.text).clicked) {
+        result.panel_result.add_meter = true;
+    }
+    if (draw_layer_button(delete_button, "Delete", 13, ui::draw_layer::modal,
+                          model.delete_enabled ? t.row : t.section,
+                          model.delete_enabled ? t.row_hover : t.section,
+                          model.delete_enabled ? t.text : t.text_hint).clicked && model.delete_enabled) {
+        result.panel_result.delete_selected = true;
+    }
+
+    ui::draw_section(editor_box);
+    ui::draw_text_in_rect("Event Inspector", 20,
+                          {editor_box.x + 14.0f, editor_box.y + 10.0f, editor_box.width - 28.0f, 24.0f},
+                          t.text, ui::text_align::left);
+
+    auto draw_pick_row = [&](Rectangle rect, const char* label, const std::string& value,
+                             editor_timing_input_field field) {
+        const bool selected = timing_state.active_input_field == field || timing_state.bar_pick_mode;
+        const ui::row_state row_state = draw_layer_row(rect, selected, ui::draw_layer::modal, t.accent);
+        if (row_state.clicked) {
+            result.panel_result.clicked_input_row = true;
+            timing_state.active_input_field = field;
+            timing_state.bar_pick_mode = true;
+            timing_state.input_error.clear();
+            timing_state.inputs.bpm_value.active = false;
+            timing_state.inputs.meter_numerator.active = false;
+            timing_state.inputs.meter_denominator.active = false;
+        }
+        ui::draw_label_value(ui::inset(row_state.visual, ui::edge_insets::symmetric(0.0f, 12.0f)),
+                             label, timing_state.bar_pick_mode ? "Pick timeline" : value.c_str(),
+                             16, selected ? t.text : t.text_secondary,
+                             timing_state.bar_pick_mode ? t.accent : t.text, 82.0f);
+    };
+    auto draw_input_row = [&](Rectangle rect, const char* label, ui::text_input_state& input,
+                              editor_timing_input_field field, ui::text_input_filter filter,
+                              const char* placeholder, float label_width = 82.0f) {
+        const ui::text_input_result input_result = ui::draw_text_input(
+            rect, input, label, placeholder, nullptr,
+            ui::draw_layer::modal, 16, 16, filter, label_width);
+        if (input_result.clicked) {
+            result.panel_result.clicked_input_row = true;
+            set_active_timing_input(timing_state, field);
+            timing_state.bar_pick_mode = false;
+            timing_state.input_error.clear();
+        }
+        if (input_result.submitted) {
+            result.panel_result.apply_selected = true;
+            set_active_timing_input(timing_state, editor_timing_input_field::none);
+            timing_state.bar_pick_mode = false;
+        } else if (input_result.deactivated && timing_state.active_input_field == field) {
+            set_active_timing_input(timing_state, editor_timing_input_field::none);
+        }
+    };
+
+    if (selected_event.has_value()) {
+        const timing_event& event = *selected_event;
+        ui::draw_label_value({editor_box.x + 14.0f, editor_box.y + 52.0f, editor_box.width - 28.0f, 24.0f},
+                             "Type", timing_event_type_label(event.type), 16,
+                             t.text_secondary, t.text, 82.0f);
+        if (event.type == timing_event_type::bpm) {
+            draw_pick_row({editor_box.x + 14.0f, editor_box.y + 90.0f, editor_box.width - 28.0f, 38.0f},
+                          "Bar", timing_state.inputs.bpm_bar.value, editor_timing_input_field::bpm_measure);
+            draw_input_row({editor_box.x + 14.0f, editor_box.y + 138.0f, editor_box.width - 28.0f, 38.0f},
+                           "BPM", timing_state.inputs.bpm_value, editor_timing_input_field::bpm_value,
+                           accepts_float_character, "BPM");
+        } else {
+            draw_pick_row({editor_box.x + 14.0f, editor_box.y + 90.0f, editor_box.width - 28.0f, 38.0f},
+                          "Bar", timing_state.inputs.meter_bar.value, editor_timing_input_field::meter_measure);
+            const float half = (editor_box.width - 36.0f) * 0.5f;
+            draw_input_row({editor_box.x + 14.0f, editor_box.y + 138.0f, half, 38.0f},
+                           "Num", timing_state.inputs.meter_numerator,
+                           editor_timing_input_field::meter_numerator,
+                           accepts_int_character, "Num", 46.0f);
+            draw_input_row({editor_box.x + 22.0f + half, editor_box.y + 138.0f, half, 38.0f},
+                           "Den", timing_state.inputs.meter_denominator,
+                           editor_timing_input_field::meter_denominator,
+                           accepts_int_character, "Den", 46.0f);
+        }
+        const Rectangle apply_button = {editor_box.x + 14.0f, editor_box.y + editor_box.height - 48.0f,
+                                        editor_box.width - 28.0f, 34.0f};
+        if (draw_layer_button(apply_button, "APPLY EVENT", 14, ui::draw_layer::modal,
+                              t.row, t.row_hover, t.text).clicked) {
+            result.panel_result.apply_selected = true;
+        }
+        if (!timing_state.input_error.empty()) {
+            ui::draw_text_in_rect(timing_state.input_error.c_str(), 15,
+                                  {editor_box.x + 14.0f, apply_button.y - 28.0f,
+                                   editor_box.width - 28.0f, 22.0f},
+                                  t.error, ui::text_align::left);
+        }
+    } else {
+        ui::draw_text_in_rect("Select or add a BPM / meter event.", 17,
+                              {editor_box.x + 14.0f, editor_box.y + 60.0f,
+                               editor_box.width - 28.0f, 24.0f},
+                              t.text_hint, ui::text_align::left);
+    }
+
+    const Rectangle close_button = {modal.x + modal.width - 144.0f, modal.y + modal.height - 52.0f, 116.0f, 32.0f};
+    result.close_requested = draw_layer_button(close_button, "CLOSE", 14, ui::draw_layer::modal,
+                                               t.row, t.row_hover, t.text_secondary).clicked;
+    return result;
 }
 
 }  // namespace editor::daw

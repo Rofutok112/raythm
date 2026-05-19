@@ -20,6 +20,8 @@ struct editor_header_view_model {
 struct editor_header_view_result {
     bool playback_toggled = false;
     bool loop_toggled = false;
+    bool metadata_modal_requested = false;
+    bool timing_modal_requested = false;
     bool offset_left_clicked = false;
     bool offset_right_clicked = false;
     bool waveform_toggled = false;
