@@ -54,6 +54,21 @@ const char* palette_label(note_type type) {
     return "TAP";
 }
 
+Color palette_tone(note_type type) {
+    const auto& t = *g_theme;
+    switch (type) {
+        case note_type::tap:
+            return t.error;
+        case note_type::hold:
+            return t.success;
+        case note_type::release:
+            return t.slow;
+        case note_type::stay:
+            return t.fast;
+    }
+    return t.accent;
+}
+
 const char* timing_event_type_label(timing_event_type type) {
     return type == timing_event_type::bpm ? "BPM" : "Meter";
 }
@@ -153,28 +168,60 @@ void set_active_timing_input(editor_timing_panel_state& state, editor_timing_inp
     state.inputs.scroll_start_bar.active = false;
 }
 
+void draw_palette_icon(Rectangle rect, note_type type, Color color) {
+    const Vector2 center = rect_center(rect);
+    const float stroke = 3.0f;
+    switch (type) {
+        case note_type::tap:
+            DrawCircleV(center, std::min(rect.width, rect.height) * 0.25f, color);
+            break;
+        case note_type::hold: {
+            const float left = rect.x + rect.width * 0.22f;
+            const float right = rect.x + rect.width * 0.78f;
+            DrawLineEx({left, center.y}, {right, center.y}, stroke + 3.0f, with_alpha(color, 110));
+            DrawCircleV({left, center.y}, 5.0f, color);
+            DrawCircleV({right, center.y}, 5.0f, color);
+            break;
+        }
+        case note_type::release: {
+            const Vector2 top = {center.x, rect.y + rect.height * 0.22f};
+            const Vector2 bottom_left = {rect.x + rect.width * 0.24f, rect.y + rect.height * 0.70f};
+            const Vector2 bottom_right = {rect.x + rect.width * 0.76f, rect.y + rect.height * 0.70f};
+            DrawTriangle(top, bottom_left, bottom_right, color);
+            break;
+        }
+        case note_type::stay: {
+            const Rectangle body = {rect.x + rect.width * 0.24f, rect.y + rect.height * 0.28f,
+                                    rect.width * 0.52f, rect.height * 0.44f};
+            ui::draw_rect_f(body, with_alpha(color, 150));
+            ui::draw_rect_lines(body, 2.0f, color);
+            DrawLineEx({body.x + body.width * 0.33f, body.y + 3.0f},
+                       {body.x + body.width * 0.33f, body.y + body.height - 3.0f}, stroke, color);
+            DrawLineEx({body.x + body.width * 0.66f, body.y + 3.0f},
+                       {body.x + body.width * 0.66f, body.y + body.height - 3.0f}, stroke, color);
+            break;
+        }
+    }
+}
+
 void draw_palette_pad(Rectangle rect,
                       note_type type,
                       const editor_note_palette_selection& selection,
                       editor_left_panel_view_result& result) {
     const auto& t = *g_theme;
     const bool selected = selection.type == type;
-    const Color tone = type == note_type::tap ? t.error :
-        (type == note_type::hold ? t.success :
-        (type == note_type::release ? t.slow :
-         (type == note_type::stay ? t.fast : t.accent)));
+    const Color tone = palette_tone(type);
     const ui::row_state state = ui::draw_row(
         rect,
         selected ? panel_tint(t.row_selected, tone, 0.18f) : t.row,
         selected ? panel_tint(t.row_active, tone, 0.2f) : t.row_hover,
         selected ? tone : t.border_light,
         selected ? 2.0f : 1.0f);
-    ui::draw_rect_f({state.visual.x + 10.0f, state.visual.y + state.visual.height - 7.0f,
-                     state.visual.width - 20.0f, 3.0f},
-                    selected ? tone : with_alpha(t.text_muted, 95));
-    ui::draw_text_in_rect(palette_label(type), 14,
-                          {state.visual.x + 10.0f, state.visual.y + 7.0f,
-                           state.visual.width - 20.0f, 19.0f},
+    const Rectangle icon_rect = {state.visual.x + 10.0f, state.visual.y + 7.0f, 36.0f, state.visual.height - 14.0f};
+    draw_palette_icon(icon_rect, type, selected ? tone : t.text_secondary);
+    ui::draw_text_in_rect(palette_label(type), 15,
+                          {state.visual.x + 58.0f, state.visual.y,
+                           state.visual.width - 72.0f, state.visual.height},
                           selected ? t.text : t.text_secondary, ui::text_align::left);
     if (state.clicked) {
         result.selected_note_type = type;
@@ -601,7 +648,7 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
     draw_badge({content.x, content.y + 62.0f, 95.0f, 24.0f}, status_label,
                model.is_dirty ? t.slow : t.success, model.is_dirty ? t.slow : t.success);
 
-    const Rectangle palette = {content.x, content.y + 112.0f, content.width, 252.0f};
+    const Rectangle palette = {content.x, content.y + 112.0f, content.width, 356.0f};
     ui::draw_section(palette);
     ui::draw_text_in_rect("Tool", 22,
                           {palette.x + 12.0f, palette.y + 10.0f, palette.width - 24.0f, 24.0f},
@@ -611,20 +658,20 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
                           {palette.x + 12.0f, palette.y + 36.0f, palette.width - 24.0f, 18.0f},
                           t.text_muted, ui::text_align::left);
     const float gap = 8.0f;
-    const float pad_width = (palette.width - 32.0f) * 0.5f;
-    const float pad_height = 56.0f;
-    const float note_row_y = palette.y + 66.0f;
+    const float pad_height = 44.0f;
+    const float pad_width = palette.width - 24.0f;
+    const float note_row_y = palette.y + 62.0f;
     draw_palette_pad({palette.x + 12.0f, note_row_y, pad_width, pad_height},
                      note_type::tap, model.note_palette, result);
-    draw_palette_pad({palette.x + 20.0f + pad_width, note_row_y, pad_width, pad_height},
+    draw_palette_pad({palette.x + 12.0f, note_row_y + (pad_height + gap), pad_width, pad_height},
                      note_type::hold, model.note_palette, result);
-    draw_palette_pad({palette.x + 12.0f, note_row_y + pad_height + gap, pad_width, pad_height},
+    draw_palette_pad({palette.x + 12.0f, note_row_y + (pad_height + gap) * 2.0f, pad_width, pad_height},
                      note_type::release, model.note_palette, result);
-    draw_palette_pad({palette.x + 20.0f + pad_width, note_row_y + pad_height + gap, pad_width, pad_height},
+    draw_palette_pad({palette.x + 12.0f, note_row_y + (pad_height + gap) * 3.0f, pad_width, pad_height},
                      note_type::stay, model.note_palette, result);
 
     result.ray_toggled = draw_ray_toggle(
-        {palette.x + 12.0f, note_row_y + (pad_height + gap) * 2.0f,
+        {palette.x + 12.0f, note_row_y + (pad_height + gap) * 4.0f + 8.0f,
          palette.width - 24.0f, 32.0f},
         model.note_palette.is_ray);
 
