@@ -15,6 +15,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui/icons/raythm_icons.h"
 #include "virtual_screen.h"
 
 namespace title_online_view {
@@ -35,6 +36,16 @@ float level_filter_t(float level) {
                kChartFilterUsefulTrack;
     }
     return 1.0f;
+}
+
+Rectangle centered_icon_rect(Rectangle rect, float inset) {
+    const float size = std::max(1.0f, std::min(rect.width, rect.height) - inset * 2.0f);
+    return {
+        rect.x + (rect.width - size) * 0.5f,
+        rect.y + (rect.height - size) * 0.5f,
+        size,
+        size
+    };
 }
 
 Rectangle level_filter_chip_rect(Rectangle range, float level) {
@@ -793,23 +804,9 @@ void draw_transport_toggle_button(Rectangle rect, bool playing, unsigned char al
     ui::draw_rect_lines(visual, 1.3f, border);
     const Color icon = with_alpha(playing ? t.text : (hovered ? t.text : t.text_secondary), alpha);
     if (playing) {
-        const float bar_width = 5.0f;
-        const float bar_height = 18.0f;
-        const float gap = 7.0f;
-        const float total_width = bar_width * 2.0f + gap;
-        const float x = visual.x + (visual.width - total_width) * 0.5f;
-        const float y = visual.y + (visual.height - bar_height) * 0.5f;
-        ui::draw_rect_f({x, y, bar_width, bar_height}, icon);
-        ui::draw_rect_f({x + bar_width + gap, y, bar_width, bar_height}, icon);
+        raythm_icons::draw_pause(centered_icon_rect(visual, 13.0f), icon, 3.0f);
     } else {
-        const float tri_width = 18.0f;
-        const float tri_height = 20.0f;
-        const float x = visual.x + (visual.width - tri_width) * 0.5f + 2.0f;
-        const float y = visual.y + (visual.height - tri_height) * 0.5f;
-        DrawTriangle({x, y},
-                     {x, y + tri_height},
-                     {x + tri_width, y + tri_height * 0.5f},
-                     icon);
+        raythm_icons::draw_play(centered_icon_rect(visual, 13.0f), icon, 3.0f);
     }
 }
 
@@ -822,29 +819,10 @@ void draw_transport_skip_button(Rectangle rect, bool next, unsigned char alpha) 
     ui::draw_rect_lines(visual, 1.2f, with_alpha(t.border_light, alpha));
 
     const Color icon = with_alpha(hovered ? t.text : t.text_secondary, alpha);
-    const float cx = visual.x + visual.width * 0.5f;
-    const float cy = visual.y + visual.height * 0.5f;
-    const float tri_w = 18.0f;
-    const float tri_h = 22.0f;
-    const float bar_h = 23.0f;
-    const float bar_w = 3.5f;
-    const float gap = 5.0f;
     if (next) {
-        const float right = cx + 12.0f;
-        const float left = right - tri_w;
-        DrawTriangle({left, cy - tri_h * 0.5f},
-                     {left, cy + tri_h * 0.5f},
-                     {right, cy},
-                     icon);
-        ui::draw_rect_f({right + gap, cy - bar_h * 0.5f, bar_w, bar_h}, icon);
+        raythm_icons::draw_skip_forward(centered_icon_rect(visual, 13.0f), icon, 3.0f);
     } else {
-        const float left = cx - 12.0f;
-        const float right = left + tri_w;
-        DrawTriangle({right, cy - tri_h * 0.5f},
-                     {left, cy},
-                     {right, cy + tri_h * 0.5f},
-                     icon);
-        ui::draw_rect_f({left - gap - bar_w, cy - bar_h * 0.5f, bar_w, bar_h}, icon);
+        raythm_icons::draw_skip_back(centered_icon_rect(visual, 13.0f), icon, 3.0f);
     }
 }
 
@@ -860,13 +838,7 @@ void draw_download_icon_button(Rectangle rect, bool update, unsigned char alpha)
     ui::draw_rect_f(visual, fill);
     ui::draw_rect_lines(visual, 1.2f, stroke);
 
-    const float cx = visual.x + visual.width * 0.5f;
-    const float top = visual.y + 7.0f;
-    const float tip_y = visual.y + visual.height - 7.0f;
-    const float wing_y = tip_y - 7.0f;
-    DrawLineEx({cx, top}, {cx, tip_y}, 2.4f, stroke);
-    DrawLineEx({cx - 6.0f, wing_y}, {cx, tip_y}, 2.4f, stroke);
-    DrawLineEx({cx + 6.0f, wing_y}, {cx, tip_y}, 2.4f, stroke);
+    raythm_icons::draw_download(centered_icon_rect(visual, 7.0f), stroke, 2.8f);
 }
 
 Color action_tone_for_state(bool update_available, bool installed, bool downloading) {
@@ -1082,22 +1054,23 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                 const bool can_prev = target_scroll > 0.001f || row.scroll_x > 0.001f;
                 const bool can_next = target_scroll < static_cast<float>(row.total_count - detail::kSongGridColumns) - 0.001f ||
                     row.scroll_x < static_cast<float>(row.total_count - detail::kSongGridColumns) - 0.001f;
-                const auto draw_shelf_arrow = [&](Rectangle rect, const char* label, bool enabled) {
+                const auto draw_shelf_arrow = [&](Rectangle rect, bool next, bool enabled) {
                     const bool hovered = enabled && ui::is_hovered(rect);
                     const unsigned char arrow_alpha = static_cast<unsigned char>(
                         (enabled ? (hovered ? hover_row_alpha : normal_row_alpha) : normal_row_alpha / 3) * grid_fade_t);
                     ui::draw_rect_f(rect, with_alpha(hovered ? button_hover : button_base, arrow_alpha));
                     ui::draw_rect_lines(rect, 1.15f, with_alpha(hovered ? t.border_active : t.border_light,
                                                                enabled ? grid_alpha : static_cast<unsigned char>(grid_alpha / 3)));
-                    draw_browse_body_text_in_rect(label,
-                                          31,
-                                          {rect.x, rect.y + rect.height * 0.5f - 22.0f, rect.width, 44.0f},
-                                          with_alpha(enabled ? t.text : t.text_muted,
-                                                     enabled ? grid_alpha : static_cast<unsigned char>(grid_alpha / 3)),
-                                          ui::text_align::center);
+                    const Color icon = with_alpha(enabled ? t.text : t.text_muted,
+                                                  enabled ? grid_alpha : static_cast<unsigned char>(grid_alpha / 3));
+                    if (next) {
+                        raythm_icons::draw_chevron_right(centered_icon_rect(rect, 8.0f), icon, 3.0f);
+                    } else {
+                        raythm_icons::draw_chevron_left(centered_icon_rect(rect, 8.0f), icon, 3.0f);
+                    }
                 };
-                draw_shelf_arrow(prev_arrow, "<", can_prev);
-                draw_shelf_arrow(arrow, ">", can_next);
+                draw_shelf_arrow(prev_arrow, false, can_prev);
+                draw_shelf_arrow(arrow, true, can_next);
             }
         }
 
