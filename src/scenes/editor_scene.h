@@ -39,6 +39,8 @@ private:
     std::vector<note_data> dragged_notes() const;
     std::vector<size_t> sorted_timing_event_indices() const;
     editor_timeline_metrics timeline_metrics() const;
+    int timeline_mouse_cursor(Vector2 mouse, const editor_timeline_metrics& metrics) const;
+    void update_mouse_cursor(Vector2 mouse, const editor_timeline_metrics& metrics) const;
     int default_timing_event_tick() const;
     void apply_flow_result(const editor_flow_result& result);
     void rebuild_hit_regions() const;

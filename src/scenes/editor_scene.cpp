@@ -45,6 +45,20 @@ std::string loop_region_label(const editor_transport_state& transport, const edi
         meter_map.bar_beat_label(transport.loop_end_tick);
 }
 
+editor_timeline_note make_timeline_note(const note_data& note) {
+    return {
+        note.type == note_type::hold ? editor_timeline_note_type::hold :
+        note.type == note_type::release ? editor_timeline_note_type::release :
+        note.type == note_type::stay ? editor_timeline_note_type::stay :
+        editor_timeline_note_type::tap,
+        note.tick,
+        note.lane,
+        note.end_tick,
+        note.is_ray,
+        note_lane_width(note),
+    };
+}
+
 }
 
 editor_scene::editor_scene(scene_manager& manager, song_data song, std::string chart_path)
@@ -117,6 +131,7 @@ void editor_scene::on_enter() {
 }
 
 void editor_scene::on_exit() {
+    SetMouseCursor(MOUSE_CURSOR_DEFAULT);
     audio_manager::instance().stop_bgm();
     audio_manager::instance().stop_all_se();
 }
@@ -134,6 +149,7 @@ void editor_scene::update(float dt) {
         metadata_panel_.chart_author_input.active = false;
         timing_panel_.active_input_field = editor_timing_input_field::none;
         timing_panel_.bar_pick_mode = false;
+        SetMouseCursor(MOUSE_CURSOR_DEFAULT);
         return;
     }
 
@@ -169,10 +185,12 @@ void editor_scene::update(float dt) {
     });
     apply_flow_result(flow_result);
     if (flow_result.consume_update) {
+        SetMouseCursor(MOUSE_CURSOR_DEFAULT);
         return;
     }
 
     if (!has_blocking_modal() && ui::is_clicked(layout::kSettingsButtonRect)) {
+        SetMouseCursor(MOUSE_CURSOR_DEFAULT);
         manager_.change_scene(std::make_unique<settings_scene>(manager_, song_, build_resume_state()));
         return;
     }
@@ -256,6 +274,7 @@ void editor_scene::update(float dt) {
 
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_);
     apply_scroll_and_zoom(dt);
+    update_mouse_cursor(virtual_screen::get_virtual_mouse(), timeline_metrics());
 }
 
 void editor_scene::rebuild_hit_regions() const {
@@ -716,6 +735,67 @@ editor_timeline_viewport_model editor_scene::viewport_model() const {
 
 editor_timeline_metrics editor_scene::timeline_metrics() const {
     return editor_timeline_viewport::metrics(viewport_model());
+}
+
+int editor_scene::timeline_mouse_cursor(Vector2 mouse, const editor_timeline_metrics& metrics) const {
+    if (has_blocking_modal() || state_ == nullptr) {
+        return MOUSE_CURSOR_DEFAULT;
+    }
+
+    if (timeline_drag_.active) {
+        if (timeline_drag_.mode == editor_timeline_drag_mode::resize_left ||
+            timeline_drag_.mode == editor_timeline_drag_mode::resize_right) {
+            return MOUSE_CURSOR_RESIZE_EW;
+        }
+        if (timeline_drag_.mode == editor_timeline_drag_mode::resize_start ||
+            timeline_drag_.mode == editor_timeline_drag_mode::resize_end ||
+            timeline_drag_.mode == editor_timeline_drag_mode::scroll_resize_start ||
+            timeline_drag_.mode == editor_timeline_drag_mode::scroll_resize_end) {
+            return MOUSE_CURSOR_RESIZE_NS;
+        }
+    }
+
+    if (!CheckCollisionPointRec(mouse, metrics.content_rect())) {
+        return MOUSE_CURSOR_DEFAULT;
+    }
+
+    if (timing_panel_.selected_scroll_event_index.has_value() &&
+        *timing_panel_.selected_scroll_event_index < state_->data().scroll_events.size()) {
+        const scroll_event& event = state_->data().scroll_events[*timing_panel_.selected_scroll_event_index];
+        const Rectangle content = metrics.content_rect();
+        const float start_y = metrics.tick_to_y(event.tick);
+        const float end_y = metrics.tick_to_y(event.tick + event.duration);
+        const Rectangle start_handle = {content.x, start_y - 4.0f, content.width, 8.0f};
+        const Rectangle end_handle = {content.x, end_y - 4.0f, content.width, 8.0f};
+        if (CheckCollisionPointRec(mouse, start_handle) || CheckCollisionPointRec(mouse, end_handle)) {
+            return MOUSE_CURSOR_RESIZE_NS;
+        }
+    }
+
+    std::optional<size_t> active_index = selected_note_index_;
+    if (!active_index.has_value() && !selected_note_indices_.empty()) {
+        active_index = selected_note_indices_.back();
+    }
+    if (!active_index.has_value() || *active_index >= state_->data().notes.size()) {
+        return MOUSE_CURSOR_DEFAULT;
+    }
+
+    const note_data& note = state_->data().notes[*active_index];
+    const editor_timeline_note_draw_info info = metrics.note_rects(make_timeline_note(note));
+    if (note.type == note_type::hold &&
+        (CheckCollisionPointRec(mouse, info.start_resize_rect) ||
+         CheckCollisionPointRec(mouse, info.end_resize_rect))) {
+        return MOUSE_CURSOR_RESIZE_NS;
+    }
+    if (CheckCollisionPointRec(mouse, info.left_resize_rect) ||
+        CheckCollisionPointRec(mouse, info.right_resize_rect)) {
+        return MOUSE_CURSOR_RESIZE_EW;
+    }
+    return MOUSE_CURSOR_DEFAULT;
+}
+
+void editor_scene::update_mouse_cursor(Vector2 mouse, const editor_timeline_metrics& metrics) const {
+    SetMouseCursor(timeline_mouse_cursor(mouse, metrics));
 }
 
 int editor_scene::default_timing_event_tick() const {
