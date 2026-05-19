@@ -196,6 +196,30 @@ void draw_palette_pad(Rectangle rect,
     }
 }
 
+bool draw_ray_toggle(Rectangle rect, bool enabled) {
+    const auto& t = *g_theme;
+    const ui::row_state state = ui::draw_row(
+        rect,
+        enabled ? panel_tint(t.row_selected, t.fast, 0.18f) : t.row,
+        enabled ? panel_tint(t.row_active, t.fast, 0.2f) : t.row_hover,
+        enabled ? t.fast : t.border_light,
+        enabled ? 2.0f : 1.0f);
+    const Rectangle label_rect = {state.visual.x + 12.0f, state.visual.y, state.visual.width - 96.0f,
+                                  state.visual.height};
+    ui::draw_text_in_rect("Ray", 15, label_rect, enabled ? t.text : t.text_secondary, ui::text_align::left);
+    const Rectangle track = {state.visual.x + state.visual.width - 78.0f,
+                             state.visual.y + state.visual.height * 0.5f - 10.0f,
+                             54.0f, 20.0f};
+    ui::draw_rect_f(track, enabled ? with_alpha(t.fast, 155) : with_alpha(t.text_muted, 70));
+    ui::draw_rect_lines(track, 1.0f, enabled ? t.fast : t.border_light);
+    const float knob_x = enabled ? track.x + track.width - 18.0f : track.x + 2.0f;
+    ui::draw_rect_f({knob_x, track.y + 2.0f, 16.0f, 16.0f}, enabled ? t.text : t.text_secondary);
+    ui::draw_text_in_rect(enabled ? "ON" : "OFF", 11,
+                          {track.x - 32.0f, track.y, 28.0f, track.height},
+                          enabled ? t.fast : t.text_muted, ui::text_align::right);
+    return state.clicked;
+}
+
 editor_timeline_note make_timeline_note(const note_data& note) {
     editor_timeline_note_type type = editor_timeline_note_type::tap;
     switch (note.type) {
@@ -378,28 +402,23 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
     draw_palette_pad({palette.x + 20.0f + pad_width, palette.y + 66.0f + pad_height + gap, pad_width, pad_height},
                      note_type::stay, model.note_palette, result);
 
-    const ui::button_state ray_button = ui::draw_button_colored(
+    result.ray_toggled = draw_ray_toggle(
         {palette.x + 12.0f, palette.y + 66.0f + (pad_height + gap) * 2.0f,
          palette.width - 24.0f, 32.0f},
-        model.note_palette.is_ray ? "RAY LANE ARMED" : "RAY LANE",
-        14,
-        model.note_palette.is_ray ? panel_tint(t.row_selected, t.fast, 0.18f) : t.row,
-        model.note_palette.is_ray ? panel_tint(t.row_active, t.fast, 0.18f) : t.row_hover,
-        model.note_palette.is_ray ? t.text : t.text_secondary,
-        model.note_palette.is_ray ? 2.0f : 1.0f);
-    result.ray_toggled = ray_button.clicked;
+        model.note_palette.is_ray);
 
     const Rectangle ops = {content.x, palette.y + palette.height + 14.0f, content.width, 164.0f};
     ui::draw_section(ops);
     ui::draw_text_in_rect("Edit Focus", 20, {ops.x + 12.0f, ops.y + 10.0f, ops.width - 24.0f, 24.0f},
                           t.text, ui::text_align::left);
     ui::draw_label_value({ops.x + 12.0f, ops.y + 50.0f, ops.width - 24.0f, 22.0f},
-                         "Edit Target", model.note_palette.is_ray ? "Ray lane" : palette_label(model.note_palette.type),
+                         "Edit Target", palette_label(model.note_palette.type),
                          14, t.text_muted, t.text_secondary, 78.0f);
     ui::draw_label_value({ops.x + 12.0f, ops.y + 82.0f, ops.width - 24.0f, 22.0f},
-                         "Snap", "Header control", 14, t.text_muted, t.text_secondary, 78.0f);
+                         "Ray", model.note_palette.is_ray ? "On" : "Off",
+                         14, t.text_muted, model.note_palette.is_ray ? t.fast : t.text_secondary, 78.0f);
     ui::draw_label_value({ops.x + 12.0f, ops.y + 114.0f, ops.width - 24.0f, 22.0f},
-                         "Loop", "[ ] then L", 14, t.text_muted, t.text_secondary, 78.0f);
+                         "Snap", "Header control", 14, t.text_muted, t.text_secondary, 78.0f);
     ui::draw_text_in_rect("Metadata and timing live in header modals.",
                           13,
                           {ops.x + 12.0f, ops.y + 138.0f, ops.width - 24.0f, 18.0f},
@@ -613,14 +632,14 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
 
     ui::draw_rect_f(bar, panel_tint(t.panel, t.bg_alt, 0.18f));
     ui::draw_rect_lines(bar, 1.5f, t.border);
-    ui::draw_button_colored(layout::kBackButtonRect, "BACK", 18, t.row, t.row_hover, t.text);
-    ui::draw_button_colored(layout::kSettingsButtonRect, "SETTINGS", 16, t.row, t.row_hover, t.text);
+    draw_icon_button(layout::kBackButtonRect, raythm_icons::draw_chevron_left, false, t.text);
+    draw_icon_button(layout::kSettingsButtonRect, raythm_icons::draw_settings_gear, false, t.text);
 
-    ui::draw_text_in_rect("raythm", 20, {content.x + 420.0f, content.y + 3.0f, 100.0f, 22.0f},
+    ui::draw_text_in_rect("raythm", 20, {content.x + 168.0f, content.y + 3.0f, 100.0f, 22.0f},
                           t.text, ui::text_align::left);
-    ui::draw_text_in_rect("DAW Chart Editor", 13, {content.x + 420.0f, content.y + 28.0f, 150.0f, 18.0f},
+    ui::draw_text_in_rect("DAW Chart Editor", 13, {content.x + 168.0f, content.y + 28.0f, 150.0f, 18.0f},
                           t.accent, ui::text_align::left);
-    const Rectangle meta_button = {content.x + 570.0f, content.y + 8.0f, 86.0f, 34.0f};
+    const Rectangle meta_button = {content.x + 318.0f, content.y + 8.0f, 86.0f, 34.0f};
     const Rectangle timing_button = {meta_button.x + meta_button.width + 8.0f, meta_button.y, 94.0f, 34.0f};
     result.metadata_modal_requested = ui::draw_button_colored(
         meta_button, "META", 13, t.row, t.row_hover, t.text_secondary, 1.2f).clicked;

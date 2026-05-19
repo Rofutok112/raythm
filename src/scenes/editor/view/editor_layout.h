@@ -18,12 +18,12 @@ inline constexpr Rectangle kTimelineRect = ui::place(kScreenRect, 1086.0f, 930.0
 inline constexpr Rectangle kRightPanelRect = ui::place(kScreenRect, 372.0f, 930.0f,
                                                        ui::anchor::top_right, ui::anchor::top_right,
                                                        Vector2{-30.0f, 108.0f});
-inline constexpr Rectangle kBackButtonRect = ui::place(kHeaderRect, 180.0f, 51.0f,
+inline constexpr Rectangle kBackButtonRect = ui::place(kHeaderRect, 51.0f, 51.0f,
                                                        ui::anchor::center_left, ui::anchor::center_left,
                                                        Vector2{24.0f, 0.0f});
-inline constexpr Rectangle kSettingsButtonRect = ui::place(kHeaderRect, 192.0f, 51.0f,
+inline constexpr Rectangle kSettingsButtonRect = ui::place(kHeaderRect, 51.0f, 51.0f,
                                                            ui::anchor::center_left, ui::anchor::center_left,
-                                                           Vector2{225.0f, 0.0f});
+                                                           Vector2{84.0f, 0.0f});
 
 inline constexpr Rectangle kEditorTitleRect = ui::place(kHeaderRect, 318.0f, 51.0f,
                                                         ui::anchor::center_left, ui::anchor::center_left,
