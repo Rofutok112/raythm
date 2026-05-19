@@ -214,10 +214,11 @@ void draw_lane_header(const editor_timeline_view_model& model, Rectangle content
 }
 
 Rectangle editor_timeline_metrics::content_rect() const {
+    constexpr float kScrollbarContentGap = 12.0f;
     return {
-        panel_rect.x + padding + scrollbar_width + scrollbar_gap,
+        panel_rect.x + padding + scrollbar_width + kScrollbarContentGap,
         panel_rect.y + padding,
-        panel_rect.width - padding * 2.0f - scrollbar_gap - scrollbar_width,
+        panel_rect.width - padding * 2.0f - scrollbar_width - kScrollbarContentGap - scrollbar_gap,
         panel_rect.height - padding * 2.0f
     };
 }
