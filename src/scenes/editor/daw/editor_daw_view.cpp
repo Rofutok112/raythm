@@ -160,9 +160,10 @@ void draw_palette_pad(Rectangle rect,
     const auto& t = *g_theme;
     const bool selected = selection.active_tool == editor_note_palette_selection::tool::note &&
         selection.type == type;
-    const Color tone = type == note_type::hold ? t.success :
+    const Color tone = type == note_type::tap ? t.error :
+        (type == note_type::hold ? t.success :
         (type == note_type::release ? t.slow :
-         (type == note_type::stay ? t.fast : t.accent));
+         (type == note_type::stay ? t.fast : t.accent)));
     const ui::row_state state = ui::draw_row(
         rect,
         selected ? panel_tint(t.row_selected, tone, 0.18f) : t.row,
@@ -211,11 +212,12 @@ void draw_select_pad(Rectangle rect,
 
 bool draw_ray_toggle(Rectangle rect, bool enabled) {
     const auto& t = *g_theme;
+    const Color ray_tone = {176, 112, 255, 255};
     const ui::row_state state = ui::draw_row(
         rect,
-        enabled ? panel_tint(t.row_selected, t.fast, 0.18f) : t.row,
-        enabled ? panel_tint(t.row_active, t.fast, 0.2f) : t.row_hover,
-        enabled ? t.fast : t.border_light,
+        enabled ? panel_tint(t.row_selected, ray_tone, 0.2f) : t.row,
+        enabled ? panel_tint(t.row_active, ray_tone, 0.24f) : t.row_hover,
+        enabled ? ray_tone : t.border_light,
         enabled ? 2.0f : 1.0f);
     const Rectangle label_rect = {state.visual.x + 12.0f, state.visual.y, state.visual.width - 96.0f,
                                   state.visual.height};
@@ -223,13 +225,13 @@ bool draw_ray_toggle(Rectangle rect, bool enabled) {
     const Rectangle track = {state.visual.x + state.visual.width - 78.0f,
                              state.visual.y + state.visual.height * 0.5f - 10.0f,
                              54.0f, 20.0f};
-    ui::draw_rect_f(track, enabled ? with_alpha(t.fast, 155) : with_alpha(t.text_muted, 70));
-    ui::draw_rect_lines(track, 1.0f, enabled ? t.fast : t.border_light);
+    ui::draw_rect_f(track, enabled ? with_alpha(ray_tone, 165) : with_alpha(t.text_muted, 70));
+    ui::draw_rect_lines(track, 1.0f, enabled ? ray_tone : t.border_light);
     const float knob_x = enabled ? track.x + track.width - 18.0f : track.x + 2.0f;
     ui::draw_rect_f({knob_x, track.y + 2.0f, 16.0f, 16.0f}, enabled ? t.text : t.text_secondary);
     ui::draw_text_in_rect(enabled ? "ON" : "OFF", 11,
                           {track.x - 32.0f, track.y, 28.0f, track.height},
-                          enabled ? t.fast : t.text_muted, ui::text_align::right);
+                          enabled ? ray_tone : t.text_muted, ui::text_align::right);
     return state.clicked;
 }
 

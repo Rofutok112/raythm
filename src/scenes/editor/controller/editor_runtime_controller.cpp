@@ -42,6 +42,23 @@ std::vector<note_data> shifted_notes(std::vector<note_data> notes, int tick_delt
     return notes;
 }
 
+bool can_place_notes(const editor_state& state, const std::vector<note_data>& notes) {
+    return !notes.empty() &&
+        !state.has_note_overlap(notes) &&
+        !editor::note_placement_rules::has_stay_stack(state.data(), notes);
+}
+
+std::vector<note_data> shifted_notes_to_open_slot(const editor_state& state, const std::vector<note_data>& source) {
+    const int tick_step = std::max(1, state.data().meta.resolution);
+    for (int step = 1; step <= 64; ++step) {
+        std::vector<note_data> notes = shifted_notes(source, tick_step * step);
+        if (can_place_notes(state, notes)) {
+            return notes;
+        }
+    }
+    return {};
+}
+
 void select_appended_notes(const editor_state& state,
                            size_t added_count,
                            std::optional<size_t>& selected_note_index,
@@ -110,10 +127,8 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
         std::vector<note_data> notes = context.d_pressed
             ? notes_for_indices(context.state, selection)
             : context.clipboard_notes;
-        notes = shifted_notes(std::move(notes), context.state.data().meta.resolution);
-        if (!notes.empty() &&
-            !context.state.has_note_overlap(notes) &&
-            !editor::note_placement_rules::has_stay_stack(context.state.data(), notes)) {
+        notes = shifted_notes_to_open_slot(context.state, notes);
+        if (can_place_notes(context.state, notes)) {
             const size_t added_count = notes.size();
             context.state.add_notes(std::move(notes));
             select_appended_notes(context.state, added_count, context.selected_note_index, context.selected_note_indices);
