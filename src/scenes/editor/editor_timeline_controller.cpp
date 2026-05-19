@@ -313,7 +313,15 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
         return result;
     }
 
-    if (context.right_pressed) {
+    if (context.alt_down && context.left_pressed) {
+        result.request_seek = true;
+        result.seek_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
+        result.scroll_seek_if_paused = true;
+        result.drag_state.active = false;
+        return result;
+    }
+
+    if (context.left_pressed) {
         if (!context.timeline_hovered) {
             result.selected_note_index.reset();
             result.selected_note_indices.clear();
@@ -380,42 +388,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             return result;
         }
 
-        result.drag_state.active = true;
-        result.drag_state.mode = editor_timeline_drag_mode::range_select;
-        result.drag_state.note_index.reset();
-        result.drag_state.note_indices.clear();
-        result.drag_state.original_notes.clear();
-        result.drag_state.start_mouse = context.mouse;
-        result.drag_state.current_mouse = context.mouse;
-        result.drag_state.start_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
-        result.drag_state.current_tick = result.drag_state.start_tick;
-        return result;
-    }
-
-    if (!context.timeline_hovered) {
-        if (context.left_released || context.right_released) {
-            result.drag_state.active = false;
-        }
-        return result;
-    }
-
-    if (context.alt_down && context.left_pressed) {
-        result.request_seek = true;
-        result.seek_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
-        result.scroll_seek_if_paused = true;
-        result.drag_state.active = false;
-        return result;
-    }
-
-    if (context.left_pressed) {
-        if (const std::optional<size_t> note_index = note_at_position(context, context.mouse); note_index.has_value()) {
-            result.note_to_delete_index = note_index;
-            result.selected_note_index.reset();
-            result.selected_note_indices.clear();
-            result.drag_state.active = false;
-            return result;
-        }
-
         if (timing_panel.selected_scroll_event_index.has_value() &&
             context.state != nullptr &&
             *timing_panel.selected_scroll_event_index < context.state->data().scroll_events.size()) {
@@ -436,6 +408,34 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
 
         if (const std::optional<size_t> scroll_index = scroll_event_at_position(context, context.mouse); scroll_index.has_value()) {
             result.selected_scroll_event_index = scroll_index;
+            result.selected_note_index.reset();
+            result.selected_note_indices.clear();
+            result.drag_state.active = false;
+            return result;
+        }
+
+        result.drag_state.active = true;
+        result.drag_state.mode = editor_timeline_drag_mode::range_select;
+        result.drag_state.note_index.reset();
+        result.drag_state.note_indices.clear();
+        result.drag_state.original_notes.clear();
+        result.drag_state.start_mouse = context.mouse;
+        result.drag_state.current_mouse = context.mouse;
+        result.drag_state.start_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
+        result.drag_state.current_tick = result.drag_state.start_tick;
+        return result;
+    }
+
+    if (!context.timeline_hovered) {
+        if (context.left_released || context.right_released) {
+            result.drag_state.active = false;
+        }
+        return result;
+    }
+
+    if (context.right_pressed) {
+        if (const std::optional<size_t> note_index = note_at_position(context, context.mouse); note_index.has_value()) {
+            result.note_to_delete_index = note_index;
             result.selected_note_index.reset();
             result.selected_note_indices.clear();
             result.drag_state.active = false;
