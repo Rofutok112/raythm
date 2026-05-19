@@ -501,7 +501,7 @@ void editor_scene::draw() {
             can_delete_selected_timing_event(),
             can_delete_selected_scroll_event(),
             virtual_screen::get_virtual_mouse(),
-        }, timing_panel_);
+        }, timing_panel_, offset_label.c_str());
         const editor_timing_panel_update_result update_result = editor_panel_controller::update_timing_panel(
             metadata_panel_,
             timing_panel_,
@@ -523,6 +523,11 @@ void editor_scene::draw() {
         }
         if (update_result.request_apply_selected) {
             apply_selected_timing_event();
+        }
+        if (modal_result.offset_left_clicked) {
+            apply_chart_offset(std::max(-10000, state_->data().meta.offset - 5));
+        } else if (modal_result.offset_right_clicked) {
+            apply_chart_offset(std::min(10000, state_->data().meta.offset + 5));
         }
         if (modal_result.close_requested) {
             timing_modal_open_ = false;

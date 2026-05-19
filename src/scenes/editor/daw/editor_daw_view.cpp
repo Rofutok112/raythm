@@ -698,38 +698,33 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
     result.timing_modal_requested = ui::draw_button_colored(
         timing_button, "TIMING", 13, t.row, t.row_hover, t.text_secondary, 1.2f).clicked;
 
-    const Rectangle transport = {content.x + 788.0f, content.y + 1.0f, 430.0f, 50.0f};
+    const Rectangle transport = {content.x + 388.0f, content.y + 1.0f, 582.0f, 50.0f};
     ui::draw_section(transport);
     const Rectangle play_rect = {transport.x + 10.0f, transport.y + 5.0f, 40.0f, 40.0f};
     const ui::button_state play_button = model.audio_playing
         ? draw_icon_button(play_rect, raythm_icons::draw_pause, true, t.accent)
         : draw_icon_button(play_rect, raythm_icons::draw_play, false, t.text);
     result.playback_toggled = play_button.clicked;
-    ui::draw_label_value({transport.x + 62.0f, transport.y + 5.0f, 168.0f, 40.0f},
-                         "Now", model.playback_status, 14, t.text_muted,
-                         model.audio_loaded ? t.text : t.text_muted, 46.0f);
-    const Rectangle loop_button_rect = {transport.x + 246.0f, transport.y + 5.0f, 40.0f, 40.0f};
+    const Rectangle loop_button_rect = {play_rect.x + play_rect.width + 8.0f, play_rect.y, 40.0f, 40.0f};
     const ui::button_state loop_button = draw_icon_button(loop_button_rect, raythm_icons::draw_repeat_2,
                                                           model.loop_enabled, t.success);
     result.loop_toggled = loop_button.clicked;
-    ui::draw_label_value({transport.x + 296.0f, transport.y + 5.0f, 124.0f, 40.0f},
-                         "Loop", model.loop_label, 14,
-                         model.loop_enabled ? t.success : t.text_muted,
-                         model.loop_enabled ? t.text : t.text_secondary, 42.0f);
-
-    const ui::selector_state chart_offset = ui::draw_value_selector(
-        layout::kChartOffsetRect, "Offset", model.offset_label,
-        14, 24.0f, 50.0f, 10.0f);
-    result.offset_left_clicked = chart_offset.left.clicked;
-    result.offset_right_clicked = chart_offset.right.clicked;
-
     const ui::button_state waveform_toggle = ui::draw_button_colored(
-        layout::kWaveformToggleRect, model.waveform_visible ? "WAVE ON" : "WAVE OFF", 14,
+        {loop_button_rect.x + loop_button_rect.width + 8.0f, play_rect.y, 84.0f, 40.0f},
+        model.waveform_visible ? "WAVE" : "WAVE",
+        13,
         model.waveform_visible ? panel_tint(t.row_selected, t.fast, 0.15f) : t.row,
         model.waveform_visible ? panel_tint(t.row_active, t.fast, 0.15f) : t.row_hover,
         model.waveform_visible ? t.text : t.text_secondary,
         model.waveform_visible ? 2.0f : 1.0f);
     result.waveform_toggled = waveform_toggle.clicked;
+    ui::draw_label_value({transport.x + 196.0f, transport.y + 5.0f, 190.0f, 40.0f},
+                         "Now", model.playback_status, 14, t.text_muted,
+                         model.audio_loaded ? t.text : t.text_muted, 46.0f);
+    ui::draw_label_value({transport.x + 402.0f, transport.y + 5.0f, 168.0f, 40.0f},
+                         "Loop", model.loop_label, 14,
+                         model.loop_enabled ? t.success : t.text_muted,
+                         model.loop_enabled ? t.text : t.text_secondary, 42.0f);
 
     const ui::dropdown_state dropdown = ui::enqueue_dropdown(
         layout::kSnapDropdownRect, snap_menu_rect,
@@ -958,7 +953,8 @@ metadata_modal_result draw_metadata_modal(const editor_left_panel_view_model& mo
 }
 
 timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model,
-                                      editor_timing_panel_state& timing_state) {
+                                      editor_timing_panel_state& timing_state,
+                                      const char* offset_label) {
     const auto& t = *g_theme;
     timing_modal_result result;
     const Rectangle modal = layout::kEditorTimingModalRect;
@@ -973,6 +969,12 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
                           15,
                           {content.x, content.y + 34.0f, content.width, 22.0f},
                           t.text_muted, ui::text_align::left);
+    const ui::selector_state chart_offset = ui::draw_value_selector(
+        {content.x + content.width - 270.0f, content.y + 8.0f, 270.0f, 36.0f},
+        "Offset", offset_label,
+        ui::draw_layer::modal, 14, 24.0f, 54.0f, 10.0f);
+    result.offset_left_clicked = chart_offset.left.clicked;
+    result.offset_right_clicked = chart_offset.right.clicked;
 
     std::vector<editor_timing_panel_item> items;
     items.reserve(model.timing_events->size());

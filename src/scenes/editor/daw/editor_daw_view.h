@@ -15,6 +15,8 @@ struct metadata_modal_result {
 
 struct timing_modal_result {
     editor_timing_panel_result panel_result;
+    bool offset_left_clicked = false;
+    bool offset_right_clicked = false;
     bool close_requested = false;
 };
 
@@ -30,6 +32,7 @@ void draw_timeline(const editor_timeline_presenter_model& model);
 metadata_modal_result draw_metadata_modal(const editor_left_panel_view_model& model);
 
 timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model,
-                                      editor_timing_panel_state& timing_state);
+                                      editor_timing_panel_state& timing_state,
+                                      const char* offset_label);
 
 }  // namespace editor::daw
