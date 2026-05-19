@@ -169,38 +169,19 @@ void set_active_timing_input(editor_timing_panel_state& state, editor_timing_inp
 }
 
 void draw_palette_icon(Rectangle rect, note_type type, Color color) {
-    const Vector2 center = rect_center(rect);
-    const float stroke = 3.0f;
     switch (type) {
         case note_type::tap:
-            DrawCircleV(center, std::min(rect.width, rect.height) * 0.25f, color);
+            raythm_icons::draw_note_tap(rect, color, 3.0f);
             break;
-        case note_type::hold: {
-            const float left = rect.x + rect.width * 0.22f;
-            const float right = rect.x + rect.width * 0.78f;
-            DrawLineEx({left, center.y}, {right, center.y}, stroke + 3.0f, with_alpha(color, 110));
-            DrawCircleV({left, center.y}, 5.0f, color);
-            DrawCircleV({right, center.y}, 5.0f, color);
+        case note_type::hold:
+            raythm_icons::draw_note_long(rect, color, 3.2f);
             break;
-        }
-        case note_type::release: {
-            const Vector2 top = {center.x, rect.y + rect.height * 0.22f};
-            const Vector2 bottom_left = {rect.x + rect.width * 0.24f, rect.y + rect.height * 0.70f};
-            const Vector2 bottom_right = {rect.x + rect.width * 0.76f, rect.y + rect.height * 0.70f};
-            DrawTriangle(top, bottom_left, bottom_right, color);
+        case note_type::release:
+            raythm_icons::draw_note_release(rect, color, 3.0f);
             break;
-        }
-        case note_type::stay: {
-            const Rectangle body = {rect.x + rect.width * 0.24f, rect.y + rect.height * 0.28f,
-                                    rect.width * 0.52f, rect.height * 0.44f};
-            ui::draw_rect_f(body, with_alpha(color, 150));
-            ui::draw_rect_lines(body, 2.0f, color);
-            DrawLineEx({body.x + body.width * 0.33f, body.y + 3.0f},
-                       {body.x + body.width * 0.33f, body.y + body.height - 3.0f}, stroke, color);
-            DrawLineEx({body.x + body.width * 0.66f, body.y + 3.0f},
-                       {body.x + body.width * 0.66f, body.y + body.height - 3.0f}, stroke, color);
+        case note_type::stay:
+            raythm_icons::draw_note_stay(rect, color, 3.0f);
             break;
-        }
     }
 }
 

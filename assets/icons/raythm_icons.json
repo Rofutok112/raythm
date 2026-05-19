@@ -67,6 +67,22 @@
     {
       "name": "layers",
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/layers.svg"
+    },
+    {
+      "name": "note_tap",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/circle.svg"
+    },
+    {
+      "name": "note_long",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/minus.svg"
+    },
+    {
+      "name": "note_release",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/triangle.svg"
+    },
+    {
+      "name": "note_stay",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/pause.svg"
     }
   ]
 }
