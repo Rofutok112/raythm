@@ -37,6 +37,7 @@ struct editor_timeline_note_draw_info {
     Rectangle tail_rect = {};
     Rectangle left_resize_rect = {};
     Rectangle right_resize_rect = {};
+    Rectangle start_resize_rect = {};
     Rectangle end_resize_rect = {};
     bool has_body = false;
 };

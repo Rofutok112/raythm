@@ -190,6 +190,70 @@ int main() {
     }
 
     {
+        chart_data hold_chart = make_chart();
+        hold_chart.notes = {
+            {note_type::hold, 480, 1, 720},
+        };
+        const auto hold_state = std::make_shared<editor_state>(hold_chart, "");
+        editor_meter_map hold_meter_map;
+        hold_meter_map.rebuild(hold_state->data());
+        editor_timing_panel_state timing_panel;
+        const editor_timeline_metrics metrics = make_metrics();
+        const editor_timeline_note selected_note{editor_timeline_note_type::hold, 480, 1, 720, false, 1};
+        const editor_timeline_note_draw_info info = metrics.note_rects(selected_note);
+        editor_timeline_result start = editor_timeline_controller::update(
+            timing_panel,
+            {hold_state.get(), &hold_meter_map, metrics,
+             {info.start_resize_rect.x + info.start_resize_rect.width * 0.5f,
+              info.start_resize_rect.y + info.start_resize_rect.height * 0.5f},
+             true, true, false, false, false, false, false, 16, std::optional<size_t>(0), {}});
+        editor_timeline_result finish = editor_timeline_controller::update(
+            timing_panel,
+            {hold_state.get(), &hold_meter_map, metrics,
+             {info.start_resize_rect.x + info.start_resize_rect.width * 0.5f, metrics.tick_to_y(360)},
+             true, false, true, true, false, false, false, 16, start.selected_note_index, start.drag_state});
+        if (!finish.note_to_modify_index.has_value() || *finish.note_to_modify_index != 0 ||
+            !finish.note_to_modify.has_value() || finish.note_to_modify->tick != 360 ||
+            finish.note_to_modify->end_tick != 720 || finish.note_to_modify->type != note_type::hold) {
+            std::cerr << "hold bottom resize handle should adjust only the start tick\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        chart_data hold_chart = make_chart();
+        hold_chart.notes = {
+            {note_type::hold, 480, 1, 720},
+        };
+        const auto hold_state = std::make_shared<editor_state>(hold_chart, "");
+        editor_meter_map hold_meter_map;
+        hold_meter_map.rebuild(hold_state->data());
+        editor_timing_panel_state timing_panel;
+        const editor_timeline_metrics metrics = make_metrics();
+        const editor_timeline_note selected_note{editor_timeline_note_type::hold, 480, 1, 720, false, 1};
+        const editor_timeline_note_draw_info info = metrics.note_rects(selected_note);
+        const Vector2 body_center = {
+            info.body_rect.x + info.body_rect.width * 0.5f,
+            info.body_rect.y + info.body_rect.height * 0.5f,
+        };
+        editor_timeline_result start = editor_timeline_controller::update(
+            timing_panel,
+            {hold_state.get(), &hold_meter_map, metrics, body_center,
+             true, true, false, false, false, false, false, 16, std::optional<size_t>(0), {}});
+        editor_timeline_result finish = editor_timeline_controller::update(
+            timing_panel,
+            {hold_state.get(), &hold_meter_map, metrics,
+             {body_center.x, metrics.tick_to_y(600)},
+             true, false, true, true, false, false, false, 16, start.selected_note_index, start.drag_state});
+        if (finish.notes_to_modify.empty() || finish.notes_to_modify.front().first != 0 ||
+            finish.notes_to_modify.front().second.tick != 600 ||
+            finish.notes_to_modify.front().second.end_tick != 840) {
+            std::cerr << "hold body drag should move the whole note instead of resizing it\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
         editor_timing_panel_state timing_panel;
         timing_panel.bar_pick_mode = true;
         timing_panel.selected_event_index = 0;

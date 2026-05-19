@@ -30,6 +30,7 @@ enum class editor_timeline_drag_mode {
     create,
     resize_left,
     resize_right,
+    resize_start,
     resize_end,
     move_notes,
     range_select,

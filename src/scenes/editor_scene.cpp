@@ -607,6 +607,7 @@ std::optional<note_data> editor_scene::dragged_note() const {
 
     if (timeline_drag_.mode == editor_timeline_drag_mode::resize_left ||
         timeline_drag_.mode == editor_timeline_drag_mode::resize_right ||
+        timeline_drag_.mode == editor_timeline_drag_mode::resize_start ||
         timeline_drag_.mode == editor_timeline_drag_mode::resize_end) {
         if (!timeline_drag_.note_index.has_value() ||
             *timeline_drag_.note_index >= state_->data().notes.size()) {
@@ -621,6 +622,9 @@ std::optional<note_data> editor_scene::dragged_note() const {
         } else if (timeline_drag_.mode == editor_timeline_drag_mode::resize_right) {
             const int last_lane = std::clamp(timeline_drag_.current_lane, note.lane, state_->data().meta.key_count - 1);
             note.lane_width = last_lane - note.lane + 1;
+        } else if (timeline_drag_.mode == editor_timeline_drag_mode::resize_start && note.type == note_type::hold) {
+            const int min_gap = editor_timeline_viewport::snap_interval(viewport_model());
+            note.tick = std::clamp(timeline_drag_.current_tick, 0, note.end_tick - min_gap);
         } else if (note.type == note_type::hold) {
             const int min_gap = editor_timeline_viewport::snap_interval(viewport_model());
             note.end_tick = std::max(note.tick + min_gap, timeline_drag_.current_tick);
