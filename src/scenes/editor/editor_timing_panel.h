@@ -60,6 +60,8 @@ struct editor_timing_panel_model {
     std::vector<editor_timing_panel_item> scroll_items;
     std::optional<timing_event> selected_event;
     std::optional<scroll_event> selected_scroll_event;
+    size_t selected_note_count = 0;
+    std::string selected_note_summary;
     bool delete_enabled = false;
     bool scroll_delete_enabled = false;
 };

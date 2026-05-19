@@ -64,9 +64,10 @@ editor_right_panel_view_result editor_right_panel_view::draw(const editor_right_
 
     result.panel_result = editor_timing_panel::draw(
         {content, model.mouse, std::move(items), std::move(scroll_items),
-         selected_event, selected_scroll_event, model.delete_enabled, model.scroll_delete_enabled},
+         selected_event, selected_scroll_event, model.selected_note_count, model.selected_note_summary,
+         model.delete_enabled, model.scroll_delete_enabled},
         timing_state);
-    const Rectangle editor_box = {content.x, content.y + 574.0f, content.width, content.height - 574.0f};
+    const Rectangle editor_box = {content.x, content.y + 660.0f, content.width, content.height - 660.0f};
     result.clicked_outside_editor = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
                                     !CheckCollisionPointRec(model.mouse, editor_box);
 

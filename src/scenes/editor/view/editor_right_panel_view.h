@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "editor/editor_meter_map.h"
@@ -13,6 +14,8 @@ struct editor_right_panel_view_model {
     const editor_meter_map* meter_map = nullptr;
     std::optional<size_t> selected_event_index;
     std::optional<size_t> selected_scroll_event_index;
+    size_t selected_note_count = 0;
+    std::string selected_note_summary;
     bool delete_enabled = false;
     bool scroll_delete_enabled = false;
     Vector2 mouse = {};

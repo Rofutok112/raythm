@@ -161,6 +161,55 @@ void draw_ruler(const editor_timeline_view_model& model, Rectangle content, cons
         ui::draw_text_in_rect(TextFormat("%d", line.measure), 14, tag, t.text_secondary);
     }
 }
+
+void draw_timeline_header(const editor_timeline_view_model& model, const ui_theme& t) {
+    const Rectangle panel = model.metrics.panel_rect;
+    const Rectangle header = {panel.x + 10.0f, panel.y + 10.0f, panel.width - 20.0f, 48.0f};
+    ui::draw_rect_f(header, with_alpha(t.panel, 245));
+    ui::draw_rect_lines(header, 1.5f, t.border_light);
+    ui::draw_text_in_rect("Timeline", 20,
+                          {header.x + 14.0f, header.y + 5.0f, 140.0f, 22.0f},
+                          t.text, ui::text_align::left);
+    ui::draw_text_in_rect("Notes / loop region / scroll automation",
+                          13,
+                          {header.x + 14.0f, header.y + 27.0f, 260.0f, 16.0f},
+                          t.text_muted, ui::text_align::left);
+
+    const char* status = model.selected_note_indices.empty()
+        ? (model.selected_note_index.has_value() ? "1 note selected" : "No selection")
+        : TextFormat("%d notes selected", static_cast<int>(model.selected_note_indices.size()));
+    const Rectangle selection_badge = {header.x + header.width - 384.0f, header.y + 9.0f, 142.0f, 30.0f};
+    ui::draw_rect_f(selection_badge, with_alpha(t.row, 235));
+    ui::draw_rect_lines(selection_badge, 1.0f, t.border_light);
+    ui::draw_text_in_rect(status, 14, selection_badge,
+                          model.selected_note_indices.empty() && !model.selected_note_index.has_value()
+                              ? t.text_muted
+                              : t.text);
+
+    const Rectangle snap_badge = {selection_badge.x + selection_badge.width + 8.0f, selection_badge.y, 96.0f, 30.0f};
+    ui::draw_rect_f(snap_badge, with_alpha(t.row, 235));
+    ui::draw_rect_lines(snap_badge, 1.0f, t.border_light);
+    ui::draw_text_in_rect(TextFormat("Snap %dt", model.snap_interval), 13, snap_badge, t.text_secondary);
+
+    const Rectangle loop_badge = {snap_badge.x + snap_badge.width + 8.0f, snap_badge.y, 120.0f, 30.0f};
+    ui::draw_rect_f(loop_badge, model.loop_enabled ? with_alpha(t.success, 120) : with_alpha(t.row, 235));
+    ui::draw_rect_lines(loop_badge, 1.0f, model.loop_enabled ? t.success : t.border_light);
+    ui::draw_text_in_rect(model.loop_enabled ? "Loop active" : "Loop off", 13,
+                          loop_badge, model.loop_enabled ? t.text : t.text_muted);
+}
+
+void draw_lane_header(const editor_timeline_view_model& model, Rectangle content, const ui_theme& t) {
+    const Rectangle lane_header = {content.x, content.y + 38.0f, content.width, 28.0f};
+    ui::draw_rect_f(lane_header, with_alpha(t.section, 225));
+    ui::draw_rect_lines(lane_header, 1.0f, t.border_light);
+    for (int lane = 0; lane < std::max(1, model.metrics.key_count); ++lane) {
+        const Rectangle lane_rect = model.metrics.lane_rect(lane);
+        const Rectangle cell = {lane_rect.x, lane_header.y, lane_rect.width, lane_header.height};
+        ui::draw_rect_f(cell, lane % 2 == 0 ? with_alpha(t.row, 58) : with_alpha(t.section, 58));
+        ui::draw_rect_lines(cell, 1.0f, with_alpha(t.border_light, 170));
+        ui::draw_text_in_rect(TextFormat("Lane %d", lane + 1), 13, cell, t.text_secondary);
+    }
+}
 }
 
 Rectangle editor_timeline_metrics::content_rect() const {
@@ -266,6 +315,7 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
     const Rectangle track = model.metrics.scrollbar_track_rect();
 
     ui::draw_rect_f(ui::inset(model.metrics.panel_rect, 10.0f), t.section);
+    draw_timeline_header(model, t);
     {
         ui::scoped_clip_rect clip_scope(content);
         const std::set<size_t> selected_note_indices(
@@ -290,6 +340,7 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
                             14, model.loop_enabled ? t.text : t.text_secondary);
         }
         draw_scroll_events(model, content, t);
+        draw_lane_header(model, content, t);
 
         for (int lane = 0; lane < std::max(1, model.metrics.key_count); ++lane) {
             const Rectangle rect = model.metrics.lane_rect(lane);

@@ -3,6 +3,7 @@
 #include "editor/view/editor_layout.h"
 #include "theme.h"
 #include "ui_draw.h"
+#include "ui/icons/raythm_icons.h"
 #include "ui_layout.h"
 
 namespace {
@@ -45,11 +46,22 @@ void draw_palette_button(Rectangle rect, note_type type, const editor_note_palet
     }
 }
 
-void draw_tool_chip(Rectangle rect, const char* label, bool selected) {
+void draw_tool_chip(Rectangle rect,
+                    const char* label,
+                    void (*draw_icon)(Rectangle, Color, float),
+                    bool selected) {
     const auto& t = *g_theme;
-    ui::draw_rect_f(rect, selected ? t.row_selected : t.row);
-    ui::draw_rect_lines(rect, 1.2f, selected ? t.border_active : t.border_light);
-    ui::draw_text_in_rect(label, 13, rect, selected ? t.text : t.text_muted);
+    const ui::row_state row = ui::draw_row(
+        rect,
+        selected ? t.row_selected : t.row,
+        selected ? t.row_active : t.row_hover,
+        selected ? t.border_active : t.border_light,
+        1.2f);
+    const Rectangle icon_rect = {row.visual.x + 8.0f, row.visual.y + 5.0f, 16.0f, 16.0f};
+    draw_icon(icon_rect, selected ? t.text : t.text_muted, 2.4f);
+    ui::draw_text_in_rect(label, 13,
+                          {row.visual.x + 28.0f, row.visual.y, row.visual.width - 30.0f, row.visual.height},
+                          selected ? t.text : t.text_muted, ui::text_align::left);
 }
 }
 
@@ -109,9 +121,12 @@ editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_pan
     const float tool_gap = 6.0f;
     const float tool_width = (tools_box.width - 24.0f - tool_gap * 2.0f) / 3.0f;
     const float tool_y = tools_box.y + 46.0f;
-    draw_tool_chip({tools_box.x + 12.0f, tool_y, tool_width, 26.0f}, "Select", true);
-    draw_tool_chip({tools_box.x + 12.0f + (tool_width + tool_gap), tool_y, tool_width, 26.0f}, "Range", false);
-    draw_tool_chip({tools_box.x + 12.0f + (tool_width + tool_gap) * 2.0f, tool_y, tool_width, 26.0f}, "Notes", false);
+    draw_tool_chip({tools_box.x + 12.0f, tool_y, tool_width, 26.0f},
+                   "Select", raythm_icons::draw_mouse_pointer, true);
+    draw_tool_chip({tools_box.x + 12.0f + (tool_width + tool_gap), tool_y, tool_width, 26.0f},
+                   "Range", raythm_icons::draw_scan, false);
+    draw_tool_chip({tools_box.x + 12.0f + (tool_width + tool_gap) * 2.0f, tool_y, tool_width, 26.0f},
+                   "Notes", raythm_icons::draw_layers, false);
     ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 74.0f, tools_box.width - 24.0f, 16.0f},
                          "Edit", ray_selected ? "Ray lane" : palette_label(model.note_palette.type),
                          13, t.text_muted, t.text_secondary, 46.0f);

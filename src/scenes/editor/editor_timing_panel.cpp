@@ -74,15 +74,24 @@ void draw_section_heading(Rectangle box, const char* title, const char* tab_labe
     ui::draw_text_in_rect(tab_label, 12, badge, t.text_muted);
     ui::draw_rect_f({box.x + 12.0f, box.y + 38.0f, box.width - 24.0f, 1.5f}, t.border_light);
 }
+
+void draw_action_chip(Rectangle rect, const char* label, bool enabled) {
+    const auto& t = *g_theme;
+    ui::draw_rect_f(rect, enabled ? with_alpha(t.row, 245) : with_alpha(t.section, 230));
+    ui::draw_rect_lines(rect, 1.0f, enabled ? t.border_light : with_alpha(t.border_light, 120));
+    ui::draw_text_in_rect(label, 13, rect, enabled ? t.text_secondary : t.text_hint);
+}
 }
 
 editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_model& model, editor_timing_panel_state& state) {
     const auto& t = *g_theme;
     editor_timing_panel_result result;
 
-    const Rectangle timing_box = {model.content_rect.x, model.content_rect.y, model.content_rect.width, 260.0f};
+    const Rectangle selection_box = {model.content_rect.x, model.content_rect.y, model.content_rect.width, 116.0f};
+    const Rectangle timing_box = {model.content_rect.x, selection_box.y + selection_box.height + 12.0f,
+                                  model.content_rect.width, 220.0f};
     const Rectangle scroll_box = {model.content_rect.x, timing_box.y + timing_box.height + 12.0f,
-                                  model.content_rect.width, 290.0f};
+                                  model.content_rect.width, 252.0f};
     const Rectangle editor_box = {model.content_rect.x, scroll_box.y + scroll_box.height + 12.0f,
                                   model.content_rect.width,
                                   model.content_rect.y + model.content_rect.height - (scroll_box.y + scroll_box.height + 12.0f)};
@@ -222,6 +231,30 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         ui::draw_scrollbar(scrollbar_rect, content_height, scroll_offset,
                            t.scrollbar_track, t.scrollbar_thumb, 28.0f);
     };
+
+    ui::draw_section(selection_box);
+    draw_section_heading(selection_box, "Selection", "Notes");
+    const bool has_notes = model.selected_note_count > 0;
+    const Rectangle count_rect = {selection_box.x + 12.0f, selection_box.y + 50.0f, 118.0f, 42.0f};
+    ui::draw_rect_f(count_rect, has_notes ? with_alpha(t.row_selected, 245) : with_alpha(t.row, 210));
+    ui::draw_rect_lines(count_rect, 1.5f, has_notes ? t.border_active : t.border_light);
+    ui::draw_text_in_rect(has_notes ? TextFormat("%d", static_cast<int>(model.selected_note_count)) : "-",
+                          26, count_rect, has_notes ? t.text : t.text_muted);
+    ui::draw_text_in_rect(model.selected_note_summary.empty() ? "No notes selected" : model.selected_note_summary.c_str(),
+                          15,
+                          {selection_box.x + 142.0f, selection_box.y + 50.0f,
+                           selection_box.width - 154.0f, 20.0f},
+                          has_notes ? t.text : t.text_muted, ui::text_align::left);
+    ui::draw_text_in_rect("Move / copy / duplicate as a grouped edit",
+                          13,
+                          {selection_box.x + 142.0f, selection_box.y + 72.0f,
+                           selection_box.width - 154.0f, 18.0f},
+                          t.text_hint, ui::text_align::left);
+    const float chip_w = (selection_box.width - 24.0f - 12.0f) / 3.0f;
+    const float chip_y = selection_box.y + selection_box.height - 30.0f;
+    draw_action_chip({selection_box.x + 12.0f, chip_y, chip_w, 22.0f}, "Copy", has_notes);
+    draw_action_chip({selection_box.x + 12.0f + chip_w + 6.0f, chip_y, chip_w, 22.0f}, "Duplicate", has_notes);
+    draw_action_chip({selection_box.x + 12.0f + (chip_w + 6.0f) * 2.0f, chip_y, chip_w, 22.0f}, "Delete", has_notes);
 
     draw_event_list(timing_box, "Timing Map", model.items,
                     state.list_scroll_offset, state.list_scrollbar_dragging,

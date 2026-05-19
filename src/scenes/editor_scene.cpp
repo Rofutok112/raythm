@@ -322,6 +322,14 @@ void editor_scene::draw() {
         &meter_map_,
         timing_panel_.selected_event_index,
         timing_panel_.selected_scroll_event_index,
+        selected_note_indices_.empty() && selected_note_index_.has_value()
+            ? 1U
+            : selected_note_indices_.size(),
+        selected_note_indices_.empty() && !selected_note_index_.has_value()
+            ? std::string("No notes selected")
+            : std::string(selected_note_indices_.empty() && selected_note_index_.has_value()
+                ? "1 note selected"
+                : TextFormat("%d notes selected", static_cast<int>(selected_note_indices_.size()))),
         can_delete_selected_timing_event(),
         can_delete_selected_scroll_event(),
         virtual_screen::get_virtual_mouse(),
