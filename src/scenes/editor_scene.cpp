@@ -21,6 +21,7 @@
 #include "editor/editor_session_loader.h"
 #include "chart_level_cache.h"
 #include "play_scene.h"
+#include "platform/window_chrome.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "settings_scene.h"
@@ -131,7 +132,7 @@ void editor_scene::on_enter() {
 }
 
 void editor_scene::on_exit() {
-    SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+    window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
     audio_manager::instance().stop_bgm();
     audio_manager::instance().stop_all_se();
 }
@@ -149,7 +150,7 @@ void editor_scene::update(float dt) {
         metadata_panel_.chart_author_input.active = false;
         timing_panel_.active_input_field = editor_timing_input_field::none;
         timing_panel_.bar_pick_mode = false;
-        SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+        window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
         return;
     }
 
@@ -185,12 +186,12 @@ void editor_scene::update(float dt) {
     });
     apply_flow_result(flow_result);
     if (flow_result.consume_update) {
-        SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+        window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
         return;
     }
 
     if (!has_blocking_modal() && ui::is_clicked(layout::kSettingsButtonRect)) {
-        SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+        window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
         manager_.change_scene(std::make_unique<settings_scene>(manager_, song_, build_resume_state()));
         return;
     }
@@ -795,7 +796,7 @@ int editor_scene::timeline_mouse_cursor(Vector2 mouse, const editor_timeline_met
 }
 
 void editor_scene::update_mouse_cursor(Vector2 mouse, const editor_timeline_metrics& metrics) const {
-    SetMouseCursor(timeline_mouse_cursor(mouse, metrics));
+    window_chrome::set_content_cursor(timeline_mouse_cursor(mouse, metrics));
 }
 
 int editor_scene::default_timing_event_tick() const {

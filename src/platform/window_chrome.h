@@ -10,6 +10,7 @@ void shutdown();
 void update(scene_manager& manager);
 void draw();
 
+void set_content_cursor(int cursor);
 int titlebar_height_px();
 bool is_maximized();
 bool is_state_transitioning();
