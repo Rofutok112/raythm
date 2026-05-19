@@ -7,6 +7,42 @@
     {
       "name": "refresh",
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/refresh-cw.svg"
+    },
+    {
+      "name": "play",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/play.svg"
+    },
+    {
+      "name": "pause",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/pause.svg"
+    },
+    {
+      "name": "skip_back",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/skip-back.svg"
+    },
+    {
+      "name": "skip_forward",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/skip-forward.svg"
+    },
+    {
+      "name": "chevron_left",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/chevron-left.svg"
+    },
+    {
+      "name": "chevron_right",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/chevron-right.svg"
+    },
+    {
+      "name": "chevrons_left",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/chevrons-left.svg"
+    },
+    {
+      "name": "chevrons_right",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/chevrons-right.svg"
+    },
+    {
+      "name": "download",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/download.svg"
     }
   ]
 }

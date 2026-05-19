@@ -62,7 +62,7 @@ void draw_save(Rectangle bounds, Color color, float stroke_width = 2.0f);
 
 - `path`: `M`, `L`, `H`, `V`, `C`, `Q`, `A`, `Z` and relative variants
 - `line`
-- `rect`
+- `rect`, including `rx`/`ry` rounded corners
 - `circle`
 - `polyline`
 - `polygon`

@@ -45,13 +45,18 @@ void draw_settings_icon(Rectangle rect, Color color, unsigned char alpha) {
     raythm_icons::draw_settings_gear(ui::inset(rect, 17.0f), with_alpha(color, alpha), 3.0f);
 }
 
+Rectangle centered_icon_rect(Rectangle rect, float inset) {
+    const float size = std::max(1.0f, std::min(rect.width, rect.height) - inset * 2.0f);
+    return {
+        rect.x + (rect.width - size) * 0.5f,
+        rect.y + (rect.height - size) * 0.5f,
+        size,
+        size
+    };
+}
+
 void draw_profile_chevron(Rectangle rect, Color color, unsigned char alpha) {
-    const Color icon = with_alpha(color, alpha);
-    const Vector2 a = {rect.x + rect.width * 0.5f - 4.0f, rect.y + rect.height * 0.5f - 7.0f};
-    const Vector2 b = {rect.x + rect.width * 0.5f + 4.0f, rect.y + rect.height * 0.5f};
-    const Vector2 c = {rect.x + rect.width * 0.5f - 4.0f, rect.y + rect.height * 0.5f + 7.0f};
-    DrawLineEx(a, b, 2.5f, icon);
-    DrawLineEx(b, c, 2.5f, icon);
+    raythm_icons::draw_chevron_right(centered_icon_rect(rect, 5.0f), with_alpha(color, alpha), 3.0f);
 }
 
 void draw_top_bar_controls(const title_header_view::draw_config& config) {

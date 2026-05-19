@@ -388,6 +388,27 @@ def rect_segment(x: float, y: float, width: float, height: float) -> Segment:
     return Segment([(x, y), (x + width, y), (x + width, y + height), (x, y + height), (x, y)], True)
 
 
+def rounded_rect_segment(x: float, y: float, width: float, height: float, rx: float, ry: float) -> Segment:
+    rx = min(abs(rx), width * 0.5)
+    ry = min(abs(ry), height * 0.5)
+    points: list[tuple[float, float]] = []
+    corners = [
+        (x + width - rx, y + ry, -math.pi * 0.5, 0.0),
+        (x + width - rx, y + height - ry, 0.0, math.pi * 0.5),
+        (x + rx, y + height - ry, math.pi * 0.5, math.pi),
+        (x + rx, y + ry, math.pi, math.pi * 1.5),
+    ]
+    for cx, cy, start, end in corners:
+        for step in range(5):
+            if points and step == 0:
+                continue
+            t = step / 4.0
+            theta = start + (end - start) * t
+            points.append((cx + math.cos(theta) * rx, cy + math.sin(theta) * ry))
+    points.append(points[0])
+    return Segment(points, True)
+
+
 def should_skip_element(element: ET.Element, warnings: list[str]) -> bool:
     tag = local_name(element.tag)
     if tag in UNSUPPORTED_ELEMENTS:
@@ -431,9 +452,16 @@ def parse_svg(source: SvgSource, curve_steps: int, circle_steps: int) -> Icon:
                 width = parse_float(element.attrib.get("width"))
                 height = parse_float(element.attrib.get("height"))
                 if width > 0 and height > 0:
-                    if parse_float(element.attrib.get("rx")) > 0 or parse_float(element.attrib.get("ry")) > 0:
-                        icon.warnings.append("Rounded rect rx/ry is not supported; emitted a square-corner rect.")
-                    icon.segments.append(rect_segment(x, y, width, height))
+                    rx = parse_float(element.attrib.get("rx"))
+                    ry = parse_float(element.attrib.get("ry"))
+                    if rx > 0 or ry > 0:
+                        if rx <= 0:
+                            rx = ry
+                        if ry <= 0:
+                            ry = rx
+                        icon.segments.append(rounded_rect_segment(x, y, width, height, rx, ry))
+                    else:
+                        icon.segments.append(rect_segment(x, y, width, height))
             elif tag == "circle":
                 radius = parse_float(element.attrib.get("r"))
                 if radius > 0:
