@@ -51,6 +51,17 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    chart_meta unchanged_meta = state.data().meta;
+    if (!state.modify_metadata(unchanged_meta) || state.is_dirty() || state.can_undo()) {
+        std::cerr << "unchanged metadata should not create history or dirty state\n";
+        return EXIT_FAILURE;
+    }
+
+    if (!state.modify_note(0, state.data().notes[0]) || state.is_dirty() || state.can_undo()) {
+        std::cerr << "unchanged note should not create history or dirty state\n";
+        return EXIT_FAILURE;
+    }
+
     if (!state.has_note_overlap({note_type::tap, 0, 0, 0}) ||
         !state.has_note_overlap({note_type::tap, 700, 2, 700}) ||
         state.has_note_overlap({note_type::tap, 240, 1, 240})) {

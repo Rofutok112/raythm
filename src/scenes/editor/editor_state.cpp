@@ -55,6 +55,43 @@ bool lanes_overlap(const note_data& left, const note_data& right) {
     return left.lane <= note_last_lane(right) && right.lane <= note_last_lane(left);
 }
 
+bool same_timing_event(const timing_event& left, const timing_event& right) {
+    return left.type == right.type &&
+        left.tick == right.tick &&
+        left.bpm == right.bpm &&
+        left.numerator == right.numerator &&
+        left.denominator == right.denominator;
+}
+
+bool same_scroll_event(const scroll_event& left, const scroll_event& right) {
+    return left.type == right.type &&
+        left.tick == right.tick &&
+        left.duration == right.duration &&
+        left.multiplier == right.multiplier;
+}
+
+bool same_note_data(const note_data& left, const note_data& right) {
+    return left.type == right.type &&
+        left.tick == right.tick &&
+        left.lane == right.lane &&
+        left.end_tick == right.end_tick &&
+        left.is_ray == right.is_ray &&
+        note_lane_width(left) == note_lane_width(right);
+}
+
+bool same_chart_meta(const chart_meta& left, const chart_meta& right) {
+    return left.chart_id == right.chart_id &&
+        left.song_id == right.song_id &&
+        left.chart_version == right.chart_version &&
+        left.key_count == right.key_count &&
+        left.difficulty == right.difficulty &&
+        left.level == right.level &&
+        left.chart_author == right.chart_author &&
+        left.format_version == right.format_version &&
+        left.resolution == right.resolution &&
+        left.offset == right.offset;
+}
+
 class add_note_command final : public editor_command {
 public:
     add_note_command(chart_data& chart, note_data note) : chart_(chart), note_(std::move(note)) {}
@@ -453,6 +490,10 @@ bool editor_state::modify_note(size_t index, note_data note) {
         return false;
     }
 
+    if (same_note_data(chart_.notes[index], note)) {
+        return true;
+    }
+
     history_.push(std::make_unique<modify_note_command>(chart_, index, std::move(note)));
     sync_dirty_flag();
     return true;
@@ -471,6 +512,12 @@ bool editor_state::modify_notes(std::vector<std::pair<size_t, note_data>> update
             (i > 0 && updates[i - 1].first == updates[i].first)) {
             return false;
         }
+    }
+    updates.erase(std::remove_if(updates.begin(), updates.end(), [this](const auto& update) {
+        return same_note_data(chart_.notes[update.first], update.second);
+    }), updates.end());
+    if (updates.empty()) {
+        return true;
     }
 
     history_.push(std::make_unique<modify_notes_command>(chart_, std::move(updates)));
@@ -498,6 +545,10 @@ bool editor_state::modify_timing_event(size_t index, timing_event event) {
         return false;
     }
 
+    if (same_timing_event(chart_.timing_events[index], event)) {
+        return true;
+    }
+
     history_.push(std::make_unique<modify_timing_event_command>(chart_, timing_engine_, index, std::move(event)));
     sync_dirty_flag();
     return true;
@@ -523,6 +574,10 @@ bool editor_state::modify_scroll_event(size_t index, scroll_event event) {
         return false;
     }
 
+    if (same_scroll_event(chart_.scroll_events[index], event)) {
+        return true;
+    }
+
     history_.push(std::make_unique<modify_scroll_event_command>(chart_, index, std::move(event)));
     sync_dirty_flag();
     return true;
@@ -531,6 +586,10 @@ bool editor_state::modify_scroll_event(size_t index, scroll_event event) {
 bool editor_state::modify_metadata(chart_meta meta, bool clear_notes) {
     if (meta.key_count != chart_.meta.key_count && !clear_notes && !chart_.notes.empty()) {
         return false;
+    }
+
+    if (!clear_notes && same_chart_meta(chart_.meta, meta)) {
+        return true;
     }
 
     history_.push(std::make_unique<modify_metadata_command>(chart_, timing_engine_, std::move(meta), clear_notes));

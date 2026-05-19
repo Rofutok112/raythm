@@ -433,7 +433,7 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
     draw_rail_icon({rail.x + 8.0f, rail.y + 190.0f, 38.0f, 50.0f},
                    raythm_icons::draw_repeat_2, "LP", false);
 
-    ui::draw_text_in_rect("TRACK", 15, row(content, 0.0f, 20.0f), t.text_muted, ui::text_align::left);
+    ui::draw_text_in_rect("CHART", 15, row(content, 0.0f, 20.0f), t.text_muted, ui::text_align::left);
     draw_marquee_text(model.song_title, content.x, content.y + 26.0f, 24, t.text, content.width, model.now);
     draw_badge({content.x, content.y + 62.0f, 95.0f, 24.0f}, status_label,
                model.is_dirty ? t.slow : t.success, model.is_dirty ? t.slow : t.success);
