@@ -1081,31 +1081,34 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
         point.curve_to_next = curve;
         return point;
     };
-    for (size_t index = 1; index < sorted_points.size(); ++index) {
-        const auto& previous = sorted_points[index - 1].second;
-        const auto& current = sorted_points[index].second;
-        const Vector2 from = {point_x(previous.multiplier), model.metrics.tick_to_y(previous.tick)};
-        const Vector2 to = {point_x(current.multiplier), model.metrics.tick_to_y(current.tick)};
-        DrawLineEx(from, to, 2.0f, with_alpha(t.fast, 220));
-    }
     std::optional<size_t> hovered_point;
-    for (size_t reverse = sorted_points.size(); reverse > 0; --reverse) {
-        const size_t sorted_index = reverse - 1;
-        const size_t point_index = sorted_points[sorted_index].first;
-        const auto& point = sorted_points[sorted_index].second;
-        const Vector2 pos = {point_x(point.multiplier), model.metrics.tick_to_y(point.tick)};
-        if (pos.y < automation.y || pos.y > automation.y + automation.height) {
-            continue;
+    {
+        ui::scoped_clip_rect clip_scope(automation_graph);
+        for (size_t index = 1; index < sorted_points.size(); ++index) {
+            const auto& previous = sorted_points[index - 1].second;
+            const auto& current = sorted_points[index].second;
+            const Vector2 from = {point_x(previous.multiplier), model.metrics.tick_to_y(previous.tick)};
+            const Vector2 to = {point_x(current.multiplier), model.metrics.tick_to_y(current.tick)};
+            DrawLineEx(from, to, 2.0f, with_alpha(t.fast, 220));
         }
-        const bool selected = model.selected_scroll_event_index.has_value() &&
-                              *model.selected_scroll_event_index == point_index;
-        const Rectangle hit = {pos.x - 8.0f, pos.y - 8.0f, 16.0f, 16.0f};
-        if (!hovered_point.has_value() && CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), hit)) {
-            hovered_point = point_index;
+        for (size_t reverse = sorted_points.size(); reverse > 0; --reverse) {
+            const size_t sorted_index = reverse - 1;
+            const size_t point_index = sorted_points[sorted_index].first;
+            const auto& point = sorted_points[sorted_index].second;
+            const Vector2 pos = {point_x(point.multiplier), model.metrics.tick_to_y(point.tick)};
+            if (pos.y < automation_graph.y || pos.y > automation_graph.y + automation_graph.height) {
+                continue;
+            }
+            const bool selected = model.selected_scroll_event_index.has_value() &&
+                                  *model.selected_scroll_event_index == point_index;
+            const Rectangle hit = {pos.x - 8.0f, pos.y - 8.0f, 16.0f, 16.0f};
+            if (!hovered_point.has_value() && CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), hit)) {
+                hovered_point = point_index;
+            }
+            DrawCircleV(pos, selected ? 7.0f : 5.5f, selected ? t.accent : t.fast);
+            DrawCircleLines(static_cast<int>(pos.x), static_cast<int>(pos.y), selected ? 8.0f : 6.5f,
+                            selected ? t.text : with_alpha(t.text, 170));
         }
-        DrawCircleV(pos, selected ? 7.0f : 5.5f, selected ? t.accent : t.fast);
-        DrawCircleLines(static_cast<int>(pos.x), static_cast<int>(pos.y), selected ? 8.0f : 6.5f,
-                        selected ? t.text : with_alpha(t.text, 170));
     }
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool automation_hovered = CheckCollisionPointRec(mouse, automation_graph);
