@@ -441,6 +441,9 @@ const char* chart_source_label(content_status status) {
 }
 
 Color chart_source_status_color(const chart_entry_state& chart) {
+    if (chart.chart.status == content_status::modified) {
+        return g_theme->slow;
+    }
     if (chart.installed || chart.update_available) {
         return g_theme->success;
     }
@@ -1473,9 +1476,15 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
 
     const bool selected_chart_update =
         chart != nullptr && chart->installed && chart->update_available;
+    const bool selected_chart_repair =
+        chart != nullptr && chart->installed && chart->chart.status == content_status::modified;
     const char* primary_label = state.download_in_progress ? "DOWNLOADING..."
-        : (needs_download(*song) ? (song->update_available ? "UPDATE SONG" : "DOWNLOAD SONG")
-           : (selected_chart_update ? "UPDATE CHART" : "OPEN LOCAL"));
+        : (needs_download(*song) ? (song->song.status == content_status::modified ? "REPAIR SONG"
+                                    : song->update_available ? "UPDATE SONG"
+                                                             : "DOWNLOAD SONG")
+           : (selected_chart_repair ? "REPAIR CHART"
+                                    : selected_chart_update ? "UPDATE CHART"
+                                                            : "OPEN LOCAL"));
     if (state.download_in_progress && state.download_progress) {
         const int total_steps = std::max(1, state.download_progress->total_steps.load());
         const int completed_steps = std::clamp(state.download_progress->completed_steps.load(), 0, total_steps);
@@ -1504,7 +1513,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     draw_toned_button(current.primary_action_rect,
                       primary_label,
                       15,
-                      action_tone_for_state(song->update_available || selected_chart_update,
+                      action_tone_for_state(song->update_available || selected_chart_update || selected_chart_repair,
                                             song->installed,
                                             state.download_in_progress),
                       detail_alpha,
@@ -1662,12 +1671,15 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         if (!chart_badge.empty() && !can_download_chart) {
             draw_browse_body_text_in_rect(chart_badge.c_str(), 12,
                                   {card.x + card.width - 78.0f, card.y + 14.0f, 62.0f, 14.0f},
-                                  with_alpha(item.update_available ? t.accent : t.text_muted, detail_alpha),
+                                  with_alpha(item.chart.status == content_status::modified ? t.slow
+                                             : item.update_available ? t.accent
+                                                                     : t.text_muted,
+                                             detail_alpha),
                                   ui::text_align::right);
         }
         if (can_download_chart) {
             draw_download_icon_button(detail::chart_download_icon_rect(card),
-                                      item.update_available,
+                                      item.update_available || item.chart.status == content_status::modified,
                                       detail_alpha);
         }
         draw_difficulty_level_badge(item.chart.meta.level,

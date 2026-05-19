@@ -44,6 +44,7 @@ void draw_palette_button(Rectangle rect, note_type type, const editor_note_palet
         result.selected_note_type = type;
     }
 }
+
 }
 
 editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_panel_view_model& model) {
@@ -92,9 +93,14 @@ editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_pan
                               t.error, ui::text_align::left);
     }
 
-    const Rectangle palette_box = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 136.0f};
+    const bool ray_selected = model.note_palette.is_ray;
+    ui::draw_label_value({content.x + 12.0f, meta_box.y + meta_box.height + 16.0f, content.width - 24.0f, 16.0f},
+                         "Edit", palette_label(model.note_palette.type),
+                         13, t.text_muted, t.text_secondary, 46.0f);
+
+    const Rectangle palette_box = {content.x, meta_box.y + meta_box.height + 42.0f, content.width, 136.0f};
     ui::draw_section(palette_box);
-    ui::draw_text_in_rect("Palette", 22,
+    ui::draw_text_in_rect("Tool", 22,
                           {palette_box.x + 12.0f, palette_box.y + 10.0f, palette_box.width - 24.0f, 28.0f},
                           t.text, ui::text_align::left);
 
@@ -114,7 +120,6 @@ editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_pan
     draw_palette_button({right, second_row_y, button_width, button_height},
                         note_type::stay, model.note_palette, result);
 
-    const bool ray_selected = model.note_palette.is_ray;
     const ui::button_state ray_button = ui::draw_button_colored(
         {palette_box.x + 12.0f, second_row_y + button_height + gap, palette_box.width - 24.0f, 28.0f},
         "RAY", 14,

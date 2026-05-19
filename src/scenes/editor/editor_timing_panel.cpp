@@ -42,15 +42,56 @@ void set_active_input(editor_timing_panel_state& state, editor_timing_input_fiel
 void clear_active_inputs(editor_timing_panel_state& state) {
     set_active_input(state, editor_timing_input_field::none);
 }
+
+void draw_inspector_tabs(Rectangle rect, const char* active_label) {
+    const auto& t = *g_theme;
+    ui::draw_rect_f(rect, with_alpha(t.panel, 220));
+    ui::draw_rect_lines(rect, 1.2f, t.border_light);
+
+    const float gap = 4.0f;
+    const float tab_width = (rect.width - gap * 2.0f) / 3.0f;
+    const char* labels[] = {"Selection", "Timing", "Scroll"};
+    for (int i = 0; i < 3; ++i) {
+        const bool active = std::string(labels[i]) == active_label;
+        const Rectangle tab = {rect.x + (tab_width + gap) * static_cast<float>(i),
+                               rect.y, tab_width, rect.height};
+        ui::draw_rect_f(ui::inset(tab, 1.0f), active ? t.row_selected : t.row);
+        if (active) {
+            ui::draw_rect_f({tab.x + 8.0f, tab.y + tab.height - 3.0f, tab.width - 16.0f, 2.0f}, t.accent);
+        }
+        ui::draw_text_in_rect(labels[i], 13, tab, active ? t.text : t.text_muted);
+    }
+}
+
+void draw_section_heading(Rectangle box, const char* title, const char* tab_label) {
+    const auto& t = *g_theme;
+    ui::draw_text_in_rect(title, 20,
+                          {box.x + 12.0f, box.y + 10.0f, box.width - 24.0f, 24.0f},
+                          t.text, ui::text_align::left);
+    const Rectangle badge = {box.x + box.width - 88.0f, box.y + 12.0f, 74.0f, 20.0f};
+    ui::draw_rect_f(badge, with_alpha(t.row, 230));
+    ui::draw_rect_lines(badge, 1.0f, t.border_light);
+    ui::draw_text_in_rect(tab_label, 12, badge, t.text_muted);
+    ui::draw_rect_f({box.x + 12.0f, box.y + 38.0f, box.width - 24.0f, 1.5f}, t.border_light);
+}
+
+void draw_action_chip(Rectangle rect, const char* label, bool enabled) {
+    const auto& t = *g_theme;
+    ui::draw_rect_f(rect, enabled ? with_alpha(t.row, 245) : with_alpha(t.section, 230));
+    ui::draw_rect_lines(rect, 1.0f, enabled ? t.border_light : with_alpha(t.border_light, 120));
+    ui::draw_text_in_rect(label, 13, rect, enabled ? t.text_secondary : t.text_hint);
+}
 }
 
 editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_model& model, editor_timing_panel_state& state) {
     const auto& t = *g_theme;
     editor_timing_panel_result result;
 
-    const Rectangle timing_box = {model.content_rect.x, model.content_rect.y, model.content_rect.width, 260.0f};
+    const Rectangle selection_box = {model.content_rect.x, model.content_rect.y, model.content_rect.width, 116.0f};
+    const Rectangle timing_box = {model.content_rect.x, selection_box.y + selection_box.height + 12.0f,
+                                  model.content_rect.width, 220.0f};
     const Rectangle scroll_box = {model.content_rect.x, timing_box.y + timing_box.height + 12.0f,
-                                  model.content_rect.width, 290.0f};
+                                  model.content_rect.width, 252.0f};
     const Rectangle editor_box = {model.content_rect.x, scroll_box.y + scroll_box.height + 12.0f,
                                   model.content_rect.width,
                                   model.content_rect.y + model.content_rect.height - (scroll_box.y + scroll_box.height + 12.0f)};
@@ -133,15 +174,13 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
                                float& scrollbar_drag_offset,
                                bool scroll_events) {
         ui::draw_section(box);
-        ui::draw_text_in_rect(title, 22,
-                              {box.x + 12.0f, box.y + 10.0f, box.width - 24.0f, 28.0f},
-                              t.text, ui::text_align::left);
+        draw_section_heading(box, title, scroll_events ? "Scroll" : "Timing");
 
         const Rectangle list_view_rect = {
             box.x + 10.0f,
-            box.y + 42.0f,
+            box.y + 50.0f,
             box.width - 32.0f,
-            box.height - 88.0f
+            box.height - 96.0f
         };
         const Rectangle scrollbar_rect = {
             list_view_rect.x + list_view_rect.width + 6.0f,
@@ -193,7 +232,31 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
                            t.scrollbar_track, t.scrollbar_thumb, 28.0f);
     };
 
-    draw_event_list(timing_box, "BPM / Time Signature", model.items,
+    ui::draw_section(selection_box);
+    draw_section_heading(selection_box, "Selection", "Notes");
+    const bool has_notes = model.selected_note_count > 0;
+    const Rectangle count_rect = {selection_box.x + 12.0f, selection_box.y + 50.0f, 118.0f, 42.0f};
+    ui::draw_rect_f(count_rect, has_notes ? with_alpha(t.row_selected, 245) : with_alpha(t.row, 210));
+    ui::draw_rect_lines(count_rect, 1.5f, has_notes ? t.border_active : t.border_light);
+    ui::draw_text_in_rect(has_notes ? TextFormat("%d", static_cast<int>(model.selected_note_count)) : "-",
+                          26, count_rect, has_notes ? t.text : t.text_muted);
+    ui::draw_text_in_rect(model.selected_note_summary.empty() ? "No notes selected" : model.selected_note_summary.c_str(),
+                          15,
+                          {selection_box.x + 142.0f, selection_box.y + 50.0f,
+                           selection_box.width - 154.0f, 20.0f},
+                          has_notes ? t.text : t.text_muted, ui::text_align::left);
+    ui::draw_text_in_rect("Move / copy / duplicate as a grouped edit",
+                          13,
+                          {selection_box.x + 142.0f, selection_box.y + 72.0f,
+                           selection_box.width - 154.0f, 18.0f},
+                          t.text_hint, ui::text_align::left);
+    const float chip_w = (selection_box.width - 24.0f - 12.0f) / 3.0f;
+    const float chip_y = selection_box.y + selection_box.height - 30.0f;
+    draw_action_chip({selection_box.x + 12.0f, chip_y, chip_w, 22.0f}, "Copy", has_notes);
+    draw_action_chip({selection_box.x + 12.0f + chip_w + 6.0f, chip_y, chip_w, 22.0f}, "Duplicate", has_notes);
+    draw_action_chip({selection_box.x + 12.0f + (chip_w + 6.0f) * 2.0f, chip_y, chip_w, 22.0f}, "Delete", has_notes);
+
+    draw_event_list(timing_box, "Timing Map", model.items,
                     state.list_scroll_offset, state.list_scrollbar_dragging,
                     state.list_scrollbar_drag_offset, false);
 
@@ -232,7 +295,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         result.delete_selected = true;
     }
 
-    draw_event_list(scroll_box, "Scroll Events", model.scroll_items,
+    draw_event_list(scroll_box, "Scroll Regions", model.scroll_items,
                     state.scroll_list_scroll_offset, state.scroll_list_scrollbar_dragging,
                     state.scroll_list_scrollbar_drag_offset, true);
 
@@ -272,25 +335,29 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
     }
 
     ui::draw_section(editor_box);
+    const char* active_tab = model.selected_scroll_event.has_value()
+        ? "Scroll"
+        : (model.selected_event.has_value() ? "Timing" : "Selection");
+    draw_inspector_tabs({editor_box.x + 12.0f, editor_box.y + 10.0f, editor_box.width - 24.0f, 28.0f}, active_tab);
     const char* editor_title = model.selected_scroll_event.has_value()
-        ? "Scroll Event Editor"
-        : (model.selected_event.has_value() ? "BPM / Time Signature Editor" : "Event Editor");
-    ui::draw_text_in_rect(editor_title, 22,
-                          {editor_box.x + 12.0f, editor_box.y + 10.0f, editor_box.width - 24.0f, 28.0f},
+        ? "Scroll Region"
+        : (model.selected_event.has_value() ? "Timing Event" : "Inspector");
+    ui::draw_text_in_rect(editor_title, 20,
+                          {editor_box.x + 12.0f, editor_box.y + 46.0f, editor_box.width - 24.0f, 24.0f},
                           t.text, ui::text_align::left);
 
     if (model.selected_scroll_event.has_value()) {
         const scroll_event& event = *model.selected_scroll_event;
-        ui::draw_label_value({editor_box.x + 12.0f, editor_box.y + 44.0f, editor_box.width - 24.0f, 22.0f},
-                             "Type", scroll_event_type_label(event.type), 16,
+        ui::draw_label_value({editor_box.x + 12.0f, editor_box.y + 76.0f, editor_box.width - 24.0f, 22.0f},
+                             "Mode", scroll_event_type_label(event.type), 16,
                              t.text_secondary, t.text, 76.0f);
-        draw_bar_pick_row({editor_box.x + 12.0f, editor_box.y + 74.0f, editor_box.width - 24.0f, 32.0f},
+        draw_bar_pick_row({editor_box.x + 12.0f, editor_box.y + 106.0f, editor_box.width - 24.0f, 32.0f},
                           "Start", state.inputs.scroll_start_bar.value, editor_timing_input_field::scroll_start);
-        draw_input_row({editor_box.x + 12.0f, editor_box.y + 112.0f, editor_box.width - 24.0f, 32.0f},
-                       "Duration", state.inputs.scroll_duration, editor_timing_input_field::scroll_duration,
+        draw_input_row({editor_box.x + 12.0f, editor_box.y + 144.0f, editor_box.width - 24.0f, 32.0f},
+                       "Length", state.inputs.scroll_duration, editor_timing_input_field::scroll_duration,
                        accepts_int_character, "ticks");
         if (event.type == scroll_event_type::speed) {
-            draw_input_row({editor_box.x + 12.0f, editor_box.y + 150.0f, editor_box.width - 24.0f, 32.0f},
+            draw_input_row({editor_box.x + 12.0f, editor_box.y + 182.0f, editor_box.width - 24.0f, 32.0f},
                            "Rate", state.inputs.scroll_multiplier, editor_timing_input_field::scroll_multiplier,
                            accepts_float_character, "1.0x");
         }
@@ -302,22 +369,22 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         }
     } else if (model.selected_event.has_value()) {
         const timing_event& event = *model.selected_event;
-        ui::draw_label_value({editor_box.x + 12.0f, editor_box.y + 44.0f, editor_box.width - 24.0f, 22.0f},
+        ui::draw_label_value({editor_box.x + 12.0f, editor_box.y + 76.0f, editor_box.width - 24.0f, 22.0f},
                              "Type", timing_event_type_label(event.type), 16,
                              t.text_secondary, t.text, 76.0f);
         if (event.type == timing_event_type::bpm) {
-            draw_bar_pick_row({editor_box.x + 12.0f, editor_box.y + 74.0f, editor_box.width - 24.0f, 32.0f},
+            draw_bar_pick_row({editor_box.x + 12.0f, editor_box.y + 106.0f, editor_box.width - 24.0f, 32.0f},
                               "Bar", state.inputs.bpm_bar.value, editor_timing_input_field::bpm_measure);
-            draw_input_row({editor_box.x + 12.0f, editor_box.y + 112.0f, editor_box.width - 24.0f, 32.0f},
+            draw_input_row({editor_box.x + 12.0f, editor_box.y + 144.0f, editor_box.width - 24.0f, 32.0f},
                            "BPM", state.inputs.bpm_value, editor_timing_input_field::bpm_value,
                            accepts_float_character, "BPM");
         } else {
-            draw_bar_pick_row({editor_box.x + 12.0f, editor_box.y + 74.0f, editor_box.width - 24.0f, 32.0f},
+            draw_bar_pick_row({editor_box.x + 12.0f, editor_box.y + 106.0f, editor_box.width - 24.0f, 32.0f},
                               "Bar", state.inputs.meter_bar.value, editor_timing_input_field::meter_measure);
-            draw_input_row({editor_box.x + 12.0f, editor_box.y + 112.0f, (editor_box.width - 32.0f) * 0.5f, 32.0f},
+            draw_input_row({editor_box.x + 12.0f, editor_box.y + 144.0f, (editor_box.width - 32.0f) * 0.5f, 32.0f},
                            "Num", state.inputs.meter_numerator, editor_timing_input_field::meter_numerator,
                            accepts_int_character, "Num", 40.0f);
-            draw_input_row({editor_box.x + 20.0f + (editor_box.width - 32.0f) * 0.5f, editor_box.y + 112.0f,
+            draw_input_row({editor_box.x + 20.0f + (editor_box.width - 32.0f) * 0.5f, editor_box.y + 144.0f,
                             (editor_box.width - 32.0f) * 0.5f, 32.0f},
                            "Den", state.inputs.meter_denominator, editor_timing_input_field::meter_denominator,
                            accepts_int_character, "Den", 40.0f);
@@ -331,7 +398,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         }
     } else {
         ui::draw_text_in_rect("Select a song timing or scroll event.", 18,
-                              {editor_box.x + 12.0f, editor_box.y + 54.0f, editor_box.width - 24.0f, 24.0f},
+                              {editor_box.x + 12.0f, editor_box.y + 82.0f, editor_box.width - 24.0f, 24.0f},
                               t.text_hint, ui::text_align::left);
     }
 

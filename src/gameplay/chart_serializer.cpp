@@ -39,6 +39,23 @@ const char* scroll_type_name(scroll_event_type type) {
     return "";
 }
 
+const char* scroll_automation_curve_name(scroll_automation_curve curve) {
+    switch (curve) {
+        case scroll_automation_curve::hold:
+            return "hold";
+        case scroll_automation_curve::linear:
+            return "linear";
+        case scroll_automation_curve::ease_in:
+            return "easeIn";
+        case scroll_automation_curve::ease_out:
+            return "easeOut";
+        case scroll_automation_curve::ease_in_out:
+            return "easeInOut";
+    }
+
+    return "";
+}
+
 const char* note_type_name(note_type type) {
     switch (type) {
         case note_type::tap:
@@ -76,7 +93,13 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
                note.is_ray ||
                note_lane_width(note) > 1;
     });
-    const int required_format_version = data.scroll_events.empty() ? (needs_format_v2 ? 2 : 1) : 3;
+    int required_format_version = needs_format_v2 ? 2 : 1;
+    if (!data.scroll_events.empty()) {
+        required_format_version = 3;
+    }
+    if (!data.scroll_automation.empty()) {
+        required_format_version = 4;
+    }
     output << "formatVersion=" << std::max(data.meta.format_version, required_format_version) << '\n';
     output << "resolution=" << data.meta.resolution << '\n';
     output << "offset=" << data.meta.offset << '\n';
@@ -115,6 +138,21 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
                 output << ',' << format_float(event.multiplier);
             }
             output << '\n';
+        }
+        output << '\n';
+    }
+
+    if (!data.scroll_automation.empty()) {
+        std::vector<scroll_automation_point> sorted_points = data.scroll_automation;
+        std::stable_sort(sorted_points.begin(), sorted_points.end(), [](const scroll_automation_point& left,
+                                                                        const scroll_automation_point& right) {
+            return left.tick < right.tick;
+        });
+
+        output << "[ScrollAutomation]\n";
+        for (const scroll_automation_point& point : sorted_points) {
+            output << "point," << point.tick << ',' << format_float(point.multiplier) << ','
+                   << scroll_automation_curve_name(point.curve_to_next) << '\n';
         }
         output << '\n';
     }

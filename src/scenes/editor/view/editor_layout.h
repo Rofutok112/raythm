@@ -12,19 +12,28 @@ inline constexpr Rectangle kHeaderRect = ui::place(kScreenRect, 1830.0f, 72.0f,
 inline constexpr Rectangle kLeftPanelRect = ui::place(kScreenRect, 372.0f, 930.0f,
                                                       ui::anchor::top_left, ui::anchor::top_left,
                                                       Vector2{30.0f, 108.0f});
-inline constexpr Rectangle kTimelineRect = ui::place(kScreenRect, 1086.0f, 930.0f,
-                                                     ui::anchor::top_center, ui::anchor::top_center,
-                                                     Vector2{0.0f, 108.0f});
+inline constexpr Rectangle kTimelineRect = ui::place(kScreenRect, 1464.0f, 930.0f,
+                                                     ui::anchor::top_left, ui::anchor::top_left,
+                                                     Vector2{426.0f, 108.0f});
 inline constexpr Rectangle kRightPanelRect = ui::place(kScreenRect, 372.0f, 930.0f,
                                                        ui::anchor::top_right, ui::anchor::top_right,
                                                        Vector2{-30.0f, 108.0f});
-inline constexpr Rectangle kBackButtonRect = ui::place(kHeaderRect, 180.0f, 51.0f,
+inline constexpr Rectangle kBackButtonRect = ui::place(kHeaderRect, 51.0f, 51.0f,
                                                        ui::anchor::center_left, ui::anchor::center_left,
                                                        Vector2{24.0f, 0.0f});
-inline constexpr Rectangle kSettingsButtonRect = ui::place(kHeaderRect, 192.0f, 51.0f,
+inline constexpr Rectangle kSettingsButtonRect = ui::place(kHeaderRect, 51.0f, 51.0f,
                                                            ui::anchor::center_left, ui::anchor::center_left,
-                                                           Vector2{225.0f, 0.0f});
+                                                           Vector2{84.0f, 0.0f});
 
+inline constexpr Rectangle kEditorTitleRect = ui::place(kHeaderRect, 318.0f, 51.0f,
+                                                        ui::anchor::center_left, ui::anchor::center_left,
+                                                        Vector2{438.0f, 0.0f});
+inline constexpr Rectangle kTransportBarRect = ui::place(kHeaderRect, 486.0f, 51.0f,
+                                                         ui::anchor::center, ui::anchor::center,
+                                                         Vector2{-48.0f, 0.0f});
+inline constexpr Rectangle kLoopStatusRect = ui::place(kHeaderRect, 264.0f, 51.0f,
+                                                       ui::anchor::center_right, ui::anchor::center_right,
+                                                       Vector2{-777.0f, 0.0f});
 inline constexpr Rectangle kHeaderToolsRect = ui::place(kHeaderRect, 252.0f, 51.0f,
                                                         ui::anchor::center_right, ui::anchor::center_right,
                                                         Vector2{-27.0f, 0.0f});
@@ -48,6 +57,10 @@ inline constexpr Rectangle kUnsavedChangesRect = ui::place(kScreenRect, 684.0f, 
                                                            ui::anchor::center, ui::anchor::center);
 inline constexpr Rectangle kSaveDialogRect = ui::place(kScreenRect, 780.0f, 336.0f,
                                                        ui::anchor::center, ui::anchor::center);
+inline constexpr Rectangle kEditorMetadataModalRect = ui::place(kScreenRect, 720.0f, 430.0f,
+                                                                ui::anchor::center, ui::anchor::center);
+inline constexpr Rectangle kEditorTimingModalRect = ui::place(kScreenRect, 900.0f, 760.0f,
+                                                              ui::anchor::center, ui::anchor::center);
 
 inline Rectangle key_count_confirm_button_rect() {
     return {kMetadataConfirmRect.x + 141.0f, kMetadataConfirmRect.y + 213.0f, 156.0f, 45.0f};

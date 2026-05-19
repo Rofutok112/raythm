@@ -49,6 +49,15 @@ editor_transport_result editor_transport_controller::sync(const editor_transport
         : !hitsound_path.empty();
 
     if (!result.audio_loaded || !has_hitsounds) {
+        if (result.audio_loaded && result.audio_playing &&
+            context.loop_enabled && context.loop_end_tick > context.loop_start_tick &&
+            context.previous_playback_tick < context.loop_end_tick && result.playback_tick >= context.loop_end_tick &&
+            context.state != nullptr) {
+            result.seek_bgm_seconds = context.state->engine().tick_to_ms(context.loop_start_tick) / 1000.0;
+            result.playback_tick = context.loop_start_tick;
+            result.previous_playback_tick = context.loop_start_tick;
+            result.loop_seeked = true;
+        }
         result.previous_playback_tick = result.playback_tick;
         result.previous_audio_playing = result.audio_playing;
         return result;
@@ -69,6 +78,22 @@ editor_transport_result editor_transport_controller::sync(const editor_transport
     if (result.playback_tick <= context.previous_playback_tick || context.state == nullptr) {
         result.previous_playback_tick = result.playback_tick;
         result.previous_audio_playing = true;
+        return result;
+    }
+
+    if (context.loop_enabled && context.loop_end_tick > context.loop_start_tick &&
+        context.previous_playback_tick < context.loop_end_tick && result.playback_tick >= context.loop_end_tick) {
+        for (const note_data& note : context.state->data().notes) {
+            if (note.tick > context.previous_playback_tick && note.tick <= context.loop_end_tick) {
+                ++result.hitsound_count;
+                result.hitsound_requests.push_back(hitsound_request_for_note(note));
+            }
+        }
+        result.seek_bgm_seconds = context.state->engine().tick_to_ms(context.loop_start_tick) / 1000.0;
+        result.playback_tick = context.loop_start_tick;
+        result.previous_playback_tick = context.loop_start_tick;
+        result.previous_audio_playing = true;
+        result.loop_seeked = true;
         return result;
     }
 

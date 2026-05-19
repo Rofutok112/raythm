@@ -42,6 +42,7 @@ editor_timing_panel_update_result editor_panel_controller::update_timing_panel(
     result.request_delete_selected_scroll = actions.panel_result.delete_selected_scroll;
     result.request_apply_selected = actions.panel_result.apply_selected;
     result.request_apply_selected_scroll = actions.panel_result.apply_selected_scroll;
+    result.request_cycle_selected_scroll_curve = actions.panel_result.cycle_selected_scroll_curve;
 
     if (actions.panel_result.selected_event_index.has_value() ||
         actions.panel_result.selected_scroll_event_index.has_value() ||

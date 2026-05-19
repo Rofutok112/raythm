@@ -2,8 +2,11 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <vector>
 
+#include "chart_difficulty.h"
 #include "editor/editor_state.h"
+#include "editor/service/editor_note_placement_rules.h"
 
 namespace {
 bool nearly_equal(double left, double right) {
@@ -39,6 +42,10 @@ int main() {
         std::cerr << "freshly loaded state should not be dirty\n";
         return EXIT_FAILURE;
     }
+    if (!nearly_equal(state.data().meta.level, chart_difficulty::calculate_level(state.data()))) {
+        std::cerr << "loaded state should refresh auto level without becoming dirty\n";
+        return EXIT_FAILURE;
+    }
 
     if (!nearly_equal(state.engine().tick_to_ms(480), 524.0)) {
         std::cerr << "initial timing engine state is invalid\n";
@@ -47,6 +54,17 @@ int main() {
 
     if (state.snap_tick(119, 16) != 120 || state.snap_tick(421, 8) != 480) {
         std::cerr << "snap_tick did not round to the expected grid\n";
+        return EXIT_FAILURE;
+    }
+
+    chart_meta unchanged_meta = state.data().meta;
+    if (!state.modify_metadata(unchanged_meta) || state.is_dirty() || state.can_undo()) {
+        std::cerr << "unchanged metadata should not create history or dirty state\n";
+        return EXIT_FAILURE;
+    }
+
+    if (!state.modify_note(0, state.data().notes[0]) || state.is_dirty() || state.can_undo()) {
+        std::cerr << "unchanged note should not create history or dirty state\n";
         return EXIT_FAILURE;
     }
 
@@ -65,9 +83,35 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    chart_data stay_chart = make_chart();
+    note_data base_stay{note_type::stay, 360, 1, 360};
+    base_stay.lane_width = 2;
+    stay_chart.notes.push_back(base_stay);
+    editor_state stay_state(stay_chart, "assets/charts/editor_state_stay.rchart");
+    note_data stacked_stay{note_type::stay, 360, 2, 360};
+    note_data clear_stay{note_type::stay, 480, 2, 480};
+    note_data same_tick_tap{note_type::tap, 360, 2, 360};
+    if (stay_state.has_note_overlap(stacked_stay) ||
+        !editor::note_placement_rules::has_stay_stack(stay_state.data(), stacked_stay) ||
+        editor::note_placement_rules::has_stay_stack(stay_state.data(), clear_stay) ||
+        editor::note_placement_rules::has_stay_stack(stay_state.data(), same_tick_tap)) {
+        std::cerr << "Stay stack placement rule should be editor-only and Stay-specific\n";
+        return EXIT_FAILURE;
+    }
+
     state.add_note({note_type::tap, 240, 1, 240});
     if (state.data().notes.size() != 3 || !state.can_undo() || state.can_redo() || !state.is_dirty()) {
         std::cerr << "add_note did not update history correctly\n";
+        return EXIT_FAILURE;
+    }
+    if (!state.level_needs_refresh()) {
+        std::cerr << "add_note should mark auto level dirty\n";
+        return EXIT_FAILURE;
+    }
+    state.refresh_auto_level();
+    if (state.level_needs_refresh() ||
+        !nearly_equal(state.data().meta.level, chart_difficulty::calculate_level(state.data()))) {
+        std::cerr << "refresh_auto_level should update pending auto level\n";
         return EXIT_FAILURE;
     }
 
@@ -120,10 +164,11 @@ int main() {
         std::cerr << "modify_metadata should succeed\n";
         return EXIT_FAILURE;
     }
-    if (state.data().meta.resolution != 960 || state.data().meta.level != 7 || state.data().meta.offset != -12) {
+    if (state.data().meta.resolution != 960 || state.data().meta.offset != -12 || !state.level_needs_refresh()) {
         std::cerr << "modify_metadata did not update metadata\n";
         return EXIT_FAILURE;
     }
+    state.refresh_auto_level();
 
     if (!nearly_equal(state.engine().tick_to_ms(480), 188.0)) {
         std::cerr << "timing engine was not rebuilt after metadata change\n";
@@ -193,6 +238,44 @@ int main() {
         std::cerr << "state should return to clean after undoing back to the saved point\n";
         return EXIT_FAILURE;
     }
+
+    std::vector<note_data> batch_notes = {
+        {note_type::tap, 960, 0, 960},
+        {note_type::tap, 1080, 1, 1080},
+    };
+    state.add_notes(batch_notes);
+    if (state.data().notes.size() != 4 || !state.is_dirty()) {
+        std::cerr << "add_notes should append notes as one edit\n";
+        return EXIT_FAILURE;
+    }
+    if (!state.undo() || state.data().notes.size() != 2 || state.is_dirty()) {
+        std::cerr << "undo should revert add_notes as one edit\n";
+        return EXIT_FAILURE;
+    }
+    if (!state.redo() || state.data().notes.size() != 4) {
+        std::cerr << "redo should restore add_notes\n";
+        return EXIT_FAILURE;
+    }
+    if (!state.remove_notes({2, 3}) || state.data().notes.size() != 2) {
+        std::cerr << "remove_notes should remove a selected batch\n";
+        return EXIT_FAILURE;
+    }
+    if (!state.undo() || state.data().notes.size() != 4) {
+        std::cerr << "undo should restore removed batch notes\n";
+        return EXIT_FAILURE;
+    }
+    if (!state.modify_notes({{2, {note_type::tap, 1200, 0, 1200}},
+                             {3, {note_type::tap, 1320, 1, 1320}}}) ||
+        state.data().notes[2].tick != 1200 || state.data().notes[3].tick != 1320) {
+        std::cerr << "modify_notes should update a selected batch\n";
+        return EXIT_FAILURE;
+    }
+    if (state.modify_notes({{2, {note_type::tap, 1200, 0, 1200}},
+                            {2, {note_type::tap, 1320, 1, 1320}}})) {
+        std::cerr << "modify_notes should reject duplicate indices\n";
+        return EXIT_FAILURE;
+    }
+    state.mark_saved("assets/charts/editor_state_saved.rchart");
 
     state.add_note({note_type::tap, 840, 1, 840});
     if (state.can_redo()) {

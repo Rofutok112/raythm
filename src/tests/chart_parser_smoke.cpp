@@ -250,7 +250,8 @@ bool expect_scroll_events_success() {
 
     const chart_parse_result result = chart_parser::parse(path.string());
     std::filesystem::remove(path);
-    if (!result.success || !result.data.has_value() || result.data->scroll_events.size() != 3) {
+    if (!result.success || !result.data.has_value() || result.data->scroll_events.size() != 3 ||
+        result.data->scroll_automation.size() != 5) {
         std::cerr << "Expected scroll events to parse\n";
         return false;
     }
@@ -258,7 +259,45 @@ bool expect_scroll_events_success() {
            result.data->scroll_events[0].duration == 960 &&
            result.data->scroll_events[0].multiplier == 2.0f &&
            result.data->scroll_events[1].type == scroll_event_type::stop &&
-           result.data->scroll_events[2].type == scroll_event_type::stop;
+           result.data->scroll_events[2].type == scroll_event_type::stop &&
+           result.data->scroll_automation[0].tick == 480 &&
+           result.data->scroll_automation[0].multiplier == 2.0f &&
+           result.data->scroll_automation[1].tick == 1440 &&
+           result.data->scroll_automation[1].multiplier == 0.0f;
+}
+
+bool expect_scroll_automation_success() {
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "raythm_parser_scroll_automation.rchart";
+    std::ofstream output(path, std::ios::trunc);
+    output << "[Metadata]\n"
+           << "chartId=parser-scroll-automation\n"
+           << "keyCount=4\n"
+           << "difficulty=Scroll Automation\n"
+           << "chartAuthor=Codex\n"
+           << "formatVersion=4\n"
+           << "resolution=480\n"
+           << "offset=0\n\n"
+           << "[Timing]\n"
+           << "bpm,0,120\n"
+           << "meter,0,4/4\n\n"
+           << "[ScrollAutomation]\n"
+           << "point,0,1.0,hold\n"
+           << "point,960,2.0,linear\n"
+           << "point,1440,0.5,easeInOut\n\n"
+           << "[Notes]\n"
+           << "tap,0,0\n";
+    output.close();
+
+    const chart_parse_result result = chart_parser::parse(path.string());
+    std::filesystem::remove(path);
+    if (!result.success || !result.data.has_value() || result.data->scroll_automation.size() != 3) {
+        std::cerr << "Expected scroll automation to parse\n";
+        return false;
+    }
+    return result.data->scroll_events.empty() &&
+           result.data->scroll_automation[1].curve_to_next == scroll_automation_curve::linear &&
+           result.data->scroll_automation[2].curve_to_next == scroll_automation_curve::ease_in_out;
 }
 
 bool expect_scroll_event_validation_failure() {
@@ -306,6 +345,7 @@ int main() {
     ok = expect_wide_note_success() && ok;
     ok = expect_wide_note_bounds_failure() && ok;
     ok = expect_scroll_events_success() && ok;
+    ok = expect_scroll_automation_success() && ok;
     ok = expect_scroll_event_validation_failure() && ok;
 
     if (!ok) {

@@ -42,25 +42,38 @@ void editor_timeline_presenter::draw(const editor_timeline_presenter_model& mode
         scroll_events.push_back({event.type, event.tick, event.duration, event.multiplier});
     }
 
-    std::optional<editor_timeline_note> preview_note;
-    if (model.preview_note.has_value()) {
-        preview_note = make_timeline_note(*model.preview_note);
+    std::vector<editor_timeline_scroll_automation_point> scroll_automation;
+    scroll_automation.reserve(model.state.data().scroll_automation.size());
+    for (const scroll_automation_point& point : model.state.data().scroll_automation) {
+        scroll_automation.push_back({point.tick, point.multiplier, point.curve_to_next});
+    }
+
+    std::vector<editor_timeline_note> preview_notes;
+    preview_notes.reserve(model.preview_notes.size());
+    for (const note_data& note : model.preview_notes) {
+        preview_notes.push_back(make_timeline_note(note));
     }
 
     editor_timeline_view::draw({
         metrics,
         model.meter_map.visible_grid_lines(min_tick, max_tick),
         std::move(scroll_events),
+        std::move(scroll_automation),
         std::move(notes),
-        model.selected_note_index,
+        model.selected_note_indices,
         model.selected_scroll_event_index,
         model.audio_loaded ? std::optional<int>(model.playback_tick) : std::nullopt,
+        model.loop_enabled,
+        model.loop_start_tick,
+        model.loop_end_tick,
         model.waveform_summary,
         &model.state.engine(),
         model.waveform_visible,
         model.waveform_offset_ms,
-        preview_note,
+        std::move(preview_notes),
+        model.preview_note_indices,
         model.preview_has_overlap,
+        model.selection_rect,
         min_tick,
         max_tick,
         editor_timeline_viewport::snap_interval(model.viewport),

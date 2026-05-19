@@ -19,10 +19,10 @@ void sync_timing_event_selection(editor_scene_sync_context context) {
             : std::optional<size_t>(context.state.data().timing_events.size() - 1);
     }
     if (context.timing_panel.selected_scroll_event_index.has_value() &&
-        *context.timing_panel.selected_scroll_event_index >= context.state.data().scroll_events.size()) {
-        context.timing_panel.selected_scroll_event_index = context.state.data().scroll_events.empty()
+        *context.timing_panel.selected_scroll_event_index >= context.state.data().scroll_automation.size()) {
+        context.timing_panel.selected_scroll_event_index = context.state.data().scroll_automation.empty()
             ? std::nullopt
-            : std::optional<size_t>(context.state.data().scroll_events.size() - 1);
+            : std::optional<size_t>(context.state.data().scroll_automation.size() - 1);
     }
 }
 
@@ -82,7 +82,7 @@ void load_timing_event_inputs(editor_scene_sync_context context) {
 void load_scroll_event_inputs(editor_scene_sync_context context) {
     sync_timing_event_selection(context);
     if (!context.timing_panel.selected_scroll_event_index.has_value() ||
-        *context.timing_panel.selected_scroll_event_index >= context.state.data().scroll_events.size()) {
+        *context.timing_panel.selected_scroll_event_index >= context.state.data().scroll_automation.size()) {
         clear_scroll_event_inputs(context);
         return;
     }
@@ -91,14 +91,15 @@ void load_scroll_event_inputs(editor_scene_sync_context context) {
     context.timing_panel.inputs.scroll_duration.active = false;
     context.timing_panel.inputs.scroll_multiplier.active = false;
 
-    const scroll_event& event = context.state.data().scroll_events[*context.timing_panel.selected_scroll_event_index];
-    context.timing_panel.inputs.scroll_start_bar.value = context.meter_map.bar_beat_label(event.tick);
-    context.timing_panel.inputs.scroll_duration.value = std::to_string(event.duration);
-    context.timing_panel.inputs.scroll_multiplier.value = TextFormat("%.2f", event.multiplier);
+    const scroll_automation_point& point =
+        context.state.data().scroll_automation[*context.timing_panel.selected_scroll_event_index];
+    context.timing_panel.inputs.scroll_start_bar.value = context.meter_map.bar_beat_label(point.tick);
+    context.timing_panel.inputs.scroll_duration.value.clear();
+    context.timing_panel.inputs.scroll_multiplier.value = TextFormat("%.2f", point.multiplier);
 }
 
 void sync_after_history_change(editor_scene_sync_context context) {
-    context.selected_note_index.reset();
+    context.selected_note_indices.clear();
     sync_timing_event_selection(context);
     sync_metadata_inputs(context);
     context.meter_map.rebuild(context.state.data());
@@ -116,7 +117,7 @@ void sync_after_timing_change(editor_scene_sync_context context) {
 
 void sync_after_metadata_change(editor_scene_sync_context context, bool key_count_changed) {
     if (key_count_changed) {
-        context.selected_note_index.reset();
+        context.selected_note_indices.clear();
     }
 
     context.metadata_panel.error.clear();

@@ -13,6 +13,7 @@
 #include "editor/editor_panel_controller.h"
 #include "editor/editor_scene_sync.h"
 #include "editor/editor_scene_types.h"
+#include "editor/view/editor_right_panel_view.h"
 #include "editor/viewport/editor_timeline_viewport.h"
 #include "raylib.h"
 #include "scene.h"
@@ -31,34 +32,37 @@ public:
     void draw() override;
 
 private:
-    chart_data make_chart_data_for_save() const;
+    chart_data make_chart_data_for_save();
     editor_resume_state build_resume_state() const;
     editor_scene_sync_context make_sync_context();
     editor_timeline_viewport_model viewport_model() const;
     std::optional<note_data> dragged_note() const;
+    std::vector<note_data> dragged_notes() const;
     std::vector<size_t> sorted_timing_event_indices() const;
     editor_timeline_metrics timeline_metrics() const;
+    int timeline_mouse_cursor(Vector2 mouse, const editor_timeline_metrics& metrics) const;
+    void update_mouse_cursor(Vector2 mouse, const editor_timeline_metrics& metrics) const;
     int default_timing_event_tick() const;
     void apply_flow_result(const editor_flow_result& result);
     void rebuild_hit_regions() const;
     void apply_scroll_and_zoom(float dt);
+    void refresh_chart_level_when_idle();
     void select_timing_event(std::optional<size_t> index, bool scroll_into_view);
     void select_scroll_event(std::optional<size_t> index, bool scroll_into_view);
     void scroll_to_tick(int tick);
     bool apply_selected_timing_event();
     bool apply_selected_scroll_event();
+    void cycle_selected_scroll_curve();
     void add_timing_event(timing_event_type type);
     void add_scroll_event(scroll_event_type type);
     void delete_selected_timing_event();
     void delete_selected_scroll_event();
     bool can_delete_selected_timing_event() const;
     bool can_delete_selected_scroll_event() const;
-    void draw_timeline() const;
+    editor_right_panel_view_result draw_timeline();
     bool has_active_metadata_input() const;
     bool apply_metadata_changes(bool clear_notes_for_key_count_change);
     bool apply_chart_offset(int offset_ms);
-    bool persist_song_timing_from_state();
-    bool persist_song_timing_and_offset_from_state();
     std::string generated_chart_id(const std::string& difficulty) const;
     bool has_blocking_modal() const;
 
@@ -80,11 +84,15 @@ private:
     audio_waveform_summary waveform_summary_;
     editor_timeline_viewport_state viewport_;
     bool snap_dropdown_open_ = false;
-    std::optional<size_t> selected_note_index_;
+    std::vector<size_t> selected_note_indices_;
+    std::vector<note_data> clipboard_notes_;
     editor_timeline_note_drag_state timeline_drag_;
     editor_note_palette_selection note_palette_;
     metadata_panel_state metadata_panel_;
     save_dialog_state save_dialog_;
     unsaved_changes_dialog_state unsaved_changes_dialog_;
-    editor_right_panel_tab right_panel_tab_ = editor_right_panel_tab::timing;
+    bool metadata_modal_open_ = false;
+    bool timing_modal_open_ = false;
+    size_t pending_level_refresh_generation_ = 0;
+    double level_refresh_after_time_ = 0.0;
 };

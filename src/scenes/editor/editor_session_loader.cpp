@@ -45,16 +45,6 @@ chart_data make_new_chart_data(const editor_start_request& request) {
     return data;
 }
 
-void apply_song_timing_to_chart(const song_data& song, chart_data& chart) {
-    if (!song.meta.timing_events.empty()) {
-        chart.timing_events = song.meta.timing_events;
-        chart.meta.resolution = 480;
-    }
-    if (song.meta.has_offset) {
-        chart.meta.offset = song.meta.offset;
-    }
-}
-
 void scroll_timing_list_to_bottom(editor_timing_panel_state& timing_panel, size_t count) {
     constexpr float kTimingRowHeight = 30.0f;
     constexpr float kTimingRowGap = 4.0f;
@@ -125,7 +115,12 @@ editor_session_load_result load(const editor_start_request& request) {
     result.waveform_offset_ms = 0;
     result.ticks_per_pixel = request.resume_state.has_value() ? request.resume_state->ticks_per_pixel : 2.0f;
     result.snap_index = request.resume_state.has_value() ? request.resume_state->snap_index : 4;
-    result.selected_note_index = request.resume_state.has_value() ? request.resume_state->selected_note_index : std::nullopt;
+    result.selected_note_indices = request.resume_state.has_value() ? request.resume_state->selected_note_indices : std::vector<size_t>{};
+    result.selected_note_indices.erase(
+        std::remove_if(result.selected_note_indices.begin(), result.selected_note_indices.end(), [&](size_t index) {
+            return index >= result.state->data().notes.size();
+        }),
+        result.selected_note_indices.end());
 
     if (request.resume_state.has_value()) {
         result.chart_path = result.state->file_path().empty()
@@ -136,7 +131,6 @@ editor_session_load_result load(const editor_start_request& request) {
         if (parse_result.success && parse_result.data.has_value()) {
             chart_data loaded_chart = *parse_result.data;
             loaded_chart.meta.song_id = request.song.meta.song_id;
-            apply_song_timing_to_chart(request.song, loaded_chart);
             result.state->load(loaded_chart, *request.chart_path);
             result.chart_path = request.chart_path;
         } else {
@@ -168,7 +162,7 @@ editor_session_load_result load(const editor_start_request& request) {
         result.meter_map,
         result.timing_panel,
         result.metadata_panel,
-        result.selected_note_index,
+        result.selected_note_indices,
     };
     editor_scene_sync::sync_metadata_inputs(sync_context);
     editor_scene_sync::load_timing_event_inputs(sync_context);
@@ -219,6 +213,7 @@ editor_session_load_result load(const editor_start_request& request) {
     result.previous_playback_tick = transport_result.previous_playback_tick;
     result.previous_audio_playing = transport_result.previous_audio_playing;
     result.audio_length_tick = std::max(result.audio_length_tick, transport_result.audio_length_tick);
+    result.state->initialize_default_scroll_automation(result.audio_length_tick);
 
     if (!request.resume_state.has_value()) {
         result.bottom_tick = 0.0f;
