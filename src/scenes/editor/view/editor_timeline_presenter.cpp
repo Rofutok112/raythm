@@ -66,6 +66,7 @@ void editor_timeline_presenter::draw(const editor_timeline_presenter_model& mode
         preview_note,
         model.preview_note_index,
         model.preview_has_overlap,
+        model.selection_rect,
         min_tick,
         max_tick,
         editor_timeline_viewport::snap_interval(model.viewport),

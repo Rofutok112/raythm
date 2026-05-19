@@ -34,7 +34,8 @@ const char* palette_label(note_type type) {
 void draw_palette_button(Rectangle rect, note_type type, const editor_note_palette_selection& selection,
                          editor_left_panel_view_result& result) {
     const auto& t = *g_theme;
-    const bool selected = selection.type == type;
+    const bool selected = selection.active_tool == editor_note_palette_selection::tool::note &&
+        selection.type == type;
     const ui::button_state button = ui::draw_button_colored(
         rect, palette_label(type), 14,
         selected ? t.row_selected : t.row,
@@ -122,7 +123,11 @@ editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_pan
     const float tool_width = (tools_box.width - 24.0f - tool_gap * 2.0f) / 3.0f;
     const float tool_y = tools_box.y + 46.0f;
     draw_tool_chip({tools_box.x + 12.0f, tool_y, tool_width, 26.0f},
-                   "Select", raythm_icons::draw_mouse_pointer, true);
+                   "Select", raythm_icons::draw_mouse_pointer,
+                   model.note_palette.active_tool == editor_note_palette_selection::tool::select);
+    if (ui::is_clicked({tools_box.x + 12.0f, tool_y, tool_width, 26.0f})) {
+        result.selected_tool = editor_note_palette_selection::tool::select;
+    }
     draw_tool_chip({tools_box.x + 12.0f + (tool_width + tool_gap), tool_y, tool_width, 26.0f},
                    "Range", raythm_icons::draw_scan, false);
     draw_tool_chip({tools_box.x + 12.0f + (tool_width + tool_gap) * 2.0f, tool_y, tool_width, 26.0f},
@@ -133,7 +138,7 @@ editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_pan
 
     const Rectangle palette_box = {content.x, tools_box.y + tools_box.height + 12.0f, content.width, 136.0f};
     ui::draw_section(palette_box);
-    ui::draw_text_in_rect("Palette", 22,
+    ui::draw_text_in_rect("Tool", 22,
                           {palette_box.x + 12.0f, palette_box.y + 10.0f, palette_box.width - 24.0f, 28.0f},
                           t.text, ui::text_align::left);
 

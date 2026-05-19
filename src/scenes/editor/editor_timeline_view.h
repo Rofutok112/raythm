@@ -82,6 +82,7 @@ struct editor_timeline_view_model {
     std::optional<editor_timeline_note> preview_note;
     std::optional<size_t> preview_note_index;
     bool preview_has_overlap = false;
+    std::optional<Rectangle> selection_rect;
     int min_tick = 0;
     int max_tick = 0;
     int snap_interval = 1;

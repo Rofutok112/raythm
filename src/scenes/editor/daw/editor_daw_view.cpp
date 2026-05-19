@@ -19,7 +19,6 @@
 namespace {
 namespace layout = editor::layout;
 
-constexpr float kRailWidth = 54.0f;
 constexpr float kPanelInset = 14.0f;
 
 bool accepts_metadata_character(int codepoint, const std::string&) {
@@ -154,31 +153,13 @@ void set_active_timing_input(editor_timing_panel_state& state, editor_timing_inp
     state.inputs.scroll_start_bar.active = false;
 }
 
-void draw_rail_icon(Rectangle rect,
-                    void (*draw_icon)(Rectangle, Color, float),
-                    const char* label,
-                    bool selected) {
-    const auto& t = *g_theme;
-    const ui::row_state state = ui::draw_row(
-        rect,
-        selected ? panel_tint(t.row_selected, t.accent, 0.14f) : with_alpha(t.row, 210),
-        selected ? panel_tint(t.row_active, t.accent, 0.18f) : t.row_hover,
-        selected ? t.accent : t.border_light,
-        selected ? 2.0f : 1.0f);
-    draw_icon(centered_icon_rect({state.visual.x + 7.0f, state.visual.y + 4.0f, 28.0f, 28.0f}, 4.0f),
-              selected ? t.accent : t.text_secondary, 2.5f);
-    ui::draw_text_in_rect(label, 9,
-                          {state.visual.x, state.visual.y + state.visual.height - 14.0f,
-                           state.visual.width, 12.0f},
-                          selected ? t.text : t.text_muted);
-}
-
 void draw_palette_pad(Rectangle rect,
                       note_type type,
                       const editor_note_palette_selection& selection,
                       editor_left_panel_view_result& result) {
     const auto& t = *g_theme;
-    const bool selected = !selection.is_ray && selection.type == type;
+    const bool selected = selection.active_tool == editor_note_palette_selection::tool::note &&
+        !selection.is_ray && selection.type == type;
     const Color tone = type == note_type::hold ? t.success :
         (type == note_type::release ? t.slow :
          (type == note_type::stay ? t.fast : t.accent));
@@ -197,6 +178,34 @@ void draw_palette_pad(Rectangle rect,
                           selected ? t.text : t.text_secondary, ui::text_align::left);
     if (state.clicked) {
         result.selected_note_type = type;
+    }
+}
+
+void draw_select_pad(Rectangle rect,
+                     const editor_note_palette_selection& selection,
+                     editor_left_panel_view_result& result) {
+    const auto& t = *g_theme;
+    const bool selected = selection.active_tool == editor_note_palette_selection::tool::select;
+    const ui::row_state state = ui::draw_row(
+        rect,
+        selected ? panel_tint(t.row_selected, t.accent, 0.18f) : t.row,
+        selected ? panel_tint(t.row_active, t.accent, 0.2f) : t.row_hover,
+        selected ? t.accent : t.border_light,
+        selected ? 2.0f : 1.0f);
+    raythm_icons::draw_mouse_pointer(
+        {state.visual.x + 10.0f, state.visual.y + 9.0f, 20.0f, 20.0f},
+        selected ? t.accent : t.text_secondary,
+        2.4f);
+    ui::draw_text_in_rect("SEL", 14,
+                          {state.visual.x + 38.0f, state.visual.y + 7.0f,
+                           state.visual.width - 48.0f, 19.0f},
+                          selected ? t.text : t.text_secondary, ui::text_align::left);
+    ui::draw_text_in_rect("Range select", 11,
+                          {state.visual.x + 38.0f, state.visual.y + 30.0f,
+                           state.visual.width - 48.0f, 14.0f},
+                          selected ? t.text_secondary : t.text_muted, ui::text_align::left);
+    if (state.clicked) {
+        result.selected_tool = editor_note_palette_selection::tool::select;
     }
 }
 
@@ -285,6 +294,7 @@ editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_m
         preview_note,
         model.preview_note_index,
         model.preview_has_overlap,
+        model.selection_rect,
         min_tick,
         max_tick,
         editor_timeline_viewport::snap_interval(model.viewport),
@@ -600,53 +610,44 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
     const auto& t = *g_theme;
     editor_left_panel_view_result result;
     const Rectangle panel = layout::kLeftPanelRect;
-    const Rectangle rail = {panel.x, panel.y, kRailWidth, panel.height};
-    const Rectangle content = {panel.x + kRailWidth + 10.0f, panel.y + 14.0f,
-                               panel.width - kRailWidth - 24.0f, panel.height - 28.0f};
+    const Rectangle content = {panel.x + kPanelInset, panel.y + kPanelInset,
+                               panel.width - kPanelInset * 2.0f, panel.height - kPanelInset * 2.0f};
     const char* status_label = model.is_dirty ? "MODIFIED" : (model.has_file ? "SAVED" : "UNSAVED");
 
     ui::draw_rect_f(panel, panel_tint(t.panel, t.bg_alt, 0.18f));
     ui::draw_rect_lines(panel, 1.5f, t.border);
-    ui::draw_rect_f(rail, panel_tint(t.section, t.accent, 0.08f));
-    ui::draw_rect_f({rail.x + rail.width - 2.0f, rail.y, 2.0f, rail.height}, t.border_light);
-
-    draw_rail_icon({rail.x + 8.0f, rail.y + 16.0f, 38.0f, 50.0f},
-                   raythm_icons::draw_mouse_pointer, "SEL", true);
-    draw_rail_icon({rail.x + 8.0f, rail.y + 74.0f, 38.0f, 50.0f},
-                   raythm_icons::draw_scan, "RNG", false);
-    draw_rail_icon({rail.x + 8.0f, rail.y + 132.0f, 38.0f, 50.0f},
-                   raythm_icons::draw_layers, "NT", false);
-    draw_rail_icon({rail.x + 8.0f, rail.y + 190.0f, 38.0f, 50.0f},
-                   raythm_icons::draw_repeat_2, "LP", false);
 
     ui::draw_text_in_rect("CHART", 15, row(content, 0.0f, 20.0f), t.text_muted, ui::text_align::left);
     draw_marquee_text(model.song_title, content.x, content.y + 26.0f, 24, t.text, content.width, model.now);
     draw_badge({content.x, content.y + 62.0f, 95.0f, 24.0f}, status_label,
                model.is_dirty ? t.slow : t.success, model.is_dirty ? t.slow : t.success);
 
-    const Rectangle palette = {content.x, content.y + 112.0f, content.width, 252.0f};
+    const Rectangle palette = {content.x, content.y + 112.0f, content.width, 316.0f};
     ui::draw_section(palette);
-    ui::draw_text_in_rect("Note Palette", 22,
+    ui::draw_text_in_rect("Tool", 22,
                           {palette.x + 12.0f, palette.y + 10.0f, palette.width - 24.0f, 24.0f},
                           t.text, ui::text_align::left);
-    ui::draw_text_in_rect("Place notes directly in the arrangement.",
+    ui::draw_text_in_rect("Select, place notes, and toggle ray notes.",
                           13,
                           {palette.x + 12.0f, palette.y + 36.0f, palette.width - 24.0f, 18.0f},
                           t.text_muted, ui::text_align::left);
     const float gap = 8.0f;
     const float pad_width = (palette.width - 32.0f) * 0.5f;
     const float pad_height = 56.0f;
-    draw_palette_pad({palette.x + 12.0f, palette.y + 66.0f, pad_width, pad_height},
+    draw_select_pad({palette.x + 12.0f, palette.y + 66.0f, palette.width - 24.0f, 48.0f},
+                    model.note_palette, result);
+    const float note_row_y = palette.y + 124.0f;
+    draw_palette_pad({palette.x + 12.0f, note_row_y, pad_width, pad_height},
                      note_type::tap, model.note_palette, result);
-    draw_palette_pad({palette.x + 20.0f + pad_width, palette.y + 66.0f, pad_width, pad_height},
+    draw_palette_pad({palette.x + 20.0f + pad_width, note_row_y, pad_width, pad_height},
                      note_type::hold, model.note_palette, result);
-    draw_palette_pad({palette.x + 12.0f, palette.y + 66.0f + pad_height + gap, pad_width, pad_height},
+    draw_palette_pad({palette.x + 12.0f, note_row_y + pad_height + gap, pad_width, pad_height},
                      note_type::release, model.note_palette, result);
-    draw_palette_pad({palette.x + 20.0f + pad_width, palette.y + 66.0f + pad_height + gap, pad_width, pad_height},
+    draw_palette_pad({palette.x + 20.0f + pad_width, note_row_y + pad_height + gap, pad_width, pad_height},
                      note_type::stay, model.note_palette, result);
 
     result.ray_toggled = draw_ray_toggle(
-        {palette.x + 12.0f, palette.y + 66.0f + (pad_height + gap) * 2.0f,
+        {palette.x + 12.0f, note_row_y + (pad_height + gap) * 2.0f,
          palette.width - 24.0f, 32.0f},
         model.note_palette.is_ray);
 
@@ -655,7 +656,9 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
     ui::draw_text_in_rect("Edit Focus", 20, {ops.x + 12.0f, ops.y + 10.0f, ops.width - 24.0f, 24.0f},
                           t.text, ui::text_align::left);
     ui::draw_label_value({ops.x + 12.0f, ops.y + 50.0f, ops.width - 24.0f, 22.0f},
-                         "Edit Target", palette_label(model.note_palette.type),
+                         "Edit Target", model.note_palette.active_tool == editor_note_palette_selection::tool::select
+                             ? "Select"
+                             : palette_label(model.note_palette.type),
                          14, t.text_muted, t.text_secondary, 78.0f);
     ui::draw_label_value({ops.x + 12.0f, ops.y + 82.0f, ops.width - 24.0f, 22.0f},
                          "Ray", model.note_palette.is_ray ? "On" : "Off",
@@ -1015,6 +1018,12 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
         if (model.preview_note.has_value()) {
             const editor_timeline_note_draw_info info = model.metrics.note_rects(*model.preview_note);
             draw_note_block(*model.preview_note, info, true, true, model.preview_has_overlap);
+        }
+
+        if (model.selection_rect.has_value()) {
+            const Rectangle rect = *model.selection_rect;
+            ui::draw_rect_f(rect, with_alpha(t.accent, 32));
+            ui::draw_rect_lines(rect, 1.5f, with_alpha(t.accent, 220));
         }
 
         if (model.playback_tick.has_value()) {

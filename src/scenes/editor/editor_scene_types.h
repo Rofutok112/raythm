@@ -56,8 +56,14 @@ struct editor_timeline_note_drag_state {
 };
 
 struct editor_note_palette_selection {
+    enum class tool {
+        select,
+        note,
+    };
+
     note_type type = note_type::tap;
     bool is_ray = false;
+    tool active_tool = tool::note;
 };
 
 enum class editor_right_panel_tab {

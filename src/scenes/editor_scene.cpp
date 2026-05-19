@@ -1,6 +1,7 @@
 #include "editor_scene.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <memory>
 
@@ -299,10 +300,15 @@ void editor_scene::draw() {
         load_errors_.empty() ? nullptr : &load_errors_.front(),
         now,
     });
+    if (left_panel.selected_tool.has_value()) {
+        note_palette_.active_tool = *left_panel.selected_tool;
+    }
     if (left_panel.selected_note_type.has_value()) {
+        note_palette_.active_tool = editor_note_palette_selection::tool::note;
         note_palette_.type = *left_panel.selected_note_type;
     }
     if (left_panel.ray_toggled) {
+        note_palette_.active_tool = editor_note_palette_selection::tool::note;
         note_palette_.is_ray = !note_palette_.is_ray;
     }
     const editor_metadata_panel_result metadata_panel_result = editor_panel_controller::update_metadata_panel(
@@ -865,6 +871,15 @@ void editor_scene::draw_timeline() const {
     const bool preview_has_overlap = preview_note.has_value() &&
         (state_->has_note_overlap(*preview_note, preview_ignore_index) ||
          editor::note_placement_rules::has_stay_stack(state_->data(), *preview_note, preview_ignore_index));
+    std::optional<Rectangle> selection_rect;
+    if (timeline_drag_.active && timeline_drag_.mode == editor_timeline_drag_mode::range_select) {
+        selection_rect = {
+            std::min(timeline_drag_.start_mouse.x, timeline_drag_.current_mouse.x),
+            std::min(timeline_drag_.start_mouse.y, timeline_drag_.current_mouse.y),
+            std::fabs(timeline_drag_.current_mouse.x - timeline_drag_.start_mouse.x),
+            std::fabs(timeline_drag_.current_mouse.y - timeline_drag_.start_mouse.y)
+        };
+    }
     editor::daw::draw_timeline({
         *state_,
         meter_map_,
@@ -882,6 +897,7 @@ void editor_scene::draw_timeline() const {
         preview_note,
         preview_ignore_index,
         preview_has_overlap,
+        selection_rect,
         viewport_model(),
     });
 }

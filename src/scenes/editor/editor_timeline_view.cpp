@@ -439,6 +439,11 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             }
         }
 
+        if (model.selection_rect.has_value()) {
+            ui::draw_rect_f(*model.selection_rect, with_alpha(t.accent, 32));
+            ui::draw_rect_lines(*model.selection_rect, 1.5f, with_alpha(t.accent, 220));
+        }
+
         if (model.playback_tick.has_value()) {
             const float y = model.metrics.tick_to_y(*model.playback_tick);
             ui::draw_line_f(content.x, y, content.x + content.width, y, with_alpha(t.accent, 240));

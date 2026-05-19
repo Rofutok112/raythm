@@ -433,7 +433,9 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             return result;
         }
 
-        if (context.shift_down) {
+        const bool range_select_tool =
+            context.shift_down || context.palette.active_tool == editor_note_palette_selection::tool::select;
+        if (range_select_tool) {
             result.drag_state.active = true;
             result.drag_state.mode = editor_timeline_drag_mode::range_select;
             result.drag_state.start_mouse = context.mouse;

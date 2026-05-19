@@ -315,6 +315,39 @@ int main() {
     }
 
     {
+        chart_data selection_chart = make_chart();
+        selection_chart.notes = {
+            {note_type::tap, 480, 1, 480},
+            {note_type::tap, 960, 2, 960},
+        };
+        selection_chart.scroll_events.clear();
+        const auto selection_state = std::make_shared<editor_state>(selection_chart, "");
+        editor_meter_map selection_meter_map;
+        selection_meter_map.rebuild(selection_state->data());
+        editor_timing_panel_state timing_panel;
+        const editor_timeline_metrics metrics = make_metrics();
+        const Rectangle lane0_rect = metrics.lane_rect(0);
+        const Rectangle lane2_rect = metrics.lane_rect(2);
+        editor_note_palette_selection select_tool;
+        select_tool.active_tool = editor_note_palette_selection::tool::select;
+        editor_timeline_result start = editor_timeline_controller::update(
+            timing_panel,
+            {selection_state.get(), &selection_meter_map, metrics,
+             {lane0_rect.x + lane0_rect.width * 0.5f, metrics.tick_to_y(240)}, true,
+             true, false, false, false, false, false, 8, std::nullopt, {}, select_tool});
+        editor_timeline_result finish = editor_timeline_controller::update(
+            timing_panel,
+            {selection_state.get(), &selection_meter_map, metrics,
+             {lane2_rect.x + lane2_rect.width * 0.5f, metrics.tick_to_y(720)}, true,
+             false, true, true, false, false, false, 8, std::nullopt, start.drag_state, select_tool});
+        if (finish.note_to_add.has_value() || finish.selected_note_indices.size() != 1 ||
+            finish.selected_note_indices.front() != 0) {
+            std::cerr << "select tool drag should range-select notes instead of creating a note\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
         editor_timing_panel_state timing_panel;
         const editor_timeline_metrics metrics = make_metrics();
         const Rectangle lane_rect = metrics.lane_rect(3);
