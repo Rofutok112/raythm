@@ -390,6 +390,10 @@ void editor_scene::draw() {
         viewport_.snap_index,
         snap_dropdown_open_,
     }, snap_dropdown_menu_rect());
+    if (header_result.restart_requested) {
+        editor_transport_service::seek_to_tick(transport_, state_.get(), 0, hitsound_path_, &hitsounds_);
+        scroll_to_tick(0);
+    }
     if (header_result.playback_toggled) {
         const std::optional<int> restore_scroll_tick = editor_transport_service::toggle_playback(
             transport_, state_.get(), space_playback_start_tick_, hitsound_path_, &hitsounds_);

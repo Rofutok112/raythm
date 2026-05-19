@@ -79,6 +79,10 @@ Rectangle centered_icon_rect(Rectangle rect, float inset) {
     return {rect.x + inset, rect.y + inset, rect.width - inset * 2.0f, rect.height - inset * 2.0f};
 }
 
+Vector2 rect_center(Rectangle rect) {
+    return {rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
+}
+
 ui::button_state draw_icon_button(Rectangle rect,
                                   void (*draw_icon)(Rectangle, Color, float),
                                   bool active,
@@ -90,7 +94,7 @@ ui::button_state draw_icon_button(Rectangle rect,
         active ? panel_tint(t.row_active, active_color, 0.18f) : t.row_hover,
         active ? t.text : t.text_secondary,
         active ? 2.2f : 1.2f);
-    draw_icon(centered_icon_rect(rect, 12.0f), active ? active_color : t.text_secondary, 2.8f);
+    draw_icon(centered_icon_rect(rect, 9.0f), active ? active_color : t.text_secondary, 3.2f);
     return button;
 }
 
@@ -342,6 +346,30 @@ void draw_note_block(const editor_timeline_note& note,
 
     ui::draw_rect_f(info.head_rect, fill);
     ui::draw_rect_lines(info.head_rect, selected ? 2.4f : 1.2f, outline);
+
+    const Color marker = note.is_ray ? WHITE : t.bg;
+    const Color marker_outline = note.is_ray ? with_alpha(t.bg, 220) : with_alpha(WHITE, 160);
+    const Rectangle marker_rect = ui::inset(info.head_rect, 5.0f);
+    const Vector2 center = rect_center(marker_rect);
+    if (note.type == editor_timeline_note_type::stay) {
+        const float radius = std::max(3.0f, std::min(marker_rect.width, marker_rect.height) * 0.28f);
+        const Rectangle bar = {marker_rect.x, center.y - 1.4f, marker_rect.width, 2.8f};
+        DrawRectangleRounded(bar, 0.7f, 4, marker);
+        DrawCircleV(center, radius, marker);
+        DrawCircleLines(static_cast<int>(std::lround(center.x)), static_cast<int>(std::lround(center.y)),
+                        radius, marker_outline);
+    } else if (note.type == editor_timeline_note_type::release) {
+        const float half_width = std::max(4.0f, marker_rect.width * 0.34f);
+        const float tip_y = marker_rect.y + 2.0f;
+        const float wing_y = marker_rect.y + marker_rect.height * 0.5f;
+        DrawTriangle({center.x, tip_y},
+                     {center.x - half_width, wing_y},
+                     {center.x + half_width, wing_y},
+                     marker);
+        const Rectangle stem = {center.x - 2.0f, wing_y - 1.0f, 4.0f,
+                                std::max(4.0f, marker_rect.y + marker_rect.height - wing_y)};
+        DrawRectangleRounded(stem, 0.4f, 4, marker);
+    }
 }
 
 float minimap_y_for_tick(const editor_timeline_view_model& model, Rectangle minimap, int tick) {
@@ -699,14 +727,18 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
     result.timing_modal_requested = ui::draw_button_colored(
         timing_button, "TIMING", 13, t.row, t.row_hover, t.text_secondary, 1.2f).clicked;
 
-    const Rectangle transport = {bar.x + bar.width * 0.5f - 56.0f, content.y + 1.0f, 112.0f, 50.0f};
+    const Rectangle transport = {bar.x + bar.width * 0.5f - 78.0f, content.y + 1.0f, 156.0f, 50.0f};
     ui::draw_section(transport);
-    const Rectangle play_rect = {transport.x + 10.0f, transport.y + 5.0f, 40.0f, 40.0f};
+    const Rectangle restart_rect = {transport.x + 10.0f, transport.y + 4.0f, 42.0f, 42.0f};
+    const ui::button_state restart_button =
+        draw_icon_button(restart_rect, raythm_icons::draw_skip_back, false, t.text);
+    result.restart_requested = restart_button.clicked;
+    const Rectangle play_rect = {restart_rect.x + restart_rect.width + 8.0f, restart_rect.y, 42.0f, 42.0f};
     const ui::button_state play_button = model.audio_playing
         ? draw_icon_button(play_rect, raythm_icons::draw_pause, true, t.accent)
         : draw_icon_button(play_rect, raythm_icons::draw_play, false, t.text);
     result.playback_toggled = play_button.clicked;
-    const Rectangle loop_button_rect = {play_rect.x + play_rect.width + 8.0f, play_rect.y, 40.0f, 40.0f};
+    const Rectangle loop_button_rect = {play_rect.x + play_rect.width + 8.0f, play_rect.y, 42.0f, 42.0f};
     const ui::button_state loop_button = draw_icon_button(loop_button_rect, raythm_icons::draw_repeat_2,
                                                           model.loop_enabled, t.success);
     result.loop_toggled = loop_button.clicked;

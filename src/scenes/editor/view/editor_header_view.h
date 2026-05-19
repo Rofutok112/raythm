@@ -18,6 +18,7 @@ struct editor_header_view_model {
 };
 
 struct editor_header_view_result {
+    bool restart_requested = false;
     bool playback_toggled = false;
     bool loop_toggled = false;
     bool metadata_modal_requested = false;
