@@ -343,6 +343,68 @@ void draw_note_block(const editor_timeline_note& note,
     ui::draw_rect_lines(info.head_rect, selected ? 2.4f : 1.2f, outline);
 }
 
+float minimap_y_for_tick(const editor_timeline_view_model& model, Rectangle minimap, int tick) {
+    const float full_tick_span = std::max(1.0f, model.content_height_pixels * model.metrics.ticks_per_pixel);
+    const float max_bottom_tick = model.metrics.bottom_tick +
+        model.scroll_offset_pixels * model.metrics.ticks_per_pixel;
+    const float min_bottom_tick = max_bottom_tick -
+        std::max(0.0f, model.content_height_pixels - model.metrics.content_rect().height) *
+            model.metrics.ticks_per_pixel;
+    const float ratio = std::clamp((static_cast<float>(tick) - min_bottom_tick) / full_tick_span, 0.0f, 1.0f);
+    return minimap.y + minimap.height - ratio * minimap.height;
+}
+
+void draw_chart_minimap(const editor_timeline_view_model& model, Rectangle minimap, Rectangle viewport_box) {
+    const auto& t = *g_theme;
+    ui::draw_rect_f(minimap, with_alpha(t.section, 235));
+    ui::draw_rect_lines(minimap, 1.0f, t.border_light);
+
+    const Rectangle inner = ui::inset(minimap, 4.0f);
+    {
+        ui::scoped_clip_rect clip_scope(inner);
+        for (const editor_timeline_note& note : model.notes) {
+            if (note.lane < 0 || note.lane >= model.metrics.key_count) {
+                continue;
+            }
+            const float y = minimap_y_for_tick(model, inner, note.tick);
+            const float lane_width = inner.width / static_cast<float>(std::max(1, model.metrics.key_count));
+            const float x = inner.x + lane_width * static_cast<float>(note.lane);
+            const float width = lane_width * static_cast<float>(std::max(1, note.lane_width));
+            const Color color = note.is_ray ? Color{174, 96, 255, 255} : WHITE;
+            if (note.type == editor_timeline_note_type::hold && note.end_tick > note.tick) {
+                const float end_y = minimap_y_for_tick(model, inner, note.end_tick);
+                const Rectangle body = {x + width * 0.35f, std::min(y, end_y), std::max(2.0f, width * 0.3f),
+                                        std::max(2.0f, std::fabs(end_y - y))};
+                ui::draw_rect_f(body, with_alpha(color, note.is_ray ? 165 : 115));
+            }
+            ui::draw_rect_f({x + 1.0f, y - 1.5f, std::max(2.0f, width - 2.0f), 3.0f},
+                            with_alpha(color, note.is_ray ? 235 : 170));
+        }
+
+        for (const editor_timeline_scroll_event& event : model.scroll_events) {
+            if (event.duration <= 0) {
+                continue;
+            }
+            const float start_y = minimap_y_for_tick(model, inner, event.tick);
+            const float end_y = minimap_y_for_tick(model, inner, event.tick + event.duration);
+            const Color color = event.type == scroll_event_type::speed ? t.fast : t.error;
+            ui::draw_rect_f({inner.x, std::min(start_y, end_y), inner.width,
+                             std::max(2.0f, std::fabs(end_y - start_y))},
+                            with_alpha(color, 70));
+        }
+    }
+
+    const Rectangle clipped_box = {
+        viewport_box.x,
+        std::clamp(viewport_box.y, minimap.y, minimap.y + minimap.height),
+        viewport_box.width,
+        std::min(viewport_box.height,
+                 minimap.y + minimap.height - std::clamp(viewport_box.y, minimap.y, minimap.y + minimap.height))
+    };
+    ui::draw_rect_f(clipped_box, with_alpha(t.accent, 36));
+    ui::draw_rect_lines(clipped_box, 2.0f, with_alpha(t.accent, 220));
+}
+
 }  // namespace
 
 namespace editor::daw {
@@ -718,7 +780,8 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
                model.loop_enabled ? t.success : t.text_secondary);
 
     const Rectangle arrange = {content.x, content.y + 62.0f, content.width, content.height - 62.0f};
-    const Rectangle ruler = track;
+    const Rectangle minimap = track;
+    const Rectangle ruler = {track.x + track.width + 8.0f, arrange.y, 60.0f, arrange.height};
     const Rectangle ruler_labels = {ruler.x, arrange.y, ruler.width, arrange.height};
     {
         ui::scoped_clip_rect clip_scope(arrange);
@@ -809,6 +872,15 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
         }
     }
 
+    const float viewport_ratio = model.content_height_pixels <= 1.0f
+        ? 1.0f
+        : std::clamp(content.height / model.content_height_pixels, 0.06f, 1.0f);
+    const float viewport_height = std::max(36.0f, minimap.height * viewport_ratio);
+    const float max_scroll = std::max(1.0f, model.content_height_pixels - content.height);
+    const float viewport_y = minimap.y + (minimap.height - viewport_height) *
+        std::clamp(model.scroll_offset_pixels / max_scroll, 0.0f, 1.0f);
+    draw_chart_minimap(model, minimap, {minimap.x + 3.0f, viewport_y, minimap.width - 6.0f, viewport_height});
+
     ui::draw_rect_f(ruler, with_alpha(t.section, 235));
     ui::draw_rect_lines(ruler, 1.0f, t.border_light);
     ui::draw_text_in_rect("BAR", 11, {ruler.x, ruler.y + 8.0f, ruler.width, 16.0f},
@@ -825,17 +897,6 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
         ui::draw_rect_f(tag, with_alpha(t.panel, 225));
         ui::draw_rect_lines(tag, 1.0f, with_alpha(t.border_light, 190));
         ui::draw_text_in_rect(TextFormat("%d:%d", line.measure, line.beat), 12, tag, t.text_secondary);
-    }
-
-    if (model.content_height_pixels > 1.0f) {
-        const float thumb_ratio = std::clamp(content.height / model.content_height_pixels, 0.06f, 1.0f);
-        const float thumb_height = std::max(36.0f, track.height * thumb_ratio);
-        const float max_scroll = std::max(1.0f, model.content_height_pixels - content.height);
-        const float thumb_y = track.y + (track.height - thumb_height) *
-            std::clamp(model.scroll_offset_pixels / max_scroll, 0.0f, 1.0f);
-        const Rectangle viewport_box = {track.x + 4.0f, thumb_y, track.width - 8.0f, thumb_height};
-        ui::draw_rect_f(viewport_box, with_alpha(t.accent, 38));
-        ui::draw_rect_lines(viewport_box, 2.0f, with_alpha(t.accent, 210));
     }
 }
 
