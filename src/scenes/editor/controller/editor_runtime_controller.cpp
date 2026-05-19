@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "editor/editor_timeline_controller.h"
+#include "editor/service/editor_note_placement_rules.h"
 #include "editor/service/editor_transport_service.h"
 
 namespace {
@@ -110,7 +111,9 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
             ? notes_for_indices(context.state, selection)
             : context.clipboard_notes;
         notes = shifted_notes(std::move(notes), context.state.data().meta.resolution);
-        if (!notes.empty() && !context.state.has_note_overlap(notes)) {
+        if (!notes.empty() &&
+            !context.state.has_note_overlap(notes) &&
+            !editor::note_placement_rules::has_stay_stack(context.state.data(), notes)) {
             const size_t added_count = notes.size();
             context.state.add_notes(std::move(notes));
             select_appended_notes(context.state, added_count, context.selected_note_index, context.selected_note_indices);
@@ -227,7 +230,8 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
         }
     }
 
-    if (timeline_result.note_to_add.has_value()) {
+    if (timeline_result.note_to_add.has_value() &&
+        !editor::note_placement_rules::has_stay_stack(context.state.data(), *timeline_result.note_to_add)) {
         context.state.add_note(*timeline_result.note_to_add);
         context.selected_note_index = context.state.data().notes.empty()
             ? std::nullopt
@@ -237,7 +241,9 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
             : std::vector<size_t>{};
     }
 
-    if (timeline_result.note_to_modify_index.has_value() && timeline_result.note_to_modify.has_value()) {
+    if (timeline_result.note_to_modify_index.has_value() && timeline_result.note_to_modify.has_value() &&
+        !editor::note_placement_rules::has_stay_stack(
+            context.state.data(), *timeline_result.note_to_modify, timeline_result.note_to_modify_index)) {
         if (context.state.modify_note(*timeline_result.note_to_modify_index, *timeline_result.note_to_modify)) {
             context.selected_note_index = timeline_result.note_to_modify_index;
             context.selected_note_indices = context.selected_note_index.has_value()
@@ -256,6 +262,7 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
             updated_notes.push_back(update.second);
         }
         if (!context.state.has_note_overlap(updated_notes, ignore_indices) &&
+            !editor::note_placement_rules::has_stay_stack(context.state.data(), updated_notes, ignore_indices) &&
             context.state.modify_notes(timeline_result.notes_to_modify)) {
             context.selected_note_indices = timeline_result.selected_note_indices;
             context.selected_note_index = timeline_result.selected_note_index;

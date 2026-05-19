@@ -10,6 +10,7 @@
 #include "editor/editor_flow_controller.h"
 #include "editor/service/editor_chart_identity_service.h"
 #include "editor/service/editor_metadata_service.h"
+#include "editor/service/editor_note_placement_rules.h"
 #include "editor/service/editor_transport_service.h"
 #include "editor/service/editor_timing_edit_service.h"
 #include "editor/service/editor_timing_selection_service.h"
@@ -861,6 +862,9 @@ void editor_scene::draw_timeline() const {
         timeline_drag_.active && timeline_drag_.mode != editor_timeline_drag_mode::create
             ? timeline_drag_.note_index
             : std::nullopt;
+    const bool preview_has_overlap = preview_note.has_value() &&
+        (state_->has_note_overlap(*preview_note, preview_ignore_index) ||
+         editor::note_placement_rules::has_stay_stack(state_->data(), *preview_note, preview_ignore_index));
     editor::daw::draw_timeline({
         *state_,
         meter_map_,
@@ -877,7 +881,7 @@ void editor_scene::draw_timeline() const {
         timing_panel_.selected_scroll_event_index,
         preview_note,
         preview_ignore_index,
-        preview_note.has_value() && state_->has_note_overlap(*preview_note, preview_ignore_index),
+        preview_has_overlap,
         viewport_model(),
     });
 }

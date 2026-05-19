@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "editor/editor_state.h"
+#include "editor/service/editor_note_placement_rules.h"
 
 namespace {
 bool nearly_equal(double left, double right) {
@@ -74,6 +75,22 @@ int main() {
     wide_clear.lane_width = 2;
     if (!state.has_note_overlap(wide_overlap) || state.has_note_overlap(wide_clear)) {
         std::cerr << "has_note_overlap should account for wide lane ranges\n";
+        return EXIT_FAILURE;
+    }
+
+    chart_data stay_chart = make_chart();
+    note_data base_stay{note_type::stay, 360, 1, 360};
+    base_stay.lane_width = 2;
+    stay_chart.notes.push_back(base_stay);
+    editor_state stay_state(stay_chart, "assets/charts/editor_state_stay.rchart");
+    note_data stacked_stay{note_type::stay, 360, 2, 360};
+    note_data clear_stay{note_type::stay, 480, 2, 480};
+    note_data same_tick_tap{note_type::tap, 360, 2, 360};
+    if (stay_state.has_note_overlap(stacked_stay) ||
+        !editor::note_placement_rules::has_stay_stack(stay_state.data(), stacked_stay) ||
+        editor::note_placement_rules::has_stay_stack(stay_state.data(), clear_stay) ||
+        editor::note_placement_rules::has_stay_stack(stay_state.data(), same_tick_tap)) {
+        std::cerr << "Stay stack placement rule should be editor-only and Stay-specific\n";
         return EXIT_FAILURE;
     }
 

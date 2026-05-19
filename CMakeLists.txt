@@ -381,6 +381,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/service/editor_chart_identity_service.h
         src/scenes/editor/service/editor_metadata_service.cpp
         src/scenes/editor/service/editor_metadata_service.h
+        src/scenes/editor/service/editor_note_placement_rules.cpp
+        src/scenes/editor/service/editor_note_placement_rules.h
         src/scenes/editor/service/editor_transport_service.cpp
         src/scenes/editor/service/editor_transport_service.h
         src/scenes/editor/service/editor_timing_edit_service.cpp
@@ -551,6 +553,8 @@ add_executable(editor_state_smoke
         src/scenes/editor/editor_meter_map.h
         src/scenes/editor/editor_state.cpp
         src/scenes/editor/editor_state.h
+        src/scenes/editor/service/editor_note_placement_rules.cpp
+        src/scenes/editor/service/editor_note_placement_rules.h
         src/models/data_models.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
