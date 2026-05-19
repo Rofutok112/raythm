@@ -393,6 +393,7 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             result.drag_state.mode = editor_timeline_drag_mode::move_notes;
             result.drag_state.note_index = note_index;
             result.drag_state.note_indices = result.selected_note_indices;
+            result.drag_state.original_note = context.state->data().notes[*note_index];
             result.drag_state.original_notes.clear();
             result.drag_state.original_notes.reserve(result.drag_state.note_indices.size());
             for (const size_t selected : result.drag_state.note_indices) {

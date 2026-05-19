@@ -242,6 +242,12 @@ int main() {
             timing_panel,
             {hold_state.get(), &hold_meter_map, metrics, body_center,
              true, true, false, false, false, false, false, 16, std::optional<size_t>(0), {}});
+        if (start.drag_state.original_note.type != note_type::hold ||
+            start.drag_state.original_note.tick != 480 ||
+            start.drag_state.original_note.end_tick != 720) {
+            std::cerr << "hold move preview should preserve the original hold note\n";
+            return EXIT_FAILURE;
+        }
         editor_timeline_result finish = editor_timeline_controller::update(
             timing_panel,
             {hold_state.get(), &hold_meter_map, metrics,
