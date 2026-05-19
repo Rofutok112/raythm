@@ -25,23 +25,12 @@ std::optional<song_data> load_sample_song() {
     return result.songs.front();
 }
 
-void apply_song_timing_to_chart(const song_data& song, chart_data& chart) {
-    if (!song.meta.timing_events.empty()) {
-        chart.timing_events = song.meta.timing_events;
-        chart.meta.resolution = 480;
-    }
-    if (song.meta.has_offset) {
-        chart.meta.offset = song.meta.offset;
-    }
-}
-
 std::optional<chart_data> load_chart_for_key_count(const song_data& song, int key_count) {
     for (const std::string& chart_path : song.chart_paths) {
         const chart_parse_result parse_result = song_loader::load_chart(chart_path);
         if (parse_result.success && parse_result.data.has_value() &&
             parse_result.data->meta.key_count == key_count) {
             chart_data chart = *parse_result.data;
-            apply_song_timing_to_chart(song, chart);
             if (const std::optional<float> cached_level = chart_level_cache::find_level(chart_path);
                 cached_level.has_value()) {
                 chart.meta.level = *cached_level;
@@ -167,7 +156,6 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     }
 
     state.chart_data->meta.song_id = state.song_data->meta.song_id;
-    apply_song_timing_to_chart(*state.song_data, *state.chart_data);
     state.chart_data = play_chart_filter::prepare_chart_for_playback(*state.chart_data, state.start_tick);
 
     state.input_handler = input_handler(g_settings.keys);

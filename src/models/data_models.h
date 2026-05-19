@@ -142,11 +142,12 @@ struct chart_data {
 };
 
 inline const std::vector<timing_event>& effective_timing_events(const song_data& song, const chart_data& chart) {
-    return song.meta.timing_events.empty() ? chart.timing_events : song.meta.timing_events;
+    return chart.timing_events.empty() ? song.meta.timing_events : chart.timing_events;
 }
 
 inline int effective_author_offset_ms(const song_data& song, const chart_data& chart) {
-    return song.meta.has_offset ? song.meta.offset : chart.meta.offset;
+    (void)song;
+    return chart.meta.offset;
 }
 
 enum class content_status {

@@ -563,17 +563,6 @@ std::pair<float, float> collect_bpm_range(const chart_data& chart) {
                  : std::pair<float, float>{0.0f, 0.0f};
 }
 
-chart_data chart_with_song_timing(const song_data& song, chart_data chart) {
-    if (!song.meta.timing_events.empty()) {
-        chart.timing_events = song.meta.timing_events;
-        chart.meta.resolution = 480;
-    }
-    if (song.meta.has_offset) {
-        chart.meta.offset = song.meta.offset;
-    }
-    return chart;
-}
-
 }  // namespace
 
 namespace song_select {
@@ -618,7 +607,7 @@ catalog_data load_catalog(bool calculate_missing_levels) {
                 continue;
             }
 
-            chart_data effective_chart = chart_with_song_timing(song, *parse_result.data);
+            chart_data effective_chart = *parse_result.data;
             chart_meta meta = effective_chart.meta;
             meta.song_id = song.meta.song_id;
             if (calculate_missing_levels) {
