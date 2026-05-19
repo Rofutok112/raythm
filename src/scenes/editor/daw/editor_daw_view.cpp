@@ -158,8 +158,7 @@ void draw_palette_pad(Rectangle rect,
                       const editor_note_palette_selection& selection,
                       editor_left_panel_view_result& result) {
     const auto& t = *g_theme;
-    const bool selected = selection.active_tool == editor_note_palette_selection::tool::note &&
-        selection.type == type;
+    const bool selected = selection.type == type;
     const Color tone = type == note_type::tap ? t.error :
         (type == note_type::hold ? t.success :
         (type == note_type::release ? t.slow :
@@ -179,34 +178,6 @@ void draw_palette_pad(Rectangle rect,
                           selected ? t.text : t.text_secondary, ui::text_align::left);
     if (state.clicked) {
         result.selected_note_type = type;
-    }
-}
-
-void draw_select_pad(Rectangle rect,
-                     const editor_note_palette_selection& selection,
-                     editor_left_panel_view_result& result) {
-    const auto& t = *g_theme;
-    const bool selected = selection.active_tool == editor_note_palette_selection::tool::select;
-    const ui::row_state state = ui::draw_row(
-        rect,
-        selected ? panel_tint(t.row_selected, t.accent, 0.18f) : t.row,
-        selected ? panel_tint(t.row_active, t.accent, 0.2f) : t.row_hover,
-        selected ? t.accent : t.border_light,
-        selected ? 2.0f : 1.0f);
-    raythm_icons::draw_mouse_pointer(
-        {state.visual.x + 10.0f, state.visual.y + 9.0f, 20.0f, 20.0f},
-        selected ? t.accent : t.text_secondary,
-        2.4f);
-    ui::draw_text_in_rect("SEL", 14,
-                          {state.visual.x + 38.0f, state.visual.y + 7.0f,
-                           state.visual.width - 48.0f, 19.0f},
-                          selected ? t.text : t.text_secondary, ui::text_align::left);
-    ui::draw_text_in_rect("Range select", 11,
-                          {state.visual.x + 38.0f, state.visual.y + 30.0f,
-                           state.visual.width - 48.0f, 14.0f},
-                          selected ? t.text_secondary : t.text_muted, ui::text_align::left);
-    if (state.clicked) {
-        result.selected_tool = editor_note_palette_selection::tool::select;
     }
 }
 
@@ -625,21 +596,19 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
     draw_badge({content.x, content.y + 62.0f, 95.0f, 24.0f}, status_label,
                model.is_dirty ? t.slow : t.success, model.is_dirty ? t.slow : t.success);
 
-    const Rectangle palette = {content.x, content.y + 112.0f, content.width, 316.0f};
+    const Rectangle palette = {content.x, content.y + 112.0f, content.width, 252.0f};
     ui::draw_section(palette);
     ui::draw_text_in_rect("Tool", 22,
                           {palette.x + 12.0f, palette.y + 10.0f, palette.width - 24.0f, 24.0f},
                           t.text, ui::text_align::left);
-    ui::draw_text_in_rect("Select, place notes, and toggle ray notes.",
+    ui::draw_text_in_rect("Place notes and toggle ray notes.",
                           13,
                           {palette.x + 12.0f, palette.y + 36.0f, palette.width - 24.0f, 18.0f},
                           t.text_muted, ui::text_align::left);
     const float gap = 8.0f;
     const float pad_width = (palette.width - 32.0f) * 0.5f;
     const float pad_height = 56.0f;
-    draw_select_pad({palette.x + 12.0f, palette.y + 66.0f, palette.width - 24.0f, 48.0f},
-                    model.note_palette, result);
-    const float note_row_y = palette.y + 124.0f;
+    const float note_row_y = palette.y + 66.0f;
     draw_palette_pad({palette.x + 12.0f, note_row_y, pad_width, pad_height},
                      note_type::tap, model.note_palette, result);
     draw_palette_pad({palette.x + 20.0f + pad_width, note_row_y, pad_width, pad_height},
@@ -659,9 +628,7 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
     ui::draw_text_in_rect("Edit Focus", 20, {ops.x + 12.0f, ops.y + 10.0f, ops.width - 24.0f, 24.0f},
                           t.text, ui::text_align::left);
     ui::draw_label_value({ops.x + 12.0f, ops.y + 50.0f, ops.width - 24.0f, 22.0f},
-                         "Edit Target", model.note_palette.active_tool == editor_note_palette_selection::tool::select
-                             ? "Select"
-                             : palette_label(model.note_palette.type),
+                         "Edit Target", palette_label(model.note_palette.type),
                          14, t.text_muted, t.text_secondary, 78.0f);
     ui::draw_label_value({ops.x + 12.0f, ops.y + 82.0f, ops.width - 24.0f, 22.0f},
                          "Ray", model.note_palette.is_ray ? "On" : "Off",

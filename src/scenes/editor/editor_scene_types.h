@@ -56,14 +56,8 @@ struct editor_timeline_note_drag_state {
 };
 
 struct editor_note_palette_selection {
-    enum class tool {
-        select,
-        note,
-    };
-
     note_type type = note_type::tap;
     bool is_ray = false;
-    tool active_tool = tool::note;
 };
 
 enum class editor_right_panel_tab {
@@ -290,6 +284,8 @@ struct editor_timeline_context {
     std::vector<size_t> selected_note_indices;
     bool ctrl_down = false;
     bool shift_down = false;
+    bool right_down = false;
+    bool right_released = false;
 };
 
 struct editor_timeline_result {

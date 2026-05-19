@@ -314,37 +314,17 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
     }
 
     if (context.right_pressed) {
-        result.selected_note_index.reset();
-        result.selected_note_indices.clear();
-        result.drag_state.active = false;
-        return result;
-    }
-
-    if (!context.timeline_hovered) {
-        if (context.left_released) {
+        if (!context.timeline_hovered) {
+            result.selected_note_index.reset();
+            result.selected_note_indices.clear();
             result.drag_state.active = false;
+            return result;
         }
-        return result;
-    }
 
-    if (context.alt_down && context.left_pressed) {
-        result.request_seek = true;
-        result.seek_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
-        result.scroll_seek_if_paused = true;
-        result.drag_state.active = false;
-        return result;
-    }
-
-    if (context.left_pressed) {
-        const bool select_tool_active = context.palette.active_tool == editor_note_palette_selection::tool::select;
-        if (select_tool_active &&
-            (context.shift_down || !result.selected_note_indices.empty() || result.selected_note_index.has_value())) {
-            const std::optional<size_t> selected_index = active_note_index(result);
+        if (const std::optional<size_t> selected_index = active_note_index(result); selected_index.has_value()) {
             const std::optional<editor_timeline_drag_mode> handle =
-                selected_index.has_value()
-                    ? resize_handle_at_position(context, *selected_index, context.mouse)
-                    : std::nullopt;
-            if (selected_index.has_value() && handle.has_value()) {
+                resize_handle_at_position(context, *selected_index, context.mouse);
+            if (handle.has_value()) {
                 result.drag_state.active = true;
                 result.drag_state.mode = *handle;
                 result.drag_state.note_index = selected_index;
@@ -361,14 +341,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
         }
 
         if (const std::optional<size_t> note_index = note_at_position(context, context.mouse); note_index.has_value()) {
-            if (!select_tool_active) {
-                result.note_to_delete_index = note_index;
-                result.selected_note_index.reset();
-                result.selected_note_indices.clear();
-                result.drag_state.active = false;
-                return result;
-            }
-
             if (context.ctrl_down) {
                 if (contains_index(result.selected_note_indices, *note_index)) {
                     result.selected_note_indices.erase(
@@ -408,6 +380,39 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             return result;
         }
 
+        result.drag_state.active = true;
+        result.drag_state.mode = editor_timeline_drag_mode::range_select;
+        result.drag_state.start_mouse = context.mouse;
+        result.drag_state.current_mouse = context.mouse;
+        result.drag_state.start_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
+        result.drag_state.current_tick = result.drag_state.start_tick;
+        return result;
+    }
+
+    if (!context.timeline_hovered) {
+        if (context.left_released || context.right_released) {
+            result.drag_state.active = false;
+        }
+        return result;
+    }
+
+    if (context.alt_down && context.left_pressed) {
+        result.request_seek = true;
+        result.seek_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
+        result.scroll_seek_if_paused = true;
+        result.drag_state.active = false;
+        return result;
+    }
+
+    if (context.left_pressed) {
+        if (const std::optional<size_t> note_index = note_at_position(context, context.mouse); note_index.has_value()) {
+            result.note_to_delete_index = note_index;
+            result.selected_note_index.reset();
+            result.selected_note_indices.clear();
+            result.drag_state.active = false;
+            return result;
+        }
+
         if (timing_panel.selected_scroll_event_index.has_value() &&
             context.state != nullptr &&
             *timing_panel.selected_scroll_event_index < context.state->data().scroll_events.size()) {
@@ -434,16 +439,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             return result;
         }
 
-        if (select_tool_active) {
-            result.drag_state.active = true;
-            result.drag_state.mode = editor_timeline_drag_mode::range_select;
-            result.drag_state.start_mouse = context.mouse;
-            result.drag_state.current_mouse = context.mouse;
-            result.drag_state.start_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
-            result.drag_state.current_tick = result.drag_state.start_tick;
-            return result;
-        }
-
         if (const std::optional<int> lane = lane_at_position(context, context.mouse); lane.has_value()) {
             result.drag_state.active = true;
             result.drag_state.mode = editor_timeline_drag_mode::create;
@@ -457,7 +452,8 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
         }
     }
 
-    if (result.drag_state.active && (context.left_down || context.left_released)) {
+    if (result.drag_state.active &&
+        (context.left_down || context.left_released || context.right_down || context.right_released)) {
         if (result.drag_state.mode == editor_timeline_drag_mode::create) {
             result.drag_state.current_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
             if (const std::optional<int> lane = lane_at_position(context, context.mouse); lane.has_value()) {
@@ -481,7 +477,9 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
         }
     }
 
-    if (!result.drag_state.active || !context.left_released || context.state == nullptr) {
+    if (!result.drag_state.active ||
+        !(context.left_released || context.right_released) ||
+        context.state == nullptr) {
         return result;
     }
 

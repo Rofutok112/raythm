@@ -235,6 +235,8 @@ void editor_scene::update(float dt) {
         IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
         editor_timeline_viewport::snap_division(viewport_),
         note_palette_,
+        IsMouseButtonDown(MOUSE_BUTTON_RIGHT),
+        IsMouseButtonReleased(MOUSE_BUTTON_RIGHT),
     });
     if (timeline_result.request_apply_selected_timing) {
         apply_selected_timing_event();
@@ -300,15 +302,10 @@ void editor_scene::draw() {
         load_errors_.empty() ? nullptr : &load_errors_.front(),
         now,
     });
-    if (left_panel.selected_tool.has_value()) {
-        note_palette_.active_tool = *left_panel.selected_tool;
-    }
     if (left_panel.selected_note_type.has_value()) {
-        note_palette_.active_tool = editor_note_palette_selection::tool::note;
         note_palette_.type = *left_panel.selected_note_type;
     }
     if (left_panel.ray_toggled) {
-        note_palette_.active_tool = editor_note_palette_selection::tool::note;
         note_palette_.is_ray = !note_palette_.is_ray;
     }
     const editor_metadata_panel_result metadata_panel_result = editor_panel_controller::update_metadata_panel(
@@ -658,8 +655,7 @@ std::optional<note_data> editor_scene::dragged_note() const {
         return note;
     }
 
-    if (timeline_drag_.mode != editor_timeline_drag_mode::create ||
-        note_palette_.active_tool != editor_note_palette_selection::tool::note) {
+    if (timeline_drag_.mode != editor_timeline_drag_mode::create) {
         return std::nullopt;
     }
 

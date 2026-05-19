@@ -21,7 +21,6 @@ struct editor_left_panel_view_result {
     ui::text_input_result author_result;
     bool key_count_left_clicked = false;
     bool key_count_right_clicked = false;
-    std::optional<editor_note_palette_selection::tool> selected_tool;
     std::optional<note_type> selected_note_type;
     bool ray_toggled = false;
 };

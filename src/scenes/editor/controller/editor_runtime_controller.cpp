@@ -199,6 +199,8 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
         context.selected_note_indices,
         context.ctrl_down,
         context.shift_down,
+        context.right_down,
+        context.right_released,
     });
 
     context.selected_note_index = timeline_result.selected_note_index;

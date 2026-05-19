@@ -3,7 +3,6 @@
 #include "editor/view/editor_layout.h"
 #include "theme.h"
 #include "ui_draw.h"
-#include "ui/icons/raythm_icons.h"
 #include "ui_layout.h"
 
 namespace {
@@ -34,8 +33,7 @@ const char* palette_label(note_type type) {
 void draw_palette_button(Rectangle rect, note_type type, const editor_note_palette_selection& selection,
                          editor_left_panel_view_result& result) {
     const auto& t = *g_theme;
-    const bool selected = selection.active_tool == editor_note_palette_selection::tool::note &&
-        selection.type == type;
+    const bool selected = selection.type == type;
     const ui::button_state button = ui::draw_button_colored(
         rect, palette_label(type), 14,
         selected ? t.row_selected : t.row,
@@ -47,23 +45,6 @@ void draw_palette_button(Rectangle rect, note_type type, const editor_note_palet
     }
 }
 
-void draw_tool_chip(Rectangle rect,
-                    const char* label,
-                    void (*draw_icon)(Rectangle, Color, float),
-                    bool selected) {
-    const auto& t = *g_theme;
-    const ui::row_state row = ui::draw_row(
-        rect,
-        selected ? t.row_selected : t.row,
-        selected ? t.row_active : t.row_hover,
-        selected ? t.border_active : t.border_light,
-        1.2f);
-    const Rectangle icon_rect = {row.visual.x + 8.0f, row.visual.y + 5.0f, 16.0f, 16.0f};
-    draw_icon(icon_rect, selected ? t.text : t.text_muted, 2.4f);
-    ui::draw_text_in_rect(label, 13,
-                          {row.visual.x + 28.0f, row.visual.y, row.visual.width - 30.0f, row.visual.height},
-                          selected ? t.text : t.text_muted, ui::text_align::left);
-}
 }
 
 editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_panel_view_model& model) {
@@ -113,30 +94,11 @@ editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_pan
     }
 
     const bool ray_selected = model.note_palette.is_ray;
-    const Rectangle tools_box = {content.x, meta_box.y + meta_box.height + 12.0f, content.width, 96.0f};
-    ui::draw_section(tools_box);
-    ui::draw_text_in_rect("Tools", 22,
-                          {tools_box.x + 12.0f, tools_box.y + 10.0f, tools_box.width - 24.0f, 28.0f},
-                          t.text, ui::text_align::left);
-
-    const float tool_gap = 6.0f;
-    const float tool_width = (tools_box.width - 24.0f - tool_gap * 2.0f) / 3.0f;
-    const float tool_y = tools_box.y + 46.0f;
-    draw_tool_chip({tools_box.x + 12.0f, tool_y, tool_width, 26.0f},
-                   "Select", raythm_icons::draw_mouse_pointer,
-                   model.note_palette.active_tool == editor_note_palette_selection::tool::select);
-    if (ui::is_clicked({tools_box.x + 12.0f, tool_y, tool_width, 26.0f})) {
-        result.selected_tool = editor_note_palette_selection::tool::select;
-    }
-    draw_tool_chip({tools_box.x + 12.0f + (tool_width + tool_gap), tool_y, tool_width, 26.0f},
-                   "Range", raythm_icons::draw_scan, false);
-    draw_tool_chip({tools_box.x + 12.0f + (tool_width + tool_gap) * 2.0f, tool_y, tool_width, 26.0f},
-                   "Notes", raythm_icons::draw_layers, false);
-    ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 74.0f, tools_box.width - 24.0f, 16.0f},
+    ui::draw_label_value({content.x + 12.0f, meta_box.y + meta_box.height + 16.0f, content.width - 24.0f, 16.0f},
                          "Edit", palette_label(model.note_palette.type),
                          13, t.text_muted, t.text_secondary, 46.0f);
 
-    const Rectangle palette_box = {content.x, tools_box.y + tools_box.height + 12.0f, content.width, 136.0f};
+    const Rectangle palette_box = {content.x, meta_box.y + meta_box.height + 42.0f, content.width, 136.0f};
     ui::draw_section(palette_box);
     ui::draw_text_in_rect("Tool", 22,
                           {palette_box.x + 12.0f, palette_box.y + 10.0f, palette_box.width - 24.0f, 28.0f},
