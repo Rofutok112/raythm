@@ -47,6 +47,22 @@ std::string loop_region_label(const editor_transport_state& transport, const edi
         meter_map.bar_beat_label(transport.loop_end_tick);
 }
 
+scroll_automation_curve next_scroll_curve(scroll_automation_curve curve) {
+    switch (curve) {
+        case scroll_automation_curve::hold:
+            return scroll_automation_curve::linear;
+        case scroll_automation_curve::linear:
+            return scroll_automation_curve::ease_in;
+        case scroll_automation_curve::ease_in:
+            return scroll_automation_curve::ease_out;
+        case scroll_automation_curve::ease_out:
+            return scroll_automation_curve::ease_in_out;
+        case scroll_automation_curve::ease_in_out:
+            return scroll_automation_curve::hold;
+    }
+    return scroll_automation_curve::hold;
+}
+
 editor_timeline_note make_timeline_note(const note_data& note) {
     return {
         note.type == note_type::hold ? editor_timeline_note_type::hold :
@@ -342,6 +358,7 @@ void editor_scene::draw() {
     const editor_right_panel_view_result right_panel = editor::daw::draw_right_panel({
         &state_->data().timing_events,
         &state_->data().scroll_events,
+        &state_->data().scroll_automation,
         &meter_map_,
         timing_panel_.selected_event_index,
         timing_panel_.selected_scroll_event_index,
@@ -355,6 +372,18 @@ void editor_scene::draw() {
         can_delete_selected_scroll_event(),
         virtual_screen::get_virtual_mouse(),
     }, timing_panel_);
+    if (right_panel.scroll_automation_point_to_add.has_value()) {
+        state_->add_scroll_automation_point(*right_panel.scroll_automation_point_to_add);
+        select_scroll_event(state_->data().scroll_automation.empty()
+                                ? std::nullopt
+                                : std::optional<size_t>(state_->data().scroll_automation.size() - 1),
+                            true);
+    }
+    if (right_panel.scroll_automation_point_to_modify.has_value()) {
+        state_->modify_scroll_automation_point(right_panel.scroll_automation_point_to_modify->first,
+                                               right_panel.scroll_automation_point_to_modify->second);
+        select_scroll_event(right_panel.scroll_automation_point_to_modify->first, false);
+    }
     const editor_timing_panel_update_result update_result = editor_panel_controller::update_timing_panel(
         metadata_panel_,
         timing_panel_,
@@ -391,6 +420,9 @@ void editor_scene::draw() {
     }
     if (update_result.request_apply_selected_scroll) {
         apply_selected_scroll_event();
+    }
+    if (update_result.request_cycle_selected_scroll_curve) {
+        cycle_selected_scroll_curve();
     }
 
     const std::string loop_label = loop_region_label(transport_, meter_map_);
@@ -489,6 +521,7 @@ void editor_scene::draw() {
         const editor::daw::timing_modal_result modal_result = editor::daw::draw_timing_modal({
             &state_->data().timing_events,
             &state_->data().scroll_events,
+            &state_->data().scroll_automation,
             &meter_map_,
             timing_panel_.selected_event_index,
             timing_panel_.selected_scroll_event_index,
@@ -804,8 +837,8 @@ void editor_scene::select_scroll_event(std::optional<size_t> index, bool scroll_
     timing_panel_.input_error.clear();
     timing_panel_.bar_pick_mode = false;
     editor_scene_sync::load_scroll_event_inputs(make_sync_context());
-    if (scroll_into_view && index.has_value() && *index < state_->data().scroll_events.size()) {
-        scroll_to_tick(state_->data().scroll_events[*index].tick);
+    if (scroll_into_view && index.has_value() && *index < state_->data().scroll_automation.size()) {
+        scroll_to_tick(state_->data().scroll_automation[*index].tick);
     }
 }
 
@@ -833,22 +866,24 @@ bool editor_scene::apply_selected_timing_event() {
 }
 
 bool editor_scene::apply_selected_scroll_event() {
-    editor_scene_sync::sync_timing_event_selection(make_sync_context());
-    const editor_timing_edit_result result = editor_timing_edit_service::apply_selected_scroll({
-        *state_,
-        meter_map_,
-        timing_panel_,
-        default_timing_event_tick(),
-    });
-    if (!result.success) {
-        return false;
-    }
     editor_scene_sync::load_scroll_event_inputs(make_sync_context());
     timing_panel_.input_error.clear();
-    if (result.scroll_to_tick.has_value()) {
-        scroll_to_tick(*result.scroll_to_tick);
+    if (timing_panel_.selected_scroll_event_index.has_value() &&
+        *timing_panel_.selected_scroll_event_index < state_->data().scroll_automation.size()) {
+        scroll_to_tick(state_->data().scroll_automation[*timing_panel_.selected_scroll_event_index].tick);
     }
     return true;
+}
+
+void editor_scene::cycle_selected_scroll_curve() {
+    if (!timing_panel_.selected_scroll_event_index.has_value() ||
+        *timing_panel_.selected_scroll_event_index >= state_->data().scroll_automation.size()) {
+        return;
+    }
+    const size_t index = *timing_panel_.selected_scroll_event_index;
+    scroll_automation_point updated = state_->data().scroll_automation[index];
+    updated.curve_to_next = next_scroll_curve(updated.curve_to_next);
+    state_->modify_scroll_automation_point(index, updated);
 }
 
 void editor_scene::add_timing_event(timing_event_type type) {
@@ -866,16 +901,13 @@ void editor_scene::add_timing_event(timing_event_type type) {
 }
 
 void editor_scene::add_scroll_event(scroll_event_type type) {
-    const editor_timing_edit_result result = editor_timing_edit_service::add_scroll_event({
-        *state_,
-        meter_map_,
-        timing_panel_,
-        default_timing_event_tick(),
-    }, type);
-    editor_scene_sync::sync_after_timing_change(make_sync_context());
-    if (result.selected_scroll_event_index.has_value()) {
-        select_scroll_event(result.selected_scroll_event_index, true);
-    }
+    (void)type;
+    scroll_automation_point point;
+    point.tick = default_timing_event_tick();
+    point.multiplier = 1.0f;
+    point.curve_to_next = scroll_automation_curve::linear;
+    state_->add_scroll_automation_point(point);
+    select_scroll_event(state_->data().scroll_automation.size() - 1, true);
 }
 
 void editor_scene::delete_selected_timing_event() {
@@ -916,15 +948,10 @@ void editor_scene::refresh_chart_level_when_idle() {
 
 void editor_scene::delete_selected_scroll_event() {
     editor_scene_sync::sync_timing_event_selection(make_sync_context());
-    const editor_timing_edit_result result = editor_timing_edit_service::delete_selected_scroll({
-        *state_,
-        meter_map_,
-        timing_panel_,
-        default_timing_event_tick(),
-    });
-    if (!result.success) {
+    if (!timing_panel_.selected_scroll_event_index.has_value()) {
         return;
     }
+    state_->remove_scroll_automation_point(*timing_panel_.selected_scroll_event_index);
     timing_panel_.selected_scroll_event_index.reset();
     editor_scene_sync::load_scroll_event_inputs(make_sync_context());
     timing_panel_.input_error.clear();
@@ -935,7 +962,8 @@ bool editor_scene::can_delete_selected_timing_event() const {
 }
 
 bool editor_scene::can_delete_selected_scroll_event() const {
-    return editor_timing_edit_service::can_delete_selected_scroll({*state_, timing_panel_});
+    return timing_panel_.selected_scroll_event_index.has_value() &&
+           *timing_panel_.selected_scroll_event_index < state_->data().scroll_automation.size();
 }
 
 bool editor_scene::has_active_metadata_input() const {

@@ -51,6 +51,7 @@ private:
     void scroll_to_tick(int tick);
     bool apply_selected_timing_event();
     bool apply_selected_scroll_event();
+    void cycle_selected_scroll_curve();
     void add_timing_event(timing_event_type type);
     void add_scroll_event(scroll_event_type type);
     void delete_selected_timing_event();

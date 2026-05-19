@@ -327,4 +327,5 @@ struct editor_timing_panel_update_result {
     bool request_delete_selected_scroll = false;
     bool request_apply_selected = false;
     bool request_apply_selected_scroll = false;
+    bool request_cycle_selected_scroll_curve = false;
 };

@@ -78,6 +78,38 @@ const char* scroll_event_type_label(scroll_event_type type) {
     return type == scroll_event_type::speed ? "Speed" : "Stop";
 }
 
+const char* scroll_curve_label(scroll_automation_curve curve) {
+    switch (curve) {
+        case scroll_automation_curve::hold:
+            return "Hold";
+        case scroll_automation_curve::linear:
+            return "Linear";
+        case scroll_automation_curve::ease_in:
+            return "Ease In";
+        case scroll_automation_curve::ease_out:
+            return "Ease Out";
+        case scroll_automation_curve::ease_in_out:
+            return "Ease In/Out";
+    }
+    return "Hold";
+}
+
+scroll_automation_curve next_scroll_curve(scroll_automation_curve curve) {
+    switch (curve) {
+        case scroll_automation_curve::hold:
+            return scroll_automation_curve::linear;
+        case scroll_automation_curve::linear:
+            return scroll_automation_curve::ease_in;
+        case scroll_automation_curve::ease_in:
+            return scroll_automation_curve::ease_out;
+        case scroll_automation_curve::ease_out:
+            return scroll_automation_curve::ease_in_out;
+        case scroll_automation_curve::ease_in_out:
+            return scroll_automation_curve::hold;
+    }
+    return scroll_automation_curve::hold;
+}
+
 Color panel_tint(Color base, Color tone, float amount) {
     return with_alpha(lerp_color(base, tone, amount), base.a);
 }
@@ -676,96 +708,127 @@ editor_right_panel_view_result draw_right_panel(const editor_right_panel_view_mo
     const Rectangle panel = layout::kRightPanelRect;
     const Rectangle content = inset_rect(panel, kPanelInset);
 
+    const std::vector<scroll_automation_point> empty_points;
+    const std::vector<scroll_automation_point>& points =
+        model.scroll_automation != nullptr ? *model.scroll_automation : empty_points;
+    std::vector<std::pair<size_t, scroll_automation_point>> sorted_points;
+    sorted_points.reserve(points.size());
+    int max_tick = 1920;
+    for (size_t index = 0; index < points.size(); ++index) {
+        sorted_points.push_back({index, points[index]});
+        max_tick = std::max(max_tick, points[index].tick + 480);
+    }
+    std::stable_sort(sorted_points.begin(), sorted_points.end(), [](const auto& left, const auto& right) {
+        return left.second.tick < right.second.tick;
+    });
+
     ui::draw_rect_f(panel, panel_tint(t.panel, t.bg_alt, 0.14f));
     ui::draw_rect_lines(panel, 1.5f, t.border);
     ui::draw_text_in_rect("SCROLL", 15, {content.x, content.y, content.width, 20.0f},
                           t.text_muted, ui::text_align::left);
-    draw_badge({content.x + content.width - 140.0f, content.y - 2.0f, 140.0f, 24.0f},
-               "SPEED / STOP", t.fast, t.fast);
+    draw_badge({content.x + content.width - 154.0f, content.y - 2.0f, 154.0f, 24.0f},
+               "AUTOMATION", t.fast, t.fast);
 
-    std::vector<editor_timing_panel_item> scroll_items;
-    scroll_items.reserve(model.scroll_events->size());
-    for (size_t index = 0; index < model.scroll_events->size(); ++index) {
-        const scroll_event& event = (*model.scroll_events)[index];
-        scroll_items.push_back({
-            index,
-            std::string("Scroll ") + model.meter_map->bar_beat_label(event.tick),
-            event.type == scroll_event_type::speed
-                ? TextFormat("%s %.2fx / %dt", scroll_event_type_label(event.type), event.multiplier, event.duration)
-                : TextFormat("%s / %dt", scroll_event_type_label(event.type), event.duration),
-            model.selected_scroll_event_index.has_value() && *model.selected_scroll_event_index == index
-        });
-    }
-
-    std::optional<scroll_event> selected_scroll_event;
-    if (model.selected_scroll_event_index.has_value() && *model.selected_scroll_event_index < model.scroll_events->size()) {
-        selected_scroll_event = (*model.scroll_events)[*model.selected_scroll_event_index];
-    }
-
-    const Rectangle list_box = {content.x, content.y + 42.0f, content.width, 372.0f};
-    ui::draw_section(list_box);
-    ui::draw_text_in_rect("Scroll Regions", 20,
-                          {list_box.x + 12.0f, list_box.y + 10.0f, list_box.width - 24.0f, 24.0f},
+    const Rectangle graph_box = {content.x, content.y + 42.0f, content.width, 454.0f};
+    ui::draw_section(graph_box);
+    ui::draw_text_in_rect("Velocity Curve", 20,
+                          {graph_box.x + 12.0f, graph_box.y + 10.0f, graph_box.width - 24.0f, 24.0f},
                           t.text, ui::text_align::left);
-    const Rectangle list_view = {list_box.x + 10.0f, list_box.y + 50.0f, list_box.width - 32.0f, 268.0f};
-    const Rectangle scrollbar = {list_view.x + list_view.width + 6.0f, list_view.y, 6.0f, list_view.height};
-    const float row_height = 34.0f;
-    const float row_gap = 5.0f;
-    const float content_height = scroll_items.empty()
-        ? list_view.height
-        : static_cast<float>(scroll_items.size()) * row_height +
-              static_cast<float>(std::max<int>(0, static_cast<int>(scroll_items.size()) - 1)) * row_gap;
-    const float max_scroll = std::max(0.0f, content_height - list_view.height);
-    timing_state.scroll_list_scroll_offset = std::clamp(timing_state.scroll_list_scroll_offset, 0.0f, max_scroll);
-    const ui::scrollbar_interaction scrollbar_result = ui::update_vertical_scrollbar(
-        scrollbar,
-        content_height,
-        timing_state.scroll_list_scroll_offset,
-        timing_state.scroll_list_scrollbar_dragging,
-        timing_state.scroll_list_scrollbar_drag_offset,
-        28.0f);
-    if (scrollbar_result.changed || scrollbar_result.dragging) {
-        timing_state.scroll_list_scroll_offset = scrollbar_result.scroll_offset;
-    }
-    if (CheckCollisionPointRec(model.mouse, list_view) && GetMouseWheelMove() != 0.0f) {
-        timing_state.scroll_list_scroll_offset = std::clamp(
-            timing_state.scroll_list_scroll_offset - GetMouseWheelMove() * 42.0f, 0.0f, max_scroll);
-    }
-    {
-        ui::scoped_clip_rect clip_scope(list_view);
-        float y = list_view.y - timing_state.scroll_list_scroll_offset;
-        for (const editor_timing_panel_item& item : scroll_items) {
-            const Rectangle item_rect = {list_view.x, y, list_view.width, row_height};
-            const ui::row_state row_state = ui::draw_selectable_row(item_rect, item.selected, 1.4f);
-            if (row_state.clicked) {
-                result.panel_result.selected_scroll_event_index = item.event_index;
-            }
-            ui::draw_label_value(ui::inset(row_state.visual, ui::edge_insets::symmetric(0.0f, 10.0f)),
-                                 item.label.c_str(), item.value.c_str(), 14,
-                                 item.selected ? t.text : t.text_secondary,
-                                 item.selected ? t.text : t.text_muted, 122.0f);
-            y += row_height + row_gap;
+    const Rectangle graph = {graph_box.x + 38.0f, graph_box.y + 52.0f,
+                             graph_box.width - 56.0f, graph_box.height - 92.0f};
+    ui::draw_rect_f(graph, with_alpha(t.bg_alt, 120));
+    ui::draw_rect_lines(graph, 1.0f, t.border_light);
+
+    auto point_to_pos = [&](const scroll_automation_point& point) {
+        const float tick_t = static_cast<float>(std::clamp(point.tick, 0, max_tick)) / static_cast<float>(max_tick);
+        const float mult_t = std::clamp(point.multiplier / 3.0f, 0.0f, 1.0f);
+        return Vector2{graph.x + mult_t * graph.width, graph.y + tick_t * graph.height};
+    };
+    auto pos_to_point = [&](Vector2 pos, scroll_automation_curve curve) {
+        const float tick_t = std::clamp((pos.y - graph.y) / graph.height, 0.0f, 1.0f);
+        const float mult_t = std::clamp((pos.x - graph.x) / graph.width, 0.0f, 1.0f);
+        scroll_automation_point point;
+        point.tick = static_cast<int>(std::round(tick_t * static_cast<float>(max_tick) / 10.0f)) * 10;
+        point.multiplier = std::round(mult_t * 300.0f) / 100.0f;
+        point.curve_to_next = curve;
+        return point;
+    };
+
+    for (int i = 0; i <= 6; ++i) {
+        const float x = graph.x + graph.width * static_cast<float>(i) / 6.0f;
+        ui::draw_line_f(x, graph.y, x, graph.y + graph.height, with_alpha(t.border_light, i == 2 ? 170 : 80));
+        if (i % 2 == 0) {
+            ui::draw_text_in_rect(TextFormat("%.1fx", static_cast<float>(i) * 0.5f), 11,
+                                  {x - 22.0f, graph.y + graph.height + 6.0f, 44.0f, 16.0f},
+                                  t.text_muted);
         }
     }
-    ui::draw_scrollbar(scrollbar, content_height, timing_state.scroll_list_scroll_offset,
-                       t.scrollbar_track, t.scrollbar_thumb, 28.0f);
+    for (int i = 0; i <= 8; ++i) {
+        const float y = graph.y + graph.height * static_cast<float>(i) / 8.0f;
+        ui::draw_line_f(graph.x, y, graph.x + graph.width, y, with_alpha(t.editor_grid_minor, 120));
+    }
+    ui::draw_text_in_rect("BAR", 11, {graph_box.x + 8.0f, graph.y - 2.0f, 28.0f, 18.0f},
+                          t.text_muted, ui::text_align::right);
+
+    for (size_t i = 1; i < sorted_points.size(); ++i) {
+        const Vector2 from = point_to_pos(sorted_points[i - 1].second);
+        const Vector2 to = point_to_pos(sorted_points[i].second);
+        DrawLineEx(from, to, 2.2f, with_alpha(t.fast, 210));
+    }
+
+    std::optional<size_t> hovered_point;
+    for (size_t i = sorted_points.size(); i > 0; --i) {
+        const size_t sorted_index = i - 1;
+        const size_t point_index = sorted_points[sorted_index].first;
+        const scroll_automation_point& point = sorted_points[sorted_index].second;
+        const Vector2 p = point_to_pos(point);
+        const bool selected = model.selected_scroll_event_index.has_value() &&
+                              *model.selected_scroll_event_index == point_index;
+        const Rectangle hit = {p.x - 8.0f, p.y - 8.0f, 16.0f, 16.0f};
+        if (!hovered_point.has_value() && CheckCollisionPointRec(model.mouse, hit)) {
+            hovered_point = point_index;
+        }
+        DrawCircleV(p, selected ? 7.0f : 5.5f, selected ? t.accent : t.fast);
+        DrawCircleLines(static_cast<int>(p.x), static_cast<int>(p.y), selected ? 8.0f : 6.5f,
+                        selected ? t.text : with_alpha(t.text, 170));
+    }
+
+    const bool graph_hovered = CheckCollisionPointRec(model.mouse, graph);
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && graph_hovered) {
+        if (hovered_point.has_value()) {
+            result.panel_result.selected_scroll_event_index = hovered_point;
+        } else {
+            result.scroll_automation_point_to_add = pos_to_point(model.mouse, scroll_automation_curve::linear);
+        }
+    }
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && graph_hovered &&
+        model.selected_scroll_event_index.has_value() &&
+        *model.selected_scroll_event_index < points.size()) {
+        scroll_automation_point updated = pos_to_point(model.mouse, points[*model.selected_scroll_event_index].curve_to_next);
+        result.scroll_automation_point_to_modify = std::make_pair(*model.selected_scroll_event_index, updated);
+    }
 
     const float button_gap = 8.0f;
-    const float button_width = (list_box.width - 24.0f - button_gap * 2.0f) / 3.0f;
-    const Rectangle speed_button = {list_box.x + 12.0f, list_box.y + list_box.height - 40.0f,
-                                    button_width, 28.0f};
-    const Rectangle stop_button = {speed_button.x + button_width + button_gap, speed_button.y,
-                                   button_width, 28.0f};
-    const Rectangle delete_button = {stop_button.x + button_width + button_gap, speed_button.y,
-                                     button_width, 28.0f};
-    if (ui::draw_button(speed_button, "Speed", 14).clicked) {
-        result.panel_result.add_speed = true;
+    const float button_width = (graph_box.width - 24.0f - button_gap * 2.0f) / 3.0f;
+    const Rectangle add_button = {graph_box.x + 12.0f, graph_box.y + graph_box.height - 34.0f,
+                                  button_width, 26.0f};
+    const Rectangle curve_button = {add_button.x + button_width + button_gap, add_button.y, button_width, 26.0f};
+    const Rectangle delete_button = {curve_button.x + button_width + button_gap, add_button.y, button_width, 26.0f};
+    if (ui::draw_button(add_button, "Add Point", 13).clicked) {
+        result.scroll_automation_point_to_add =
+            scroll_automation_point{std::clamp(max_tick / 2, 0, max_tick), 1.0f, scroll_automation_curve::linear};
     }
-    if (ui::draw_button(stop_button, "Stop", 14).clicked) {
-        result.panel_result.add_stop = true;
+    const ui::button_state curve_state = ui::draw_button_colored(
+        curve_button, "Curve", 13,
+        model.scroll_delete_enabled ? t.row : t.section,
+        model.scroll_delete_enabled ? t.row_hover : t.section,
+        model.scroll_delete_enabled ? t.text : t.text_hint,
+        1.4f);
+    if (model.scroll_delete_enabled && curve_state.clicked) {
+        result.panel_result.cycle_selected_scroll_curve = true;
     }
     const ui::button_state delete_state = ui::draw_button_colored(
-        delete_button, "Delete", 14,
+        delete_button, "Delete", 13,
         model.scroll_delete_enabled ? t.row : t.section,
         model.scroll_delete_enabled ? t.row_hover : t.section,
         model.scroll_delete_enabled ? t.text : t.text_hint,
@@ -774,89 +837,34 @@ editor_right_panel_view_result draw_right_panel(const editor_right_panel_view_mo
         result.panel_result.delete_selected_scroll = true;
     }
 
-    const Rectangle editor_box = {content.x, list_box.y + list_box.height + 14.0f,
-                                  content.width, content.y + content.height - (list_box.y + list_box.height + 14.0f)};
-    ui::draw_section(editor_box);
-    ui::draw_text_in_rect("Region Inspector", 20,
-                          {editor_box.x + 12.0f, editor_box.y + 10.0f, editor_box.width - 24.0f, 24.0f},
+    const Rectangle inspector = {content.x, graph_box.y + graph_box.height + 14.0f,
+                                 content.width, content.y + content.height - (graph_box.y + graph_box.height + 14.0f)};
+    ui::draw_section(inspector);
+    ui::draw_text_in_rect("Point", 20,
+                          {inspector.x + 12.0f, inspector.y + 10.0f, inspector.width - 24.0f, 24.0f},
                           t.text, ui::text_align::left);
-    if (selected_scroll_event.has_value()) {
-        const scroll_event& event = *selected_scroll_event;
-        ui::draw_label_value({editor_box.x + 12.0f, editor_box.y + 46.0f, editor_box.width - 24.0f, 22.0f},
-                             "Mode", scroll_event_type_label(event.type), 15,
+    if (model.selected_scroll_event_index.has_value() &&
+        *model.selected_scroll_event_index < points.size()) {
+        const scroll_automation_point& point = points[*model.selected_scroll_event_index];
+        ui::draw_label_value({inspector.x + 12.0f, inspector.y + 48.0f, inspector.width - 24.0f, 22.0f},
+                             "Bar", model.meter_map->bar_beat_label(point.tick).c_str(), 15,
                              t.text_secondary, t.text, 72.0f);
-        auto draw_pick_row = [&](Rectangle rect, const char* label, const std::string& value,
-                                 editor_timing_input_field field) {
-            const bool selected = timing_state.active_input_field == field || timing_state.bar_pick_mode;
-            const ui::row_state row_state = ui::draw_row(
-                rect,
-                selected ? t.row_selected : t.row,
-                selected ? t.row_selected_hover : t.row_hover,
-                timing_state.bar_pick_mode ? t.accent : (selected ? t.border_active : t.border),
-                1.4f);
-            if (row_state.clicked) {
-                result.panel_result.clicked_input_row = true;
-                timing_state.active_input_field = field;
-                timing_state.bar_pick_mode = true;
-                timing_state.input_error.clear();
-                timing_state.inputs.scroll_duration.active = false;
-                timing_state.inputs.scroll_multiplier.active = false;
-            }
-            ui::draw_label_value(ui::inset(row_state.visual, ui::edge_insets::symmetric(0.0f, 10.0f)),
-                                 label, timing_state.bar_pick_mode ? "Pick timeline" : value.c_str(),
-                                 15, selected ? t.text : t.text_secondary,
-                                 timing_state.bar_pick_mode ? t.accent : t.text, 72.0f);
-        };
-        auto draw_input_row = [&](Rectangle rect, const char* label, ui::text_input_state& input,
-                                  editor_timing_input_field field, ui::text_input_filter filter,
-                                  const char* placeholder) {
-            const ui::text_input_result input_result = ui::draw_text_input(
-                rect, input, label, placeholder, nullptr,
-                ui::draw_layer::base, 15, 16, filter, 72.0f);
-            if (input_result.clicked) {
-                result.panel_result.clicked_input_row = true;
-                set_active_timing_input(timing_state, field);
-                timing_state.bar_pick_mode = false;
-                timing_state.input_error.clear();
-            }
-            if (input_result.submitted) {
-                result.panel_result.apply_selected_scroll = true;
-                set_active_timing_input(timing_state, editor_timing_input_field::none);
-                timing_state.bar_pick_mode = false;
-            } else if (input_result.deactivated && timing_state.active_input_field == field) {
-                set_active_timing_input(timing_state, editor_timing_input_field::none);
-            }
-        };
-        draw_pick_row({editor_box.x + 12.0f, editor_box.y + 82.0f, editor_box.width - 24.0f, 34.0f},
-                      "Start", timing_state.inputs.scroll_start_bar.value, editor_timing_input_field::scroll_start);
-        draw_input_row({editor_box.x + 12.0f, editor_box.y + 124.0f, editor_box.width - 24.0f, 34.0f},
-                       "Length", timing_state.inputs.scroll_duration, editor_timing_input_field::scroll_duration,
-                       accepts_int_character, "ticks");
-        if (event.type == scroll_event_type::speed) {
-            draw_input_row({editor_box.x + 12.0f, editor_box.y + 166.0f, editor_box.width - 24.0f, 34.0f},
-                           "Rate", timing_state.inputs.scroll_multiplier, editor_timing_input_field::scroll_multiplier,
-                           accepts_float_character, "1.0x");
-        }
-        const Rectangle apply_rect = {editor_box.x + 12.0f, editor_box.y + editor_box.height - 42.0f,
-                                      editor_box.width - 24.0f, 30.0f};
-        if (ui::draw_button(apply_rect, "Apply Region", 14).clicked) {
-            result.panel_result.apply_selected_scroll = true;
-        }
-        if (!timing_state.input_error.empty()) {
-            ui::draw_text_in_rect(timing_state.input_error.c_str(), 14,
-                                  {editor_box.x + 12.0f, apply_rect.y - 26.0f,
-                                   editor_box.width - 24.0f, 20.0f},
-                                  t.error, ui::text_align::left);
-        }
+        ui::draw_label_value({inspector.x + 12.0f, inspector.y + 76.0f, inspector.width - 24.0f, 22.0f},
+                             "Rate", TextFormat("%.2fx", point.multiplier), 15,
+                             t.text_secondary, t.text, 72.0f);
+        ui::draw_label_value({inspector.x + 12.0f, inspector.y + 104.0f, inspector.width - 24.0f, 22.0f},
+                             "Curve", scroll_curve_label(point.curve_to_next), 15,
+                             t.text_secondary, t.text, 72.0f);
     } else {
-        ui::draw_text_in_rect("Select or create a speed / stop region.", 16,
-                              {editor_box.x + 12.0f, editor_box.y + 56.0f,
-                               editor_box.width - 24.0f, 22.0f},
+        ui::draw_text_in_rect("Click the graph to create a point.", 15,
+                              {inspector.x + 12.0f, inspector.y + 54.0f,
+                               inspector.width - 24.0f, 22.0f},
                               t.text_hint, ui::text_align::left);
     }
 
     result.clicked_outside_editor = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-                                    !CheckCollisionPointRec(model.mouse, editor_box);
+                                    !CheckCollisionPointRec(model.mouse, graph_box) &&
+                                    !CheckCollisionPointRec(model.mouse, inspector);
     return result;
 }
 

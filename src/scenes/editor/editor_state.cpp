@@ -72,6 +72,12 @@ bool same_scroll_event(const scroll_event& left, const scroll_event& right) {
         left.multiplier == right.multiplier;
 }
 
+bool same_scroll_automation_point(const scroll_automation_point& left, const scroll_automation_point& right) {
+    return left.tick == right.tick &&
+        left.multiplier == right.multiplier &&
+        left.curve_to_next == right.curve_to_next;
+}
+
 bool same_note_data(const note_data& left, const note_data& right) {
     return left.type == right.type &&
         left.tick == right.tick &&
@@ -362,6 +368,64 @@ private:
     scroll_event after_;
 };
 
+class add_scroll_automation_point_command final : public editor_command {
+public:
+    add_scroll_automation_point_command(chart_data& chart, scroll_automation_point point)
+        : chart_(chart), point_(std::move(point)) {}
+
+    void execute() override {
+        chart_.scroll_automation.push_back(point_);
+    }
+
+    void undo() override {
+        chart_.scroll_automation.pop_back();
+    }
+
+private:
+    chart_data& chart_;
+    scroll_automation_point point_;
+};
+
+class remove_scroll_automation_point_command final : public editor_command {
+public:
+    remove_scroll_automation_point_command(chart_data& chart, size_t index)
+        : chart_(chart), index_(index), removed_(chart.scroll_automation[index]) {}
+
+    void execute() override {
+        chart_.scroll_automation.erase(chart_.scroll_automation.begin() + static_cast<std::ptrdiff_t>(index_));
+    }
+
+    void undo() override {
+        chart_.scroll_automation.insert(chart_.scroll_automation.begin() + static_cast<std::ptrdiff_t>(index_),
+                                        removed_);
+    }
+
+private:
+    chart_data& chart_;
+    size_t index_ = 0;
+    scroll_automation_point removed_;
+};
+
+class modify_scroll_automation_point_command final : public editor_command {
+public:
+    modify_scroll_automation_point_command(chart_data& chart, size_t index, scroll_automation_point updated)
+        : chart_(chart), index_(index), before_(chart.scroll_automation[index]), after_(std::move(updated)) {}
+
+    void execute() override {
+        chart_.scroll_automation[index_] = after_;
+    }
+
+    void undo() override {
+        chart_.scroll_automation[index_] = before_;
+    }
+
+private:
+    chart_data& chart_;
+    size_t index_ = 0;
+    scroll_automation_point before_;
+    scroll_automation_point after_;
+};
+
 class modify_metadata_command final : public editor_command {
 public:
     modify_metadata_command(chart_data& chart, timing_engine& engine, chart_meta updated, bool clear_notes)
@@ -595,6 +659,38 @@ bool editor_state::modify_scroll_event(size_t index, scroll_event event) {
     }
 
     history_.push(std::make_unique<modify_scroll_event_command>(chart_, index, std::move(event)));
+    mark_level_dirty();
+    sync_dirty_flag();
+    return true;
+}
+
+void editor_state::add_scroll_automation_point(scroll_automation_point point) {
+    history_.push(std::make_unique<add_scroll_automation_point_command>(chart_, std::move(point)));
+    mark_level_dirty();
+    sync_dirty_flag();
+}
+
+bool editor_state::remove_scroll_automation_point(size_t index) {
+    if (index >= chart_.scroll_automation.size()) {
+        return false;
+    }
+
+    history_.push(std::make_unique<remove_scroll_automation_point_command>(chart_, index));
+    mark_level_dirty();
+    sync_dirty_flag();
+    return true;
+}
+
+bool editor_state::modify_scroll_automation_point(size_t index, scroll_automation_point point) {
+    if (index >= chart_.scroll_automation.size()) {
+        return false;
+    }
+
+    if (same_scroll_automation_point(chart_.scroll_automation[index], point)) {
+        return true;
+    }
+
+    history_.push(std::make_unique<modify_scroll_automation_point_command>(chart_, index, std::move(point)));
     mark_level_dirty();
     sync_dirty_flag();
     return true;

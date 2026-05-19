@@ -76,6 +76,7 @@ struct editor_timing_panel_result {
     bool delete_selected_scroll = false;
     bool apply_selected = false;
     bool apply_selected_scroll = false;
+    bool cycle_selected_scroll_curve = false;
     std::optional<size_t> selected_event_index;
     std::optional<size_t> selected_scroll_event_index;
 };
