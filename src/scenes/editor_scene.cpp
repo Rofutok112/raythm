@@ -632,6 +632,25 @@ std::optional<note_data> editor_scene::dragged_note() const {
         return note;
     }
 
+    if (timeline_drag_.mode == editor_timeline_drag_mode::move_notes) {
+        if (!timeline_drag_.note_index.has_value() ||
+            *timeline_drag_.note_index >= state_->data().notes.size()) {
+            return std::nullopt;
+        }
+
+        note_data note = timeline_drag_.original_note;
+        const int tick_delta = timeline_drag_.current_tick - timeline_drag_.start_tick;
+        const int lane_delta = timeline_drag_.current_lane - timeline_drag_.lane;
+        note.tick = std::max(0, note.tick + tick_delta);
+        if (note.type == note_type::hold) {
+            note.end_tick = std::max(note.tick + 1, note.end_tick + tick_delta);
+        } else {
+            note.end_tick = note.tick;
+        }
+        note.lane += lane_delta;
+        return note;
+    }
+
     note_data note;
     note.lane = std::min(timeline_drag_.lane, timeline_drag_.current_lane);
     note.lane_width = std::abs(timeline_drag_.current_lane - timeline_drag_.lane) + 1;
