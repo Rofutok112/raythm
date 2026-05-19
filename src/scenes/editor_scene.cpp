@@ -7,7 +7,6 @@
 #include "audio_manager.h"
 #include "editor/controller/editor_runtime_controller.h"
 #include "editor/daw/editor_daw_view.h"
-#include "editor/view/editor_cursor_hud_view.h"
 #include "editor/editor_flow_controller.h"
 #include "editor/service/editor_chart_identity_service.h"
 #include "editor/service/editor_metadata_service.h"
@@ -381,12 +380,11 @@ void editor_scene::draw() {
         apply_selected_scroll_event();
     }
 
-    const std::string playback_status = editor_transport_service::playback_status_text(transport_);
     const std::string loop_label = loop_region_label(transport_, meter_map_);
     const std::string offset_label =
         (state_->data().meta.offset > 0 ? "+" : "") + std::to_string(state_->data().meta.offset) + " ms";
     const editor_header_view_result header_result = editor::daw::draw_header({
-        playback_status.c_str(),
+        "",
         transport_.audio_loaded,
         transport_.audio_playing,
         offset_label.c_str(),
@@ -429,20 +427,6 @@ void editor_scene::draw() {
         snap_dropdown_open_ = false;
     } else if (header_result.snap_dropdown_close_requested) {
         snap_dropdown_open_ = false;
-    }
-
-    const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const bool hud_visible = CheckCollisionPointRec(mouse, layout::kTimelineRect);
-    if (hud_visible) {
-        const int tick = std::max(0, timeline_metrics().y_to_tick(mouse.y));
-        const editor_meter_map::bar_beat_position position = meter_map_.bar_beat_at_tick(tick);
-        editor_cursor_hud_view::draw({
-            true,
-            editor_timeline_viewport::snap_tick(viewport_model(), tick),
-            meter_map_.beat_number_at_tick(tick),
-            position.measure,
-            position.beat,
-        });
     }
 
     if (unsaved_changes_dialog_.open) {

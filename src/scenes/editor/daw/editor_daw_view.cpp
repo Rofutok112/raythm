@@ -290,7 +290,7 @@ editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_m
 
 void draw_waveform(const editor_timeline_view_model& model, Rectangle content) {
     const auto& t = *g_theme;
-    if (!model.waveform_visible || model.waveform_summary == nullptr || model.timing_engine == nullptr) {
+    if (model.waveform_summary == nullptr || model.timing_engine == nullptr) {
         return;
     }
 
@@ -309,15 +309,16 @@ void draw_waveform(const editor_timeline_view_model& model, Rectangle content) {
         }
     }
 
-    const float center_x = content.x + content.width * 0.5f;
+    const float base_x = content.x + content.width - 4.0f;
+    const float max_width = std::max(1.0f, content.width - 10.0f);
     for (int i = 0; i < row_count; ++i) {
         const float amplitude = rows[static_cast<size_t>(i)];
         if (amplitude <= 0.001f) {
             continue;
         }
         const float y = content.y + static_cast<float>(i);
-        const float half_width = content.width * 0.48f * amplitude;
-        ui::draw_line_f(center_x - half_width, y, center_x + half_width, y, with_alpha(t.accent, 58));
+        const float width = max_width * amplitude;
+        ui::draw_line_f(base_x - width, y, base_x, y, with_alpha(t.accent, 70));
     }
 }
 
@@ -698,7 +699,7 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
     result.timing_modal_requested = ui::draw_button_colored(
         timing_button, "TIMING", 13, t.row, t.row_hover, t.text_secondary, 1.2f).clicked;
 
-    const Rectangle transport = {content.x + 388.0f, content.y + 1.0f, 582.0f, 50.0f};
+    const Rectangle transport = {bar.x + bar.width * 0.5f - 56.0f, content.y + 1.0f, 112.0f, 50.0f};
     ui::draw_section(transport);
     const Rectangle play_rect = {transport.x + 10.0f, transport.y + 5.0f, 40.0f, 40.0f};
     const ui::button_state play_button = model.audio_playing
@@ -709,22 +710,6 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
     const ui::button_state loop_button = draw_icon_button(loop_button_rect, raythm_icons::draw_repeat_2,
                                                           model.loop_enabled, t.success);
     result.loop_toggled = loop_button.clicked;
-    const ui::button_state waveform_toggle = ui::draw_button_colored(
-        {loop_button_rect.x + loop_button_rect.width + 8.0f, play_rect.y, 84.0f, 40.0f},
-        model.waveform_visible ? "WAVE" : "WAVE",
-        13,
-        model.waveform_visible ? panel_tint(t.row_selected, t.fast, 0.15f) : t.row,
-        model.waveform_visible ? panel_tint(t.row_active, t.fast, 0.15f) : t.row_hover,
-        model.waveform_visible ? t.text : t.text_secondary,
-        model.waveform_visible ? 2.0f : 1.0f);
-    result.waveform_toggled = waveform_toggle.clicked;
-    ui::draw_label_value({transport.x + 196.0f, transport.y + 5.0f, 190.0f, 40.0f},
-                         "Now", model.playback_status, 14, t.text_muted,
-                         model.audio_loaded ? t.text : t.text_muted, 46.0f);
-    ui::draw_label_value({transport.x + 402.0f, transport.y + 5.0f, 168.0f, 40.0f},
-                         "Loop", model.loop_label, 14,
-                         model.loop_enabled ? t.success : t.text_muted,
-                         model.loop_enabled ? t.text : t.text_secondary, 42.0f);
 
     const ui::dropdown_state dropdown = ui::enqueue_dropdown(
         layout::kSnapDropdownRect, snap_menu_rect,
@@ -759,7 +744,6 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
     const Rectangle ruler_labels = {ruler.x, arrange.y, ruler.width, arrange.height};
     {
         ui::scoped_clip_rect clip_scope(arrange);
-        draw_waveform(model, arrange);
 
         for (int lane = 0; lane < std::max(1, model.metrics.key_count); ++lane) {
             Rectangle lane_rect = model.metrics.lane_rect(lane);
@@ -857,6 +841,7 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
 
     ui::draw_rect_f(ruler, with_alpha(t.section, 235));
     ui::draw_rect_lines(ruler, 1.0f, t.border_light);
+    draw_waveform(model, ui::inset(ruler, 4.0f));
     ui::draw_text_in_rect("BAR", 11, {ruler.x, ruler.y + 8.0f, ruler.width, 16.0f},
                           t.text_muted);
     for (const editor_meter_map::grid_line& line : model.grid_lines) {
