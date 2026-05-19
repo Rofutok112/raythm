@@ -16,7 +16,6 @@ constexpr float kScrollbarWidth = 48.0f;
 constexpr float kScrollbarGap = 76.0f;
 constexpr float kMinTicksPerPixel = 0.9f;
 constexpr float kMaxTicksPerPixel = 28.0f;
-constexpr float kScrollLerpSpeed = 12.0f;
 constexpr float kScrollWheelPixels = 1020.0f;
 constexpr float kNoteHeadHeight = 14.0f;
 constexpr float kTimelineLeadInTicks = 960.0f;
@@ -127,10 +126,7 @@ editor_timeline_viewport_state editor_timeline_viewport::apply_scroll_and_zoom(c
 
     const editor_timeline_viewport_model updated_model = {model.state, model.audio_length_tick, next};
     next.bottom_tick_target = std::clamp(next.bottom_tick_target, min_bottom_tick(), max_bottom_tick(updated_model));
-    next.bottom_tick += (next.bottom_tick_target - next.bottom_tick) * std::min(1.0f, kScrollLerpSpeed * input.dt);
-    if (std::fabs(next.bottom_tick - next.bottom_tick_target) < 0.5f) {
-        next.bottom_tick = next.bottom_tick_target;
-    }
+    next.bottom_tick = next.bottom_tick_target;
     return next;
 }
 
