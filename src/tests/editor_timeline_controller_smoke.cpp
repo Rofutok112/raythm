@@ -253,10 +253,20 @@ int main() {
             {hold_state.get(), &hold_meter_map, metrics,
              {body_center.x, metrics.tick_to_y(600)},
              true, false, true, true, false, false, false, 16, start.selected_note_index, start.drag_state});
-        if (finish.notes_to_modify.empty() || finish.notes_to_modify.front().first != 0 ||
-            finish.notes_to_modify.front().second.tick != 600 ||
-            finish.notes_to_modify.front().second.end_tick != 840) {
-            std::cerr << "hold body drag should move the whole note instead of resizing it\n";
+        if (!finish.notes_to_modify.empty()) {
+            std::cerr << "hold body drag should use the grabbed point as the move origin\n";
+            return EXIT_FAILURE;
+        }
+
+        editor_timeline_result moved = editor_timeline_controller::update(
+            timing_panel,
+            {hold_state.get(), &hold_meter_map, metrics,
+             {body_center.x, metrics.tick_to_y(720)},
+             true, false, true, true, false, false, false, 16, start.selected_note_index, start.drag_state});
+        if (moved.notes_to_modify.empty() || moved.notes_to_modify.front().first != 0 ||
+            moved.notes_to_modify.front().second.tick != 600 ||
+            moved.notes_to_modify.front().second.end_tick != 840) {
+            std::cerr << "hold body drag should move relative to the grabbed center point\n";
             return EXIT_FAILURE;
         }
     }

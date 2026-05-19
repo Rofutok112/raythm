@@ -399,9 +399,9 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             for (const size_t selected : result.drag_state.note_indices) {
                 result.drag_state.original_notes.push_back(context.state->data().notes[selected]);
             }
-            result.drag_state.lane = context.state->data().notes[*note_index].lane;
+            result.drag_state.lane = lane_at_x_clamped(context, context.mouse.x);
             result.drag_state.current_lane = result.drag_state.lane;
-            result.drag_state.start_tick = context.state->data().notes[*note_index].tick;
+            result.drag_state.start_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
             result.drag_state.current_tick = result.drag_state.start_tick;
             result.drag_state.start_mouse = context.mouse;
             result.drag_state.current_mouse = context.mouse;
