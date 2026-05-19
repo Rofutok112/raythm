@@ -198,7 +198,8 @@ int main() {
         editor_meter_map hold_meter_map;
         hold_meter_map.rebuild(hold_state->data());
         editor_timing_panel_state timing_panel;
-        const editor_timeline_metrics metrics = make_metrics();
+        editor_timeline_metrics metrics = make_metrics();
+        metrics.ticks_per_pixel = 10.0f;
         const editor_timeline_note selected_note{editor_timeline_note_type::hold, 480, 1, 720, false, 1};
         const editor_timeline_note_draw_info info = metrics.note_rects(selected_note);
         editor_timeline_result start = editor_timeline_controller::update(
@@ -229,7 +230,8 @@ int main() {
         editor_meter_map hold_meter_map;
         hold_meter_map.rebuild(hold_state->data());
         editor_timing_panel_state timing_panel;
-        const editor_timeline_metrics metrics = make_metrics();
+        editor_timeline_metrics metrics = make_metrics();
+        metrics.ticks_per_pixel = 10.0f;
         const editor_timeline_note selected_note{editor_timeline_note_type::hold, 480, 1, 720, false, 1};
         const editor_timeline_note_draw_info info = metrics.note_rects(selected_note);
         const Vector2 body_center = {

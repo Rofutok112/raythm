@@ -312,14 +312,17 @@ editor_timeline_note_draw_info editor_timeline_metrics::note_rects(const editor_
                           end_y - tap_height * 0.5f,
                           note_body_width,
                           tap_height};
+        const float endpoint_handle_height = std::clamp(std::min(tap_height * 0.35f, height * 0.25f),
+                                                        4.0f,
+                                                        14.0f);
         info.start_resize_rect = {lane.x + (lane.width - note_body_width) * 0.5f,
-                                  start_y - tap_height * 0.5f,
+                                  start_y - endpoint_handle_height * 0.5f,
                                   note_body_width,
-                                  tap_height};
+                                  endpoint_handle_height};
         info.end_resize_rect = {lane.x + (lane.width - note_body_width) * 0.5f,
-                                end_y - tap_height * 0.5f,
+                                end_y - endpoint_handle_height * 0.5f,
                                 note_body_width,
-                                tap_height};
+                                endpoint_handle_height};
         info.has_body = true;
     }
 

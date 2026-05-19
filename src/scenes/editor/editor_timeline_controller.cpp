@@ -193,6 +193,7 @@ std::optional<editor_timeline_drag_mode> resize_handle_at_position(const editor_
         if (CheckCollisionPointRec(point, info.end_resize_rect)) {
             return editor_timeline_drag_mode::resize_end;
         }
+        return std::nullopt;
     }
     if (CheckCollisionPointRec(point, info.left_resize_rect)) {
         return editor_timeline_drag_mode::resize_left;
