@@ -653,7 +653,7 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
 
     result.ray_toggled = draw_ray_toggle(
         {palette.x + 12.0f, note_row_y + (pad_height + gap) * 4.0f + 8.0f,
-         palette.width - 24.0f, 32.0f},
+         palette.width - 24.0f, pad_height},
         model.note_palette.is_ray);
 
     if (model.load_error != nullptr) {
