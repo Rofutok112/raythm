@@ -51,6 +51,12 @@ song_select::song_entry make_song(const fs::path& song_dir, const fs::path& char
     song.song.meta.preview_start_ms = 12000;
     song.song.meta.preview_start_seconds = 12.0f;
     song.song.meta.song_version = 3;
+    song.song.meta.offset = 45;
+    song.song.meta.has_offset = true;
+    song.song.meta.timing_events = {
+        {timing_event_type::bpm, 0, 128.0f, 4, 4},
+        {timing_event_type::meter, 960, 120.0f, 3, 4},
+    };
     song.song.directory = song_dir.string();
     song.status = content_status::community;
     song.source_status = content_status::community;
@@ -84,6 +90,14 @@ int main() {
     assert(cached.songs[0].song.meta.genre == "Fusion");
     assert(cached.songs[0].song.meta.duration_seconds == 95.0f);
     assert(cached.songs[0].song.meta.preview_start_seconds == 12.0f);
+    assert(cached.songs[0].song.meta.offset == 45);
+    assert(cached.songs[0].song.meta.has_offset);
+    assert(cached.songs[0].song.meta.timing_events.size() == 2);
+    assert(cached.songs[0].song.meta.timing_events[0].type == timing_event_type::bpm);
+    assert(cached.songs[0].song.meta.timing_events[0].bpm == 128.0f);
+    assert(cached.songs[0].song.meta.timing_events[1].type == timing_event_type::meter);
+    assert(cached.songs[0].song.meta.timing_events[1].numerator == 3);
+    assert(cached.songs[0].song.meta.timing_events[1].denominator == 4);
     assert(cached.songs[0].status == content_status::community);
     assert(cached.songs[0].source_status == content_status::community);
     assert(cached.songs[0].charts.size() == 1);

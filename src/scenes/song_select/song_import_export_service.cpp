@@ -277,6 +277,16 @@ bool copy_file_into_directory(const fs::path& source_path, const fs::path& desti
     return !ec;
 }
 
+void apply_song_timing_to_chart(const song_meta& song, chart_data& chart) {
+    if (!song.timing_events.empty()) {
+        chart.timing_events = song.timing_events;
+        chart.meta.resolution = 480;
+    }
+    if (song.has_offset) {
+        chart.meta.offset = song.offset;
+    }
+}
+
 std::optional<fs::path> find_song_json_root(const fs::path& directory) {
     std::error_code ec;
     for (const auto& entry : fs::recursive_directory_iterator(directory, ec)) {
@@ -450,6 +460,10 @@ transfer_result import_chart_package(const chart_import_request& request) {
     }
     chart_data chart_data_for_cache = chart_data_for_save;
     chart_data_for_cache.meta.song_id = request.target_song_id;
+    const song_load_result target_song = song_loader::load_directory(path_utils::to_utf8(target_song_dir));
+    if (!target_song.songs.empty()) {
+        apply_song_timing_to_chart(target_song.songs.front().meta, chart_data_for_cache);
+    }
     chart_level_cache::calculate_and_store(path_utils::to_utf8(destination_path), chart_data_for_cache);
 
     result.success = true;
@@ -734,6 +748,7 @@ transfer_result import_song_package(const song_import_request& request) {
             }
             chart_data chart_data_for_cache = chart_data_for_save;
             chart_data_for_cache.meta.song_id = request.imported_song.meta.song_id;
+            apply_song_timing_to_chart(request.imported_song.meta, chart_data_for_cache);
             chart_level_cache::calculate_and_store(destination_chart_utf8, chart_data_for_cache);
         }
     }

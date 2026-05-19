@@ -36,16 +36,16 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
 
     if (context.ctrl_down && context.z_pressed && !context.mv_script_editor_active) {
         if (context.shift_down) {
-            context.state.redo();
+            result.history_changed = context.state.redo();
         } else {
-            context.state.undo();
+            result.history_changed = context.state.undo();
         }
         editor_scene_sync::sync_after_history_change(context.sync_context);
         editor_transport_service::sync(context.transport, &context.state, context.hitsound_path, context.hitsounds, true);
     }
 
     if (context.ctrl_down && context.y_pressed && !context.mv_script_editor_active) {
-        context.state.redo();
+        result.history_changed = context.state.redo();
         editor_scene_sync::sync_after_history_change(context.sync_context);
         editor_transport_service::sync(context.transport, &context.state, context.hitsound_path, context.hitsounds, true);
     }
@@ -58,6 +58,7 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
         const size_t selected_index = *context.selected_note_index;
         if (context.state.remove_note(selected_index)) {
             context.selected_note_index.reset();
+            result.history_changed = true;
         }
     }
 

@@ -19,6 +19,13 @@ runtime convenience derived from it.
 `songId` is required in `song.json`. The loader no longer falls back to the
 directory name.
 
+Song-authored timing fields also live in `song.json` when present:
+song timing events are authored at a fixed 480 PPQ resolution, `offset` is the
+creator-authored song timeline offset, and `timingEvents` contains BPM/meter
+events. The legacy `timingResolution` field in `song.json` is ignored. Older charts may still carry
+`.rchart` resolution, timing, and offset data; runtime code uses song-level
+values first and falls back to chart values for compatibility.
+
 ## Chart Metadata
 
 Authoritative fields:
@@ -29,14 +36,16 @@ Authoritative fields:
 
 `chart_meta` contains chart identity, authored metadata, and a runtime-only
 parent song ID:
-`chartId`, `keyCount`, `difficulty`, `chartAuthor`, `formatVersion`,
-`resolution`, and `offset` are serialized in `.rchart`; `songId` is filled from
-the parent song folder/catalog row after loading.
+`chartId`, `keyCount`, `difficulty`, `chartAuthor`, and `formatVersion`
+are serialized in `.rchart`; legacy `resolution` and `offset` may still be
+serialized for compatibility. `songId` is filled from the parent song
+folder/catalog row after loading.
 
 `.rchart` files must include `chartId`, `keyCount`, `difficulty`,
-`chartAuthor`, `formatVersion`, `resolution`, and `offset`. `songId` is not a
-file-format relationship field. `level` remains excluded from the file format
-because runtime level is derived from chart notes.
+`chartAuthor`, `formatVersion`, `resolution`, and currently `offset` for legacy
+compatibility. `songId` is not a file-format relationship field. `level`
+remains excluded from the file format because runtime level is derived from
+chart notes.
 
 ## Display Metadata
 
@@ -93,6 +102,8 @@ Song upload fields:
 - `title`
 - `artist`
 - `baseBpm`
+- `offset`
+- `timingEvents`
 - `durationSec`
 - `previewStartMs`
 - `songVersion`
@@ -135,8 +146,8 @@ Paged catalog responses use `{ "items": [...], "total": number }`. Song detail
 uses `{ "song": { ... } }`.
 
 Song catalog responses should return `id`, `title`, `artist`, `baseBpm`,
-`durationSec`, `previewStartMs`, `songVersion`, `contentSource`, `audioUrl`,
-and `jacketUrl`.
+`offset`, `timingEvents`, `durationSec`, `previewStartMs`, `songVersion`,
+`contentSource`, `audioUrl`, and `jacketUrl`.
 
 Chart catalog responses should return `id`, `songId`, `keyCount`,
 `difficultyName`, `chartAuthor`, `formatVersion`, `resolution`, `offset`,

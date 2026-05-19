@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "data_models.h"
+
 namespace title_online_view {
 
 enum class catalog_mode;
@@ -17,6 +19,9 @@ struct remote_song_payload {
     std::vector<std::string> genres;
     std::vector<std::string> keywords;
     float base_bpm = 0.0f;
+    int offset = 0;
+    bool has_offset = false;
+    std::vector<timing_event> timing_events;
     float duration_seconds = 0.0f;
     int preview_start_ms = 0;
     int song_version = 0;

@@ -30,11 +30,29 @@ chart_data make_new_chart_data(const editor_start_request& request) {
         data.meta.offset = 0;
     }
     data.meta.song_id = request.song.meta.song_id;
-    data.timing_events = {
-        {timing_event_type::bpm, 0, std::max(request.song.meta.base_bpm, 120.0f), 4, 4},
-        {timing_event_type::meter, 0, 0.0f, 4, 4},
-    };
+    if (!request.song.meta.timing_events.empty()) {
+        data.timing_events = request.song.meta.timing_events;
+        data.meta.resolution = 480;
+    } else {
+        data.timing_events = {
+            {timing_event_type::bpm, 0, std::max(request.song.meta.base_bpm, 120.0f), 4, 4},
+            {timing_event_type::meter, 0, 0.0f, 4, 4},
+        };
+    }
+    if (request.song.meta.has_offset) {
+        data.meta.offset = request.song.meta.offset;
+    }
     return data;
+}
+
+void apply_song_timing_to_chart(const song_data& song, chart_data& chart) {
+    if (!song.meta.timing_events.empty()) {
+        chart.timing_events = song.meta.timing_events;
+        chart.meta.resolution = 480;
+    }
+    if (song.meta.has_offset) {
+        chart.meta.offset = song.meta.offset;
+    }
 }
 
 void scroll_timing_list_to_bottom(editor_timing_panel_state& timing_panel, size_t count) {
@@ -118,6 +136,7 @@ editor_session_load_result load(const editor_start_request& request) {
         if (parse_result.success && parse_result.data.has_value()) {
             chart_data loaded_chart = *parse_result.data;
             loaded_chart.meta.song_id = request.song.meta.song_id;
+            apply_song_timing_to_chart(request.song, loaded_chart);
             result.state->load(loaded_chart, *request.chart_path);
             result.chart_path = request.chart_path;
         } else {

@@ -478,6 +478,39 @@ std::optional<remote_song_payload> parse_remote_song(const std::string& object) 
     if (!play_count.has_value()) {
         play_count = json::extract_int(object, "plays");
     }
+    std::vector<timing_event> timing_events;
+    if (const auto timing_array = json::extract_array(object, "timingEvents")) {
+        for (const std::string& timing_object : json::extract_objects_from_array(*timing_array)) {
+            const std::string type = json::extract_string(timing_object, "type").value_or("");
+            const std::optional<int> tick = json::extract_int(timing_object, "tick");
+            if (!tick.has_value() || *tick < 0) {
+                continue;
+            }
+            timing_event event;
+            event.tick = *tick;
+            if (type == "bpm") {
+                const std::optional<float> bpm = json::extract_float(timing_object, "bpm");
+                if (!bpm.has_value() || *bpm <= 0.0f) {
+                    continue;
+                }
+                event.type = timing_event_type::bpm;
+                event.bpm = *bpm;
+            } else if (type == "meter") {
+                const std::optional<int> numerator = json::extract_int(timing_object, "numerator");
+                const std::optional<int> denominator = json::extract_int(timing_object, "denominator");
+                if (!numerator.has_value() || !denominator.has_value() || *numerator <= 0 || *denominator <= 0) {
+                    continue;
+                }
+                event.type = timing_event_type::meter;
+                event.numerator = *numerator;
+                event.denominator = *denominator;
+            } else {
+                continue;
+            }
+            timing_events.push_back(event);
+        }
+    }
+    const std::optional<int> offset = json::extract_int(object, "offset");
 
     return remote_song_payload{
         .id = *id,
@@ -487,6 +520,9 @@ std::optional<remote_song_payload> parse_remote_song(const std::string& object) 
         .genres = std::move(genres),
         .keywords = std::move(keywords),
         .base_bpm = json::extract_float(object, "baseBpm").value_or(0.0f),
+        .offset = offset.value_or(0),
+        .has_offset = offset.has_value(),
+        .timing_events = std::move(timing_events),
         .duration_seconds = json::extract_float(object, "durationSec").value_or(0.0f),
         .preview_start_ms = json::extract_int(object, "previewStartMs").value_or(0),
         .song_version = json::extract_int(object, "songVersion").value_or(0),

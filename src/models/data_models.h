@@ -5,6 +5,21 @@
 #include <string>
 #include <vector>
 
+// タイミングイベントの種類。
+enum class timing_event_type {
+    bpm,
+    meter
+};
+
+// BPM や拍子変更を表す譜面イベント。
+struct timing_event {
+    timing_event_type type = timing_event_type::bpm;
+    int tick = 0;
+    float bpm = 0.0f;
+    int numerator = 4;
+    int denominator = 4;
+};
+
 // Song metadata sourced from song.json or the remote song catalog.
 // Storage and API use camelCase names, but runtime code keeps this normalized
 // snake_case shape with milliseconds as the canonical preview unit.
@@ -16,6 +31,9 @@ struct song_meta {
     std::vector<std::string> genres;
     std::vector<std::string> keywords;
     float base_bpm = 0.0f;
+    int offset = 0;
+    bool has_offset = false;
+    std::vector<timing_event> timing_events;
     std::string audio_file;
     std::string jacket_file;
     std::string audio_url;
@@ -56,21 +74,6 @@ struct chart_meta {
     int format_version = 0;
     int resolution = 0;
     int offset = 0;
-};
-
-// タイミングイベントの種類。
-enum class timing_event_type {
-    bpm,
-    meter
-};
-
-// BPM や拍子変更を表す譜面イベント。
-struct timing_event {
-    timing_event_type type = timing_event_type::bpm;
-    int tick = 0;
-    float bpm = 0.0f;
-    int numerator = 4;
-    int denominator = 4;
 };
 
 enum class scroll_event_type {
@@ -137,6 +140,14 @@ struct chart_data {
     std::vector<scroll_event> scroll_events;
     std::vector<note_data> notes;
 };
+
+inline const std::vector<timing_event>& effective_timing_events(const song_data& song, const chart_data& chart) {
+    return song.meta.timing_events.empty() ? chart.timing_events : song.meta.timing_events;
+}
+
+inline int effective_author_offset_ms(const song_data& song, const chart_data& chart) {
+    return song.meta.has_offset ? song.meta.offset : chart.meta.offset;
+}
 
 enum class content_status {
     local,

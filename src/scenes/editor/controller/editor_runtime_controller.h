@@ -28,6 +28,7 @@ struct editor_shortcut_context {
 
 struct editor_shortcut_result {
     std::optional<int> restore_scroll_tick;
+    bool history_changed = false;
 };
 
 struct editor_runtime_timeline_context {

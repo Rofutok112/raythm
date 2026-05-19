@@ -563,6 +563,17 @@ std::pair<float, float> collect_bpm_range(const chart_data& chart) {
                  : std::pair<float, float>{0.0f, 0.0f};
 }
 
+chart_data chart_with_song_timing(const song_data& song, chart_data chart) {
+    if (!song.meta.timing_events.empty()) {
+        chart.timing_events = song.meta.timing_events;
+        chart.meta.resolution = 480;
+    }
+    if (song.meta.has_offset) {
+        chart.meta.offset = song.meta.offset;
+    }
+    return chart;
+}
+
 }  // namespace
 
 namespace song_select {
@@ -607,15 +618,16 @@ catalog_data load_catalog(bool calculate_missing_levels) {
                 continue;
             }
 
-            chart_meta meta = parse_result.data->meta;
+            chart_data effective_chart = chart_with_song_timing(song, *parse_result.data);
+            chart_meta meta = effective_chart.meta;
             meta.song_id = song.meta.song_id;
             if (calculate_missing_levels) {
-                meta.level = chart_level_cache::get_or_calculate(chart_path, *parse_result.data);
+                meta.level = chart_level_cache::get_or_calculate(chart_path, effective_chart);
             } else if (const std::optional<float> cached_level = chart_level_cache::find_level(chart_path);
                        cached_level.has_value()) {
                 meta.level = *cached_level;
             }
-            const auto [min_bpm, max_bpm] = collect_bpm_range(*parse_result.data);
+            const auto [min_bpm, max_bpm] = collect_bpm_range(effective_chart);
 
             chart_option option{
                 chart_path,

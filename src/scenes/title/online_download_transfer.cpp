@@ -79,6 +79,46 @@ bool restore_staged_charts(const std::filesystem::path& staged_charts_dir,
     return !ec;
 }
 
+std::vector<timing_event> parse_timing_events(const std::string& metadata_json) {
+    std::vector<timing_event> events;
+    const std::optional<std::string> timing_array = json::extract_array(metadata_json, "timingEvents");
+    if (!timing_array.has_value()) {
+        return events;
+    }
+
+    for (const std::string& object : json::extract_objects_from_array(*timing_array)) {
+        const std::string type = json::extract_string(object, "type").value_or("");
+        const std::optional<int> tick = json::extract_int(object, "tick");
+        if (!tick.has_value() || *tick < 0) {
+            continue;
+        }
+
+        timing_event event;
+        event.tick = *tick;
+        if (type == "bpm") {
+            const std::optional<float> bpm = json::extract_float(object, "bpm");
+            if (!bpm.has_value() || *bpm <= 0.0f) {
+                continue;
+            }
+            event.type = timing_event_type::bpm;
+            event.bpm = *bpm;
+        } else if (type == "meter") {
+            const std::optional<int> numerator = json::extract_int(object, "numerator");
+            const std::optional<int> denominator = json::extract_int(object, "denominator");
+            if (!numerator.has_value() || !denominator.has_value() || *numerator <= 0 || *denominator <= 0) {
+                continue;
+            }
+            event.type = timing_event_type::meter;
+            event.numerator = *numerator;
+            event.denominator = *denominator;
+        } else {
+            continue;
+        }
+        events.push_back(event);
+    }
+    return events;
+}
+
 std::optional<song_meta> parse_downloaded_song_metadata(const std::string& metadata_json,
                                                         const std::string& local_song_id,
                                                         int fallback_song_version,
@@ -103,6 +143,11 @@ std::optional<song_meta> parse_downloaded_song_metadata(const std::string& metad
     meta.audio_file = trim_ascii(json::extract_string(metadata_json, "audioFile").value_or(""));
     meta.jacket_file = trim_ascii(json::extract_string(metadata_json, "jacketFile").value_or(""));
     meta.base_bpm = json::extract_float(metadata_json, "baseBpm").value_or(0.0f);
+    if (const std::optional<int> offset = json::extract_int(metadata_json, "offset")) {
+        meta.offset = *offset;
+        meta.has_offset = true;
+    }
+    meta.timing_events = parse_timing_events(metadata_json);
     meta.duration_seconds = json::extract_float(metadata_json, "durationSec").value_or(0.0f);
     meta.chart_count = std::max(0, json::extract_int(metadata_json, "chartCount").value_or(0));
     meta.preview_start_ms = json::extract_int(metadata_json, "previewStartMs").value_or(0);
