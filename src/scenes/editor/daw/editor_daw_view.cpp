@@ -948,8 +948,8 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
 
     const Rectangle arrange = content;
     const Rectangle minimap = track;
-    const Rectangle ruler = {arrange.x + arrange.width + 8.0f, arrange.y, 60.0f, arrange.height};
-    const Rectangle automation = {ruler.x + ruler.width + 8.0f, arrange.y, 110.0f, arrange.height};
+    const Rectangle ruler = {track.x + track.width + 8.0f, arrange.y, 60.0f, arrange.height};
+    const Rectangle automation = {arrange.x + arrange.width + 8.0f, arrange.y, 110.0f, arrange.height};
     const Rectangle ruler_labels = {ruler.x, arrange.y, ruler.width, arrange.height};
     {
         ui::scoped_clip_rect clip_scope(arrange);
