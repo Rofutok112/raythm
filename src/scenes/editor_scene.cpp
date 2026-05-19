@@ -658,6 +658,11 @@ std::optional<note_data> editor_scene::dragged_note() const {
         return note;
     }
 
+    if (timeline_drag_.mode != editor_timeline_drag_mode::create ||
+        note_palette_.active_tool != editor_note_palette_selection::tool::note) {
+        return std::nullopt;
+    }
+
     note_data note;
     note.lane = std::min(timeline_drag_.lane, timeline_drag_.current_lane);
     note.lane_width = std::abs(timeline_drag_.current_lane - timeline_drag_.lane) + 1;
