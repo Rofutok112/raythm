@@ -326,38 +326,132 @@ void draw_waveform(const editor_timeline_view_model& model, Rectangle content) {
     }
 }
 
-Color editor_note_tone(editor_timeline_note_type type, bool is_ray, const ui_theme& t) {
+Color editor_play_note_color(editor_timeline_note_type type, bool is_ray, Color base) {
     if (is_ray) {
-        return {174, 96, 255, 255};
+        switch (type) {
+            case editor_timeline_note_type::hold:
+                return lerp_color(base, {142, 92, 236, 255}, 0.72f);
+            case editor_timeline_note_type::release:
+                return lerp_color(base, {198, 116, 255, 255}, 0.76f);
+            case editor_timeline_note_type::stay:
+                return lerp_color(base, WHITE, 0.90f);
+            case editor_timeline_note_type::tap:
+                return lerp_color(base, {180, 132, 255, 255}, 0.68f);
+        }
     }
     switch (type) {
         case editor_timeline_note_type::release:
-            return {255, 105, 148, 255};
+            return lerp_color(base, {255, 105, 148, 255}, 0.42f);
         case editor_timeline_note_type::stay:
-            return {70, 236, 224, 255};
+            return lerp_color(base, g_theme->judge_perfect, 0.25f);
         case editor_timeline_note_type::tap:
+            return lerp_color(base, WHITE, 0.42f);
         case editor_timeline_note_type::hold:
-            return WHITE;
+            return lerp_color(base, WHITE, 0.96f);
     }
-    return t.text;
+    return base;
 }
 
-void draw_editor_tap_slab(Rectangle rect, Color fill, Color outline, bool selected) {
-    ui::draw_rect_f(rect, fill);
-    const float border_width = selected ? 2.4f : 1.2f;
-    ui::draw_rect_lines(rect, border_width, outline);
-
-    const float rim_height = std::clamp(rect.height * 0.16f, 1.5f, 4.0f);
-    const float side_width = std::clamp(rect.width * 0.055f, 1.5f, 4.0f);
-    ui::draw_rect_f({rect.x, rect.y, rect.width, rim_height}, with_alpha(WHITE, fill.a / 3));
-    ui::draw_rect_f({rect.x, rect.y + rect.height - rim_height, rect.width, rim_height},
-                    with_alpha(BLACK, fill.a / 10));
-    ui::draw_rect_f({rect.x, rect.y, side_width, rect.height}, with_alpha(WHITE, fill.a / 5));
-    ui::draw_rect_f({rect.x + rect.width - side_width, rect.y, side_width, rect.height},
-                    with_alpha(BLACK, fill.a / 12));
+Color editor_tap_gradient_color(Color base, float t) {
+    const float edge_factor = std::pow(std::fabs(t - 0.5f) * 2.0f, 1.25f);
+    const float highlight = 0.26f + (1.0f - edge_factor) * 0.26f;
+    const unsigned char alpha = static_cast<unsigned char>(166.0f + edge_factor * 42.0f);
+    return with_alpha(lerp_color(base, WHITE, highlight), alpha);
 }
 
-void draw_editor_stay_dot(Rectangle rect, Color fill, Color outline, bool selected) {
+Color editor_hold_gradient_color(Color base, float t) {
+    const float edge_factor = std::pow(std::fabs(t - 0.5f) * 2.0f, 1.55f);
+    const unsigned char alpha = static_cast<unsigned char>(84.0f + edge_factor * 110.0f);
+    return with_alpha(lerp_color(base, WHITE, edge_factor * 0.10f), alpha);
+}
+
+Color editor_stay_gradient_color(Color base, float t) {
+    const float center_factor = 1.0f - std::pow(std::fabs(t - 0.5f) * 2.0f, 1.35f);
+    const float highlight = 0.16f + center_factor * 0.52f;
+    const unsigned char alpha = static_cast<unsigned char>(208.0f + center_factor * 24.0f);
+    return with_alpha(lerp_color(base, WHITE, highlight), alpha);
+}
+
+void draw_horizontal_strip_gradient(Rectangle rect, int steps, Color (*color_at)(Color, float), Color base) {
+    const float step_width = rect.width / static_cast<float>(steps);
+    for (int i = 0; i < steps; ++i) {
+        const float t = (static_cast<float>(i) + 0.5f) / static_cast<float>(steps);
+        const Rectangle strip = {
+            rect.x + step_width * static_cast<float>(i),
+            rect.y,
+            i == steps - 1 ? rect.width - step_width * static_cast<float>(i) : step_width + 0.75f,
+            rect.height
+        };
+        ui::draw_rect_f(strip, color_at(base, t));
+    }
+}
+
+void draw_editor_tap_slab(Rectangle rect, Color fill, bool release_style, bool ray_style, bool selected) {
+    const Color tap_base = ray_style
+                               ? lerp_color(fill, {180, 132, 255, 255}, 0.72f)
+                               : release_style
+                               ? lerp_color(fill, {255, 118, 156, 255}, 0.38f)
+                               : lerp_color(fill, WHITE, 0.56f);
+    const Color edge = lerp_color(tap_base, WHITE, 0.30f);
+    const float rim_height = std::max(2.0f, rect.height * 0.16f);
+    const float side_width = std::max(2.0f, std::min(rect.width * 0.055f, rect.height * 0.18f));
+    const Color frame_left = with_alpha(lerp_color(edge, WHITE, 0.12f), 232);
+    const Color frame_right = with_alpha(lerp_color(edge, BLACK, 0.08f), 218);
+    const Color frame_near = with_alpha(lerp_color(edge, WHITE, 0.18f), 238);
+    const Color frame_far = with_alpha(lerp_color(edge, BLACK, 0.12f), 210);
+
+    draw_horizontal_strip_gradient(rect, 16, editor_tap_gradient_color, tap_base);
+    DrawRectangleGradientH(static_cast<int>(rect.x), static_cast<int>(rect.y),
+                           static_cast<int>(rect.width), static_cast<int>(rim_height),
+                           frame_left, frame_right);
+    DrawRectangleGradientH(static_cast<int>(rect.x), static_cast<int>(rect.y + rect.height - rim_height),
+                           static_cast<int>(rect.width), static_cast<int>(rim_height),
+                           frame_left, frame_right);
+    DrawRectangleGradientV(static_cast<int>(rect.x), static_cast<int>(rect.y),
+                           static_cast<int>(side_width), static_cast<int>(rect.height),
+                           frame_near, frame_far);
+    DrawRectangleGradientV(static_cast<int>(rect.x + rect.width - side_width), static_cast<int>(rect.y),
+                           static_cast<int>(side_width), static_cast<int>(rect.height),
+                           frame_near, frame_far);
+    if (selected) {
+        ui::draw_rect_lines(ui::inset(rect, -2.0f), 2.0f, g_theme->accent);
+    }
+}
+
+void draw_editor_hold_body(Rectangle rect, Color fill, bool ray_style, bool selected) {
+    const Color hold_base = ray_style
+                                ? lerp_color(fill, g_theme->accent, 0.68f)
+                                : lerp_color(fill, WHITE, 0.94f);
+    const Color edge = lerp_color(hold_base, WHITE, 0.24f);
+    const float cap_height = std::min(18.0f, std::max(4.0f, rect.height * 0.16f));
+    const float cap_overhang = std::min(rect.width * 0.035f, rect.width * 0.015f);
+    const Rectangle body = {
+        rect.x + cap_overhang,
+        rect.y,
+        std::max(1.0f, rect.width - cap_overhang * 2.0f),
+        rect.height
+    };
+    const Color cap_left = with_alpha(lerp_color(edge, WHITE, 0.16f), 230);
+    const Color cap_right = with_alpha(lerp_color(edge, BLACK, 0.10f), 214);
+
+    draw_horizontal_strip_gradient(body, 24, editor_hold_gradient_color, hold_base);
+    DrawRectangleGradientH(static_cast<int>(rect.x), static_cast<int>(rect.y),
+                           static_cast<int>(rect.width), static_cast<int>(cap_height),
+                           cap_left, cap_right);
+    DrawRectangleGradientH(static_cast<int>(rect.x), static_cast<int>(rect.y + rect.height - cap_height),
+                           static_cast<int>(rect.width), static_cast<int>(cap_height),
+                           cap_left, cap_right);
+    if (selected) {
+        ui::draw_rect_lines(ui::inset(rect, -2.0f), 2.0f, g_theme->accent);
+    }
+}
+
+void draw_editor_stay_dot(Rectangle rect, Color fill, bool ray_style, bool selected) {
+    const Color stay_base = ray_style
+                                ? lerp_color(WHITE, {224, 214, 255, 255}, 0.14f)
+                                : lerp_color({70, 236, 224, 255}, fill, 0.14f);
+    const Color end_edge = with_alpha(lerp_color(stay_base, WHITE, 0.34f), 226);
+    const Color end_inner = with_alpha(lerp_color(stay_base, WHITE, 0.12f), 178);
     const Vector2 center = rect_center(rect);
     const float bar_width = std::max(12.0f, rect.width * 1.04f);
     const float bar_height = std::clamp(rect.height * 0.46f, 6.0f, 14.0f);
@@ -369,12 +463,16 @@ void draw_editor_stay_dot(Rectangle rect, Color fill, Color outline, bool select
     const Rectangle right_cap = {bar.x + bar.width - cap_width, center.y - cap_height * 0.5f,
                                  cap_width, cap_height};
 
-    DrawRectangleRounded(bar, 0.65f, 8, fill);
-    ui::draw_rect_f(left_cap, with_alpha(WHITE, fill.a / 5));
-    ui::draw_rect_f(right_cap, with_alpha(BLACK, fill.a / 9));
-    ui::draw_rect_lines(bar, selected ? 2.2f : 1.2f, outline);
-    ui::draw_rect_lines(left_cap, 1.0f, with_alpha(outline, 170));
-    ui::draw_rect_lines(right_cap, 1.0f, with_alpha(outline, 170));
+    draw_horizontal_strip_gradient(bar, 18, editor_stay_gradient_color, stay_base);
+    DrawRectangleGradientV(static_cast<int>(left_cap.x), static_cast<int>(left_cap.y),
+                           static_cast<int>(left_cap.width), static_cast<int>(left_cap.height),
+                           end_inner, end_edge);
+    DrawRectangleGradientV(static_cast<int>(right_cap.x), static_cast<int>(right_cap.y),
+                           static_cast<int>(right_cap.width), static_cast<int>(right_cap.height),
+                           end_inner, end_edge);
+    if (selected) {
+        ui::draw_rect_lines(ui::inset(bar, -2.0f), 2.0f, g_theme->accent);
+    }
 }
 
 void draw_editor_release_chevron(Rectangle rect, Color marker, Color contour) {
@@ -408,27 +506,26 @@ void draw_note_block(const editor_timeline_note& note,
                      bool preview,
                      bool overlap) {
     const auto& t = *g_theme;
-    const Color tone = overlap ? t.error : editor_note_tone(note.type, note.is_ray, t);
-    const Color fill = selected ? with_alpha(tone, 245) : with_alpha(tone, preview ? 150 : 220);
-    const Color outline = selected ? t.accent : with_alpha(tone, note.is_ray ? 255 : 210);
+    const Color fill = overlap ? t.error : editor_play_note_color(note.type, note.is_ray, t.note_color);
+    const Color draw_fill = preview ? with_alpha(fill, 170) : fill;
 
     if (info.has_body) {
-        ui::draw_rect_f(info.body_rect, with_alpha(tone, selected ? 150 : 100));
-        ui::draw_rect_lines(info.body_rect, selected ? 2.0f : 1.0f, with_alpha(outline, 205));
-        draw_editor_tap_slab(info.tail_rect, fill, outline, selected);
+        draw_editor_hold_body(info.body_rect, draw_fill, note.is_ray, selected);
+        draw_editor_tap_slab(info.tail_rect, draw_fill, false, note.is_ray, selected);
     }
 
     if (note.type == editor_timeline_note_type::stay) {
-        draw_editor_stay_dot(info.head_rect, fill, outline, selected);
+        draw_editor_stay_dot(info.head_rect, draw_fill, note.is_ray, selected);
         return;
     }
 
-    draw_editor_tap_slab(info.head_rect, fill, outline, selected);
+    draw_editor_tap_slab(info.head_rect, draw_fill, note.type == editor_timeline_note_type::release,
+                         note.is_ray, selected);
     if (note.type == editor_timeline_note_type::release) {
-        const Color marker = note.is_ray ? with_alpha(WHITE, selected ? 255 : 235)
-                                         : with_alpha(lerp_color(tone, WHITE, 0.52f), selected ? 255 : 235);
-        const Color contour = note.is_ray ? with_alpha(t.bg, 220)
-                                          : with_alpha(lerp_color(tone, BLACK, 0.22f), 220);
+        const Color release_seed = note.is_ray ? Color{190, 112, 255, 255} : Color{255, 90, 132, 255};
+        const Color release_base = lerp_color(release_seed, draw_fill, note.is_ray ? 0.24f : 0.16f);
+        const Color marker = with_alpha(lerp_color(release_base, WHITE, 0.28f), 255);
+        const Color contour = with_alpha(lerp_color(release_base, BLACK, 0.16f), 255);
         draw_editor_release_chevron(info.head_rect, marker, contour);
     }
 }
