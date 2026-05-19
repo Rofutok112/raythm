@@ -978,7 +978,11 @@ void editor_scene::draw_timeline() const {
     std::vector<size_t> preview_ignore_indices;
     if (timeline_drag_.active && timeline_drag_.mode == editor_timeline_drag_mode::move_notes) {
         preview_ignore_indices = timeline_drag_.note_indices;
-    } else if (timeline_drag_.active && timeline_drag_.mode != editor_timeline_drag_mode::create &&
+    } else if (timeline_drag_.active &&
+               (timeline_drag_.mode == editor_timeline_drag_mode::resize_left ||
+                timeline_drag_.mode == editor_timeline_drag_mode::resize_right ||
+                timeline_drag_.mode == editor_timeline_drag_mode::resize_start ||
+                timeline_drag_.mode == editor_timeline_drag_mode::resize_end) &&
                timeline_drag_.note_index.has_value()) {
         preview_ignore_indices.push_back(*timeline_drag_.note_index);
     }

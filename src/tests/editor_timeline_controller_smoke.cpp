@@ -376,6 +376,38 @@ int main() {
     }
 
     {
+        chart_data selection_chart = make_chart();
+        selection_chart.notes = {
+            {note_type::tap, 480, 1, 480},
+            {note_type::tap, 960, 2, 960},
+        };
+        selection_chart.scroll_events.clear();
+        const auto selection_state = std::make_shared<editor_state>(selection_chart, "");
+        editor_meter_map selection_meter_map;
+        selection_meter_map.rebuild(selection_state->data());
+        editor_timing_panel_state timing_panel;
+        const editor_timeline_metrics metrics = make_metrics();
+        const Rectangle lane0_rect = metrics.lane_rect(0);
+        editor_timeline_note_drag_state stale_drag_state;
+        stale_drag_state.note_index = 0;
+        stale_drag_state.note_indices = {0};
+        stale_drag_state.original_notes = {selection_state->data().notes[0]};
+        const editor_timeline_result start = editor_timeline_controller::update(
+            timing_panel,
+            {selection_state.get(), &selection_meter_map, metrics,
+             {lane0_rect.x + lane0_rect.width * 0.5f, metrics.tick_to_y(240)}, true,
+             false, false, false, true, false, false, 8, std::optional<size_t>(0), stale_drag_state,
+             {}, {0}});
+        if (start.drag_state.mode != editor_timeline_drag_mode::range_select ||
+            start.drag_state.note_index.has_value() ||
+            !start.drag_state.note_indices.empty() ||
+            !start.drag_state.original_notes.empty()) {
+            std::cerr << "range selection should clear stale note drag state\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
         editor_timing_panel_state timing_panel;
         const editor_timeline_metrics metrics = make_metrics();
         const Rectangle lane_rect = metrics.lane_rect(3);

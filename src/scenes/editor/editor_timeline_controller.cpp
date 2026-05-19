@@ -382,6 +382,9 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
 
         result.drag_state.active = true;
         result.drag_state.mode = editor_timeline_drag_mode::range_select;
+        result.drag_state.note_index.reset();
+        result.drag_state.note_indices.clear();
+        result.drag_state.original_notes.clear();
         result.drag_state.start_mouse = context.mouse;
         result.drag_state.current_mouse = context.mouse;
         result.drag_state.start_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
