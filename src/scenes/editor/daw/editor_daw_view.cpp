@@ -628,23 +628,6 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
          palette.width - 24.0f, 32.0f},
         model.note_palette.is_ray);
 
-    const Rectangle ops = {content.x, palette.y + palette.height + 14.0f, content.width, 164.0f};
-    ui::draw_section(ops);
-    ui::draw_text_in_rect("Edit Focus", 20, {ops.x + 12.0f, ops.y + 10.0f, ops.width - 24.0f, 24.0f},
-                          t.text, ui::text_align::left);
-    ui::draw_label_value({ops.x + 12.0f, ops.y + 50.0f, ops.width - 24.0f, 22.0f},
-                         "Edit Target", palette_label(model.note_palette.type),
-                         14, t.text_muted, t.text_secondary, 78.0f);
-    ui::draw_label_value({ops.x + 12.0f, ops.y + 82.0f, ops.width - 24.0f, 22.0f},
-                         "Ray", model.note_palette.is_ray ? "On" : "Off",
-                         14, t.text_muted, model.note_palette.is_ray ? t.fast : t.text_secondary, 78.0f);
-    ui::draw_label_value({ops.x + 12.0f, ops.y + 114.0f, ops.width - 24.0f, 22.0f},
-                         "Snap", "Header control", 14, t.text_muted, t.text_secondary, 78.0f);
-    ui::draw_text_in_rect("Metadata and timing live in header modals.",
-                          13,
-                          {ops.x + 12.0f, ops.y + 138.0f, ops.width - 24.0f, 18.0f},
-                          t.text_hint, ui::text_align::left);
-
     if (model.load_error != nullptr) {
         ui::draw_text_in_rect(model.load_error->c_str(), 16,
                               {content.x, content.y + content.height - 58.0f, content.width, 52.0f},
