@@ -629,7 +629,7 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
     draw_badge({content.x, content.y + 62.0f, 95.0f, 24.0f}, status_label,
                model.is_dirty ? t.slow : t.success, model.is_dirty ? t.slow : t.success);
 
-    const Rectangle palette = {content.x, content.y + 112.0f, content.width, 356.0f};
+    const Rectangle palette = {content.x, content.y + 112.0f, content.width, 384.0f};
     ui::draw_section(palette);
     ui::draw_text_in_rect("Tool", 22,
                           {palette.x + 12.0f, palette.y + 10.0f, palette.width - 24.0f, 24.0f},
@@ -874,18 +874,26 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
     result.timing_modal_requested = ui::draw_button_colored(
         timing_button, "TIMING", 13, t.row, t.row_hover, t.text_secondary, 1.2f).clicked;
 
-    const Rectangle transport = {bar.x + bar.width * 0.5f - 78.0f, content.y + 1.0f, 156.0f, 50.0f};
+    const float transport_padding = 10.0f;
+    const float transport_button_size = 42.0f;
+    const float transport_button_gap = 8.0f;
+    const float transport_width = transport_padding * 2.0f + transport_button_size * 3.0f + transport_button_gap * 2.0f;
+    const Rectangle transport = {bar.x + bar.width * 0.5f - transport_width * 0.5f, content.y + 1.0f,
+                                 transport_width, 50.0f};
     ui::draw_section(transport);
-    const Rectangle restart_rect = {transport.x + 10.0f, transport.y + 4.0f, 42.0f, 42.0f};
+    const Rectangle restart_rect = {transport.x + transport_padding, transport.y + 4.0f,
+                                    transport_button_size, transport_button_size};
     const ui::button_state restart_button =
         draw_icon_button(restart_rect, raythm_icons::draw_skip_back, false, t.text);
     result.restart_requested = restart_button.clicked;
-    const Rectangle play_rect = {restart_rect.x + restart_rect.width + 8.0f, restart_rect.y, 42.0f, 42.0f};
+    const Rectangle play_rect = {restart_rect.x + restart_rect.width + transport_button_gap, restart_rect.y,
+                                 transport_button_size, transport_button_size};
     const ui::button_state play_button = model.audio_playing
         ? draw_icon_button(play_rect, raythm_icons::draw_pause, true, t.accent)
         : draw_icon_button(play_rect, raythm_icons::draw_play, false, t.text);
     result.playback_toggled = play_button.clicked;
-    const Rectangle loop_button_rect = {play_rect.x + play_rect.width + 8.0f, play_rect.y, 42.0f, 42.0f};
+    const Rectangle loop_button_rect = {play_rect.x + play_rect.width + transport_button_gap, play_rect.y,
+                                        transport_button_size, transport_button_size};
     const ui::button_state loop_button = draw_icon_button(loop_button_rect, raythm_icons::draw_repeat_2,
                                                           model.loop_enabled, t.success);
     result.loop_toggled = loop_button.clicked;
