@@ -70,19 +70,19 @@
     },
     {
       "name": "note_tap",
-      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/circle.svg"
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/circle-dot.svg"
     },
     {
       "name": "note_long",
-      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/minus.svg"
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/move-horizontal.svg"
     },
     {
       "name": "note_release",
-      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/triangle.svg"
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/arrow-up-from-line.svg"
     },
     {
       "name": "note_stay",
-      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/pause.svg"
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/circle-pause.svg"
     }
   ]
 }
