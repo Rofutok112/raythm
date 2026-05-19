@@ -513,18 +513,18 @@ void draw_note_block(const editor_timeline_note& note,
     }
 }
 
-float minimap_y_for_tick(const editor_timeline_view_model& model, Rectangle minimap, int tick) {
+float minimap_y_for_tick(const editor_timeline_view_model& model, Rectangle minimap, float tick) {
     const float full_tick_span = std::max(1.0f, model.content_height_pixels * model.metrics.ticks_per_pixel);
     const float max_bottom_tick = model.metrics.bottom_tick +
         model.scroll_offset_pixels * model.metrics.ticks_per_pixel;
     const float min_bottom_tick = max_bottom_tick -
         std::max(0.0f, model.content_height_pixels - model.metrics.content_rect().height) *
             model.metrics.ticks_per_pixel;
-    const float ratio = std::clamp((static_cast<float>(tick) - min_bottom_tick) / full_tick_span, 0.0f, 1.0f);
+    const float ratio = std::clamp((tick - min_bottom_tick) / full_tick_span, 0.0f, 1.0f);
     return minimap.y + minimap.height - ratio * minimap.height;
 }
 
-void draw_chart_minimap(const editor_timeline_view_model& model, Rectangle minimap, Rectangle viewport_box) {
+void draw_chart_minimap(const editor_timeline_view_model& model, Rectangle minimap) {
     const auto& t = *g_theme;
     ui::draw_rect_f(minimap, with_alpha(t.section, 235));
     ui::draw_rect_lines(minimap, 1.0f, t.border_light);
@@ -564,12 +564,18 @@ void draw_chart_minimap(const editor_timeline_view_model& model, Rectangle minim
         }
     }
 
+    const float visible_start_y = minimap_y_for_tick(model, inner, model.metrics.bottom_tick);
+    const float visible_end_y = minimap_y_for_tick(
+        model,
+        inner,
+        model.metrics.bottom_tick + model.metrics.visible_tick_span());
+    const float box_top = std::clamp(std::min(visible_start_y, visible_end_y), inner.y, inner.y + inner.height);
+    const float box_bottom = std::clamp(std::max(visible_start_y, visible_end_y), inner.y, inner.y + inner.height);
     const Rectangle clipped_box = {
-        viewport_box.x,
-        std::clamp(viewport_box.y, minimap.y, minimap.y + minimap.height),
-        viewport_box.width,
-        std::min(viewport_box.height,
-                 minimap.y + minimap.height - std::clamp(viewport_box.y, minimap.y, minimap.y + minimap.height))
+        inner.x,
+        box_top,
+        inner.width,
+        std::max(1.0f, box_bottom - box_top)
     };
     ui::draw_rect_f(clipped_box, with_alpha(t.accent, 36));
     ui::draw_rect_lines(clipped_box, 2.0f, with_alpha(t.accent, 220));
@@ -1001,14 +1007,7 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
         }
     }
 
-    const float viewport_ratio = model.content_height_pixels <= 1.0f
-        ? 1.0f
-        : std::clamp(content.height / model.content_height_pixels, 0.06f, 1.0f);
-    const float viewport_height = std::max(36.0f, minimap.height * viewport_ratio);
-    const float max_scroll = std::max(1.0f, model.content_height_pixels - content.height);
-    const float viewport_y = minimap.y + (minimap.height - viewport_height) *
-        std::clamp(model.scroll_offset_pixels / max_scroll, 0.0f, 1.0f);
-    draw_chart_minimap(model, minimap, {minimap.x + 3.0f, viewport_y, minimap.width - 6.0f, viewport_height});
+    draw_chart_minimap(model, minimap);
 
     ui::draw_rect_f(ruler, with_alpha(t.section, 235));
     ui::draw_rect_lines(ruler, 1.0f, t.border_light);
