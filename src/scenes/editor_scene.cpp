@@ -33,7 +33,7 @@
 
 namespace {
 namespace layout = editor::layout;
-constexpr double kLevelRefreshDebounceSeconds = 0.25;
+constexpr double kLevelRefreshDebounceSeconds = 0.10;
 
 Rectangle snap_dropdown_menu_rect() {
     return layout::snap_dropdown_menu_rect(static_cast<int>(editor_timeline_viewport::snap_labels().size()));
