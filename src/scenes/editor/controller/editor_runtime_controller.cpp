@@ -198,7 +198,6 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
         context.palette,
         context.selected_note_indices,
         context.ctrl_down,
-        context.shift_down,
         context.right_down,
         context.right_released,
     });
@@ -235,13 +234,6 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
 
     if (timeline_result.note_to_delete_index.has_value()) {
         if (context.state.remove_note(*timeline_result.note_to_delete_index)) {
-            context.selected_note_index.reset();
-            context.selected_note_indices.clear();
-        }
-    }
-
-    if (!timeline_result.notes_to_delete_indices.empty()) {
-        if (context.state.remove_notes(timeline_result.notes_to_delete_indices)) {
             context.selected_note_index.reset();
             context.selected_note_indices.clear();
         }

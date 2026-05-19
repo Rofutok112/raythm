@@ -326,7 +326,7 @@ int main() {
             timing_panel,
             {state.get(), &meter_map, metrics, {lane3_rect.x + lane3_rect.width * 0.5f, metrics.tick_to_y(720)}, true,
              false, false, false, false, false, false, 8, std::nullopt, start.drag_state,
-             {note_type::hold, false}, {}, false, false, true, true});
+             {note_type::hold, false}, {}, false, true, true});
         if (!finish.note_to_add.has_value() || finish.note_to_add->lane != 2 ||
             finish.note_to_add->lane_width != 2 ||
             finish.note_to_add->tick != 240 || finish.note_to_add->end_tick != 720) {
@@ -415,7 +415,7 @@ int main() {
             timing_panel,
             {state.get(), &meter_map, metrics, {lane_rect.x + lane_rect.width * 0.5f, y}, true,
              false, false, false, false, false, false, 8, std::nullopt, start.drag_state,
-             {note_type::release, true}, {}, false, false, true, true});
+             {note_type::release, true}, {}, false, true, true});
         if (!finish.note_to_add.has_value() || finish.note_to_add->type != note_type::release ||
             !finish.note_to_add->is_ray || finish.note_to_add->tick != finish.note_to_add->end_tick) {
             std::cerr << "palette should create a ray release note without converting it to tap\n";

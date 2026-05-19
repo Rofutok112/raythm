@@ -251,7 +251,6 @@ void editor_scene::update(float dt) {
         IsKeyPressed(KEY_ESCAPE),
         IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT),
         IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
-        IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
         editor_timeline_viewport::snap_division(viewport_),
         note_palette_,
         IsMouseButtonDown(MOUSE_BUTTON_RIGHT),
@@ -653,25 +652,6 @@ std::optional<note_data> editor_scene::dragged_note() const {
             const int min_gap = editor_timeline_viewport::snap_interval(viewport_model());
             note.end_tick = std::max(note.tick + min_gap, timeline_drag_.current_tick);
         }
-        return note;
-    }
-
-    if (timeline_drag_.mode == editor_timeline_drag_mode::move_notes) {
-        if (!timeline_drag_.note_index.has_value() ||
-            *timeline_drag_.note_index >= state_->data().notes.size()) {
-            return std::nullopt;
-        }
-
-        note_data note = timeline_drag_.original_note;
-        const int tick_delta = timeline_drag_.current_tick - timeline_drag_.start_tick;
-        const int lane_delta = timeline_drag_.current_lane - timeline_drag_.lane;
-        note.tick = std::max(0, note.tick + tick_delta);
-        if (note.type == note_type::hold) {
-            note.end_tick = std::max(note.tick + 1, note.end_tick + tick_delta);
-        } else {
-            note.end_tick = note.tick;
-        }
-        note.lane += lane_delta;
         return note;
     }
 

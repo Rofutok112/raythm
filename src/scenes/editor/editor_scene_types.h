@@ -283,7 +283,6 @@ struct editor_timeline_context {
     editor_note_palette_selection palette;
     std::vector<size_t> selected_note_indices;
     bool ctrl_down = false;
-    bool shift_down = false;
     bool right_down = false;
     bool right_released = false;
 };
@@ -293,7 +292,6 @@ struct editor_timeline_result {
     std::vector<size_t> selected_note_indices;
     editor_timeline_note_drag_state drag_state;
     std::optional<size_t> note_to_delete_index;
-    std::vector<size_t> notes_to_delete_indices;
     bool request_seek = false;
     int seek_tick = 0;
     bool scroll_seek_if_paused = false;
