@@ -1121,15 +1121,14 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
             if (pos.y < automation_graph.y || pos.y > automation_graph.y + automation_graph.height) {
                 continue;
             }
-            const bool selected = model.selected_scroll_event_index.has_value() &&
-                                  *model.selected_scroll_event_index == point_index;
             const Rectangle hit = {pos.x - 8.0f, pos.y - 8.0f, 16.0f, 16.0f};
             if (!hovered_point.has_value() && CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), hit)) {
                 hovered_point = point_index;
             }
-            DrawCircleV(pos, selected ? 7.0f : 5.5f, selected ? t.accent : t.fast);
-            DrawCircleLines(static_cast<int>(pos.x), static_cast<int>(pos.y), selected ? 8.0f : 6.5f,
-                            selected ? t.text : with_alpha(t.text, 170));
+            const bool hovered = hovered_point.has_value() && *hovered_point == point_index;
+            DrawCircleV(pos, hovered ? 6.5f : 5.5f, hovered ? t.accent : t.fast);
+            DrawCircleLines(static_cast<int>(pos.x), static_cast<int>(pos.y), hovered ? 7.5f : 6.5f,
+                            hovered ? t.text : with_alpha(t.text, 170));
         }
     }
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
@@ -1137,16 +1136,19 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && automation_hovered) {
         if (hovered_point.has_value()) {
             result.panel_result.selected_scroll_event_index = hovered_point;
+            result.scroll_automation_point_to_modify = std::make_pair(
+                *hovered_point,
+                point_at_mouse(mouse, model.scroll_automation[*hovered_point].curve_to_next));
         } else {
             result.scroll_automation_point_to_add = point_at_mouse(mouse, scroll_automation_curve::linear);
         }
     }
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && automation_hovered &&
-        model.selected_scroll_event_index.has_value() &&
-        *model.selected_scroll_event_index < model.scroll_automation.size()) {
+        hovered_point.has_value() &&
+        *hovered_point < model.scroll_automation.size()) {
         result.scroll_automation_point_to_modify = std::make_pair(
-            *model.selected_scroll_event_index,
-            point_at_mouse(mouse, model.scroll_automation[*model.selected_scroll_event_index].curve_to_next));
+            *hovered_point,
+            point_at_mouse(mouse, model.scroll_automation[*hovered_point].curve_to_next));
     }
     if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && hovered_point.has_value()) {
         result.panel_result.selected_scroll_event_index = hovered_point;
