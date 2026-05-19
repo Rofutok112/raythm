@@ -949,7 +949,7 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
     const Rectangle arrange = content;
     const Rectangle minimap = track;
     const Rectangle ruler = {track.x + track.width + 8.0f, arrange.y, 60.0f, arrange.height};
-    const Rectangle automation = {arrange.x + arrange.width + 8.0f, arrange.y, 110.0f, arrange.height};
+    const Rectangle automation = {arrange.x + arrange.width + 8.0f, arrange.y, 260.0f, arrange.height};
     const Rectangle ruler_labels = {ruler.x, arrange.y, ruler.width, arrange.height};
     {
         ui::scoped_clip_rect clip_scope(arrange);
@@ -1030,9 +1030,29 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
 
     ui::draw_rect_f(automation, with_alpha(t.section, 235));
     ui::draw_rect_lines(automation, 1.0f, t.border_light);
-    ui::draw_text_in_rect("AUTO", 11, {automation.x, automation.y + 8.0f, automation.width, 16.0f},
-                          t.text_muted);
-    const Rectangle automation_graph = ui::inset(automation, ui::edge_insets{28.0f, 8.0f, 10.0f, 8.0f});
+    const Rectangle automation_header = {automation.x, automation.y, 72.0f, automation.height};
+    const Rectangle automation_body = {automation_header.x + automation_header.width, automation.y,
+                                       automation.width - automation_header.width, automation.height};
+    ui::draw_rect_f(automation_header, with_alpha(t.panel, 235));
+    ui::draw_rect_lines(automation_header, 1.0f, with_alpha(t.border_light, 190));
+    ui::draw_text_in_rect("Scroll", 13,
+                          {automation_header.x + 8.0f, automation_header.y + 8.0f,
+                           automation_header.width - 16.0f, 18.0f},
+                          t.text_secondary, ui::text_align::left);
+    const Rectangle read_button = {automation_header.x + 8.0f, automation_header.y + 34.0f, 24.0f, 22.0f};
+    const Rectangle write_button = {read_button.x + read_button.width + 6.0f, read_button.y, 24.0f, 22.0f};
+    ui::draw_rect_f(read_button, with_alpha(t.success, 86));
+    ui::draw_rect_lines(read_button, 1.0f, with_alpha(t.success, 190));
+    ui::draw_text_in_rect("R", 12, read_button, t.text);
+    ui::draw_rect_f(write_button, with_alpha(t.row, 190));
+    ui::draw_rect_lines(write_button, 1.0f, with_alpha(t.border_light, 180));
+    ui::draw_text_in_rect("W", 12, write_button, t.text_muted);
+    ui::draw_text_in_rect("1x", 11,
+                          {automation_header.x + 8.0f, automation_header.y + automation_header.height - 28.0f,
+                           automation_header.width - 16.0f, 18.0f},
+                          t.text_muted, ui::text_align::left);
+    const Rectangle automation_graph = ui::inset(automation_body, ui::edge_insets{10.0f, 10.0f, 10.0f, 8.0f});
+    ui::draw_rect_f(automation_graph, with_alpha(t.bg_alt, 80));
     for (int i = 0; i <= 3; ++i) {
         const float x = automation_graph.x + automation_graph.width * static_cast<float>(i) / 3.0f;
         ui::draw_line_f(x, automation_graph.y, x, automation_graph.y + automation_graph.height,
@@ -1050,6 +1070,9 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
         const float t_value = std::clamp(multiplier / 3.0f, 0.0f, 1.0f);
         return automation_graph.x + t_value * automation_graph.width;
     };
+    const float unity_x = point_x(1.0f);
+    ui::draw_line_f(unity_x, automation_graph.y, unity_x, automation_graph.y + automation_graph.height,
+                    with_alpha(t.fast, 150));
     auto point_at_mouse = [&](Vector2 mouse, scroll_automation_curve curve) {
         scroll_automation_point point;
         point.tick = std::max(0, model.metrics.y_to_tick(mouse.y));

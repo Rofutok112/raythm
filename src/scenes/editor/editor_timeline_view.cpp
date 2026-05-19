@@ -216,7 +216,7 @@ void draw_lane_header(const editor_timeline_view_model& model, Rectangle content
 Rectangle editor_timeline_metrics::content_rect() const {
     constexpr float kLeftLaneWidth = 60.0f;
     constexpr float kLaneGap = 8.0f;
-    constexpr float kAutomationWidth = 110.0f;
+    constexpr float kAutomationWidth = 260.0f;
     return {
         panel_rect.x + padding + scrollbar_width + kLaneGap + kLeftLaneWidth + kLaneGap,
         panel_rect.y + padding,

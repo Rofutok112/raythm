@@ -39,6 +39,7 @@ public:
     void add_scroll_automation_point(scroll_automation_point point);
     bool remove_scroll_automation_point(size_t index);
     bool modify_scroll_automation_point(size_t index, scroll_automation_point point);
+    void initialize_default_scroll_automation(int end_tick);
 
     bool modify_metadata(chart_meta meta, bool clear_notes = false);
 

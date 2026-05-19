@@ -696,6 +696,17 @@ bool editor_state::modify_scroll_automation_point(size_t index, scroll_automatio
     return true;
 }
 
+void editor_state::initialize_default_scroll_automation(int end_tick) {
+    if (!chart_.scroll_automation.empty()) {
+        return;
+    }
+    const int clamped_end_tick = std::max(std::max(1, chart_.meta.resolution * 8), end_tick);
+    chart_.scroll_automation = {
+        {0, 1.0f, scroll_automation_curve::linear},
+        {clamped_end_tick, 1.0f, scroll_automation_curve::hold},
+    };
+}
+
 bool editor_state::modify_metadata(chart_meta meta, bool clear_notes) {
     if (meta.key_count != chart_.meta.key_count && !clear_notes && !chart_.notes.empty()) {
         return false;

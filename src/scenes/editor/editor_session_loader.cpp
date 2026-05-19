@@ -213,6 +213,7 @@ editor_session_load_result load(const editor_start_request& request) {
     result.previous_playback_tick = transport_result.previous_playback_tick;
     result.previous_audio_playing = transport_result.previous_audio_playing;
     result.audio_length_tick = std::max(result.audio_length_tick, transport_result.audio_length_tick);
+    result.state->initialize_default_scroll_automation(result.audio_length_tick);
 
     if (!request.resume_state.has_value()) {
         result.bottom_tick = 0.0f;
