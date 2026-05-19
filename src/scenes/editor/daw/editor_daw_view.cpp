@@ -123,13 +123,6 @@ void draw_badge(Rectangle rect, const char* label, Color border, Color text) {
     ui::draw_text_in_rect(label, 13, rect, text);
 }
 
-void draw_difficulty_badge(Rectangle rect, const char* label, float level) {
-    const Color tone = difficulty_level_color(level);
-    ui::draw_rect_f(rect, with_alpha(tone, 34));
-    ui::draw_rect_lines(rect, 1.2f, with_alpha(tone, 210));
-    ui::draw_text_in_rect(label != nullptr && label[0] != '\0' ? label : "New", 13, rect, tone);
-}
-
 ui::button_state draw_layer_button(Rectangle rect,
                                    const char* label,
                                    int font_size,
@@ -636,8 +629,9 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
     draw_marquee_text(model.song_title, content.x, content.y + 26.0f, 24, t.text, content.width, model.now);
     draw_badge({content.x, content.y + 62.0f, 95.0f, 24.0f}, status_label,
                model.is_dirty ? t.slow : t.success, model.is_dirty ? t.slow : t.success);
-    draw_difficulty_badge({content.x + 103.0f, content.y + 62.0f, content.width - 103.0f, 24.0f},
-                          model.difficulty, model.level);
+    draw_difficulty_level_badge(model.level,
+                                {content.x + 103.0f, content.y + 62.0f, 76.0f, 24.0f},
+                                13, 255);
 
     const Rectangle palette = {content.x, content.y + 112.0f, content.width, 384.0f};
     ui::draw_section(palette);

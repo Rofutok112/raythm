@@ -308,7 +308,6 @@ void editor_scene::draw() {
 
     const editor_left_panel_view_result left_panel = editor::daw::draw_left_panel({
         song_.meta.title.c_str(),
-        state_->data().meta.difficulty.c_str(),
         state_->data().meta.level,
         !state_->file_path().empty(),
         state_->is_dirty(),
@@ -455,7 +454,6 @@ void editor_scene::draw() {
     if (metadata_modal_open_) {
         const editor::daw::metadata_modal_result modal_result = editor::daw::draw_metadata_modal({
             song_.meta.title.c_str(),
-            state_->data().meta.difficulty.c_str(),
             state_->data().meta.level,
             !state_->file_path().empty(),
             state_->is_dirty(),

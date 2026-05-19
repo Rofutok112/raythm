@@ -8,7 +8,6 @@
 
 struct editor_left_panel_view_model {
     const char* song_title = "";
-    const char* difficulty = "";
     float level = 0.0f;
     bool has_file = false;
     bool is_dirty = false;
