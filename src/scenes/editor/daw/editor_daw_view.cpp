@@ -9,6 +9,7 @@
 #include "editor/editor_timeline_view.h"
 #include "editor/view/editor_layout.h"
 #include "editor/viewport/editor_timeline_viewport.h"
+#include "game_settings.h"
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
@@ -453,12 +454,9 @@ void draw_editor_stay_dot(Rectangle rect, Color fill, bool ray_style, bool selec
     const Color end_edge = with_alpha(lerp_color(stay_base, WHITE, 0.34f), 226);
     const Color end_inner = with_alpha(lerp_color(stay_base, WHITE, 0.12f), 178);
     const Vector2 center = rect_center(rect);
-    const float bar_width = std::max(12.0f, rect.width * 1.04f);
-    const float bar_height = std::clamp(rect.height * 0.46f, 6.0f, 14.0f);
-    const Rectangle bar = {center.x - bar_width * 0.5f, center.y - bar_height * 0.5f,
-                           bar_width, bar_height};
-    const float cap_width = std::clamp(bar_width * 0.055f, 2.0f, 5.0f);
-    const float cap_height = bar_height * 1.55f;
+    const Rectangle bar = rect;
+    const float cap_width = std::clamp(bar.width * 0.055f, 2.0f, 5.0f);
+    const float cap_height = bar.height * 1.55f;
     const Rectangle left_cap = {bar.x, center.y - cap_height * 0.5f, cap_width, cap_height};
     const Rectangle right_cap = {bar.x + bar.width - cap_width, center.y - cap_height * 0.5f,
                                  cap_width, cap_height};
@@ -475,10 +473,12 @@ void draw_editor_stay_dot(Rectangle rect, Color fill, bool ray_style, bool selec
     }
 }
 
-void draw_editor_release_chevron(Rectangle rect, Color marker, Color contour) {
-    const Vector2 center = rect_center(rect);
-    const float width = std::max(12.0f, rect.width * 0.72f);
-    const float height = std::clamp(rect.height * 0.72f, 10.0f, 24.0f);
+void draw_editor_release_chevron(Rectangle note_rect, float world_to_px, Color marker, Color contour) {
+    const float width = std::max(g_settings.lane_width * world_to_px * 0.76f, note_rect.width * 0.78f);
+    const float height = g_settings.lane_width * world_to_px * 0.40f;
+    const float lift = 2.5f * world_to_px;
+    const Vector2 center = {note_rect.x + note_rect.width * 0.5f,
+                            note_rect.y + note_rect.height * 0.5f - lift - height * 0.5f};
     const Vector2 left_outer_bottom = {center.x - width * 0.50f, center.y + height * 0.26f};
     const Vector2 left_outer_top = {center.x - width * 0.50f, center.y + height * 0.02f};
     const Vector2 center_top = {center.x, center.y - height * 0.36f};
@@ -526,7 +526,9 @@ void draw_note_block(const editor_timeline_note& note,
         const Color release_base = lerp_color(release_seed, draw_fill, note.is_ray ? 0.24f : 0.16f);
         const Color marker = with_alpha(lerp_color(release_base, WHITE, 0.28f), 255);
         const Color contour = with_alpha(lerp_color(release_base, BLACK, 0.16f), 255);
-        draw_editor_release_chevron(info.head_rect, marker, contour);
+        const float world_to_px = info.head_rect.width /
+            std::max(g_settings.lane_width * 0.92f, 0.001f);
+        draw_editor_release_chevron(info.head_rect, world_to_px, marker, contour);
     }
 }
 

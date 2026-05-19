@@ -5,6 +5,7 @@
 #include <set>
 #include <vector>
 
+#include "game_settings.h"
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
@@ -273,15 +274,22 @@ editor_timeline_note_draw_info editor_timeline_metrics::note_rects(const editor_
     };
     const float start_y = tick_to_y(note.tick);
     editor_timeline_note_draw_info info;
-    float inset = 6.0f;
-    if (note.type == editor_timeline_note_type::release) {
-        inset = 3.0f;
-    } else if (note.type == editor_timeline_note_type::stay) {
-        inset = 9.0f;
-    }
-    info.head_rect = {lane.x + inset, start_y - note_head_height * 0.5f, lane.width - inset * 2.0f, note_head_height};
+    const float single_lane_width = lane_width();
+    const float world_to_px = single_lane_width / std::max(0.001f, g_settings.lane_width);
+    const float note_body_width = std::max(single_lane_width * 0.2f, lane.width - single_lane_width * 0.08f);
+    const float hold_body_width = std::max(single_lane_width * 0.18f, lane.width - single_lane_width * 0.20f);
+    const float tap_height = std::max(8.0f, world_to_px * 0.78f * g_settings.note_height);
+    const float stay_width = std::max(single_lane_width * 0.54f, note_body_width * 1.04f);
+    const float stay_height = std::max(5.0f, world_to_px * 0.28f);
+
+    const float head_width = note.type == editor_timeline_note_type::stay ? stay_width : note_body_width;
+    const float head_height = note.type == editor_timeline_note_type::stay ? stay_height : tap_height;
+    info.head_rect = {lane.x + (lane.width - head_width) * 0.5f,
+                      start_y - head_height * 0.5f,
+                      head_width,
+                      head_height};
     const float handle_width = std::min(9.0f, std::max(5.0f, lane.width * 0.18f));
-    const float handle_height = note_head_height + 8.0f;
+    const float handle_height = head_height + 8.0f;
     info.left_resize_rect = {info.head_rect.x - handle_width * 0.5f,
                              start_y - handle_height * 0.5f,
                              handle_width,
@@ -295,9 +303,18 @@ editor_timeline_note_draw_info editor_timeline_metrics::note_rects(const editor_
         const float end_y = tick_to_y(note.end_tick);
         const float top = std::min(start_y, end_y);
         const float height = std::fabs(end_y - start_y);
-        info.body_rect = {lane.x + lane.width * 0.3f, top, lane.width * 0.4f, std::max(height, 6.0f)};
-        info.tail_rect = {lane.x + 10.0f, end_y - 5.0f, lane.width - 20.0f, 10.0f};
-        info.end_resize_rect = {lane.x + 8.0f, end_y - 8.0f, lane.width - 16.0f, 16.0f};
+        info.body_rect = {lane.x + (lane.width - hold_body_width) * 0.5f,
+                          top,
+                          hold_body_width,
+                          std::max(height, 6.0f)};
+        info.tail_rect = {lane.x + (lane.width - note_body_width) * 0.5f,
+                          end_y - tap_height * 0.5f,
+                          note_body_width,
+                          tap_height};
+        info.end_resize_rect = {lane.x + (lane.width - note_body_width) * 0.5f,
+                                end_y - tap_height * 0.5f,
+                                note_body_width,
+                                tap_height};
         info.left_resize_rect.height = std::fabs(end_y - start_y) + handle_height;
         info.left_resize_rect.y = std::min(start_y, end_y) - handle_height * 0.5f;
         info.right_resize_rect.height = info.left_resize_rect.height;
