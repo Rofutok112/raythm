@@ -13,6 +13,10 @@ int snap_tick(const editor_timeline_context& context, int raw_tick) {
     return std::max(0, context.state->snap_tick(std::max(0, raw_tick), context.snap_division));
 }
 
+int seek_tick(int raw_tick) {
+    return std::max(0, raw_tick);
+}
+
 std::optional<int> lane_at_position(const editor_timeline_context& context, Vector2 point) {
     const Rectangle content = context.metrics.content_rect();
     if (!CheckCollisionPointRec(point, content) || context.state == nullptr) {
@@ -308,7 +312,7 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
 
     if (context.shift_down && context.timeline_hovered && (context.left_pressed || context.left_down)) {
         result.request_seek = true;
-        result.seek_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
+        result.seek_tick = seek_tick(context.metrics.y_to_tick(context.mouse.y));
         result.drag_state.active = false;
         return result;
     }
