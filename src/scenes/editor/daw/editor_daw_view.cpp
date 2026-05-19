@@ -159,7 +159,7 @@ void draw_palette_pad(Rectangle rect,
                       editor_left_panel_view_result& result) {
     const auto& t = *g_theme;
     const bool selected = selection.active_tool == editor_note_palette_selection::tool::note &&
-        !selection.is_ray && selection.type == type;
+        selection.type == type;
     const Color tone = type == note_type::hold ? t.success :
         (type == note_type::release ? t.slow :
          (type == note_type::stay ? t.fast : t.accent));

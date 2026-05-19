@@ -133,7 +133,7 @@ editor_left_panel_view_result editor_left_panel_view::draw(const editor_left_pan
     draw_tool_chip({tools_box.x + 12.0f + (tool_width + tool_gap) * 2.0f, tool_y, tool_width, 26.0f},
                    "Notes", raythm_icons::draw_layers, false);
     ui::draw_label_value({tools_box.x + 12.0f, tools_box.y + 74.0f, tools_box.width - 24.0f, 16.0f},
-                         "Edit", ray_selected ? "Ray lane" : palette_label(model.note_palette.type),
+                         "Edit", palette_label(model.note_palette.type),
                          13, t.text_muted, t.text_secondary, 46.0f);
 
     const Rectangle palette_box = {content.x, tools_box.y + tools_box.height + 12.0f, content.width, 136.0f};
