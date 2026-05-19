@@ -753,28 +753,7 @@ void draw_timeline(const editor_timeline_presenter_model& presenter_model) {
     ui::draw_rect_f(panel, panel_tint(t.panel, t.bg_alt, 0.12f));
     ui::draw_rect_lines(panel, 1.5f, t.border);
 
-    const Rectangle title = {panel.x + 14.0f, panel.y + 12.0f, panel.width - 28.0f, 54.0f};
-    ui::draw_rect_f(title, panel_tint(t.section, t.accent, 0.06f));
-    ui::draw_rect_lines(title, 1.0f, t.border_light);
-    ui::draw_text_in_rect("Arrangement", 21, {title.x + 14.0f, title.y + 6.0f, 150.0f, 24.0f},
-                          t.text, ui::text_align::left);
-    draw_micro_label({title.x + 14.0f, title.y + 32.0f, 220.0f, 16.0f},
-                     "measure ruler / notes / automation", t.text_muted);
-    const char* selection_label = model.selected_note_indices.empty()
-        ? (model.selected_note_index.has_value() ? "1 NOTE" : "NO SELECTION")
-        : TextFormat("%d NOTES", static_cast<int>(model.selected_note_indices.size()));
-    draw_badge({title.x + title.width - 330.0f, title.y + 12.0f, 120.0f, 30.0f},
-               selection_label,
-               model.selected_note_indices.empty() && !model.selected_note_index.has_value() ? t.text_muted : t.accent,
-               model.selected_note_indices.empty() && !model.selected_note_index.has_value() ? t.text_secondary : t.text);
-    draw_badge({title.x + title.width - 200.0f, title.y + 12.0f, 86.0f, 30.0f},
-               TextFormat("%dt", model.snap_interval), t.fast, t.text);
-    draw_badge({title.x + title.width - 104.0f, title.y + 12.0f, 90.0f, 30.0f},
-               model.loop_enabled ? "LOOP ON" : "LOOP OFF",
-               model.loop_enabled ? t.success : t.text_muted,
-               model.loop_enabled ? t.success : t.text_secondary);
-
-    const Rectangle arrange = {content.x, content.y + 62.0f, content.width, content.height - 62.0f};
+    const Rectangle arrange = content;
     const Rectangle minimap = track;
     const Rectangle ruler = {track.x + track.width + 8.0f, arrange.y, 60.0f, arrange.height};
     const Rectangle ruler_labels = {ruler.x, arrange.y, ruler.width, arrange.height};
