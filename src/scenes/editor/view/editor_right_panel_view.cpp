@@ -14,9 +14,6 @@ const char* timing_event_type_label(timing_event_type type) {
     return type == timing_event_type::bpm ? "BPM" : "Time Sig";
 }
 
-const char* scroll_event_type_label(scroll_event_type type) {
-    return type == scroll_event_type::speed ? "Speed" : "Stop";
-}
 }
 
 editor_right_panel_view_result editor_right_panel_view::draw(const editor_right_panel_view_model& model,
@@ -40,15 +37,13 @@ editor_right_panel_view_result editor_right_panel_view::draw(const editor_right_
     }
 
     std::vector<editor_timing_panel_item> scroll_items;
-    scroll_items.reserve(model.scroll_events->size());
-    for (size_t index = 0; index < model.scroll_events->size(); ++index) {
-        const scroll_event& event = (*model.scroll_events)[index];
+    scroll_items.reserve(model.scroll_automation->size());
+    for (size_t index = 0; index < model.scroll_automation->size(); ++index) {
+        const scroll_automation_point& point = (*model.scroll_automation)[index];
         scroll_items.push_back({
             index,
-            std::string("Scroll Region ") + model.meter_map->bar_beat_label(event.tick),
-            event.type == scroll_event_type::speed
-                ? TextFormat("%s %.2fx / %dt", scroll_event_type_label(event.type), event.multiplier, event.duration)
-                : TextFormat("%s / %dt", scroll_event_type_label(event.type), event.duration),
+            std::string("Automation ") + model.meter_map->bar_beat_label(point.tick),
+            TextFormat("%.2fx", point.multiplier),
             model.selected_scroll_event_index.has_value() && *model.selected_scroll_event_index == index
         });
     }
@@ -57,9 +52,9 @@ editor_right_panel_view_result editor_right_panel_view::draw(const editor_right_
     if (model.selected_event_index.has_value() && *model.selected_event_index < model.timing_events->size()) {
         selected_event = (*model.timing_events)[*model.selected_event_index];
     }
-    std::optional<scroll_event> selected_scroll_event;
-    if (model.selected_scroll_event_index.has_value() && *model.selected_scroll_event_index < model.scroll_events->size()) {
-        selected_scroll_event = (*model.scroll_events)[*model.selected_scroll_event_index];
+    std::optional<scroll_automation_point> selected_scroll_event;
+    if (model.selected_scroll_event_index.has_value() && *model.selected_scroll_event_index < model.scroll_automation->size()) {
+        selected_scroll_event = (*model.scroll_automation)[*model.selected_scroll_event_index];
     }
 
     result.panel_result = editor_timing_panel::draw(

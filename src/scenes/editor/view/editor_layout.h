@@ -9,12 +9,12 @@ inline constexpr Rectangle kScreenRect = {0.0f, 0.0f, static_cast<float>(kScreen
 inline constexpr Rectangle kHeaderRect = ui::place(kScreenRect, 1830.0f, 72.0f,
                                                    ui::anchor::top_center, ui::anchor::top_center,
                                                    Vector2{0.0f, 18.0f});
-inline constexpr Rectangle kLeftPanelRect = ui::place(kScreenRect, 372.0f, 930.0f,
+inline constexpr Rectangle kLeftPanelRect = ui::place(kScreenRect, 300.0f, 930.0f,
                                                       ui::anchor::top_left, ui::anchor::top_left,
                                                       Vector2{30.0f, 108.0f});
-inline constexpr Rectangle kTimelineRect = ui::place(kScreenRect, 1464.0f, 930.0f,
+inline constexpr Rectangle kTimelineRect = ui::place(kScreenRect, 1536.0f, 930.0f,
                                                      ui::anchor::top_left, ui::anchor::top_left,
-                                                     Vector2{426.0f, 108.0f});
+                                                     Vector2{354.0f, 108.0f});
 inline constexpr Rectangle kRightPanelRect = ui::place(kScreenRect, 372.0f, 930.0f,
                                                        ui::anchor::top_right, ui::anchor::top_right,
                                                        Vector2{-30.0f, 108.0f});

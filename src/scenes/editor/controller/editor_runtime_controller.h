@@ -69,7 +69,6 @@ struct editor_runtime_timeline_result {
     bool request_apply_selected_timing = false;
     bool request_apply_selected_scroll = false;
     std::optional<size_t> selected_scroll_event_index;
-    bool scroll_event_modified = false;
     std::optional<int> scroll_to_tick;
 };
 

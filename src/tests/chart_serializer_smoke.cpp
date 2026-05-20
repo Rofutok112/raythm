@@ -38,17 +38,19 @@ bool equal_timing_event(const timing_event& left, const timing_event& right) {
            left.denominator == right.denominator;
 }
 
-bool equal_scroll_event(const scroll_event& left, const scroll_event& right) {
-    return left.type == right.type &&
-           left.tick == right.tick &&
-           left.duration == right.duration &&
-           almost_equal(left.multiplier, right.multiplier);
-}
-
 bool equal_scroll_automation_point(const scroll_automation_point& left, const scroll_automation_point& right) {
     return left.tick == right.tick &&
            almost_equal(left.multiplier, right.multiplier) &&
            left.curve_to_next == right.curve_to_next;
+}
+
+bool equal_scroll_automation_guides(const scroll_automation_guides& left, const scroll_automation_guides& right) {
+    for (size_t i = 0; i < left.values.size(); ++i) {
+        if (!almost_equal(left.values[i], right.values[i])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool equal_note(const note_data& left, const note_data& right) {
@@ -63,20 +65,14 @@ bool equal_note(const note_data& left, const note_data& right) {
 bool equal_chart_data(const chart_data& left, const chart_data& right) {
     if (!equal_chart_meta(left.meta, right.meta) ||
         left.timing_events.size() != right.timing_events.size() ||
-        left.scroll_events.size() != right.scroll_events.size() ||
         left.scroll_automation.size() != right.scroll_automation.size() ||
+        !equal_scroll_automation_guides(left.scroll_guides, right.scroll_guides) ||
         left.notes.size() != right.notes.size()) {
         return false;
     }
 
     for (size_t i = 0; i < left.timing_events.size(); ++i) {
         if (!equal_timing_event(left.timing_events[i], right.timing_events[i])) {
-            return false;
-        }
-    }
-
-    for (size_t i = 0; i < left.scroll_events.size(); ++i) {
-        if (!equal_scroll_event(left.scroll_events[i], right.scroll_events[i])) {
             return false;
         }
     }
@@ -99,13 +95,6 @@ bool equal_chart_data(const chart_data& left, const chart_data& right) {
 chart_data normalized_chart(chart_data data) {
     std::stable_sort(data.timing_events.begin(), data.timing_events.end(), [](const timing_event& left, const timing_event& right) {
         return left.tick < right.tick;
-    });
-
-    std::stable_sort(data.scroll_events.begin(), data.scroll_events.end(), [](const scroll_event& left, const scroll_event& right) {
-        if (left.tick != right.tick) {
-            return left.tick < right.tick;
-        }
-        return left.type == scroll_event_type::speed && right.type == scroll_event_type::stop;
     });
 
     std::stable_sort(data.scroll_automation.begin(), data.scroll_automation.end(),
@@ -156,15 +145,12 @@ int main() {
         {.type = timing_event_type::bpm, .tick = 0, .bpm = 150.0f, .numerator = 4, .denominator = 4},
     };
 
-    source.scroll_events = {
-        {.type = scroll_event_type::stop, .tick = 1440, .duration = 120, .multiplier = 0.0f},
-        {.type = scroll_event_type::speed, .tick = 960, .duration = 480, .multiplier = 0.5f},
-    };
     source.scroll_automation = {
         {.tick = 0, .multiplier = 1.0f, .curve_to_next = scroll_automation_curve::hold},
         {.tick = 960, .multiplier = 0.5f, .curve_to_next = scroll_automation_curve::linear},
         {.tick = 1440, .multiplier = 1.25f, .curve_to_next = scroll_automation_curve::ease_out},
     };
+    source.scroll_guides.values = {0.25f, 0.75f, 2.5f, 100.0f};
 
     note_data wide_tap{.type = note_type::tap, .tick = 1320, .lane = 1, .end_tick = 1320};
     wide_tap.lane_width = 2;
@@ -194,11 +180,11 @@ int main() {
     ok = content.find("level=") == std::string::npos && ok;
     ok = expect_contains_in_order(content, "chartId=", "keyCount=") && ok;
     ok = expect_contains_in_order(content, "meter,0,4/4", "bpm,960,180.5") && ok;
-    ok = expect_contains_in_order(content, "[Scroll]", "[Notes]") && ok;
-    ok = expect_contains_in_order(content, "[Scroll]", "[ScrollAutomation]") && ok;
-    ok = expect_contains_in_order(content, "[ScrollAutomation]", "[Notes]") && ok;
-    ok = expect_contains_in_order(content, "speed,960,480,0.5", "stop,1440,120") && ok;
+    ok = expect_contains_in_order(content, "[ScrollAutomation]", "[ScrollAutomationGuides]") && ok;
+    ok = expect_contains_in_order(content, "[ScrollAutomationGuides]", "[Notes]") && ok;
+    ok = content.find("[Scroll]\n") == std::string::npos && ok;
     ok = expect_contains_in_order(content, "point,0,1,hold", "point,1440,1.25,easeOut") && ok;
+    ok = content.find("guides,0.25,0.75,2.5,100") != std::string::npos && ok;
     ok = expect_contains_in_order(content, "tap,480,0", "hold,480,2,840") && ok;
     ok = content.find("release,960,0,ray") != std::string::npos && ok;
     ok = content.find("stay,1200,1") != std::string::npos && ok;

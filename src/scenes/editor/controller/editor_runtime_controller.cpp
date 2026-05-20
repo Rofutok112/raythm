@@ -252,15 +252,5 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
         }
     }
 
-    if (timeline_result.scroll_event_to_modify_index.has_value() &&
-        timeline_result.scroll_event_to_modify.has_value()) {
-        if (context.state.modify_scroll_event(*timeline_result.scroll_event_to_modify_index,
-                                              *timeline_result.scroll_event_to_modify)) {
-            result.selected_scroll_event_index = timeline_result.scroll_event_to_modify_index;
-            result.scroll_event_modified = true;
-            result.scroll_to_tick = timeline_result.scroll_event_to_modify->tick;
-        }
-    }
-
     return result;
 }

@@ -31,6 +31,7 @@ editor_timeline_metrics editor_timeline_viewport::metrics(const editor_timeline_
         kScrollbarGap,
         kScrollbarWidth,
         kLaneGap,
+        128.0f,
         kNoteHeadHeight,
         model.viewport.bottom_tick,
         model.viewport.ticks_per_pixel,

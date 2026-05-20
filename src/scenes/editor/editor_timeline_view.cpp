@@ -33,10 +33,10 @@ void draw_release_note_marker(Rectangle rect, Color fill, Color outline) {
     ui::draw_rect_lines(rect, 1.5f, outline);
 
     const float center_x = rect.x + rect.width * 0.5f;
-    const float tip_y = rect.y - 17.0f;
-    const float wing_y = rect.y - 5.0f;
-    const float half_width = std::min(11.0f, rect.width * 0.28f);
-    const Rectangle stem = {center_x - 2.0f, rect.y - 5.0f, 4.0f, 9.0f};
+    const float tip_y = rect.y - std::max(18.0f, rect.height * 0.64f);
+    const float wing_y = rect.y - 1.5f;
+    const float half_width = std::min(16.0f, rect.width * 0.36f);
+    const Rectangle stem = {center_x - 2.5f, rect.y - 2.0f, 5.0f, 7.0f};
     DrawRectangleRounded(stem, 0.4f, 4, fill);
     ui::draw_rect_lines(stem, 1.0f, outline);
     DrawTriangle({center_x, tip_y}, {center_x - half_width, wing_y}, {center_x + half_width, wing_y}, fill);
@@ -98,43 +98,6 @@ void draw_waveform(const editor_timeline_view_model& model, Rectangle content, c
                         with_alpha(t.accent, primary_alpha));
         ui::draw_line_f(center_x - half_width, y + 1.0f, center_x + half_width, y + 1.0f,
                         with_alpha(t.accent, secondary_alpha));
-    }
-}
-
-void draw_scroll_events(const editor_timeline_view_model& model, Rectangle content, const ui_theme& t) {
-    for (size_t i = 0; i < model.scroll_events.size(); ++i) {
-        const editor_timeline_scroll_event& event = model.scroll_events[i];
-        if (event.duration <= 0 || event.tick > model.max_tick || event.tick + event.duration < model.min_tick) {
-            continue;
-        }
-
-        const float start_y = model.metrics.tick_to_y(event.tick);
-        const float end_y = model.metrics.tick_to_y(event.tick + event.duration);
-        const float top = std::min(start_y, end_y);
-        const float height = std::max(8.0f, std::fabs(end_y - start_y));
-        const Rectangle band = {content.x, top, content.width, height};
-        const bool selected = model.selected_scroll_event_index.has_value() && *model.selected_scroll_event_index == i;
-        const Color base = event.type == scroll_event_type::speed
-            ? Color{26, 188, 196, 255}
-            : Color{238, 92, 64, 255};
-        ui::draw_rect_f(band, with_alpha(base, selected ? 104 : 54));
-        ui::draw_rect_lines(band, selected ? 2.5f : 1.2f, with_alpha(base, selected ? 235 : 150));
-        ui::draw_rect_f({band.x, band.y - 3.0f, band.width, 6.0f}, with_alpha(base, selected ? 220 : 135));
-        ui::draw_rect_f({band.x, band.y + band.height - 3.0f, band.width, 6.0f}, with_alpha(base, selected ? 220 : 135));
-
-        if (event.type == scroll_event_type::stop) {
-            for (float x = band.x - band.height; x < band.x + band.width; x += 18.0f) {
-                DrawLineEx({x, band.y + band.height}, {x + band.height, band.y}, 2.0f,
-                           with_alpha(base, selected ? 185 : 110));
-            }
-        }
-
-        const char* label = event.type == scroll_event_type::speed
-            ? TextFormat("%.2fx", event.multiplier)
-            : "STOP";
-        ui::draw_text_f(label, band.x + 10.0f, band.y + 4.0f, 15, selected ? t.text : t.text_secondary);
-        ui::draw_text_f("Scroll Region", band.x + band.width - 112.0f, band.y + 4.0f, 13,
-                        selected ? t.text : t.text_muted);
     }
 }
 
@@ -221,7 +184,7 @@ Rectangle editor_timeline_metrics::content_rect() const {
         panel_rect.x + padding + scrollbar_width + kLaneGap + kLeftLaneWidth + kLaneGap,
         panel_rect.y + padding,
         panel_rect.width - padding * 2.0f - scrollbar_width - kLeftLaneWidth - kAutomationWidth -
-            kLaneGap * 3.0f,
+            kLaneGap * 3.0f - right_reserved_width,
         panel_rect.height - padding * 2.0f
     };
 }
@@ -371,7 +334,6 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             ui::draw_text_f(model.loop_enabled ? "LOOP" : "loop", band.x + band.width - 58.0f, band.y + 5.0f,
                             14, model.loop_enabled ? t.text : t.text_secondary);
         }
-        draw_scroll_events(model, content, t);
         draw_lane_header(model, content, t);
 
         for (int lane = 0; lane < std::max(1, model.metrics.key_count); ++lane) {
@@ -403,16 +365,16 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
         const std::set<size_t> preview_note_indices(
             model.preview_note_indices.begin(), model.preview_note_indices.end());
         for (size_t i = 0; i < model.notes.size(); ++i) {
-            if (preview_note_indices.find(i) != preview_note_indices.end()) {
+            const editor_timeline_note& note = model.notes[i];
+            if (preview_note_indices.find(note.source_index) != preview_note_indices.end()) {
                 continue;
             }
-            const editor_timeline_note& note = model.notes[i];
             if (note.lane < 0 || note.lane >= model.metrics.key_count) {
                 continue;
             }
 
             const editor_timeline_note_draw_info info = model.metrics.note_rects(note);
-            const bool selected = selected_note_indices.find(i) != selected_note_indices.end();
+            const bool selected = selected_note_indices.find(note.source_index) != selected_note_indices.end();
             Color head_fill = selected ? t.row_active : t.note_color;
             if (!selected && note.type == editor_timeline_note_type::release) {
                 head_fill = lerp_color(t.note_color, t.judge_great, 0.35f);

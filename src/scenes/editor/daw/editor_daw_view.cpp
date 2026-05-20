@@ -1,6 +1,7 @@
 #include "editor/daw/editor_daw_view.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <set>
 #include <string>
@@ -22,6 +23,9 @@ namespace {
 namespace layout = editor::layout;
 
 constexpr float kPanelInset = 14.0f;
+constexpr float kAutomationWidth = 380.0f;
+constexpr std::size_t kAutomationSideGuideCount = 4;
+std::array<ui::text_input_state, kAutomationSideGuideCount> gAutomationGuideInputs;
 
 bool accepts_metadata_character(int codepoint, const std::string&) {
     return codepoint >= 32 && codepoint <= 126;
@@ -75,10 +79,6 @@ const char* timing_event_type_label(timing_event_type type) {
     return type == timing_event_type::bpm ? "BPM" : "Meter";
 }
 
-const char* scroll_event_type_label(scroll_event_type type) {
-    return type == scroll_event_type::speed ? "Speed" : "Stop";
-}
-
 const char* scroll_curve_label(scroll_automation_curve curve) {
     switch (curve) {
         case scroll_automation_curve::hold:
@@ -125,6 +125,124 @@ Rectangle row(Rectangle rect, float y, float height) {
 
 Rectangle centered_icon_rect(Rectangle rect, float inset) {
     return {rect.x + inset, rect.y + inset, rect.width - inset * 2.0f, rect.height - inset * 2.0f};
+}
+
+float snap_automation_multiplier(const std::array<float, 5>& guides, float multiplier, bool free_drag) {
+    multiplier = std::max(0.0f, multiplier);
+    if (free_drag) {
+        return std::round(multiplier * 100.0f) / 100.0f;
+    }
+    float best = guides[0];
+    float best_distance = std::fabs(multiplier - best);
+    for (const float guide : guides) {
+        const float distance = std::fabs(multiplier - guide);
+        if (distance < best_distance) {
+            best = guide;
+            best_distance = distance;
+        }
+    }
+    return best;
+}
+
+void normalize_automation_guides(scroll_automation_guides& guides) {
+    for (float& guide : guides.values) {
+        if (!std::isfinite(guide)) {
+            guide = 1.0f;
+        }
+        guide = std::max(0.0f, guide);
+    }
+}
+
+void reset_automation_guide_input(ui::text_input_state& input, float value) {
+    input.value = TextFormat("%.1f", value);
+    input.cursor = input.value.size();
+    input.has_selection = false;
+}
+
+bool is_unity_automation_guide(float value) {
+    return std::fabs(value - 1.0f) < 0.0001f;
+}
+
+std::array<float, 5> automation_guides(scroll_automation_guides& guides) {
+    normalize_automation_guides(guides);
+    return {
+        guides.values[0],
+        guides.values[1],
+        1.0f,
+        guides.values[2],
+        guides.values[3],
+    };
+}
+
+float automation_guide_t(std::size_t guide_index) {
+    return static_cast<float>(guide_index) / 4.0f;
+}
+
+float automation_multiplier_to_t(const std::array<float, 5>& guides, float multiplier) {
+    for (std::size_t index = 0; index + 1 < guides.size(); ++index) {
+        const float from = guides[index];
+        const float to = guides[index + 1];
+        const float low = std::min(from, to);
+        const float high = std::max(from, to);
+        if (multiplier < low || multiplier > high) {
+            continue;
+        }
+        if (std::fabs(to - from) < 0.0001f) {
+            return automation_guide_t(index);
+        }
+        const float segment_t = std::clamp((multiplier - from) / (to - from), 0.0f, 1.0f);
+        return (static_cast<float>(index) + segment_t) / 4.0f;
+    }
+
+    std::size_t nearest_index = 0;
+    float nearest_distance = std::fabs(multiplier - guides[0]);
+    for (std::size_t index = 1; index < guides.size(); ++index) {
+        const float distance = std::fabs(multiplier - guides[index]);
+        if (distance < nearest_distance) {
+            nearest_distance = distance;
+            nearest_index = index;
+        }
+    }
+    return automation_guide_t(nearest_index);
+}
+
+float automation_multiplier_at_t(const std::array<float, 5>& guides, float t) {
+    t = std::clamp(t, 0.0f, 1.0f);
+    const float scaled = t * 4.0f;
+    const std::size_t index = std::min<std::size_t>(3, static_cast<std::size_t>(std::floor(scaled)));
+    const float segment_t = std::clamp(scaled - static_cast<float>(index), 0.0f, 1.0f);
+    return guides[index] + (guides[index + 1] - guides[index]) * segment_t;
+}
+
+bool draw_automation_guide_input(std::size_t index, Rectangle rect, scroll_automation_guides& guides) {
+    if (index >= guides.values.size()) {
+        return false;
+    }
+    normalize_automation_guides(guides);
+    ui::text_input_state& input = gAutomationGuideInputs[index];
+    const bool hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), rect);
+    if (!input.active) {
+        reset_automation_guide_input(input, guides.values[index]);
+    }
+    const ui::text_input_result result = ui::draw_text_input(
+        rect, input, "", "x", nullptr, ui::draw_layer::base, 12, 8,
+        accepts_float_character, 0.0f, false, true, true);
+    if (result.submitted || result.deactivated) {
+        const float previous_value = guides.values[index];
+        try {
+            const float parsed_value = std::max(0.0f, std::stof(input.value));
+            if (!is_unity_automation_guide(parsed_value)) {
+                guides.values[index] = parsed_value;
+            }
+        } catch (...) {
+        }
+        normalize_automation_guides(guides);
+        if (is_unity_automation_guide(guides.values[index])) {
+            guides.values[index] = previous_value;
+        }
+        reset_automation_guide_input(input, guides.values[index]);
+    }
+    return hovered || input.active || result.clicked;
 }
 
 Vector2 rect_center(Rectangle rect) {
@@ -268,7 +386,7 @@ bool draw_ray_toggle(Rectangle rect, bool enabled) {
     return state.clicked;
 }
 
-editor_timeline_note make_timeline_note(const note_data& note) {
+editor_timeline_note make_timeline_note(const note_data& note, size_t source_index) {
     editor_timeline_note_type type = editor_timeline_note_type::tap;
     switch (note.type) {
         case note_type::tap:
@@ -284,7 +402,13 @@ editor_timeline_note make_timeline_note(const note_data& note) {
             type = editor_timeline_note_type::stay;
             break;
     }
-    return {type, note.tick, note.lane, note.end_tick, note.is_ray, note_lane_width(note)};
+    return {type, note.tick, note.lane, note.end_tick, note.is_ray, note_lane_width(note), source_index};
+}
+
+bool note_intersects_tick_range(const note_data& note, int min_tick, int max_tick) {
+    const int start_tick = note.tick;
+    const int end_tick = note.type == note_type::hold ? std::max(note.tick, note.end_tick) : note.tick;
+    return end_tick >= min_tick && start_tick <= max_tick;
 }
 
 editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_model& model) {
@@ -294,15 +418,16 @@ editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_m
     const int max_tick = static_cast<int>(std::ceil(model.viewport.viewport.bottom_tick + visible_tick_span));
 
     std::vector<editor_timeline_note> notes;
-    notes.reserve(model.state.data().notes.size());
-    for (const note_data& note : model.state.data().notes) {
-        notes.push_back(make_timeline_note(note));
-    }
-
-    std::vector<editor_timeline_scroll_event> scroll_events;
-    scroll_events.reserve(model.state.data().scroll_events.size());
-    for (const scroll_event& event : model.state.data().scroll_events) {
-        scroll_events.push_back({event.type, event.tick, event.duration, event.multiplier});
+    std::vector<editor_timeline_note> minimap_notes;
+    notes.reserve(std::min<std::size_t>(model.state.data().notes.size(), 4096));
+    minimap_notes.reserve(model.state.data().notes.size());
+    for (size_t index = 0; index < model.state.data().notes.size(); ++index) {
+        const note_data& note = model.state.data().notes[index];
+        editor_timeline_note timeline_note = make_timeline_note(note, index);
+        minimap_notes.push_back(timeline_note);
+        if (note_intersects_tick_range(note, min_tick, max_tick)) {
+            notes.push_back(timeline_note);
+        }
     }
 
     std::vector<editor_timeline_scroll_automation_point> scroll_automation;
@@ -313,16 +438,16 @@ editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_m
 
     std::vector<editor_timeline_note> preview_notes;
     preview_notes.reserve(model.preview_notes.size());
-    for (const note_data& note : model.preview_notes) {
-        preview_notes.push_back(make_timeline_note(note));
+    for (size_t index = 0; index < model.preview_notes.size(); ++index) {
+        preview_notes.push_back(make_timeline_note(model.preview_notes[index], index));
     }
 
     return {
         metrics,
         model.meter_map.visible_grid_lines(min_tick, max_tick),
-        std::move(scroll_events),
         std::move(scroll_automation),
         std::move(notes),
+        std::move(minimap_notes),
         model.selected_note_indices,
         model.selected_scroll_event_index,
         model.audio_loaded ? std::optional<int>(model.playback_tick) : std::nullopt,
@@ -526,9 +651,9 @@ void draw_editor_stay_dot(Rectangle rect, Color fill, bool ray_style, bool selec
 }
 
 void draw_editor_release_chevron(Rectangle note_rect, Color marker, Color contour) {
-    const float width = std::max(note_rect.width * 0.76f, note_rect.width * 0.78f);
-    const float height = std::max(4.0f, note_rect.height * (0.40f / 0.78f));
-    const float lift = note_rect.height * (2.5f / 0.78f);
+    const float width = note_rect.width * 0.88f;
+    const float height = std::max(9.0f, note_rect.height * 0.78f);
+    const float lift = note_rect.height * 0.34f + 2.0f;
     const Vector2 center = {note_rect.x + note_rect.width * 0.5f,
                             note_rect.y + note_rect.height * 0.5f - lift - height * 0.5f};
     const Vector2 left_outer_bottom = {center.x - width * 0.50f, center.y + height * 0.26f};
@@ -601,7 +726,10 @@ void draw_chart_minimap(const editor_timeline_view_model& model, Rectangle minim
     const Rectangle inner = ui::inset(minimap, 4.0f);
     {
         ui::scoped_clip_rect clip_scope(inner);
-        for (const editor_timeline_note& note : model.notes) {
+        const int occupancy_width = std::max(1, static_cast<int>(std::ceil(inner.width)));
+        const int occupancy_height = std::max(1, static_cast<int>(std::ceil(inner.height)));
+        std::vector<unsigned char> marker_occupancy(static_cast<size_t>(occupancy_width * occupancy_height), 0);
+        for (const editor_timeline_note& note : model.minimap_notes) {
             if (note.lane < 0 || note.lane >= model.metrics.key_count) {
                 continue;
             }
@@ -609,28 +737,36 @@ void draw_chart_minimap(const editor_timeline_view_model& model, Rectangle minim
             const float lane_width = inner.width / static_cast<float>(std::max(1, model.metrics.key_count));
             const float x = inner.x + lane_width * static_cast<float>(note.lane);
             const float width = lane_width * static_cast<float>(std::max(1, note.lane_width));
-            const Color color = note.is_ray ? Color{174, 96, 255, 255} : WHITE;
+            const Color color = editor_play_note_color(note.type, note.is_ray, t.note_color);
             if (note.type == editor_timeline_note_type::hold && note.end_tick > note.tick) {
                 const float end_y = minimap_y_for_tick(model, inner, note.end_tick);
                 const Rectangle body = {x + width * 0.35f, std::min(y, end_y), std::max(2.0f, width * 0.3f),
                                         std::max(2.0f, std::fabs(end_y - y))};
-                ui::draw_rect_f(body, with_alpha(color, note.is_ray ? 165 : 115));
+                ui::draw_rect_f(body, with_alpha(color, note.is_ray ? 170 : 125));
             }
-            ui::draw_rect_f({x + 1.0f, y - 1.5f, std::max(2.0f, width - 2.0f), 3.0f},
-                            with_alpha(color, note.is_ray ? 235 : 170));
-        }
-
-        for (const editor_timeline_scroll_event& event : model.scroll_events) {
-            if (event.duration <= 0) {
+            const float note_width = std::max(2.0f, width - 2.0f);
+            const int occupancy_x = std::clamp(static_cast<int>(std::floor(x + width * 0.5f - inner.x)),
+                                               0, occupancy_width - 1);
+            const int occupancy_y = std::clamp(static_cast<int>(std::floor(y - inner.y)),
+                                               0, occupancy_height - 1);
+            unsigned char& occupied = marker_occupancy[
+                static_cast<size_t>(occupancy_y * occupancy_width + occupancy_x)];
+            if (occupied != 0) {
                 continue;
             }
-            const float start_y = minimap_y_for_tick(model, inner, event.tick);
-            const float end_y = minimap_y_for_tick(model, inner, event.tick + event.duration);
-            const Color color = event.type == scroll_event_type::speed ? t.fast : t.error;
-            ui::draw_rect_f({inner.x, std::min(start_y, end_y), inner.width,
-                             std::max(2.0f, std::fabs(end_y - start_y))},
-                            with_alpha(color, 70));
+            occupied = 1;
+            if (note.type == editor_timeline_note_type::release) {
+                const float half_width = std::max(2.5f, note_width * 0.5f);
+                DrawTriangle({x + width * 0.5f, y - 4.5f},
+                             {x + width * 0.5f - half_width, y + 3.0f},
+                             {x + width * 0.5f + half_width, y + 3.0f},
+                             with_alpha(color, note.is_ray ? 245 : 210));
+            } else {
+                ui::draw_rect_f({x + 1.0f, y - 1.5f, note_width, 3.0f},
+                                with_alpha(color, note.is_ray ? 235 : 185));
+            }
         }
+
     }
 
     const float visible_start_y = minimap_y_for_tick(model, inner, model.metrics.bottom_tick);
@@ -719,6 +855,9 @@ editor_right_panel_view_result draw_right_panel(const editor_right_panel_view_mo
     const std::vector<scroll_automation_point> empty_points;
     const std::vector<scroll_automation_point>& points =
         model.scroll_automation != nullptr ? *model.scroll_automation : empty_points;
+    scroll_automation_guides editable_guides =
+        model.scroll_guides != nullptr ? *model.scroll_guides : scroll_automation_guides{};
+    const std::array<float, 5> guides = automation_guides(editable_guides);
     std::vector<std::pair<size_t, scroll_automation_point>> sorted_points;
     sorted_points.reserve(points.size());
     int max_tick = 1920;
@@ -734,22 +873,20 @@ editor_right_panel_view_result draw_right_panel(const editor_right_panel_view_mo
     ui::draw_rect_lines(panel, 1.5f, t.border);
     ui::draw_text_in_rect("SCROLL", 15, {content.x, content.y, content.width, 20.0f},
                           t.text_muted, ui::text_align::left);
-    draw_badge({content.x + content.width - 154.0f, content.y - 2.0f, 154.0f, 24.0f},
-               "AUTOMATION", t.fast, t.fast);
 
     const Rectangle graph_box = {content.x, content.y + 42.0f, content.width, 454.0f};
     ui::draw_section(graph_box);
     ui::draw_text_in_rect("Velocity Curve", 20,
                           {graph_box.x + 12.0f, graph_box.y + 10.0f, graph_box.width - 24.0f, 24.0f},
                           t.text, ui::text_align::left);
-    const Rectangle graph = {graph_box.x + 38.0f, graph_box.y + 52.0f,
-                             graph_box.width - 56.0f, graph_box.height - 92.0f};
+    const Rectangle graph = {graph_box.x + 12.0f, graph_box.y + 52.0f,
+                             graph_box.width - 24.0f, graph_box.height - 92.0f};
     ui::draw_rect_f(graph, with_alpha(t.bg_alt, 120));
     ui::draw_rect_lines(graph, 1.0f, t.border_light);
 
     auto point_to_pos = [&](const scroll_automation_point& point) {
         const float tick_t = static_cast<float>(std::clamp(point.tick, 0, max_tick)) / static_cast<float>(max_tick);
-        const float mult_t = std::clamp(point.multiplier / 3.0f, 0.0f, 1.0f);
+        const float mult_t = automation_multiplier_to_t(guides, point.multiplier);
         return Vector2{graph.x + mult_t * graph.width, graph.y + tick_t * graph.height};
     };
     auto pos_to_point = [&](Vector2 pos, scroll_automation_curve curve) {
@@ -757,25 +894,29 @@ editor_right_panel_view_result draw_right_panel(const editor_right_panel_view_mo
         const float mult_t = std::clamp((pos.x - graph.x) / graph.width, 0.0f, 1.0f);
         scroll_automation_point point;
         point.tick = static_cast<int>(std::round(tick_t * static_cast<float>(max_tick) / 10.0f)) * 10;
-        point.multiplier = std::round(mult_t * 300.0f) / 100.0f;
+        point.multiplier = snap_automation_multiplier(
+            guides,
+            automation_multiplier_at_t(guides, mult_t),
+            IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
         point.curve_to_next = curve;
         return point;
     };
 
-    for (int i = 0; i <= 6; ++i) {
-        const float x = graph.x + graph.width * static_cast<float>(i) / 6.0f;
-        ui::draw_line_f(x, graph.y, x, graph.y + graph.height, with_alpha(t.border_light, i == 2 ? 170 : 80));
-        if (i % 2 == 0) {
-            ui::draw_text_in_rect(TextFormat("%.1fx", static_cast<float>(i) * 0.5f), 11,
-                                  {x - 22.0f, graph.y + graph.height + 6.0f, 44.0f, 16.0f},
-                                  t.text_muted);
-        }
+    for (std::size_t guide_index = 0; guide_index < guides.size(); ++guide_index) {
+        const float guide = guides[guide_index];
+        const float x = graph.x + graph.width * automation_guide_t(guide_index);
+        const bool unity = std::fabs(guide - 1.0f) < 0.001f;
+        ui::draw_line_f(x, graph.y, x, graph.y + graph.height,
+                        unity ? with_alpha(t.fast, 210) : with_alpha(t.border_light, 120));
+        ui::draw_text_in_rect(TextFormat("%.1fx", guide), 11,
+                              {x - 22.0f, graph.y + graph.height + 6.0f, 44.0f, 16.0f},
+                              unity ? t.fast : t.text_muted);
     }
     for (int i = 0; i <= 8; ++i) {
         const float y = graph.y + graph.height * static_cast<float>(i) / 8.0f;
         ui::draw_line_f(graph.x, y, graph.x + graph.width, y, with_alpha(t.editor_grid_minor, 120));
     }
-    ui::draw_text_in_rect("BAR", 11, {graph_box.x + 8.0f, graph.y - 2.0f, 28.0f, 18.0f},
+    ui::draw_text_in_rect("BAR", 11, {graph_box.x + 8.0f, graph.y - 20.0f, 36.0f, 18.0f},
                           t.text_muted, ui::text_align::right);
 
     for (size_t i = 1; i < sorted_points.size(); ++i) {
@@ -796,24 +937,47 @@ editor_right_panel_view_result draw_right_panel(const editor_right_panel_view_mo
         if (!hovered_point.has_value() && CheckCollisionPointRec(model.mouse, hit)) {
             hovered_point = point_index;
         }
-        DrawCircleV(p, selected ? 7.0f : 5.5f, selected ? t.accent : t.fast);
-        DrawCircleLines(static_cast<int>(p.x), static_cast<int>(p.y), selected ? 8.0f : 6.5f,
-                        selected ? t.text : with_alpha(t.text, 170));
+        if (timing_state.automation_drag_point_index.has_value() &&
+            *timing_state.automation_drag_point_index == point_index) {
+            hovered_point = point_index;
+        }
+        const float handle_size = selected ? 14.0f : 11.0f;
+        const Rectangle handle = {p.x - handle_size * 0.5f, p.y - handle_size * 0.5f,
+                                  handle_size, handle_size};
+        ui::draw_rect_f(handle, selected ? t.accent : t.fast);
+        ui::draw_rect_lines(handle, selected ? 2.0f : 1.4f,
+                            selected ? t.text : with_alpha(t.text, 170));
     }
 
     const bool graph_hovered = CheckCollisionPointRec(model.mouse, graph);
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && graph_hovered) {
         if (hovered_point.has_value()) {
             result.panel_result.selected_scroll_event_index = hovered_point;
+            timing_state.automation_drag_point_index = hovered_point;
+            timing_state.automation_pending_add = false;
+            result.scroll_automation_point_to_modify = std::make_pair(
+                *hovered_point,
+                pos_to_point(model.mouse, points[*hovered_point].curve_to_next));
         } else {
-            result.scroll_automation_point_to_add = pos_to_point(model.mouse, scroll_automation_curve::linear);
+            timing_state.automation_drag_point_index.reset();
+            timing_state.automation_pending_add = true;
         }
     }
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && graph_hovered &&
-        model.selected_scroll_event_index.has_value() &&
-        *model.selected_scroll_event_index < points.size()) {
-        scroll_automation_point updated = pos_to_point(model.mouse, points[*model.selected_scroll_event_index].curve_to_next);
-        result.scroll_automation_point_to_modify = std::make_pair(*model.selected_scroll_event_index, updated);
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        if (timing_state.automation_pending_add && graph_hovered &&
+            !timing_state.automation_drag_point_index.has_value()) {
+            result.scroll_automation_point_to_add = pos_to_point(model.mouse, scroll_automation_curve::linear);
+        }
+        timing_state.automation_drag_point_index.reset();
+        timing_state.automation_pending_add = false;
+    }
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
+        timing_state.automation_drag_point_index.has_value() &&
+        *timing_state.automation_drag_point_index < points.size()) {
+        const size_t point_index = *timing_state.automation_drag_point_index;
+        scroll_automation_point updated = pos_to_point(model.mouse, points[point_index].curve_to_next);
+        result.panel_result.selected_scroll_event_index = point_index;
+        result.scroll_automation_point_to_modify = std::make_pair(point_index, updated);
     }
 
     const float button_gap = 8.0f;
@@ -934,7 +1098,12 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
     return result;
 }
 
-editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_model& presenter_model) {
+editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_model& presenter_model,
+                                             Rectangle snap_menu_rect,
+                                             bool snap_dropdown_open) {
+    static std::optional<size_t> automation_drag_point_index;
+    static bool automation_pending_add = false;
+
     const auto& t = *g_theme;
     editor_right_panel_view_result result;
     const editor_timeline_view_model model = make_timeline_model(presenter_model);
@@ -949,7 +1118,7 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
     const Rectangle arrange = content;
     const Rectangle minimap = track;
     const Rectangle ruler = {track.x + track.width + 8.0f, arrange.y, 60.0f, arrange.height};
-    const Rectangle automation = {arrange.x + arrange.width + 8.0f, arrange.y, 260.0f, arrange.height};
+    const Rectangle automation = {arrange.x + arrange.width + 8.0f, arrange.y, kAutomationWidth, arrange.height};
     const Rectangle ruler_labels = {ruler.x, arrange.y, ruler.width, arrange.height};
     {
         ui::scoped_clip_rect clip_scope(arrange);
@@ -997,15 +1166,15 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
 
         const std::set<size_t> preview_indices(model.preview_note_indices.begin(), model.preview_note_indices.end());
         for (size_t index = 0; index < model.notes.size(); ++index) {
-            if (preview_indices.find(index) != preview_indices.end()) {
+            const editor_timeline_note& note = model.notes[index];
+            if (preview_indices.find(note.source_index) != preview_indices.end()) {
                 continue;
             }
-            const editor_timeline_note& note = model.notes[index];
             if (note.lane < 0 || note.lane >= model.metrics.key_count) {
                 continue;
             }
             const editor_timeline_note_draw_info info = model.metrics.note_rects(note);
-            const bool selected = selected_indices.find(index) != selected_indices.end();
+            const bool selected = selected_indices.find(note.source_index) != selected_indices.end();
             draw_note_block(note, info, selected, false, false);
         }
 
@@ -1030,33 +1199,53 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
 
     ui::draw_rect_f(automation, with_alpha(t.section, 235));
     ui::draw_rect_lines(automation, 1.0f, t.border_light);
-    const Rectangle automation_header = {automation.x, automation.y, 72.0f, automation.height};
+    const Rectangle automation_header = {automation.x, automation.y, 24.0f, automation.height};
     const Rectangle automation_body = {automation_header.x + automation_header.width, automation.y,
                                        automation.width - automation_header.width, automation.height};
     ui::draw_rect_f(automation_header, with_alpha(t.panel, 235));
     ui::draw_rect_lines(automation_header, 1.0f, with_alpha(t.border_light, 190));
-    ui::draw_text_in_rect("Scroll", 13,
-                          {automation_header.x + 8.0f, automation_header.y + 8.0f,
-                           automation_header.width - 16.0f, 18.0f},
-                          t.text_secondary, ui::text_align::left);
-    const Rectangle read_button = {automation_header.x + 8.0f, automation_header.y + 34.0f, 24.0f, 22.0f};
-    const Rectangle write_button = {read_button.x + read_button.width + 6.0f, read_button.y, 24.0f, 22.0f};
-    ui::draw_rect_f(read_button, with_alpha(t.success, 86));
-    ui::draw_rect_lines(read_button, 1.0f, with_alpha(t.success, 190));
-    ui::draw_text_in_rect("R", 12, read_button, t.text);
-    ui::draw_rect_f(write_button, with_alpha(t.row, 190));
-    ui::draw_rect_lines(write_button, 1.0f, with_alpha(t.border_light, 180));
-    ui::draw_text_in_rect("W", 12, write_button, t.text_muted);
-    ui::draw_text_in_rect("1x", 11,
-                          {automation_header.x + 8.0f, automation_header.y + automation_header.height - 28.0f,
-                           automation_header.width - 16.0f, 18.0f},
-                          t.text_muted, ui::text_align::left);
+    ui::draw_text_in_rect("S", 13,
+                          {automation_header.x + 4.0f, automation_header.y + 8.0f,
+                           automation_header.width - 8.0f, 18.0f},
+                          t.text_secondary);
+    std::optional<float> selected_multiplier;
+    if (model.selected_scroll_event_index.has_value() &&
+        *model.selected_scroll_event_index < model.scroll_automation.size()) {
+        selected_multiplier = model.scroll_automation[*model.selected_scroll_event_index].multiplier;
+    }
+    ui::draw_text_in_rect(selected_multiplier.has_value()
+                              ? TextFormat("%.2fx", *selected_multiplier)
+                              : "Rate",
+                          11,
+                          {automation_header.x + 2.0f, automation_header.y + automation_header.height - 28.0f,
+                           automation_header.width - 4.0f, 18.0f},
+                          selected_multiplier.has_value() ? t.fast : t.text_muted, ui::text_align::left);
     const Rectangle automation_graph = ui::inset(automation_body, ui::edge_insets{10.0f, 10.0f, 10.0f, 8.0f});
     ui::draw_rect_f(automation_graph, with_alpha(t.bg_alt, 80));
-    for (int i = 0; i <= 3; ++i) {
-        const float x = automation_graph.x + automation_graph.width * static_cast<float>(i) / 3.0f;
+    scroll_automation_guides editable_guides = presenter_model.state.data().scroll_guides;
+    const scroll_automation_guides original_guides = editable_guides;
+    const std::array<float, 5> guides = automation_guides(editable_guides);
+    bool guide_input_interacting = false;
+    for (size_t guide_index = 0; guide_index < guides.size(); ++guide_index) {
+        const float guide = guides[guide_index];
+        const float x = automation_graph.x + automation_graph.width * automation_guide_t(guide_index);
+        const bool unity = std::fabs(guide - 1.0f) < 0.001f;
         ui::draw_line_f(x, automation_graph.y, x, automation_graph.y + automation_graph.height,
-                        with_alpha(t.border_light, i == 1 ? 165 : 80));
+                        unity ? with_alpha(t.fast, 210) : with_alpha(t.border_light, 110));
+        Rectangle value_rect = {x - 34.0f, automation_graph.y + 4.0f, 68.0f, 24.0f};
+        value_rect.x = std::clamp(value_rect.x,
+                                  automation_graph.x + 2.0f,
+                                  automation_graph.x + automation_graph.width - value_rect.width - 2.0f);
+        if (unity) {
+            ui::draw_text_in_rect("1.0", 12, value_rect, t.fast);
+        } else {
+            const size_t side_index = guide_index < 2 ? guide_index : guide_index - 1;
+            guide_input_interacting = draw_automation_guide_input(side_index, value_rect, editable_guides) ||
+                                      guide_input_interacting;
+        }
+    }
+    if (editable_guides.values != original_guides.values) {
+        result.scroll_automation_guides_to_modify = editable_guides;
     }
     const int snap_interval = std::max(1, model.snap_interval);
     const int first_snap_tick = std::max(0, (model.min_tick / snap_interval) * snap_interval);
@@ -1088,7 +1277,7 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
         return left.second.tick < right.second.tick;
     });
     auto point_x = [&](float multiplier) {
-        const float t_value = std::clamp(multiplier / 3.0f, 0.0f, 1.0f);
+        const float t_value = automation_multiplier_to_t(guides, multiplier);
         return automation_graph.x + t_value * automation_graph.width;
     };
     const float unity_x = point_x(1.0f);
@@ -1098,11 +1287,19 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
         scroll_automation_point point;
         const int raw_tick = std::max(0, model.metrics.y_to_tick(mouse.y));
         point.tick = std::max(0, (raw_tick + snap_interval / 2) / snap_interval * snap_interval);
-        point.multiplier = std::round(
-            std::clamp((mouse.x - automation_graph.x) / automation_graph.width, 0.0f, 1.0f) * 300.0f) / 100.0f;
+        point.multiplier = snap_automation_multiplier(
+            guides,
+            automation_multiplier_at_t(
+                guides,
+                std::clamp((mouse.x - automation_graph.x) / automation_graph.width, 0.0f, 1.0f)),
+            IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
         point.curve_to_next = curve;
         return point;
     };
+    const Vector2 mouse = virtual_screen::get_virtual_mouse();
+    const bool snap_ui_hovered =
+        CheckCollisionPointRec(mouse, layout::kSnapDropdownRect) ||
+        (snap_dropdown_open && CheckCollisionPointRec(mouse, snap_menu_rect));
     std::optional<size_t> hovered_point;
     {
         ui::scoped_clip_rect clip_scope(automation_graph);
@@ -1122,35 +1319,59 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
                 continue;
             }
             const Rectangle hit = {pos.x - 8.0f, pos.y - 8.0f, 16.0f, 16.0f};
-            if (!hovered_point.has_value() && CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), hit)) {
+            if (!snap_ui_hovered && !hovered_point.has_value() && CheckCollisionPointRec(mouse, hit)) {
+                hovered_point = point_index;
+            }
+            if (automation_drag_point_index.has_value() && *automation_drag_point_index == point_index) {
                 hovered_point = point_index;
             }
             const bool hovered = hovered_point.has_value() && *hovered_point == point_index;
-            DrawCircleV(pos, hovered ? 6.5f : 5.5f, hovered ? t.accent : t.fast);
-            DrawCircleLines(static_cast<int>(pos.x), static_cast<int>(pos.y), hovered ? 7.5f : 6.5f,
-                            hovered ? t.text : with_alpha(t.text, 170));
+            const float handle_size = hovered ? 13.0f : 11.0f;
+            const Rectangle handle = {pos.x - handle_size * 0.5f, pos.y - handle_size * 0.5f,
+                                      handle_size, handle_size};
+            ui::draw_rect_f(handle, hovered ? t.accent : t.fast);
+            ui::draw_rect_lines(handle, hovered ? 2.0f : 1.4f,
+                                hovered ? t.text : with_alpha(t.text, 170));
         }
     }
-    const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const bool automation_hovered = CheckCollisionPointRec(mouse, automation_graph);
+    const bool automation_hovered =
+        CheckCollisionPointRec(mouse, automation_graph) && !guide_input_interacting && !snap_ui_hovered;
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && automation_hovered) {
         if (hovered_point.has_value()) {
             result.panel_result.selected_scroll_event_index = hovered_point;
+            automation_drag_point_index = hovered_point;
+            automation_pending_add = false;
             result.scroll_automation_point_to_modify = std::make_pair(
                 *hovered_point,
                 point_at_mouse(mouse, model.scroll_automation[*hovered_point].curve_to_next));
         } else {
+            automation_drag_point_index.reset();
+            automation_pending_add = true;
+        }
+    } else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && guide_input_interacting) {
+        automation_drag_point_index.reset();
+        automation_pending_add = false;
+    } else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && snap_ui_hovered) {
+        automation_drag_point_index.reset();
+        automation_pending_add = false;
+    }
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        if (automation_pending_add && automation_hovered && !automation_drag_point_index.has_value()) {
             result.scroll_automation_point_to_add = point_at_mouse(mouse, scroll_automation_curve::linear);
         }
+        automation_drag_point_index.reset();
+        automation_pending_add = false;
     }
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && automation_hovered &&
-        hovered_point.has_value() &&
-        *hovered_point < model.scroll_automation.size()) {
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
+        !snap_ui_hovered &&
+        automation_drag_point_index.has_value() &&
+        *automation_drag_point_index < model.scroll_automation.size()) {
         result.scroll_automation_point_to_modify = std::make_pair(
-            *hovered_point,
-            point_at_mouse(mouse, model.scroll_automation[*hovered_point].curve_to_next));
+            *automation_drag_point_index,
+            point_at_mouse(mouse, model.scroll_automation[*automation_drag_point_index].curve_to_next));
+        result.panel_result.selected_scroll_event_index = automation_drag_point_index;
     }
-    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && hovered_point.has_value()) {
+    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && !snap_ui_hovered && hovered_point.has_value()) {
         result.panel_result.selected_scroll_event_index = hovered_point;
         result.panel_result.delete_selected_scroll = true;
     }

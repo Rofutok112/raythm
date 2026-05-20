@@ -58,16 +58,28 @@ editor_timeline_note make_timeline_note(const note_data& note) {
     };
 }
 
+bool note_intersects_tick_range(const note_data& note, int min_tick, int max_tick) {
+    const int start_tick = note.tick;
+    const int end_tick = note.type == note_type::hold ? std::max(note.tick, note.end_tick) : note.tick;
+    return end_tick >= min_tick && start_tick <= max_tick;
+}
+
 std::optional<size_t> note_at_position(const editor_timeline_context& context, Vector2 point) {
     const Rectangle content = context.metrics.content_rect();
     if (!CheckCollisionPointRec(point, content) || context.state == nullptr) {
         return std::nullopt;
     }
 
+    const int hit_tick = context.metrics.y_to_tick(point.y);
+    const int tick_margin = static_cast<int>(std::ceil(context.metrics.note_head_height *
+                                                       context.metrics.ticks_per_pixel * 2.0f));
     for (size_t i = context.state->data().notes.size(); i > 0; --i) {
         const size_t index = i - 1;
         const note_data& note = context.state->data().notes[index];
         if (note.lane < 0 || note.lane >= context.state->data().meta.key_count) {
+            continue;
+        }
+        if (!note_intersects_tick_range(note, hit_tick - tick_margin, hit_tick + tick_margin)) {
             continue;
         }
 
@@ -116,9 +128,16 @@ std::vector<size_t> notes_in_rectangle(const editor_timeline_context& context, R
         return indices;
     }
 
+    const int min_tick = context.metrics.y_to_tick(rect.y + rect.height);
+    const int max_tick = context.metrics.y_to_tick(rect.y);
+    const int tick_margin = static_cast<int>(std::ceil(context.metrics.note_head_height *
+                                                       context.metrics.ticks_per_pixel * 2.0f));
     for (size_t index = 0; index < context.state->data().notes.size(); ++index) {
         const note_data& note = context.state->data().notes[index];
         if (note.lane < 0 || note.lane >= context.state->data().meta.key_count) {
+            continue;
+        }
+        if (!note_intersects_tick_range(note, min_tick - tick_margin, max_tick + tick_margin)) {
             continue;
         }
 
@@ -129,53 +148,6 @@ std::vector<size_t> notes_in_rectangle(const editor_timeline_context& context, R
         }
     }
     return indices;
-}
-
-Rectangle scroll_event_rect(const editor_timeline_context& context, const scroll_event& event) {
-    const Rectangle content = context.metrics.content_rect();
-    const float start_y = context.metrics.tick_to_y(event.tick);
-    const float end_y = context.metrics.tick_to_y(event.tick + event.duration);
-    const float top = std::min(start_y, end_y);
-    const float height = std::max(8.0f, std::fabs(end_y - start_y));
-    return {content.x, top, content.width, height};
-}
-
-std::optional<size_t> scroll_event_at_position(const editor_timeline_context& context, Vector2 point) {
-    const Rectangle content = context.metrics.content_rect();
-    if (context.state == nullptr || !CheckCollisionPointRec(point, content) ||
-        point.x > content.x + 96.0f) {
-        return std::nullopt;
-    }
-
-    for (size_t i = context.state->data().scroll_events.size(); i > 0; --i) {
-        const size_t index = i - 1;
-        if (CheckCollisionPointRec(point, scroll_event_rect(context, context.state->data().scroll_events[index]))) {
-            return index;
-        }
-    }
-    return std::nullopt;
-}
-
-std::optional<editor_timeline_drag_mode> scroll_resize_handle_at_position(const editor_timeline_context& context,
-                                                                          size_t index,
-                                                                          Vector2 point) {
-    if (context.state == nullptr || index >= context.state->data().scroll_events.size()) {
-        return std::nullopt;
-    }
-
-    const scroll_event& event = context.state->data().scroll_events[index];
-    const Rectangle band = scroll_event_rect(context, event);
-    const float start_y = context.metrics.tick_to_y(event.tick);
-    const float end_y = context.metrics.tick_to_y(event.tick + event.duration);
-    const Rectangle start_handle = {band.x, start_y - 4.0f, band.width, 8.0f};
-    const Rectangle end_handle = {band.x, end_y - 4.0f, band.width, 8.0f};
-    if (CheckCollisionPointRec(point, start_handle)) {
-        return editor_timeline_drag_mode::scroll_resize_start;
-    }
-    if (CheckCollisionPointRec(point, end_handle)) {
-        return editor_timeline_drag_mode::scroll_resize_end;
-    }
-    return std::nullopt;
 }
 
 std::optional<editor_timeline_drag_mode> resize_handle_at_position(const editor_timeline_context& context,
@@ -295,7 +267,7 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             result.request_apply_selected_timing = true;
         } else if (context.left_pressed && context.timeline_hovered && timing_panel.selected_scroll_event_index.has_value() &&
             context.state != nullptr && context.meter_map != nullptr &&
-            *timing_panel.selected_scroll_event_index < context.state->data().scroll_events.size()) {
+            *timing_panel.selected_scroll_event_index < context.state->data().scroll_automation.size()) {
             const int tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
             const editor_meter_map::bar_beat_position position = context.meter_map->bar_beat_at_tick(tick);
             timing_panel.inputs.scroll_start_bar.value =
@@ -379,31 +351,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
             return result;
         }
 
-        if (timing_panel.selected_scroll_event_index.has_value() &&
-            context.state != nullptr &&
-            *timing_panel.selected_scroll_event_index < context.state->data().scroll_events.size()) {
-            const std::optional<editor_timeline_drag_mode> scroll_handle =
-                scroll_resize_handle_at_position(context, *timing_panel.selected_scroll_event_index, context.mouse);
-            if (scroll_handle.has_value()) {
-                result.selected_scroll_event_index = timing_panel.selected_scroll_event_index;
-                result.drag_state.active = true;
-                result.drag_state.mode = *scroll_handle;
-                result.drag_state.scroll_event_index = timing_panel.selected_scroll_event_index;
-                result.drag_state.original_scroll_event =
-                    context.state->data().scroll_events[*timing_panel.selected_scroll_event_index];
-                result.drag_state.start_tick = result.drag_state.original_scroll_event.tick;
-                result.drag_state.current_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
-                return result;
-            }
-        }
-
-        if (const std::optional<size_t> scroll_index = scroll_event_at_position(context, context.mouse); scroll_index.has_value()) {
-            result.selected_scroll_event_index = scroll_index;
-            result.selected_note_indices.clear();
-            result.drag_state.active = false;
-            return result;
-        }
-
         result.drag_state.active = true;
         result.drag_state.mode = editor_timeline_drag_mode::range_select;
         result.drag_state.note_index.reset();
@@ -460,9 +407,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
         } else if (result.drag_state.mode == editor_timeline_drag_mode::range_select) {
             result.drag_state.current_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
             result.drag_state.current_mouse = context.mouse;
-        } else if (result.drag_state.mode == editor_timeline_drag_mode::scroll_resize_start ||
-                   result.drag_state.mode == editor_timeline_drag_mode::scroll_resize_end) {
-            result.drag_state.current_tick = snap_tick(context, context.metrics.y_to_tick(context.mouse.y));
         } else {
             result.drag_state.current_lane = lane_at_x_clamped(context, context.mouse.x);
         }
@@ -478,29 +422,6 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
         const Rectangle selection_rect = rectangle_from_points(result.drag_state.start_mouse, result.drag_state.current_mouse);
         result.selected_note_indices = sorted_unique_indices(notes_in_rectangle(context, selection_rect));
         result.drag_state.active = false;
-        return result;
-    }
-
-    if (result.drag_state.mode == editor_timeline_drag_mode::scroll_resize_start ||
-        result.drag_state.mode == editor_timeline_drag_mode::scroll_resize_end) {
-        result.drag_state.active = false;
-        if (!result.drag_state.scroll_event_index.has_value()) {
-            return result;
-        }
-
-        scroll_event updated = result.drag_state.original_scroll_event;
-        if (result.drag_state.mode == editor_timeline_drag_mode::scroll_resize_start) {
-            const int end_tick = updated.tick + updated.duration;
-            updated.tick = std::clamp(result.drag_state.current_tick, 0, end_tick - 1);
-            updated.duration = std::max(1, end_tick - updated.tick);
-        } else {
-            const int end_tick = std::max(updated.tick + 1, result.drag_state.current_tick);
-            updated.duration = end_tick - updated.tick;
-        }
-
-        result.selected_scroll_event_index = result.drag_state.scroll_event_index;
-        result.scroll_event_to_modify_index = result.drag_state.scroll_event_index;
-        result.scroll_event_to_modify = updated;
         return result;
     }
 

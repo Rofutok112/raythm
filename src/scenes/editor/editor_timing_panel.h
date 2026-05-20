@@ -44,6 +44,8 @@ struct editor_timing_panel_state {
     float scroll_list_scroll_offset = 0.0f;
     bool scroll_list_scrollbar_dragging = false;
     float scroll_list_scrollbar_drag_offset = 0.0f;
+    std::optional<size_t> automation_drag_point_index;
+    bool automation_pending_add = false;
 };
 
 struct editor_timing_panel_item {
@@ -59,7 +61,7 @@ struct editor_timing_panel_model {
     std::vector<editor_timing_panel_item> items;
     std::vector<editor_timing_panel_item> scroll_items;
     std::optional<timing_event> selected_event;
-    std::optional<scroll_event> selected_scroll_event;
+    std::optional<scroll_automation_point> selected_scroll_event;
     size_t selected_note_count = 0;
     std::string selected_note_summary;
     bool delete_enabled = false;

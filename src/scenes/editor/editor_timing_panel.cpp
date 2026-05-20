@@ -12,10 +12,6 @@ const char* timing_event_type_label(timing_event_type type) {
     return type == timing_event_type::bpm ? "BPM" : "Time Sig";
 }
 
-const char* scroll_event_type_label(scroll_event_type type) {
-    return type == scroll_event_type::speed ? "Speed" : "Stop";
-}
-
 bool accepts_float_character(int codepoint, const std::string& value) {
     if (codepoint >= '0' && codepoint <= '9') {
         return true;
@@ -172,9 +168,9 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
                                float& scroll_offset,
                                bool& scrollbar_dragging,
                                float& scrollbar_drag_offset,
-                               bool scroll_events) {
+                               bool automation_items) {
         ui::draw_section(box);
-        draw_section_heading(box, title, scroll_events ? "Scroll" : "Timing");
+        draw_section_heading(box, title, automation_items ? "Scroll" : "Timing");
 
         const Rectangle list_view_rect = {
             box.x + 10.0f,
@@ -214,7 +210,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
                 const Rectangle row_rect = {list_view_rect.x, row_y, list_view_rect.width, row_height};
                 const ui::row_state row = ui::draw_selectable_row(row_rect, item.selected, 1.5f);
                 if (row.clicked) {
-                    if (scroll_events) {
+                    if (automation_items) {
                         result.selected_scroll_event_index = item.event_index;
                     } else {
                         result.selected_event_index = item.event_index;
@@ -295,7 +291,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         result.delete_selected = true;
     }
 
-    draw_event_list(scroll_box, "Scroll Regions", model.scroll_items,
+    draw_event_list(scroll_box, "Automation", model.scroll_items,
                     state.scroll_list_scroll_offset, state.scroll_list_scrollbar_dragging,
                     state.scroll_list_scrollbar_drag_offset, true);
 
@@ -319,11 +315,11 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         scroll_button_width,
         28.0f
     };
-    if (ui::draw_button(add_speed_rect, "Speed", 14).clicked) {
+    if (ui::draw_button(add_speed_rect, "Add Point", 14).clicked) {
         result.add_speed = true;
     }
-    if (ui::draw_button(add_stop_rect, "Stop", 14).clicked) {
-        result.add_stop = true;
+    if (ui::draw_button(add_stop_rect, "Curve", 14).clicked) {
+        result.cycle_selected_scroll_curve = true;
     }
     const ui::button_state delete_scroll_button = ui::draw_button_colored(
         delete_scroll_rect, "Delete", 14,
@@ -340,27 +336,25 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         : (model.selected_event.has_value() ? "Timing" : "Selection");
     draw_inspector_tabs({editor_box.x + 12.0f, editor_box.y + 10.0f, editor_box.width - 24.0f, 28.0f}, active_tab);
     const char* editor_title = model.selected_scroll_event.has_value()
-        ? "Scroll Region"
+        ? "Automation Point"
         : (model.selected_event.has_value() ? "Timing Event" : "Inspector");
     ui::draw_text_in_rect(editor_title, 20,
                           {editor_box.x + 12.0f, editor_box.y + 46.0f, editor_box.width - 24.0f, 24.0f},
                           t.text, ui::text_align::left);
 
     if (model.selected_scroll_event.has_value()) {
-        const scroll_event& event = *model.selected_scroll_event;
+        const scroll_automation_point& point = *model.selected_scroll_event;
         ui::draw_label_value({editor_box.x + 12.0f, editor_box.y + 76.0f, editor_box.width - 24.0f, 22.0f},
-                             "Mode", scroll_event_type_label(event.type), 16,
+                             "Mode", "Automation", 16,
                              t.text_secondary, t.text, 76.0f);
         draw_bar_pick_row({editor_box.x + 12.0f, editor_box.y + 106.0f, editor_box.width - 24.0f, 32.0f},
                           "Start", state.inputs.scroll_start_bar.value, editor_timing_input_field::scroll_start);
         draw_input_row({editor_box.x + 12.0f, editor_box.y + 144.0f, editor_box.width - 24.0f, 32.0f},
-                       "Length", state.inputs.scroll_duration, editor_timing_input_field::scroll_duration,
-                       accepts_int_character, "ticks");
-        if (event.type == scroll_event_type::speed) {
-            draw_input_row({editor_box.x + 12.0f, editor_box.y + 182.0f, editor_box.width - 24.0f, 32.0f},
-                           "Rate", state.inputs.scroll_multiplier, editor_timing_input_field::scroll_multiplier,
-                           accepts_float_character, "1.0x");
-        }
+                       "Rate", state.inputs.scroll_multiplier, editor_timing_input_field::scroll_multiplier,
+                       accepts_float_character, "1.0x");
+        ui::draw_label_value({editor_box.x + 12.0f, editor_box.y + 182.0f, editor_box.width - 24.0f, 22.0f},
+                             "Tick", TextFormat("%d", point.tick), 16,
+                             t.text_secondary, t.text, 76.0f);
         if (!state.input_error.empty()) {
             ui::draw_text_in_rect(state.input_error.c_str(), 16,
                                   {editor_box.x + 12.0f, editor_box.y + editor_box.height - 32.0f,

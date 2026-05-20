@@ -11,8 +11,8 @@
 
 struct editor_right_panel_view_model {
     const std::vector<timing_event>* timing_events = nullptr;
-    const std::vector<scroll_event>* scroll_events = nullptr;
     const std::vector<scroll_automation_point>* scroll_automation = nullptr;
+    const scroll_automation_guides* scroll_guides = nullptr;
     const editor_meter_map* meter_map = nullptr;
     std::optional<size_t> selected_event_index;
     std::optional<size_t> selected_scroll_event_index;
@@ -27,6 +27,7 @@ struct editor_right_panel_view_result {
     editor_timing_panel_result panel_result;
     std::optional<scroll_automation_point> scroll_automation_point_to_add;
     std::optional<std::pair<size_t, scroll_automation_point>> scroll_automation_point_to_modify;
+    std::optional<scroll_automation_guides> scroll_automation_guides_to_modify;
     bool clicked_outside_editor = false;
 };
 

@@ -33,8 +33,6 @@ enum class editor_timeline_drag_mode {
     resize_end,
     move_notes,
     range_select,
-    scroll_resize_start,
-    scroll_resize_end,
 };
 
 struct editor_timeline_note_drag_state {
@@ -50,8 +48,6 @@ struct editor_timeline_note_drag_state {
     note_data original_note;
     std::vector<size_t> note_indices;
     std::vector<note_data> original_notes;
-    std::optional<size_t> scroll_event_index;
-    scroll_event original_scroll_event;
 };
 
 struct editor_note_palette_selection {
@@ -297,8 +293,6 @@ struct editor_timeline_result {
     std::optional<size_t> note_to_modify_index;
     std::optional<note_data> note_to_modify;
     std::vector<std::pair<size_t, note_data>> notes_to_modify;
-    std::optional<size_t> scroll_event_to_modify_index;
-    std::optional<scroll_event> scroll_event_to_modify;
 };
 
 struct editor_metadata_panel_actions {

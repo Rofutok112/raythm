@@ -24,9 +24,6 @@ chart_data make_chart() {
     data.notes = {
         {note_type::tap, 480, 1, 480},
     };
-    data.scroll_events = {
-        {scroll_event_type::speed, 360, 480, 1.5f},
-    };
     return data;
 }
 
@@ -61,46 +58,6 @@ int main() {
              false, false, true, false, false, false, 4, start.drag_state});
         if (result.note_to_delete_index.has_value() || !result.selected_note_indices.empty()) {
             std::cerr << "left click should clear note selection without deleting notes\n";
-            return EXIT_FAILURE;
-        }
-    }
-
-    {
-        editor_timing_panel_state timing_panel;
-        const editor_timeline_metrics metrics = make_metrics();
-        const Rectangle content = metrics.content_rect();
-        const float y = metrics.tick_to_y(700);
-        const editor_timeline_result result = editor_timeline_controller::update(
-            timing_panel,
-            {state.get(), &meter_map, metrics, {content.x + 12.0f, y}, true,
-             true, false, false, false, false, false, 8, {}});
-        if (!result.selected_scroll_event_index.has_value() || *result.selected_scroll_event_index != 0 ||
-            !result.selected_note_indices.empty()) {
-            std::cerr << "left click on a scroll event band should select the scroll event\n";
-            return EXIT_FAILURE;
-        }
-    }
-
-    {
-        editor_timing_panel_state timing_panel;
-        timing_panel.selected_scroll_event_index = 0;
-        const editor_timeline_metrics metrics = make_metrics();
-        const Rectangle content = metrics.content_rect();
-        const float start_y = metrics.tick_to_y(360);
-        editor_timeline_note_drag_state drag_state;
-        editor_timeline_result start = editor_timeline_controller::update(
-            timing_panel,
-            {state.get(), &meter_map, metrics, {content.x + 12.0f, start_y}, true,
-             true, false, false, false, false, false, 8, drag_state});
-        editor_timeline_result finish = editor_timeline_controller::update(
-            timing_panel,
-            {state.get(), &meter_map, metrics, {content.x + 12.0f, metrics.tick_to_y(480)}, true,
-             false, true, true, false, false, false, 8, start.drag_state});
-        if (!finish.scroll_event_to_modify_index.has_value() || *finish.scroll_event_to_modify_index != 0 ||
-            !finish.scroll_event_to_modify.has_value() ||
-            finish.scroll_event_to_modify->tick != 480 ||
-            finish.scroll_event_to_modify->duration != 360) {
-            std::cerr << "scroll event start handle should resize the event\n";
             return EXIT_FAILURE;
         }
     }
@@ -349,7 +306,6 @@ int main() {
             {note_type::tap, 480, 1, 480},
             {note_type::tap, 960, 2, 960},
         };
-        selection_chart.scroll_events.clear();
         const auto selection_state = std::make_shared<editor_state>(selection_chart, "");
         editor_meter_map selection_meter_map;
         selection_meter_map.rebuild(selection_state->data());
@@ -382,7 +338,6 @@ int main() {
             {note_type::tap, 480, 1, 480},
             {note_type::tap, 960, 2, 960},
         };
-        selection_chart.scroll_events.clear();
         const auto selection_state = std::make_shared<editor_state>(selection_chart, "");
         editor_meter_map selection_meter_map;
         selection_meter_map.rebuild(selection_state->data());

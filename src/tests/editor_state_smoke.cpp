@@ -83,6 +83,25 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    editor_state automation_state(make_chart(), "assets/charts/editor_state_automation.rchart");
+    scroll_automation_point first_scroll_point{240, 1.0f, scroll_automation_curve::linear};
+    scroll_automation_point duplicate_scroll_point{240, 2.0f, scroll_automation_curve::ease_in};
+    scroll_automation_point second_scroll_point{480, 1.5f, scroll_automation_curve::linear};
+    if (!automation_state.add_scroll_automation_point(first_scroll_point) ||
+        automation_state.add_scroll_automation_point(duplicate_scroll_point) ||
+        automation_state.data().scroll_automation.size() != 1 ||
+        automation_state.data().scroll_automation.front().multiplier != 1.0f) {
+        std::cerr << "Scroll automation should reject duplicate ticks on add\n";
+        return EXIT_FAILURE;
+    }
+    if (!automation_state.add_scroll_automation_point(second_scroll_point) ||
+        automation_state.modify_scroll_automation_point(1, duplicate_scroll_point) ||
+        automation_state.data().scroll_automation.size() != 2 ||
+        automation_state.data().scroll_automation[1].tick != 480) {
+        std::cerr << "Scroll automation should reject duplicate ticks on modify\n";
+        return EXIT_FAILURE;
+    }
+
     chart_data stay_chart = make_chart();
     note_data base_stay{note_type::stay, 360, 1, 360};
     base_stay.lane_width = 2;

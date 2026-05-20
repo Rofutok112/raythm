@@ -17,10 +17,13 @@ public:
 
     [[nodiscard]] bool has_active_notes() const;
     [[nodiscard]] const std::vector<size_t>& active_indices_for_lane(int lane) const;
+    [[nodiscard]] double visual_target_ms(size_t note_index) const;
+    [[nodiscard]] double visual_end_target_ms(size_t note_index) const;
 
 private:
     int key_count_ = 0;
     std::vector<double> note_visual_target_ms_;
+    std::vector<double> note_visual_end_target_ms_;
     std::vector<std::deque<size_t>> inactive_draw_notes_by_lane_;
     std::vector<std::vector<size_t>> active_draw_notes_by_lane_;
 };
