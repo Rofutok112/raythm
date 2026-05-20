@@ -41,10 +41,10 @@ int main() {
 
     song_select::state state;
     song_select::apply_catalog(state, std::move(catalog), "song-a", "chart-a-2");
-    assert(state.selected_song_index == 0);
-    assert(state.difficulty_index == 1);
-    assert(state.scroll_y == 0.0f);
-    assert(state.scroll_y_target == 0.0f);
+    assert(state.selection.song_index == 0);
+    assert(state.selection.chart_index == 1);
+    assert(state.song_list_scroll.y == 0.0f);
+    assert(state.song_list_scroll.target_y == 0.0f);
     assert(std::fabs(song_select::layout::kLoginButtonRect.y - song_select::layout::kSettingsButtonRect.y) < 0.01f);
     assert(std::fabs(song_select::layout::kLoginButtonRect.x + song_select::layout::kLoginButtonRect.width +
                      song_select::layout::kButtonGap -
@@ -69,8 +69,8 @@ int main() {
 
     const bool changed = song_select::apply_song_selection(state, 1, 3);
     assert(changed);
-    assert(state.selected_song_index == 1);
-    assert(state.difficulty_index == 0);
+    assert(state.selection.song_index == 1);
+    assert(state.selection.chart_index == 0);
 
     song_select::apply_song_selection(state, 0, 1);
     assert(song_select::expanded_row_height(state, 0) ==
@@ -89,9 +89,9 @@ int main() {
 
     song_select::state scrolled_state;
     song_select::apply_catalog(scrolled_state, std::move(large_catalog), "song-15", "chart-15");
-    assert(scrolled_state.selected_song_index == 15);
-    assert(scrolled_state.scroll_y > 0.0f);
-    assert(std::fabs(scrolled_state.scroll_y - scrolled_state.scroll_y_target) < 0.01f);
+    assert(scrolled_state.selection.song_index == 15);
+    assert(scrolled_state.song_list_scroll.y > 0.0f);
+    assert(std::fabs(scrolled_state.song_list_scroll.y - scrolled_state.song_list_scroll.target_y) < 0.01f);
 
     return 0;
 }

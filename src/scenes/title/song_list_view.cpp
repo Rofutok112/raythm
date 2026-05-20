@@ -74,26 +74,26 @@ int hit_test(Rectangle area, float scroll_y, Vector2 point, int count) {
 void draw(const song_select::state& state, const draw_config& config) {
     const auto& t = *g_theme;
     const bool hide_unloaded_content =
-        state.catalog_loading && !state.catalog_loaded_once && state.songs.empty();
+        state.catalog.loading && !state.catalog.loaded_once && state.catalog.songs.empty();
     if (hide_unloaded_content) {
         return;
     }
 
-    ui::draw_text_in_rect(TextFormat("%d songs", static_cast<int>(state.songs.size())), 16,
+    ui::draw_text_in_rect(TextFormat("%d songs", static_cast<int>(state.catalog.songs.size())), 16,
                           {config.column_rect.x, config.column_rect.y - kSongCountOffsetY,
                            config.column_rect.width, kSongCountHeight},
                           with_alpha(t.text_muted, config.alpha), ui::text_align::left);
 
     ui::scoped_clip_rect clip(config.column_rect);
-    for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
-        const song_select::song_entry& song = state.songs[static_cast<size_t>(i)];
-        const Rectangle row = row_rect(config.column_rect, i, state.scroll_y);
+    for (int i = 0; i < static_cast<int>(state.catalog.songs.size()); ++i) {
+        const song_select::song_entry& song = state.catalog.songs[static_cast<size_t>(i)];
+        const Rectangle row = row_rect(config.column_rect, i, state.song_list_scroll.y);
         if (row.y + row.height < config.column_rect.y - kClipSlack ||
             row.y > config.column_rect.y + config.column_rect.height + kClipSlack) {
             continue;
         }
 
-        const bool selected = i == state.selected_song_index;
+        const bool selected = i == state.selection.song_index;
         const bool hovered = ui::is_hovered(row);
         const unsigned char row_alpha = selected ? config.selected_row_alpha
             : hovered ? config.hover_row_alpha

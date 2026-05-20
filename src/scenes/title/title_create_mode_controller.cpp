@@ -113,7 +113,7 @@ void title_create_mode_controller::update(scene_manager& manager,
         return;
     }
     if (result.create_chart_requested && song != nullptr) {
-        manager.change_scene(song_select::make_new_chart_scene(manager, *song, state.difficulty_index));
+        manager.change_scene(song_select::make_new_chart_scene(manager, *song, state.selection.chart_index));
         return;
     }
     if (result.edit_chart_requested && song != nullptr && chart != nullptr) {

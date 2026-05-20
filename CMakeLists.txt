@@ -302,6 +302,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_import_export_service.h
         src/scenes/song_select/song_select_command_controller.cpp
         src/scenes/song_select/song_select_command_controller.h
+        src/scenes/song_select/song_select_data_controller.cpp
+        src/scenes/song_select/song_select_data_controller.h
         src/scenes/song_select/song_transfer_controller.cpp
         src/scenes/song_select/song_transfer_controller.h
         src/scenes/song_select/song_select_last_played.cpp

@@ -605,12 +605,12 @@ catalog_data load_catalog(bool calculate_missing_levels) {
 
 delete_result delete_song(const state& state, int song_index) {
     delete_result result;
-    if (song_index < 0 || song_index >= static_cast<int>(state.songs.size())) {
+    if (song_index < 0 || song_index >= static_cast<int>(state.catalog.songs.size())) {
         result.message = "Song delete target is invalid.";
         return result;
     }
 
-    const song_entry& entry = state.songs[static_cast<size_t>(song_index)];
+    const song_entry& entry = state.catalog.songs[static_cast<size_t>(song_index)];
     const std::filesystem::path song_dir = path_utils::from_utf8(entry.song.directory);
     if (!is_within_root(song_dir, app_paths::songs_root())) {
         result.message = "Refused to delete a song outside the user songs directory.";
@@ -646,12 +646,12 @@ delete_result delete_song(const state& state, int song_index) {
 
 delete_result delete_chart(const state& state, int song_index, int chart_index) {
     delete_result result;
-    if (song_index < 0 || song_index >= static_cast<int>(state.songs.size())) {
+    if (song_index < 0 || song_index >= static_cast<int>(state.catalog.songs.size())) {
         result.message = "Chart delete target is invalid.";
         return result;
     }
 
-    const auto& charts = state.songs[static_cast<size_t>(song_index)].charts;
+    const auto& charts = state.catalog.songs[static_cast<size_t>(song_index)].charts;
     if (chart_index < 0 || chart_index >= static_cast<int>(charts.size())) {
         result.message = "Chart delete target is invalid.";
         return result;
@@ -675,7 +675,7 @@ delete_result delete_chart(const state& state, int song_index, int chart_index) 
 
     result.success = true;
     result.message = "Chart deleted.";
-    result.preferred_song_id = state.songs[static_cast<size_t>(song_index)].song.meta.song_id;
+    result.preferred_song_id = state.catalog.songs[static_cast<size_t>(song_index)].song.meta.song_id;
     result.preferred_chart_id = fallback_chart_id_after_chart_delete(state, song_index, chart_index);
     return result;
 }

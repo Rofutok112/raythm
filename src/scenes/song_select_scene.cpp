@@ -1,12 +1,8 @@
 #include "song_select_scene.h"
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
-#include <exception>
 #include <filesystem>
-#include <future>
-#include <thread>
 #include <utility>
 
 #include "core/app_paths.h"
@@ -64,10 +60,7 @@ void song_select_scene::on_enter() {
     if (state_.auth.logged_in) {
         auth_overlay::start_restore(auth_controller_, state_.login_dialog);
     }
-    catalog_loading_ = false;
-    catalog_reload_pending_ = false;
-    pending_catalog_song_id_.clear();
-    pending_catalog_chart_id_.clear();
+    data_controller_.reset(state_);
     reload_song_library(preferred_song_id_, preferred_chart_id_);
 }
 
@@ -81,54 +74,23 @@ void song_select_scene::on_exit() {
 
 void song_select_scene::reload_song_library(const std::string& preferred_song_id,
                                             const std::string& preferred_chart_id) {
-    if (catalog_loading_) {
-        catalog_reload_pending_ = true;
-        pending_catalog_song_id_ = preferred_song_id;
-        pending_catalog_chart_id_ = preferred_chart_id;
-        state_.catalog_loading = true;
-        return;
-    }
-
     preferred_song_id_ = preferred_song_id;
     preferred_chart_id_ = preferred_chart_id;
-    catalog_loading_ = true;
-    state_.catalog_loading = true;
-    std::promise<song_select::catalog_data> promise;
-    catalog_future_ = promise.get_future();
-    std::thread([promise = std::move(promise)]() mutable {
-        try {
-            promise.set_value(song_select::load_catalog());
-        } catch (...) {
-            promise.set_exception(std::current_exception());
-        }
-    }).detach();
+    data_controller_.request_catalog_reload(
+        state_,
+        {
+            .preferred_song_id = preferred_song_id,
+            .preferred_chart_id = preferred_chart_id,
+            .sync_media_on_apply = true,
+        });
 }
 
 void song_select_scene::poll_song_library_reload() {
-    if (!catalog_loading_) {
-        return;
+    const song_select::data_controller::catalog_poll_result result =
+        data_controller_.poll_catalog_reload(state_);
+    if (result.sync_media) {
+        sync_selected_song_media();
     }
-    if (catalog_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
-        return;
-    }
-
-    try {
-        song_select::apply_catalog(state_, catalog_future_.get(), preferred_song_id_, preferred_chart_id_);
-    } catch (const std::exception& ex) {
-        song_select::apply_catalog(state_, {}, preferred_song_id_, preferred_chart_id_);
-        state_.load_errors = {ex.what()};
-    }
-    catalog_loading_ = false;
-    sync_selected_song_media();
-
-    if (!catalog_reload_pending_) {
-        return;
-    }
-
-    catalog_reload_pending_ = false;
-    reload_song_library(pending_catalog_song_id_, pending_catalog_chart_id_);
-    pending_catalog_song_id_.clear();
-    pending_catalog_chart_id_.clear();
 }
 
 void song_select_scene::sync_selected_song_media() {
@@ -137,74 +99,11 @@ void song_select_scene::sync_selected_song_media() {
 }
 
 void song_select_scene::reload_selected_chart_ranking() {
-    if (ranking_loading_) {
-        ++ranking_generation_;
-        ranking_reload_pending_ = true;
-        if (state_.ranking_panel.selected_source == ranking_service::source::online) {
-            state_.ranking_panel.listing = {};
-            state_.ranking_panel.listing.ranking_source = state_.ranking_panel.selected_source;
-            state_.ranking_panel.listing.available = false;
-            state_.ranking_panel.listing.message = "Loading online rankings...";
-        }
-        return;
-    }
-
-    const auto filtered = song_select::filtered_charts_for_selected_song(state_);
-    const song_select::chart_option* chart = song_select::selected_chart_for(state_, filtered);
-    const std::string chart_id = chart != nullptr ? chart->meta.chart_id : "";
-    const ranking_service::source source = state_.ranking_panel.selected_source;
-    ++ranking_generation_;
-    ranking_pending_generation_ = ranking_generation_;
-    state_.ranking_panel.source_dropdown_open = false;
-    state_.ranking_panel.scroll_y = 0.0f;
-    state_.ranking_panel.scroll_y_target = 0.0f;
-    state_.ranking_panel.scrollbar_dragging = false;
-    state_.ranking_panel.scrollbar_drag_offset = 0.0f;
-    if (source == ranking_service::source::online) {
-        state_.ranking_panel.listing = {};
-        state_.ranking_panel.listing.ranking_source = source;
-        state_.ranking_panel.listing.available = false;
-        state_.ranking_panel.listing.message = "Loading online rankings...";
-    }
-
-    ranking_loading_ = true;
-    std::promise<ranking_service::listing> promise;
-    ranking_future_ = promise.get_future();
-    std::thread([promise = std::move(promise), chart_id, source]() mutable {
-        try {
-            promise.set_value(ranking_service::load_chart_ranking(chart_id, source, 50));
-        } catch (...) {
-            promise.set_exception(std::current_exception());
-        }
-    }).detach();
+    data_controller_.request_ranking_reload(state_);
 }
 
 void song_select_scene::poll_selected_chart_ranking() {
-    if (!ranking_loading_) {
-        return;
-    }
-    if (ranking_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
-        return;
-    }
-
-    ranking_service::listing listing;
-    try {
-        listing = ranking_future_.get();
-    } catch (const std::exception& ex) {
-        listing.available = false;
-        listing.message = ex.what();
-        listing.ranking_source = state_.ranking_panel.selected_source;
-    }
-    ranking_loading_ = false;
-    const bool stale = ranking_pending_generation_ != ranking_generation_;
-    if (!stale) {
-        state_.ranking_panel.listing = std::move(listing);
-    }
-
-    if (ranking_reload_pending_) {
-        ranking_reload_pending_ = false;
-        reload_selected_chart_ranking();
-    }
+    data_controller_.poll_ranking_reload(state_);
 }
 
 void song_select_scene::refresh_auth_state() {
@@ -274,7 +173,7 @@ bool song_select_scene::adjust_selected_song_local_offset(int delta_ms) {
         return false;
     }
 
-    auto& charts = state_.songs[static_cast<size_t>(state_.selected_song_index)].charts;
+    auto& charts = state_.catalog.songs[static_cast<size_t>(state_.selection.song_index)].charts;
     auto chart_it = std::find_if(charts.begin(), charts.end(), [&](const song_select::chart_option& candidate) {
         return candidate.meta.chart_id == selected_chart->meta.chart_id;
     });
@@ -336,7 +235,7 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
                             song_select::context_menu_item_count(
                                 state_, song_select::context_menu_target::list_background,
                                 song_select::context_menu_section::root,
-                                state_.selected_song_index, state_.difficulty_index)));
+                                state_.selection.song_index, state_.selection.chart_index)));
             return true;
         }
         return false;
@@ -358,7 +257,7 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
         }
 
         song_select::close_context_menu(state_);
-        if (state_.difficulty_index == chart_index) {
+        if (state_.selection.chart_index == chart_index) {
             const song_select::song_entry* song = song_select::selected_song(state_);
             const auto filtered = song_select::filtered_charts_for_selected_song(state_);
             const song_select::chart_option* chart = song_select::selected_chart_for(state_, filtered);
@@ -373,7 +272,7 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
     }
 
     if (right_pressed) {
-        const int chart_index = hit->song_index == state_.selected_song_index ? state_.difficulty_index : 0;
+        const int chart_index = hit->song_index == state_.selection.song_index ? state_.selection.chart_index : 0;
         const bool song_changed = song_select::apply_song_selection(state_, hit->song_index, chart_index);
         if (song_changed) {
             sync_selected_song_media();
@@ -391,7 +290,7 @@ bool song_select_scene::handle_song_list_pointer(Vector2 mouse, bool left_presse
 
     song_select::close_context_menu(state_);
     const bool song_changed = song_select::apply_song_selection(
-        state_, hit->song_index, hit->song_index == state_.selected_song_index ? state_.difficulty_index : 0);
+        state_, hit->song_index, hit->song_index == state_.selection.song_index ? state_.selection.chart_index : 0);
     if (song_changed) {
         sync_selected_song_media();
     } else {
@@ -542,13 +441,13 @@ void song_select_scene::update(float dt) {
 
     if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
         song_select::close_context_menu(state_);
-        if (song_select::apply_song_selection(state_, std::max(0, state_.selected_song_index - 1), 0)) {
+        if (song_select::apply_song_selection(state_, std::max(0, state_.selection.song_index - 1), 0)) {
             sync_selected_song_media();
         }
     } else if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
         song_select::close_context_menu(state_);
-        if (song_select::apply_song_selection(state_, std::min(static_cast<int>(state_.songs.size()) - 1,
-                                                               state_.selected_song_index + 1), 0)) {
+        if (song_select::apply_song_selection(state_, std::min(static_cast<int>(state_.catalog.songs.size()) - 1,
+                                                               state_.selection.song_index + 1), 0)) {
             sync_selected_song_media();
         }
     }
@@ -556,24 +455,24 @@ void song_select_scene::update(float dt) {
     const ui::scrollbar_interaction scrollbar = ui::update_vertical_scrollbar(
         song_select::layout::kSongListScrollbarTrackRect,
         song_select::content_height(state_),
-        state_.scroll_y_target,
-        state_.scrollbar_dragging,
-        state_.scrollbar_drag_offset,
+        state_.song_list_scroll.target_y,
+        state_.song_list_scroll.scrollbar_dragging,
+        state_.song_list_scroll.scrollbar_drag_offset,
         song_select::layout::kSceneLayer);
-    state_.scroll_y_target = scrollbar.scroll_offset;
+    state_.song_list_scroll.target_y = scrollbar.scroll_offset;
     if (scrollbar.changed || scrollbar.dragging) {
-        state_.scroll_y = state_.scroll_y_target;
+        state_.song_list_scroll.y = state_.song_list_scroll.target_y;
     }
 
     if (!scrollbar.dragging && song_list_hovered && wheel != 0.0f) {
-        state_.scroll_y_target -= wheel * song_select::layout::kScrollWheelStep;
+        state_.song_list_scroll.target_y -= wheel * song_select::layout::kScrollWheelStep;
     }
 
     const float max_scroll = ui::vertical_scroll_metrics(song_select::layout::kSongListScrollbarTrackRect,
                                                          song_select::content_height(state_),
-                                                         state_.scroll_y_target).max_scroll;
-    state_.scroll_y_target = std::clamp(state_.scroll_y_target, 0.0f, max_scroll);
-    state_.scroll_y = tween::damp(state_.scroll_y, state_.scroll_y_target, dt,
+                                                         state_.song_list_scroll.target_y).max_scroll;
+    state_.song_list_scroll.target_y = std::clamp(state_.song_list_scroll.target_y, 0.0f, max_scroll);
+    state_.song_list_scroll.y = tween::damp(state_.song_list_scroll.y, state_.song_list_scroll.target_y, dt,
                                   song_select::layout::kScrollLerpSpeed, 0.5f);
 
     const ui::scrollbar_interaction ranking_scrollbar = ui::update_vertical_scrollbar(
@@ -602,16 +501,16 @@ void song_select_scene::update(float dt) {
 
     const auto filtered = song_select::filtered_charts_for_selected_song(state_);
     if (!filtered.empty()) {
-        state_.difficulty_index = std::clamp(state_.difficulty_index, 0, static_cast<int>(filtered.size()) - 1);
+        state_.selection.chart_index = std::clamp(state_.selection.chart_index, 0, static_cast<int>(filtered.size()) - 1);
         if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) {
             song_select::close_context_menu(state_);
-            state_.difficulty_index = std::max(0, state_.difficulty_index - 1);
-            state_.chart_change_anim_t = 1.0f;
+            state_.selection.chart_index = std::max(0, state_.selection.chart_index - 1);
+            state_.preview.chart_change_anim_t = 1.0f;
             reload_selected_chart_ranking();
         } else if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) {
             song_select::close_context_menu(state_);
-            state_.difficulty_index = std::min(static_cast<int>(filtered.size()) - 1, state_.difficulty_index + 1);
-            state_.chart_change_anim_t = 1.0f;
+            state_.selection.chart_index = std::min(static_cast<int>(filtered.size()) - 1, state_.selection.chart_index + 1);
+            state_.preview.chart_change_anim_t = 1.0f;
             reload_selected_chart_ranking();
         }
 
@@ -632,7 +531,7 @@ void song_select_scene::update(float dt) {
 
             if (IsKeyPressed(KEY_N)) {
                 song_select::close_context_menu(state_);
-                manager_.change_scene(song_select::make_new_chart_scene(manager_, *song, state_.difficulty_index));
+                manager_.change_scene(song_select::make_new_chart_scene(manager_, *song, state_.selection.chart_index));
                 return;
             }
         }
@@ -642,7 +541,7 @@ void song_select_scene::update(float dt) {
         return;
     }
 
-    if (state_.songs.empty()) {
+    if (state_.catalog.songs.empty()) {
         return;
     }
 }
@@ -655,7 +554,7 @@ void song_select_scene::draw() {
     song_select::draw_frame(state_);
     song_select::draw_song_list(state_);
 
-    if (state_.songs.empty()) {
+    if (state_.catalog.songs.empty()) {
         song_select::draw_empty_state(state_);
         if (transfer_controller_.busy()) {
             song_select::draw_busy_overlay(transfer_controller_.busy_label());
@@ -735,7 +634,7 @@ void song_select_scene::draw() {
     }
     ui::flush_draw_queue();
 
-    state_.scene_fade_in.draw();
+    state_.transition.fade_in.draw();
 
     virtual_screen::end();
 

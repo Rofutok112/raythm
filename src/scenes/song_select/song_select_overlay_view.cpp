@@ -22,7 +22,7 @@ std::vector<context_menu_item_entry> build_context_menu_entries(const state& sta
 
     switch (state.context_menu.target) {
         case context_menu_target::list_background: {
-            const bool has_any_song = !state.songs.empty();
+            const bool has_any_song = !state.catalog.songs.empty();
             if (state.context_menu.section == context_menu_section::root) {
                 entries = {
                     make_entry("SONG >", true, context_menu_command::open_song_section),
@@ -45,7 +45,7 @@ std::vector<context_menu_item_entry> build_context_menu_entries(const state& sta
         case context_menu_target::song:
         case context_menu_target::chart: {
             const bool valid_song = state.context_menu.song_index >= 0 &&
-                                    state.context_menu.song_index < static_cast<int>(state.songs.size());
+                                    state.context_menu.song_index < static_cast<int>(state.catalog.songs.size());
 
             const bool can_edit_song = valid_song;
             const bool can_export_song = valid_song;
@@ -56,7 +56,7 @@ std::vector<context_menu_item_entry> build_context_menu_entries(const state& sta
             bool can_edit_chart = false;
             bool can_delete_chart = false;
             if (valid_song) {
-                const auto& charts = state.songs[static_cast<size_t>(state.context_menu.song_index)].charts;
+                const auto& charts = state.catalog.songs[static_cast<size_t>(state.context_menu.song_index)].charts;
                 valid_chart = state.context_menu.chart_index >= 0 &&
                               state.context_menu.chart_index < static_cast<int>(charts.size());
                 if (valid_chart) {
@@ -67,7 +67,7 @@ std::vector<context_menu_item_entry> build_context_menu_entries(const state& sta
 
             const bool has_mv = valid_song &&
                 mv::find_first_package_for_song(
-                    state.songs[static_cast<size_t>(state.context_menu.song_index)].song.meta.song_id).has_value();
+                    state.catalog.songs[static_cast<size_t>(state.context_menu.song_index)].song.meta.song_id).has_value();
 
             if (state.context_menu.target == context_menu_target::song) {
                 if (state.context_menu.section == context_menu_section::root) {

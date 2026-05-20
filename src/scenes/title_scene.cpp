@@ -108,8 +108,8 @@ bool select_local_song(song_select::state& state, const std::string& song_id) {
         return false;
     }
 
-    for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
-        if (state.songs[static_cast<size_t>(i)].song.meta.song_id != song_id) {
+    for (int i = 0; i < static_cast<int>(state.catalog.songs.size()); ++i) {
+        if (state.catalog.songs[static_cast<size_t>(i)].song.meta.song_id != song_id) {
             continue;
         }
 
@@ -248,13 +248,13 @@ void title_scene::update_startup_loading() {
         return;
     }
 
-    if (!play_state_.catalog_loaded_once) {
+    if (!play_state_.catalog.loaded_once) {
         return;
     }
 
     if (!startup_scoring_requested_) {
         startup_scoring_requested_ = true;
-        startup_load_failed_ = !play_state_.load_errors.empty();
+        startup_load_failed_ = !play_state_.catalog.load_errors.empty();
         startup_loading_message_ = "Preparing scoring cache...";
         title_online_view::reload_catalog(online_state_);
         if (play_state_.auth.logged_in) {
@@ -273,9 +273,9 @@ void title_scene::update_startup_loading() {
     startup_load_complete_ = true;
     startup_loading_message_ = startup_load_failed_ ? "Catalog loaded with warnings." : "Ready.";
     if (startup_load_failed_) {
-        home_status_message_ = play_state_.load_errors.empty()
+        home_status_message_ = play_state_.catalog.load_errors.empty()
             ? "Catalog loaded with warnings."
-            : play_state_.load_errors.front();
+            : play_state_.catalog.load_errors.front();
     }
 }
 

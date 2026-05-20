@@ -223,8 +223,8 @@ float ranking_content_height(const state& state) {
 ranking_panel_result draw_ranking_panel(const state& state, bool source_dropdown_interactive) {
     const auto& theme = *g_theme;
     ranking_panel_result result;
-    const float chart_anim = 1.0f - state.chart_change_anim_t;
-    const float content_offset_x = 14.0f * state.chart_change_anim_t;
+    const float chart_anim = 1.0f - state.preview.chart_change_anim_t;
+    const float content_offset_x = 14.0f * state.preview.chart_change_anim_t;
     const unsigned char content_alpha = static_cast<unsigned char>(120.0f + 135.0f * chart_anim);
 
     ui::draw_section(layout::kRankingPanelRect);

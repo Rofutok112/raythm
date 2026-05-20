@@ -76,25 +76,25 @@ void apply_context_menu_command(scene_manager& manager, state& state,
         return;
     case context_menu_command::edit_song:
         if (state.context_menu.song_index >= 0 &&
-            state.context_menu.song_index < static_cast<int>(state.songs.size())) {
-            const song_entry& song = state.songs[static_cast<size_t>(state.context_menu.song_index)];
+            state.context_menu.song_index < static_cast<int>(state.catalog.songs.size())) {
+            const song_entry& song = state.catalog.songs[static_cast<size_t>(state.context_menu.song_index)];
             close_context_menu(state);
             manager.change_scene(make_edit_song_scene(manager, song));
         }
         return;
     case context_menu_command::new_chart:
         if (state.context_menu.song_index >= 0 &&
-            state.context_menu.song_index < static_cast<int>(state.songs.size())) {
-            const song_entry& song = state.songs[static_cast<size_t>(state.context_menu.song_index)];
+            state.context_menu.song_index < static_cast<int>(state.catalog.songs.size())) {
+            const song_entry& song = state.catalog.songs[static_cast<size_t>(state.context_menu.song_index)];
             close_context_menu(state);
-            manager.change_scene(make_new_chart_scene(manager, song, state.difficulty_index));
+            manager.change_scene(make_new_chart_scene(manager, song, state.selection.chart_index));
         }
         return;
     case context_menu_command::import_chart:
     {
         const int target_song_index = state.context_menu.song_index >= 0
             ? state.context_menu.song_index
-            : state.selected_song_index;
+            : state.selection.song_index;
         close_context_menu(state);
         transfer_result result;
         if (const auto batch = prepare_chart_imports(state, target_song_index, result); batch.has_value()) {
@@ -126,8 +126,8 @@ void apply_context_menu_command(scene_manager& manager, state& state,
         return;
     case context_menu_command::edit_chart:
         if (state.context_menu.song_index >= 0 &&
-            state.context_menu.song_index < static_cast<int>(state.songs.size())) {
-            const auto& song = state.songs[static_cast<size_t>(state.context_menu.song_index)];
+            state.context_menu.song_index < static_cast<int>(state.catalog.songs.size())) {
+            const auto& song = state.catalog.songs[static_cast<size_t>(state.context_menu.song_index)];
             if (state.context_menu.chart_index >= 0 &&
                 state.context_menu.chart_index < static_cast<int>(song.charts.size())) {
                 const auto& chart = song.charts[static_cast<size_t>(state.context_menu.chart_index)];
@@ -154,8 +154,8 @@ void apply_context_menu_command(scene_manager& manager, state& state,
     case context_menu_command::new_mv:
     case context_menu_command::edit_mv:
         if (state.context_menu.song_index >= 0 &&
-            state.context_menu.song_index < static_cast<int>(state.songs.size())) {
-            const auto& song = state.songs[static_cast<size_t>(state.context_menu.song_index)];
+            state.context_menu.song_index < static_cast<int>(state.catalog.songs.size())) {
+            const auto& song = state.catalog.songs[static_cast<size_t>(state.context_menu.song_index)];
             close_context_menu(state);
             manager.change_scene(make_mv_editor_scene(manager, song));
         }
@@ -172,8 +172,8 @@ void apply_context_menu_command(scene_manager& manager, state& state,
         return;
     case context_menu_command::import_mv:
         if (state.context_menu.song_index >= 0 &&
-            state.context_menu.song_index < static_cast<int>(state.songs.size())) {
-            const auto& song = state.songs[static_cast<size_t>(state.context_menu.song_index)];
+            state.context_menu.song_index < static_cast<int>(state.catalog.songs.size())) {
+            const auto& song = state.catalog.songs[static_cast<size_t>(state.context_menu.song_index)];
             close_context_menu(state);
             const std::string src = file_dialog::open_mv_script_file();
             if (!src.empty()) {
@@ -194,8 +194,8 @@ void apply_context_menu_command(scene_manager& manager, state& state,
         return;
     case context_menu_command::export_mv:
         if (state.context_menu.song_index >= 0 &&
-            state.context_menu.song_index < static_cast<int>(state.songs.size())) {
-            const auto& song = state.songs[static_cast<size_t>(state.context_menu.song_index)];
+            state.context_menu.song_index < static_cast<int>(state.catalog.songs.size())) {
+            const auto& song = state.catalog.songs[static_cast<size_t>(state.context_menu.song_index)];
             close_context_menu(state);
             if (const auto package = mv::find_first_package_for_song(song.song.meta.song_id); package.has_value()) {
                 const std::string dest = file_dialog::save_mv_script_file(package->meta.mv_id + ".rmv");
@@ -230,8 +230,8 @@ void apply_confirmation_command(state& state,
         if (state.confirmation_dialog.action == pending_confirmation_action::delete_mv) {
             const int si = state.confirmation_dialog.song_index;
             state.confirmation_dialog = {};
-            if (si >= 0 && si < static_cast<int>(state.songs.size())) {
-                const auto& song_id = state.songs[static_cast<size_t>(si)].song.meta.song_id;
+            if (si >= 0 && si < static_cast<int>(state.catalog.songs.size())) {
+                const auto& song_id = state.catalog.songs[static_cast<size_t>(si)].song.meta.song_id;
                 if (const auto package = mv::find_first_package_for_song(song_id); package.has_value()) {
                     std::error_code ec;
                     std::filesystem::remove_all(path_utils::from_utf8(package->directory), ec);

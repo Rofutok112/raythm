@@ -99,7 +99,7 @@ void draw_chart_rows(const song_select::state& state,
     float child_y = item_y + 46.0f;
     for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
         const song_select::chart_option& chart = *filtered[static_cast<size_t>(chart_index)];
-        const bool child_selected = chart_index == state.difficulty_index;
+        const bool child_selected = chart_index == state.selection.chart_index;
         const Rectangle child_rect = {child_x, child_y - 6.0f, child_w, 28.0f};
         if (ui::is_hovered(child_rect, song_select::layout::kSceneLayer) || child_selected) {
             const ui::row_state child_state = ui::draw_selectable_row(child_rect, child_selected, 0.0f);
@@ -143,9 +143,9 @@ std::optional<list_hit> hit_test_song_list(const state& state, Vector2 mouse) {
 
     const std::vector<const chart_option*> filtered = filtered_charts_for_selected_song(state);
     float item_y = song_list_first_item_y(state);
-    for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
+    for (int i = 0; i < static_cast<int>(state.catalog.songs.size()); ++i) {
         const float row_h = expanded_row_height(state, i);
-        if (i == state.selected_song_index) {
+        if (i == state.selection.song_index) {
             float child_y = item_y + 46.0f;
             for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
                 const Rectangle child_rect = {layout::kSongListRect.x + 46.0f, child_y - 6.0f,
@@ -178,8 +178,8 @@ void draw_song_list(const state& state) {
     const std::vector<const chart_option*> filtered = filtered_charts_for_selected_song(state);
     const double now = GetTime();
     float item_y = song_list_first_item_y(state);
-    for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
-        const bool is_selected = i == state.selected_song_index;
+    for (int i = 0; i < static_cast<int>(state.catalog.songs.size()); ++i) {
+        const bool is_selected = i == state.selection.song_index;
         const float row_h = expanded_row_height(state, i);
 
         if (item_y + row_h < layout::kSongListViewRect.y) {
@@ -190,14 +190,14 @@ void draw_song_list(const state& state) {
             break;
         }
 
-        draw_song_row(state.songs[static_cast<size_t>(i)], item_y, is_selected, now);
+        draw_song_row(state.catalog.songs[static_cast<size_t>(i)], item_y, is_selected, now);
         if (is_selected) {
             draw_chart_rows(state, filtered, item_y);
         }
         item_y += row_h;
     }
 
-    ui::draw_scrollbar(layout::kSongListScrollbarTrackRect, content_height(state), state.scroll_y,
+    ui::draw_scrollbar(layout::kSongListScrollbarTrackRect, content_height(state), state.song_list_scroll.y,
                        theme.scrollbar_track, theme.scrollbar_thumb);
 }
 

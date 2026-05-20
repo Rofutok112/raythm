@@ -72,7 +72,7 @@ void title_play_transfer_controller::start_chart_import(song_select::state& stat
 }
 
 void title_play_transfer_controller::start_song_export(song_select::state& state) {
-    const int song_index = state.selected_song_index;
+    const int song_index = state.selection.song_index;
     if (const auto request = song_select::prepare_song_export(state, song_index); request.has_value()) {
         transfer_controller_.start_song_export(*request);
         song_select::queue_status_message(state, transfer_controller_.busy_label(), false);
@@ -84,7 +84,7 @@ void title_play_transfer_controller::start_chart_export(song_select::state& stat
                                                        bool sync_media_on_reload) {
     apply_transfer_result(
         state,
-        song_select::export_chart_package(state, state.selected_song_index, state.difficulty_index),
+        song_select::export_chart_package(state, state.selection.song_index, state.selection.chart_index),
         callbacks,
         sync_media_on_reload);
 }

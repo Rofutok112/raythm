@@ -67,7 +67,7 @@ std::string sanitize_file_stem(const std::string& value, const char* fallback) {
 }
 
 bool is_valid_song_index(const song_select::state& state, int song_index) {
-    return song_index >= 0 && song_index < static_cast<int>(state.songs.size());
+    return song_index >= 0 && song_index < static_cast<int>(state.catalog.songs.size());
 }
 
 bool is_valid_chart_index(const song_select::song_entry& song, int chart_index) {
@@ -75,7 +75,7 @@ bool is_valid_chart_index(const song_select::song_entry& song, int chart_index) 
 }
 
 std::optional<song_select::chart_option> find_chart_by_id(const song_select::state& state, const std::string& chart_id) {
-    for (const auto& song : state.songs) {
+    for (const auto& song : state.catalog.songs) {
         for (const auto& chart : song.charts) {
             if (chart.meta.chart_id == chart_id) {
                 return chart;
@@ -86,7 +86,7 @@ std::optional<song_select::chart_option> find_chart_by_id(const song_select::sta
 }
 
 std::optional<song_select::song_entry> find_song_by_id(const song_select::state& state, const std::string& song_id) {
-    for (const auto& song : state.songs) {
+    for (const auto& song : state.catalog.songs) {
         if (song.song.meta.song_id == song_id) {
             return song;
         }
@@ -98,7 +98,7 @@ const song_select::song_entry* song_at_index(const song_select::state& state, in
     if (!is_valid_song_index(state, song_index)) {
         return nullptr;
     }
-    return &state.songs[static_cast<size_t>(song_index)];
+    return &state.catalog.songs[static_cast<size_t>(song_index)];
 }
 
 fs::path make_temp_directory(const char* prefix) {
@@ -308,7 +308,7 @@ transfer_result export_chart_package(const state& state, int song_index, int cha
         return result;
     }
 
-    const song_entry& song = state.songs[static_cast<size_t>(song_index)];
+    const song_entry& song = state.catalog.songs[static_cast<size_t>(song_index)];
     if (!is_valid_chart_index(song, chart_index)) {
         result.message = "Chart export target is invalid.";
         return result;
@@ -349,7 +349,7 @@ transfer_result import_chart_package(const state& state, int song_index) {
 }
 
 std::optional<chart_import_request> prepare_chart_import(const state& state, transfer_result& result) {
-    return prepare_chart_import(state, state.selected_song_index, result);
+    return prepare_chart_import(state, state.selection.song_index, result);
 }
 
 std::optional<chart_import_request> prepare_chart_import(const state& state, int song_index, transfer_result& result) {
@@ -381,7 +381,7 @@ std::optional<chart_import_request> prepare_chart_import(const state& state, int
 }
 
 std::optional<chart_import_batch_request> prepare_chart_imports(const state& state, transfer_result& result) {
-    return prepare_chart_imports(state, state.selected_song_index, result);
+    return prepare_chart_imports(state, state.selection.song_index, result);
 }
 
 std::optional<chart_import_batch_request> prepare_chart_imports(const state& state, int song_index,
@@ -510,7 +510,7 @@ std::optional<song_export_request> prepare_song_export(const state& state, int s
         return std::nullopt;
     }
 
-    const song_entry& song = state.songs[static_cast<size_t>(song_index)];
+    const song_entry& song = state.catalog.songs[static_cast<size_t>(song_index)];
     const song_meta export_meta = make_export_song_meta_copy(song.song.meta);
     const std::string default_name = sanitize_file_stem(export_meta.song_id, "song") + ".rpack";
     const std::string save_path = file_dialog::save_song_package_file(default_name);

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <future>
 #include <optional>
 #include <string>
 #include <vector>
@@ -11,6 +10,7 @@
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_select_command_controller.h"
 #include "song_select/song_select_confirmation_dialog.h"
+#include "song_select/song_select_data_controller.h"
 #include "song_select/song_select_login_dialog.h"
 #include "song_select/song_preview_controller.h"
 #include "song_select/song_select_overlay_view.h"
@@ -47,20 +47,11 @@ private:
 
     song_select::state state_;
     song_select::preview_controller preview_controller_;
+    song_select::data_controller data_controller_;
     std::string preferred_song_id_;
     std::string preferred_chart_id_;
-    std::string pending_catalog_song_id_;
-    std::string pending_catalog_chart_id_;
     std::optional<song_select::recent_result_offset> recent_result_offset_;
     bool open_login_dialog_on_enter_ = false;
-    std::future<song_select::catalog_data> catalog_future_;
-    bool catalog_loading_ = false;
-    bool catalog_reload_pending_ = false;
-    std::future<ranking_service::listing> ranking_future_;
-    bool ranking_loading_ = false;
-    bool ranking_reload_pending_ = false;
-    int ranking_generation_ = 0;
-    int ranking_pending_generation_ = 0;
     auth_overlay::controller auth_controller_;
     song_select::transfer::controller transfer_controller_;
 };

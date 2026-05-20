@@ -37,6 +37,34 @@ struct catalog_data {
     std::vector<std::string> load_errors;
 };
 
+struct catalog_state {
+    std::vector<song_entry> songs;
+    std::vector<std::string> load_errors;
+    bool loading = false;
+    bool loaded_once = false;
+};
+
+struct selection_state {
+    int song_index = 0;
+    int chart_index = 0;
+};
+
+struct scroll_state {
+    float y = 0.0f;
+    float target_y = 0.0f;
+    bool scrollbar_dragging = false;
+    float scrollbar_drag_offset = 0.0f;
+};
+
+struct preview_state {
+    float song_change_anim_t = 0.0f;
+    float chart_change_anim_t = 0.0f;
+};
+
+struct transition_state {
+    scene_fade fade_in{scene_fade::direction::in, 0.3f, 0.65f};
+};
+
 enum class context_menu_target {
     none,
     list_background,
@@ -126,21 +154,12 @@ struct login_dialog_state {
 };
 
 struct state {
-    std::vector<song_entry> songs;
-    std::vector<std::string> load_errors;
-    bool catalog_loading = false;
-    bool catalog_loaded_once = false;
-    int selected_song_index = 0;
-    int difficulty_index = 0;
-    float scroll_y = 0.0f;
-    float scroll_y_target = 0.0f;
-    float chart_scroll_y = 0.0f;
-    float chart_scroll_y_target = 0.0f;
-    float song_change_anim_t = 0.0f;
-    float chart_change_anim_t = 0.0f;
-    scene_fade scene_fade_in{scene_fade::direction::in, 0.3f, 0.65f};
-    bool scrollbar_dragging = false;
-    float scrollbar_drag_offset = 0.0f;
+    catalog_state catalog;
+    selection_state selection;
+    scroll_state song_list_scroll;
+    scroll_state chart_list_scroll;
+    preview_state preview;
+    transition_state transition;
     context_menu_state context_menu;
     confirmation_dialog_state confirmation_dialog;
     std::optional<recent_result_offset> recent_result_offset;

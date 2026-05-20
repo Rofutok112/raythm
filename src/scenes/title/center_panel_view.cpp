@@ -160,7 +160,7 @@ void draw(const song_select::state& state,
     const auto& t = *g_theme;
 
     if (song == nullptr) {
-        if (state.catalog_loading && !state.catalog_loaded_once && state.songs.empty()) {
+        if (state.catalog.loading && !state.catalog.loaded_once && state.catalog.songs.empty()) {
             return;
         }
         ui::draw_text_in_rect("No songs found yet.", 34,
@@ -251,13 +251,13 @@ void draw(const song_select::state& state,
     ui::scoped_clip_rect clip(config.chart_buttons_rect);
     for (int i = 0; i < static_cast<int>(filtered.size()); ++i) {
         const song_select::chart_option& item = *filtered[static_cast<size_t>(i)];
-        const Rectangle row = chart_button_rect(config.chart_buttons_rect, i, state.chart_scroll_y);
+        const Rectangle row = chart_button_rect(config.chart_buttons_rect, i, state.chart_list_scroll.y);
         if (row.y + row.height < config.chart_buttons_rect.y - kClipSlack ||
             row.y > config.chart_buttons_rect.y + config.chart_buttons_rect.height + kClipSlack) {
             continue;
         }
 
-        const bool selected = i == state.difficulty_index;
+        const bool selected = i == state.selection.chart_index;
         const bool hovered = ui::is_hovered(row);
         const unsigned char row_alpha = selected ? config.selected_row_alpha
             : hovered ? config.hover_row_alpha

@@ -105,8 +105,8 @@ void draw_empty_state(const state& state) {
                                     ui::anchor::center, ui::anchor::center,
                                     {0.0f, -20.0f}),
                           theme.text);
-    if (!state.load_errors.empty()) {
-        ui::draw_text_in_rect(state.load_errors.front().c_str(), 22,
+    if (!state.catalog.load_errors.empty()) {
+        ui::draw_text_in_rect(state.catalog.load_errors.front().c_str(), 22,
                               ui::place(layout::kLeftPanelRect, 620.0f, 28.0f,
                                         ui::anchor::center, ui::anchor::center,
                                         {0.0f, 28.0f}),
@@ -122,11 +122,11 @@ void draw_song_details(const state& state, const preview_controller& preview_con
 
     const chart_option* selected_chart = selected_chart_for(state, filtered_charts_for_selected_song(state));
     const auto& theme = *g_theme;
-    const float content_anim = 1.0f - state.song_change_anim_t;
-    const float content_offset_x = 18.0f * state.song_change_anim_t;
+    const float content_anim = 1.0f - state.preview.song_change_anim_t;
+    const float content_offset_x = 18.0f * state.preview.song_change_anim_t;
     const unsigned char content_alpha = static_cast<unsigned char>(145.0f + 110.0f * content_anim);
-    const float chart_anim = 1.0f - state.chart_change_anim_t;
-    const float chart_offset_x = 14.0f * state.chart_change_anim_t;
+    const float chart_anim = 1.0f - state.preview.chart_change_anim_t;
+    const float chart_offset_x = 14.0f * state.preview.chart_change_anim_t;
     const unsigned char chart_alpha = static_cast<unsigned char>(120.0f + 135.0f * chart_anim);
     const int local_offset_ms = selected_chart != nullptr ? selected_chart->local_note_offset_ms : 0;
     const bool has_recent_result = state.recent_result_offset.has_value() &&
