@@ -320,8 +320,6 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_create_scene.h
         src/scenes/song_select/song_catalog_service.cpp
         src/scenes/song_select/song_catalog_service.h
-        src/scenes/song_select/content_verification_cache_database.cpp
-        src/scenes/song_select/content_verification_cache_database.h
         src/scenes/song_select/local_catalog_database.cpp
         src/scenes/song_select/local_catalog_database.h
         src/scenes/song_select/song_select_confirmation_dialog.cpp
@@ -357,6 +355,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select_scene.h
         src/scenes/editor/controller/editor_runtime_controller.cpp
         src/scenes/editor/controller/editor_runtime_controller.h
+        src/scenes/editor/daw/editor_daw_view.cpp
+        src/scenes/editor/daw/editor_daw_view.h
         src/scenes/editor/editor_flow_controller.cpp
         src/scenes/editor/editor_flow_controller.h
         src/scenes/editor/view/editor_cursor_hud_view.cpp
@@ -381,6 +381,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/service/editor_chart_identity_service.h
         src/scenes/editor/service/editor_metadata_service.cpp
         src/scenes/editor/service/editor_metadata_service.h
+        src/scenes/editor/service/editor_note_placement_rules.cpp
+        src/scenes/editor/service/editor_note_placement_rules.h
         src/scenes/editor/service/editor_transport_service.cpp
         src/scenes/editor/service/editor_transport_service.h
         src/scenes/editor/service/editor_timing_edit_service.cpp
@@ -551,6 +553,12 @@ add_executable(editor_state_smoke
         src/scenes/editor/editor_meter_map.h
         src/scenes/editor/editor_state.cpp
         src/scenes/editor/editor_state.h
+        src/scenes/editor/service/editor_note_placement_rules.cpp
+        src/scenes/editor/service/editor_note_placement_rules.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/models/data_models.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
@@ -797,6 +805,10 @@ add_executable(editor_transport_controller_smoke
         src/scenes/editor/editor_state.h
         src/scenes/editor/editor_timeline_view.h
         src/scenes/editor/editor_timing_panel.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/models/data_models.h
@@ -820,6 +832,10 @@ add_executable(editor_flow_controller_smoke
         src/scenes/editor/editor_timing_panel.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/models/data_models.h
@@ -839,6 +855,10 @@ add_executable(editor_timeline_controller_smoke
         src/scenes/editor/editor_timeline_view.cpp
         src/scenes/editor/editor_timeline_view.h
         src/scenes/editor/editor_timing_panel.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/models/data_models.h

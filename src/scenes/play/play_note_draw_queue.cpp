@@ -14,6 +14,7 @@ const std::vector<size_t>& empty_active_indices() {
 void play_note_draw_queue::clear() {
     key_count_ = 0;
     note_visual_target_ms_.clear();
+    note_visual_end_target_ms_.clear();
     inactive_draw_notes_by_lane_.clear();
     active_draw_notes_by_lane_.clear();
 }
@@ -23,6 +24,7 @@ void play_note_draw_queue::init_from_note_states(int key_count, const std::vecto
     clear();
     key_count_ = key_count;
     note_visual_target_ms_.resize(note_states.size());
+    note_visual_end_target_ms_.resize(note_states.size());
     inactive_draw_notes_by_lane_.assign(static_cast<size_t>(key_count_), {});
     active_draw_notes_by_lane_.assign(static_cast<size_t>(key_count_), {});
 
@@ -30,6 +32,9 @@ void play_note_draw_queue::init_from_note_states(int key_count, const std::vecto
         note_visual_target_ms_[i] = scroll_map != nullptr
             ? scroll_map->visual_ms_at(note_states[i].target_ms)
             : note_states[i].target_ms;
+        note_visual_end_target_ms_[i] = scroll_map != nullptr
+            ? scroll_map->visual_ms_at(note_states[i].end_target_ms)
+            : note_states[i].end_target_ms;
         const int lane = note_states[i].note_ref.lane;
         if (lane >= 0 && lane < key_count_) {
             inactive_draw_notes_by_lane_[static_cast<size_t>(lane)].push_back(i);
@@ -100,4 +105,12 @@ const std::vector<size_t>& play_note_draw_queue::active_indices_for_lane(int lan
         return empty_active_indices();
     }
     return active_draw_notes_by_lane_[static_cast<size_t>(lane)];
+}
+
+double play_note_draw_queue::visual_target_ms(size_t note_index) const {
+    return note_index < note_visual_target_ms_.size() ? note_visual_target_ms_[note_index] : 0.0;
+}
+
+double play_note_draw_queue::visual_end_target_ms(size_t note_index) const {
+    return note_index < note_visual_end_target_ms_.size() ? note_visual_end_target_ms_[note_index] : 0.0;
 }

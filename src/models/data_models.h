@@ -76,18 +76,24 @@ struct chart_meta {
     int offset = 0;
 };
 
-enum class scroll_event_type {
-    speed,
-    stop
+enum class scroll_automation_curve {
+    hold,
+    linear,
+    ease_in,
+    ease_out,
+    ease_in_out
 };
 
-// 表示スクロールに影響する区間イベント。
-// 判定時刻や音楽時間には影響しない。
-struct scroll_event {
-    scroll_event_type type = scroll_event_type::speed;
+// 表示スクロール倍率を制御点で表すオートメーション。
+// curve_to_next は次の制御点までの補間方法を表す。
+struct scroll_automation_point {
     int tick = 0;
-    int duration = 0;
     float multiplier = 1.0f;
+    scroll_automation_curve curve_to_next = scroll_automation_curve::hold;
+};
+
+struct scroll_automation_guides {
+    std::array<float, 4> values = {0.0f, 0.5f, 1.5f, 2.0f};
 };
 
 // ノート入力の種類。
@@ -137,16 +143,18 @@ inline bool note_covers_lane(const note_data& note, int lane) {
 struct chart_data {
     chart_meta meta;
     std::vector<timing_event> timing_events;
-    std::vector<scroll_event> scroll_events;
+    std::vector<scroll_automation_point> scroll_automation;
+    scroll_automation_guides scroll_guides;
     std::vector<note_data> notes;
 };
 
 inline const std::vector<timing_event>& effective_timing_events(const song_data& song, const chart_data& chart) {
-    return song.meta.timing_events.empty() ? chart.timing_events : song.meta.timing_events;
+    return chart.timing_events.empty() ? song.meta.timing_events : chart.timing_events;
 }
 
 inline int effective_author_offset_ms(const song_data& song, const chart_data& chart) {
-    return song.meta.has_offset ? song.meta.offset : chart.meta.offset;
+    (void)song;
+    return chart.meta.offset;
 }
 
 enum class content_status {

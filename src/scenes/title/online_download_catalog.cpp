@@ -69,6 +69,13 @@ content_status source_status_from_remote(const std::string& content_source) {
     return content_source == "official" ? content_status::official : content_status::community;
 }
 
+content_status remote_display_status(content_status local_status, content_status remote_source_status) {
+    if (local_status == content_status::modified || local_status == content_status::update) {
+        return local_status;
+    }
+    return remote_source_status;
+}
+
 song_select::song_entry make_remote_song_entry(const remote_song_payload& song, const std::string& server_url) {
     song_select::song_entry entry;
     entry.song.meta.song_id = song.id;
@@ -108,6 +115,10 @@ song_entry_state build_song_state(const remote_song_payload& remote_song,
 
     state_entry.installed = local_song.song != nullptr;
     state_entry.installed_local_song_id = local_song.local_song_id;
+    if (local_song.song != nullptr) {
+        state_entry.song.status =
+            remote_display_status(local_song.song->status, state_entry.song.source_status);
+    }
     state_entry.update_available = local_song.song != nullptr &&
                                    local_song.song->song.meta.song_version < state_entry.song.song.meta.song_version;
     state_entry.charts_loaded = false;
@@ -234,6 +245,7 @@ void append_chart_page(song_entry_state& song_state,
         const std::optional<std::string> mapped_local_chart_id =
             binding.has_value() ? std::optional<std::string>(binding->local_chart_id) : std::nullopt;
         std::string installed_local_chart_id;
+        const song_select::chart_option* installed_local_chart = nullptr;
         const bool local_chart_installed = local_song != nullptr &&
             std::any_of(local_song->charts.begin(), local_song->charts.end(),
                         [&](const song_select::chart_option& local_chart) {
@@ -242,6 +254,7 @@ void append_chart_page(song_entry_state& song_state,
                                  local_chart.meta.chart_id == *mapped_local_chart_id);
                             if (matches) {
                                 installed_local_chart_id = local_chart.meta.chart_id;
+                                installed_local_chart = &local_chart;
                             }
                             return matches;
                         });
@@ -252,6 +265,10 @@ void append_chart_page(song_entry_state& song_state,
                 ? binding->remote_chart_version
                 : 1);
 
+        const content_status chart_source_status = source_status_from_remote(chart.content_source);
+        const content_status chart_status = installed_local_chart != nullptr
+            ? remote_display_status(installed_local_chart->status, chart_source_status)
+            : chart_source_status;
         song_state.charts.push_back({
             {
                 {},
@@ -267,8 +284,8 @@ void append_chart_page(song_entry_state& song_state,
                     .resolution = chart.resolution,
                     .offset = chart.offset,
                 },
-                chart.content_source == "official" ? content_status::official : content_status::community,
-                chart.content_source == "official" ? content_status::official : content_status::community,
+                chart_status,
+                chart_source_status,
                 0,
                 std::nullopt,
                 chart.note_count,

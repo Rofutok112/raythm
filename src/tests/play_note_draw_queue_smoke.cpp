@@ -43,21 +43,24 @@ int main() {
         chart.timing_events = {
             {.type = timing_event_type::bpm, .tick = 0, .bpm = 120.0f, .numerator = 4, .denominator = 4},
         };
-        chart.scroll_events = {
-            {.type = scroll_event_type::speed, .tick = 480, .duration = 480, .multiplier = 2.0f},
-            {.type = scroll_event_type::stop, .tick = 1440, .duration = 240, .multiplier = 0.0f},
+        chart.scroll_automation = {
+            {.tick = 0, .multiplier = 1.0f, .curve_to_next = scroll_automation_curve::linear},
+            {.tick = 480, .multiplier = 2.0f, .curve_to_next = scroll_automation_curve::hold},
+            {.tick = 960, .multiplier = 1.0f, .curve_to_next = scroll_automation_curve::hold},
         };
         timing_engine timing;
         timing.init(chart.timing_events, chart.meta.resolution, 0);
         play_scroll_map scroll_map;
         scroll_map.init(chart, timing);
-        const double before = scroll_map.visual_ms_at(timing.tick_to_ms(480));
-        const double after_fast = scroll_map.visual_ms_at(timing.tick_to_ms(960));
-        const double before_stop = scroll_map.visual_ms_at(timing.tick_to_ms(1440));
-        const double after_stop = scroll_map.visual_ms_at(timing.tick_to_ms(1680));
-        if (std::fabs((after_fast - before) - 1000.0) > 0.0001 ||
-            std::fabs(after_stop - before_stop) > 0.0001) {
-            std::cerr << "Scroll map speed/stop conversion failed\n";
+        const double at_start = scroll_map.visual_ms_at(timing.tick_to_ms(0));
+        const double at_ramp_end = scroll_map.visual_ms_at(timing.tick_to_ms(480));
+        const double at_hold_end = scroll_map.visual_ms_at(timing.tick_to_ms(960));
+        const double after_hold = scroll_map.visual_ms_at(timing.tick_to_ms(1440));
+        if (std::fabs(at_start) > 0.0001 ||
+            std::fabs(at_ramp_end - 750.0) > 0.0001 ||
+            std::fabs(at_hold_end - 1750.0) > 0.0001 ||
+            std::fabs(after_hold - 2250.0) > 0.0001) {
+            std::cerr << "Scroll automation map conversion failed\n";
             return EXIT_FAILURE;
         }
     }

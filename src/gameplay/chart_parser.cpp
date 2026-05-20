@@ -96,12 +96,21 @@ std::optional<timing_event_type> parse_timing_type(const std::string& value) {
     return std::nullopt;
 }
 
-std::optional<scroll_event_type> parse_scroll_type(const std::string& value) {
-    if (value == "speed") {
-        return scroll_event_type::speed;
+std::optional<scroll_automation_curve> parse_scroll_automation_curve(const std::string& value) {
+    if (value == "hold") {
+        return scroll_automation_curve::hold;
     }
-    if (value == "stop") {
-        return scroll_event_type::stop;
+    if (value == "linear") {
+        return scroll_automation_curve::linear;
+    }
+    if (value == "easeIn" || value == "ease_in") {
+        return scroll_automation_curve::ease_in;
+    }
+    if (value == "easeOut" || value == "ease_out") {
+        return scroll_automation_curve::ease_out;
+    }
+    if (value == "easeInOut" || value == "ease_in_out") {
+        return scroll_automation_curve::ease_in_out;
     }
     return std::nullopt;
 }
@@ -249,8 +258,11 @@ chart_parse_result chart_parser::parse(const std::string& file_path) {
     chart_data data;
     data.meta = parse_metadata(sections["Metadata"], errors);
     data.timing_events = parse_timing(sections["Timing"], errors);
-    if (sections.find("Scroll") != sections.end()) {
-        data.scroll_events = parse_scroll(sections["Scroll"], errors);
+    if (sections.find("ScrollAutomation") != sections.end()) {
+        data.scroll_automation = parse_scroll_automation(sections["ScrollAutomation"], errors);
+    }
+    if (sections.find("ScrollAutomationGuides") != sections.end()) {
+        data.scroll_guides = parse_scroll_automation_guides(sections["ScrollAutomationGuides"], errors);
     }
     data.notes = parse_notes(sections["Notes"], errors);
 
@@ -418,8 +430,9 @@ std::vector<timing_event> chart_parser::parse_timing(const std::vector<numbered_
     return events;
 }
 
-std::vector<scroll_event> chart_parser::parse_scroll(const std::vector<numbered_line>& lines, std::vector<std::string>& errors) {
-    std::vector<scroll_event> events;
+std::vector<scroll_automation_point> chart_parser::parse_scroll_automation(const std::vector<numbered_line>& lines,
+                                                                           std::vector<std::string>& errors) {
+    std::vector<scroll_automation_point> points;
 
     for (const numbered_line& line : lines) {
         const std::vector<std::string> tokens = split_csv_line(line.second);
@@ -427,47 +440,74 @@ std::vector<scroll_event> chart_parser::parse_scroll(const std::vector<numbered_
             continue;
         }
 
-        const std::optional<scroll_event_type> type = parse_scroll_type(tokens[0]);
-        if (!type.has_value()) {
-            errors.push_back(format_line_error(line.first, "Unknown scroll event type: " + tokens[0]));
+        if (tokens[0] != "point") {
+            errors.push_back(format_line_error(line.first, "Unknown scroll automation entry type: " + tokens[0]));
             continue;
         }
 
-        const size_t expected_fields = *type == scroll_event_type::speed ? 4 : 3;
-        if (tokens.size() != expected_fields) {
-            errors.push_back(format_line_error(line.first, "Scroll entry has an unexpected number of fields"));
+        if (tokens.size() != 4) {
+            errors.push_back(format_line_error(line.first, "Scroll automation point must have exactly 4 fields"));
             continue;
         }
 
         const std::optional<int> tick = parse_int(tokens[1]);
-        const std::optional<int> duration = parse_int(tokens[2]);
-        if (!tick.has_value() || !duration.has_value()) {
-            errors.push_back(format_line_error(line.first, "Scroll tick and duration must be integers"));
+        const std::optional<float> multiplier = parse_float(tokens[2]);
+        const std::optional<scroll_automation_curve> curve = parse_scroll_automation_curve(tokens[3]);
+        if (!tick.has_value()) {
+            errors.push_back(format_line_error(line.first, "Scroll automation tick must be an integer"));
+            continue;
+        }
+        if (!multiplier.has_value()) {
+            errors.push_back(format_line_error(line.first, "Scroll automation multiplier must be a number"));
+            continue;
+        }
+        if (!curve.has_value()) {
+            errors.push_back(format_line_error(line.first, "Unknown scroll automation curve: " + tokens[3]));
             continue;
         }
 
-        scroll_event event;
-        event.type = *type;
-        event.tick = *tick;
-        event.duration = *duration;
-        event.multiplier = *type == scroll_event_type::stop ? 0.0f : 1.0f;
-
-        if (*type == scroll_event_type::speed) {
-            const std::optional<float> multiplier = parse_float(tokens[3]);
-            if (!multiplier.has_value()) {
-                errors.push_back(format_line_error(line.first, "Speed multiplier must be a number"));
-                continue;
-            }
-            event.multiplier = *multiplier;
-            if (event.multiplier == 0.0f) {
-                event.type = scroll_event_type::stop;
-            }
-        }
-
-        events.push_back(event);
+        points.push_back({*tick, *multiplier, *curve});
     }
 
-    return events;
+    return points;
+}
+
+scroll_automation_guides chart_parser::parse_scroll_automation_guides(const std::vector<numbered_line>& lines,
+                                                                      std::vector<std::string>& errors) {
+    scroll_automation_guides guides;
+    bool parsed = false;
+    for (const numbered_line& line : lines) {
+        const std::vector<std::string> tokens = split_csv_line(line.second);
+        if (tokens.size() != 5 || tokens[0] != "guides") {
+            errors.push_back(format_line_error(line.first,
+                                               "Scroll automation guides must be guides,left1,left2,right1,right2"));
+            continue;
+        }
+
+        std::array<float, 4> parsed_values = {};
+        bool ok = true;
+        for (size_t index = 0; index < parsed_values.size(); ++index) {
+            const std::optional<float> value = parse_float(tokens[index + 1]);
+            if (!value.has_value() || *value < 0.0f) {
+                ok = false;
+                break;
+            }
+            parsed_values[index] = *value;
+        }
+        if (!ok) {
+            errors.push_back(format_line_error(line.first,
+                                               "Scroll automation guide values must be non-negative numbers"));
+            continue;
+        }
+
+        guides.values = parsed_values;
+        parsed = true;
+    }
+
+    if (!parsed && !lines.empty()) {
+        errors.push_back("Scroll automation guides section did not contain a guides entry");
+    }
+    return guides;
 }
 
 std::vector<note_data> chart_parser::parse_notes(const std::vector<numbered_line>& lines, std::vector<std::string>& errors) {
@@ -557,21 +597,13 @@ std::vector<std::string> chart_parser::validate(const chart_data& data) {
         }
     }
 
-    for (const scroll_event& event : data.scroll_events) {
-        if (event.tick < 0) {
-            errors.push_back("Scroll event tick must be zero or greater");
+    for (const scroll_automation_point& point : data.scroll_automation) {
+        if (point.tick < 0) {
+            errors.push_back("Scroll automation tick must be zero or greater");
         }
 
-        if (event.duration <= 0) {
-            errors.push_back("Scroll event duration must be greater than zero");
-        }
-
-        if (event.type == scroll_event_type::speed && event.multiplier <= 0.0f) {
-            errors.push_back("Speed event multiplier must be greater than zero");
-        }
-
-        if (event.type == scroll_event_type::stop && event.multiplier != 0.0f) {
-            errors.push_back("Stop event multiplier must be zero");
+        if (point.multiplier < 0.0f) {
+            errors.push_back("Scroll automation multiplier must be zero or greater");
         }
     }
 

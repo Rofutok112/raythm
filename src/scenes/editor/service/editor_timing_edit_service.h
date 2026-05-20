@@ -32,7 +32,7 @@ public:
     static editor_timing_edit_result apply_selected(editor_timing_edit_context context);
     static editor_timing_edit_result apply_selected_scroll(editor_timing_edit_context context);
     static editor_timing_edit_result add_event(editor_timing_edit_context context, timing_event_type type);
-    static editor_timing_edit_result add_scroll_event(editor_timing_edit_context context, scroll_event_type type);
+    static editor_timing_edit_result add_scroll_event(editor_timing_edit_context context);
     static editor_timing_edit_result delete_selected(editor_timing_edit_context context);
     static editor_timing_edit_result delete_selected_scroll(editor_timing_edit_context context);
 };

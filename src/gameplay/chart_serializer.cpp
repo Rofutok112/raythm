@@ -28,12 +28,18 @@ const char* timing_type_name(timing_event_type type) {
     return "";
 }
 
-const char* scroll_type_name(scroll_event_type type) {
-    switch (type) {
-        case scroll_event_type::speed:
-            return "speed";
-        case scroll_event_type::stop:
-            return "stop";
+const char* scroll_automation_curve_name(scroll_automation_curve curve) {
+    switch (curve) {
+        case scroll_automation_curve::hold:
+            return "hold";
+        case scroll_automation_curve::linear:
+            return "linear";
+        case scroll_automation_curve::ease_in:
+            return "easeIn";
+        case scroll_automation_curve::ease_out:
+            return "easeOut";
+        case scroll_automation_curve::ease_in_out:
+            return "easeInOut";
     }
 
     return "";
@@ -52,6 +58,16 @@ const char* note_type_name(note_type type) {
     }
 
     return "";
+}
+
+bool scroll_guides_are_default(const scroll_automation_guides& guides) {
+    constexpr std::array<float, 4> kDefault = {0.0f, 0.5f, 1.5f, 2.0f};
+    for (size_t index = 0; index < kDefault.size(); ++index) {
+        if (guides.values[index] != kDefault[index]) {
+            return false;
+        }
+    }
+    return true;
 }
 }
 
@@ -76,7 +92,13 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
                note.is_ray ||
                note_lane_width(note) > 1;
     });
-    const int required_format_version = data.scroll_events.empty() ? (needs_format_v2 ? 2 : 1) : 3;
+    int required_format_version = needs_format_v2 ? 2 : 1;
+    if (!data.scroll_automation.empty()) {
+        required_format_version = 4;
+    }
+    if (!scroll_guides_are_default(data.scroll_guides)) {
+        required_format_version = 4;
+    }
     output << "formatVersion=" << std::max(data.meta.format_version, required_format_version) << '\n';
     output << "resolution=" << data.meta.resolution << '\n';
     output << "offset=" << data.meta.offset << '\n';
@@ -99,24 +121,28 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
     }
     output << '\n';
 
-    if (!data.scroll_events.empty()) {
-        std::vector<scroll_event> sorted_scroll = data.scroll_events;
-        std::stable_sort(sorted_scroll.begin(), sorted_scroll.end(), [](const scroll_event& left, const scroll_event& right) {
-            if (left.tick != right.tick) {
-                return left.tick < right.tick;
-            }
-            return left.type == scroll_event_type::speed && right.type == scroll_event_type::stop;
+    if (!data.scroll_automation.empty()) {
+        std::vector<scroll_automation_point> sorted_points = data.scroll_automation;
+        std::stable_sort(sorted_points.begin(), sorted_points.end(), [](const scroll_automation_point& left,
+                                                                        const scroll_automation_point& right) {
+            return left.tick < right.tick;
         });
 
-        output << "[Scroll]\n";
-        for (const scroll_event& event : sorted_scroll) {
-            output << scroll_type_name(event.type) << ',' << event.tick << ',' << event.duration;
-            if (event.type == scroll_event_type::speed) {
-                output << ',' << format_float(event.multiplier);
-            }
-            output << '\n';
+        output << "[ScrollAutomation]\n";
+        for (const scroll_automation_point& point : sorted_points) {
+            output << "point," << point.tick << ',' << format_float(point.multiplier) << ','
+                   << scroll_automation_curve_name(point.curve_to_next) << '\n';
         }
         output << '\n';
+    }
+
+    if (!scroll_guides_are_default(data.scroll_guides)) {
+        output << "[ScrollAutomationGuides]\n";
+        output << "guides";
+        for (const float guide : data.scroll_guides.values) {
+            output << ',' << format_float(guide);
+        }
+        output << "\n\n";
     }
 
     std::vector<note_data> sorted_notes = data.notes;

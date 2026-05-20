@@ -111,6 +111,27 @@ int main() {
         editor_transport_context context;
         context.state = state.get();
         context.audio_loaded = true;
+        context.previous_playback_tick = 700;
+        context.previous_audio_playing = true;
+        context.loop_enabled = true;
+        context.loop_start_tick = 240;
+        context.loop_end_tick = 960;
+        context.bgm_clock = audio_clock_snapshot{true, true, 0.0, state->engine().tick_to_ms(1000) / 1000.0, 0.0, 0.0};
+        context.bgm_length_seconds = 8.0;
+
+        const editor_transport_result result = editor_transport_controller::sync(context);
+        if (!result.loop_seeked || !result.seek_bgm_seconds.has_value() ||
+            !nearly_equal(*result.seek_bgm_seconds, state->engine().tick_to_ms(240) / 1000.0) ||
+            result.playback_tick != 240 || result.previous_playback_tick != 240) {
+            std::cerr << "sync should seek to loop start after crossing loop end\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        editor_transport_context context;
+        context.state = state.get();
+        context.audio_loaded = true;
         context.audio_playing = true;
         context.space_playback_start_tick = 240;
 

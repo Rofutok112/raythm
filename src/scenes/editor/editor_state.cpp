@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <set>
 #include <utility>
+
+#include "chart_difficulty.h"
 
 namespace {
 struct note_span {
@@ -54,6 +57,60 @@ bool lanes_overlap(const note_data& left, const note_data& right) {
     return left.lane <= note_last_lane(right) && right.lane <= note_last_lane(left);
 }
 
+bool same_timing_event(const timing_event& left, const timing_event& right) {
+    return left.type == right.type &&
+        left.tick == right.tick &&
+        left.bpm == right.bpm &&
+        left.numerator == right.numerator &&
+        left.denominator == right.denominator;
+}
+
+bool same_scroll_automation_point(const scroll_automation_point& left, const scroll_automation_point& right) {
+    return left.tick == right.tick &&
+        left.multiplier == right.multiplier &&
+        left.curve_to_next == right.curve_to_next;
+}
+
+bool same_scroll_automation_guides(const scroll_automation_guides& left, const scroll_automation_guides& right) {
+    return left.values == right.values;
+}
+
+bool has_scroll_automation_point_at_tick(const chart_data& chart,
+                                         int tick,
+                                         std::optional<size_t> ignore_index = std::nullopt) {
+    for (size_t index = 0; index < chart.scroll_automation.size(); ++index) {
+        if (ignore_index.has_value() && *ignore_index == index) {
+            continue;
+        }
+        if (chart.scroll_automation[index].tick == tick) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool same_note_data(const note_data& left, const note_data& right) {
+    return left.type == right.type &&
+        left.tick == right.tick &&
+        left.lane == right.lane &&
+        left.end_tick == right.end_tick &&
+        left.is_ray == right.is_ray &&
+        note_lane_width(left) == note_lane_width(right);
+}
+
+bool same_chart_meta(const chart_meta& left, const chart_meta& right) {
+    return left.chart_id == right.chart_id &&
+        left.song_id == right.song_id &&
+        left.chart_version == right.chart_version &&
+        left.key_count == right.key_count &&
+        left.difficulty == right.difficulty &&
+        left.level == right.level &&
+        left.chart_author == right.chart_author &&
+        left.format_version == right.format_version &&
+        left.resolution == right.resolution &&
+        left.offset == right.offset;
+}
+
 class add_note_command final : public editor_command {
 public:
     add_note_command(chart_data& chart, note_data note) : chart_(chart), note_(std::move(note)) {}
@@ -69,6 +126,25 @@ public:
 private:
     chart_data& chart_;
     note_data note_;
+};
+
+class add_notes_command final : public editor_command {
+public:
+    add_notes_command(chart_data& chart, std::vector<note_data> notes) : chart_(chart), notes_(std::move(notes)) {}
+
+    void execute() override {
+        chart_.notes.insert(chart_.notes.end(), notes_.begin(), notes_.end());
+    }
+
+    void undo() override {
+        if (notes_.size() <= chart_.notes.size()) {
+            chart_.notes.erase(chart_.notes.end() - static_cast<std::ptrdiff_t>(notes_.size()), chart_.notes.end());
+        }
+    }
+
+private:
+    chart_data& chart_;
+    std::vector<note_data> notes_;
 };
 
 class remove_note_command final : public editor_command {
@@ -89,6 +165,36 @@ private:
     note_data removed_;
 };
 
+class remove_notes_command final : public editor_command {
+public:
+    remove_notes_command(chart_data& chart, std::vector<size_t> indices) : chart_(chart), indices_(std::move(indices)) {
+        std::sort(indices_.begin(), indices_.end());
+        indices_.erase(std::unique(indices_.begin(), indices_.end()), indices_.end());
+        removed_.reserve(indices_.size());
+        for (const size_t index : indices_) {
+            removed_.push_back(chart_.notes[index]);
+        }
+    }
+
+    void execute() override {
+        for (size_t i = indices_.size(); i > 0; --i) {
+            const size_t index = indices_[i - 1];
+            chart_.notes.erase(chart_.notes.begin() + static_cast<std::ptrdiff_t>(index));
+        }
+    }
+
+    void undo() override {
+        for (size_t i = 0; i < indices_.size(); ++i) {
+            chart_.notes.insert(chart_.notes.begin() + static_cast<std::ptrdiff_t>(indices_[i]), removed_[i]);
+        }
+    }
+
+private:
+    chart_data& chart_;
+    std::vector<size_t> indices_;
+    std::vector<note_data> removed_;
+};
+
 class modify_note_command final : public editor_command {
 public:
     modify_note_command(chart_data& chart, size_t index, note_data updated)
@@ -107,6 +213,37 @@ private:
     size_t index_ = 0;
     note_data before_;
     note_data after_;
+};
+
+class modify_notes_command final : public editor_command {
+public:
+    modify_notes_command(chart_data& chart, std::vector<std::pair<size_t, note_data>> updates)
+        : chart_(chart), updates_(std::move(updates)) {
+        std::sort(updates_.begin(), updates_.end(), [](const auto& left, const auto& right) {
+            return left.first < right.first;
+        });
+        before_.reserve(updates_.size());
+        for (const auto& update : updates_) {
+            before_.push_back(chart_.notes[update.first]);
+        }
+    }
+
+    void execute() override {
+        for (const auto& update : updates_) {
+            chart_.notes[update.first] = update.second;
+        }
+    }
+
+    void undo() override {
+        for (size_t i = 0; i < updates_.size(); ++i) {
+            chart_.notes[updates_[i].first] = before_[i];
+        }
+    }
+
+private:
+    chart_data& chart_;
+    std::vector<std::pair<size_t, note_data>> updates_;
+    std::vector<note_data> before_;
 };
 
 class add_timing_event_command final : public editor_command {
@@ -187,59 +324,81 @@ private:
     timing_event after_;
 };
 
-class add_scroll_event_command final : public editor_command {
+class add_scroll_automation_point_command final : public editor_command {
 public:
-    add_scroll_event_command(chart_data& chart, scroll_event event) : chart_(chart), event_(std::move(event)) {}
+    add_scroll_automation_point_command(chart_data& chart, scroll_automation_point point)
+        : chart_(chart), point_(std::move(point)) {}
 
     void execute() override {
-        chart_.scroll_events.push_back(event_);
+        chart_.scroll_automation.push_back(point_);
     }
 
     void undo() override {
-        chart_.scroll_events.pop_back();
+        chart_.scroll_automation.pop_back();
     }
 
 private:
     chart_data& chart_;
-    scroll_event event_;
+    scroll_automation_point point_;
 };
 
-class remove_scroll_event_command final : public editor_command {
+class remove_scroll_automation_point_command final : public editor_command {
 public:
-    remove_scroll_event_command(chart_data& chart, size_t index) : chart_(chart), index_(index), removed_(chart.scroll_events[index]) {}
+    remove_scroll_automation_point_command(chart_data& chart, size_t index)
+        : chart_(chart), index_(index), removed_(chart.scroll_automation[index]) {}
 
     void execute() override {
-        chart_.scroll_events.erase(chart_.scroll_events.begin() + static_cast<std::ptrdiff_t>(index_));
+        chart_.scroll_automation.erase(chart_.scroll_automation.begin() + static_cast<std::ptrdiff_t>(index_));
     }
 
     void undo() override {
-        chart_.scroll_events.insert(chart_.scroll_events.begin() + static_cast<std::ptrdiff_t>(index_), removed_);
+        chart_.scroll_automation.insert(chart_.scroll_automation.begin() + static_cast<std::ptrdiff_t>(index_),
+                                        removed_);
     }
 
 private:
     chart_data& chart_;
     size_t index_ = 0;
-    scroll_event removed_;
+    scroll_automation_point removed_;
 };
 
-class modify_scroll_event_command final : public editor_command {
+class modify_scroll_automation_point_command final : public editor_command {
 public:
-    modify_scroll_event_command(chart_data& chart, size_t index, scroll_event updated)
-        : chart_(chart), index_(index), before_(chart.scroll_events[index]), after_(std::move(updated)) {}
+    modify_scroll_automation_point_command(chart_data& chart, size_t index, scroll_automation_point updated)
+        : chart_(chart), index_(index), before_(chart.scroll_automation[index]), after_(std::move(updated)) {}
 
     void execute() override {
-        chart_.scroll_events[index_] = after_;
+        chart_.scroll_automation[index_] = after_;
     }
 
     void undo() override {
-        chart_.scroll_events[index_] = before_;
+        chart_.scroll_automation[index_] = before_;
     }
 
 private:
     chart_data& chart_;
     size_t index_ = 0;
-    scroll_event before_;
-    scroll_event after_;
+    scroll_automation_point before_;
+    scroll_automation_point after_;
+};
+
+class modify_scroll_automation_guides_command final : public editor_command {
+public:
+    modify_scroll_automation_guides_command(chart_data& chart, scroll_automation_guides updated)
+        : chart_(chart), before_(chart.scroll_guides), after_(std::move(updated)) {}
+
+    void execute() override {
+        chart_.scroll_guides = after_;
+    }
+
+    void undo() override {
+        chart_.scroll_guides = before_;
+    }
+
+private:
+    chart_data& chart_;
+    scroll_automation_guides before_;
+    scroll_automation_guides after_;
 };
 
 class modify_metadata_command final : public editor_command {
@@ -290,6 +449,7 @@ void editor_state::load(chart_data data, std::string file_path) {
     saved_history_index_ = 0;
     dirty_ = false;
     rebuild_timing_engine();
+    refresh_auto_level();
 }
 
 void editor_state::mark_saved(std::string file_path) {
@@ -304,6 +464,7 @@ void editor_state::mark_saved(std::string file_path) {
 bool editor_state::undo() {
     const bool changed = history_.undo();
     if (changed) {
+        mark_level_dirty();
         sync_dirty_flag();
     }
     return changed;
@@ -312,6 +473,7 @@ bool editor_state::undo() {
 bool editor_state::redo() {
     const bool changed = history_.redo();
     if (changed) {
+        mark_level_dirty();
         sync_dirty_flag();
     }
     return changed;
@@ -327,6 +489,17 @@ bool editor_state::can_redo() const {
 
 void editor_state::add_note(note_data note) {
     history_.push(std::make_unique<add_note_command>(chart_, std::move(note)));
+    mark_level_dirty();
+    sync_dirty_flag();
+}
+
+void editor_state::add_notes(std::vector<note_data> notes) {
+    if (notes.empty()) {
+        return;
+    }
+
+    history_.push(std::make_unique<add_notes_command>(chart_, std::move(notes)));
+    mark_level_dirty();
     sync_dirty_flag();
 }
 
@@ -336,6 +509,26 @@ bool editor_state::remove_note(size_t index) {
     }
 
     history_.push(std::make_unique<remove_note_command>(chart_, index));
+    mark_level_dirty();
+    sync_dirty_flag();
+    return true;
+}
+
+bool editor_state::remove_notes(std::vector<size_t> indices) {
+    if (indices.empty()) {
+        return false;
+    }
+
+    std::sort(indices.begin(), indices.end());
+    indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+    if (std::any_of(indices.begin(), indices.end(), [this](size_t index) {
+            return index >= chart_.notes.size();
+        })) {
+        return false;
+    }
+
+    history_.push(std::make_unique<remove_notes_command>(chart_, std::move(indices)));
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -345,13 +538,46 @@ bool editor_state::modify_note(size_t index, note_data note) {
         return false;
     }
 
+    if (same_note_data(chart_.notes[index], note)) {
+        return true;
+    }
+
     history_.push(std::make_unique<modify_note_command>(chart_, index, std::move(note)));
+    mark_level_dirty();
+    sync_dirty_flag();
+    return true;
+}
+
+bool editor_state::modify_notes(std::vector<std::pair<size_t, note_data>> updates) {
+    if (updates.empty()) {
+        return false;
+    }
+
+    std::sort(updates.begin(), updates.end(), [](const auto& left, const auto& right) {
+        return left.first < right.first;
+    });
+    for (size_t i = 0; i < updates.size(); ++i) {
+        if (updates[i].first >= chart_.notes.size() ||
+            (i > 0 && updates[i - 1].first == updates[i].first)) {
+            return false;
+        }
+    }
+    updates.erase(std::remove_if(updates.begin(), updates.end(), [this](const auto& update) {
+        return same_note_data(chart_.notes[update.first], update.second);
+    }), updates.end());
+    if (updates.empty()) {
+        return true;
+    }
+
+    history_.push(std::make_unique<modify_notes_command>(chart_, std::move(updates)));
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
 
 void editor_state::add_timing_event(timing_event event) {
     history_.push(std::make_unique<add_timing_event_command>(chart_, timing_engine_, std::move(event)));
+    mark_level_dirty();
     sync_dirty_flag();
 }
 
@@ -361,6 +587,7 @@ bool editor_state::remove_timing_event(size_t index) {
     }
 
     history_.push(std::make_unique<remove_timing_event_command>(chart_, timing_engine_, index));
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -370,32 +597,63 @@ bool editor_state::modify_timing_event(size_t index, timing_event event) {
         return false;
     }
 
+    if (same_timing_event(chart_.timing_events[index], event)) {
+        return true;
+    }
+
     history_.push(std::make_unique<modify_timing_event_command>(chart_, timing_engine_, index, std::move(event)));
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
 
-void editor_state::add_scroll_event(scroll_event event) {
-    history_.push(std::make_unique<add_scroll_event_command>(chart_, std::move(event)));
-    sync_dirty_flag();
-}
-
-bool editor_state::remove_scroll_event(size_t index) {
-    if (index >= chart_.scroll_events.size()) {
+bool editor_state::add_scroll_automation_point(scroll_automation_point point) {
+    if (has_scroll_automation_point_at_tick(chart_, point.tick)) {
         return false;
     }
-
-    history_.push(std::make_unique<remove_scroll_event_command>(chart_, index));
+    history_.push(std::make_unique<add_scroll_automation_point_command>(chart_, std::move(point)));
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
 
-bool editor_state::modify_scroll_event(size_t index, scroll_event event) {
-    if (index >= chart_.scroll_events.size()) {
+bool editor_state::remove_scroll_automation_point(size_t index) {
+    if (index >= chart_.scroll_automation.size()) {
         return false;
     }
 
-    history_.push(std::make_unique<modify_scroll_event_command>(chart_, index, std::move(event)));
+    history_.push(std::make_unique<remove_scroll_automation_point_command>(chart_, index));
+    mark_level_dirty();
+    sync_dirty_flag();
+    return true;
+}
+
+bool editor_state::modify_scroll_automation_point(size_t index, scroll_automation_point point) {
+    if (index >= chart_.scroll_automation.size()) {
+        return false;
+    }
+
+    if (has_scroll_automation_point_at_tick(chart_, point.tick, index)) {
+        return false;
+    }
+
+    if (same_scroll_automation_point(chart_.scroll_automation[index], point)) {
+        return true;
+    }
+
+    history_.push(std::make_unique<modify_scroll_automation_point_command>(chart_, index, std::move(point)));
+    mark_level_dirty();
+    sync_dirty_flag();
+    return true;
+}
+
+bool editor_state::modify_scroll_automation_guides(scroll_automation_guides guides) {
+    if (same_scroll_automation_guides(chart_.scroll_guides, guides)) {
+        return true;
+    }
+
+    history_.push(std::make_unique<modify_scroll_automation_guides_command>(chart_, std::move(guides)));
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -405,9 +663,27 @@ bool editor_state::modify_metadata(chart_meta meta, bool clear_notes) {
         return false;
     }
 
+    if (!clear_notes && same_chart_meta(chart_.meta, meta)) {
+        return true;
+    }
+
     history_.push(std::make_unique<modify_metadata_command>(chart_, timing_engine_, std::move(meta), clear_notes));
+    mark_level_dirty();
     sync_dirty_flag();
     return true;
+}
+
+void editor_state::refresh_auto_level() {
+    chart_difficulty::apply_auto_level(chart_);
+    level_dirty_ = false;
+}
+
+bool editor_state::level_needs_refresh() const {
+    return level_dirty_;
+}
+
+size_t editor_state::level_refresh_generation() const {
+    return level_refresh_generation_;
 }
 
 const chart_data& editor_state::data() const {
@@ -425,14 +701,23 @@ int editor_state::snap_tick(int raw_tick, int division) const {
 }
 
 bool editor_state::has_note_overlap(const note_data& note, std::optional<size_t> ignore_index) const {
+    std::vector<size_t> ignore_indices;
+    if (ignore_index.has_value()) {
+        ignore_indices.push_back(*ignore_index);
+    }
+    return has_note_overlap(note, ignore_indices);
+}
+
+bool editor_state::has_note_overlap(const note_data& note, const std::vector<size_t>& ignore_indices) const {
     if (note.lane < 0 || note.lane >= chart_.meta.key_count ||
         note_lane_width(note) <= 0 || note_last_lane(note) >= chart_.meta.key_count) {
         return true;
     }
 
+    const std::set<size_t> ignored(ignore_indices.begin(), ignore_indices.end());
     const note_span candidate = make_note_span(note);
     for (size_t i = 0; i < chart_.notes.size(); ++i) {
-        if (ignore_index.has_value() && *ignore_index == i) {
+        if (ignored.find(i) != ignored.end()) {
             continue;
         }
 
@@ -450,6 +735,22 @@ bool editor_state::has_note_overlap(const note_data& note, std::optional<size_t>
     return false;
 }
 
+bool editor_state::has_note_overlap(const std::vector<note_data>& notes, const std::vector<size_t>& ignore_indices) const {
+    for (size_t i = 0; i < notes.size(); ++i) {
+        if (has_note_overlap(notes[i], ignore_indices)) {
+            return true;
+        }
+        for (size_t j = i + 1; j < notes.size(); ++j) {
+            if (lanes_overlap(notes[i], notes[j]) &&
+                spans_overlap(make_note_span(notes[i]), make_note_span(notes[j])) &&
+                !overlap_allowed(notes[i], notes[j])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool editor_state::is_dirty() const {
     return dirty_;
 }
@@ -464,6 +765,11 @@ void editor_state::set_file_path(std::string file_path) {
 
 void editor_state::rebuild_timing_engine() {
     timing_engine_.init(chart_.timing_events, chart_.meta.resolution, chart_.meta.offset);
+}
+
+void editor_state::mark_level_dirty() {
+    level_dirty_ = true;
+    ++level_refresh_generation_;
 }
 
 void editor_state::sync_dirty_flag() {

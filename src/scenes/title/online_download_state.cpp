@@ -516,6 +516,9 @@ Color key_mode_color(int key_count) {
 }
 
 std::string song_status_label(const song_entry_state& song) {
+    if (song.song.status == content_status::modified) {
+        return "REPAIR";
+    }
     if (song.update_available) {
         return "UPDATE";
     }
@@ -524,6 +527,9 @@ std::string song_status_label(const song_entry_state& song) {
 
 Color song_status_color(const song_entry_state& song) {
     const auto& t = *g_theme;
+    if (song.song.status == content_status::modified) {
+        return t.slow;
+    }
     if (song.update_available) {
         return t.accent;
     }
@@ -534,6 +540,9 @@ Color song_status_color(const song_entry_state& song) {
 }
 
 std::string chart_status_label(const chart_entry_state& chart) {
+    if (chart.chart.status == content_status::modified) {
+        return "REPAIR";
+    }
     if (chart.update_available) {
         return "UPDATE";
     }
@@ -544,7 +553,10 @@ std::string chart_status_label(const chart_entry_state& chart) {
 }
 
 bool can_download_chart(const song_entry_state& song, const chart_entry_state& chart) {
-    return song.installed && (!chart.installed || chart.update_available);
+    return song.installed &&
+           (!chart.installed ||
+            chart.update_available ||
+            chart.chart.status == content_status::modified);
 }
 
 const char* catalog_caption(const state& state, const std::vector<song_entry_state>& songs) {

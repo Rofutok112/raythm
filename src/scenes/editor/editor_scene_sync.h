@@ -7,7 +7,7 @@ struct editor_scene_sync_context {
     editor_meter_map& meter_map;
     editor_timing_panel_state& timing_panel;
     metadata_panel_state& metadata_panel;
-    std::optional<size_t>& selected_note_index;
+    std::vector<size_t>& selected_note_indices;
 };
 
 namespace editor_scene_sync {

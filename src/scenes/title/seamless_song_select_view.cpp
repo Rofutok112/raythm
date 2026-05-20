@@ -1244,17 +1244,18 @@ update_result update(song_select::state& state, mode view_mode, float anim_t, Re
             }
             return result;
         }
-        const bool update_available =
-            (song != nullptr && song->status == content_status::update) ||
-            (chart != nullptr && chart->status == content_status::update);
-        if (left_pressed && update_available) {
+        const bool song_reinstall_available =
+            song != nullptr &&
+            (song->status == content_status::update || song->status == content_status::modified);
+        const bool chart_reinstall_available =
+            chart != nullptr &&
+            (chart->status == content_status::update || chart->status == content_status::modified);
+        if (left_pressed && (song_reinstall_available || chart_reinstall_available)) {
             const bool song_update_clicked =
-                song != nullptr &&
-                song->status == content_status::update &&
+                song_reinstall_available &&
                 CheckCollisionPointRec(mouse, title_center_view::song_status_badge_rect(current.main_column));
             const bool chart_update_clicked =
-                chart != nullptr &&
-                chart->status == content_status::update &&
+                chart_reinstall_available &&
                 CheckCollisionPointRec(mouse, title_center_view::chart_status_badge_rect(current.chart_detail_rect));
             if (song_update_clicked) {
                 result.update_song_requested = true;

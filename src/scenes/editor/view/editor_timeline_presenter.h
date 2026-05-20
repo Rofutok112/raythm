@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <vector>
 
 #include "audio_waveform.h"
 #include "editor/editor_meter_map.h"
@@ -16,10 +17,15 @@ struct editor_timeline_presenter_model {
     int waveform_offset_ms = 0;
     bool audio_loaded = false;
     int playback_tick = 0;
-    std::optional<size_t> selected_note_index;
+    bool loop_enabled = false;
+    int loop_start_tick = 0;
+    int loop_end_tick = 0;
+    std::vector<size_t> selected_note_indices;
     std::optional<size_t> selected_scroll_event_index;
-    std::optional<note_data> preview_note;
+    std::vector<note_data> preview_notes;
+    std::vector<size_t> preview_note_indices;
     bool preview_has_overlap = false;
+    std::optional<Rectangle> selection_rect;
     editor_timeline_viewport_model viewport;
 };
 

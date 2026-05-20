@@ -12,15 +12,14 @@ namespace layout = editor::layout;
 
 constexpr float kTimelinePadding = 18.0f;
 constexpr float kLaneGap = 6.0f;
-constexpr float kScrollbarWidth = 10.0f;
-constexpr float kScrollbarGap = 10.0f;
+constexpr float kScrollbarWidth = 48.0f;
+constexpr float kScrollbarGap = 194.0f;
 constexpr float kMinTicksPerPixel = 0.9f;
 constexpr float kMaxTicksPerPixel = 28.0f;
-constexpr float kScrollLerpSpeed = 12.0f;
-constexpr float kScrollWheelViewportRatio = 0.55f;
+constexpr float kScrollWheelViewportRatio = 0.10f;
 constexpr float kNoteHeadHeight = 14.0f;
 constexpr float kTimelineLeadInTicks = 960.0f;
-constexpr float kPlaybackFollowViewportRatio = 0.35f;
+constexpr float kPlaybackFollowViewportRatio = 0.5f;
 constexpr std::array<int, 11> kSnapDivisions = {1, 2, 3, 4, 8, 12, 16, 24, 32, 64, 128};
 constexpr std::array<const char*, 11> kSnapLabels = {"1/1", "1/2", "1/3", "1/4", "1/8", "1/12", "1/16", "1/24", "1/32", "1/64", "1/128"};
 }
@@ -32,6 +31,7 @@ editor_timeline_metrics editor_timeline_viewport::metrics(const editor_timeline_
         kScrollbarGap,
         kScrollbarWidth,
         kLaneGap,
+        128.0f,
         kNoteHeadHeight,
         model.viewport.bottom_tick,
         model.viewport.ticks_per_pixel,
@@ -50,6 +50,9 @@ float editor_timeline_viewport::content_tick_span(const editor_timeline_viewport
     }
     for (const timing_event& event : model.state->data().timing_events) {
         max_tick = std::max(max_tick, event.tick);
+    }
+    for (const scroll_automation_point& point : model.state->data().scroll_automation) {
+        max_tick = std::max(max_tick, point.tick);
     }
     max_tick = std::max(max_tick, model.audio_length_tick);
 
@@ -117,7 +120,8 @@ editor_timeline_viewport_state editor_timeline_viewport::apply_scroll_and_zoom(c
         const editor_timeline_viewport_model updated_model = {model.state, model.audio_length_tick, next};
         next.bottom_tick_target = std::clamp(next.bottom_tick_target, min_bottom_tick(), max_bottom_tick(updated_model));
     } else if (!input.audio_playing && input.wheel != 0.0f && CheckCollisionPointRec(input.mouse, content)) {
-        next.bottom_tick_target = std::clamp(next.bottom_tick_target + input.wheel * visible_tick_span(model) * kScrollWheelViewportRatio,
+        const float wheel_direction = input.wheel > 0.0f ? 1.0f : -1.0f;
+        next.bottom_tick_target = std::clamp(next.bottom_tick_target + wheel_direction * visible_tick_span(model) * kScrollWheelViewportRatio,
                                              min_bottom_tick(), max_bottom_tick(model));
     } else if (input.audio_playing) {
         next.bottom_tick_target = std::clamp(static_cast<float>(input.playback_tick) - visible_tick_span(model) * kPlaybackFollowViewportRatio,
@@ -126,14 +130,7 @@ editor_timeline_viewport_state editor_timeline_viewport::apply_scroll_and_zoom(c
 
     const editor_timeline_viewport_model updated_model = {model.state, model.audio_length_tick, next};
     next.bottom_tick_target = std::clamp(next.bottom_tick_target, min_bottom_tick(), max_bottom_tick(updated_model));
-    if (next.bottom_tick_target <= min_bottom_tick() || next.bottom_tick_target >= max_bottom_tick(updated_model)) {
-        next.bottom_tick = next.bottom_tick_target;
-        return next;
-    }
-    next.bottom_tick += (next.bottom_tick_target - next.bottom_tick) * std::min(1.0f, kScrollLerpSpeed * input.dt);
-    if (std::fabs(next.bottom_tick - next.bottom_tick_target) < 0.5f) {
-        next.bottom_tick = next.bottom_tick_target;
-    }
+    next.bottom_tick = next.bottom_tick_target;
     return next;
 }
 

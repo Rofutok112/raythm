@@ -22,13 +22,13 @@ struct editor_timeline_note {
     int end_tick = 0;
     bool is_ray = false;
     int lane_width = 1;
+    size_t source_index = 0;
 };
 
-struct editor_timeline_scroll_event {
-    scroll_event_type type = scroll_event_type::speed;
+struct editor_timeline_scroll_automation_point {
     int tick = 0;
-    int duration = 0;
     float multiplier = 1.0f;
+    scroll_automation_curve curve_to_next = scroll_automation_curve::hold;
 };
 
 struct editor_timeline_note_draw_info {
@@ -37,6 +37,7 @@ struct editor_timeline_note_draw_info {
     Rectangle tail_rect = {};
     Rectangle left_resize_rect = {};
     Rectangle right_resize_rect = {};
+    Rectangle start_resize_rect = {};
     Rectangle end_resize_rect = {};
     bool has_body = false;
 };
@@ -47,6 +48,7 @@ struct editor_timeline_metrics {
     float scrollbar_gap = 10.0f;
     float scrollbar_width = 10.0f;
     float lane_gap = 6.0f;
+    float right_reserved_width = 0.0f;
     float note_head_height = 14.0f;
     float bottom_tick = 0.0f;
     float ticks_per_pixel = 2.0f;
@@ -65,17 +67,23 @@ struct editor_timeline_metrics {
 struct editor_timeline_view_model {
     editor_timeline_metrics metrics;
     std::vector<editor_meter_map::grid_line> grid_lines;
-    std::vector<editor_timeline_scroll_event> scroll_events;
+    std::vector<editor_timeline_scroll_automation_point> scroll_automation;
     std::vector<editor_timeline_note> notes;
-    std::optional<size_t> selected_note_index;
+    std::vector<editor_timeline_note> minimap_notes;
+    std::vector<size_t> selected_note_indices;
     std::optional<size_t> selected_scroll_event_index;
     std::optional<int> playback_tick;
+    bool loop_enabled = false;
+    int loop_start_tick = 0;
+    int loop_end_tick = 0;
     const audio_waveform_summary* waveform_summary = nullptr;
     const timing_engine* timing_engine = nullptr;
     bool waveform_visible = false;
     int waveform_offset_ms = 0;
-    std::optional<editor_timeline_note> preview_note;
+    std::vector<editor_timeline_note> preview_notes;
+    std::vector<size_t> preview_note_indices;
     bool preview_has_overlap = false;
+    std::optional<Rectangle> selection_rect;
     int min_tick = 0;
     int max_tick = 0;
     int snap_interval = 1;
