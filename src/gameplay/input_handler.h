@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "data_models.h"
+#include "lane_input_tracker.h"
 #include "platform/windows_input_source.h"
 #include "raylib.h"
 
@@ -26,8 +27,8 @@ public:
     explicit input_handler(key_config config = {});
 
     void set_key_count(int key_count);
-    void update(double timestamp_ms);
-    void update_from_lane_states(std::span<const bool> lane_states, double timestamp_ms = 0.0);
+    void update(double input_event_time_ms);
+    void update_from_lane_states(std::span<const bool> lane_states, double input_event_time_ms = 0.0);
 
     std::span<const input_event> events() const;
     input_update_source last_update_source() const;
@@ -38,16 +39,12 @@ public:
     bool is_lane_just_released(int lane) const;
 
 private:
-    static constexpr int kMaxLanes = 6;
-
     int find_lane_for_key(int key) const;
-    void apply_native_events(std::span<const native_key_event> native_events, double audio_time_ms);
+    void apply_native_events(std::span<const native_key_event> native_events, double input_event_time_ms);
 
     key_config key_config_;
     int key_count_ = 4;
-    std::array<bool, kMaxLanes> prev_state_ = {};
-    std::array<bool, kMaxLanes> curr_state_ = {};
-    std::vector<input_event> events_;
+    lane_input_tracker tracker_;
     input_update_source last_update_source_ = input_update_source::polling;
     int last_update_event_count_ = 0;
 };

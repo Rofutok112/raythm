@@ -3,6 +3,7 @@
 #include <functional>
 
 #include "raylib.h"
+#include "title/online_catalog_data_controller.h"
 #include "title/online_download_view.h"
 
 class title_online_mode_controller {
@@ -16,6 +17,7 @@ public:
     };
 
     static void update(title_online_view::state& state,
+                       online_catalog::data_controller& data_controller,
                        float play_view_anim,
                        Rectangle play_entry_origin_rect,
                        float dt,

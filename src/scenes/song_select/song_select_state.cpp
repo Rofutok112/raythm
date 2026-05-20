@@ -92,6 +92,65 @@ void ensure_jacket_cache(song_select::state& state) {
 
 namespace song_select {
 
+state::state()
+    : songs(catalog.songs),
+      load_errors(catalog.load_errors),
+      jackets(catalog.jackets),
+      catalog_loading(catalog.catalog_loading),
+      catalog_loaded_once(catalog.catalog_loaded_once),
+      selected_song_index(selection.selected_song_index),
+      difficulty_index(selection.difficulty_index),
+      scroll_y(scroll.scroll_y),
+      scroll_y_target(scroll.scroll_y_target),
+      chart_scroll_y(scroll.chart_scroll_y),
+      chart_scroll_y_target(scroll.chart_scroll_y_target),
+      embedded_chart_scroll_y(scroll.embedded_chart_scroll_y),
+      embedded_chart_scroll_y_target(scroll.embedded_chart_scroll_y_target),
+      selected_song_expanded(selection.selected_song_expanded),
+      selected_song_expand_t(selection.selected_song_expand_t),
+      play_search_input(filter.play_search_input),
+      chart_source(filter.chart_source),
+      chart_key_filter(filter.chart_key_filter),
+      chart_min_level(filter.chart_min_level),
+      chart_max_level(filter.chart_max_level),
+      chart_level_filter_dragging(filter.chart_level_filter_dragging),
+      chart_level_filter_dragging_min(filter.chart_level_filter_dragging_min),
+      preview_bar_dragging(preview.preview_bar_dragging),
+      preview_bar_resume_after_drag(preview.preview_bar_resume_after_drag),
+      preview_bar_drag_position_seconds(preview.preview_bar_drag_position_seconds),
+      song_change_anim_t(preview.song_change_anim_t),
+      chart_change_anim_t(preview.chart_change_anim_t),
+      scene_fade_in(preview.scene_fade_in),
+      scrollbar_dragging(scroll.scrollbar_dragging),
+      scrollbar_drag_offset(scroll.scrollbar_drag_offset),
+      context_menu(dialog.context_menu),
+      confirmation_dialog(dialog.confirmation_dialog),
+      recent_result_offset(preview.recent_result_offset),
+      auth(auth_ui.auth),
+      login_dialog(auth_ui.login_dialog) {
+}
+
+state::state(const state& other)
+    : state() {
+    *this = other;
+}
+
+state& state::operator=(const state& other) {
+    if (this == &other) {
+        return *this;
+    }
+
+    catalog = other.catalog;
+    selection = other.selection;
+    filter = other.filter;
+    scroll = other.scroll;
+    preview = other.preview;
+    dialog = other.dialog;
+    ranking_panel = other.ranking_panel;
+    auth_ui = other.auth_ui;
+    return *this;
+}
+
 jacket_cache::~jacket_cache() {
     clear();
 }

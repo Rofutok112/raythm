@@ -15,6 +15,7 @@
 #include "path_utils.h"
 #include "song_select/song_catalog_service.h"
 #include "title/local_content_index.h"
+#include "title/online_catalog_data_controller.h"
 #include "title/online_download_remote_client.h"
 
 namespace title_online_view {
@@ -436,7 +437,7 @@ bool select_installed_song_in(std::vector<song_entry_state>& songs,
     return true;
 }
 
-bool apply_pending_select(state& state) {
+bool apply_pending_select(state& state, online_catalog::data_controller& data_controller) {
     if (state.pending_select_local_song_id.empty()) {
         return false;
     }
@@ -492,7 +493,7 @@ bool apply_pending_select(state& state) {
                 }
             }
         }
-        request_charts_for_selected_song(state);
+        request_charts_for_selected_song(state, data_controller);
     }
     if (state.pending_select_local_chart_id.empty()) {
         state.pending_select_local_song_id.clear();
@@ -637,14 +638,14 @@ catalog_load_result load_catalog_result(source_filter source) {
     return result;
 }
 
-void start_owned_reload(state& state) {
+void start_owned_reload(state& state, online_catalog::data_controller& data_controller) {
     if (state.owned_loading || state.catalog_server_url.empty()) {
         return;
     }
 
     state.owned_loading = true;
     std::promise<std::vector<song_entry_state>> promise;
-    state.owned_future = promise.get_future();
+    data_controller.owned_future() = promise.get_future();
     const std::vector<song_select::song_entry> local_songs = state.local_songs;
     const std::string server_url = state.catalog_server_url;
     std::thread([promise = std::move(promise), local_songs, server_url]() mutable {
@@ -769,7 +770,7 @@ void jacket_cache::clear() {
     entries_.clear();
 }
 
-void reload_catalog(state& state, bool preserve_view) {
+void reload_catalog(state& state, online_catalog::data_controller& data_controller, bool preserve_view) {
     if (state.catalog_loading) {
         return;
     }
@@ -804,7 +805,7 @@ void reload_catalog(state& state, bool preserve_view) {
         state.jackets.clear();
     }
     std::promise<catalog_load_result> promise;
-    state.catalog_future = promise.get_future();
+    data_controller.catalog_future() = promise.get_future();
     const source_filter source = state.source;
     std::thread([promise = std::move(promise), source]() mutable {
         try {
@@ -815,17 +816,17 @@ void reload_catalog(state& state, bool preserve_view) {
     }).detach();
 }
 
-bool poll_catalog(state& state) {
+bool poll_catalog(state& state, online_catalog::data_controller& data_controller) {
     if (!state.catalog_loading) {
         return false;
     }
-    if (state.catalog_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+    if (data_controller.catalog_future().wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
         return false;
     }
 
     catalog_load_result result;
     try {
-        result = state.catalog_future.get();
+        result = data_controller.catalog_future().get();
     } catch (const std::exception& ex) {
         result.catalog_request_failed = true;
         result.catalog_maintenance = false;
@@ -853,12 +854,12 @@ bool poll_catalog(state& state) {
     detail::rebuild_visible_discovery_songs(state);
     detail::ensure_selection_valid(state);
     apply_reload_restore(state);
-    apply_pending_select(state);
-    start_owned_reload(state);
+    apply_pending_select(state, data_controller);
+    start_owned_reload(state, data_controller);
     return true;
 }
 
-void request_next_song_page(state& state, catalog_mode mode) {
+void request_next_song_page(state& state, online_catalog::data_controller& data_controller, catalog_mode mode) {
     if (mode == catalog_mode::owned || state.song_page_loading || state.catalog_loading) {
         return;
     }
@@ -871,7 +872,7 @@ void request_next_song_page(state& state, catalog_mode mode) {
     const std::string cursor = next_cursor_ref(state, mode);
     const std::string server_url = state.catalog_server_url;
     std::promise<remote_song_page_fetch_result> promise;
-    state.song_page_future = promise.get_future();
+    data_controller.song_page_future() = promise.get_future();
     std::thread([promise = std::move(promise), mode, cursor, server_url]() mutable {
         try {
             promise.set_value(fetch_remote_song_page(mode, cursor, kSongPageSize, server_url));
@@ -881,17 +882,17 @@ void request_next_song_page(state& state, catalog_mode mode) {
     }).detach();
 }
 
-bool poll_song_page(state& state) {
+bool poll_song_page(state& state, online_catalog::data_controller& data_controller) {
     if (!state.song_page_loading) {
         return false;
     }
-    if (state.song_page_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+    if (data_controller.song_page_future().wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
         return false;
     }
 
     remote_song_page_fetch_result page_result;
     try {
-        page_result = state.song_page_future.get();
+        page_result = data_controller.song_page_future().get();
     } catch (const std::exception& ex) {
         page_result.success = false;
         page_result.error_message = ex.what();
@@ -922,11 +923,11 @@ bool poll_song_page(state& state) {
     }
     detail::ensure_selection_valid(state);
     apply_reload_restore(state);
-    apply_pending_select(state);
+    apply_pending_select(state, data_controller);
     return true;
 }
 
-void request_charts_for_selected_song(state& state) {
+void request_charts_for_selected_song(state& state, online_catalog::data_controller& data_controller) {
     if (state.chart_page_loading || state.catalog_server_url.empty()) {
         return;
     }
@@ -950,7 +951,7 @@ void request_charts_for_selected_song(state& state) {
     const std::string server_url = state.catalog_server_url;
     const std::string cursor = song->next_chart_cursor;
     std::promise<remote_chart_page_fetch_result> promise;
-    state.chart_page_future = promise.get_future();
+    data_controller.chart_page_future() = promise.get_future();
     const std::string song_id = state.chart_page_song_id;
     std::thread([promise = std::move(promise), server_url, cursor, song_id]() mutable {
         try {
@@ -961,17 +962,17 @@ void request_charts_for_selected_song(state& state) {
     }).detach();
 }
 
-bool poll_chart_page(state& state) {
+bool poll_chart_page(state& state, online_catalog::data_controller& data_controller) {
     if (!state.chart_page_loading) {
         return false;
     }
-    if (state.chart_page_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+    if (data_controller.chart_page_future().wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
         return false;
     }
 
     remote_chart_page_fetch_result page_result;
     try {
-        page_result = state.chart_page_future.get();
+        page_result = data_controller.chart_page_future().get();
     } catch (...) {
         page_result.success = false;
     }
@@ -999,34 +1000,36 @@ bool poll_chart_page(state& state) {
     }
     detail::ensure_selection_valid(state);
     apply_reload_restore(state);
-    apply_pending_select(state);
+    apply_pending_select(state, data_controller);
     return true;
 }
 
-bool poll_owned(state& state) {
+bool poll_owned(state& state, online_catalog::data_controller& data_controller) {
     if (!state.owned_loading) {
         return false;
     }
-    if (state.owned_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+    if (data_controller.owned_future().wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
         return false;
     }
 
     state.owned_loading = false;
     state.owned_loaded_once = true;
     try {
-        state.owned_songs = state.owned_future.get();
+        state.owned_songs = data_controller.owned_future().get();
     } catch (...) {
         state.owned_songs.clear();
     }
     detail::ensure_selection_valid(state);
     apply_reload_restore(state);
-    apply_pending_select(state);
+    apply_pending_select(state, data_controller);
     return true;
 }
 
-void on_enter(state& state, song_select::preview_controller& preview_controller) {
+void on_enter(state& state,
+              online_catalog::data_controller& data_controller,
+              song_select::preview_controller& preview_controller) {
     if (!state.catalog_loaded_once && !state.catalog_loading) {
-        reload_catalog(state);
+        reload_catalog(state, data_controller);
     }
     state.detail_transition = state.detail_open ? 1.0f : 0.0f;
     preview_controller.select_song(preview_song(state));
@@ -1038,17 +1041,18 @@ void on_exit(state& state) {
 }
 
 void select_local_update_target(state& state,
+                                online_catalog::data_controller& data_controller,
                                 const std::string& local_song_id,
                                 const std::string& local_chart_id,
                                 bool open_detail) {
     state.pending_select_local_song_id = local_song_id;
     state.pending_select_local_chart_id = local_chart_id;
     state.pending_select_detail_open = open_detail;
-    if (apply_pending_select(state)) {
+    if (apply_pending_select(state, data_controller)) {
         return;
     }
     if (!state.catalog_loading) {
-        reload_catalog(state, true);
+        reload_catalog(state, data_controller, true);
     }
 }
 

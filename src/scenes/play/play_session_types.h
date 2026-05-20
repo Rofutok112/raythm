@@ -56,7 +56,7 @@ struct play_draw_window {
     float lane_start_z = 0.0f;
     float judgement_z = 0.0f;
     float lane_end_z = 0.0f;
-    double visual_ms = 0.0;
+    double visual_time_ms = 0.0;
 };
 
 struct lane_judge_effect {
@@ -105,9 +105,9 @@ struct play_session_state {
     bool ranking_enabled = true;
     bool auto_paused_by_focus = false;
     float camera_angle_degrees = 45.0f;
-    double current_ms = 0.0;
-    double paused_ms = 0.0;
-    double song_end_ms = 0.0;
+    double chart_time_ms = 0.0;
+    double paused_chart_time_ms = 0.0;
+    double song_end_chart_time_ms = 0.0;
     double lane_speed = 0.045;
     int combo_display = 0;
     score_system score_system;

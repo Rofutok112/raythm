@@ -33,6 +33,14 @@ public:
     static editor_timing_edit_result apply_selected_scroll(editor_timing_edit_context context);
     static editor_timing_edit_result add_event(editor_timing_edit_context context, timing_event_type type);
     static editor_timing_edit_result add_scroll_event(editor_timing_edit_context context);
+    static editor_timing_edit_result add_scroll_event(editor_timing_edit_context context,
+                                                      scroll_automation_point point);
+    static editor_timing_edit_result modify_scroll_event(editor_timing_edit_context context,
+                                                         size_t index,
+                                                         scroll_automation_point point);
+    static editor_timing_edit_result modify_scroll_guides(editor_timing_edit_context context,
+                                                          scroll_automation_guides guides);
+    static editor_timing_edit_result cycle_selected_scroll_curve(editor_timing_edit_context context);
     static editor_timing_edit_result delete_selected(editor_timing_edit_context context);
     static editor_timing_edit_result delete_selected_scroll(editor_timing_edit_context context);
 };

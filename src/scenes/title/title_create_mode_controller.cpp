@@ -6,7 +6,7 @@
 #include "network/server_environment.h"
 #include "song_select/song_select_navigation.h"
 #include "title/local_content_index.h"
-#include "title/seamless_song_select_view.h"
+#include "title/title_local_song_select_controller.h"
 #include "ui_notice.h"
 
 namespace {
@@ -43,7 +43,8 @@ void title_create_mode_controller::update(scene_manager& manager,
                                           float dt,
                                           const callbacks& callbacks) {
     const title_play_view::update_result result =
-        title_play_view::update(state, title_play_view::mode::create, play_view_anim, play_entry_origin_rect, dt);
+        title_local_song_select_controller::update(
+            state, title_play_view::mode::create, play_view_anim, play_entry_origin_rect, dt);
     const bool create_action_requested =
         result.create_song_requested ||
         result.edit_song_requested ||

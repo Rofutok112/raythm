@@ -21,6 +21,7 @@
 #include "path_utils.h"
 #include "song_writer.h"
 #include "title/local_content_index.h"
+#include "title/online_catalog_data_controller.h"
 #include "title/online_download_remote_client.h"
 #include "ui_notice.h"
 
@@ -479,7 +480,7 @@ bool needs_download(const song_entry_state& song) {
            song.song.status == content_status::modified;
 }
 
-void start_download(state& state) {
+void start_download(state& state, online_catalog::data_controller& data_controller) {
     if (state.download_in_progress) {
         return;
     }
@@ -496,7 +497,7 @@ void start_download(state& state) {
     ui::notify("Downloading song...", ui::notice_tone::info, 1.8f);
     const std::shared_ptr<download_progress_state> progress = state.download_progress;
     std::promise<download_song_result> promise;
-    state.download_future = promise.get_future();
+    data_controller.download_future() = promise.get_future();
     std::thread([promise = std::move(promise), selected, server_url, progress]() mutable {
         try {
             promise.set_value(download_song_package(selected, server_url, progress));
@@ -506,7 +507,7 @@ void start_download(state& state) {
     }).detach();
 }
 
-void start_chart_download(state& state) {
+void start_chart_download(state& state, online_catalog::data_controller& data_controller) {
     if (state.download_in_progress) {
         return;
     }
@@ -534,7 +535,7 @@ void start_chart_download(state& state) {
     ui::notify("Downloading chart...", ui::notice_tone::info, 1.8f);
     const std::shared_ptr<download_progress_state> progress = state.download_progress;
     std::promise<download_song_result> promise;
-    state.download_future = promise.get_future();
+    data_controller.download_future() = promise.get_future();
     std::thread([promise = std::move(promise), selected_song, selected_chart, server_url, progress]() mutable {
         try {
             promise.set_value(download_chart_file(selected_song, selected_chart, server_url, progress));
@@ -544,17 +545,17 @@ void start_chart_download(state& state) {
     }).detach();
 }
 
-bool poll_download(state& state) {
+bool poll_download(state& state, online_catalog::data_controller& data_controller) {
     if (!state.download_in_progress) {
         return false;
     }
-    if (state.download_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+    if (data_controller.download_future().wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
         return false;
     }
 
     download_song_result result;
     try {
-        result = state.download_future.get();
+        result = data_controller.download_future().get();
     } catch (const std::exception& ex) {
         result.success = false;
         result.message = ex.what();
@@ -576,7 +577,7 @@ bool poll_download(state& state) {
             mark_song_downloaded(state.owned_songs, result.song_id);
         }
         ui::notify(result.message, ui::notice_tone::success, 2.4f);
-        reload_catalog(state, true);
+        reload_catalog(state, data_controller, true);
     } else {
         ui::notify(result.message.empty() ? "Download failed." : result.message,
                    ui::notice_tone::error, 3.2f);

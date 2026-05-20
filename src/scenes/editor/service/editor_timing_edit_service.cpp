@@ -64,6 +64,22 @@ bool try_parse_bar_beat(const std::string& text, editor_meter_map::bar_beat_posi
     out_value = {measure, beat};
     return true;
 }
+
+scroll_automation_curve next_scroll_curve(scroll_automation_curve curve) {
+    switch (curve) {
+        case scroll_automation_curve::hold:
+            return scroll_automation_curve::linear;
+        case scroll_automation_curve::linear:
+            return scroll_automation_curve::ease_in;
+        case scroll_automation_curve::ease_in:
+            return scroll_automation_curve::ease_out;
+        case scroll_automation_curve::ease_out:
+            return scroll_automation_curve::ease_in_out;
+        case scroll_automation_curve::ease_in_out:
+            return scroll_automation_curve::hold;
+    }
+    return scroll_automation_curve::hold;
+}
 }
 
 bool editor_timing_edit_service::can_delete_selected(const editor_timing_delete_query& query) {
@@ -224,18 +240,66 @@ editor_timing_edit_result editor_timing_edit_service::add_event(editor_timing_ed
 }
 
 editor_timing_edit_result editor_timing_edit_service::add_scroll_event(editor_timing_edit_context context) {
-    editor_timing_edit_result result;
     scroll_automation_point point;
     point.tick = context.default_timing_event_tick;
     point.multiplier = 1.0f;
     point.curve_to_next = scroll_automation_curve::linear;
+    return add_scroll_event(context, point);
+}
 
+editor_timing_edit_result editor_timing_edit_service::add_scroll_event(editor_timing_edit_context context,
+                                                                       scroll_automation_point point) {
+    editor_timing_edit_result result;
     if (context.state.add_scroll_automation_point(point)) {
         result.success = true;
         result.selected_scroll_event_index = context.state.data().scroll_automation.size() - 1;
         result.scroll_to_tick = point.tick;
     }
     return result;
+}
+
+editor_timing_edit_result editor_timing_edit_service::modify_scroll_event(editor_timing_edit_context context,
+                                                                          size_t index,
+                                                                          scroll_automation_point point) {
+    editor_timing_edit_result result;
+    if (!context.state.modify_scroll_automation_point(index, point)) {
+        context.timing_panel.input_error = "Failed to update the scroll automation point.";
+        return result;
+    }
+
+    result.success = true;
+    result.selected_scroll_event_index = index;
+    result.scroll_to_tick = point.tick;
+    return result;
+}
+
+editor_timing_edit_result editor_timing_edit_service::modify_scroll_guides(editor_timing_edit_context context,
+                                                                           scroll_automation_guides guides) {
+    editor_timing_edit_result result;
+    if (!context.state.modify_scroll_automation_guides(guides)) {
+        return result;
+    }
+
+    result.success = true;
+    return result;
+}
+
+editor_timing_edit_result editor_timing_edit_service::cycle_selected_scroll_curve(editor_timing_edit_context context) {
+    editor_timing_edit_result result;
+    if (!context.timing_panel.selected_scroll_event_index.has_value()) {
+        context.timing_panel.input_error = "Select a scroll automation point first.";
+        return result;
+    }
+
+    const size_t index = *context.timing_panel.selected_scroll_event_index;
+    if (index >= context.state.data().scroll_automation.size()) {
+        context.timing_panel.input_error = "Selected scroll automation point is out of range.";
+        return result;
+    }
+
+    scroll_automation_point updated = context.state.data().scroll_automation[index];
+    updated.curve_to_next = next_scroll_curve(updated.curve_to_next);
+    return modify_scroll_event(context, index, updated);
 }
 
 editor_timing_edit_result editor_timing_edit_service::delete_selected(editor_timing_edit_context context) {
