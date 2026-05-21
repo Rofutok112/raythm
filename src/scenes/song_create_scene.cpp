@@ -15,6 +15,7 @@
 #include "editor/editor_meter_map.h"
 #include "editor_scene.h"
 #include "file_dialog.h"
+#include "game_settings.h"
 #include "gameplay/timing_engine.h"
 #include "raylib.h"
 #include "scene_common.h"
@@ -214,7 +215,8 @@ bool song_create_scene::start_timing_preview() {
         error_ = "Failed to load audio preview.";
         return false;
     }
-    audio.set_preview_volume(0.65f);
+    audio.set_preview_volume(g_settings.bgm_volume);
+    audio.set_preview_fade_gain(0.65f);
     audio.seek_preview(0.0);
     audio.play_preview(true);
 

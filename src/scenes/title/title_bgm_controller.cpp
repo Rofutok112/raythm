@@ -28,13 +28,14 @@ void title_bgm_controller::on_enter() {
     phase_ = phase::stopped;
     suspended_ = false;
     paused_for_suspend_ = false;
-    current_volume_ = std::clamp(g_settings.bgm_volume, 0.0f, 1.0f);
+    current_volume_ = 1.0f;
     target_volume_ = current_volume_;
     if (intro_path_.empty() || !audio_manager::instance().load_bgm(intro_path_)) {
         return;
     }
 
-    audio_manager::instance().set_bgm_volume(current_volume_);
+    audio_manager::instance().set_bgm_volume(std::clamp(g_settings.bgm_volume, 0.0f, 1.0f));
+    audio_manager::instance().set_bgm_fade_gain(current_volume_);
     audio_manager::instance().play_bgm(true);
     phase_ = phase::intro;
 }
@@ -51,10 +52,11 @@ void title_bgm_controller::update() {
         return;
     }
 
-    const float desired_volume = suspended_ ? 0.0f : std::clamp(g_settings.bgm_volume, 0.0f, 1.0f);
+    const float desired_volume = suspended_ ? 0.0f : 1.0f;
     target_volume_ = desired_volume;
     current_volume_ = approach(current_volume_, target_volume_, kTitleBgmFadeSpeed);
-    audio_manager::instance().set_bgm_volume(current_volume_);
+    audio_manager::instance().set_bgm_volume(std::clamp(g_settings.bgm_volume, 0.0f, 1.0f));
+    audio_manager::instance().set_bgm_fade_gain(current_volume_);
 
     if (suspended_) {
         if (current_volume_ <= 0.001f && audio_manager::instance().is_bgm_playing()) {
@@ -75,7 +77,8 @@ void title_bgm_controller::update() {
 
     if (phase_ == phase::intro) {
         if (!loop_path_.empty() && audio_manager::instance().load_bgm(loop_path_)) {
-            audio_manager::instance().set_bgm_volume(current_volume_);
+            audio_manager::instance().set_bgm_volume(std::clamp(g_settings.bgm_volume, 0.0f, 1.0f));
+            audio_manager::instance().set_bgm_fade_gain(current_volume_);
             audio_manager::instance().play_bgm(true);
             phase_ = phase::loop;
             return;
@@ -85,7 +88,8 @@ void title_bgm_controller::update() {
     }
 
     audio_manager::instance().seek_bgm(0.0);
-    audio_manager::instance().set_bgm_volume(current_volume_);
+    audio_manager::instance().set_bgm_volume(std::clamp(g_settings.bgm_volume, 0.0f, 1.0f));
+    audio_manager::instance().set_bgm_fade_gain(current_volume_);
     audio_manager::instance().play_bgm(true);
 }
 
@@ -101,9 +105,10 @@ void title_bgm_controller::resume() {
         return;
     }
     suspended_ = false;
-    target_volume_ = std::clamp(g_settings.bgm_volume, 0.0f, 1.0f);
+    target_volume_ = 1.0f;
     if (paused_for_suspend_ && !audio_manager::instance().is_bgm_playing()) {
-        audio_manager::instance().set_bgm_volume(current_volume_);
+        audio_manager::instance().set_bgm_volume(std::clamp(g_settings.bgm_volume, 0.0f, 1.0f));
+        audio_manager::instance().set_bgm_fade_gain(current_volume_);
         audio_manager::instance().play_bgm(false);
         paused_for_suspend_ = false;
     }
@@ -112,7 +117,7 @@ void title_bgm_controller::resume() {
 void title_bgm_controller::restart() {
     suspended_ = false;
     paused_for_suspend_ = false;
-    current_volume_ = std::clamp(g_settings.bgm_volume, 0.0f, 1.0f);
+    current_volume_ = 1.0f;
     target_volume_ = current_volume_;
 
     audio_manager::instance().stop_bgm();
@@ -121,7 +126,8 @@ void title_bgm_controller::restart() {
         return;
     }
 
-    audio_manager::instance().set_bgm_volume(current_volume_);
+    audio_manager::instance().set_bgm_volume(std::clamp(g_settings.bgm_volume, 0.0f, 1.0f));
+    audio_manager::instance().set_bgm_fade_gain(current_volume_);
     audio_manager::instance().play_bgm(true);
     phase_ = phase::intro;
 }
