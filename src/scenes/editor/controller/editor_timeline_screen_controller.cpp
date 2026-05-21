@@ -138,7 +138,7 @@ editor_right_panel_view_result draw(const context& context) {
     }
     const bool preview_has_overlap = !preview_notes.empty() &&
         (context.state.has_note_overlap(preview_notes, preview_ignore_indices) ||
-         editor::note_placement_rules::has_stay_stack(context.state.data(), preview_notes, preview_ignore_indices));
+         editor::note_placement_rules::has_stay_stack(context.state, preview_notes, preview_ignore_indices));
 
     std::optional<Rectangle> selection_rect;
     if (context.timeline_drag.active && context.timeline_drag.mode == editor_timeline_drag_mode::range_select) {

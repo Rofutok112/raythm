@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "editor/editor_state.h"
+
 namespace editor::note_placement_rules {
 namespace {
 
@@ -20,6 +22,52 @@ bool stay_stack(const note_data& left, const note_data& right) {
         lanes_overlap(left, right);
 }
 
+}
+
+bool has_stay_stack(const editor_state& state,
+                    const note_data& candidate,
+                    std::optional<size_t> ignore_index) {
+    std::vector<size_t> ignore_indices;
+    if (ignore_index.has_value()) {
+        ignore_indices.push_back(*ignore_index);
+    }
+    return has_stay_stack(state, candidate, ignore_indices);
+}
+
+bool has_stay_stack(const editor_state& state,
+                    const note_data& candidate,
+                    const std::vector<size_t>& ignore_indices) {
+    if (candidate.type != note_type::stay) {
+        return false;
+    }
+
+    const std::vector<size_t> nearby_indices =
+        state.note_indices_in_tick_range(candidate.tick, candidate.tick);
+    for (const size_t index : nearby_indices) {
+        if (is_ignored(index, ignore_indices)) {
+            continue;
+        }
+        if (stay_stack(candidate, state.data().notes[index])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool has_stay_stack(const editor_state& state,
+                    const std::vector<note_data>& candidates,
+                    const std::vector<size_t>& ignore_indices) {
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (has_stay_stack(state, candidates[i], ignore_indices)) {
+            return true;
+        }
+        for (size_t j = i + 1; j < candidates.size(); ++j) {
+            if (stay_stack(candidates[i], candidates[j])) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 bool has_stay_stack(const chart_data& chart,

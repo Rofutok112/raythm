@@ -45,9 +45,7 @@ float editor_timeline_viewport::visible_tick_span(const editor_timeline_viewport
 
 float editor_timeline_viewport::content_tick_span(const editor_timeline_viewport_model& model) {
     int max_tick = model.state->data().meta.resolution * 8;
-    for (const note_data& note : model.state->data().notes) {
-        max_tick = std::max(max_tick, note.type == note_type::hold ? note.end_tick : note.tick);
-    }
+    max_tick = std::max(max_tick, model.state->max_note_tick());
     for (const timing_event& event : model.state->data().timing_events) {
         max_tick = std::max(max_tick, event.tick);
     }

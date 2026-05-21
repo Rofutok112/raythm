@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -82,23 +83,50 @@ int main() {
         std::cerr << "has_note_overlap should account for wide lane ranges\n";
         return EXIT_FAILURE;
     }
+    if (state.max_note_tick() != 960) {
+        std::cerr << "max_note_tick should report the current note extent\n";
+        return EXIT_FAILURE;
+    }
+    {
+        chart_data indexed_chart = make_chart();
+        note_data indexed_wide{note_type::tap, 720, 1, 720};
+        indexed_wide.lane_width = 3;
+        indexed_chart.notes.push_back(indexed_wide);
+        editor_state indexed_state(indexed_chart, "assets/charts/editor_state_indexed.rchart");
+        const std::vector<size_t> indices = indexed_state.note_indices_in_tick_range(700, 740);
+        if (std::find(indices.begin(), indices.end(), 2) == indices.end() ||
+            std::count(indices.begin(), indices.end(), 2) != 1) {
+            std::cerr << "note_indices_in_tick_range should include wide notes once\n";
+            return EXIT_FAILURE;
+        }
+        indexed_state.remove_note(2);
+        const std::vector<size_t> after_remove_indices = indexed_state.note_indices_in_tick_range(700, 740);
+        if (indexed_state.max_note_tick() != 960 ||
+            std::find(after_remove_indices.begin(), after_remove_indices.end(), 2) != after_remove_indices.end()) {
+            std::cerr << "note index should refresh after note removal\n";
+            return EXIT_FAILURE;
+        }
+    }
 
     editor_state automation_state(make_chart(), "assets/charts/editor_state_automation.rchart");
     scroll_automation_point first_scroll_point{240, 1.0f, scroll_automation_curve::linear};
-    scroll_automation_point duplicate_scroll_point{240, 2.0f, scroll_automation_curve::ease_in};
+    scroll_automation_point same_tick_scroll_point{240, 2.0f, scroll_automation_curve::ease_in};
+    scroll_automation_point duplicate_scroll_point{240, 1.0f, scroll_automation_curve::ease_in};
     scroll_automation_point second_scroll_point{480, 1.5f, scroll_automation_curve::linear};
     if (!automation_state.add_scroll_automation_point(first_scroll_point) ||
+        !automation_state.add_scroll_automation_point(same_tick_scroll_point) ||
         automation_state.add_scroll_automation_point(duplicate_scroll_point) ||
-        automation_state.data().scroll_automation.size() != 1 ||
+        automation_state.data().scroll_automation.size() != 2 ||
         automation_state.data().scroll_automation.front().multiplier != 1.0f) {
-        std::cerr << "Scroll automation should reject duplicate ticks on add\n";
+        std::cerr << "Scroll automation should allow same-tick rate changes but reject overlapping points on add\n";
         return EXIT_FAILURE;
     }
     if (!automation_state.add_scroll_automation_point(second_scroll_point) ||
-        automation_state.modify_scroll_automation_point(1, duplicate_scroll_point) ||
-        automation_state.data().scroll_automation.size() != 2 ||
-        automation_state.data().scroll_automation[1].tick != 480) {
-        std::cerr << "Scroll automation should reject duplicate ticks on modify\n";
+        !automation_state.modify_scroll_automation_point(2, same_tick_scroll_point) ||
+        automation_state.data().scroll_automation.size() != 3 ||
+        automation_state.data().scroll_automation[2].tick != 240 ||
+        automation_state.data().scroll_automation[2].multiplier != 2.0f) {
+        std::cerr << "Scroll automation should allow existing points to be moved onto another point\n";
         return EXIT_FAILURE;
     }
 

@@ -126,14 +126,13 @@ void editor_scene::update(float dt) {
         return;
     }
 
-    const chart_data chart_for_save = make_chart_data_for_save();
     const bool save_dialog_submit = save_dialog_.submit_requested ||
         (save_dialog_.open && ui::is_clicked(layout::save_submit_button_rect(), ui::draw_layer::modal));
     save_dialog_.submit_requested = false;
 
     const editor_flow_result flow_result = editor_flow_controller::update({
         &song_,
-        &chart_for_save,
+        [this]() { return make_chart_data_for_save(); },
         state_,
         &metadata_panel_,
         &save_dialog_,

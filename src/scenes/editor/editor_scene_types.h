@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -178,7 +179,7 @@ struct editor_session_load_result {
 
 struct editor_flow_context {
     const song_data* song = nullptr;
-    const chart_data* chart_for_save = nullptr;
+    std::function<chart_data()> make_chart_data_for_save;
     std::shared_ptr<editor_state> state;
     metadata_panel_state* metadata_panel = nullptr;
     save_dialog_state* save_dialog = nullptr;

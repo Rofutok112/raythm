@@ -49,6 +49,8 @@ public:
     const timing_engine& engine() const;
 
     int snap_tick(int raw_tick, int division) const;
+    int max_note_tick() const;
+    std::vector<size_t> note_indices_in_tick_range(int min_tick, int max_tick) const;
     bool has_note_overlap(const note_data& note, std::optional<size_t> ignore_index = std::nullopt) const;
     bool has_note_overlap(const note_data& note, const std::vector<size_t>& ignore_indices) const;
     bool has_note_overlap(const std::vector<note_data>& notes, const std::vector<size_t>& ignore_indices = {}) const;
@@ -58,7 +60,15 @@ public:
     void set_file_path(std::string file_path);
 
 private:
+    struct note_index_entry {
+        int start_tick = 0;
+        int end_tick = 0;
+        size_t index = 0;
+    };
+
     void rebuild_timing_engine();
+    void invalidate_note_index() const;
+    void rebuild_note_index() const;
     void mark_level_dirty();
     void sync_dirty_flag();
 
@@ -70,4 +80,8 @@ private:
     size_t level_refresh_generation_ = 0;
     std::string file_path_;
     size_t saved_history_index_ = 0;
+    mutable bool note_index_dirty_ = true;
+    mutable int max_note_tick_ = 0;
+    mutable std::vector<std::vector<note_index_entry>> note_entries_by_lane_;
+    mutable std::vector<std::vector<note_index_entry>> hold_entries_by_lane_;
 };

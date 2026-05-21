@@ -48,9 +48,18 @@ int main() {
     const editor_timing_edit_result duplicate =
         editor_timing_edit_service::add_scroll_event(
             context(state, meter_map, panel, 960),
-            scroll_automation_point{480, 2.0f, scroll_automation_curve::ease_in});
+            scroll_automation_point{480, 1.0f, scroll_automation_curve::ease_in});
     if (duplicate.success || state.data().scroll_automation.size() != 1) {
-        std::cerr << "add_scroll_event should reject duplicate scroll ticks\n";
+        std::cerr << "add_scroll_event should reject overlapping scroll points\n";
+        return EXIT_FAILURE;
+    }
+
+    const editor_timing_edit_result same_tick =
+        editor_timing_edit_service::add_scroll_event(
+            context(state, meter_map, panel, 960),
+            scroll_automation_point{480, 2.0f, scroll_automation_curve::ease_in});
+    if (!same_tick.success || state.data().scroll_automation.size() != 2) {
+        std::cerr << "add_scroll_event should allow same-tick scroll rate changes\n";
         return EXIT_FAILURE;
     }
 
@@ -87,11 +96,11 @@ int main() {
 
     const editor_timing_edit_result deleted =
         editor_timing_edit_service::delete_selected_scroll(context(state, meter_map, panel));
-    if (!deleted.success || !state.data().scroll_automation.empty()) {
+    if (!deleted.success || state.data().scroll_automation.size() != 1) {
         std::cerr << "delete_selected_scroll should remove the selected point\n";
         return EXIT_FAILURE;
     }
-    if (!state.undo() || state.data().scroll_automation.size() != 1) {
+    if (!state.undo() || state.data().scroll_automation.size() != 2) {
         std::cerr << "scroll delete should remain undoable through editor_state\n";
         return EXIT_FAILURE;
     }

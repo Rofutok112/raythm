@@ -29,6 +29,27 @@ bool note_intersects_tick_range(const note_data& note, int min_tick, int max_tic
     const int end_tick = note.type == note_type::hold ? std::max(note.tick, note.end_tick) : note.tick;
     return end_tick >= min_tick && start_tick <= max_tick;
 }
+
+struct timeline_note_cache {
+    const editor_state* state = nullptr;
+    size_t generation = static_cast<size_t>(-1);
+    std::vector<editor_timeline_note> notes;
+};
+
+const std::vector<editor_timeline_note>* cached_minimap_notes(const editor_state& state) {
+    static timeline_note_cache cache;
+    const size_t generation = state.level_refresh_generation();
+    if (cache.state != &state || cache.generation != generation) {
+        cache.state = &state;
+        cache.generation = generation;
+        cache.notes.clear();
+        cache.notes.reserve(state.data().notes.size());
+        for (size_t index = 0; index < state.data().notes.size(); ++index) {
+            cache.notes.push_back(make_timeline_note(state.data().notes[index], index));
+        }
+    }
+    return &cache.notes;
+}
 }
 
 void editor_timeline_presenter::draw(const editor_timeline_presenter_model& model) {
@@ -38,15 +59,13 @@ void editor_timeline_presenter::draw(const editor_timeline_presenter_model& mode
     const int max_tick = static_cast<int>(std::ceil(model.viewport.viewport.bottom_tick + visible_tick_span));
 
     std::vector<editor_timeline_note> notes;
-    std::vector<editor_timeline_note> minimap_notes;
-    notes.reserve(std::min<std::size_t>(model.state.data().notes.size(), 4096));
-    minimap_notes.reserve(model.state.data().notes.size());
-    for (size_t index = 0; index < model.state.data().notes.size(); ++index) {
+    const std::vector<size_t> visible_note_indices =
+        model.state.note_indices_in_tick_range(min_tick, max_tick);
+    notes.reserve(visible_note_indices.size());
+    for (const size_t index : visible_note_indices) {
         const note_data& note = model.state.data().notes[index];
-        editor_timeline_note timeline_note = make_timeline_note(note, index);
-        minimap_notes.push_back(timeline_note);
         if (note_intersects_tick_range(note, min_tick, max_tick)) {
-            notes.push_back(timeline_note);
+            notes.push_back(make_timeline_note(note, index));
         }
     }
 
@@ -67,7 +86,8 @@ void editor_timeline_presenter::draw(const editor_timeline_presenter_model& mode
         model.meter_map.visible_grid_lines(min_tick, max_tick),
         std::move(scroll_automation),
         std::move(notes),
-        std::move(minimap_notes),
+        cached_minimap_notes(model.state),
+        model.state.level_refresh_generation(),
         model.selected_note_indices,
         model.selected_scroll_event_index,
         model.audio_loaded ? std::optional<int>(model.playback_tick) : std::nullopt,

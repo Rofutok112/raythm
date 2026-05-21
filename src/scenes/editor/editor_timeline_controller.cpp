@@ -73,13 +73,12 @@ std::optional<size_t> note_at_position(const editor_timeline_context& context, V
     const int hit_tick = context.metrics.y_to_tick(point.y);
     const int tick_margin = static_cast<int>(std::ceil(context.metrics.note_head_height *
                                                        context.metrics.ticks_per_pixel * 2.0f));
-    for (size_t i = context.state->data().notes.size(); i > 0; --i) {
-        const size_t index = i - 1;
+    std::vector<size_t> candidate_indices =
+        context.state->note_indices_in_tick_range(hit_tick - tick_margin, hit_tick + tick_margin);
+    for (auto it = candidate_indices.rbegin(); it != candidate_indices.rend(); ++it) {
+        const size_t index = *it;
         const note_data& note = context.state->data().notes[index];
         if (note.lane < 0 || note.lane >= context.state->data().meta.key_count) {
-            continue;
-        }
-        if (!note_intersects_tick_range(note, hit_tick - tick_margin, hit_tick + tick_margin)) {
             continue;
         }
 
@@ -132,12 +131,11 @@ std::vector<size_t> notes_in_rectangle(const editor_timeline_context& context, R
     const int max_tick = context.metrics.y_to_tick(rect.y);
     const int tick_margin = static_cast<int>(std::ceil(context.metrics.note_head_height *
                                                        context.metrics.ticks_per_pixel * 2.0f));
-    for (size_t index = 0; index < context.state->data().notes.size(); ++index) {
+    const std::vector<size_t> candidate_indices =
+        context.state->note_indices_in_tick_range(min_tick - tick_margin, max_tick + tick_margin);
+    for (const size_t index : candidate_indices) {
         const note_data& note = context.state->data().notes[index];
         if (note.lane < 0 || note.lane >= context.state->data().meta.key_count) {
-            continue;
-        }
-        if (!note_intersects_tick_range(note, min_tick - tick_margin, max_tick + tick_margin)) {
             continue;
         }
 

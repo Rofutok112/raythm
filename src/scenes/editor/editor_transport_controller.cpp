@@ -83,7 +83,10 @@ editor_transport_result editor_transport_controller::sync(const editor_transport
 
     if (context.loop_enabled && context.loop_end_tick > context.loop_start_tick &&
         context.previous_playback_tick < context.loop_end_tick && result.playback_tick >= context.loop_end_tick) {
-        for (const note_data& note : context.state->data().notes) {
+        const std::vector<size_t> note_indices =
+            context.state->note_indices_in_tick_range(context.previous_playback_tick + 1, context.loop_end_tick);
+        for (const size_t index : note_indices) {
+            const note_data& note = context.state->data().notes[index];
             if (note.tick > context.previous_playback_tick && note.tick <= context.loop_end_tick) {
                 ++result.hitsound_count;
                 result.hitsound_requests.push_back(hitsound_request_for_note(note));
@@ -97,7 +100,10 @@ editor_transport_result editor_transport_controller::sync(const editor_transport
         return result;
     }
 
-    for (const note_data& note : context.state->data().notes) {
+    const std::vector<size_t> note_indices =
+        context.state->note_indices_in_tick_range(context.previous_playback_tick + 1, result.playback_tick);
+    for (const size_t index : note_indices) {
+        const note_data& note = context.state->data().notes[index];
         if (note.tick > context.previous_playback_tick && note.tick <= result.playback_tick) {
             ++result.hitsound_count;
             result.hitsound_requests.push_back(hitsound_request_for_note(note));

@@ -69,7 +69,8 @@ struct editor_timeline_view_model {
     std::vector<editor_meter_map::grid_line> grid_lines;
     std::vector<editor_timeline_scroll_automation_point> scroll_automation;
     std::vector<editor_timeline_note> notes;
-    std::vector<editor_timeline_note> minimap_notes;
+    const std::vector<editor_timeline_note>* minimap_notes = nullptr;
+    size_t minimap_generation = 0;
     std::vector<size_t> selected_note_indices;
     std::optional<size_t> selected_scroll_event_index;
     std::optional<int> playback_tick;

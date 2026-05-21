@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <optional>
 
 #include "app_paths.h"
 #include "chart_serializer.h"
@@ -85,8 +86,9 @@ editor_navigation_request navigation_for_action(editor_pending_action action) {
     return {};
 }
 
-bool save_to_path(const editor_flow_context& context, const std::string& file_path, editor_flow_result& result) {
-    if (context.state == nullptr || context.chart_for_save == nullptr || context.save_dialog == nullptr) {
+bool save_to_path(const editor_flow_context& context, const chart_data& chart_for_save,
+                  const std::string& file_path, editor_flow_result& result) {
+    if (context.state == nullptr || context.save_dialog == nullptr) {
         return false;
     }
 
@@ -98,7 +100,7 @@ bool save_to_path(const editor_flow_context& context, const std::string& file_pa
         return false;
     }
 
-    if (!chart_serializer::serialize(*context.chart_for_save, path_utils::to_utf8(path))) {
+    if (!chart_serializer::serialize(chart_for_save, path_utils::to_utf8(path))) {
         context.save_dialog->error = "Failed to save the chart file.";
         return false;
     }
@@ -110,7 +112,8 @@ bool save_to_path(const editor_flow_context& context, const std::string& file_pa
     return true;
 }
 
-bool save_chart_from_dialog(const editor_flow_context& context, editor_flow_result& result) {
+bool save_chart_from_dialog(const editor_flow_context& context, const chart_data& chart_for_save,
+                            editor_flow_result& result) {
     if (context.song == nullptr || context.state == nullptr || context.save_dialog == nullptr) {
         return false;
     }
@@ -119,7 +122,7 @@ bool save_chart_from_dialog(const editor_flow_context& context, editor_flow_resu
         const std::filesystem::path dest =
             app_paths::song_chart_path(context.song->meta.song_id, context.state->data().meta.chart_id);
         app_paths::ensure_directories();
-        if (!save_to_path(context, path_utils::to_utf8(dest), result)) {
+        if (!save_to_path(context, chart_for_save, path_utils::to_utf8(dest), result)) {
             return false;
         }
 
@@ -154,7 +157,7 @@ bool save_chart_from_dialog(const editor_flow_context& context, editor_flow_resu
         chart_path += ".rchart";
     }
 
-    if (!save_to_path(context, path_utils::to_utf8(chart_path), result)) {
+    if (!save_to_path(context, chart_for_save, path_utils::to_utf8(chart_path), result)) {
         context.save_dialog->file_name_input.active = true;
         return false;
     }
@@ -165,16 +168,17 @@ bool save_chart_from_dialog(const editor_flow_context& context, editor_flow_resu
     return true;
 }
 
-bool save_chart(const editor_flow_context& context, editor_pending_action action_after_save, editor_flow_result& result) {
-    if (context.state == nullptr || context.chart_for_save == nullptr || context.save_dialog == nullptr) {
+bool save_chart(const editor_flow_context& context, const chart_data& chart_for_save,
+                editor_pending_action action_after_save, editor_flow_result& result) {
+    if (context.state == nullptr || context.save_dialog == nullptr) {
         return false;
     }
 
     if (!context.state->file_path().empty()) {
-        return save_to_path(context, context.state->file_path(), result);
+        return save_to_path(context, chart_for_save, context.state->file_path(), result);
     }
 
-    open_save_dialog(*context.save_dialog, action_after_save, *context.chart_for_save);
+    open_save_dialog(*context.save_dialog, action_after_save, chart_for_save);
     return false;
 }
 
@@ -200,9 +204,19 @@ editor_flow_result editor_flow_controller::update(const editor_flow_context& con
         return result;
     }
 
+    std::optional<chart_data> chart_for_save;
+    auto get_chart_for_save = [&]() -> const chart_data& {
+        if (!chart_for_save.has_value() && context.make_chart_data_for_save) {
+            chart_for_save = context.make_chart_data_for_save();
+        }
+        return *chart_for_save;
+    };
+
     if (context.save_dialog_submit && context.save_dialog->open) {
         context.save_dialog->submit_requested = false;
-        save_chart_from_dialog(context, result);
+        if (context.make_chart_data_for_save) {
+            save_chart_from_dialog(context, get_chart_for_save(), result);
+        }
     }
 
     if (context.save_dialog->open && (context.escape_pressed || context.save_dialog_cancel)) {
@@ -237,8 +251,11 @@ editor_flow_result editor_flow_controller::update(const editor_flow_context& con
             const editor_pending_action action = context.unsaved_changes_dialog->pending;
             *context.unsaved_changes_dialog = {};
             if (context.state != nullptr && context.state->file_path().empty()) {
-                open_save_dialog(*context.save_dialog, action, *context.chart_for_save);
-            } else if (save_chart(context, editor_pending_action::none, result)) {
+                if (context.make_chart_data_for_save) {
+                    open_save_dialog(*context.save_dialog, action, get_chart_for_save());
+                }
+            } else if (context.make_chart_data_for_save &&
+                       save_chart(context, get_chart_for_save(), editor_pending_action::none, result)) {
                 result.navigation = navigation_for_action(action);
             }
         } else if (context.unsaved_discard_clicked) {
@@ -294,7 +311,9 @@ editor_flow_result editor_flow_controller::update(const editor_flow_context& con
     }
 
     if (context.ctrl_s_pressed) {
-        save_chart(context, editor_pending_action::none, result);
+        if (context.make_chart_data_for_save) {
+            save_chart(context, get_chart_for_save(), editor_pending_action::none, result);
+        }
         if (context.save_dialog->open) {
             result.consume_update = true;
         }

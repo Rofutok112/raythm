@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <set>
 #include <vector>
 
 #include "game_settings.h"
@@ -313,8 +312,9 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
     draw_timeline_header(model, t);
     {
         ui::scoped_clip_rect clip_scope(content);
-        const std::set<size_t> selected_note_indices(
-            model.selected_note_indices.begin(), model.selected_note_indices.end());
+        auto contains_sorted_index = [](const std::vector<size_t>& indices, size_t index) {
+            return std::binary_search(indices.begin(), indices.end(), index);
+        };
 
         draw_waveform(model, content, t);
         if (model.loop_end_tick > model.loop_start_tick &&
@@ -362,11 +362,9 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
                             line.major ? 16 : 14, line.major ? t.text : t.text_secondary);
         }
 
-        const std::set<size_t> preview_note_indices(
-            model.preview_note_indices.begin(), model.preview_note_indices.end());
         for (size_t i = 0; i < model.notes.size(); ++i) {
             const editor_timeline_note& note = model.notes[i];
-            if (preview_note_indices.find(note.source_index) != preview_note_indices.end()) {
+            if (contains_sorted_index(model.preview_note_indices, note.source_index)) {
                 continue;
             }
             if (note.lane < 0 || note.lane >= model.metrics.key_count) {
@@ -374,7 +372,7 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
             }
 
             const editor_timeline_note_draw_info info = model.metrics.note_rects(note);
-            const bool selected = selected_note_indices.find(note.source_index) != selected_note_indices.end();
+            const bool selected = contains_sorted_index(model.selected_note_indices, note.source_index);
             Color head_fill = selected ? t.row_active : t.note_color;
             if (!selected && note.type == editor_timeline_note_type::release) {
                 head_fill = lerp_color(t.note_color, t.judge_great, 0.35f);

@@ -25,7 +25,7 @@ std::vector<note_data> shifted_notes(std::vector<note_data> notes, int tick_delt
 bool can_place_notes(const editor_state& state, const std::vector<note_data>& notes) {
     return !notes.empty() &&
         !state.has_note_overlap(notes) &&
-        !editor::note_placement_rules::has_stay_stack(state.data(), notes);
+        !editor::note_placement_rules::has_stay_stack(state, notes);
 }
 
 std::vector<note_data> shifted_notes_to_open_slot(const editor_state& state, const std::vector<note_data>& source) {
@@ -116,7 +116,7 @@ editor_note_edit_result editor_note_edit_service::apply_timeline_notes(
     }
 
     if (timeline_result.note_to_add.has_value() &&
-        !editor::note_placement_rules::has_stay_stack(state.data(), *timeline_result.note_to_add)) {
+        !editor::note_placement_rules::has_stay_stack(state, *timeline_result.note_to_add)) {
         state.add_note(*timeline_result.note_to_add);
         result.changed = true;
         result.selected_note_indices = state.data().notes.empty()
@@ -127,7 +127,7 @@ editor_note_edit_result editor_note_edit_service::apply_timeline_notes(
 
     if (timeline_result.note_to_modify_index.has_value() && timeline_result.note_to_modify.has_value() &&
         !editor::note_placement_rules::has_stay_stack(
-            state.data(), *timeline_result.note_to_modify, timeline_result.note_to_modify_index)) {
+            state, *timeline_result.note_to_modify, timeline_result.note_to_modify_index)) {
         if (state.modify_note(*timeline_result.note_to_modify_index, *timeline_result.note_to_modify)) {
             result.changed = true;
             result.selected_note_indices = {*timeline_result.note_to_modify_index};
@@ -149,7 +149,7 @@ editor_note_edit_result editor_note_edit_service::apply_timeline_notes(
     }
 
     if (!state.has_note_overlap(updated_notes, ignore_indices) &&
-        !editor::note_placement_rules::has_stay_stack(state.data(), updated_notes, ignore_indices) &&
+        !editor::note_placement_rules::has_stay_stack(state, updated_notes, ignore_indices) &&
         state.modify_notes(timeline_result.notes_to_modify)) {
         result.changed = true;
         result.selected_note_indices = timeline_result.selected_note_indices;
