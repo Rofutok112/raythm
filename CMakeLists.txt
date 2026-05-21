@@ -128,6 +128,8 @@ set_source_files_properties("${RAYTHM_GENERATED_ICON_CPP}" "${RAYTHM_GENERATED_I
 add_executable(raythm WIN32 src/main.cpp
         src/audio/audio.cpp
         src/audio/audio.h
+        src/audio/audio_loudness.cpp
+        src/audio/audio_loudness.h
         src/audio/audio_manager.cpp
         src/audio/audio_manager.h
         src/mv/lang/mv_lexer.cpp
@@ -1003,6 +1005,8 @@ add_executable(editor_panel_controller_smoke
 add_executable(audio_manager_smoke
         src/audio/audio.cpp
         src/audio/audio.h
+        src/audio/audio_loudness.cpp
+        src/audio/audio_loudness.h
         src/audio/audio_manager.cpp
         src/audio/audio_manager.h
         src/tests/audio_manager_smoke.cpp)

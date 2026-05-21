@@ -12,7 +12,7 @@ std::filesystem::path repo_root() {
 }
 
 int main() {
-    const std::filesystem::path audio_path = repo_root() / "assets" / "audio" / "hitsound.mp3" ;
+    const std::filesystem::path audio_path = repo_root() / "assets" / "audio" / "HitSound_Tap.mp3" ;
     if (!std::filesystem::exists(audio_path)) {
         std::cerr << "Audio asset not found: " << audio_path.string() << '\n';
         return 1;
@@ -26,6 +26,16 @@ int main() {
 
     if (!manager.load_bgm(audio_path.string())) {
         std::cerr << "BGM load failed\n";
+        return 1;
+    }
+    const audio_loudness_analysis bgm_loudness = manager.get_bgm_loudness_analysis();
+    if (!bgm_loudness.valid || bgm_loudness.linear_gain <= 0.0f || bgm_loudness.peak <= 0.0f) {
+        std::cerr << "BGM loudness analysis failed\n";
+        return 1;
+    }
+    manager.set_loudness_normalization_enabled(true);
+    if (!manager.is_loudness_normalization_enabled()) {
+        std::cerr << "Loudness normalization flag did not update\n";
         return 1;
     }
     const audio_clock_snapshot initial_clock = manager.get_bgm_clock();

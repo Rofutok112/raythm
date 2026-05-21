@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <future>
+#include <mutex>
+#include <optional>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -32,6 +34,12 @@ struct se_voice_entry {
     std::string sample_path;
 };
 
+struct loudness_cache_entry {
+    std::uintmax_t file_size = 0;
+    std::filesystem::file_time_type last_write_time = {};
+    audio_loudness_analysis analysis;
+};
+
 std::unordered_map<std::string, se_sample_entry>& se_samples() {
     static std::unordered_map<std::string, se_sample_entry> samples;
     return samples;
@@ -45,6 +53,35 @@ std::unordered_map<int, se_voice_entry>& se_voices() {
 std::uint64_t& se_sample_generation() {
     static std::uint64_t generation = 0;
     return generation;
+}
+
+std::unordered_map<std::string, loudness_cache_entry>& loudness_cache() {
+    static std::unordered_map<std::string, loudness_cache_entry> cache;
+    return cache;
+}
+
+std::mutex& loudness_cache_mutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::optional<loudness_cache_entry> make_loudness_cache_probe(const std::string& file_path) {
+    std::error_code ec;
+    const std::filesystem::path path(file_path);
+    if (!std::filesystem::is_regular_file(path, ec) || ec) {
+        return std::nullopt;
+    }
+
+    loudness_cache_entry entry;
+    entry.file_size = std::filesystem::file_size(path, ec);
+    if (ec) {
+        return std::nullopt;
+    }
+    entry.last_write_time = std::filesystem::last_write_time(path, ec);
+    if (ec) {
+        return std::nullopt;
+    }
+    return entry;
 }
 
 std::string lowercase_ascii(std::string value) {
@@ -199,6 +236,7 @@ bool audio_manager::load_bgm(const std::string& file_path) {
         return false;
     }
     replace_voice(bgm_handle_, file_path);
+    bgm_loudness_ = analyze_or_get_cached_loudness(file_path);
     apply_bgm_volume();
     return is_voice_loaded(bgm_handle_);
 }
@@ -223,6 +261,24 @@ void audio_manager::stop_bgm() {
 void audio_manager::set_bgm_volume(float volume) {
     bgm_volume_ = std::clamp(volume, 0.0f, 1.0f);
     apply_bgm_volume();
+}
+
+void audio_manager::set_loudness_normalization_enabled(bool enabled) {
+    loudness_normalization_enabled_ = enabled;
+    apply_bgm_volume();
+    apply_preview_volume();
+}
+
+bool audio_manager::is_loudness_normalization_enabled() const {
+    return loudness_normalization_enabled_;
+}
+
+audio_loudness_analysis audio_manager::get_bgm_loudness_analysis() const {
+    return bgm_loudness_;
+}
+
+audio_loudness_analysis audio_manager::get_preview_loudness_analysis() const {
+    return preview_loudness_;
 }
 
 void audio_manager::seek_bgm(double seconds) {
@@ -347,6 +403,8 @@ bool audio_manager::load_preview(const std::string& file_path) {
     }
     preview_loading_ = false;
     replace_voice(preview_handle_, file_path);
+    preview_path_ = file_path;
+    preview_loudness_ = analyze_or_get_cached_loudness(file_path);
     apply_preview_volume();
     return is_voice_loaded(preview_handle_);
 }
@@ -366,6 +424,8 @@ bool audio_manager::request_preview_load(const std::string& file_path) {
     free_voice(preview_handle_);
     preview_loading_ = true;
     const std::string source = file_path;
+    preview_path_ = file_path;
+    preview_loudness_ = {};
     const unsigned int generation = active_preview_load_generation_;
     std::promise<preview_load_payload> promise;
     preview_load_future_ = promise.get_future();
@@ -423,6 +483,7 @@ audio_manager::async_preview_load_result audio_manager::poll_preview_load() {
 
     free_voice(preview_handle_);
     preview_handle_ = loaded.handle;
+    preview_loudness_ = analyze_or_get_cached_loudness(preview_path_);
     apply_preview_volume();
     result.loaded = is_voice_loaded(preview_handle_);
     return result;
@@ -453,6 +514,8 @@ void audio_manager::unload_preview() {
     preview_loading_ = false;
     stop_voice(preview_handle_);
     free_voice(preview_handle_);
+    preview_path_.clear();
+    preview_loudness_ = {};
 }
 
 void audio_manager::set_preview_volume(float volume) {
@@ -737,14 +800,43 @@ void audio_manager::replace_voice(unsigned long& handle, const std::string& file
     handle = create_stream(file_path);
 }
 
+audio_loudness_analysis audio_manager::analyze_or_get_cached_loudness(const std::string& file_path) const {
+    const std::optional<loudness_cache_entry> probe = make_loudness_cache_probe(file_path);
+    if (!probe.has_value()) {
+        return {};
+    }
+
+    {
+        std::scoped_lock lock(loudness_cache_mutex());
+        const auto it = loudness_cache().find(file_path);
+        if (it != loudness_cache().end() &&
+            it->second.file_size == probe->file_size &&
+            it->second.last_write_time == probe->last_write_time) {
+            return it->second.analysis;
+        }
+    }
+
+    loudness_cache_entry entry = *probe;
+    entry.analysis = analyze_audio_loudness(file_path);
+
+    std::scoped_lock lock(loudness_cache_mutex());
+    loudness_cache()[file_path] = entry;
+    return entry.analysis;
+}
+
 void audio_manager::apply_bgm_volume() const {
     if (is_voice_loaded(bgm_handle_)) {
-        BASS_ChannelSetAttribute(bgm_handle_, BASS_ATTRIB_VOL, bgm_volume_);
+        const float normalized_gain =
+            loudness_normalization_enabled_ && bgm_loudness_.valid ? bgm_loudness_.linear_gain : 1.0f;
+        BASS_ChannelSetAttribute(bgm_handle_, BASS_ATTRIB_VOL, std::clamp(bgm_volume_ * normalized_gain, 0.0f, 4.0f));
     }
 }
 
 void audio_manager::apply_preview_volume() const {
     if (is_voice_loaded(preview_handle_)) {
-        BASS_ChannelSetAttribute(preview_handle_, BASS_ATTRIB_VOL, preview_volume_);
+        const float normalized_gain =
+            loudness_normalization_enabled_ && preview_loudness_.valid ? preview_loudness_.linear_gain : 1.0f;
+        BASS_ChannelSetAttribute(preview_handle_, BASS_ATTRIB_VOL,
+                                 std::clamp(preview_volume_ * normalized_gain, 0.0f, 4.0f));
     }
 }

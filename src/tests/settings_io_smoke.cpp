@@ -82,6 +82,7 @@ int main() {
         defaults.lane_width = 8.4f;
         defaults.note_height = 1.4f;
         defaults.target_fps = 240;
+        defaults.loudness_normalization_enabled = true;
         defaults.fullscreen = true;
         defaults.window_maximized = true;
         defaults.dark_mode = true;
@@ -106,6 +107,9 @@ int main() {
                ok);
         expect(loaded.target_fps == defaults.target_fps,
                "Expected default target FPS to be written to settings.json.",
+               ok);
+        expect(loaded.loudness_normalization_enabled == defaults.loudness_normalization_enabled,
+               "Expected loudness normalization setting to be written to settings.json.",
                ok);
         expect(loaded.fullscreen == defaults.fullscreen,
                "Expected default fullscreen flag to be written to settings.json.",
@@ -146,6 +150,9 @@ int main() {
         const std::string language_token = "\"language\": \"ja\"";
         expect(content.find("\"windowMaximized\": true") != std::string::npos,
                "Expected windowMaximized key to be present in settings.json.",
+               ok);
+        expect(content.find("\"loudnessNormalizationEnabled\": true") != std::string::npos,
+               "Expected loudnessNormalizationEnabled key to be present in settings.json.",
                ok);
         const size_t language_pos = content.find(language_token);
         expect(language_pos != std::string::npos,
