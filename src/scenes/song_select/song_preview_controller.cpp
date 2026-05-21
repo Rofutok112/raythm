@@ -54,7 +54,8 @@ void preview_controller::update(float dt, const song_entry* selected_song) {
         if (load_result.loaded && selected_song != nullptr &&
             selected_song->song.meta.song_id == preview_song_id_) {
             audio.seek_preview(preview_load_song_->meta.preview_start_seconds);
-            audio.set_preview_volume(0.0f);
+            audio.set_preview_volume(g_settings.bgm_volume);
+            audio.set_preview_fade_gain(0.0f);
             audio.play_preview(false);
             preview_volume_ = 0.0f;
             active_preview_song_ = preview_load_song_;
@@ -70,7 +71,8 @@ void preview_controller::update(float dt, const song_entry* selected_song) {
 
     if (preview_fade_direction_ < 0) {
         preview_volume_ = std::max(0.0f, preview_volume_ - dt * kPreviewFadeSpeed);
-        audio.set_preview_volume(preview_volume_ * g_settings.bgm_volume);
+        audio.set_preview_volume(g_settings.bgm_volume);
+        audio.set_preview_fade_gain(preview_volume_);
         if (preview_volume_ <= 0.0f) {
             audio.stop_preview();
             preview_song_id_.clear();
@@ -86,7 +88,8 @@ void preview_controller::update(float dt, const song_entry* selected_song) {
         }
     } else if (preview_fade_direction_ > 0) {
         preview_volume_ = std::min(kPreviewMaxVolume, preview_volume_ + dt * kPreviewFadeSpeed);
-        audio.set_preview_volume(preview_volume_ * g_settings.bgm_volume);
+        audio.set_preview_volume(g_settings.bgm_volume);
+        audio.set_preview_fade_gain(preview_volume_);
         if (preview_volume_ >= kPreviewMaxVolume) {
             preview_fade_direction_ = 0;
         }
@@ -122,7 +125,8 @@ void preview_controller::resume(const song_entry* song) {
         active_preview_song_ = song->song;
         preview_fade_direction_ = 0;
         preview_volume_ = std::max(preview_volume_, kPreviewMaxVolume);
-        audio.set_preview_volume(preview_volume_ * g_settings.bgm_volume);
+        audio.set_preview_volume(g_settings.bgm_volume);
+        audio.set_preview_fade_gain(preview_volume_);
         audio.play_preview(false);
         return;
     }
