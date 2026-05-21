@@ -37,6 +37,10 @@ void draw_to_screen(bool use_alpha = false);
 // 物理スクリーンのマウス座標を仮想座標に変換する。
 Vector2 get_virtual_mouse();
 
+// 物理スクリーン全体に対応する仮想座標の表示範囲を返す。
+// 16:9 ボックス外の左右/上下余白は負座標や 1920x1080 外として表現される。
+Rectangle visible_rect();
+
 // 1920x1080 の論理座標が、実画面へどれだけ拡大されているかを返す。
 float design_to_screen_scale();
 

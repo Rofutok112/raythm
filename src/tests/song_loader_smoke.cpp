@@ -101,6 +101,33 @@ std::filesystem::path write_temp_song_with_legacy_preview_fields() {
     return song_dir;
 }
 
+std::filesystem::path write_temp_song_with_legacy_timing_resolution() {
+    const std::filesystem::path song_dir =
+        std::filesystem::temp_directory_path() / "raythm_song_loader_legacy_timing_resolution";
+    std::error_code ec;
+    std::filesystem::remove_all(song_dir, ec);
+    std::filesystem::create_directories(song_dir);
+    std::ofstream output(song_dir / "song.json", std::ios::trunc);
+    output << "{\n"
+           << "  \"songId\": \"legacy-timing-resolution\",\n"
+           << "  \"title\": \"Legacy Timing Resolution\",\n"
+           << "  \"artist\": \"Codex\",\n"
+           << "  \"baseBpm\": 120,\n"
+           << "  \"timingResolution\": 960,\n"
+           << "  \"offset\": 12,\n"
+           << "  \"timingEvents\": [\n"
+           << "    {\"type\": \"bpm\", \"tick\": 0, \"bpm\": 120},\n"
+           << "    {\"type\": \"meter\", \"tick\": 0, \"numerator\": 4, \"denominator\": 4},\n"
+           << "    {\"type\": \"bpm\", \"tick\": 480, \"bpm\": 150}\n"
+           << "  ],\n"
+           << "  \"audioFile\": \"audio.ogg\",\n"
+           << "  \"jacketFile\": \"jacket.png\",\n"
+           << "  \"previewStartMs\": 0,\n"
+           << "  \"songVersion\": 1\n"
+           << "}\n";
+    return song_dir;
+}
+
 }
 
 int main() {
@@ -179,6 +206,25 @@ int main() {
     }
     std::filesystem::remove_all(legacy_preview_song);
 
+    const std::filesystem::path legacy_timing_song = write_temp_song_with_legacy_timing_resolution();
+    const song_load_result legacy_timing_result = song_loader::load_directory(legacy_timing_song.string());
+    if (legacy_timing_result.songs.size() != 1 ||
+        legacy_timing_result.songs.front().meta.offset != 12 ||
+        legacy_timing_result.songs.front().meta.timing_events.size() != 3) {
+        std::cerr << "Expected legacy timingResolution to be ignored while loading song timing"
+                  << " (songs=" << legacy_timing_result.songs.size();
+        if (!legacy_timing_result.songs.empty()) {
+            std::cerr << ", offset=" << legacy_timing_result.songs.front().meta.offset
+                      << ", timingCount=" << legacy_timing_result.songs.front().meta.timing_events.size();
+        }
+        std::cerr << ")\n";
+        for (const std::string& error : legacy_timing_result.errors) {
+            std::cerr << "  " << error << '\n';
+        }
+        ok = false;
+    }
+    std::filesystem::remove_all(legacy_timing_song);
+
     const std::filesystem::path written_song_dir =
         std::filesystem::temp_directory_path() / "raythm_song_writer_external_id";
     std::filesystem::remove_all(written_song_dir, ec);
@@ -186,9 +232,17 @@ int main() {
     written_meta.song_id = "external-local-id";
     written_meta.title = "Written Song";
     written_meta.artist = "Codex";
-    written_meta.genre = "Artcore";
+    written_meta.genres = {"Artcore", "Drum and bass"};
+    written_meta.keywords = {"Boss song"};
     written_meta.duration_seconds = 123.0f;
     written_meta.base_bpm = 128.0f;
+    written_meta.offset = -25;
+    written_meta.has_offset = true;
+    written_meta.timing_events = {
+        {timing_event_type::bpm, 0, 128.0f, 4, 4},
+        {timing_event_type::meter, 0, 0.0f, 4, 4},
+        {timing_event_type::bpm, 480, 160.0f, 4, 4},
+    };
     written_meta.audio_file = "audio.ogg";
     written_meta.jacket_file = "jacket.png";
     written_meta.preview_start_ms = 0;
@@ -204,12 +258,29 @@ int main() {
             std::cerr << "Expected song writer to persist songId in song.json\n";
             ok = false;
         }
-        if (written_content.find("\"genre\": \"Artcore\"") == std::string::npos) {
-            std::cerr << "Expected song writer to persist genre in song.json\n";
+        if (written_content.find("\"genres\": [\"Artcore\", \"Drum and bass\"]") == std::string::npos) {
+            std::cerr << "Expected song writer to persist genres in song.json\n";
+            ok = false;
+        }
+        if (written_content.find("\"keywords\": [\"Boss song\"]") == std::string::npos) {
+            std::cerr << "Expected song writer to persist keywords in song.json\n";
+            ok = false;
+        }
+        if (written_content.find("\"genre\"") != std::string::npos) {
+            std::cerr << "Expected song writer to omit legacy genre in song.json\n";
             ok = false;
         }
         if (written_content.find("\"durationSec\": 123") == std::string::npos) {
             std::cerr << "Expected song writer to persist durationSec in song.json\n";
+            ok = false;
+        }
+        if (written_content.find("\"timingResolution\"") != std::string::npos) {
+            std::cerr << "Expected song writer to omit fixed timingResolution from song.json\n";
+            ok = false;
+        }
+        if (written_content.find("\"offset\": -25") == std::string::npos ||
+            written_content.find("\"timingEvents\"") == std::string::npos) {
+            std::cerr << "Expected song writer to persist song-level offset and timingEvents\n";
             ok = false;
         }
         if (written_content.find("sns") != std::string::npos) {
@@ -218,8 +289,22 @@ int main() {
         }
         const song_load_result written_load_result = song_loader::load_directory(written_song_dir.string());
         if (written_load_result.songs.size() != 1 ||
-            written_load_result.songs.front().meta.duration_seconds != 123.0f) {
-            std::cerr << "Expected song loader to parse durationSec from song.json\n";
+            written_load_result.songs.front().meta.duration_seconds != 123.0f ||
+            !written_load_result.songs.front().meta.has_offset ||
+            written_load_result.songs.front().meta.offset != -25 ||
+            written_load_result.songs.front().meta.timing_events.size() != 3) {
+            std::cerr << "Expected song loader to parse durationSec, offset, and timingEvents from song.json"
+                      << " (songs=" << written_load_result.songs.size();
+            if (!written_load_result.songs.empty()) {
+                std::cerr << ", duration=" << written_load_result.songs.front().meta.duration_seconds
+                          << ", hasOffset=" << written_load_result.songs.front().meta.has_offset
+                          << ", offset=" << written_load_result.songs.front().meta.offset
+                          << ", timingCount=" << written_load_result.songs.front().meta.timing_events.size();
+            }
+            std::cerr << ")\n";
+            for (const std::string& error : written_load_result.errors) {
+                std::cerr << "  " << error << '\n';
+            }
             ok = false;
         }
     }
@@ -260,6 +345,38 @@ int main() {
     if (updater::compute_sha256_hex(std::string_view(song_fingerprint::build(song_json_local))) !=
         updater::compute_sha256_hex(std::string_view(song_fingerprint::build(song_json_server)))) {
         std::cerr << "Expected song fingerprint to ignore storage-only song metadata differences\n";
+        ok = false;
+    }
+    const std::string song_json_with_legacy_resolution =
+        "{\n"
+        "  \"title\": \"Same\",\n"
+        "  \"artist\": \"Codex\",\n"
+        "  \"baseBpm\": 125,\n"
+        "  \"timingResolution\": 960,\n"
+        "  \"offset\": 12,\n"
+        "  \"timingEvents\": [{\"type\":\"bpm\",\"tick\":0,\"bpm\":125}],\n"
+        "  \"previewStartMs\": 1200,\n"
+        "  \"songVersion\": 1\n"
+        "}\n";
+    const std::string song_json_without_legacy_resolution =
+        "{\n"
+        "  \"title\": \"Same\",\n"
+        "  \"artist\": \"Codex\",\n"
+        "  \"baseBpm\": 125,\n"
+        "  \"offset\": 12,\n"
+        "  \"timingEvents\": [{\"type\":\"bpm\",\"tick\":0,\"bpm\":125}],\n"
+        "  \"previewStartMs\": 1200,\n"
+        "  \"songVersion\": 1\n"
+        "}\n";
+    const std::string legacy_resolution_fingerprint =
+        song_fingerprint::build(song_json_with_legacy_resolution);
+    if (updater::compute_sha256_hex(std::string_view(legacy_resolution_fingerprint)) !=
+        updater::compute_sha256_hex(std::string_view(song_fingerprint::build(song_json_without_legacy_resolution)))) {
+        std::cerr << "Expected song fingerprint to ignore legacy timingResolution differences\n";
+        ok = false;
+    }
+    if (legacy_resolution_fingerprint.find("timingResolution") != std::string::npos) {
+        std::cerr << "Expected song fingerprint canonical string to omit timingResolution\n";
         ok = false;
     }
     const std::string escaped_song_json =

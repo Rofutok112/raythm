@@ -30,10 +30,18 @@ chart_data make_new_chart_data(const editor_start_request& request) {
         data.meta.offset = 0;
     }
     data.meta.song_id = request.song.meta.song_id;
-    data.timing_events = {
-        {timing_event_type::bpm, 0, std::max(request.song.meta.base_bpm, 120.0f), 4, 4},
-        {timing_event_type::meter, 0, 0.0f, 4, 4},
-    };
+    if (!request.song.meta.timing_events.empty()) {
+        data.timing_events = request.song.meta.timing_events;
+        data.meta.resolution = 480;
+    } else {
+        data.timing_events = {
+            {timing_event_type::bpm, 0, std::max(request.song.meta.base_bpm, 120.0f), 4, 4},
+            {timing_event_type::meter, 0, 0.0f, 4, 4},
+        };
+    }
+    if (request.song.meta.has_offset) {
+        data.meta.offset = request.song.meta.offset;
+    }
     return data;
 }
 
@@ -107,7 +115,12 @@ editor_session_load_result load(const editor_start_request& request) {
     result.waveform_offset_ms = 0;
     result.ticks_per_pixel = request.resume_state.has_value() ? request.resume_state->ticks_per_pixel : 2.0f;
     result.snap_index = request.resume_state.has_value() ? request.resume_state->snap_index : 4;
-    result.selected_note_index = request.resume_state.has_value() ? request.resume_state->selected_note_index : std::nullopt;
+    result.selected_note_indices = request.resume_state.has_value() ? request.resume_state->selected_note_indices : std::vector<size_t>{};
+    result.selected_note_indices.erase(
+        std::remove_if(result.selected_note_indices.begin(), result.selected_note_indices.end(), [&](size_t index) {
+            return index >= result.state->data().notes.size();
+        }),
+        result.selected_note_indices.end());
 
     if (request.resume_state.has_value()) {
         result.chart_path = result.state->file_path().empty()
@@ -149,7 +162,7 @@ editor_session_load_result load(const editor_start_request& request) {
         result.meter_map,
         result.timing_panel,
         result.metadata_panel,
-        result.selected_note_index,
+        result.selected_note_indices,
     };
     editor_scene_sync::sync_metadata_inputs(sync_context);
     editor_scene_sync::load_timing_event_inputs(sync_context);
@@ -183,6 +196,9 @@ editor_session_load_result load(const editor_start_request& request) {
     editor_transport_context transport_context;
     transport_context.state = result.state.get();
     transport_context.audio_loaded = result.audio_loaded;
+    transport_context.playback_tick = request.resume_state.has_value()
+        ? request.resume_state->playback_tick
+        : 0;
     transport_context.previous_playback_tick = 0;
     transport_context.previous_audio_playing = false;
     transport_context.hitsound_path = &result.hitsound_path;
@@ -195,6 +211,7 @@ editor_session_load_result load(const editor_start_request& request) {
     const editor_transport_result transport_result = editor_transport_controller::sync(transport_context);
     result.audio_loaded = transport_result.audio_loaded;
     result.audio_playing = transport_result.audio_playing;
+    result.pre_audio_playing = transport_result.pre_audio_playing;
     result.audio_time_seconds = transport_result.audio_time_seconds;
     result.playback_tick = transport_result.playback_tick;
     result.previous_playback_tick = transport_result.previous_playback_tick;

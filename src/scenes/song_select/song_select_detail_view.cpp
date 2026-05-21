@@ -8,6 +8,7 @@
 #include "song_select/song_select_layout.h"
 #include "theme.h"
 #include "ui_draw.h"
+#include "ui/icons/raythm_icons.h"
 
 namespace {
 
@@ -49,6 +50,22 @@ Color rank_color(rank value) {
 
 std::string format_offset_label(int offset_ms) {
     return (offset_ms > 0 ? "+" : "") + std::to_string(offset_ms) + "ms";
+}
+
+Rectangle centered_icon_rect(Rectangle rect, float inset) {
+    const float size = std::max(1.0f, std::min(rect.width, rect.height) - inset * 2.0f);
+    return {
+        rect.x + (rect.width - size) * 0.5f,
+        rect.y + (rect.height - size) * 0.5f,
+        size,
+        size
+    };
+}
+
+void draw_icon_button(Rectangle rect, void (*draw_icon)(Rectangle, Color, float), Color base, Color hover, Color icon) {
+    ui::draw_button_colored(rect, "", 18, base, hover, icon);
+    const Rectangle visual = ui::is_pressed(rect) ? ui::inset(rect, 1.5f) : rect;
+    draw_icon(centered_icon_rect(visual, 13.0f), icon, 3.0f);
 }
 
 std::string format_recent_offset_label(float offset_ms) {
@@ -163,13 +180,14 @@ void draw_song_details(const state& state, const preview_controller& preview_con
         const float key_x = detail_x + content_offset_x + chart_offset_x;
         const float key_y = layout::kJacketRect.y + 126.0f;
         const float difficulty_x = key_x + 54.0f;
-        const float difficulty_width = detail_max_width - 54.0f;
-        const std::string difficulty_label =
-            selected_chart->meta.difficulty + "  Lv." + TextFormat("%.1f", selected_chart->meta.level);
+        const float difficulty_width = detail_max_width - 132.0f;
         ui::draw_text_f(key_mode_label(selected_chart->meta.key_count).c_str(), key_x, key_y, 28,
                         with_alpha(key_mode_color(selected_chart->meta.key_count), chart_alpha));
-        draw_marquee_text(difficulty_label.c_str(), difficulty_x, key_y, 28,
+        draw_marquee_text(selected_chart->meta.difficulty.c_str(), difficulty_x, key_y, 28,
                           with_alpha(theme.text, chart_alpha), difficulty_width, now);
+        draw_difficulty_level_badge(selected_chart->meta.level,
+                                    {difficulty_x + difficulty_width + 8.0f, key_y + 3.0f, 72.0f, 26.0f},
+                                    13, chart_alpha);
         content_status_badge::draw_compound(
             {difficulty_x, layout::kJacketRect.y + 158.0f, 100.0f, 22.0f},
             selected_chart->source_status, selected_chart->status, chart_alpha, 11);
@@ -203,14 +221,14 @@ void draw_song_details(const state& state, const preview_controller& preview_con
     ui::draw_text_in_rect(local_label.c_str(), 26, value_rect,
                           with_alpha(theme.accent, chart_alpha), ui::text_align::left);
 
-    ui::draw_button_colored(layout::local_offset_double_left_rect(), "<<", 18,
-                            theme.row, theme.row_hover, theme.text);
-    ui::draw_button_colored(layout::local_offset_left_rect(), "<", 18,
-                            theme.row, theme.row_hover, theme.text);
-    ui::draw_button_colored(layout::local_offset_right_rect(), ">", 18,
-                            theme.row, theme.row_hover, theme.text);
-    ui::draw_button_colored(layout::local_offset_double_right_rect(), ">>", 18,
-                            theme.row, theme.row_hover, theme.text);
+    draw_icon_button(layout::local_offset_double_left_rect(), raythm_icons::draw_chevrons_left,
+                     theme.row, theme.row_hover, theme.text);
+    draw_icon_button(layout::local_offset_left_rect(), raythm_icons::draw_chevron_left,
+                     theme.row, theme.row_hover, theme.text);
+    draw_icon_button(layout::local_offset_right_rect(), raythm_icons::draw_chevron_right,
+                     theme.row, theme.row_hover, theme.text);
+    draw_icon_button(layout::local_offset_double_right_rect(), raythm_icons::draw_chevrons_right,
+                     theme.row, theme.row_hover, theme.text);
 
     const std::string auto_apply_label = has_recent_result
         ? format_recent_offset_label(state.recent_result_offset->avg_offset_ms)

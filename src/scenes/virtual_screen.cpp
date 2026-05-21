@@ -30,6 +30,38 @@ Camera2D make_ui_camera() {
 const RenderTexture2D& current_target(render_mode mode) {
     return mode == render_mode::ui_highres ? ui_render_target_ : render_target_;
 }
+
+struct presentation_layout {
+    float screen_w = 1.0f;
+    float reserved_top = 0.0f;
+    float screen_h = 1.0f;
+    float source_w = 1.0f;
+    float source_h = 1.0f;
+    float scale = 1.0f;
+    float dest_w = 1.0f;
+    float dest_h = 1.0f;
+    float offset_x = 0.0f;
+    float offset_y = 0.0f;
+};
+
+presentation_layout make_presentation_layout() {
+    presentation_layout layout;
+    layout.screen_w = static_cast<float>(GetScreenWidth());
+    layout.reserved_top = static_cast<float>(std::clamp(top_reserved_pixels_, 0, std::max(0, GetScreenHeight() - 1)));
+    layout.screen_h = std::max(1.0f, static_cast<float>(GetScreenHeight()) - layout.reserved_top);
+    const RenderTexture2D& target = current_target(present_mode_);
+    layout.source_w = static_cast<float>(target.texture.width);
+    layout.source_h = static_cast<float>(target.texture.height);
+
+    const float scale_x = layout.screen_w / layout.source_w;
+    const float scale_y = layout.screen_h / layout.source_h;
+    layout.scale = (scale_x < scale_y) ? scale_x : scale_y;
+    layout.dest_w = std::round(layout.source_w * layout.scale);
+    layout.dest_h = std::round(layout.source_h * layout.scale);
+    layout.offset_x = std::round((layout.screen_w - layout.dest_w) * 0.5f);
+    layout.offset_y = layout.reserved_top + std::round((layout.screen_h - layout.dest_h) * 0.5f);
+    return layout;
+}
 }  // namespace
 
 namespace virtual_screen {
@@ -38,7 +70,7 @@ void init() {
     render_target_ = LoadRenderTexture(kDesignWidth, kDesignHeight);
     ui_render_target_ = LoadRenderTexture(kDesignWidth * kUiRenderScale, kDesignHeight * kUiRenderScale);
     SetTextureFilter(render_target_.texture, TEXTURE_FILTER_POINT);
-    SetTextureFilter(ui_render_target_.texture, TEXTURE_FILTER_POINT);
+    SetTextureFilter(ui_render_target_.texture, TEXTURE_FILTER_BILINEAR);
     active_mode_ = render_mode::none;
     present_mode_ = render_mode::standard;
     initialized_ = true;
@@ -84,46 +116,34 @@ void end() {
 }
 
 void draw_to_screen(bool use_alpha) {
-    const float screen_w = static_cast<float>(GetScreenWidth());
-    const float reserved_top = static_cast<float>(std::clamp(top_reserved_pixels_, 0, std::max(0, GetScreenHeight() - 1)));
-    const float screen_h = std::max(1.0f, static_cast<float>(GetScreenHeight()) - reserved_top);
+    const presentation_layout layout = make_presentation_layout();
     const RenderTexture2D& target = current_target(present_mode_);
-    const float source_w = static_cast<float>(target.texture.width);
-    const float source_h = static_cast<float>(target.texture.height);
-
-    // 16:9 を前提としてウィンドウ全体にフィットさせる
-    const float scale_x = screen_w / source_w;
-    const float scale_y = screen_h / source_h;
-    const float scale = (scale_x < scale_y) ? scale_x : scale_y;
-
-    const float dest_w = std::round(source_w * scale);
-    const float dest_h = std::round(source_h * scale);
-    const float offset_x = std::round((screen_w - dest_w) * 0.5f);
-    const float offset_y = reserved_top + std::round((screen_h - dest_h) * 0.5f);
 
     // RenderTexture は OpenGL 座標系で上下反転しているため source.height を負にする
-    const Rectangle source = {0.0f, 0.0f, source_w, -source_h};
-    const Rectangle dest = {offset_x, offset_y, dest_w, dest_h};
+    const Rectangle source = {0.0f, 0.0f, layout.source_w, -layout.source_h};
+    const Rectangle dest = {layout.offset_x, layout.offset_y, layout.dest_w, layout.dest_h};
 
     if (!use_alpha) {
-        if (offset_y > 0.0f) {
+        if (layout.offset_y > 0.0f) {
             DrawTexturePro(target.texture,
-                           {0.0f, source_h - 1.0f, source_w, -1.0f},
-                           {0.0f, reserved_top, screen_w, offset_y - reserved_top},
+                           {0.0f, layout.source_h - 1.0f, layout.source_w, -1.0f},
+                           {0.0f, layout.reserved_top, layout.screen_w, layout.offset_y - layout.reserved_top},
                            {0.0f, 0.0f}, 0.0f, WHITE);
             DrawTexturePro(target.texture,
-                           {0.0f, 0.0f, source_w, -1.0f},
-                           {0.0f, offset_y + dest_h, screen_w, screen_h - offset_y - dest_h},
+                           {0.0f, 0.0f, layout.source_w, -1.0f},
+                           {0.0f, layout.offset_y + layout.dest_h,
+                            layout.screen_w, layout.screen_h - layout.offset_y - layout.dest_h},
                            {0.0f, 0.0f}, 0.0f, WHITE);
         }
-        if (offset_x > 0.0f) {
+        if (layout.offset_x > 0.0f) {
             DrawTexturePro(target.texture,
-                           {0.0f, 0.0f, 1.0f, -source_h},
-                           {0.0f, offset_y, offset_x, dest_h},
+                           {0.0f, 0.0f, 1.0f, -layout.source_h},
+                           {0.0f, layout.offset_y, layout.offset_x, layout.dest_h},
                            {0.0f, 0.0f}, 0.0f, WHITE);
             DrawTexturePro(target.texture,
-                           {source_w - 1.0f, 0.0f, 1.0f, -source_h},
-                           {offset_x + dest_w, offset_y, screen_w - offset_x - dest_w, dest_h},
+                           {layout.source_w - 1.0f, 0.0f, 1.0f, -layout.source_h},
+                           {layout.offset_x + layout.dest_w, layout.offset_y,
+                            layout.screen_w - layout.offset_x - layout.dest_w, layout.dest_h},
                            {0.0f, 0.0f}, 0.0f, WHITE);
         }
     }
@@ -134,36 +154,31 @@ void draw_to_screen(bool use_alpha) {
 
 Vector2 get_virtual_mouse() {
     const Vector2 physical = GetMousePosition();
-    const float screen_w = static_cast<float>(GetScreenWidth());
-    const float reserved_top = static_cast<float>(std::clamp(top_reserved_pixels_, 0, std::max(0, GetScreenHeight() - 1)));
-    const float screen_h = std::max(1.0f, static_cast<float>(GetScreenHeight()) - reserved_top);
+    const presentation_layout layout = make_presentation_layout();
 
-    const float source_w = static_cast<float>(current_target(present_mode_).texture.width);
-    const float source_h = static_cast<float>(current_target(present_mode_).texture.height);
-    const float scale_x = screen_w / source_w;
-    const float scale_y = screen_h / source_h;
-    const float scale = (scale_x < scale_y) ? scale_x : scale_y;
-
-    const float dest_w = std::round(source_w * scale);
-    const float dest_h = std::round(source_h * scale);
-    const float offset_x = std::round((screen_w - dest_w) * 0.5f);
-    const float offset_y = reserved_top + std::round((screen_h - dest_h) * 0.5f);
-
-    const float normalized_x = (physical.x - offset_x) / dest_w;
-    const float normalized_y = (physical.y - offset_y) / dest_h;
+    const float normalized_x = (physical.x - layout.offset_x) / layout.dest_w;
+    const float normalized_y = (physical.y - layout.offset_y) / layout.dest_h;
     return {
         normalized_x * static_cast<float>(kDesignWidth),
         normalized_y * static_cast<float>(kDesignHeight),
     };
 }
 
+Rectangle visible_rect() {
+    const presentation_layout layout = make_presentation_layout();
+    const float scale_x = static_cast<float>(kDesignWidth) / std::max(1.0f, layout.dest_w);
+    const float scale_y = static_cast<float>(kDesignHeight) / std::max(1.0f, layout.dest_h);
+    return {
+        -layout.offset_x * scale_x,
+        (layout.reserved_top - layout.offset_y) * scale_y,
+        layout.screen_w * scale_x,
+        layout.screen_h * scale_y,
+    };
+}
+
 float design_to_screen_scale() {
-    const float screen_w = static_cast<float>(GetScreenWidth());
-    const float reserved_top = static_cast<float>(std::clamp(top_reserved_pixels_, 0, std::max(0, GetScreenHeight() - 1)));
-    const float screen_h = std::max(1.0f, static_cast<float>(GetScreenHeight()) - reserved_top);
-    const float scale_x = screen_w / static_cast<float>(kDesignWidth);
-    const float scale_y = screen_h / static_cast<float>(kDesignHeight);
-    return (scale_x < scale_y) ? scale_x : scale_y;
+    const presentation_layout layout = make_presentation_layout();
+    return layout.dest_w / static_cast<float>(kDesignWidth);
 }
 
 float current_render_scale() {

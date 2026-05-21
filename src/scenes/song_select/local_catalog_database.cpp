@@ -10,6 +10,7 @@
 
 #include "app_paths.h"
 #include "local_sqlite.h"
+#include "network/json_helpers.h"
 #include "sqlite3.h"
 
 namespace song_select::local_catalog_database {
@@ -20,10 +21,15 @@ using local_sqlite::column_text;
 using local_sqlite::exec;
 using local_sqlite::statement;
 
+constexpr const char* kCatalogStatusSchema = "source-v3";
+
 void ensure_optional_schema(sqlite3* database) {
     exec(database, "ALTER TABLE local_songs ADD COLUMN genre TEXT NOT NULL DEFAULT '';");
     exec(database, "ALTER TABLE local_songs ADD COLUMN duration_seconds REAL NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_songs ADD COLUMN source_status TEXT NOT NULL DEFAULT 'local';");
+    exec(database, "ALTER TABLE local_songs ADD COLUMN song_offset INTEGER NOT NULL DEFAULT 0;");
+    exec(database, "ALTER TABLE local_songs ADD COLUMN song_has_offset INTEGER NOT NULL DEFAULT 0;");
+    exec(database, "ALTER TABLE local_songs ADD COLUMN timing_events TEXT NOT NULL DEFAULT '';");
     exec(database, "ALTER TABLE local_charts ADD COLUMN min_bpm REAL NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_charts ADD COLUMN max_bpm REAL NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_charts ADD COLUMN source_status TEXT NOT NULL DEFAULT 'local';");
@@ -47,6 +53,9 @@ bool ensure_schema(sqlite3* database) {
              "song_version INTEGER NOT NULL,"
              "status TEXT NOT NULL,"
              "source_status TEXT NOT NULL DEFAULT 'local',"
+             "song_offset INTEGER NOT NULL DEFAULT 0,"
+             "song_has_offset INTEGER NOT NULL DEFAULT 0,"
+             "timing_events TEXT NOT NULL DEFAULT '',"
              "updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))"
              ");") &&
         exec(database,
@@ -162,11 +171,99 @@ content_status parse_status(std::string value) {
     return content_status::local;
 }
 
+std::string timing_type_label(timing_event_type type) {
+    switch (type) {
+    case timing_event_type::meter:
+        return "meter";
+    case timing_event_type::bpm:
+    default:
+        return "bpm";
+    }
+}
+
+std::optional<timing_event_type> parse_timing_type(const std::string& value) {
+    if (value == "bpm") {
+        return timing_event_type::bpm;
+    }
+    if (value == "meter") {
+        return timing_event_type::meter;
+    }
+    return std::nullopt;
+}
+
+std::string serialize_timing_events(const std::vector<timing_event>& events) {
+    if (events.empty()) {
+        return {};
+    }
+
+    std::ostringstream output;
+    output << "[";
+    for (size_t index = 0; index < events.size(); ++index) {
+        const timing_event& event = events[index];
+        if (index > 0) {
+            output << ",";
+        }
+        output << "{\"type\":\"" << timing_type_label(event.type) << "\",\"tick\":" << event.tick;
+        if (event.type == timing_event_type::bpm) {
+            output << ",\"bpm\":" << event.bpm;
+        } else {
+            output << ",\"numerator\":" << event.numerator << ",\"denominator\":" << event.denominator;
+        }
+        output << "}";
+    }
+    output << "]";
+    return output.str();
+}
+
+std::vector<timing_event> parse_timing_events(const std::string& value) {
+    std::vector<timing_event> events;
+    if (value.empty()) {
+        return events;
+    }
+
+    const std::vector<std::string> objects = network::json::extract_objects_from_array(value);
+    events.reserve(objects.size());
+    for (const std::string& object : objects) {
+        const std::optional<std::string> type_token = network::json::extract_string(object, "type");
+        const std::optional<int> tick = network::json::extract_int(object, "tick");
+        if (!type_token.has_value() || !tick.has_value() || *tick < 0) {
+            continue;
+        }
+
+        const std::optional<timing_event_type> type = parse_timing_type(*type_token);
+        if (!type.has_value()) {
+            continue;
+        }
+
+        timing_event event;
+        event.type = *type;
+        event.tick = *tick;
+        if (*type == timing_event_type::bpm) {
+            const std::optional<float> bpm = network::json::extract_float(object, "bpm");
+            if (!bpm.has_value() || *bpm <= 0.0f) {
+                continue;
+            }
+            event.bpm = *bpm;
+        } else {
+            const std::optional<int> numerator = network::json::extract_int(object, "numerator");
+            const std::optional<int> denominator = network::json::extract_int(object, "denominator");
+            if (!numerator.has_value() || !denominator.has_value() || *numerator <= 0 || *denominator <= 0) {
+                continue;
+            }
+            event.numerator = *numerator;
+            event.denominator = *denominator;
+        }
+        events.push_back(event);
+    }
+    return events;
+}
+
 void put_song(sqlite3* database, const song_entry& song) {
     statement query(database,
                     "INSERT INTO local_songs(song_id, title, artist, genre, directory, audio_file, jacket_file, "
-                    "base_bpm, duration_seconds, preview_start_ms, song_version, status, source_status, updated_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
+                    "base_bpm, duration_seconds, preview_start_ms, song_version, status, source_status, "
+                    "song_offset, song_has_offset, timing_events, updated_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
                     "ON CONFLICT(song_id) DO UPDATE SET "
                     "title = excluded.title,"
                     "artist = excluded.artist,"
@@ -180,6 +277,9 @@ void put_song(sqlite3* database, const song_entry& song) {
                     "song_version = excluded.song_version,"
                     "status = excluded.status,"
                     "source_status = excluded.source_status,"
+                    "song_offset = excluded.song_offset,"
+                    "song_has_offset = excluded.song_has_offset,"
+                    "timing_events = excluded.timing_events,"
                     "updated_at = excluded.updated_at;");
     if (!query.valid() || song.song.meta.song_id.empty()) {
         return;
@@ -198,6 +298,9 @@ void put_song(sqlite3* database, const song_entry& song) {
     sqlite3_bind_int(query.get(), 11, song.song.meta.song_version);
     bind_text(query.get(), 12, status_label(song.status));
     bind_text(query.get(), 13, status_label(song.source_status));
+    sqlite3_bind_int(query.get(), 14, song.song.meta.offset);
+    sqlite3_bind_int(query.get(), 15, song.song.meta.has_offset ? 1 : 0);
+    bind_text(query.get(), 16, serialize_timing_events(song.song.meta.timing_events));
     sqlite3_step(query.get());
 }
 
@@ -252,14 +355,15 @@ catalog_data load_cached_catalog() {
         current_catalog_signature()) {
         return catalog;
     }
-    if (local_sqlite::metadata_value(database.get(), "local_catalog.status_schema").value_or("") != "source-v1") {
+    if (local_sqlite::metadata_value(database.get(), "local_catalog.status_schema").value_or("") != kCatalogStatusSchema) {
         return catalog;
     }
 
     std::map<std::string, song_entry> by_song_id;
     statement songs(database.get(),
                     "SELECT song_id, title, artist, genre, directory, audio_file, jacket_file, base_bpm, "
-                    "duration_seconds, preview_start_ms, song_version, status, source_status "
+                    "duration_seconds, preview_start_ms, song_version, status, source_status, "
+                    "song_offset, song_has_offset, timing_events "
                     "FROM local_songs ORDER BY title, song_id;");
     if (!songs.valid()) {
         return catalog;
@@ -280,6 +384,9 @@ catalog_data load_cached_catalog() {
         entry.song.meta.song_version = sqlite3_column_int(songs.get(), 10);
         entry.status = parse_status(column_text(songs.get(), 11));
         entry.source_status = parse_status(column_text(songs.get(), 12));
+        entry.song.meta.offset = sqlite3_column_int(songs.get(), 13);
+        entry.song.meta.has_offset = sqlite3_column_int(songs.get(), 14) != 0;
+        entry.song.meta.timing_events = parse_timing_events(column_text(songs.get(), 15));
         if ((entry.status == content_status::official || entry.status == content_status::community) &&
             entry.source_status == content_status::local) {
             entry.source_status = entry.status;
@@ -350,7 +457,7 @@ void replace_catalog(const std::vector<song_entry>& songs) {
         }
     }
     local_sqlite::put_metadata(database.get(), "local_catalog.signature", current_catalog_signature());
-    local_sqlite::put_metadata(database.get(), "local_catalog.status_schema", "source-v1");
+    local_sqlite::put_metadata(database.get(), "local_catalog.status_schema", kCatalogStatusSchema);
     tx.commit();
 }
 

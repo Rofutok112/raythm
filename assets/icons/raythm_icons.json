@@ -1,0 +1,96 @@
+{
+  "icons": [
+    {
+      "name": "settings_gear",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/settings.svg"
+    },
+    {
+      "name": "refresh",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/refresh-cw.svg"
+    },
+    {
+      "name": "play",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/play.svg"
+    },
+    {
+      "name": "pause",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/pause.svg"
+    },
+    {
+      "name": "skip_back",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/skip-back.svg"
+    },
+    {
+      "name": "skip_forward",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/skip-forward.svg"
+    },
+    {
+      "name": "chevron_left",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/chevron-left.svg"
+    },
+    {
+      "name": "chevron_right",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/chevron-right.svg"
+    },
+    {
+      "name": "chevrons_left",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/chevrons-left.svg"
+    },
+    {
+      "name": "chevrons_right",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/chevrons-right.svg"
+    },
+    {
+      "name": "download",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/download.svg"
+    },
+    {
+      "name": "repeat_2",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/repeat-2.svg"
+    },
+    {
+      "name": "mouse_pointer",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/mouse-pointer-2.svg"
+    },
+    {
+      "name": "scan",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/scan.svg"
+    },
+    {
+      "name": "copy",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/copy.svg"
+    },
+    {
+      "name": "trash_2",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/trash-2.svg"
+    },
+    {
+      "name": "triangle_alert",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/triangle-alert.svg"
+    },
+    {
+      "name": "flask_conical",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/flask-conical.svg"
+    },
+    {
+      "name": "layers",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/layers.svg"
+    },
+    {
+      "name": "note_tap",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/circle-dot.svg"
+    },
+    {
+      "name": "note_long",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/move-horizontal.svg"
+    },
+    {
+      "name": "note_release",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/arrow-up-from-line.svg"
+    },
+    {
+      "name": "note_stay",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/circle-pause.svg"
+    }
+  ]
+}

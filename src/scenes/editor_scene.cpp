@@ -6,33 +6,31 @@
 
 #include "audio_manager.h"
 #include "editor/controller/editor_runtime_controller.h"
-#include "editor/view/editor_cursor_hud_view.h"
+#include "editor/controller/editor_screen_controller.h"
+#include "editor/controller/editor_timeline_screen_controller.h"
+#include "editor/controller/editor_timing_action_controller.h"
 #include "editor/editor_flow_controller.h"
 #include "editor/service/editor_chart_identity_service.h"
 #include "editor/service/editor_metadata_service.h"
 #include "editor/service/editor_transport_service.h"
-#include "editor/service/editor_timing_edit_service.h"
 #include "editor/service/editor_timing_selection_service.h"
-#include "editor/view/editor_header_view.h"
 #include "editor/view/editor_layout.h"
-#include "editor/view/editor_left_panel_view.h"
-#include "editor/view/editor_modal_view.h"
-#include "editor/view/editor_right_panel_view.h"
-#include "editor/view/editor_timeline_presenter.h"
 #include "editor/viewport/editor_timeline_viewport.h"
 #include "editor/editor_session_loader.h"
+#include "chart_level_cache.h"
 #include "play_scene.h"
+#include "platform/window_chrome.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "settings_scene.h"
 #include "song_select/song_select_navigation.h"
 #include "theme.h"
-#include "ui_clip.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
 
 namespace {
 namespace layout = editor::layout;
+constexpr double kLevelRefreshDebounceSeconds = 0.10;
 
 Rectangle snap_dropdown_menu_rect() {
     return layout::snap_dropdown_menu_rect(static_cast<int>(editor_timeline_viewport::snap_labels().size()));
@@ -84,6 +82,7 @@ void editor_scene::on_enter() {
     transport_.audio_length_tick = load_result.audio_length_tick;
     transport_.audio_loaded = load_result.audio_loaded;
     transport_.audio_playing = load_result.audio_playing;
+    transport_.pre_audio_playing = load_result.pre_audio_playing;
     transport_.audio_time_seconds = load_result.audio_time_seconds;
     transport_.playback_tick = load_result.playback_tick;
     transport_.previous_playback_tick = load_result.previous_playback_tick;
@@ -100,28 +99,43 @@ void editor_scene::on_enter() {
     viewport_.scrollbar_dragging = false;
     viewport_.scrollbar_drag_offset = 0.0f;
     snap_dropdown_open_ = false;
-    selected_note_index_ = load_result.selected_note_index;
+    selected_note_indices_ = load_result.selected_note_indices;
     timeline_drag_ = {};
     resume_state_.reset();
 }
 
 void editor_scene::on_exit() {
+    window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
     audio_manager::instance().stop_bgm();
     audio_manager::instance().stop_all_se();
 }
 
 void editor_scene::update(float dt) {
     rebuild_hit_regions();
-    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_);
+    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, false, dt);
 
-    const chart_data chart_for_save = make_chart_data_for_save();
+    if ((metadata_modal_open_ || timing_modal_open_) &&
+        !metadata_panel_.key_count_confirm_open &&
+        IsKeyPressed(KEY_ESCAPE)) {
+        metadata_modal_open_ = false;
+        timing_modal_open_ = false;
+        metadata_panel_.difficulty_input.active = false;
+        metadata_panel_.chart_author_input.active = false;
+        timing_panel_.active_input_field = editor_timing_input_field::none;
+        timing_panel_.bar_pick_mode = false;
+        window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
+        return;
+    }
+
     const bool save_dialog_submit = save_dialog_.submit_requested ||
         (save_dialog_.open && ui::is_clicked(layout::save_submit_button_rect(), ui::draw_layer::modal));
     save_dialog_.submit_requested = false;
+    const bool playtest_requested = IsKeyPressed(KEY_F5) || playtest_button_requested_;
+    playtest_button_requested_ = false;
 
     const editor_flow_result flow_result = editor_flow_controller::update({
         &song_,
-        &chart_for_save,
+        [this]() { return make_chart_data_for_save(); },
         state_,
         &metadata_panel_,
         &save_dialog_,
@@ -129,7 +143,7 @@ void editor_scene::update(float dt) {
         IsKeyPressed(KEY_ESCAPE),
         ui::is_clicked(layout::kBackButtonRect),
         (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_S),
-        IsKeyPressed(KEY_F5),
+        playtest_requested,
         IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
         has_active_metadata_input(),
         timing_panel_.active_input_field != editor_timing_input_field::none,
@@ -146,10 +160,12 @@ void editor_scene::update(float dt) {
     });
     apply_flow_result(flow_result);
     if (flow_result.consume_update) {
+        window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
         return;
     }
 
     if (!has_blocking_modal() && ui::is_clicked(layout::kSettingsButtonRect)) {
+        window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
         manager_.change_scene(std::make_unique<settings_scene>(manager_, song_, build_resume_state()));
         return;
     }
@@ -160,7 +176,8 @@ void editor_scene::update(float dt) {
         metadata_panel_,
         timing_panel_,
         timeline_drag_,
-        selected_note_index_,
+        selected_note_indices_,
+        clipboard_notes_,
         transport_,
         space_playback_start_tick_,
         hitsound_path_,
@@ -170,6 +187,9 @@ void editor_scene::update(float dt) {
         IsKeyPressed(KEY_SPACE),
         IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
         IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
+        IsKeyPressed(KEY_C),
+        IsKeyPressed(KEY_V),
+        IsKeyPressed(KEY_D),
         IsKeyPressed(KEY_Z),
         IsKeyPressed(KEY_Y),
         IsKeyPressed(KEY_DELETE),
@@ -177,7 +197,6 @@ void editor_scene::update(float dt) {
     if (shortcut_result.restore_scroll_tick.has_value()) {
         scroll_to_tick(*shortcut_result.restore_scroll_tick);
     }
-
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const editor_timeline_metrics metrics = timeline_metrics();
     const Rectangle content = metrics.content_rect();
@@ -187,7 +206,7 @@ void editor_scene::update(float dt) {
         timing_panel_,
         transport_,
         space_playback_start_tick_,
-        selected_note_index_,
+        selected_note_indices_,
         timeline_drag_,
         hitsound_path_,
         &hitsounds_,
@@ -199,12 +218,21 @@ void editor_scene::update(float dt) {
         IsMouseButtonReleased(MOUSE_BUTTON_LEFT),
         IsMouseButtonPressed(MOUSE_BUTTON_RIGHT),
         IsKeyPressed(KEY_ESCAPE),
-        IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT),
+        IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
+        IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
         editor_timeline_viewport::snap_division(viewport_),
         note_palette_,
+        IsMouseButtonDown(MOUSE_BUTTON_RIGHT),
+        IsMouseButtonReleased(MOUSE_BUTTON_RIGHT),
     });
     if (timeline_result.request_apply_selected_timing) {
-        apply_selected_timing_event();
+        editor_timing_action_controller::apply_selected_timing_event(timing_action_context());
+    }
+    if (timeline_result.request_apply_selected_scroll) {
+        editor_timing_action_controller::apply_selected_scroll_event(timing_action_context());
+    }
+    if (timeline_result.selected_scroll_event_index.has_value()) {
+        select_scroll_event(timeline_result.selected_scroll_event_index, false);
     }
     if (timeline_result.scroll_to_tick.has_value()) {
         scroll_to_tick(*timeline_result.scroll_to_tick);
@@ -212,6 +240,15 @@ void editor_scene::update(float dt) {
 
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_);
     apply_scroll_and_zoom(dt);
+    refresh_chart_level_when_idle();
+    window_chrome::set_content_cursor(editor_timeline_screen_controller::mouse_cursor({
+        *state_,
+        timeline_drag_,
+        selected_note_indices_,
+        timeline_metrics(),
+        virtual_screen::get_virtual_mouse(),
+        has_blocking_modal(),
+    }));
 }
 
 void editor_scene::rebuild_hit_regions() const {
@@ -231,146 +268,70 @@ void editor_scene::rebuild_hit_regions() const {
         ui::register_hit_region(layout::kScreenRect, ui::draw_layer::overlay);
         ui::register_hit_region(layout::kMetadataConfirmRect, ui::draw_layer::modal);
     }
+    if (metadata_modal_open_) {
+        ui::register_hit_region(layout::kScreenRect, ui::draw_layer::overlay);
+        ui::register_hit_region(layout::kEditorMetadataModalRect, ui::draw_layer::modal);
+    }
+    if (timing_modal_open_) {
+        ui::register_hit_region(layout::kScreenRect, ui::draw_layer::overlay);
+        ui::register_hit_region(layout::kEditorTimingModalRect, ui::draw_layer::modal);
+    }
 }
 
 void editor_scene::draw() {
-    const auto& t = *g_theme;
-    const double now = GetTime();
-    virtual_screen::begin_ui();
-    rebuild_hit_regions();
-    ui::begin_draw_queue();
-    draw_scene_background(t);
-
-    ui::draw_panel(layout::kLeftPanelRect);
-    ui::draw_panel(layout::kTimelineRect);
-    ui::draw_panel(layout::kRightPanelRect);
-    ui::draw_panel(layout::kHeaderRect);
-
-    ui::draw_button_colored(layout::kBackButtonRect, "BACK", 20, t.row, t.row_hover, t.text);
-    ui::draw_button_colored(layout::kSettingsButtonRect, "SETTINGS", 18, t.row, t.row_hover, t.text);
-
-    const editor_left_panel_view_result left_panel = editor_left_panel_view::draw({
-        song_.meta.title.c_str(),
-        !state_->file_path().empty(),
-        state_->is_dirty(),
-        &metadata_panel_,
-        note_palette_,
-        load_errors_.empty() ? nullptr : &load_errors_.front(),
-        now,
-    });
-    if (left_panel.selected_note_type.has_value()) {
-        note_palette_.type = *left_panel.selected_note_type;
-    }
-    if (left_panel.ray_toggled) {
-        note_palette_.is_ray = !note_palette_.is_ray;
-    }
-    const editor_metadata_panel_result metadata_panel_result = editor_panel_controller::update_metadata_panel(
-        metadata_panel_,
+    editor_screen_controller::draw_and_update({
+        song_,
+        *state_,
+        meter_map_,
         timing_panel_,
-        {
-            left_panel.difficulty_result.activated || left_panel.author_result.activated,
-            left_panel.difficulty_result.submitted || left_panel.author_result.submitted,
-            left_panel.key_count_left_clicked || left_panel.key_count_right_clicked,
-        });
-    if (metadata_panel_result.request_apply_metadata) {
-        apply_metadata_changes(false);
-    }
-
-    draw_timeline();
-
-    editor_scene_sync::sync_timing_event_selection(make_sync_context());
-    const editor_right_panel_view_result right_panel = editor_right_panel_view::draw({
-        &state_->data().timing_events,
-        &meter_map_,
-        timing_panel_.selected_event_index,
-        can_delete_selected_timing_event(),
-        virtual_screen::get_virtual_mouse(),
-    }, timing_panel_);
-    const editor_timing_panel_update_result update_result = editor_panel_controller::update_timing_panel(
         metadata_panel_,
-        timing_panel_,
-        {
-            right_panel.panel_result,
-            right_panel.clicked_outside_editor,
-        });
-    if (update_result.select_timing_event_index.has_value()) {
-        select_timing_event(update_result.select_timing_event_index, true);
-    }
-    if (update_result.request_add_bpm) {
-        add_timing_event(timing_event_type::bpm);
-    }
-    if (update_result.request_add_meter) {
-        add_timing_event(timing_event_type::meter);
-    }
-    if (update_result.request_delete_selected) {
-        delete_selected_timing_event();
-    }
-    if (update_result.request_apply_selected) {
-        apply_selected_timing_event();
-    }
-
-    const std::string playback_status = editor_transport_service::playback_status_text(transport_);
-    const std::string offset_label =
-        (state_->data().meta.offset > 0 ? "+" : "") + std::to_string(state_->data().meta.offset) + " ms";
-    const editor_header_view_result header_result = editor_header_view::draw({
-        playback_status.c_str(),
-        transport_.audio_loaded,
-        offset_label.c_str(),
+        transport_,
+        space_playback_start_tick_,
+        hitsound_path_,
+        hitsounds_,
         waveform_visible_,
-        editor_timeline_viewport::snap_labels(),
-        viewport_.snap_index,
+        viewport_,
         snap_dropdown_open_,
-    }, snap_dropdown_menu_rect());
-    if (header_result.offset_left_clicked) {
-        apply_chart_offset(std::max(-10000, state_->data().meta.offset - 5));
-    } else if (header_result.offset_right_clicked) {
-        apply_chart_offset(std::min(10000, state_->data().meta.offset + 5));
-    }
-    if (header_result.waveform_toggled) {
-        waveform_visible_ = !waveform_visible_;
-    }
-    if (header_result.snap_dropdown_toggled) {
-        snap_dropdown_open_ = !snap_dropdown_open_;
-    }
-    if (header_result.snap_index_clicked >= 0) {
-        viewport_.snap_index = header_result.snap_index_clicked;
-        snap_dropdown_open_ = false;
-    } else if (header_result.snap_dropdown_close_requested) {
-        snap_dropdown_open_ = false;
-    }
-
-    const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const bool hud_visible = CheckCollisionPointRec(mouse, layout::kTimelineRect);
-    if (hud_visible) {
-        const int tick = std::max(0, timeline_metrics().y_to_tick(mouse.y));
-        const editor_meter_map::bar_beat_position position = meter_map_.bar_beat_at_tick(tick);
-        editor_cursor_hud_view::draw({
-            true,
-            editor_timeline_viewport::snap_tick(viewport_model(), tick),
-            meter_map_.beat_number_at_tick(tick),
-            position.measure,
-            position.beat,
-        });
-    }
-
-    if (unsaved_changes_dialog_.open) {
-        editor_modal_view::draw_unsaved_changes_dialog();
-    }
-    if (save_dialog_.open) {
-        const editor_modal_view_result modal_result = editor_modal_view::draw_save_dialog(save_dialog_);
-        save_dialog_.submit_requested = save_dialog_.submit_requested || modal_result.save_dialog_submit_requested;
-    }
-    if (metadata_panel_.key_count_confirm_open) {
-        editor_modal_view::draw_key_count_confirmation(metadata_panel_.pending_key_count);
-    }
-
-    ui::flush_draw_queue();
-    virtual_screen::end();
-    ClearBackground(BLACK);
-    virtual_screen::draw_to_screen();
+        selected_note_indices_,
+        timeline_drag_,
+        note_palette_,
+        load_errors_,
+        save_dialog_,
+        unsaved_changes_dialog_,
+        metadata_modal_open_,
+        timing_modal_open_,
+        playtest_button_requested_,
+        [this]() { rebuild_hit_regions(); },
+        [this]() {
+            return editor_timeline_screen_controller::draw({
+                *state_,
+                meter_map_,
+                waveform_summary_,
+                waveform_visible_,
+                waveform_offset_ms_,
+                transport_,
+                viewport_,
+                snap_dropdown_open_,
+                selected_note_indices_,
+                timing_panel_,
+                timeline_drag_,
+                note_palette_,
+            });
+        },
+        [this]() { return make_sync_context(); },
+        [this]() { return timing_action_context(); },
+        [this](std::optional<size_t> index, bool scroll_into_view) { select_timing_event(index, scroll_into_view); },
+        [this](std::optional<size_t> index, bool scroll_into_view) { select_scroll_event(index, scroll_into_view); },
+        [this](int tick) { scroll_to_tick(tick); },
+        [this](bool clear_notes) { return apply_metadata_changes(clear_notes); },
+        [this](int offset_ms) { return apply_chart_offset(offset_ms); },
+    });
 }
 
-chart_data editor_scene::make_chart_data_for_save() const {
+chart_data editor_scene::make_chart_data_for_save() {
+    state_->refresh_auto_level();
+    pending_level_refresh_generation_ = state_->level_refresh_generation();
+    level_refresh_after_time_ = 0.0;
     chart_data data = state_->data();
     if (state_->file_path().empty()) {
         data.meta.chart_id = generated_chart_id(data.meta.difficulty);
@@ -392,7 +353,7 @@ editor_resume_state editor_scene::build_resume_state() const {
         viewport_.ticks_per_pixel,
         viewport_.snap_index,
         waveform_visible_,
-        selected_note_index_
+        selected_note_indices_
     };
 }
 
@@ -402,7 +363,7 @@ editor_scene_sync_context editor_scene::make_sync_context() {
         meter_map_,
         timing_panel_,
         metadata_panel_,
-        selected_note_index_,
+        selected_note_indices_,
     };
 }
 
@@ -436,49 +397,8 @@ void editor_scene::apply_flow_result(const editor_flow_result& result) {
 }
 
 bool editor_scene::has_blocking_modal() const {
-    return metadata_panel_.key_count_confirm_open || save_dialog_.open || unsaved_changes_dialog_.open;
-}
-
-std::optional<note_data> editor_scene::dragged_note() const {
-    if (!timeline_drag_.active) {
-        return std::nullopt;
-    }
-
-    if (timeline_drag_.mode == editor_timeline_drag_mode::resize_left ||
-        timeline_drag_.mode == editor_timeline_drag_mode::resize_right) {
-        if (!timeline_drag_.note_index.has_value() ||
-            *timeline_drag_.note_index >= state_->data().notes.size()) {
-            return std::nullopt;
-        }
-
-        note_data note = timeline_drag_.original_note;
-        if (timeline_drag_.mode == editor_timeline_drag_mode::resize_left) {
-            const int last_lane = note_last_lane(timeline_drag_.original_note);
-            note.lane = std::clamp(timeline_drag_.current_lane, 0, last_lane);
-            note.lane_width = last_lane - note.lane + 1;
-        } else {
-            const int last_lane = std::clamp(timeline_drag_.current_lane, note.lane, state_->data().meta.key_count - 1);
-            note.lane_width = last_lane - note.lane + 1;
-        }
-        return note;
-    }
-
-    note_data note;
-    note.lane = std::min(timeline_drag_.lane, timeline_drag_.current_lane);
-    note.lane_width = std::abs(timeline_drag_.current_lane - timeline_drag_.lane) + 1;
-    note.tick = std::min(timeline_drag_.start_tick, timeline_drag_.current_tick);
-    note.end_tick = std::max(timeline_drag_.start_tick, timeline_drag_.current_tick);
-    note.type = (note.end_tick - note.tick) >= editor_timeline_viewport::snap_interval(viewport_model()) ? note_type::hold : note_type::tap;
-    if (note.type == note_type::tap) {
-        note.end_tick = note.tick;
-    }
-    if (note_palette_.type != note_type::hold) {
-        note.type = note_palette_.type;
-        note.end_tick = note.tick;
-    }
-    note.is_ray = note_palette_.is_ray;
-
-    return note;
+    return metadata_panel_.key_count_confirm_open || save_dialog_.open || unsaved_changes_dialog_.open ||
+        metadata_modal_open_ || timing_modal_open_;
 }
 
 std::vector<size_t> editor_scene::sorted_timing_event_indices() const {
@@ -493,16 +413,34 @@ editor_timeline_metrics editor_scene::timeline_metrics() const {
     return editor_timeline_viewport::metrics(viewport_model());
 }
 
-int editor_scene::default_timing_event_tick() const {
-    return editor_timeline_viewport::default_timing_event_tick(viewport_model(), timing_panel_.selected_event_index);
+editor_timing_action_controller::context editor_scene::timing_action_context() {
+    return {
+        *state_,
+        meter_map_,
+        timing_panel_,
+        metadata_panel_,
+        selected_note_indices_,
+        transport_,
+        viewport_,
+        viewport_model(),
+        hitsound_path_,
+        hitsounds_,
+    };
 }
 
 void editor_scene::apply_scroll_and_zoom(float dt) {
+    Vector2 mouse = virtual_screen::get_virtual_mouse();
+    const editor_timeline_metrics metrics = timeline_metrics();
+    const Rectangle content = metrics.content_rect();
+    const Rectangle automation = {content.x + content.width + 8.0f, content.y, 380.0f, content.height};
+    if (CheckCollisionPointRec(mouse, automation)) {
+        mouse = {content.x + content.width * 0.5f, std::clamp(mouse.y, content.y, content.y + content.height)};
+    }
     viewport_ = editor_timeline_viewport::apply_scroll_and_zoom(viewport_model(), {
-        virtual_screen::get_virtual_mouse(),
+        mouse,
         GetMouseWheelMove(),
         IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
-        transport_.audio_playing,
+        transport_.audio_playing || transport_.pre_audio_playing,
         transport_.playback_tick,
         dt,
     });
@@ -512,64 +450,46 @@ void editor_scene::select_timing_event(std::optional<size_t> index, bool scroll_
     if (scroll_into_view && index.has_value() && *index < state_->data().timing_events.size()) {
         scroll_to_tick(state_->data().timing_events[*index].tick);
     }
+    timing_panel_.selected_scroll_event_index.reset();
     editor_scene_sync_context sync_context = make_sync_context();
     editor_timing_selection_service::select_event(sync_context, index, scroll_into_view, timing_panel_.list_scroll_offset);
+}
+
+void editor_scene::select_scroll_event(std::optional<size_t> index, bool scroll_into_view) {
+    timing_panel_.selected_event_index.reset();
+    timing_panel_.selected_scroll_event_index = index;
+    timing_panel_.active_input_field = editor_timing_input_field::none;
+    timing_panel_.input_error.clear();
+    timing_panel_.bar_pick_mode = false;
+    editor_scene_sync::load_scroll_event_inputs(make_sync_context());
+    if (scroll_into_view && index.has_value() && *index < state_->data().scroll_automation.size()) {
+        scroll_to_tick(state_->data().scroll_automation[*index].tick);
+    }
 }
 
 void editor_scene::scroll_to_tick(int tick) {
     viewport_ = editor_timeline_viewport::scroll_to_tick(viewport_model(), tick);
 }
 
-bool editor_scene::apply_selected_timing_event() {
-    editor_scene_sync::sync_timing_event_selection(make_sync_context());
-    const editor_timing_edit_result result = editor_timing_edit_service::apply_selected({
-        *state_,
-        meter_map_,
-        timing_panel_,
-        default_timing_event_tick(),
-    });
-    if (!result.success) {
-        return false;
-    }
-    editor_scene_sync::sync_after_timing_change(make_sync_context());
-    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
-    if (result.scroll_to_tick.has_value()) {
-        scroll_to_tick(*result.scroll_to_tick);
-    }
-    return true;
-}
-
-void editor_scene::add_timing_event(timing_event_type type) {
-    const editor_timing_edit_result result = editor_timing_edit_service::add_event({
-        *state_,
-        meter_map_,
-        timing_panel_,
-        default_timing_event_tick(),
-    }, type);
-    editor_scene_sync::sync_after_timing_change(make_sync_context());
-    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
-    if (result.selected_event_index.has_value()) {
-        select_timing_event(result.selected_event_index, true);
-    }
-}
-
-void editor_scene::delete_selected_timing_event() {
-    editor_scene_sync::sync_timing_event_selection(make_sync_context());
-    const editor_timing_edit_result result = editor_timing_edit_service::delete_selected({
-        *state_,
-        meter_map_,
-        timing_panel_,
-        default_timing_event_tick(),
-    });
-    if (!result.success) {
+void editor_scene::refresh_chart_level_when_idle() {
+    if (!state_->level_needs_refresh()) {
         return;
     }
-    editor_scene_sync::sync_after_timing_change(make_sync_context());
-    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
-}
 
-bool editor_scene::can_delete_selected_timing_event() const {
-    return editor_timing_edit_service::can_delete_selected({*state_, timing_panel_});
+    const size_t generation = state_->level_refresh_generation();
+    const double now = GetTime();
+    if (generation != pending_level_refresh_generation_) {
+        pending_level_refresh_generation_ = generation;
+        level_refresh_after_time_ = now + kLevelRefreshDebounceSeconds;
+    }
+    if (timeline_drag_.active) {
+        level_refresh_after_time_ = now + kLevelRefreshDebounceSeconds;
+        return;
+    }
+    if (now >= level_refresh_after_time_) {
+        state_->refresh_auto_level();
+        level_refresh_after_time_ = 0.0;
+    }
 }
 
 bool editor_scene::has_active_metadata_input() const {
@@ -598,26 +518,6 @@ bool editor_scene::apply_chart_offset(int offset_ms) {
 
     editor_scene_sync::sync_after_offset_change(make_sync_context());
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
+    chart_level_cache::clear();
     return true;
-}
-
-void editor_scene::draw_timeline() const {
-    const std::optional<note_data> preview_note = dragged_note();
-    const std::optional<size_t> preview_ignore_index =
-        timeline_drag_.active && timeline_drag_.mode != editor_timeline_drag_mode::create
-            ? timeline_drag_.note_index
-            : std::nullopt;
-    editor_timeline_presenter::draw({
-        *state_,
-        meter_map_,
-        &waveform_summary_,
-        waveform_visible_,
-        waveform_offset_ms_,
-        transport_.audio_loaded,
-        transport_.playback_tick,
-        selected_note_index_,
-        preview_note,
-        preview_note.has_value() && state_->has_note_overlap(*preview_note, preview_ignore_index),
-        viewport_model(),
-    });
 }

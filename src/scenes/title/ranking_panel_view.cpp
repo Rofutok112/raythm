@@ -15,35 +15,15 @@
 
 namespace {
 
-constexpr float kRankingRowHeight = 90.0f;
+constexpr float kRankingRowHeight = 34.0f;
 constexpr float kScrollPadding = 12.0f;
 constexpr float kEmptyMessageOffsetY = 60.0f;
 constexpr float kEmptyMessageHeight = 42.0f;
-constexpr float kRowGap = 6.0f;
-constexpr float kRevealOffsetX = 66.0f;
+constexpr float kHeaderRowHeight = 38.0f;
+constexpr float kBrowseRankRowHeight = 38.0f;
+constexpr float kBrowseRankRowStep = 42.0f;
+constexpr float kRevealOffsetX = 0.0f;
 constexpr float kClipSlack = 6.0f;
-constexpr float kRowBorderWidth = 1.5f;
-constexpr float kTopLineOffsetY = 12.0f;
-constexpr float kStatLabelOffsetY = 40.5f;
-constexpr float kStatValueOffsetY = 54.0f;
-constexpr float kPlacementOffsetX = 12.0f;
-constexpr float kPlacementOffsetY = 9.0f;
-constexpr float kPlacementWidth = 66.0f;
-constexpr float kPlacementVerticalInset = 18.0f;
-constexpr float kRankRightInset = 72.0f;
-constexpr float kRankOffsetY = 13.5f;
-constexpr float kRankWidth = 60.0f;
-constexpr float kRankVerticalInset = 27.0f;
-constexpr float kScoreOffsetFromRank = 144.0f;
-constexpr float kScoreOffsetY = 19.5f;
-constexpr float kScoreWidth = 126.0f;
-constexpr float kScoreHeight = 39.0f;
-constexpr float kDetailsOffsetX = 96.0f;
-constexpr float kDetailsScoreGap = 4.5f;
-constexpr float kTimeWidth = 33.0f;
-constexpr float kNameTimeGap = 1.5f;
-constexpr float kStatColumnGap = 27.0f;
-constexpr float kComboMaxWidth = 114.0f;
 
 const char* rank_label(rank value) {
     switch (value) {
@@ -145,7 +125,7 @@ namespace title_ranking_view {
 
 float content_height(const ranking_service::listing& listing) {
     const size_t count = listing.entries.empty() ? 1 : listing.entries.size();
-    return static_cast<float>(count) * kRankingRowHeight;
+    return kHeaderRowHeight + static_cast<float>(count) * kBrowseRankRowStep;
 }
 
 float max_scroll(Rectangle list_rect, const ranking_service::listing& listing) {
@@ -164,29 +144,66 @@ std::optional<ranking_service::source> hit_test_source(const draw_config& config
 
 void draw(const song_select::ranking_panel_state& panel, const draw_config& config) {
     const auto& t = *g_theme;
-    ui::draw_text_in_rect("RANKINGS", 24, config.header_rect,
-                          with_alpha(t.text, config.alpha), ui::text_align::left);
-    ui::draw_button_colored(config.source_local_rect, "LOCAL", 15,
-                            with_alpha(panel.selected_source == ranking_service::source::local ? config.button_selected : config.button_base,
-                                       panel.selected_source == ranking_service::source::local ? config.selected_row_alpha : config.normal_row_alpha),
-                            with_alpha(panel.selected_source == ranking_service::source::local ? config.button_selected_hover : config.button_hover,
-                                       panel.selected_source == ranking_service::source::local ? config.selected_hover_row_alpha : config.hover_row_alpha),
-                            with_alpha(t.text, config.alpha), 1.5f);
-    ui::draw_button_colored(config.source_online_rect, "ONLINE", 15,
+    ui::draw_text_in_rect(panel.selected_source == ranking_service::source::online ? "GLOBAL RANKING" : "ローカルランキング",
+                          16, {config.header_rect.x, config.header_rect.y, 280.0f, config.header_rect.height},
+                          with_alpha(t.accent, config.alpha), ui::text_align::left);
+    ui::draw_button_colored(config.source_online_rect, "GLOBAL", 14,
                             with_alpha(panel.selected_source == ranking_service::source::online ? config.button_selected : config.button_base,
                                        panel.selected_source == ranking_service::source::online ? config.selected_row_alpha : config.normal_row_alpha),
                             with_alpha(panel.selected_source == ranking_service::source::online ? config.button_selected_hover : config.button_hover,
                                        panel.selected_source == ranking_service::source::online ? config.selected_hover_row_alpha : config.hover_row_alpha),
                             with_alpha(t.text, config.alpha), 1.5f);
+    ui::draw_button_colored(config.source_local_rect, "LOCAL", 14,
+                            with_alpha(panel.selected_source == ranking_service::source::local ? config.button_selected : config.button_base,
+                                       panel.selected_source == ranking_service::source::local ? config.selected_row_alpha : config.normal_row_alpha),
+                            with_alpha(panel.selected_source == ranking_service::source::local ? config.button_selected_hover : config.button_hover,
+                                       panel.selected_source == ranking_service::source::local ? config.selected_hover_row_alpha : config.hover_row_alpha),
+                            with_alpha(t.text, config.alpha), 1.5f);
 
-    ui::scoped_clip_rect clip(config.list_rect);
-    const float base_y = config.list_rect.y - panel.scroll_y;
+    ui::draw_rect_f(config.list_rect, with_alpha(config.button_base, config.normal_row_alpha));
+    ui::draw_rect_lines(config.list_rect, 1.0f, with_alpha(t.border_light, config.alpha));
+    const float list_right = config.list_rect.x + config.list_rect.width;
+    const float clear_right = list_right - 18.0f;
+    const float acc_right = clear_right - 78.0f;
+    const float date_right = acc_right - 88.0f;
+    const float score_right = date_right - 92.0f;
+    const float score_width = 126.0f;
+    const float date_width = 58.0f;
+    const float acc_width = 76.0f;
+    const float clear_width = 56.0f;
+    {
+        const Rectangle header_clip_rect = {config.list_rect.x, config.list_rect.y,
+                                            config.list_rect.width, kHeaderRowHeight};
+        ui::scoped_clip_rect header_clip(header_clip_rect);
+        ui::draw_text_in_rect("#", 11, {config.list_rect.x + 12.0f, config.list_rect.y + 12.0f, 32.0f, 16.0f},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
+        ui::draw_text_in_rect("PLAYER", 11, {config.list_rect.x + 62.0f, config.list_rect.y + 12.0f, 178.0f, 16.0f},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
+        ui::draw_text_in_rect("SCORE", 11,
+                              {score_right - score_width, config.list_rect.y + 12.0f, score_width, 16.0f},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+        ui::draw_text_in_rect("DATE", 11,
+                              {date_right - date_width, config.list_rect.y + 12.0f, date_width, 16.0f},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+        ui::draw_text_in_rect("ACC", 11,
+                              {acc_right - acc_width, config.list_rect.y + 12.0f, acc_width, 16.0f},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+        ui::draw_text_in_rect("CLEAR", 11,
+                              {clear_right - clear_width, config.list_rect.y + 12.0f, clear_width, 16.0f},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+    }
+
+    const float base_y = config.list_rect.y + kHeaderRowHeight - panel.scroll_y;
     const float reveal_anim = panel.reveal_anim;
+    const Rectangle entries_clip_rect = {config.list_rect.x, config.list_rect.y + kHeaderRowHeight,
+                                         config.list_rect.width,
+                                         std::max(0.0f, config.list_rect.height - kHeaderRowHeight)};
+    ui::scoped_clip_rect entries_clip(entries_clip_rect);
     if (!panel.listing.available || panel.listing.entries.empty()) {
         const std::string message = panel.listing.message.empty()
             ? std::string("No ") + (panel.selected_source == ranking_service::source::local ? "local" : "online") + " entries yet."
             : panel.listing.message;
-        ui::draw_text_in_rect(message.c_str(), 20,
+        ui::draw_text_in_rect(message.c_str(), 13,
                               {config.list_rect.x, config.list_rect.y + kEmptyMessageOffsetY,
                                config.list_rect.width, kEmptyMessageHeight},
                               with_alpha(t.text_muted, config.alpha), ui::text_align::left);
@@ -202,10 +219,10 @@ void draw(const song_select::ranking_panel_state& panel, const draw_config& conf
         }
 
         const Rectangle base_row = {
-            config.list_rect.x,
-            base_y + static_cast<float>(i) * kRankingRowHeight,
-            config.list_rect.width,
-            kRankingRowHeight - kRowGap
+            config.list_rect.x + 10.0f,
+            base_y + static_cast<float>(i) * kBrowseRankRowStep,
+            config.list_rect.width - 20.0f,
+            kBrowseRankRowHeight
         };
         const Rectangle row = {
             base_row.x + (1.0f - row_reveal_t) * kRevealOffsetX,
@@ -220,105 +237,25 @@ void draw(const song_select::ranking_panel_state& panel, const draw_config& conf
 
         const unsigned char row_alpha = static_cast<unsigned char>(config.normal_row_alpha * row_reveal_t);
         const unsigned char content_alpha = static_cast<unsigned char>(config.alpha * row_reveal_t);
-        ui::draw_rect_f(row, with_alpha(config.button_base, row_alpha));
-        ui::draw_rect_lines(row, kRowBorderWidth,
-                            with_alpha(t.border_light,
-                                       static_cast<unsigned char>(130.0f * config.play_t * row_reveal_t)));
-
-        constexpr int kNameFontSize = 13;
-        constexpr int kTimeFontSize = 12;
-        constexpr int kStatLabelFontSize = 10;
-        constexpr int kStatValueFontSize = 12;
-        const float top_line_y = row.y + kTopLineOffsetY;
-        const float stat_label_y = row.y + kStatLabelOffsetY;
-        const float stat_value_y = row.y + kStatValueOffsetY;
-        const Rectangle placement_rect = {
-            row.x + kPlacementOffsetX,
-            row.y + kPlacementOffsetY,
-            kPlacementWidth,
-            row.height - kPlacementVerticalInset
-        };
-        const Rectangle rank_rect = {
-            row.x + row.width - kRankRightInset,
-            row.y + kRankOffsetY,
-            kRankWidth,
-            row.height - kRankVerticalInset
-        };
-        const Rectangle score_rect = {
-            rank_rect.x - kScoreOffsetFromRank,
-            row.y + kScoreOffsetY,
-            kScoreWidth,
-            kScoreHeight
-        };
-        const float details_x = row.x + kDetailsOffsetX;
-        const float details_right = std::max(details_x, score_rect.x - kDetailsScoreGap);
-        const Rectangle time_rect = {
-            details_right - kTimeWidth,
-            top_line_y,
-            kTimeWidth,
-            ui::text_layout_font_size(static_cast<float>(kTimeFontSize))
-        };
-        const Rectangle name_rect = {
-            details_x,
-            top_line_y,
-            std::max(0.0f, time_rect.x - details_x - kNameTimeGap),
-            ui::text_layout_font_size(static_cast<float>(kNameFontSize))
-        };
-        const float combo_width = std::min(kComboMaxWidth,
-                                           std::max(0.0f, (details_right - details_x - kStatColumnGap) * 0.5f));
-        const float accuracy_x = details_x + combo_width + kStatColumnGap;
-        const float accuracy_width = std::max(0.0f, details_right - accuracy_x);
-        const Rectangle combo_label_rect = {
-            details_x,
-            stat_label_y,
-            combo_width,
-            ui::text_layout_font_size(static_cast<float>(kStatLabelFontSize))
-        };
-        const Rectangle combo_value_rect = {
-            details_x,
-            stat_value_y,
-            combo_width,
-            ui::text_layout_font_size(static_cast<float>(kStatValueFontSize))
-        };
-        const Rectangle accuracy_label_rect = {
-            accuracy_x,
-            stat_label_y,
-            accuracy_width,
-            ui::text_layout_font_size(static_cast<float>(kStatLabelFontSize))
-        };
-        const Rectangle accuracy_value_rect = {
-            accuracy_x,
-            stat_value_y,
-            accuracy_width,
-            ui::text_layout_font_size(static_cast<float>(kStatValueFontSize))
-        };
-
-        ui::draw_text_in_rect(TextFormat("#%d", i + 1), 18, placement_rect,
-                              with_alpha(t.text_secondary, content_alpha), ui::text_align::center);
-        draw_marquee_text(entry.player_display_name.empty() ? "Unknown Player" : entry.player_display_name.c_str(),
-                          name_rect, kNameFontSize, with_alpha(t.text, content_alpha), GetTime());
-        ui::draw_text_in_rect(format_relative_recorded_at(entry.recorded_at).c_str(), kTimeFontSize,
-                              time_rect,
-                              with_alpha(t.text_muted, content_alpha), ui::text_align::right);
-        ui::draw_text_in_rect("Max Combo", kStatLabelFontSize,
-                              combo_label_rect,
-                              with_alpha(t.text_muted, content_alpha), ui::text_align::left);
-        ui::draw_text_in_rect(TextFormat("%dx", entry.max_combo), kStatValueFontSize,
-                              combo_value_rect,
-                              with_alpha(entry.is_full_combo ? t.success : t.text, content_alpha),
-                              ui::text_align::left);
-        ui::draw_text_in_rect("Accuracy", kStatLabelFontSize,
-                              accuracy_label_rect,
-                              with_alpha(t.text_muted, content_alpha), ui::text_align::left);
-        ui::draw_text_in_rect(TextFormat("%.2f%%", entry.accuracy), kStatValueFontSize,
-                              accuracy_value_rect,
+        ui::draw_rect_f(row, with_alpha(i % 2 == 0 ? t.section : config.button_base, row_alpha));
+        ui::draw_text_in_rect(TextFormat("%d", entry.placement > 0 ? entry.placement : i + 1), 14,
+                              {row.x + 4.0f, row.y + 9.0f, 36.0f, 18.0f},
                               with_alpha(t.text, content_alpha), ui::text_align::left);
-        ui::draw_text_in_rect(format_score(entry.score).c_str(), 18,
-                              score_rect,
-                              with_alpha(t.text, content_alpha), ui::text_align::right);
-        ui::draw_text_in_rect(rank_label(entry.clear_rank()), 24,
-                              rank_rect,
-                              with_alpha(rank_color(entry.clear_rank()), content_alpha), ui::text_align::center);
+        draw_marquee_text(entry.player_display_name.empty() ? "Unknown Player" : entry.player_display_name.c_str(),
+                          {row.x + 52.0f, row.y + 9.0f, 178.0f, 18.0f},
+                          14, with_alpha(t.text, content_alpha), GetTime());
+        ui::draw_text_in_rect(format_score(entry.score).c_str(), 14,
+                              {score_right - score_width, row.y + 9.0f, score_width, 18.0f},
+                              with_alpha(t.text_secondary, content_alpha), ui::text_align::right);
+        ui::draw_text_in_rect(format_relative_recorded_at(entry.recorded_at).c_str(), 13,
+                              {date_right - date_width, row.y + 9.0f, date_width, 18.0f},
+                              with_alpha(t.text_muted, content_alpha), ui::text_align::right);
+        ui::draw_text_in_rect(TextFormat("%.2f%%", entry.accuracy), 14,
+                              {acc_right - acc_width, row.y + 9.0f, acc_width, 18.0f},
+                              with_alpha(t.text_secondary, content_alpha), ui::text_align::right);
+        ui::draw_text_in_rect(rank_label(entry.clear_rank()), 15,
+                              {clear_right - clear_width, row.y + 8.0f, clear_width, 20.0f},
+                              with_alpha(rank_color(entry.clear_rank()), content_alpha), ui::text_align::right);
     }
 }
 

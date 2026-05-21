@@ -45,6 +45,8 @@ constexpr int kButtonCount = 3;
 constexpr int kMinWindowWidth = 640;
 constexpr int kMinWindowHeight = 360 + kTitlebarHeight;
 bool g_enabled = false;
+int g_content_cursor = MOUSE_CURSOR_DEFAULT;
+int g_applied_cursor = -1;
 float g_button_hover_t[kButtonCount] = {};
 float g_button_press_t[kButtonCount] = {};
 float g_maximize_icon_t = 0.0f;
@@ -117,6 +119,14 @@ Color blend(Color from, Color to, float amount) {
 float approach(float value, float target, float speed, float dt) {
     const float t = 1.0f - std::exp(-speed * std::max(0.0f, dt));
     return value + (target - value) * t;
+}
+
+void apply_cursor(int cursor) {
+    if (g_applied_cursor == cursor) {
+        return;
+    }
+    SetMouseCursor(cursor);
+    g_applied_cursor = cursor;
 }
 
 Color alpha_color(Color color, float alpha) {
@@ -365,19 +375,30 @@ bool point_in_caption_area(int x, int y, window_rect rect) {
 
 void update_cursor() {
     if (g_resize_edge != resize_edge::none) {
-        SetMouseCursor(cursor_for_resize_edge(g_resize_edge));
+        apply_cursor(cursor_for_resize_edge(g_resize_edge));
         return;
     }
-    if (g_move_active || is_maximized() || IsWindowFullscreen()) {
-        SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+    if (g_move_active) {
+        apply_cursor(MOUSE_CURSOR_DEFAULT);
+        return;
+    }
+    if (IsWindowFullscreen()) {
+        apply_cursor(g_content_cursor);
         return;
     }
     POINT cursor{};
     if (!GetCursorPos(&cursor)) {
-        SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+        apply_cursor(MOUSE_CURSOR_DEFAULT);
         return;
     }
-    SetMouseCursor(cursor_for_resize_edge(resize_edge_at_point(cursor.x, cursor.y, current_window_rect())));
+    const window_rect rect = current_window_rect();
+    const int local_y = cursor.y - rect.y;
+    if (local_y >= 0 && local_y < kTitlebarHeight) {
+        apply_cursor(MOUSE_CURSOR_DEFAULT);
+        return;
+    }
+    const resize_edge edge = is_maximized() ? resize_edge::none : resize_edge_at_point(cursor.x, cursor.y, rect);
+    apply_cursor(edge == resize_edge::none ? g_content_cursor : cursor_for_resize_edge(edge));
 }
 
 void start_manual_resize(resize_edge edge) {
@@ -592,10 +613,13 @@ void shutdown() {
     g_installed = false;
 #endif
     g_enabled = false;
+    g_content_cursor = MOUSE_CURSOR_DEFAULT;
+    g_applied_cursor = -1;
 }
 
 void update(scene_manager& manager) {
     if (!g_enabled) {
+        apply_cursor(g_content_cursor);
         return;
     }
     const float dt = GetFrameTime();
@@ -643,6 +667,13 @@ void update(scene_manager& manager) {
     }
 }
 
+void set_content_cursor(int cursor) {
+    g_content_cursor = cursor;
+    if (!g_enabled) {
+        apply_cursor(cursor);
+    }
+}
+
 void draw() {
     if (!g_enabled || IsWindowFullscreen()) {
         return;
@@ -654,7 +685,7 @@ void draw() {
 
     const Color text_color = g_theme->text;
     const Color muted = g_theme->text_secondary;
-    ui::draw_text_f("raythm", 28.0f, 8.0f, 16, text_color);
+    ui::draw_text_display("raythm", {28.0f, 8.0f}, 16.0f, 0.0f, text_color);
     ui::draw_rect_f({12.0f, 10.0f, 3.0f, 16.0f}, g_theme->accent);
     ui::draw_rect_f({17.0f, 14.0f, 3.0f, 8.0f}, g_theme->fast);
     ui::draw_rect_f({7.0f, 14.0f, 3.0f, 8.0f}, g_theme->accent);

@@ -1,8 +1,13 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstddef>
+#include <future>
 #include <string>
+#include <vector>
+
+#include "audio_loudness.h"
 
 class audio;
 
@@ -17,6 +22,11 @@ struct audio_clock_snapshot {
 
 class audio_manager final {
 public:
+    struct async_preview_load_result {
+        bool completed = false;
+        bool loaded = false;
+    };
+
     static audio_manager& instance();
 
     audio_manager(const audio_manager&) = delete;
@@ -32,6 +42,11 @@ public:
     void fade_out_bgm(unsigned int duration_ms);
     void stop_bgm();
     void set_bgm_volume(float volume);
+    void set_bgm_fade_gain(float gain);
+    void set_loudness_normalization_enabled(bool enabled);
+    bool is_loudness_normalization_enabled() const;
+    audio_loudness_analysis get_bgm_loudness_analysis() const;
+    audio_loudness_analysis get_preview_loudness_analysis() const;
     void seek_bgm(double seconds);
     bool is_bgm_loaded() const;
     bool is_bgm_playing() const;
@@ -47,11 +62,15 @@ public:
     double get_output_buffer_seconds() const;
 
     bool load_preview(const std::string& file_path);
+    bool request_preview_load(const std::string& file_path);
+    async_preview_load_result poll_preview_load();
+    bool is_preview_loading() const;
     void play_preview(bool restart = true);
     void pause_preview();
     void stop_preview();
     void unload_preview();
     void set_preview_volume(float volume);
+    void set_preview_fade_gain(float gain);
     void seek_preview(double seconds);
     bool is_preview_loaded() const;
     bool is_preview_playing() const;
@@ -78,6 +97,18 @@ private:
     ~audio_manager();
 
     struct managed_voice;
+    struct preview_load_payload {
+        unsigned int generation = 0;
+        unsigned long handle = 0;
+    };
+    struct volume_fade_state {
+        float gain = 1.0f;
+        float start_gain = 1.0f;
+        float target_gain = 1.0f;
+        std::chrono::steady_clock::time_point started_at = {};
+        std::chrono::milliseconds duration = std::chrono::milliseconds(0);
+        bool active = false;
+    };
 
     void retain_legacy_client();
     void release_legacy_client();
@@ -90,7 +121,6 @@ private:
     static double get_voice_sample_rate_hz(unsigned long handle);
     static void play_voice(unsigned long handle, bool restart);
     static void pause_voice(unsigned long handle);
-    static void fade_out_voice(unsigned long handle, unsigned int duration_ms);
     static void stop_voice(unsigned long handle);
     static void set_voice_position_seconds(unsigned long handle, double seconds);
     static void free_voice(unsigned long& handle);
@@ -98,6 +128,10 @@ private:
     bool ensure_initialized();
     unsigned long create_stream(const std::string& file_path) const;
     void replace_voice(unsigned long& handle, const std::string& file_path) const;
+    audio_loudness_analysis analyze_or_get_cached_loudness(const std::string& file_path) const;
+    void reset_bgm_fade();
+    void reset_preview_fade();
+    bool update_fade(volume_fade_state& fade);
     void apply_bgm_volume() const;
     void apply_preview_volume() const;
 
@@ -106,7 +140,18 @@ private:
     float bgm_volume_ = 1.0f;
     float preview_volume_ = 1.0f;
     float se_volume_ = 1.0f;
+    volume_fade_state bgm_fade_;
+    volume_fade_state preview_fade_;
+    bool loudness_normalization_enabled_ = false;
+    std::string preview_path_;
+    audio_loudness_analysis bgm_loudness_;
+    audio_loudness_analysis preview_loudness_;
     unsigned long bgm_handle_ = 0;
     unsigned long preview_handle_ = 0;
+    std::future<preview_load_payload> preview_load_future_;
+    std::vector<std::future<preview_load_payload>> stale_preview_load_futures_;
+    unsigned int preview_load_generation_ = 0;
+    unsigned int active_preview_load_generation_ = 0;
+    bool preview_loading_ = false;
     int next_se_voice_id_ = 1;
 };

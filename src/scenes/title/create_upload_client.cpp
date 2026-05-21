@@ -188,6 +188,27 @@ std::string format_float_field(float value) {
     return stream.str();
 }
 
+std::string timing_events_json_field(const std::vector<timing_event>& events) {
+    std::ostringstream stream;
+    stream << '[';
+    for (size_t index = 0; index < events.size(); ++index) {
+        const timing_event& event = events[index];
+        if (index > 0) {
+            stream << ',';
+        }
+        stream << "{\"type\":\"";
+        if (event.type == timing_event_type::bpm) {
+            stream << "bpm\",\"tick\":" << event.tick << ",\"bpm\":" << format_float_field(event.bpm);
+        } else {
+            stream << "meter\",\"tick\":" << event.tick << ",\"numerator\":" << event.numerator
+                   << ",\"denominator\":" << event.denominator;
+        }
+        stream << '}';
+    }
+    stream << ']';
+    return stream.str();
+}
+
 void push_string_field(std::vector<multipart_field>& fields,
                        const std::string& name,
                        const std::string& value) {
@@ -694,10 +715,23 @@ upload_request_result send_song_upload_request(const auth::session& session,
     std::vector<multipart_field> fields;
     fields.push_back({"title", meta.title});
     fields.push_back({"artist", meta.artist});
-    if (!meta.genre.empty()) {
-        fields.push_back({"genre", meta.genre});
+    std::vector<std::string> genres = meta.genres;
+    if (genres.empty() && !meta.genre.empty()) {
+        genres.push_back(meta.genre);
+    }
+    for (const std::string& genre : genres) {
+        push_string_field(fields, "genres", genre);
+    }
+    for (const std::string& keyword : meta.keywords) {
+        push_string_field(fields, "keywords", keyword);
     }
     fields.push_back({"baseBpm", format_float_field(meta.base_bpm)});
+    if (meta.has_offset) {
+        fields.push_back({"offset", std::to_string(meta.offset)});
+    }
+    if (!meta.timing_events.empty()) {
+        fields.push_back({"timingEvents", timing_events_json_field(meta.timing_events)});
+    }
     if (meta.duration_seconds > 0.0f) {
         fields.push_back({"durationSec", std::to_string(static_cast<int>(meta.duration_seconds + 0.5f))});
     }
@@ -791,7 +825,7 @@ void append_chart_contract_fields(std::vector<multipart_field>& fields,
     push_positive_float_field(fields, "maxBpm", chart.max_bpm);
     push_positive_float_field(fields, "calculatedLevel", chart.meta.level);
     fields.push_back({"difficultyRulesetId", "raythm-local"});
-    fields.push_back({"difficultyRulesetVersion", "1"});
+    fields.push_back({"difficultyRulesetVersion", "13"});
 
     if (const std::optional<std::string> chart_sha256 = updater::compute_sha256_hex(chart_path);
         chart_sha256.has_value()) {

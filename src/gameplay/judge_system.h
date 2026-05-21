@@ -58,6 +58,7 @@ private:
     void process_input_event(const input_event& event);
     void handle_hold_release(const input_event& event);
     void handle_press(const input_event& event);
+    void resolve_hold_heads_from_nearby_stays(double current_ms, const input_handler& input);
     void resolve_stay_notes(double current_ms, const input_handler& input);
     void resolve_hold_completions(double current_ms);
     void resolve_auto_misses(double current_ms);
@@ -71,6 +72,9 @@ private:
     void deactivate_hold_lane(size_t note_index, int lane, input_session_id input_id);
     void clear_active_hold_for_note(size_t note_index);
     bool has_active_hold_for_note(size_t note_index) const;
+    bool lane_is_held_for_stay(const input_handler& input, int lane, double timestamp_ms) const;
+    bool lane_was_held_at(int lane, double timestamp_ms) const;
+    bool has_held_nearby_stay(const input_handler& input, const chart_judge_event& hold_head) const;
     bool mark_event_completed(size_t event_descriptor_index);
     std::optional<size_t> descriptor_index_for_event_index(int event_index) const;
     bool release_overlaps_hold_tail(const chart_judge_event& release) const;

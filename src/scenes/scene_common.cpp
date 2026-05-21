@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 
 #include "theme.h"
 #include "ui_clip.h"
@@ -42,13 +43,78 @@ void draw_scene_background(const ui_theme& theme) {
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, theme.bg, theme.bg_alt);
 }
 
-void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Color color, double time) {
+Color difficulty_level_color(float level) {
+    struct level_stop {
+        float level;
+        Color color;
+    };
+    static constexpr level_stop kStops[] = {
+        {1.0f, {80, 188, 82, 255}},
+        {3.0f, {186, 211, 43, 255}},
+        {5.0f, {232, 166, 41, 255}},
+        {6.5f, {235, 92, 58, 255}},
+        {7.7f, {223, 49, 120, 255}},
+        {8.5f, {158, 65, 223, 255}},
+        {10.0f, {106, 54, 168, 255}},
+        {12.0f, {58, 38, 84, 255}},
+    };
+
+    if (level <= kStops[0].level) {
+        return kStops[0].color;
+    }
+    for (size_t i = 1; i < std::size(kStops); ++i) {
+        if (level <= kStops[i].level) {
+            const level_stop& from = kStops[i - 1];
+            const level_stop& to = kStops[i];
+            const float t = std::clamp((level - from.level) / (to.level - from.level), 0.0f, 1.0f);
+            return lerp_color(from.color, to.color, t);
+        }
+    }
+    return kStops[std::size(kStops) - 1].color;
+}
+
+void draw_difficulty_level_badge(float level, Rectangle rect, int font_size, unsigned char alpha) {
+    if (rect.width <= 0.0f || rect.height <= 0.0f || alpha == 0) {
+        return;
+    }
+    const Color base = difficulty_level_color(level);
+    const Color accent = lerp_color(base, WHITE, level >= 10.0f ? 0.22f : 0.0f);
+    const Color fill = with_alpha(accent, static_cast<unsigned char>((static_cast<int>(alpha) * 28) / 255));
+    const Color border = with_alpha(accent, static_cast<unsigned char>((static_cast<int>(alpha) * 190) / 255));
+    const Color text_color = with_alpha(accent, alpha);
+
+    ui::draw_rect_f(rect, fill);
+    ui::draw_rect_lines(rect, 1.2f, border);
+
+    const char* label = TextFormat("Lv.%.1f", level);
+    const Vector2 text_size = ui::measure_text_size(label, static_cast<float>(font_size), 0.0f);
+    ui::draw_text_auto(label,
+                       {rect.x + (rect.width - text_size.x) * 0.5f,
+                        rect.y + (rect.height - text_size.y) * 0.5f - 1.0f},
+                       static_cast<float>(font_size), 0.0f, text_color);
+}
+
+void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Color color, double time,
+                       ui::text_align align) {
     if (text == nullptr || *text == '\0' || clip_rect.width <= 0.0f || clip_rect.height <= 0.0f) {
         return;
     }
 
     const float text_width = measure_text_width(text, font_size);
-    const float draw_x = clip_rect.x;
+    float draw_x = clip_rect.x;
+    if (text_width <= clip_rect.width) {
+        switch (align) {
+        case ui::text_align::left:
+            draw_x = clip_rect.x;
+            break;
+        case ui::text_align::center:
+            draw_x = clip_rect.x + (clip_rect.width - text_width) * 0.5f;
+            break;
+        case ui::text_align::right:
+            draw_x = clip_rect.x + clip_rect.width - text_width;
+            break;
+        }
+    }
     const float draw_y = clip_rect.y;
     constexpr float kEdgeSlack = 2.0f;
 
@@ -85,5 +151,5 @@ void draw_marquee_text(const char* text, Rectangle clip_rect, int font_size, Col
 
 void draw_marquee_text(const char* text, float x, float y, int font_size, Color color, float max_width, double time) {
     draw_marquee_text(text, {x, y, max_width, ui::text_layout_font_size(static_cast<float>(font_size))},
-                      font_size, color, time);
+                      font_size, color, time, ui::text_align::left);
 }

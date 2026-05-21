@@ -7,11 +7,16 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ranking_service.h"
 #include "raylib.h"
 #include "song_select/song_preview_controller.h"
 #include "song_select/song_select_state.h"
 #include "title/online_download_remote_client.h"
 #include "ui_text_input.h"
+
+namespace online_catalog {
+class data_controller;
+}
 
 namespace title_online_view {
 
@@ -19,6 +24,28 @@ enum class catalog_mode {
     official,
     community,
     owned,
+};
+
+enum class discovery_view {
+    overview,
+    new_arrivals,
+    rising,
+    hidden_gems,
+    recommended,
+    needs_charts,
+};
+
+enum class source_filter {
+    all,
+    official,
+    community,
+};
+
+enum class chart_source_filter {
+    all,
+    official,
+    community,
+    mine,
 };
 
 enum class requested_action {
@@ -33,6 +60,7 @@ enum class requested_action {
 struct chart_entry_state {
     song_select::chart_option chart;
     std::string installed_local_chart_id;
+    std::string uploader_id;
     bool installed = false;
     bool update_available = false;
 };
@@ -47,10 +75,17 @@ struct song_entry_state {
     bool charts_loading = false;
     bool charts_has_more = false;
     bool charts_failed = false;
-    int next_chart_page = 1;
+    std::string next_chart_cursor;
+};
+
+struct discovery_shelf_state {
+    std::string key;
+    std::string title;
+    std::vector<song_entry_state> songs;
 };
 
 struct catalog_load_result {
+    std::vector<discovery_shelf_state> discovery_shelves;
     std::vector<song_entry_state> official_songs;
     std::vector<song_entry_state> community_songs;
     std::vector<song_entry_state> owned_songs;
@@ -112,8 +147,11 @@ struct state {
     std::vector<song_entry_state> official_songs;
     std::vector<song_entry_state> community_songs;
     std::vector<song_entry_state> owned_songs;
+    std::vector<discovery_shelf_state> discovery_shelves;
     std::vector<song_select::song_entry> local_songs;
     catalog_mode mode = catalog_mode::official;
+    discovery_view view = discovery_view::overview;
+    source_filter source = source_filter::all;
     int official_selected_song_index = 0;
     int community_selected_song_index = 0;
     int owned_selected_song_index = 0;
@@ -122,22 +160,27 @@ struct state {
     int owned_selected_chart_index = 0;
     float song_scroll_y = 0.0f;
     float song_scroll_y_target = 0.0f;
+    std::unordered_map<std::string, float> overview_shelf_scroll_x;
+    std::unordered_map<std::string, float> overview_shelf_scroll_x_target;
     float chart_scroll_y = 0.0f;
     float chart_scroll_y_target = 0.0f;
     ui::text_input_state search_input;
+    ui::text_input_state chart_search_input;
+    ui::text_input_state min_level_input;
+    ui::text_input_state max_level_input;
+    bool chart_level_filter_dragging = false;
+    bool chart_level_filter_dragging_min = false;
+    chart_source_filter chart_source = chart_source_filter::all;
+    int chart_key_filter = 0;
+    int chart_download_filter = 0;
     jacket_cache jackets;
-    std::future<catalog_load_result> catalog_future;
-    std::future<remote_song_page_fetch_result> song_page_future;
-    std::future<remote_chart_page_fetch_result> chart_page_future;
-    std::future<std::vector<song_entry_state>> owned_future;
-    std::future<download_song_result> download_future;
     std::shared_ptr<download_progress_state> download_progress;
     bool catalog_loading = false;
     bool catalog_loaded_once = false;
     bool official_has_more = false;
     bool community_has_more = false;
-    int official_next_page = 1;
-    int community_next_page = 1;
+    std::string official_next_cursor;
+    std::string community_next_cursor;
     bool song_page_loading = false;
     catalog_mode song_page_mode = catalog_mode::official;
     bool chart_page_loading = false;
@@ -146,6 +189,8 @@ struct state {
     bool owned_loading = false;
     bool owned_loaded_once = false;
     bool download_in_progress = false;
+    bool ranking_loading = false;
+    ranking_service::listing ranking_listing;
     std::string catalog_server_url;
     std::string catalog_status_message;
     std::string catalog_retry_after;
@@ -173,9 +218,12 @@ struct layout {
     Rectangle owned_tab_rect;
     Rectangle search_rect;
     Rectangle content_rect;
+    Rectangle sidebar_rect;
+    Rectangle preview_panel_rect;
     Rectangle song_grid_rect;
     Rectangle detail_left_rect;
     Rectangle detail_right_rect;
+    Rectangle detail_preview_rect;
     Rectangle hero_jacket_rect;
     Rectangle preview_bar_rect;
     Rectangle preview_play_rect;
@@ -192,18 +240,20 @@ struct update_result {
     requested_action action = requested_action::none;
 };
 
-void reload_catalog(state& state, bool preserve_view = false);
-bool poll_catalog(state& state);
-bool poll_song_page(state& state);
-bool poll_chart_page(state& state);
-bool poll_owned(state& state);
-void request_next_song_page(state& state, catalog_mode mode);
-void request_charts_for_selected_song(state& state);
-void start_download(state& state);
-void start_chart_download(state& state);
-bool poll_download(state& state);
+void reload_catalog(state& state, online_catalog::data_controller& data_controller, bool preserve_view = false);
+bool poll_catalog(state& state, online_catalog::data_controller& data_controller);
+bool poll_song_page(state& state, online_catalog::data_controller& data_controller);
+bool poll_chart_page(state& state, online_catalog::data_controller& data_controller);
+bool poll_owned(state& state, online_catalog::data_controller& data_controller);
+void request_next_song_page(state& state, online_catalog::data_controller& data_controller, catalog_mode mode);
+void request_charts_for_selected_song(state& state, online_catalog::data_controller& data_controller);
+void start_download(state& state, online_catalog::data_controller& data_controller);
+void start_chart_download(state& state, online_catalog::data_controller& data_controller);
+bool poll_download(state& state, online_catalog::data_controller& data_controller);
 void mark_song_removed(state& state, const std::string& song_id);
-void on_enter(state& state, song_select::preview_controller& preview_controller);
+void on_enter(state& state,
+              online_catalog::data_controller& data_controller,
+              song_select::preview_controller& preview_controller);
 void on_exit(state& state);
 
 const song_entry_state* selected_song(const state& state);
@@ -213,12 +263,17 @@ bool needs_download(const song_entry_state& song);
 bool can_open_local(const state& state);
 std::string selected_song_id(const state& state);
 void select_local_update_target(state& state,
+                                online_catalog::data_controller& data_controller,
                                 const std::string& local_song_id,
                                 const std::string& local_chart_id,
                                 bool open_detail);
 
 layout make_layout(float anim_t, Rectangle origin_rect);
-update_result update(state& state, float anim_t, Rectangle origin_rect, float dt);
+update_result update(state& state,
+                     online_catalog::data_controller& data_controller,
+                     float anim_t,
+                     Rectangle origin_rect,
+                     float dt);
 void draw(state& state, float anim_t, Rectangle origin_rect);
 
 }  // namespace title_online_view

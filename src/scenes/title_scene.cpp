@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "raylib.h"
+#include "ranking_service.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select/song_catalog_service.h"
@@ -21,9 +22,12 @@
 #include "title/title_create_mode_controller.h"
 #include "title/title_header_view.h"
 #include "title/title_home_input_controller.h"
+#include "title/title_hub_update_coordinator.h"
+#include "title/title_hub_view.h"
 #include "title/title_layout.h"
 #include "title/title_online_mode_controller.h"
 #include "title/title_play_mode_controller.h"
+#include "title/title_startup_controller.h"
 #include "title/seamless_song_select_view.h"
 #include "theme.h"
 #include "ui_notice.h"
@@ -39,57 +43,7 @@ constexpr const char* kTitleLoopPath = "assets/audio/title_loop.mp3";
 constexpr float kHomeAnimSpeed = 6.5f;
 constexpr float kAccountChipInteractiveThreshold = 0.2f;
 constexpr float kPlayViewAnimSpeed = 6.0f;
-constexpr float kStartupProgressMin = 0.08f;
-constexpr float kStartupProgressCatalog = 0.68f;
-constexpr float kStartupProgressScoring = 0.88f;
 constexpr ui::draw_layer kTitleModalLayer = ui::draw_layer::modal;
-
-std::string make_avatar_label(const auth::session_summary& summary) {
-    const std::string source = summary.logged_in
-        ? (summary.display_name.empty() ? summary.email : summary.display_name)
-        : "A";
-    if (source.empty()) {
-        return "A";
-    }
-
-    std::string result;
-    result.reserve(2);
-    for (char ch : source) {
-        if (std::isalnum(static_cast<unsigned char>(ch))) {
-            result.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
-            if (result.size() == 2) {
-                break;
-            }
-        }
-    }
-    return result.empty() ? "A" : result;
-}
-
-std::string make_avatar_label(const song_select::auth_state& auth_state) {
-    const auth::session_summary summary = {
-        auth_state.logged_in,
-        {},
-        auth_state.email,
-        auth_state.display_name,
-        auth_state.email_verified,
-    };
-    return make_avatar_label(summary);
-}
-
-const char* account_name_for(const song_select::auth_state& auth_state) {
-    if (!auth_state.logged_in) {
-        return "ACCOUNT";
-    }
-    return auth_state.display_name.empty() ? auth_state.email.c_str() : auth_state.display_name.c_str();
-}
-
-const char* account_status_for(const song_select::auth_state& auth_state) {
-    if (!auth_state.logged_in) {
-        return "Manage account";
-    }
-    return auth_state.email_verified ? "Verified profile" : "Manage account";
-}
-
 title_scene::hub_mode content_mode_for_settings(title_scene::hub_mode mode, title_scene::hub_mode return_mode) {
     return mode == title_scene::hub_mode::settings ? return_mode : mode;
 }
@@ -126,15 +80,6 @@ title_scene::transition_target transition_target_for_home_action(title_home_view
         : action == title_home_view::action::online
             ? title_scene::transition_target::online_download
             : title_scene::transition_target::song_select;
-}
-
-bool consume_startup_level_calculation() {
-    static bool consumed = false;
-    if (consumed) {
-        return false;
-    }
-    consumed = true;
-    return true;
 }
 
 }  // namespace
@@ -176,6 +121,7 @@ void title_scene::enter_play_mode() {
     mode_ = hub_mode::play;
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
+    play_state_.ranking_panel.selected_source = ranking_service::source::online;
     sync_play_media();
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
 }
@@ -184,7 +130,7 @@ void title_scene::enter_online_mode() {
     mode_ = hub_mode::online;
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
-    title_online_view::on_enter(online_state_, audio_controller_.preview());
+    title_online_view::on_enter(online_state_, online_data_controller_, audio_controller_.preview());
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
 }
 
@@ -230,53 +176,49 @@ void title_scene::poll_play_catalog_reload() {
 }
 
 void title_scene::update_startup_loading() {
-    if (!startup_loading_) {
-        return;
-    }
-
-    if (!startup_catalog_requested_) {
-        startup_catalog_requested_ = true;
-        startup_loading_message_ = "Loading local catalog...";
-        request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
-                                    mode_ == hub_mode::play || mode_ == hub_mode::create,
-                                    consume_startup_level_calculation());
-        return;
-    }
-
-    if (play_data_controller_.catalog_loading()) {
-        startup_loading_message_ = "Loading local catalog...";
-        return;
-    }
-
-    if (!play_state_.catalog_loaded_once) {
-        return;
-    }
-
-    if (!startup_scoring_requested_) {
-        startup_scoring_requested_ = true;
-        startup_load_failed_ = !play_state_.load_errors.empty();
-        startup_loading_message_ = "Preparing scoring cache...";
-        title_online_view::reload_catalog(online_state_);
-        if (play_state_.auth.logged_in) {
+    title_startup_controller::update(startup_, {
+        play_state_,
+        preferred_song_id_,
+        preferred_chart_id_,
+        mode_ == hub_mode::play || mode_ == hub_mode::create,
+        home_status_message_,
+        [this](std::string song_id, std::string chart_id, bool sync_media, bool calculate_missing_levels) {
+            request_play_catalog_reload(std::move(song_id), std::move(chart_id), sync_media, calculate_missing_levels);
+        },
+        [this]() {
+            return play_data_controller_.catalog_loading();
+        },
+        [this]() {
+            title_online_view::reload_catalog(online_state_, online_data_controller_);
+        },
+        [this]() {
             auth_overlay::start_restore(auth_controller_, play_state_.login_dialog);
-        }
-        request_scoring_ruleset_warm(true);
-        return;
-    }
+        },
+        [this](bool force_refresh) {
+            request_scoring_ruleset_warm(force_refresh);
+        },
+        [this]() {
+            return play_data_controller_.scoring_ruleset_loading();
+        },
+    });
+}
 
-    if (play_data_controller_.scoring_ruleset_loading()) {
-        startup_loading_message_ = "Preparing scoring cache...";
-        return;
+title_hub_view::mode to_title_hub_view_mode(title_scene::hub_mode mode) {
+    switch (mode) {
+        case title_scene::hub_mode::title:
+            return title_hub_view::mode::title;
+        case title_scene::hub_mode::home:
+            return title_hub_view::mode::home;
+        case title_scene::hub_mode::play:
+            return title_hub_view::mode::play;
+        case title_scene::hub_mode::online:
+            return title_hub_view::mode::online;
+        case title_scene::hub_mode::create:
+            return title_hub_view::mode::create;
+        case title_scene::hub_mode::settings:
+            return title_hub_view::mode::settings;
     }
-
-    startup_loading_ = false;
-    startup_load_complete_ = true;
-    startup_loading_message_ = startup_load_failed_ ? "Catalog loaded with warnings." : "Ready.";
-    if (startup_load_failed_) {
-        home_status_message_ = play_state_.load_errors.empty()
-            ? "Catalog loaded with warnings."
-            : play_state_.load_errors.front();
-    }
+    return title_hub_view::mode::title;
 }
 
 void title_scene::capture_current_play_selection() {
@@ -327,7 +269,7 @@ void title_scene::start_chart_upload(const song_select::song_entry& song,
 void title_scene::poll_create_upload() {
     if (play_data_controller_.poll_create_upload(play_state_).refresh_catalog) {
         capture_current_play_selection();
-        title_online_view::reload_catalog(online_state_, true);
+        title_online_view::reload_catalog(online_state_, online_data_controller_, true);
         request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
                                     mode_ == hub_mode::play || mode_ == hub_mode::create,
                                     true);
@@ -358,7 +300,7 @@ title_play_transfer_controller::catalog_callbacks title_scene::play_transfer_cal
             title_online_view::mark_song_removed(online_state_, song_id);
         },
         .reload_online_catalog = [this]() {
-            title_online_view::reload_catalog(online_state_);
+            title_online_view::reload_catalog(online_state_, online_data_controller_);
         },
         .request_play_catalog_reload =
             [this](const std::string& song_id, const std::string& chart_id, bool sync_media_on_apply) {
@@ -389,6 +331,7 @@ void title_scene::update_play_mode(float dt) {
                 const song_select::chart_option* chart = song_select::selected_chart_for(play_state_, filtered);
                 title_online_view::select_local_update_target(
                     online_state_,
+                    online_data_controller_,
                     song->song.meta.song_id,
                     include_chart && chart != nullptr ? chart->meta.chart_id : "",
                     true);
@@ -432,6 +375,7 @@ void title_scene::update_create_mode(float dt) {
 void title_scene::update_online_mode(float dt) {
     title_online_mode_controller::update(
         online_state_,
+        online_data_controller_,
         play_view_anim_,
         play_entry_origin_rect_,
         dt,
@@ -458,35 +402,60 @@ void title_scene::update_online_mode(float dt) {
 }
 
 void title_scene::update_common_animation(float dt) {
-    auth_overlay::poll_restore(auth_controller_, play_state_.auth, play_state_.login_dialog);
-    auth_overlay::poll_request(auth_controller_, play_state_.auth, play_state_.login_dialog);
-    poll_play_catalog_reload();
-    play_transfer_controller_.poll(play_state_, play_transfer_callbacks(),
-                                   mode_ == hub_mode::play || mode_ == hub_mode::create);
-    poll_play_ranking_reload();
-    poll_scoring_ruleset_warm();
-    poll_create_upload();
-    if (profile_controller_.poll().content_changed) {
-        auth_overlay::refresh_auth_state(play_state_.auth);
-        title_online_view::reload_catalog(online_state_);
-        request_play_catalog_reload("", "", mode_ == hub_mode::play || mode_ == hub_mode::create);
-    }
-    title_online_view::poll_song_page(online_state_);
-    title_online_view::poll_chart_page(online_state_);
-    title_online_view::poll_owned(online_state_);
-    profile_controller_.close_if_logged_out(play_state_.auth.logged_in);
     const hub_mode content_mode = content_mode_for_settings(mode_, settings_return_mode_);
-
-    if (title_online_view::poll_download(online_state_)) {
-        preferred_song_id_ = title_online_view::selected_song_id(online_state_);
-        preferred_chart_id_.clear();
-        request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
-                                    content_mode == hub_mode::play || content_mode == hub_mode::create,
-                                    true);
-    }
-    if (title_online_view::poll_catalog(online_state_) && content_mode == hub_mode::online) {
-        audio_controller_.preview().select_song(title_online_view::preview_song(online_state_));
-    }
+    title_hub_update_coordinator::poll_feature_work(
+        content_mode == hub_mode::online,
+        {
+            .poll_auth = [this]() {
+                auth_overlay::poll_restore(auth_controller_, play_state_.auth, play_state_.login_dialog);
+                auth_overlay::poll_request(auth_controller_, play_state_.auth, play_state_.login_dialog);
+            },
+            .poll_play_catalog_reload = [this]() { poll_play_catalog_reload(); },
+            .poll_play_transfer = [this]() {
+                play_transfer_controller_.poll(play_state_, play_transfer_callbacks(),
+                                               mode_ == hub_mode::play || mode_ == hub_mode::create);
+            },
+            .poll_play_ranking_reload = [this]() { poll_play_ranking_reload(); },
+            .poll_scoring_ruleset_warm = [this]() { poll_scoring_ruleset_warm(); },
+            .poll_create_upload = [this]() { poll_create_upload(); },
+            .poll_profile_content_changed = [this]() {
+                return profile_controller_.poll().content_changed;
+            },
+            .refresh_auth_state = [this]() {
+                auth_overlay::refresh_auth_state(play_state_.auth);
+            },
+            .reload_online_catalog = [this]() {
+                title_online_view::reload_catalog(online_state_, online_data_controller_);
+            },
+            .request_play_catalog_reload = [this]() {
+                request_play_catalog_reload("", "", mode_ == hub_mode::play || mode_ == hub_mode::create);
+            },
+            .poll_online_song_page = [this]() { title_online_view::poll_song_page(online_state_, online_data_controller_); },
+            .poll_online_chart_page = [this]() { title_online_view::poll_chart_page(online_state_, online_data_controller_); },
+            .poll_online_owned = [this]() { title_online_view::poll_owned(online_state_, online_data_controller_); },
+            .close_profile_if_logged_out = [this]() {
+                profile_controller_.close_if_logged_out(play_state_.auth.logged_in);
+            },
+            .poll_online_download = [this]() {
+                return title_online_view::poll_download(online_state_, online_data_controller_);
+            },
+            .selected_online_song_id = [this]() {
+                return title_online_view::selected_song_id(online_state_);
+            },
+            .request_downloaded_play_catalog_reload = [this, content_mode](std::string song_id) {
+                preferred_song_id_ = std::move(song_id);
+                preferred_chart_id_.clear();
+                request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
+                                            content_mode == hub_mode::play || content_mode == hub_mode::create,
+                                            true);
+            },
+            .poll_online_catalog = [this]() {
+                return title_online_view::poll_catalog(online_state_, online_data_controller_);
+            },
+            .select_online_preview_song = [this]() {
+                audio_controller_.preview().select_song(title_online_view::preview_song(online_state_));
+            },
+        });
 
     if (intro_hold_t_ > 0.0f) {
         intro_hold_t_ = std::max(0.0f, intro_hold_t_ - dt);
@@ -556,7 +525,7 @@ bool title_scene::handle_refresh_button_input() {
     }
 
     capture_current_play_selection();
-    title_online_view::reload_catalog(online_state_, true);
+    title_online_view::reload_catalog(online_state_, online_data_controller_, true);
     request_play_catalog_reload(preferred_song_id_, preferred_chart_id_,
                                 mode_ == hub_mode::play || mode_ == hub_mode::create,
                                 true);
@@ -714,6 +683,9 @@ void title_scene::on_enter() {
     }
     mode_ = start_in_create_view_ ? hub_mode::create
         : (start_in_play_view_ ? hub_mode::play : (start_with_home_open_ ? hub_mode::home : hub_mode::title));
+    if (mode_ == hub_mode::play) {
+        play_state_.ranking_panel.selected_source = ranking_service::source::online;
+    }
     suppress_home_pointer_until_release_ = false;
     settings_return_mode_ = hub_mode::home;
     home_menu_anim_ = mode_ == hub_mode::title ? 0.0f : 1.0f;
@@ -723,13 +695,7 @@ void title_scene::on_enter() {
     play_entry_origin_rect_ = {};
     settings_overlay_.open();
     play_state_.login_dialog.open = false;
-    startup_loading_ = true;
-    startup_catalog_requested_ = false;
-    startup_scoring_requested_ = false;
-    startup_load_complete_ = false;
-    startup_load_failed_ = false;
-    startup_progress_visual_ = kStartupProgressMin;
-    startup_loading_message_ = "Initializing audio...";
+    title_startup_controller::reset(startup_);
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
 }
 
@@ -794,7 +760,7 @@ void title_scene::update(float dt) {
         return;
     }
 
-    if (startup_loading_) {
+    if (startup_.loading) {
         update_title_quit(dt);
         return;
     }
@@ -868,129 +834,39 @@ void title_scene::update(float dt) {
 
 // タイトルと、そこから展開する Home 導線を描画する。
 void title_scene::draw() {
-    const auto& t = *g_theme;
-    const float menu_t = tween::ease_out_cubic(home_menu_anim_);
-    const float play_t = tween::ease_out_cubic(play_view_anim_);
-    const Rectangle screen_rect = title_layout::screen_rect();
-    const Rectangle spectrum_rect = title_layout::spectrum_rect();
-    const Rectangle settings_chip_rect = title_layout::settings_chip_rect();
-    const Rectangle refresh_chip_rect = title_layout::refresh_chip_rect();
-    const Rectangle account_chip_rect = title_layout::account_chip_rect();
-    virtual_screen::begin_ui();
-    draw_scene_background(t);
-    ui::begin_draw_queue();
-    const float spectrum_alpha = tween::lerp(1.0f, 0.5f, play_t);
-    audio_controller_.draw_spectrum(spectrum_rect, spectrum_alpha);
-    if (mode_ != hub_mode::settings) {
-        title_header_view::draw({
-            .closed_header_rect = title_layout::closed_header_rect(),
-            .open_header_rect = title_layout::open_header_rect(),
-            .refresh_chip_rect = refresh_chip_rect,
-            .settings_chip_rect = settings_chip_rect,
-            .account_chip_rect = account_chip_rect,
-            .menu_t = menu_t,
-            .play_t = play_t,
-            .account_name = account_name_for(play_state_.auth),
-            .account_status = account_status_for(play_state_.auth),
-            .avatar_label = make_avatar_label(play_state_.auth),
-            .logged_in = play_state_.auth.logged_in,
-            .email_verified = play_state_.auth.email_verified,
-            .now = GetTime(),
-        });
-
-        if (!startup_loading_) {
-            title_home_view::draw(home_menu_anim_, play_view_anim_, home_menu_selected_index_, home_status_message_);
-        }
-    }
-
-    if (startup_loading_) {
-        draw_startup_loading(GetFrameTime());
-    } else if (startup_load_failed_ && mode_ == hub_mode::title) {
-        draw_startup_status();
-    } else if (mode_ == hub_mode::settings) {
-        settings_overlay_.draw();
-    } else if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
-        title_play_view::draw(play_state_, audio_controller_.preview(),
-                              mode_ == hub_mode::create ? title_play_view::mode::create : title_play_view::mode::play,
-                              play_view_anim_, play_entry_origin_rect_);
-    } else if (mode_ == hub_mode::online) {
-        title_online_view::draw(online_state_, play_view_anim_, play_entry_origin_rect_);
-    }
-
-    const Rectangle account_dialog_anchor = {
-        account_chip_rect.x,
-        account_chip_rect.y + 12.0f,
-        account_chip_rect.width,
-        account_chip_rect.height
-    };
-    if (mode_ == hub_mode::play || mode_ == hub_mode::create) {
-        play_transfer_controller_.draw_or_apply_confirmation(
-            play_state_, audio_controller_.preview(), play_transfer_callbacks(),
-            mode_ == hub_mode::play || mode_ == hub_mode::create);
-    }
-    profile_controller_.draw(play_state_.auth, auth_controller_.request_active, kTitleModalLayer);
-    const song_select::login_dialog_command login_command =
-        song_select::draw_login_dialog(play_state_.auth, play_state_.login_dialog,
-                                       account_dialog_anchor, screen_rect,
-                                       auth_controller_.request_active, kTitleModalLayer);
-    if (login_command == song_select::login_dialog_command::close) {
+    const title_play_transfer_controller::catalog_callbacks transfer_callbacks = play_transfer_callbacks();
+    const title_hub_view::draw_result result = title_hub_view::draw({
+        {
+            to_title_hub_view_mode(mode_),
+            transitioning_to_song_select_,
+            quitting_,
+            intro_hold_t_ > 0.0f,
+            home_menu_anim_,
+            play_view_anim_,
+            home_menu_selected_index_,
+            home_status_message_,
+            play_entry_origin_rect_,
+        },
+        play_state_,
+        online_state_,
+        startup_,
+        audio_controller_,
+        settings_overlay_,
+        play_transfer_controller_,
+        profile_controller_,
+        auth_controller_,
+        transfer_callbacks,
+        intro_fade_,
+        transition_fade_,
+        quit_fade_,
+    });
+    if (result.close_login_dialog) {
         play_state_.login_dialog.open = false;
-    } else if (login_command == song_select::login_dialog_command::request_profile) {
+    } else if (result.open_profile) {
         play_state_.login_dialog.open = false;
         profile_controller_.open();
-    } else if (login_command != song_select::login_dialog_command::none) {
-        auth_overlay::start_request(auth_controller_, play_state_.login_dialog, login_command);
+    } else if (result.login_command != song_select::login_dialog_command::none) {
+        auth_overlay::start_request(auth_controller_, play_state_.login_dialog, result.login_command);
     }
-
-    ui::flush_draw_queue();
-
-    if (!startup_loading_) {
-        if (intro_hold_t_ > 0.0f) {
-            ui::draw_fullscreen_overlay(BLACK);
-        } else {
-            intro_fade_.draw();
-        }
-    }
-    if (transitioning_to_song_select_) {
-        transition_fade_.draw();
-    }
-    if (quitting_) {
-        quit_fade_.draw();
-    }
-    virtual_screen::end();
-
-    ClearBackground(BLACK);
-    virtual_screen::draw_to_screen();
 }
 
-void title_scene::draw_startup_loading(float dt) {
-    const Rectangle panel = {690.0f, 702.0f, 540.0f, 112.0f};
-    const Rectangle label_rect = {panel.x, panel.y, panel.width, 38.0f};
-    const Rectangle detail_rect = {panel.x, panel.y + 36.0f, panel.width, 28.0f};
-    const Rectangle bar_rect = {panel.x + 2.0f, panel.y + 82.0f, panel.width - 4.0f, 8.0f};
-    float base_progress = kStartupProgressMin;
-    if (startup_catalog_requested_) {
-        base_progress = kStartupProgressCatalog;
-    }
-    if (startup_scoring_requested_) {
-        base_progress = kStartupProgressScoring;
-    }
-    if (startup_load_complete_) {
-        base_progress = 1.0f;
-    }
-    startup_progress_visual_ = tween::damp(startup_progress_visual_, base_progress, dt, 5.0f, 0.0005f);
-    const float progress = std::clamp(startup_progress_visual_, 0.0f, 1.0f);
-
-    ui::draw_text_in_rect("raythm", 28, label_rect, g_theme->text);
-    ui::draw_text_in_rect(startup_loading_message_.c_str(), 18, detail_rect,
-                          startup_load_failed_ ? g_theme->error : g_theme->text_muted);
-    ui::draw_progress_bar(bar_rect, progress, with_alpha(g_theme->row, 180),
-                          startup_load_failed_ ? g_theme->error : g_theme->accent,
-                          with_alpha(g_theme->border, 180), 1.5f, 1.5f);
-}
-
-void title_scene::draw_startup_status() const {
-    const Rectangle status_rect = {520.0f, 704.0f, 880.0f, 34.0f};
-    ui::draw_text_in_rect(startup_loading_message_.c_str(), 18, status_rect,
-                          startup_load_failed_ ? g_theme->error : g_theme->text_muted);
-}

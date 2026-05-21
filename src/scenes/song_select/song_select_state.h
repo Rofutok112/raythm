@@ -1,7 +1,10 @@
 #pragma once
 
 #include <optional>
+#include <future>
+#include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "data_models.h"
@@ -20,6 +23,7 @@ struct chart_option {
     content_status source_status = content_status::local;
     int local_note_offset_ms = 0;
     std::optional<rank> best_local_rank;
+    std::optional<int> best_local_score;
     int note_count = 0;
     float min_bpm = 0.0f;
     float max_bpm = 0.0f;
@@ -37,11 +41,46 @@ struct catalog_data {
     std::vector<std::string> load_errors;
 };
 
+class jacket_cache {
+public:
+    struct pending_texture {
+        std::vector<unsigned char> bytes;
+        std::string file_type;
+    };
+
+    jacket_cache() = default;
+    ~jacket_cache();
+
+    jacket_cache(const jacket_cache&) = delete;
+    jacket_cache& operator=(const jacket_cache&) = delete;
+
+    const Texture2D* get(const song_data& song);
+    void poll();
+    void clear();
+
+private:
+    struct cache_entry {
+        Texture2D texture{};
+        std::future<pending_texture> future;
+        bool loaded = false;
+        bool missing = false;
+        bool requested = false;
+    };
+
+    std::unordered_map<std::string, cache_entry> entries_;
+};
+
 enum class context_menu_target {
     none,
     list_background,
     song,
     chart,
+};
+
+enum class chart_source_filter {
+    all,
+    official,
+    community,
 };
 
 enum class context_menu_section {
@@ -90,6 +129,10 @@ struct recent_result_offset {
 struct ranking_panel_state {
     ranking_service::source selected_source = ranking_service::source::local;
     ranking_service::listing listing;
+    ranking_service::source best_source = ranking_service::source::local;
+    std::optional<ranking_service::entry> best_entry;
+    std::string best_chart_id;
+    bool best_loaded = false;
     bool source_dropdown_open = false;
     float scroll_y = 0.0f;
     float scroll_y_target = 0.0f;
@@ -125,31 +168,115 @@ struct login_dialog_state {
     ui::text_input_state verification_code_input;
 };
 
-struct state {
+struct catalog_state {
     std::vector<song_entry> songs;
     std::vector<std::string> load_errors;
+    std::shared_ptr<jacket_cache> jackets;
     bool catalog_loading = false;
     bool catalog_loaded_once = false;
+};
+
+struct selection_state {
     int selected_song_index = 0;
     int difficulty_index = 0;
+    bool selected_song_expanded = true;
+    float selected_song_expand_t = 1.0f;
+};
+
+struct filter_state {
+    ui::text_input_state play_search_input;
+    chart_source_filter chart_source = chart_source_filter::all;
+    int chart_key_filter = 0;
+    float chart_min_level = 0.0f;
+    float chart_max_level = 99.0f;
+    bool chart_level_filter_dragging = false;
+    bool chart_level_filter_dragging_min = false;
+};
+
+struct scroll_state {
     float scroll_y = 0.0f;
     float scroll_y_target = 0.0f;
     float chart_scroll_y = 0.0f;
     float chart_scroll_y_target = 0.0f;
+    float embedded_chart_scroll_y = 0.0f;
+    float embedded_chart_scroll_y_target = 0.0f;
+    bool scrollbar_dragging = false;
+    float scrollbar_drag_offset = 0.0f;
+};
+
+struct preview_state {
+    bool preview_bar_dragging = false;
+    bool preview_bar_resume_after_drag = false;
+    double preview_bar_drag_position_seconds = 0.0;
     float song_change_anim_t = 0.0f;
     float chart_change_anim_t = 0.0f;
     scene_fade scene_fade_in{scene_fade::direction::in, 0.3f, 0.65f};
-    bool scrollbar_dragging = false;
-    float scrollbar_drag_offset = 0.0f;
+    std::optional<recent_result_offset> recent_result_offset;
+};
+
+struct dialog_state {
     context_menu_state context_menu;
     confirmation_dialog_state confirmation_dialog;
-    std::optional<recent_result_offset> recent_result_offset;
-    ranking_panel_state ranking_panel;
+};
+
+struct auth_ui_state {
     auth_state auth;
     login_dialog_state login_dialog;
 };
 
+struct state {
+    state();
+    state(const state& other);
+    state& operator=(const state& other);
+
+    catalog_state catalog;
+    selection_state selection;
+    filter_state filter;
+    scroll_state scroll;
+    preview_state preview;
+    dialog_state dialog;
+    ranking_panel_state ranking_panel;
+    auth_ui_state auth_ui;
+
+    std::vector<song_entry>& songs;
+    std::vector<std::string>& load_errors;
+    std::shared_ptr<jacket_cache>& jackets;
+    bool& catalog_loading;
+    bool& catalog_loaded_once;
+    int& selected_song_index;
+    int& difficulty_index;
+    float& scroll_y;
+    float& scroll_y_target;
+    float& chart_scroll_y;
+    float& chart_scroll_y_target;
+    float& embedded_chart_scroll_y;
+    float& embedded_chart_scroll_y_target;
+    bool& selected_song_expanded;
+    float& selected_song_expand_t;
+    ui::text_input_state& play_search_input;
+    chart_source_filter& chart_source;
+    int& chart_key_filter;
+    float& chart_min_level;
+    float& chart_max_level;
+    bool& chart_level_filter_dragging;
+    bool& chart_level_filter_dragging_min;
+    bool& preview_bar_dragging;
+    bool& preview_bar_resume_after_drag;
+    double& preview_bar_drag_position_seconds;
+    float& song_change_anim_t;
+    float& chart_change_anim_t;
+    scene_fade& scene_fade_in;
+    bool& scrollbar_dragging;
+    float& scrollbar_drag_offset;
+    context_menu_state& context_menu;
+    confirmation_dialog_state& confirmation_dialog;
+    std::optional<recent_result_offset>& recent_result_offset;
+    auth_state& auth;
+    login_dialog_state& login_dialog;
+};
+
 const song_entry* selected_song(const state& state);
+std::vector<int> filtered_song_indices(const state& state);
 std::vector<const chart_option*> filtered_charts_for_selected_song(const state& state);
 const chart_option* selected_chart_for(const state& state, const std::vector<const chart_option*>& filtered);
 
@@ -159,6 +286,12 @@ void apply_catalog(state& state, catalog_data catalog,
                    const std::string& preferred_song_id = "",
                    const std::string& preferred_chart_id = "");
 bool apply_song_selection(state& state, int song_index, int chart_index = 0);
+bool apply_chart_filters(state& state,
+                         chart_source_filter source,
+                         int key_filter,
+                         float min_level,
+                         float max_level);
+bool clear_chart_filters(state& state);
 
 void open_song_context_menu(state& state, int song_index, Rectangle rect);
 void open_chart_context_menu(state& state, int song_index, int chart_index, Rectangle rect);

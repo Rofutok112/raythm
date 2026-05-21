@@ -478,6 +478,44 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    judge_system early_hold_head_from_stay_judge;
+    early_hold_head_from_stay_judge.init({
+        note_data{note_type::hold, 960, 1, 1440},
+        note_data{note_type::stay, 960, 1, 960},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 835.0);
+    early_hold_head_from_stay_judge.update(835.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+    early_hold_head_from_stay_judge.update(1000.0, input);
+    if (!early_hold_head_from_stay_judge.note_states()[0].is_holding() ||
+        !early_hold_head_from_stay_judge.note_states()[1].is_completed() ||
+        early_hold_head_from_stay_judge.note_states()[0].result != judge_result::perfect ||
+        early_hold_head_from_stay_judge.note_states()[1].result != judge_result::perfect) {
+        std::cerr << "Hold head next to a held stay should start even when the press was slightly early\n";
+        return EXIT_FAILURE;
+    }
+
+    judge_system early_hold_head_from_near_stay_judge;
+    early_hold_head_from_near_stay_judge.init({
+        note_data{note_type::hold, 960, 1, 1440},
+        note_data{note_type::stay, 816, 1, 816},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 835.0);
+    early_hold_head_from_near_stay_judge.update(835.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+    early_hold_head_from_near_stay_judge.update(1000.0, input);
+    if (!early_hold_head_from_near_stay_judge.note_states()[0].is_holding() ||
+        !early_hold_head_from_near_stay_judge.note_states()[1].is_completed() ||
+        early_hold_head_from_near_stay_judge.note_states()[0].result != judge_result::perfect ||
+        early_hold_head_from_near_stay_judge.note_states()[1].result != judge_result::perfect) {
+        std::cerr << "Hold head near a held stay should start from the continuous held input\n";
+        return EXIT_FAILURE;
+    }
+
     judge_system late_hold_head_across_stay_judge;
     late_hold_head_across_stay_judge.init({
         note_data{note_type::hold, 960, 1, 1440},
@@ -493,6 +531,87 @@ int main() {
         late_hold_head_across_stay_judge.note_states()[1].result != judge_result::perfect) {
         std::cerr << "Late perfect hold head press should stay prioritized even after crossing a nearby stay\n";
         return EXIT_FAILURE;
+    }
+
+    judge_system missed_hold_contained_stay_judge;
+    missed_hold_contained_stay_judge.init({
+        note_data{note_type::hold, 960, 1, 1440},
+        note_data{note_type::stay, 1200, 1, 1200},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    missed_hold_contained_stay_judge.update(1170.0, input);
+    if (!missed_hold_contained_stay_judge.note_states()[0].is_completed() ||
+        missed_hold_contained_stay_judge.note_states()[0].result != judge_result::miss) {
+        std::cerr << "Hold head should miss before checking a later stay inside its span\n";
+        return EXIT_FAILURE;
+    }
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1240.0);
+    missed_hold_contained_stay_judge.update(1240.0, input);
+    missed_hold_contained_stay_judge.update(1260.0, input);
+    if (!missed_hold_contained_stay_judge.note_states()[1].is_completed() ||
+        missed_hold_contained_stay_judge.note_states()[1].result != judge_result::perfect ||
+        !missed_hold_contained_stay_judge.get_last_judge().has_value() ||
+        missed_hold_contained_stay_judge.get_last_judge()->hitsound_type != note_type::stay) {
+        std::cerr << "Stay inside a missed hold should still judge and play its stay hitsound\n";
+        return EXIT_FAILURE;
+    }
+
+    judge_system hold_tail_dense_stay_release_judge;
+    hold_tail_dense_stay_release_judge.init({
+        note_data{note_type::hold, 960, 1, 1440},
+        note_data{note_type::stay, 1392, 1, 1392},
+        note_data{note_type::stay, 1416, 1, 1416},
+        note_data{note_type::stay, 1430, 1, 1430},
+        note_data{note_type::stay, 1440, 1, 1440},
+    }, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+    hold_tail_dense_stay_release_judge.update(1000.0, input);
+    input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, 1500.0);
+    hold_tail_dense_stay_release_judge.update(1500.0, input);
+    if (!hold_tail_dense_stay_release_judge.note_states()[0].is_completed() ||
+        hold_tail_dense_stay_release_judge.note_states()[0].result != judge_result::perfect) {
+        std::cerr << "Dense stays near a hold tail should not steal the hold release judgement\n";
+        return EXIT_FAILURE;
+    }
+    for (size_t note_index = 1; note_index <= 4; ++note_index) {
+        if (!hold_tail_dense_stay_release_judge.note_states()[note_index].is_completed() ||
+            hold_tail_dense_stay_release_judge.note_states()[note_index].result != judge_result::perfect) {
+            std::cerr << "Dense stays crossed before release should resolve from the held input session\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    const struct {
+        double release_ms;
+        judge_result expected_hold_result;
+        const char* label;
+    } early_hold_tail_near_stay_cases[] = {
+        {1470.0, judge_result::perfect, "perfect"},
+        {1430.0, judge_result::great, "great"},
+    };
+    for (const auto& test_case : early_hold_tail_near_stay_cases) {
+        judge_system early_hold_tail_near_stay_release_judge;
+        early_hold_tail_near_stay_release_judge.init({
+            note_data{note_type::hold, 960, 1, 1440},
+            note_data{note_type::stay, 1440, 1, 1440},
+        }, engine);
+        input = input_handler();
+        input.set_key_count(4);
+        input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+        early_hold_tail_near_stay_release_judge.update(1000.0, input);
+        input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, test_case.release_ms);
+        early_hold_tail_near_stay_release_judge.update(test_case.release_ms, input);
+        if (!early_hold_tail_near_stay_release_judge.note_states()[0].is_completed() ||
+            early_hold_tail_near_stay_release_judge.note_states()[0].result != test_case.expected_hold_result ||
+            !early_hold_tail_near_stay_release_judge.note_states()[1].is_completed() ||
+            early_hold_tail_near_stay_release_judge.note_states()[1].result > judge_result::great) {
+            std::cerr << "Early " << test_case.label
+                      << " release on a hold tail should also judge the stacked stay at Great or better\n";
+            return EXIT_FAILURE;
+        }
     }
 
     judge_system stay_release_judge;

@@ -2,9 +2,14 @@
 
 #include <array>
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <cstdint>
 #include <filesystem>
+#include <future>
+#include <mutex>
+#include <optional>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -29,6 +34,12 @@ struct se_voice_entry {
     std::string sample_path;
 };
 
+struct loudness_cache_entry {
+    std::uintmax_t file_size = 0;
+    std::filesystem::file_time_type last_write_time = {};
+    audio_loudness_analysis analysis;
+};
+
 std::unordered_map<std::string, se_sample_entry>& se_samples() {
     static std::unordered_map<std::string, se_sample_entry> samples;
     return samples;
@@ -44,6 +55,35 @@ std::uint64_t& se_sample_generation() {
     return generation;
 }
 
+std::unordered_map<std::string, loudness_cache_entry>& loudness_cache() {
+    static std::unordered_map<std::string, loudness_cache_entry> cache;
+    return cache;
+}
+
+std::mutex& loudness_cache_mutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::optional<loudness_cache_entry> make_loudness_cache_probe(const std::string& file_path) {
+    std::error_code ec;
+    const std::filesystem::path path(file_path);
+    if (!std::filesystem::is_regular_file(path, ec) || ec) {
+        return std::nullopt;
+    }
+
+    loudness_cache_entry entry;
+    entry.file_size = std::filesystem::file_size(path, ec);
+    if (ec) {
+        return std::nullopt;
+    }
+    entry.last_write_time = std::filesystem::last_write_time(path, ec);
+    if (ec) {
+        return std::nullopt;
+    }
+    return entry;
+}
+
 std::string lowercase_ascii(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
@@ -54,6 +94,13 @@ std::string lowercase_ascii(std::string value) {
 bool is_remote_stream_url(const std::string& file_path) {
     const std::string lowered = lowercase_ascii(file_path);
     return lowered.rfind("http://", 0) == 0 || lowered.rfind("https://", 0) == 0;
+}
+
+unsigned long create_stream_from_path(const std::string& file_path) {
+    if (is_remote_stream_url(file_path)) {
+        return BASS_StreamCreateURL(file_path.c_str(), 0, BASS_STREAM_PRESCAN, nullptr, nullptr);
+    }
+    return BASS_StreamCreateFile(FALSE, file_path.c_str(), 0, 0, 0);
 }
 
 bool is_pinned_se_sample_path(const std::string& file_path) {
@@ -152,6 +199,25 @@ bool audio_manager::initialize() {
 void audio_manager::shutdown() {
     stop_all_se();
     free_se_samples();
+    if (preview_loading_ && preview_load_future_.valid()) {
+        preview_load_future_.wait();
+        const preview_load_payload loaded = preview_load_future_.get();
+        if (loaded.handle != 0) {
+            BASS_StreamFree(loaded.handle);
+        }
+    }
+    for (std::future<preview_load_payload>& stale_future : stale_preview_load_futures_) {
+        if (!stale_future.valid()) {
+            continue;
+        }
+        stale_future.wait();
+        const preview_load_payload loaded = stale_future.get();
+        if (loaded.handle != 0) {
+            BASS_StreamFree(loaded.handle);
+        }
+    }
+    stale_preview_load_futures_.clear();
+    preview_loading_ = false;
     free_voice(bgm_handle_);
     free_voice(preview_handle_);
 
@@ -169,7 +235,9 @@ bool audio_manager::load_bgm(const std::string& file_path) {
     if (!ensure_initialized()) {
         return false;
     }
+    reset_bgm_fade();
     replace_voice(bgm_handle_, file_path);
+    bgm_loudness_ = analyze_or_get_cached_loudness(file_path);
     apply_bgm_volume();
     return is_voice_loaded(bgm_handle_);
 }
@@ -184,16 +252,54 @@ void audio_manager::pause_bgm() {
 }
 
 void audio_manager::fade_out_bgm(unsigned int duration_ms) {
-    fade_out_voice(bgm_handle_, duration_ms);
+    if (!is_voice_loaded(bgm_handle_)) {
+        return;
+    }
+    bgm_fade_.start_gain = bgm_fade_.gain;
+    bgm_fade_.target_gain = 0.0f;
+    bgm_fade_.started_at = std::chrono::steady_clock::now();
+    bgm_fade_.duration = std::chrono::milliseconds(duration_ms);
+    bgm_fade_.active = duration_ms > 0;
+    if (!bgm_fade_.active) {
+        bgm_fade_.gain = bgm_fade_.target_gain;
+    }
+    apply_bgm_volume();
 }
 
 void audio_manager::stop_bgm() {
     stop_voice(bgm_handle_);
+    reset_bgm_fade();
 }
 
 void audio_manager::set_bgm_volume(float volume) {
     bgm_volume_ = std::clamp(volume, 0.0f, 1.0f);
     apply_bgm_volume();
+}
+
+void audio_manager::set_bgm_fade_gain(float gain) {
+    bgm_fade_.active = false;
+    bgm_fade_.gain = std::clamp(gain, 0.0f, 1.0f);
+    bgm_fade_.start_gain = bgm_fade_.gain;
+    bgm_fade_.target_gain = bgm_fade_.gain;
+    apply_bgm_volume();
+}
+
+void audio_manager::set_loudness_normalization_enabled(bool enabled) {
+    loudness_normalization_enabled_ = enabled;
+    apply_bgm_volume();
+    apply_preview_volume();
+}
+
+bool audio_manager::is_loudness_normalization_enabled() const {
+    return loudness_normalization_enabled_;
+}
+
+audio_loudness_analysis audio_manager::get_bgm_loudness_analysis() const {
+    return bgm_loudness_;
+}
+
+audio_loudness_analysis audio_manager::get_preview_loudness_analysis() const {
+    return preview_loudness_;
 }
 
 void audio_manager::seek_bgm(double seconds) {
@@ -311,12 +417,108 @@ bool audio_manager::load_preview(const std::string& file_path) {
     if (!ensure_initialized()) {
         return false;
     }
+    ++preview_load_generation_;
+    active_preview_load_generation_ = preview_load_generation_;
+    if (preview_load_future_.valid()) {
+        stale_preview_load_futures_.push_back(std::move(preview_load_future_));
+    }
+    preview_loading_ = false;
+    reset_preview_fade();
     replace_voice(preview_handle_, file_path);
+    preview_path_ = file_path;
+    preview_loudness_ = analyze_or_get_cached_loudness(file_path);
     apply_preview_volume();
     return is_voice_loaded(preview_handle_);
 }
 
+bool audio_manager::request_preview_load(const std::string& file_path) {
+    if (!ensure_initialized()) {
+        return false;
+    }
+
+    ++preview_load_generation_;
+    active_preview_load_generation_ = preview_load_generation_;
+    if (preview_load_future_.valid()) {
+        stale_preview_load_futures_.push_back(std::move(preview_load_future_));
+    }
+
+    stop_voice(preview_handle_);
+    free_voice(preview_handle_);
+    reset_preview_fade();
+    preview_loading_ = true;
+    const std::string source = file_path;
+    preview_path_ = file_path;
+    preview_loudness_ = {};
+    const unsigned int generation = active_preview_load_generation_;
+    std::promise<preview_load_payload> promise;
+    preview_load_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), source, generation]() mutable {
+        try {
+            promise.set_value({
+                generation,
+                create_stream_from_path(source),
+            });
+        } catch (...) {
+            promise.set_value({generation, 0});
+        }
+    }).detach();
+    return true;
+}
+
+audio_manager::async_preview_load_result audio_manager::poll_preview_load() {
+    async_preview_load_result result;
+    for (auto it = stale_preview_load_futures_.begin(); it != stale_preview_load_futures_.end();) {
+        if (!it->valid() || it->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            if (it->valid()) {
+                const preview_load_payload stale = it->get();
+                if (stale.handle != 0) {
+                    BASS_StreamFree(stale.handle);
+                }
+            }
+            it = stale_preview_load_futures_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    if (!preview_loading_ || !preview_load_future_.valid()) {
+        return result;
+    }
+    if (preview_load_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return result;
+    }
+
+    result.completed = true;
+    preview_loading_ = false;
+    preview_load_payload loaded;
+    try {
+        loaded = preview_load_future_.get();
+    } catch (...) {
+        loaded = {};
+    }
+
+    if (loaded.generation != preview_load_generation_) {
+        if (loaded.handle != 0) {
+            BASS_StreamFree(loaded.handle);
+        }
+        return result;
+    }
+
+    free_voice(preview_handle_);
+    preview_handle_ = loaded.handle;
+    preview_loudness_ = analyze_or_get_cached_loudness(preview_path_);
+    reset_preview_fade();
+    apply_preview_volume();
+    result.loaded = is_voice_loaded(preview_handle_);
+    return result;
+}
+
+bool audio_manager::is_preview_loading() const {
+    return preview_loading_;
+}
+
 void audio_manager::play_preview(bool restart) {
+    apply_preview_volume();
     play_voice(preview_handle_, restart);
 }
 
@@ -326,15 +528,33 @@ void audio_manager::pause_preview() {
 
 void audio_manager::stop_preview() {
     stop_voice(preview_handle_);
+    reset_preview_fade();
 }
 
 void audio_manager::unload_preview() {
+    ++preview_load_generation_;
+    active_preview_load_generation_ = preview_load_generation_;
+    if (preview_load_future_.valid()) {
+        stale_preview_load_futures_.push_back(std::move(preview_load_future_));
+    }
+    preview_loading_ = false;
     stop_voice(preview_handle_);
     free_voice(preview_handle_);
+    reset_preview_fade();
+    preview_path_.clear();
+    preview_loudness_ = {};
 }
 
 void audio_manager::set_preview_volume(float volume) {
     preview_volume_ = std::clamp(volume, 0.0f, 1.0f);
+    apply_preview_volume();
+}
+
+void audio_manager::set_preview_fade_gain(float gain) {
+    preview_fade_.active = false;
+    preview_fade_.gain = std::clamp(gain, 0.0f, 1.0f);
+    preview_fade_.start_gain = preview_fade_.gain;
+    preview_fade_.target_gain = preview_fade_.gain;
     apply_preview_volume();
 }
 
@@ -482,6 +702,13 @@ void audio_manager::set_se_volume(float volume) {
 }
 
 void audio_manager::update() {
+    if (update_fade(bgm_fade_)) {
+        apply_bgm_volume();
+    }
+    if (update_fade(preview_fade_)) {
+        apply_preview_volume();
+    }
+
     for (auto it = se_voices().begin(); it != se_voices().end();) {
         if (!is_voice_loaded(it->second.handle) || BASS_ChannelIsActive(it->second.handle) == BASS_ACTIVE_STOPPED) {
             if (it->second.stream_fallback) {
@@ -576,12 +803,6 @@ void audio_manager::pause_voice(unsigned long handle) {
     }
 }
 
-void audio_manager::fade_out_voice(unsigned long handle, unsigned int duration_ms) {
-    if (handle != 0) {
-        BASS_ChannelSlideAttribute(handle, BASS_ATTRIB_VOL, 0.0f, duration_ms);
-    }
-}
-
 void audio_manager::stop_voice(unsigned long handle) {
     if (handle != 0) {
         BASS_ChannelStop(handle);
@@ -607,10 +828,7 @@ bool audio_manager::ensure_initialized() {
 }
 
 unsigned long audio_manager::create_stream(const std::string& file_path) const {
-    if (is_remote_stream_url(file_path)) {
-        return BASS_StreamCreateURL(file_path.c_str(), 0, BASS_STREAM_PRESCAN, nullptr, nullptr);
-    }
-    return BASS_StreamCreateFile(FALSE, file_path.c_str(), 0, 0, 0);
+    return create_stream_from_path(file_path);
 }
 
 void audio_manager::replace_voice(unsigned long& handle, const std::string& file_path) const {
@@ -618,14 +836,77 @@ void audio_manager::replace_voice(unsigned long& handle, const std::string& file
     handle = create_stream(file_path);
 }
 
+audio_loudness_analysis audio_manager::analyze_or_get_cached_loudness(const std::string& file_path) const {
+    const std::optional<loudness_cache_entry> probe = make_loudness_cache_probe(file_path);
+    if (!probe.has_value()) {
+        return {};
+    }
+
+    {
+        std::scoped_lock lock(loudness_cache_mutex());
+        const auto it = loudness_cache().find(file_path);
+        if (it != loudness_cache().end() &&
+            it->second.file_size == probe->file_size &&
+            it->second.last_write_time == probe->last_write_time) {
+            return it->second.analysis;
+        }
+    }
+
+    loudness_cache_entry entry = *probe;
+    entry.analysis = analyze_audio_loudness(file_path);
+
+    std::scoped_lock lock(loudness_cache_mutex());
+    loudness_cache()[file_path] = entry;
+    return entry.analysis;
+}
+
+void audio_manager::reset_bgm_fade() {
+    bgm_fade_ = {};
+}
+
+void audio_manager::reset_preview_fade() {
+    preview_fade_ = {};
+}
+
+bool audio_manager::update_fade(volume_fade_state& fade) {
+    if (!fade.active) {
+        return false;
+    }
+
+    if (fade.duration.count() <= 0) {
+        fade.gain = fade.target_gain;
+        fade.active = false;
+        return true;
+    }
+
+    const auto elapsed = std::chrono::steady_clock::now() - fade.started_at;
+    const float t = std::clamp(
+        static_cast<float>(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()) /
+            static_cast<float>(fade.duration.count()),
+        0.0f,
+        1.0f);
+    fade.gain = fade.start_gain + (fade.target_gain - fade.start_gain) * t;
+    if (t >= 1.0f) {
+        fade.gain = fade.target_gain;
+        fade.active = false;
+    }
+    return true;
+}
+
 void audio_manager::apply_bgm_volume() const {
     if (is_voice_loaded(bgm_handle_)) {
-        BASS_ChannelSetAttribute(bgm_handle_, BASS_ATTRIB_VOL, bgm_volume_);
+        const float normalized_gain =
+            loudness_normalization_enabled_ && bgm_loudness_.valid ? bgm_loudness_.linear_gain : 1.0f;
+        BASS_ChannelSetAttribute(bgm_handle_, BASS_ATTRIB_VOL,
+                                 std::clamp(bgm_volume_ * bgm_fade_.gain * normalized_gain, 0.0f, 4.0f));
     }
 }
 
 void audio_manager::apply_preview_volume() const {
     if (is_voice_loaded(preview_handle_)) {
-        BASS_ChannelSetAttribute(preview_handle_, BASS_ATTRIB_VOL, preview_volume_);
+        const float normalized_gain =
+            loudness_normalization_enabled_ && preview_loudness_.valid ? preview_loudness_.linear_gain : 1.0f;
+        BASS_ChannelSetAttribute(preview_handle_, BASS_ATTRIB_VOL,
+                                 std::clamp(preview_volume_ * preview_fade_.gain * normalized_gain, 0.0f, 4.0f));
     }
 }

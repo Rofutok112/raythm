@@ -1,5 +1,6 @@
 #include "editor/service/editor_timing_edit_service.h"
 
+#include <algorithm>
 #include <string>
 
 namespace {
@@ -63,6 +64,22 @@ bool try_parse_bar_beat(const std::string& text, editor_meter_map::bar_beat_posi
     out_value = {measure, beat};
     return true;
 }
+
+scroll_automation_curve next_scroll_curve(scroll_automation_curve curve) {
+    switch (curve) {
+        case scroll_automation_curve::hold:
+            return scroll_automation_curve::linear;
+        case scroll_automation_curve::linear:
+            return scroll_automation_curve::ease_in;
+        case scroll_automation_curve::ease_in:
+            return scroll_automation_curve::ease_out;
+        case scroll_automation_curve::ease_out:
+            return scroll_automation_curve::ease_in_out;
+        case scroll_automation_curve::ease_in_out:
+            return scroll_automation_curve::hold;
+    }
+    return scroll_automation_curve::hold;
+}
 }
 
 bool editor_timing_edit_service::can_delete_selected(const editor_timing_delete_query& query) {
@@ -72,6 +89,11 @@ bool editor_timing_edit_service::can_delete_selected(const editor_timing_delete_
     }
     const timing_event& event = query.state.data().timing_events[*query.timing_panel.selected_event_index];
     return !(event.type == timing_event_type::bpm && event.tick == 0);
+}
+
+bool editor_timing_edit_service::can_delete_selected_scroll(const editor_timing_delete_query& query) {
+    return query.timing_panel.selected_scroll_event_index.has_value() &&
+           *query.timing_panel.selected_scroll_event_index < query.state.data().scroll_automation.size();
 }
 
 editor_timing_edit_result editor_timing_edit_service::apply_selected(editor_timing_edit_context context) {
@@ -149,6 +171,50 @@ editor_timing_edit_result editor_timing_edit_service::apply_selected(editor_timi
     return result;
 }
 
+editor_timing_edit_result editor_timing_edit_service::apply_selected_scroll(editor_timing_edit_context context) {
+    editor_timing_edit_result result;
+    if (!context.timing_panel.selected_scroll_event_index.has_value()) {
+        context.timing_panel.input_error = "Select a scroll automation point first.";
+        return result;
+    }
+
+    const size_t index = *context.timing_panel.selected_scroll_event_index;
+    if (index >= context.state.data().scroll_automation.size()) {
+        context.timing_panel.input_error = "Selected scroll automation point is out of range.";
+        return result;
+    }
+
+    scroll_automation_point updated = context.state.data().scroll_automation[index];
+    editor_meter_map::bar_beat_position position;
+    if (!try_parse_bar_beat(context.timing_panel.inputs.scroll_start_bar.value, position)) {
+        context.timing_panel.input_error = "Start must be in M:B format.";
+        return result;
+    }
+
+    const std::optional<int> tick = context.meter_map.tick_from_bar_beat(position.measure, position.beat);
+    if (!tick.has_value()) {
+        context.timing_panel.input_error = "Start is outside the current meter layout.";
+        return result;
+    }
+
+    updated.tick = *tick;
+    float multiplier = 0.0f;
+    if (!try_parse_float(context.timing_panel.inputs.scroll_multiplier.value, multiplier) || multiplier < 0.0f) {
+        context.timing_panel.input_error = "Rate must be zero or greater.";
+        return result;
+    }
+    updated.multiplier = multiplier;
+
+    if (!context.state.modify_scroll_automation_point(index, updated)) {
+        context.timing_panel.input_error = "Failed to update the scroll automation point.";
+        return result;
+    }
+
+    result.success = true;
+    result.scroll_to_tick = updated.tick;
+    return result;
+}
+
 editor_timing_edit_result editor_timing_edit_service::add_event(editor_timing_edit_context context, timing_event_type type) {
     editor_timing_edit_result result;
     timing_event event;
@@ -173,6 +239,69 @@ editor_timing_edit_result editor_timing_edit_service::add_event(editor_timing_ed
     return result;
 }
 
+editor_timing_edit_result editor_timing_edit_service::add_scroll_event(editor_timing_edit_context context) {
+    scroll_automation_point point;
+    point.tick = context.default_timing_event_tick;
+    point.multiplier = 1.0f;
+    point.curve_to_next = scroll_automation_curve::linear;
+    return add_scroll_event(context, point);
+}
+
+editor_timing_edit_result editor_timing_edit_service::add_scroll_event(editor_timing_edit_context context,
+                                                                       scroll_automation_point point) {
+    editor_timing_edit_result result;
+    if (context.state.add_scroll_automation_point(point)) {
+        result.success = true;
+        result.selected_scroll_event_index = context.state.data().scroll_automation.size() - 1;
+        result.scroll_to_tick = point.tick;
+    }
+    return result;
+}
+
+editor_timing_edit_result editor_timing_edit_service::modify_scroll_event(editor_timing_edit_context context,
+                                                                          size_t index,
+                                                                          scroll_automation_point point) {
+    editor_timing_edit_result result;
+    if (!context.state.modify_scroll_automation_point(index, point)) {
+        context.timing_panel.input_error = "Failed to update the scroll automation point.";
+        return result;
+    }
+
+    result.success = true;
+    result.selected_scroll_event_index = index;
+    result.scroll_to_tick = point.tick;
+    return result;
+}
+
+editor_timing_edit_result editor_timing_edit_service::modify_scroll_guides(editor_timing_edit_context context,
+                                                                           scroll_automation_guides guides) {
+    editor_timing_edit_result result;
+    if (!context.state.modify_scroll_automation_guides(guides)) {
+        return result;
+    }
+
+    result.success = true;
+    return result;
+}
+
+editor_timing_edit_result editor_timing_edit_service::cycle_selected_scroll_curve(editor_timing_edit_context context) {
+    editor_timing_edit_result result;
+    if (!context.timing_panel.selected_scroll_event_index.has_value()) {
+        context.timing_panel.input_error = "Select a scroll automation point first.";
+        return result;
+    }
+
+    const size_t index = *context.timing_panel.selected_scroll_event_index;
+    if (index >= context.state.data().scroll_automation.size()) {
+        context.timing_panel.input_error = "Selected scroll automation point is out of range.";
+        return result;
+    }
+
+    scroll_automation_point updated = context.state.data().scroll_automation[index];
+    updated.curve_to_next = next_scroll_curve(updated.curve_to_next);
+    return modify_scroll_event(context, index, updated);
+}
+
 editor_timing_edit_result editor_timing_edit_service::delete_selected(editor_timing_edit_context context) {
     editor_timing_edit_result result;
     if (!context.timing_panel.selected_event_index.has_value()) {
@@ -187,6 +316,23 @@ editor_timing_edit_result editor_timing_edit_service::delete_selected(editor_tim
     const size_t index = *context.timing_panel.selected_event_index;
     if (!context.state.remove_timing_event(index)) {
         context.timing_panel.input_error = "Failed to delete the timing event.";
+        return result;
+    }
+
+    result.success = true;
+    return result;
+}
+
+editor_timing_edit_result editor_timing_edit_service::delete_selected_scroll(editor_timing_edit_context context) {
+    editor_timing_edit_result result;
+    if (!context.timing_panel.selected_scroll_event_index.has_value()) {
+        context.timing_panel.input_error = "Select a scroll automation point first.";
+        return result;
+    }
+
+    const size_t index = *context.timing_panel.selected_scroll_event_index;
+    if (!context.state.remove_scroll_automation_point(index)) {
+        context.timing_panel.input_error = "Failed to delete the scroll automation point.";
         return result;
     }
 

@@ -33,17 +33,25 @@ editor_timing_panel_update_result editor_panel_controller::update_timing_panel(
     const editor_timing_panel_actions& actions) {
     editor_timing_panel_update_result result;
     result.select_timing_event_index = actions.panel_result.selected_event_index;
+    result.select_scroll_event_index = actions.panel_result.selected_scroll_event_index;
     result.request_add_bpm = actions.panel_result.add_bpm;
     result.request_add_meter = actions.panel_result.add_meter;
+    result.request_add_speed = actions.panel_result.add_speed;
+    result.request_add_stop = actions.panel_result.add_stop;
     result.request_delete_selected = actions.panel_result.delete_selected;
+    result.request_delete_selected_scroll = actions.panel_result.delete_selected_scroll;
     result.request_apply_selected = actions.panel_result.apply_selected;
+    result.request_apply_selected_scroll = actions.panel_result.apply_selected_scroll;
+    result.request_cycle_selected_scroll_curve = actions.panel_result.cycle_selected_scroll_curve;
 
-    if (actions.panel_result.selected_event_index.has_value() || actions.panel_result.clicked_input_row) {
+    if (actions.panel_result.selected_event_index.has_value() ||
+        actions.panel_result.selected_scroll_event_index.has_value() ||
+        actions.panel_result.clicked_input_row) {
         metadata_panel.difficulty_input.active = false;
         metadata_panel.chart_author_input.active = false;
     }
 
-    if (actions.panel_result.apply_selected) {
+    if (actions.panel_result.apply_selected || actions.panel_result.apply_selected_scroll) {
         timing_panel.active_input_field = editor_timing_input_field::none;
         timing_panel.bar_pick_mode = false;
     }

@@ -7,6 +7,7 @@
 struct editor_header_view_model {
     const char* playback_status = "";
     bool audio_loaded = false;
+    bool audio_playing = false;
     const char* offset_label = "";
     bool waveform_visible = true;
     std::span<const char* const> snap_labels = {};
@@ -15,6 +16,11 @@ struct editor_header_view_model {
 };
 
 struct editor_header_view_result {
+    bool restart_requested = false;
+    bool playtest_requested = false;
+    bool playback_toggled = false;
+    bool metadata_modal_requested = false;
+    bool timing_modal_requested = false;
     bool offset_left_clicked = false;
     bool offset_right_clicked = false;
     bool waveform_toggled = false;

@@ -64,6 +64,8 @@ Song/
 | `title`          | `string` | 楽曲タイトル        |
 | `artist`         | `string` | アーティスト名       |
 | `baseBpm`        | `float`  | 基準BPM         |
+| `offset`         | `int`    | 制作者設定の楽曲オフセット（ms） |
+| `timingEvents`   | `array`  | BPM/拍子変更イベント |
 | `audioFile`      | `string` | 音源ファイル名       |
 | `jacketFile`     | `string` | ジャケット画像ファイル名  |
 | `previewStartMs` | `int`    | 選曲画面プレビュー開始位置 |
@@ -100,6 +102,7 @@ Song/
 ### 3.2 セクション構成
 
 譜面ファイルは以下の3セクションで構成される。全セクション必須。
+表示スクロール倍率を使う譜面は任意の `[ScrollAutomation]` / `[ScrollAutomationGuides]` セクションを持てる。
 
 #### `[Metadata]` — 譜面メタ情報（`ChartMeta`）
 
@@ -110,8 +113,8 @@ Song/
 | `difficulty`    | `string` | 難易度名              |
 | `chartAuthor`   | `string` | 譜面作者              |
 | `formatVersion` | `int`    | フォーマットバージョン       |
-| `resolution`    | `int`    | tick解像度（ファイルごと指定） |
-| `offset`        | `int`    | 譜面オフセット（ms）       |
+| `resolution`    | `int`    | 旧形式互換用の譜面tick解像度 |
+| `offset`        | `int`    | 旧形式互換用の譜面オフセット（ms） |
 
 `songId` は譜面ファイルには保存しない。ローカルでは
 `songs/<songId>/charts/*.rchart` の配置とカタログDB、サーバーでは
@@ -120,12 +123,33 @@ Song/
 `level` は譜面ファイルには保存しない。実行時またはサーバー側で譜面内容から
 `calculatedLevel` として計算し、表示用メタとして扱う。
 
-#### `[Timing]` — タイミングイベント（`TimingEvent`）
+#### `[Timing]` — 旧形式互換タイミングイベント（`TimingEvent`）
+
+BPM/拍子変更は楽曲固有情報として `song.json` の `timingEvents` を優先する。楽曲タイミングは480 PPQ固定で扱い、`song.json` の旧 `timingResolution` フィールドは参照しない。
+既存譜面との互換性のため、`song.json` に `timingEvents` がない場合は
+`.rchart` の `resolution` と `[Timing]` を使用する。
 
 | イベント種別  | パラメータ         | 説明    |
 |---------|---------------|-------|
 | `bpm`   | `tick`, `bpm` | BPM変更 |
 | `meter` | `tick`, `n/d` | 拍子変更  |
+
+#### `[ScrollAutomation]` — スクロールオートメーション（`ScrollAutomationPoint`）
+
+| エントリ種別 | パラメータ                         | 説明                         |
+|--------|-------------------------------|----------------------------|
+| `point` | `tick`, `multiplier`, `curve` | 指定tickにおける表示スクロール倍率の制御点 |
+
+`curve` は次の制御点までの補間を表し、`hold`, `linear`, `easeIn`, `easeOut`, `easeInOut` を指定できる。
+オートメーションは表示スクロールのみに影響し、判定時刻や BPM 由来の音楽時間には影響しない。負の倍率は未対応。
+
+#### `[ScrollAutomationGuides]` — オートメーションガイド
+
+| エントリ種別 | パラメータ                         | 説明                  |
+|--------|-------------------------------|---------------------|
+| `guides` | `left1`, `left2`, `right1`, `right2` | 1.0固定線の左右に置くスナップ倍率 |
+
+`1.0` は中央固定線として扱うため、左右ガイド値には指定しない。
 
 #### `[Notes]` — ノートデータ（`Note`）
 

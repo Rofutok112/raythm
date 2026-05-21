@@ -5,15 +5,10 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <array>
 
 #include "audio_manager.h"
 #include "core/app_paths.h"
 #include "editor_scene.h"
-#include "mv/api/mv_context.h"
-#include "mv/mv_storage.h"
-#include "mv/mv_runtime.h"
-#include "mv/render/mv_renderer.h"
 #include "path_utils.h"
 #include "play/play_flow_controller.h"
 #include "play/play_renderer.h"
@@ -34,77 +29,6 @@ constexpr float kCameraHeight = 42.0f;
 constexpr float kCameraFovY = 42.0f;
 constexpr float kJudgeLineWorldZ = 12.0f;
 constexpr float kMaxGroundDistance = 1000.0f;
-constexpr float kMvSpectrumClampMax = 2.0f;
-
-int sample_mv_waveform_index(const std::vector<float>& waveform, double current_ms, double song_length_ms) {
-    if (waveform.empty() || song_length_ms <= 0.0) {
-        return 0;
-    }
-
-    const double progress = std::clamp(current_ms / song_length_ms, 0.0, 1.0);
-    const std::size_t last = waveform.size() - 1;
-    return static_cast<int>(std::clamp<std::size_t>(
-        static_cast<std::size_t>(progress * static_cast<double>(last)), 0, last));
-}
-
-void fill_mv_spectrum(std::vector<float>& spectrum) {
-    std::array<float, 128> fft = {};
-    if (!audio_manager::instance().get_bgm_fft256(fft)) {
-        spectrum.clear();
-        return;
-    }
-
-    spectrum.resize(fft.size());
-    for (std::size_t i = 0; i < fft.size(); ++i) {
-        const float sample = fft[i];
-        const float shaped = std::sqrt(std::max(0.0f, sample)) * 8.0f;
-        spectrum[i] = std::clamp(shaped, 0.0f, kMvSpectrumClampMax);
-    }
-}
-
-void fill_mv_oscilloscope(std::vector<float>& oscilloscope) {
-    std::array<float, 256> pcm = {};
-    if (!audio_manager::instance().get_bgm_oscilloscope256(pcm)) {
-        oscilloscope.clear();
-        return;
-    }
-
-    oscilloscope.resize(pcm.size());
-    std::copy(pcm.begin(), pcm.end(), oscilloscope.begin());
-}
-
-float compute_oscilloscope_rms(const std::vector<float>& oscilloscope) {
-    if (oscilloscope.empty()) {
-        return 0.0f;
-    }
-
-    double sum = 0.0;
-    for (float sample : oscilloscope) {
-        sum += static_cast<double>(sample) * static_cast<double>(sample);
-    }
-    return static_cast<float>(std::sqrt(sum / static_cast<double>(oscilloscope.size())));
-}
-
-float compute_oscilloscope_peak(const std::vector<float>& oscilloscope) {
-    float peak = 0.0f;
-    for (float sample : oscilloscope) {
-        peak = std::max(peak, std::fabs(sample));
-    }
-    return peak;
-}
-
-float compute_spectrum_band_average(const std::vector<float>& spectrum, std::size_t start, std::size_t end) {
-    if (start >= end || start >= spectrum.size()) {
-        return 0.0f;
-    }
-
-    const std::size_t clamped_end = std::min(end, spectrum.size());
-    double sum = 0.0;
-    for (std::size_t i = start; i < clamped_end; ++i) {
-        sum += spectrum[i];
-    }
-    return static_cast<float>(sum / static_cast<double>(clamped_end - start));
-}
 
 Vector3 build_camera_forward(float camera_angle_degrees) {
     const float angle_rad = std::clamp(camera_angle_degrees, 5.0f, 90.0f) * DEG2RAD;
@@ -131,6 +55,10 @@ std::optional<float> ground_z_offset(float height, float angle_rad, float half_f
 void present_virtual_screen() {
     ClearBackground(BLACK);
     virtual_screen::draw_to_screen();
+}
+
+void present_virtual_screen_overlay() {
+    virtual_screen::draw_to_screen(true);
 }
 
 }  // namespace
@@ -167,33 +95,13 @@ play_scene::~play_scene() {
 void play_scene::on_enter() {
     state_ = play_session_loader::load(request_, draw_queue_);
     load_jacket_texture();
-
-    // Try to load MV script for this song
-    if (state_.song_data.has_value()) {
-        if (const auto package = mv::find_first_package_for_song(state_.song_data->meta.song_id); package.has_value()) {
-            const auto script_file = mv::script_path(*package);
-            TraceLog(LOG_INFO, "MV: looking for script at %s", script_file.string().c_str());
-            mv_runtime_ = std::make_unique<mv::mv_runtime>();
-            if (!mv_runtime_->load_file(script_file.string())) {
-                TraceLog(LOG_WARNING, "MV: compile failed");
-                for (const auto& e : mv_runtime_->last_errors()) {
-                    TraceLog(LOG_WARNING, "MV:   L%d: %s (%s)", e.line, e.message.c_str(), e.phase.c_str());
-                }
-                mv_runtime_.reset();
-            } else {
-                TraceLog(LOG_INFO, "MV: script loaded OK");
-            }
-        } else {
-            TraceLog(LOG_INFO, "MV: script file not found");
-        }
-    } else {
-        TraceLog(LOG_INFO, "MV: no song_data, skipping script load");
-    }
+    mv_controller_.load_for_song(state_.song_data);
 }
 
 void play_scene::on_exit() {
     audio_manager::instance().stop_bgm();
     audio_manager::instance().stop_all_se();
+    mv_controller_.reset();
     unload_jacket_texture();
 }
 
@@ -210,8 +118,9 @@ void play_scene::update(float dt) {
 
     const audio_clock_snapshot bgm_clock = audio_manager::instance().get_bgm_clock();
     context.bgm_loaded = bgm_clock.loaded;
-    if (bgm_clock.loaded) {
-        context.bgm_audio_time_ms = bgm_clock.audio_time_seconds * 1000.0;
+    context.bgm_playing = bgm_clock.playing;
+    if (bgm_clock.loaded && bgm_clock.playing) {
+        context.audio_clock_time_ms = bgm_clock.audio_time_seconds * 1000.0;
     }
 
     if (state_.paused) {
@@ -250,7 +159,7 @@ void play_scene::update(float dt) {
         audio_manager::instance().pause_bgm();
     }
     if (result.request_fade_out_bgm) {
-        audio_manager::instance().fade_out_bgm(180);
+        audio_manager::instance().fade_out_bgm(result.fade_out_bgm_duration_ms);
     }
     if (result.request_play_bgm && audio_manager::instance().is_bgm_loaded()) {
         audio_manager::instance().play_bgm(false);
@@ -360,91 +269,8 @@ void play_scene::draw() {
 
     virtual_screen::begin();
     play_renderer::draw_world_background();
-    const double visual_ms = get_visual_ms();
-
-    // MV script layer (2D, behind notes)
-    if (mv_runtime_ && mv_runtime_->is_loaded()) {
-        mv::context_input mv_input;
-        mv_input.current_ms = visual_ms;
-        mv_input.song_length_ms = state_.song_end_ms;
-
-        int current_tick = state_.timing_engine.ms_to_tick(state_.current_ms);
-        mv_input.bpm = state_.timing_engine.get_bpm_at(current_tick);
-        mv_input.meter_numerator = state_.timing_engine.get_meter_numerator_at(current_tick);
-        mv_input.meter_denominator = state_.timing_engine.get_meter_denominator_at(current_tick);
-
-        double beat_duration_ms = 60000.0 / mv_input.bpm;
-        if (beat_duration_ms > 0) {
-            double ms_in_beat = std::fmod(state_.current_ms, beat_duration_ms);
-            if (ms_in_beat < 0) ms_in_beat += beat_duration_ms;
-            mv_input.beat_phase = static_cast<float>(ms_in_beat / beat_duration_ms);
-            mv_input.beat_number = static_cast<int>(state_.current_ms / beat_duration_ms);
-        }
-
-        mv_input.combo = state_.combo_display;
-        if (state_.last_judge.has_value() &&
-            state_.last_judge->is_ray &&
-            state_.last_judge->result != judge_result::miss) {
-            mv_input.ray_pulse = 1.0f;
-            mv_input.ray_lane = state_.last_judge->lane;
-        }
-        mv_input.key_count = state_.key_count;
-        fill_mv_spectrum(mv_spectrum_buffer_);
-        mv_input.spectrum = mv_spectrum_buffer_;
-        fill_mv_oscilloscope(mv_oscilloscope_buffer_);
-        mv_input.oscilloscope = &mv_oscilloscope_buffer_;
-        mv_input.rms = compute_oscilloscope_rms(mv_oscilloscope_buffer_);
-        mv_input.peak = compute_oscilloscope_peak(mv_oscilloscope_buffer_);
-        const std::size_t spectrum_size = mv_input.spectrum.size();
-        const std::size_t first_split = spectrum_size / 3;
-        const std::size_t second_split = (spectrum_size * 2) / 3;
-        mv_input.low = compute_spectrum_band_average(mv_input.spectrum, 0, first_split);
-        mv_input.mid = compute_spectrum_band_average(mv_input.spectrum, first_split, second_split);
-        mv_input.high = compute_spectrum_band_average(mv_input.spectrum, second_split, spectrum_size);
-        mv_input.waveform = &state_.mv_waveform;
-        mv_input.waveform_index =
-            sample_mv_waveform_index(state_.mv_waveform, mv_input.current_ms, mv_input.song_length_ms);
-        if (!state_.mv_waveform.empty()) {
-            mv_input.level = state_.mv_waveform[static_cast<std::size_t>(mv_input.waveform_index)];
-        }
-        if (state_.song_data.has_value()) {
-            mv_input.song_id = state_.song_data->meta.song_id;
-            mv_input.song_title = state_.song_data->meta.title;
-            mv_input.song_artist = state_.song_data->meta.artist;
-            mv_input.song_base_bpm = state_.song_data->meta.base_bpm;
-        }
-        if (state_.chart_data.has_value()) {
-            mv_input.chart_id = state_.chart_data->meta.chart_id;
-            mv_input.chart_song_id = state_.chart_data->meta.song_id;
-            mv_input.chart_difficulty = state_.chart_data->meta.difficulty;
-            mv_input.chart_level = state_.chart_data->meta.level;
-            mv_input.chart_author = state_.chart_data->meta.chart_author;
-            mv_input.chart_resolution = state_.chart_data->meta.resolution;
-            mv_input.chart_offset = state_.chart_data->meta.offset;
-            mv_input.total_notes = static_cast<int>(state_.chart_data->notes.size());
-        }
-        mv_input.screen_w = static_cast<float>(kScreenWidth);
-        mv_input.screen_h = static_cast<float>(kScreenHeight);
-
-        const mv::scene* scene_ptr = mv_runtime_->tick_ref(mv_input);
-        if (scene_ptr != nullptr) {
-            static int mv_log_count = 0;
-            if (mv_log_count < 3) {
-                TraceLog(LOG_INFO, "MV: tick OK, %d nodes", static_cast<int>(scene_ptr->nodes.size()));
-                mv_log_count++;
-            }
-            mv::render_scene(*scene_ptr);
-        } else {
-            static int mv_fail_count = 0;
-            if (mv_fail_count < 3) {
-                TraceLog(LOG_WARNING, "MV: tick returned nullopt");
-                for (const auto& e : mv_runtime_->last_errors()) {
-                    TraceLog(LOG_WARNING, "MV:   L%d: %s (%s)", e.line, e.message.c_str(), e.phase.c_str());
-                }
-                mv_fail_count++;
-            }
-        }
-    }
+    const double visual_time_ms = get_visual_ms();
+    mv_controller_.draw(state_, visual_time_ms);
 
     const Camera3D camera = make_play_camera();
     float lane_start_z = 0.0f;
@@ -454,24 +280,31 @@ void play_scene::draw() {
 
     BeginMode3D(camera);
     if (has_bounds) {
-        play_renderer::draw_world(state_, draw_queue_, camera, lane_start_z, judgement_z, lane_end_z, visual_ms);
+        play_renderer::draw_world(state_, draw_queue_, camera, lane_start_z, judgement_z, lane_end_z, visual_time_ms);
     }
     EndMode3D();
 
+    virtual_screen::end();
+
+    present_virtual_screen();
+
+    virtual_screen::begin_ui();
+    ClearBackground(BLANK);
     rebuild_hit_regions();
     ui::begin_draw_queue();
     play_renderer::draw_overlay(state_, jacket_texture_loaded_ ? &jacket_texture_ : nullptr);
     ui::flush_draw_queue();
     virtual_screen::end();
 
-    present_virtual_screen();
+    present_virtual_screen_overlay();
 }
 
 double play_scene::get_visual_ms() const {
+    double source_ms = state_.chart_time_ms;
     if (state_.intro_playing) {
-        return state_.start_ms - static_cast<double>(state_.intro_timer) * 1000.0;
+        source_ms = state_.start_ms - static_cast<double>(state_.intro_timer) * 1000.0;
     }
-    return state_.current_ms;
+    return state_.scroll_map.visual_ms_at(source_ms);
 }
 
 void play_scene::apply_navigation(play_navigation_request navigation) {

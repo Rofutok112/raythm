@@ -4,7 +4,9 @@
 #include <vector>
 
 #include "play/play_note_draw_queue.h"
+#include "play/play_scroll_map.h"
 #include "play/play_speed_compensation.h"
+#include "timing_engine.h"
 
 int main() {
     {
@@ -31,6 +33,34 @@ int main() {
             reference_speed * play_speed_compensation::judge_line_projection_scale(45.0f);
         if (std::fabs(shallow_screen_speed - reference_screen_speed) > 0.0001f) {
             std::cerr << "Angle-based note speed compensation normalization failed\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        chart_data chart;
+        chart.meta.resolution = 480;
+        chart.timing_events = {
+            {.type = timing_event_type::bpm, .tick = 0, .bpm = 120.0f, .numerator = 4, .denominator = 4},
+        };
+        chart.scroll_automation = {
+            {.tick = 0, .multiplier = 1.0f, .curve_to_next = scroll_automation_curve::linear},
+            {.tick = 480, .multiplier = 2.0f, .curve_to_next = scroll_automation_curve::hold},
+            {.tick = 960, .multiplier = 1.0f, .curve_to_next = scroll_automation_curve::hold},
+        };
+        timing_engine timing;
+        timing.init(chart.timing_events, chart.meta.resolution, 0);
+        play_scroll_map scroll_map;
+        scroll_map.init(chart, timing);
+        const double at_start = scroll_map.visual_ms_at(timing.tick_to_ms(0));
+        const double at_ramp_end = scroll_map.visual_ms_at(timing.tick_to_ms(480));
+        const double at_hold_end = scroll_map.visual_ms_at(timing.tick_to_ms(960));
+        const double after_hold = scroll_map.visual_ms_at(timing.tick_to_ms(1440));
+        if (std::fabs(at_start) > 0.0001 ||
+            std::fabs(at_ramp_end - 750.0) > 0.0001 ||
+            std::fabs(at_hold_end - 1750.0) > 0.0001 ||
+            std::fabs(after_hold - 2250.0) > 0.0001) {
+            std::cerr << "Scroll automation map conversion failed\n";
             return EXIT_FAILURE;
         }
     }

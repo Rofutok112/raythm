@@ -11,17 +11,22 @@
 #include "performance_system.h"
 #include "score_system.h"
 #include "song_loader.h"
+#include "play_scroll_map.h"
 #include "timing_engine.h"
 
 namespace play_session_constants {
 
-inline constexpr float kIntroDurationSeconds = 2.0f;
+inline constexpr float kIntroDurationSeconds = 0.0f;
+inline constexpr double kAudioLeadInBeforeFirstSoundMs = 3000.0;
 inline constexpr float kFailureFadeDurationSeconds = 1.0f;
 inline constexpr float kFailureHoldDurationSeconds = 1.0f;
 inline constexpr float kFailureTransitionDurationSeconds =
     kFailureFadeDurationSeconds + kFailureHoldDurationSeconds;
 inline constexpr float kResultTransitionDurationSeconds = 1.0f;
 inline constexpr float kLaneJudgeEffectDurationSeconds = 0.28f;
+inline constexpr double kChartEndTailMs = 2000.0;
+inline constexpr unsigned int kChartEndFadeOutMs = 2000;
+inline constexpr unsigned int kResultSkipFadeOutMs = 300;
 
 }  // namespace play_session_constants
 
@@ -55,7 +60,7 @@ struct play_draw_window {
     float lane_start_z = 0.0f;
     float judgement_z = 0.0f;
     float lane_end_z = 0.0f;
-    double visual_ms = 0.0;
+    double visual_time_ms = 0.0;
 };
 
 struct lane_judge_effect {
@@ -104,9 +109,9 @@ struct play_session_state {
     bool ranking_enabled = true;
     bool auto_paused_by_focus = false;
     float camera_angle_degrees = 45.0f;
-    double current_ms = 0.0;
-    double paused_ms = 0.0;
-    double song_end_ms = 0.0;
+    double chart_time_ms = 0.0;
+    double paused_chart_time_ms = 0.0;
+    double song_end_chart_time_ms = 0.0;
     double lane_speed = 0.045;
     int combo_display = 0;
     score_system score_system;
@@ -114,6 +119,7 @@ struct play_session_state {
     gauge gauge;
     input_handler input_handler;
     timing_engine timing_engine;
+    play_scroll_map scroll_map;
     judge_system judge_system;
     std::optional<chart_data> chart_data;
     std::optional<song_data> song_data;
@@ -132,6 +138,7 @@ struct play_session_state {
     float failure_transition_timer = 0.0f;
     bool result_transition_playing = false;
     float result_transition_timer = 0.0f;
+    bool chart_end_fade_started = false;
     std::string hitsound_path;
     play_hitsound_paths hitsounds;
     std::vector<float> mv_waveform;

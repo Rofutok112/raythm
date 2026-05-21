@@ -39,12 +39,14 @@ private:
 
     std::optional<song_data> pending_preview_song_;
     std::optional<song_data> active_preview_song_;
+    std::optional<song_data> preview_load_song_;
     std::string preview_song_id_;
     std::string jacket_song_id_;
     float preview_volume_ = 0.0f;
     int preview_fade_direction_ = 0;
     Texture2D jacket_texture_{};
     bool jacket_loaded_ = false;
+    bool preview_load_pending_ = false;
 };
 
 }  // namespace song_select

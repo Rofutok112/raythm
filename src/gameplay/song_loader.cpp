@@ -77,12 +77,32 @@ std::string read_file(const fs::path& path) {
     return buffer.str();
 }
 
+std::optional<size_t> find_json_key(const std::string& content, const std::string& key) {
+    const std::string token = "\"" + key + "\"";
+    size_t search_start = 0;
+    while (true) {
+        const size_t key_pos = content.find(token, search_start);
+        if (key_pos == std::string::npos) {
+            return std::nullopt;
+        }
+        size_t prefix = key_pos;
+        while (prefix > 0 && std::isspace(static_cast<unsigned char>(content[prefix - 1])) != 0) {
+            --prefix;
+        }
+        if (prefix == 0 || content[prefix - 1] == '{' || content[prefix - 1] == ',') {
+            return key_pos;
+        }
+        search_start = key_pos + token.size();
+    }
+}
+
 std::optional<std::string> extract_json_string(const std::string& content, const std::string& key) {
     const std::string token = "\"" + key + "\"";
-    const size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
+    const std::optional<size_t> found_key = find_json_key(content, key);
+    if (!found_key.has_value()) {
         return std::nullopt;
     }
+    const size_t key_pos = *found_key;
 
     const size_t colon_pos = content.find(':', key_pos + token.size());
     if (colon_pos == std::string::npos) {
@@ -113,10 +133,11 @@ std::optional<std::string> extract_json_string(const std::string& content, const
 
 std::optional<std::string> extract_json_number_token(const std::string& content, const std::string& key) {
     const std::string token = "\"" + key + "\"";
-    const size_t key_pos = content.find(token);
-    if (key_pos == std::string::npos) {
+    const std::optional<size_t> found_key = find_json_key(content, key);
+    if (!found_key.has_value()) {
         return std::nullopt;
     }
+    const size_t key_pos = *found_key;
 
     const size_t colon_pos = content.find(':', key_pos + token.size());
     if (colon_pos == std::string::npos) {
@@ -141,6 +162,150 @@ std::optional<std::string> extract_json_number_token(const std::string& content,
     }
 
     return token_value;
+}
+
+std::optional<std::string> extract_json_array(const std::string& content, const std::string& key) {
+    const std::string token = "\"" + key + "\"";
+    const std::optional<size_t> found_key = find_json_key(content, key);
+    if (!found_key.has_value()) {
+        return std::nullopt;
+    }
+    const size_t key_pos = *found_key;
+
+    const size_t colon_pos = content.find(':', key_pos + token.size());
+    if (colon_pos == std::string::npos) {
+        return std::nullopt;
+    }
+
+    size_t value_start = colon_pos + 1;
+    while (value_start < content.size() &&
+           std::isspace(static_cast<unsigned char>(content[value_start])) != 0) {
+        ++value_start;
+    }
+    if (value_start >= content.size() || content[value_start] != '[') {
+        return std::nullopt;
+    }
+
+    bool in_string = false;
+    bool escaped = false;
+    int depth = 0;
+    for (size_t index = value_start; index < content.size(); ++index) {
+        const char ch = content[index];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (in_string && ch == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch == '"') {
+            in_string = !in_string;
+            continue;
+        }
+        if (in_string) {
+            continue;
+        }
+        if (ch == '[') {
+            ++depth;
+        } else if (ch == ']') {
+            --depth;
+            if (depth == 0) {
+                return content.substr(value_start + 1, index - value_start - 1);
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+std::vector<std::string> extract_json_object_array_values(const std::string& array_content) {
+    std::vector<std::string> values;
+    bool in_string = false;
+    bool escaped = false;
+    int depth = 0;
+    size_t object_start = std::string::npos;
+
+    for (size_t index = 0; index < array_content.size(); ++index) {
+        const char ch = array_content[index];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (in_string && ch == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch == '"') {
+            in_string = !in_string;
+            continue;
+        }
+        if (in_string) {
+            continue;
+        }
+        if (ch == '{') {
+            if (depth == 0) {
+                object_start = index;
+            }
+            ++depth;
+        } else if (ch == '}') {
+            --depth;
+            if (depth == 0 && object_start != std::string::npos) {
+                values.push_back(array_content.substr(object_start, index - object_start + 1));
+                object_start = std::string::npos;
+            }
+        }
+    }
+
+    return values;
+}
+
+std::vector<std::string> extract_json_string_array_values(const std::string& array_content) {
+    std::vector<std::string> values;
+    bool in_string = false;
+    bool escaped = false;
+    std::string current;
+
+    for (const char ch : array_content) {
+        if (!in_string) {
+            if (ch == '"') {
+                in_string = true;
+                current.clear();
+            }
+            continue;
+        }
+
+        if (escaped) {
+            switch (ch) {
+                case 'n': current.push_back('\n'); break;
+                case 'r': current.push_back('\r'); break;
+                case 't': current.push_back('\t'); break;
+                default: current.push_back(ch); break;
+            }
+            escaped = false;
+            continue;
+        }
+
+        if (ch == '\\') {
+            escaped = true;
+        } else if (ch == '"') {
+            values.push_back(current);
+            in_string = false;
+        } else {
+            current.push_back(ch);
+        }
+    }
+
+    return values;
+}
+
+std::optional<timing_event_type> parse_timing_type(const std::string& value) {
+    if (value == "bpm") {
+        return timing_event_type::bpm;
+    }
+    if (value == "meter") {
+        return timing_event_type::meter;
+    }
+    return std::nullopt;
 }
 
 std::optional<int> parse_int(const std::string& value) {
@@ -169,6 +334,68 @@ std::optional<float> parse_float(const std::string& value) {
     }
 }
 
+std::vector<timing_event> parse_song_timing_events(const std::string& content,
+                                                   const fs::path& song_json_path,
+                                                   std::vector<std::string>& errors) {
+    std::vector<timing_event> events;
+    const std::optional<std::string> timing_array = extract_json_array(content, "timingEvents");
+    if (!timing_array.has_value()) {
+        if (find_json_key(content, "timingEvents").has_value()) {
+            errors.push_back("timingEvents must be an array in " + path_utils::to_utf8(song_json_path));
+        }
+        return events;
+    }
+
+    const std::vector<std::string> objects = extract_json_object_array_values(*timing_array);
+    if (objects.empty() && !trim(*timing_array).empty()) {
+        errors.push_back("timingEvents must contain objects in " + path_utils::to_utf8(song_json_path));
+        return events;
+    }
+    for (const std::string& object : objects) {
+        const std::optional<std::string> type_token = extract_json_string(object, "type");
+        const std::optional<std::string> tick_token = extract_json_number_token(object, "tick");
+        if (!type_token.has_value() || !tick_token.has_value()) {
+            errors.push_back("timingEvents entries must include type and tick in " + path_utils::to_utf8(song_json_path));
+            continue;
+        }
+
+        const std::optional<timing_event_type> type = parse_timing_type(*type_token);
+        const std::optional<int> tick = parse_int(*tick_token);
+        if (!type.has_value() || !tick.has_value() || *tick < 0) {
+            errors.push_back("timingEvents entries have invalid type or tick in " + path_utils::to_utf8(song_json_path));
+            continue;
+        }
+
+        timing_event event;
+        event.type = *type;
+        event.tick = *tick;
+        if (*type == timing_event_type::bpm) {
+            const std::optional<std::string> bpm_token = extract_json_number_token(object, "bpm");
+            const std::optional<float> bpm = bpm_token.has_value() ? parse_float(*bpm_token) : std::nullopt;
+            if (!bpm.has_value() || *bpm <= 0.0f) {
+                errors.push_back("bpm timingEvents entries must include positive bpm in " + path_utils::to_utf8(song_json_path));
+                continue;
+            }
+            event.bpm = *bpm;
+        } else {
+            const std::optional<std::string> numerator_token = extract_json_number_token(object, "numerator");
+            const std::optional<std::string> denominator_token = extract_json_number_token(object, "denominator");
+            const std::optional<int> numerator = numerator_token.has_value() ? parse_int(*numerator_token) : std::nullopt;
+            const std::optional<int> denominator = denominator_token.has_value() ? parse_int(*denominator_token) : std::nullopt;
+            if (!numerator.has_value() || !denominator.has_value() || *numerator <= 0 || *denominator <= 0) {
+                errors.push_back("meter timingEvents entries must include positive numerator and denominator in " +
+                                 path_utils::to_utf8(song_json_path));
+                continue;
+            }
+            event.numerator = *numerator;
+            event.denominator = *denominator;
+        }
+        events.push_back(event);
+    }
+
+    return events;
+}
+
 std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
                                          std::vector<std::string>& errors) {
     const std::string content = read_file(song_json_path);
@@ -183,12 +410,16 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
     const std::optional<std::string> title = extract_json_string(content, "title");
     const std::optional<std::string> artist = extract_json_string(content, "artist");
     const std::optional<std::string> genre = extract_json_string(content, "genre");
+    const std::optional<std::string> genres = extract_json_array(content, "genres");
+    const std::optional<std::string> keywords = extract_json_array(content, "keywords");
     const std::optional<std::string> audio_file = extract_json_string(content, "audioFile");
     const std::optional<std::string> jacket_file = extract_json_string(content, "jacketFile");
     const std::optional<std::string> difficulty_bpm = extract_json_number_token(content, "baseBpm");
+    const std::optional<std::string> offset = extract_json_number_token(content, "offset");
     const std::optional<std::string> duration_sec = extract_json_number_token(content, "durationSec");
     const std::optional<std::string> preview_start_ms = extract_json_number_token(content, "previewStartMs");
     const std::optional<std::string> song_version = extract_json_number_token(content, "songVersion");
+    const std::optional<std::string> chart_count = extract_json_number_token(content, "chartCount");
 
     if (!song_id.has_value()) {
         errors.push_back("Missing required field songId in " + path_utils::to_utf8(song_json_path));
@@ -210,6 +441,18 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
 
     if (genre.has_value()) {
         meta.genre = *genre;
+    }
+    if (genres.has_value()) {
+        meta.genres = extract_json_string_array_values(*genres);
+    }
+    if (meta.genre.empty() && !meta.genres.empty()) {
+        meta.genre = meta.genres.front();
+    }
+    if (meta.genres.empty() && !meta.genre.empty()) {
+        meta.genres.push_back(meta.genre);
+    }
+    if (keywords.has_value()) {
+        meta.keywords = extract_json_string_array_values(*keywords);
     }
 
     if (!audio_file.has_value()) {
@@ -264,6 +507,25 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
             errors.push_back("songVersion must be an integer in " + path_utils::to_utf8(song_json_path));
         } else {
             meta.song_version = *parsed;
+        }
+    }
+
+    if (offset.has_value()) {
+        const std::optional<int> parsed = parse_int(*offset);
+        if (!parsed.has_value()) {
+            errors.push_back("offset must be an integer in " + path_utils::to_utf8(song_json_path));
+        } else {
+            meta.offset = *parsed;
+            meta.has_offset = true;
+        }
+    }
+
+    meta.timing_events = parse_song_timing_events(content, song_json_path, errors);
+
+    if (chart_count.has_value()) {
+        const std::optional<int> parsed = parse_int(*chart_count);
+        if (parsed.has_value()) {
+            meta.chart_count = std::max(0, *parsed);
         }
     }
 

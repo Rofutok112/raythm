@@ -6,22 +6,32 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "app_paths.h"
 
+#include "audio_manager.h"
 #include "path_utils.h"
+#include "editor/editor_meter_map.h"
 #include "editor_scene.h"
 #include "file_dialog.h"
+#include "game_settings.h"
+#include "gameplay/timing_engine.h"
 #include "raylib.h"
 #include "scene_common.h"
 #include "scene_manager.h"
+#include "song_create/song_create_form_panel.h"
+#include "song_create/song_create_saved_view.h"
+#include "song_create/song_create_service.h"
+#include "song_create/song_create_tag_editor.h"
+#include "song_create/song_create_timing_controller.h"
+#include "song_create/song_create_timing_panel.h"
+#include "song_create/song_create_timing_service.h"
 #include "song_select/song_select_navigation.h"
-#include "song_writer.h"
 #include "theme.h"
 #include "ui_draw.h"
 #include "ui_text.h"
 #include "ui_text_input.h"
-#include "uuid_util.h"
 #include "virtual_screen.h"
 
 namespace {
@@ -45,53 +55,76 @@ constexpr float kRowGap = 9.0f;
 constexpr float kFormStartY = 213.0f;
 constexpr float kFormX = (static_cast<float>(kScreenW) - kFormWidth) * 0.5f;
 constexpr float kFormCardPaddingX = 39.0f;
-constexpr Rectangle kFormCardRect = {kFormX - kFormCardPaddingX, 177.0f, kFormWidth + kFormCardPaddingX * 2.0f, 780.0f};
+constexpr Rectangle kFormCardRect = {kFormX - kFormCardPaddingX, 177.0f, kFormWidth + kFormCardPaddingX * 2.0f, 875.0f};
 constexpr Rectangle kDecisionCardRect = {525.0f, 315.0f, 870.0f, 330.0f};
+constexpr Rectangle kTimingModalRect = ui::place(kScreenRect, 1160.0f, 720.0f,
+                                                 ui::anchor::center, ui::anchor::center);
 constexpr float kTextInputLabelWidth = 180.0f;
-constexpr float kBrowseWidth = 138.0f;
-constexpr float kBrowseGap = 12.0f;
-constexpr float kButtonTopGap = 24.0f;
-constexpr float kButtonWidth = 270.0f;
-constexpr float kButtonHeight = 66.0f;
-constexpr float kButtonGap = 18.0f;
-constexpr float kErrorTopGap = 18.0f;
-constexpr float kErrorHeight = 36.0f;
+constexpr ui::draw_layer kModalLayer = ui::draw_layer::modal;
 
-constexpr Rectangle make_row(int index) {
-    return {kFormX, kFormStartY + static_cast<float>(index) * (kRowHeight + kRowGap), kFormWidth, kRowHeight};
-}
-
-bool numeric_filter(int codepoint, const std::string&) {
-    return (codepoint >= '0' && codepoint <= '9') || codepoint == '.';
-}
-
-bool int_filter(int codepoint, const std::string&) {
-    return codepoint >= '0' && codepoint <= '9';
-}
-
-bool wide_text_filter(int codepoint, const std::string&) {
-    return codepoint >= 32;
-}
-
-std::string key_count_label(int key_count) {
-    return key_count == 6 ? "6K" : "4K";
-}
-
-bool paths_match(const fs::path& left, const fs::path& right) {
-    std::error_code ec;
-    if (fs::exists(left, ec) && fs::exists(right, ec)) {
-        if (fs::equivalent(left, right, ec) && !ec) {
-            return true;
-        }
+bool parse_int_text(const std::string& text, int& value) {
+    if (text.empty()) {
+        return false;
     }
+    try {
+        size_t consumed = 0;
+        const int parsed = std::stoi(text, &consumed);
+        if (consumed != text.size()) {
+            return false;
+        }
+        value = parsed;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
 
-    return left.lexically_normal() == right.lexically_normal();
+bool parse_float_text(const std::string& text, float& value) {
+    if (text.empty()) {
+        return false;
+    }
+    try {
+        size_t consumed = 0;
+        const float parsed = std::stof(text, &consumed);
+        if (consumed != text.size()) {
+            return false;
+        }
+        value = parsed;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+song_create::timing_controller::context timing_context(ui::text_input_state& bpm_input,
+                                                       ui::text_input_state& bar_input,
+                                                       ui::text_input_state& event_bpm_input,
+                                                       ui::text_input_state& numerator_input,
+                                                       ui::text_input_state& denominator_input,
+                                                       std::vector<timing_event>& events,
+                                                       std::optional<size_t>& selected_event_index,
+                                                       float& event_scroll_offset,
+                                                       std::string& import_status,
+                                                       std::string& error) {
+    return {
+        bpm_input,
+        bar_input,
+        event_bpm_input,
+        numerator_input,
+        denominator_input,
+        events,
+        selected_event_index,
+        event_scroll_offset,
+        import_status,
+        error,
+    };
 }
 
 }  // namespace
 
 song_create_scene::song_create_scene(scene_manager& manager)
     : scene(manager) {
+    ensure_timing_events_initialized();
 }
 
 song_create_scene::song_create_scene(scene_manager& manager, song_data song_to_edit)
@@ -99,9 +132,13 @@ song_create_scene::song_create_scene(scene_manager& manager, song_data song_to_e
     const song_meta& meta = editing_song_->meta;
     title_input_.value = meta.title;
     artist_input_.value = meta.artist;
-    genre_input_.value = meta.genre;
+    selected_genres_ = song_create::tag_editor::normalize_genres_for_editor(meta);
+    selected_keywords_ = song_create::tag_editor::normalize_keywords_for_editor(meta);
     bpm_input_.value = meta.base_bpm > 0.0f ? TextFormat("%.6g", meta.base_bpm) : "";
+    offset_input_.value = std::to_string(meta.has_offset ? meta.offset : 0);
     preview_ms_input_.value = std::to_string(meta.preview_start_ms);
+    timing_events_ = meta.timing_events;
+    ensure_timing_events_initialized();
 
     if (!meta.audio_file.empty()) {
         audio_path_input_.value = path_utils::to_utf8(path_utils::join_utf8(editing_song_->directory, meta.audio_file));
@@ -111,8 +148,156 @@ song_create_scene::song_create_scene(scene_manager& manager, song_data song_to_e
     }
 }
 
+void song_create_scene::ensure_timing_events_initialized() {
+    song_create::timing_controller::ensure_initialized(timing_context(
+        bpm_input_, timing_bar_input_, timing_bpm_input_, timing_numerator_input_,
+        timing_denominator_input_, timing_events_, selected_timing_event_index_,
+        timing_event_scroll_offset_, timing_import_status_, error_));
+}
+
+void song_create_scene::sync_selected_timing_inputs() {
+    song_create::timing_controller::sync_selected_inputs(timing_context(
+        bpm_input_, timing_bar_input_, timing_bpm_input_, timing_numerator_input_,
+        timing_denominator_input_, timing_events_, selected_timing_event_index_,
+        timing_event_scroll_offset_, timing_import_status_, error_));
+}
+
+void song_create_scene::add_timing_event(timing_event_type type) {
+    song_create::timing_controller::add_event(
+        timing_context(bpm_input_, timing_bar_input_, timing_bpm_input_, timing_numerator_input_,
+                       timing_denominator_input_, timing_events_, selected_timing_event_index_,
+                       timing_event_scroll_offset_, timing_import_status_, error_),
+        type);
+}
+
+void song_create_scene::delete_selected_timing_event() {
+    song_create::timing_controller::delete_selected_event(timing_context(
+        bpm_input_, timing_bar_input_, timing_bpm_input_, timing_numerator_input_,
+        timing_denominator_input_, timing_events_, selected_timing_event_index_,
+        timing_event_scroll_offset_, timing_import_status_, error_));
+}
+
+bool song_create_scene::apply_selected_timing_event() {
+    return song_create::timing_controller::apply_selected_event(timing_context(
+        bpm_input_, timing_bar_input_, timing_bpm_input_, timing_numerator_input_,
+        timing_denominator_input_, timing_events_, selected_timing_event_index_,
+        timing_event_scroll_offset_, timing_import_status_, error_));
+}
+
+bool song_create_scene::flush_selected_timing_event_inputs() {
+    return song_create::timing_controller::flush_selected_inputs(timing_context(
+        bpm_input_, timing_bar_input_, timing_bpm_input_, timing_numerator_input_,
+        timing_denominator_input_, timing_events_, selected_timing_event_index_,
+        timing_event_scroll_offset_, timing_import_status_, error_));
+}
+
+void song_create_scene::close_timing_modal() {
+    if (!flush_selected_timing_event_inputs()) {
+        return;
+    }
+    timing_modal_open_ = false;
+    stop_timing_preview();
+}
+
+bool song_create_scene::start_timing_preview() {
+    if (audio_path_input_.value.empty()) {
+        error_ = "Audio file is required.";
+        return false;
+    }
+    const fs::path audio_source = path_utils::from_utf8(audio_path_input_.value);
+    if (!fs::exists(audio_source)) {
+        error_ = "Audio file not found: " + audio_path_input_.value;
+        return false;
+    }
+
+    audio_manager& audio = audio_manager::instance();
+    if (!audio.load_preview(audio_path_input_.value)) {
+        error_ = "Failed to load audio preview.";
+        return false;
+    }
+    audio.set_preview_volume(g_settings.bgm_volume);
+    audio.set_preview_fade_gain(0.65f);
+    audio.seek_preview(0.0);
+    audio.play_preview(true);
+
+    const std::filesystem::path tap = app_paths::audio_root() / "HitSound_RayTap.mp3";
+    audio.play_se(path_utils::to_utf8(tap), 0.6f);
+    metronome_elapsed_ms_ = 0.0;
+    metronome_next_tick_ = 480;
+    error_.clear();
+    return true;
+}
+
+void song_create_scene::stop_timing_preview() {
+    metronome_enabled_ = false;
+    metronome_elapsed_ms_ = 0.0;
+    metronome_next_tick_ = 0;
+    audio_manager::instance().stop_preview();
+}
+
+bool song_create_scene::import_midi_timing(const std::string& midi_path) {
+    return song_create::timing_controller::import_midi_timing(
+        timing_context(bpm_input_, timing_bar_input_, timing_bpm_input_, timing_numerator_input_,
+                       timing_denominator_input_, timing_events_, selected_timing_event_index_,
+                       timing_event_scroll_offset_, timing_import_status_, error_),
+        midi_path);
+}
+
+std::vector<timing_event> song_create_scene::validated_timing_events(float base_bpm, bool& ok) {
+    return song_create::timing_controller::validated_events(
+        timing_context(bpm_input_, timing_bar_input_, timing_bpm_input_, timing_numerator_input_,
+                       timing_denominator_input_, timing_events_, selected_timing_event_index_,
+                       timing_event_scroll_offset_, timing_import_status_, error_),
+        base_bpm,
+        ok);
+}
+
+void song_create_scene::update_metronome(float dt) {
+    if (!metronome_enabled_ || !selected_timing_event_index_.has_value() ||
+        *selected_timing_event_index_ >= timing_events_.size()) {
+        metronome_elapsed_ms_ = 0.0;
+        return;
+    }
+    if (!audio_manager::instance().is_preview_playing()) {
+        stop_timing_preview();
+        return;
+    }
+
+    int offset_ms = 0;
+    if (!offset_input_.value.empty()) {
+        parse_int_text(offset_input_.value, offset_ms);
+    }
+
+    timing_engine engine;
+    try {
+        engine.init(timing_events_, 480, offset_ms);
+    } catch (...) {
+        stop_timing_preview();
+        error_ = "Song timing contains an invalid BPM or time signature.";
+        return;
+    }
+
+    const double current_ms = audio_manager::instance().get_preview_position_seconds() * 1000.0;
+    const int current_tick = std::max(0, engine.ms_to_tick(current_ms));
+    if (metronome_next_tick_ <= 0 || metronome_next_tick_ < current_tick - 480) {
+        metronome_next_tick_ = current_tick;
+    }
+
+    const editor_meter_map meter_map = song_create::timing_service::build_meter_map(timing_events_, 480);
+    int safety = 0;
+    while (current_tick >= metronome_next_tick_ && safety++ < 16) {
+        const editor_meter_map::bar_beat_position position = meter_map.bar_beat_at_tick(metronome_next_tick_);
+        const bool downbeat = position.beat == 1;
+        const std::filesystem::path tap = app_paths::audio_root() /
+            (downbeat ? "HitSound_RayTap.mp3" : "HitSound_Tap.mp3");
+        audio_manager::instance().play_se(path_utils::to_utf8(tap), downbeat ? 0.6f : 0.55f);
+        metronome_next_tick_ += song_create::timing_service::beat_step_ticks_at(engine, metronome_next_tick_, 480);
+    }
+}
+
 void song_create_scene::update(float dt) {
     ui::begin_hit_regions();
+    update_metronome(dt);
 
     switch (current_step_) {
         case step::song_metadata: update_song_metadata(); break;
@@ -134,6 +319,10 @@ void song_create_scene::draw() {
     }
 
     virtual_screen::begin_ui();
+    if (timing_modal_open_) {
+        ui::register_hit_region(kScreenRect, ui::draw_layer::overlay);
+        ui::register_hit_region(kTimingModalRect, kModalLayer);
+    }
     draw_scene_background(t);
     ui::draw_header_block(kHeaderRect, content_title, content_subtitle);
 
@@ -148,6 +337,29 @@ void song_create_scene::draw() {
             break;
     }
 
+    if (timing_modal_open_) {
+        song_create::timing_panel::draw_modal(
+            {
+                bpm_input_, offset_input_, timing_bar_input_, timing_bpm_input_,
+                timing_numerator_input_, timing_denominator_input_, timing_events_,
+                selected_timing_event_index_, metronome_enabled_, timing_modal_open_,
+                timing_event_scroll_offset_, timing_event_scrollbar_dragging_,
+                timing_event_scrollbar_drag_offset_, timing_import_status_, error_,
+            },
+            {
+                [this] { ensure_timing_events_initialized(); },
+                [this] { return flush_selected_timing_event_inputs(); },
+                [this] { sync_selected_timing_inputs(); },
+                [this](timing_event_type type) { add_timing_event(type); },
+                [this] { delete_selected_timing_event(); },
+                [this](const std::string& path) { return import_midi_timing(path); },
+                [this] { close_timing_modal(); },
+                [this] { return start_timing_preview(); },
+                [this] { stop_timing_preview(); },
+            },
+            {kScreenRect, kTimingModalRect, kTextInputLabelWidth, kLayer, kModalLayer});
+    }
+
     virtual_screen::end();
 
     ClearBackground(BLACK);
@@ -155,6 +367,13 @@ void song_create_scene::draw() {
 }
 
 void song_create_scene::update_song_metadata() {
+    if (timing_modal_open_) {
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            close_timing_modal();
+        }
+        return;
+    }
+
     if (jacket_picker_.is_open()) {
         jacket_picker_.update();
         if (jacket_picker_.consume_accept()) {
@@ -182,204 +401,111 @@ void song_create_scene::update_song_saved() {
 }
 
 void song_create_scene::draw_song_metadata() {
-    int row = 0;
-
-    ui::draw_text_input(make_row(row++), title_input_, "Title", "Song title",
-                        nullptr, kLayer, 16, 128, wide_text_filter, kTextInputLabelWidth);
-
-    ui::draw_text_input(make_row(row++), artist_input_, "Artist", "Artist name",
-                        nullptr, kLayer, 16, 128, wide_text_filter, kTextInputLabelWidth);
-
-    ui::draw_text_input(make_row(row++), genre_input_, "Genre", "Genre (optional)",
-                        nullptr, kLayer, 16, 100, wide_text_filter, kTextInputLabelWidth);
-
-    ui::draw_text_input(make_row(row++), bpm_input_, "BPM", "120.0",
-                        nullptr, kLayer, 16, 16, numeric_filter, kTextInputLabelWidth);
-
-    {
-        const Rectangle audio_row = make_row(row++);
-        const Rectangle input_rect = {audio_row.x, audio_row.y, audio_row.width - kBrowseWidth - kBrowseGap, audio_row.height};
-        const Rectangle browse_rect = {audio_row.x + audio_row.width - kBrowseWidth, audio_row.y, kBrowseWidth, audio_row.height};
-
-        ui::draw_text_input(input_rect, audio_path_input_, "Audio", "Select audio file...",
-                            nullptr, kLayer, 16, 512, nullptr, kTextInputLabelWidth);
-
-        if (ui::draw_button(browse_rect, "BROWSE", 14).clicked) {
-            const std::string path = file_dialog::open_audio_file();
-            if (!path.empty()) {
-                audio_path_input_.value = path;
-            }
-        }
-    }
-
-    {
-        const Rectangle jacket_row = make_row(row++);
-        const Rectangle input_rect = {jacket_row.x, jacket_row.y, jacket_row.width - kBrowseWidth - kBrowseGap, jacket_row.height};
-        const Rectangle browse_rect = {jacket_row.x + jacket_row.width - kBrowseWidth, jacket_row.y, kBrowseWidth, jacket_row.height};
-
-        ui::draw_text_input(input_rect, jacket_path_input_, "Jacket", "Select image file... (optional)",
-                            nullptr, kLayer, 16, 512, nullptr, kTextInputLabelWidth);
-
-        if (ui::draw_button(browse_rect, "BROWSE", 14).clicked) {
-            const std::string path = file_dialog::open_image_file();
-            if (!path.empty()) {
-                if (!jacket_picker_.open(path, error_)) {
+    const song_create::form_panel::result result = song_create::form_panel::draw(
+        {
+            title_input_, artist_input_, genre_search_input_, keyword_input_,
+            audio_path_input_, jacket_path_input_, preview_ms_input_,
+            selected_genres_, selected_keywords_, jacket_picker_, error_,
+        },
+        {
+            [this](Rectangle rect) {
+                song_create::timing_panel::draw_summary(
+                    rect,
+                    {
+                        bpm_input_, offset_input_, timing_bar_input_, timing_bpm_input_,
+                        timing_numerator_input_, timing_denominator_input_, timing_events_,
+                        selected_timing_event_index_, metronome_enabled_, timing_modal_open_,
+                        timing_event_scroll_offset_, timing_event_scrollbar_dragging_,
+                        timing_event_scrollbar_drag_offset_, timing_import_status_, error_,
+                    },
+                    {
+                        [this] { ensure_timing_events_initialized(); },
+                        [this] { return flush_selected_timing_event_inputs(); },
+                        [this] { sync_selected_timing_inputs(); },
+                        [this](timing_event_type type) { add_timing_event(type); },
+                        [this] { delete_selected_timing_event(); },
+                        [this](const std::string& path) { return import_midi_timing(path); },
+                        [this] { close_timing_modal(); },
+                        [this] { return start_timing_preview(); },
+                        [this] { stop_timing_preview(); },
+                    },
+                    {kScreenRect, kTimingModalRect, kTextInputLabelWidth, kLayer, kModalLayer});
+            },
+            [] { return file_dialog::open_audio_file(); },
+            [this] {
+                const std::string path = file_dialog::open_image_file();
+                if (!path.empty() && !jacket_picker_.open(path, error_)) {
                     jacket_path_input_.value.clear();
                     jacket_crop_source_.clear();
                 }
-            }
-        }
-    }
-
-    ui::draw_text_input(make_row(row++), preview_ms_input_, "Preview (ms)", "0",
-                        "0", kLayer, 16, 10, int_filter, kTextInputLabelWidth);
-
-    const float button_y = kFormStartY + static_cast<float>(row) * (kRowHeight + kRowGap) + kButtonTopGap;
-    const Rectangle create_rect = {kFormX + kFormWidth - kButtonWidth, button_y, kButtonWidth, kButtonHeight};
-    const Rectangle cancel_rect = {kFormX + kFormWidth - kButtonWidth * 2.0f - kButtonGap, button_y, kButtonWidth, kButtonHeight};
-    const char* submit_label = is_edit_mode() ? "SAVE" : "CREATE";
-    const char* cancel_label = is_edit_mode() ? "BACK" : "CANCEL";
-
-    if (ui::draw_button(create_rect, submit_label, 16).clicked) {
-        const bool success = is_edit_mode() ? save_song_edits() : create_song();
-        if (success && !is_edit_mode()) {
-            current_step_ = step::song_saved;
-            error_.clear();
-        }
-    }
-
-    if (ui::draw_button(cancel_rect, cancel_label, 16).clicked) {
-        go_back_to_song_select(editing_song_.has_value() ? editing_song_->meta.song_id : "");
-        return;
-    }
-
-    if (!error_.empty()) {
-        const Rectangle error_rect = {kFormX, button_y + kButtonHeight + kErrorTopGap, kFormWidth, kErrorHeight};
-        ui::draw_text_in_rect(error_.c_str(), 14, error_rect, g_theme->error, ui::text_align::left);
-    }
-
-    if (jacket_picker_.is_open()) {
-        jacket_picker_.draw();
+            },
+            [this] { return is_edit_mode() ? save_song_edits() : create_song(); },
+            [this] { go_back_to_song_select(editing_song_.has_value() ? editing_song_->meta.song_id : ""); },
+        },
+        {kFormX, kFormWidth, kFormStartY, kRowHeight, kRowGap, kTextInputLabelWidth, kLayer, is_edit_mode()});
+    if (result.created_song) {
+        current_step_ = step::song_saved;
+        error_.clear();
     }
 }
 
 void song_create_scene::draw_song_saved() {
-    constexpr float kCenterY = 465.0f;
-    constexpr float kSavedButtonWidth = 330.0f;
-    constexpr float kSavedButtonHeight = 72.0f;
-    constexpr float kSavedButtonGap = 24.0f;
-    const float total_width = kSavedButtonWidth * 2.0f + kSavedButtonGap;
-    const float start_x = (static_cast<float>(kScreenW) - total_width) * 0.5f;
-
-    const Rectangle title_rect = {kDecisionCardRect.x + 54.0f, kDecisionCardRect.y + 42.0f, kDecisionCardRect.width - 108.0f, 51.0f};
-    const Rectangle song_rect = {kDecisionCardRect.x + 54.0f, kDecisionCardRect.y + 108.0f, kDecisionCardRect.width - 108.0f, 45.0f};
-    const Rectangle msg_rect = {kDecisionCardRect.x + 54.0f, kDecisionCardRect.y + 177.0f, kDecisionCardRect.width - 108.0f, 45.0f};
-    ui::draw_text_in_rect("Song has been created.", 24, title_rect, g_theme->text, ui::text_align::center);
-    ui::draw_text_in_rect(created_song_.meta.title.c_str(), 22, song_rect, g_theme->text_secondary, ui::text_align::center);
-    ui::draw_text_in_rect("What would you like to do next?", 20, msg_rect, g_theme->text_muted, ui::text_align::center);
-
-    const Rectangle add_chart_rect = {start_x, kCenterY + 67.5f, kSavedButtonWidth, kSavedButtonHeight};
-    const Rectangle add_later_rect = {start_x + kSavedButtonWidth + kSavedButtonGap, kCenterY + 67.5f,
-                                      kSavedButtonWidth, kSavedButtonHeight};
-
-    if (ui::draw_button(add_chart_rect, "ADD CHART", 16).clicked) {
+    const song_create::saved_view::action action =
+        song_create::saved_view::draw(created_song_, kDecisionCardRect, kScreenW);
+    if (action == song_create::saved_view::action::add_chart) {
         manager_.change_scene(std::make_unique<editor_scene>(manager_, created_song_, 4));
         return;
     }
-
-    if (ui::draw_button(add_later_rect, "ADD LATER", 16).clicked) {
+    if (action == song_create::saved_view::action::add_later) {
         go_back_to_song_select(created_song_.meta.song_id);
     }
 }
 
 
 bool song_create_scene::create_song() {
-    if (title_input_.value.empty()) {
-        error_ = "Title is required.";
-        return false;
-    }
-    if (artist_input_.value.empty()) {
-        error_ = "Artist is required.";
-        return false;
-    }
-    if (audio_path_input_.value.empty()) {
-        error_ = "Audio file is required.";
-        return false;
-    }
-
-    const fs::path audio_source = path_utils::from_utf8(audio_path_input_.value);
-    if (!fs::exists(audio_source)) {
-        error_ = "Audio file not found: " + audio_path_input_.value;
-        return false;
-    }
-
     float base_bpm = 0.0f;
     if (!bpm_input_.value.empty()) {
-        try {
-            base_bpm = std::stof(bpm_input_.value);
-        } catch (...) {
-            error_ = "Invalid BPM value.";
-            return false;
-        }
+        parse_float_text(bpm_input_.value, base_bpm);
     }
 
-    int preview_ms = 0;
-    if (!preview_ms_input_.value.empty()) {
-        try {
-            preview_ms = std::stoi(preview_ms_input_.value);
-        } catch (...) {
-            error_ = "Invalid preview start value.";
-            return false;
-        }
+    const bool timing_input_active = timing_bar_input_.active || timing_bpm_input_.active ||
+                                     timing_numerator_input_.active || timing_denominator_input_.active;
+    if (timing_input_active && selected_timing_event_index_.has_value() && !apply_selected_timing_event()) {
+        return false;
     }
-
-    const std::string song_id = generate_uuid();
-    app_paths::ensure_directories();
-    const fs::path song_dir = app_paths::song_dir(song_id);
-    fs::create_directories(song_dir);
-
-    const std::string audio_filename = path_utils::to_utf8(audio_source.filename());
-    const fs::path audio_dest = song_dir / audio_filename;
-    try {
-        fs::copy_file(audio_source, audio_dest, fs::copy_options::overwrite_existing);
-    } catch (const std::exception& e) {
-        error_ = std::string("Failed to copy audio file: ") + e.what();
+    bool timing_ok = false;
+    const std::vector<timing_event> timing_events = validated_timing_events(base_bpm, timing_ok);
+    if (!timing_ok) {
         return false;
     }
 
-    std::string jacket_filename;
-    if (!jacket_path_input_.value.empty()) {
-        const fs::path jacket_source = path_utils::from_utf8(jacket_path_input_.value);
-        if (!fs::exists(jacket_source)) {
-            error_ = "Jacket file not found: " + jacket_path_input_.value;
-            return false;
-        }
-        if (!export_jacket_image(jacket_source, song_dir, jacket_filename)) {
-            return false;
-        }
-    }
+    song_create::song_form_data form;
+    form.title = title_input_.value;
+    form.artist = artist_input_.value;
+    form.audio_path = audio_path_input_.value;
+    form.jacket_path = jacket_path_input_.value;
+    form.bpm_text = bpm_input_.value;
+    form.preview_ms_text = preview_ms_input_.value;
+    form.offset_ms_text = offset_input_.value;
+    form.genres = selected_genres_;
+    form.keywords = selected_keywords_;
+    form.timing_events = timing_events;
 
-    song_meta meta;
-    meta.song_id = song_id;
-    meta.title = title_input_.value;
-    meta.artist = artist_input_.value;
-    meta.genre = genre_input_.value;
-    meta.base_bpm = base_bpm;
-    meta.audio_file = audio_filename;
-    meta.jacket_file = jacket_filename;
-    meta.preview_start_ms = preview_ms;
-    meta.preview_start_seconds = static_cast<float>(preview_ms) / 1000.0f;
-    meta.song_version = 1;
-
-    if (!song_writer::write_song_json(meta, path_utils::to_utf8(song_dir))) {
-        error_ = "Failed to write song.json.";
+    const song_create::song_save_result result = song_create::create_song(
+        form,
+        [this](const fs::path& source_path, const fs::path& song_dir) {
+            song_create::jacket_export_result exported;
+            std::string error_message;
+            exported.success = export_jacket_image(source_path, song_dir, exported.filename, error_message);
+            exported.error = error_message;
+            return exported;
+        });
+    if (!result.success) {
+        error_ = result.error;
         return false;
     }
 
-    created_song_.meta = meta;
-    created_song_.directory = path_utils::to_utf8(song_dir);
-    created_song_.chart_paths.clear();
-
+    created_song_ = result.song;
     return true;
 }
 
@@ -388,111 +514,61 @@ bool song_create_scene::save_song_edits() {
         error_ = "No song selected for editing.";
         return false;
     }
-    if (title_input_.value.empty()) {
-        error_ = "Title is required.";
-        return false;
-    }
-    if (artist_input_.value.empty()) {
-        error_ = "Artist is required.";
-        return false;
-    }
-    if (audio_path_input_.value.empty()) {
-        error_ = "Audio file is required.";
-        return false;
-    }
-
-    const fs::path song_dir = path_utils::from_utf8(editing_song_->directory);
-    const fs::path audio_source = path_utils::from_utf8(audio_path_input_.value);
-    if (!fs::exists(audio_source)) {
-        error_ = "Audio file not found: " + audio_path_input_.value;
-        return false;
-    }
-
     float base_bpm = 0.0f;
     if (!bpm_input_.value.empty()) {
-        try {
-            base_bpm = std::stof(bpm_input_.value);
-        } catch (...) {
-            error_ = "Invalid BPM value.";
-            return false;
-        }
+        parse_float_text(bpm_input_.value, base_bpm);
     }
 
-    int preview_ms = 0;
-    if (!preview_ms_input_.value.empty()) {
-        try {
-            preview_ms = std::stoi(preview_ms_input_.value);
-        } catch (...) {
-            error_ = "Invalid preview start value.";
-            return false;
-        }
+    const bool timing_input_active = timing_bar_input_.active || timing_bpm_input_.active ||
+                                     timing_numerator_input_.active || timing_denominator_input_.active;
+    if (timing_input_active && selected_timing_event_index_.has_value() && !apply_selected_timing_event()) {
+        return false;
     }
-
-    std::string audio_filename = editing_song_->meta.audio_file;
-    const fs::path current_audio_path = path_utils::join_utf8(editing_song_->directory, editing_song_->meta.audio_file);
-    if (!paths_match(audio_source, current_audio_path)) {
-        audio_filename = path_utils::to_utf8(audio_source.filename());
-        const fs::path audio_dest = song_dir / audio_filename;
-        try {
-            fs::copy_file(audio_source, audio_dest, fs::copy_options::overwrite_existing);
-        } catch (const std::exception& e) {
-            error_ = std::string("Failed to copy audio file: ") + e.what();
-            return false;
-        }
-    }
-
-    std::string jacket_filename = editing_song_->meta.jacket_file;
-    if (jacket_path_input_.value.empty()) {
-        jacket_filename.clear();
-    } else {
-        const fs::path jacket_source = path_utils::from_utf8(jacket_path_input_.value);
-        if (!fs::exists(jacket_source)) {
-            error_ = "Jacket file not found: " + jacket_path_input_.value;
-            return false;
-        }
-
-        const fs::path current_jacket_path = editing_song_->meta.jacket_file.empty()
-            ? fs::path()
-            : path_utils::join_utf8(editing_song_->directory, editing_song_->meta.jacket_file);
-        if (!editing_song_->meta.jacket_file.empty() &&
-            paths_match(jacket_source, current_jacket_path) &&
-            jacket_crop_source_ != path_utils::to_utf8(jacket_source)) {
-            jacket_filename = editing_song_->meta.jacket_file;
-        } else {
-            if (!export_jacket_image(jacket_source, song_dir, jacket_filename)) {
-                return false;
-            }
-        }
-    }
-
-    song_meta meta = editing_song_->meta;
-    meta.title = title_input_.value;
-    meta.artist = artist_input_.value;
-    meta.genre = genre_input_.value;
-    meta.base_bpm = base_bpm;
-    meta.audio_file = audio_filename;
-    meta.jacket_file = jacket_filename;
-    meta.preview_start_ms = preview_ms;
-    meta.preview_start_seconds = static_cast<float>(preview_ms) / 1000.0f;
-    if (meta.song_version <= 0) {
-        meta.song_version = 1;
-    }
-
-    if (!song_writer::write_song_json(meta, path_utils::to_utf8(song_dir))) {
-        error_ = "Failed to write song.json.";
+    bool timing_ok = false;
+    const std::vector<timing_event> timing_events = validated_timing_events(base_bpm, timing_ok);
+    if (!timing_ok) {
         return false;
     }
 
-    editing_song_->meta = meta;
-    created_song_ = *editing_song_;
+    song_create::song_form_data form;
+    form.title = title_input_.value;
+    form.artist = artist_input_.value;
+    form.audio_path = audio_path_input_.value;
+    form.jacket_path = jacket_path_input_.value;
+    form.bpm_text = bpm_input_.value;
+    form.preview_ms_text = preview_ms_input_.value;
+    form.offset_ms_text = offset_input_.value;
+    form.genres = selected_genres_;
+    form.keywords = selected_keywords_;
+    form.timing_events = timing_events;
+    form.reuse_existing_jacket_when_source_matches = jacket_crop_source_ != jacket_path_input_.value;
+
+    const song_create::song_save_result result = song_create::save_song_edits(
+        *editing_song_,
+        form,
+        [this](const fs::path& source_path, const fs::path& song_dir) {
+            song_create::jacket_export_result exported;
+            std::string error_message;
+            exported.success = export_jacket_image(source_path, song_dir, exported.filename, error_message);
+            exported.error = error_message;
+            return exported;
+        });
+    if (!result.success) {
+        error_ = result.error;
+        return false;
+    }
+
+    editing_song_ = result.song;
+    created_song_ = result.song;
     error_.clear();
-    go_back_to_song_select(meta.song_id);
+    go_back_to_song_select(result.song.meta.song_id);
     return true;
 }
 
 bool song_create_scene::export_jacket_image(const fs::path& source_path,
                                             const fs::path& song_dir,
-                                            std::string& jacket_filename) {
+                                            std::string& jacket_filename,
+                                            std::string& error_message) {
     jacket_filename = "jacket.png";
     const fs::path jacket_dest = song_dir / jacket_filename;
     const std::string source_utf8 = path_utils::to_utf8(source_path);
@@ -506,7 +582,7 @@ bool song_create_scene::export_jacket_image(const fs::path& source_path,
     }
 
     if (!result.success) {
-        error_ = result.message.empty() ? "Failed to export jacket image." : result.message;
+        error_message = result.message.empty() ? "Failed to export jacket image." : result.message;
         jacket_filename.clear();
         return false;
     }

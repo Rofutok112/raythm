@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 4.1)
 project(raythm)
 
 include(CTest)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY ON)
@@ -40,10 +41,11 @@ if(NOT RAYTHM_API_BASE_URL STREQUAL "")
 endif()
 
 include(FetchContent)
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 FetchContent_Declare(
         raylib
-        GIT_REPOSITORY  https://github.com/raysan5/raylib.git
-        GIT_TAG         5.5
+        URL https://github.com/raysan5/raylib/archive/refs/tags/5.5.zip
+        URL_HASH SHA256=00e8a7c85f7a5221e56ee8e4e1c6642b773eae73d29379a91c8ac5149e803f42
 )
 FetchContent_MakeAvailable(raylib)
 
@@ -99,9 +101,36 @@ if(WIN32)
     set_source_files_properties("${RAYTHM_APP_ICON_ICO}" "${RAYTHM_APP_ICON_RC}" PROPERTIES GENERATED TRUE)
 endif()
 
+set(RAYTHM_ICON_MANIFEST "${CMAKE_SOURCE_DIR}/assets/icons/raythm_icons.json")
+set(RAYTHM_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(RAYTHM_GENERATED_ICON_CPP "${RAYTHM_GENERATED_INCLUDE_DIR}/ui/icons/raythm_icons.cpp")
+set(RAYTHM_GENERATED_ICON_H "${RAYTHM_GENERATED_INCLUDE_DIR}/ui/icons/raythm_icons.h")
+
+add_custom_command(
+        OUTPUT "${RAYTHM_GENERATED_ICON_CPP}" "${RAYTHM_GENERATED_ICON_H}"
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/tools/svg2raylib.py"
+                --manifest "${RAYTHM_ICON_MANIFEST}"
+                --out "${RAYTHM_GENERATED_ICON_CPP}"
+                --header-out "${RAYTHM_GENERATED_ICON_H}"
+                --include "ui/icons/raythm_icons.h"
+                --namespace raythm_icons
+                --sdf-atlas
+                --sdf-cell-size 80
+        DEPENDS
+                "${CMAKE_SOURCE_DIR}/tools/svg2raylib.py"
+                "${RAYTHM_ICON_MANIFEST}"
+        COMMENT "Generating raylib icon drawing code"
+        VERBATIM
+)
+
+set_source_files_properties("${RAYTHM_GENERATED_ICON_CPP}" "${RAYTHM_GENERATED_ICON_H}" PROPERTIES GENERATED TRUE)
+
 add_executable(raythm WIN32 src/main.cpp
         src/audio/audio.cpp
         src/audio/audio.h
+        src/audio/audio_loudness.cpp
+        src/audio/audio_loudness.h
         src/audio/audio_manager.cpp
         src/audio/audio_manager.h
         src/mv/lang/mv_lexer.cpp
@@ -150,6 +179,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/platform/window_chrome.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
+        src/gameplay/chart_file_storage.cpp
+        src/gameplay/chart_file_storage.h
         src/gameplay/chart_difficulty.cpp
         src/gameplay/chart_difficulty.h
         src/gameplay/chart_judge_events.cpp
@@ -161,6 +192,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
         src/models/data_models.h
+        src/gameplay/lane_input_tracker.cpp
+        src/gameplay/lane_input_tracker.h
         src/gameplay/input_handler.cpp
         src/gameplay/input_handler.h
         src/gameplay/judge_system.cpp
@@ -169,8 +202,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/player_note_offsets.h
         src/gameplay/performance_system.cpp
         src/gameplay/performance_system.h
-        src/gameplay/ranking_service.cpp
-        src/gameplay/ranking_service.h
+        src/services/ranking_service.cpp
+        src/services/ranking_service.h
         src/gameplay/scoring_ruleset_runtime.cpp
         src/gameplay/scoring_ruleset_runtime.h
         src/gameplay/score_system.cpp
@@ -229,6 +262,10 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/home_menu_view.h
         src/scenes/title/title_home_input_controller.cpp
         src/scenes/title/title_home_input_controller.h
+        src/scenes/title/title_hub_update_coordinator.cpp
+        src/scenes/title/title_hub_update_coordinator.h
+        src/scenes/title/title_hub_view.cpp
+        src/scenes/title/title_hub_view.h
         src/scenes/title/title_audio_controller.cpp
         src/scenes/title/title_audio_controller.h
         src/scenes/title/title_audio_policy.cpp
@@ -247,14 +284,22 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_play_data_controller.h
         src/scenes/title/title_play_mode_controller.cpp
         src/scenes/title/title_play_mode_controller.h
+        src/scenes/title/title_startup_controller.cpp
+        src/scenes/title/title_startup_controller.h
         src/scenes/title/title_play_transfer_controller.cpp
         src/scenes/title/title_play_transfer_controller.h
         src/scenes/title/title_profile_controller.cpp
         src/scenes/title/title_profile_controller.h
         src/scenes/title/title_header_view.cpp
         src/scenes/title/title_header_view.h
+        src/scenes/title/title_local_song_select_controller.cpp
+        src/scenes/title/title_local_song_select_controller.h
+        src/scenes/title/create_tools_view.cpp
+        src/scenes/title/create_tools_view.h
         src/scenes/title/create_upload_client.cpp
         src/scenes/title/create_upload_client.h
+        src/scenes/title/online_catalog_data_controller.cpp
+        src/scenes/title/online_catalog_data_controller.h
         src/scenes/title/local_content_database.cpp
         src/scenes/title/local_content_database.h
         src/scenes/title/local_content_binding.h
@@ -266,6 +311,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/online_download_remote_client.h
         src/scenes/title/online_download_transfer.cpp
         src/scenes/title/online_download_update.cpp
+        src/scenes/title/online_download_preview_controller.cpp
+        src/scenes/title/online_download_preview_controller.h
         src/scenes/title/online_download_render.cpp
         src/scenes/title/online_download_layout.cpp
         src/scenes/title/online_download_state.cpp
@@ -286,12 +333,26 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_settings_overlay.h
         src/scenes/mv_editor_scene.cpp
         src/scenes/mv_editor_scene.h
-        src/scenes/song_create_scene.cpp
-        src/scenes/song_create_scene.h
-        src/scenes/song_select/song_catalog_service.cpp
+         src/scenes/song_create_scene.cpp
+         src/scenes/song_create_scene.h
+         src/scenes/song_create/song_create_form_panel.cpp
+         src/scenes/song_create/song_create_form_panel.h
+         src/scenes/song_create/song_create_midi_importer.cpp
+         src/scenes/song_create/song_create_midi_importer.h
+         src/scenes/song_create/song_create_saved_view.cpp
+         src/scenes/song_create/song_create_saved_view.h
+         src/scenes/song_create/song_create_service.cpp
+         src/scenes/song_create/song_create_service.h
+         src/scenes/song_create/song_create_tag_editor.cpp
+         src/scenes/song_create/song_create_tag_editor.h
+         src/scenes/song_create/song_create_timing_controller.cpp
+         src/scenes/song_create/song_create_timing_controller.h
+         src/scenes/song_create/song_create_timing_panel.cpp
+         src/scenes/song_create/song_create_timing_panel.h
+         src/scenes/song_create/song_create_timing_service.cpp
+         src/scenes/song_create/song_create_timing_service.h
+         src/scenes/song_select/song_catalog_service.cpp
         src/scenes/song_select/song_catalog_service.h
-        src/scenes/song_select/content_verification_cache_database.cpp
-        src/scenes/song_select/content_verification_cache_database.h
         src/scenes/song_select/local_catalog_database.cpp
         src/scenes/song_select/local_catalog_database.h
         src/scenes/song_select/song_select_confirmation_dialog.cpp
@@ -302,6 +363,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_import_export_service.h
         src/scenes/song_select/song_select_command_controller.cpp
         src/scenes/song_select/song_select_command_controller.h
+        src/scenes/song_select/song_select_data_controller.cpp
+        src/scenes/song_select/song_select_data_controller.h
         src/scenes/song_select/song_transfer_controller.cpp
         src/scenes/song_select/song_transfer_controller.h
         src/scenes/song_select/song_select_last_played.cpp
@@ -327,6 +390,14 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select_scene.h
         src/scenes/editor/controller/editor_runtime_controller.cpp
         src/scenes/editor/controller/editor_runtime_controller.h
+        src/scenes/editor/controller/editor_screen_controller.cpp
+        src/scenes/editor/controller/editor_screen_controller.h
+        src/scenes/editor/controller/editor_timeline_screen_controller.cpp
+        src/scenes/editor/controller/editor_timeline_screen_controller.h
+        src/scenes/editor/controller/editor_timing_action_controller.cpp
+        src/scenes/editor/controller/editor_timing_action_controller.h
+        src/scenes/editor/daw/editor_daw_view.cpp
+        src/scenes/editor/daw/editor_daw_view.h
         src/scenes/editor/editor_flow_controller.cpp
         src/scenes/editor/editor_flow_controller.h
         src/scenes/editor/view/editor_cursor_hud_view.cpp
@@ -342,6 +413,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/editor_panel_controller.h
         src/scenes/editor/view/editor_right_panel_view.cpp
         src/scenes/editor/view/editor_right_panel_view.h
+        src/scenes/editor/view/editor_screen_view.cpp
+        src/scenes/editor/view/editor_screen_view.h
         src/scenes/editor/editor_scene_sync.cpp
         src/scenes/editor/editor_scene_sync.h
         src/scenes/editor/editor_scene_types.h
@@ -351,6 +424,10 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/service/editor_chart_identity_service.h
         src/scenes/editor/service/editor_metadata_service.cpp
         src/scenes/editor/service/editor_metadata_service.h
+        src/scenes/editor/service/editor_note_edit_service.cpp
+        src/scenes/editor/service/editor_note_edit_service.h
+        src/scenes/editor/service/editor_note_placement_rules.cpp
+        src/scenes/editor/service/editor_note_placement_rules.h
         src/scenes/editor/service/editor_transport_service.cpp
         src/scenes/editor/service/editor_transport_service.h
         src/scenes/editor/service/editor_timing_edit_service.cpp
@@ -373,6 +450,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/play/play_chart_filter.h
         src/scenes/play/play_note_draw_queue.cpp
         src/scenes/play/play_note_draw_queue.h
+        src/scenes/play/play_mv_controller.cpp
+        src/scenes/play/play_mv_controller.h
         src/scenes/play/play_renderer.cpp
         src/scenes/play/play_renderer.h
         src/scenes/play_scene.cpp
@@ -410,6 +489,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/ui/ui_text_editor.h
         src/mv/mv_script_panel.cpp
         src/mv/mv_script_panel.h)
+
+target_sources(raythm PRIVATE "${RAYTHM_GENERATED_ICON_CPP}" "${RAYTHM_GENERATED_ICON_H}")
 
 add_executable(raythm_launcher
         src/launcher_main.cpp
@@ -456,6 +537,19 @@ add_executable(raythm_updater
 set_target_properties(raythm_launcher PROPERTIES OUTPUT_NAME "Launcher")
 set_target_properties(raythm_updater PROPERTIES OUTPUT_NAME "Updater")
 
+add_executable(font_atlas_generator
+        src/font_atlas/font_atlas_generator.cpp)
+add_custom_target(generate_ui_font_atlas
+        COMMAND font_atlas_generator
+                "${CMAKE_SOURCE_DIR}/assets/fonts/MPLUS1p-Medium.ttf"
+                "${CMAKE_SOURCE_DIR}/assets/fonts/japanese_full.txt"
+                "${CMAKE_SOURCE_DIR}/assets/fonts/ui_sdf"
+        DEPENDS
+                font_atlas_generator
+                "${CMAKE_SOURCE_DIR}/assets/fonts/MPLUS1p-Medium.ttf"
+                "${CMAKE_SOURCE_DIR}/assets/fonts/japanese_full.txt"
+        VERBATIM)
+
 if(WIN32)
     set_target_properties(raythm_launcher PROPERTIES WIN32_EXECUTABLE TRUE)
     set_target_properties(raythm_updater PROPERTIES WIN32_EXECUTABLE TRUE)
@@ -468,6 +562,14 @@ add_executable(chart_parser_smoke
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
         src/tests/chart_parser_smoke.cpp
+        src/models/data_models.h)
+
+add_executable(chart_file_storage_smoke
+        src/gameplay/chart_file_storage.cpp
+        src/gameplay/chart_file_storage.h
+        src/gameplay/chart_parser.cpp
+        src/gameplay/chart_parser.h
+        src/tests/chart_file_storage_smoke.cpp
         src/models/data_models.h)
 
 add_executable(chart_serializer_smoke
@@ -498,6 +600,12 @@ add_executable(editor_state_smoke
         src/scenes/editor/editor_meter_map.h
         src/scenes/editor/editor_state.cpp
         src/scenes/editor/editor_state.h
+        src/scenes/editor/service/editor_note_placement_rules.cpp
+        src/scenes/editor/service/editor_note_placement_rules.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/models/data_models.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
@@ -537,6 +645,17 @@ add_executable(song_select_state_smoke
         src/scenes/song_select/song_select_state.h
         src/tests/song_select_state_smoke.cpp)
 
+add_executable(song_select_data_controller_smoke
+        src/models/data_models.h
+        src/scenes/shared/scene_fade.cpp
+        src/scenes/shared/scene_fade.h
+        src/scenes/song_select/song_select_data_controller.cpp
+        src/scenes/song_select/song_select_data_controller.h
+        src/scenes/song_select/song_select_layout.h
+        src/scenes/song_select/song_select_state.cpp
+        src/scenes/song_select/song_select_state.h
+        src/tests/song_select_data_controller_smoke.cpp)
+
 add_executable(song_export_identity_smoke
         src/models/data_models.h
         src/scenes/song_select/song_export_identity.cpp
@@ -564,6 +683,8 @@ add_executable(local_catalog_database_smoke
         src/core/app_paths.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
         src/scenes/song_select/local_catalog_database.cpp
         src/scenes/song_select/local_catalog_database.h
         src/scenes/song_select/song_select_state.cpp
@@ -596,9 +717,17 @@ add_executable(mv_storage_smoke
 add_executable(input_handler_smoke
         src/platform/windows_input_source.cpp
         src/platform/windows_input_source.h
+        src/gameplay/lane_input_tracker.cpp
+        src/gameplay/lane_input_tracker.h
         src/gameplay/input_handler.cpp
         src/gameplay/input_handler.h
         src/tests/input_handler_smoke.cpp)
+
+add_executable(lane_input_tracker_smoke
+        src/models/data_models.h
+        src/gameplay/lane_input_tracker.cpp
+        src/gameplay/lane_input_tracker.h
+        src/tests/lane_input_tracker_smoke.cpp)
 
 add_executable(timing_engine_smoke
         src/models/data_models.h
@@ -610,6 +739,8 @@ add_executable(judge_system_smoke
         src/models/data_models.h
         src/platform/windows_input_source.cpp
         src/platform/windows_input_source.h
+        src/gameplay/lane_input_tracker.cpp
+        src/gameplay/lane_input_tracker.h
         src/gameplay/input_handler.cpp
         src/gameplay/input_handler.h
         src/gameplay/chart_judge_events.cpp
@@ -660,8 +791,8 @@ add_executable(ranking_service_smoke
         src/models/data_models.h
         src/gameplay/chart_fingerprint.cpp
         src/gameplay/chart_fingerprint.h
-        src/gameplay/ranking_service.cpp
-        src/gameplay/ranking_service.h
+        src/services/ranking_service.cpp
+        src/services/ranking_service.h
         src/gameplay/scoring_ruleset_runtime.cpp
         src/gameplay/scoring_ruleset_runtime.h
         src/gameplay/song_fingerprint.cpp
@@ -693,6 +824,9 @@ add_executable(play_note_draw_queue_smoke
         src/models/data_models.h
         src/scenes/play/play_note_draw_queue.cpp
         src/scenes/play/play_note_draw_queue.h
+        src/scenes/play/play_scroll_map.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
         src/tests/play_note_draw_queue_smoke.cpp)
 
 add_executable(play_chart_filter_smoke
@@ -705,6 +839,8 @@ add_executable(play_flow_controller_smoke
         src/models/data_models.h
         src/platform/windows_input_source.cpp
         src/platform/windows_input_source.h
+        src/gameplay/lane_input_tracker.cpp
+        src/gameplay/lane_input_tracker.h
         src/gameplay/input_handler.cpp
         src/gameplay/input_handler.h
         src/gameplay/judge_system.cpp
@@ -739,6 +875,10 @@ add_executable(editor_transport_controller_smoke
         src/scenes/editor/editor_state.h
         src/scenes/editor/editor_timeline_view.h
         src/scenes/editor/editor_timing_panel.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/models/data_models.h
@@ -762,6 +902,10 @@ add_executable(editor_flow_controller_smoke
         src/scenes/editor/editor_timing_panel.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/models/data_models.h
@@ -781,6 +925,10 @@ add_executable(editor_timeline_controller_smoke
         src/scenes/editor/editor_timeline_view.cpp
         src/scenes/editor/editor_timeline_view.h
         src/scenes/editor/editor_timing_panel.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/models/data_models.h
@@ -791,11 +939,56 @@ add_executable(editor_timeline_controller_smoke
         src/ui/ui_clip.h
         src/ui/ui_font.cpp
         src/ui/ui_font.h
+        src/localization/localization.cpp
+        src/localization/localization.h
         src/core/app_paths.cpp
         src/core/app_paths.h
         src/scenes/virtual_screen.cpp
         src/scenes/virtual_screen.h
         src/tests/editor_timeline_controller_smoke.cpp)
+
+add_executable(editor_note_edit_service_smoke
+        src/scenes/editor/editor_command.h
+        src/scenes/editor/editor_meter_map.cpp
+        src/scenes/editor/editor_meter_map.h
+        src/scenes/editor/editor_state.cpp
+        src/scenes/editor/editor_state.h
+        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timing_panel.h
+        src/scenes/editor/service/editor_note_edit_service.cpp
+        src/scenes/editor/service/editor_note_edit_service.h
+        src/scenes/editor/service/editor_note_placement_rules.cpp
+        src/scenes/editor/service/editor_note_placement_rules.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/models/data_models.h
+        src/scenes/editor/editor_scene_types.h
+        src/tests/editor_note_edit_service_smoke.cpp)
+
+add_executable(editor_timing_edit_service_smoke
+        src/scenes/editor/editor_command.h
+        src/scenes/editor/editor_meter_map.cpp
+        src/scenes/editor/editor_meter_map.h
+        src/scenes/editor/editor_state.cpp
+        src/scenes/editor/editor_state.h
+        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timing_panel.h
+        src/scenes/editor/service/editor_note_placement_rules.cpp
+        src/scenes/editor/service/editor_note_placement_rules.h
+        src/scenes/editor/service/editor_timing_edit_service.cpp
+        src/scenes/editor/service/editor_timing_edit_service.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/models/data_models.h
+        src/tests/editor_timing_edit_service_smoke.cpp)
 
 add_executable(editor_panel_controller_smoke
         src/audio/audio_manager.h
@@ -813,6 +1006,8 @@ add_executable(editor_panel_controller_smoke
 add_executable(audio_manager_smoke
         src/audio/audio.cpp
         src/audio/audio.h
+        src/audio/audio_loudness.cpp
+        src/audio/audio_loudness.h
         src/audio/audio_manager.cpp
         src/audio/audio_manager.h
         src/tests/audio_manager_smoke.cpp)
@@ -912,6 +1107,7 @@ set(RAYTHM_INCLUDE_DIRS
         ${CMAKE_SOURCE_DIR}/src/gameplay
         ${CMAKE_SOURCE_DIR}/src/models
         ${CMAKE_SOURCE_DIR}/src/scenes
+        ${CMAKE_SOURCE_DIR}/src/services
         ${CMAKE_SOURCE_DIR}/src/ui
 )
 set(RAYTHM_TEST_INCLUDE_DIRS
@@ -925,18 +1121,21 @@ set(RAYTHM_APP_TARGETS
 )
 set(RAYTHM_SMOKE_TARGETS
         chart_parser_smoke
+        chart_file_storage_smoke
         chart_serializer_smoke
         chart_difficulty_smoke
         editor_state_smoke
         editor_meter_map_smoke
         song_loader_smoke
         song_select_state_smoke
+        song_select_data_controller_smoke
         song_export_identity_smoke
         settings_io_smoke
         localization_smoke
         local_catalog_database_smoke
         local_content_index_smoke
         mv_storage_smoke
+        lane_input_tracker_smoke
         input_handler_smoke
         timing_engine_smoke
         chart_judge_events_smoke
@@ -951,6 +1150,8 @@ set(RAYTHM_SMOKE_TARGETS
         editor_transport_controller_smoke
         editor_flow_controller_smoke
         editor_timeline_controller_smoke
+        editor_note_edit_service_smoke
+        editor_timing_edit_service_smoke
         editor_panel_controller_smoke
         audio_manager_smoke
         update_version_smoke
@@ -962,6 +1163,7 @@ set(RAYTHM_SMOKE_TARGETS
 foreach(raythm_target IN LISTS RAYTHM_APP_TARGETS RAYTHM_SMOKE_TARGETS)
     target_include_directories(${raythm_target} PRIVATE ${RAYTHM_INCLUDE_DIRS})
 endforeach()
+target_include_directories(raythm BEFORE PRIVATE "${RAYTHM_GENERATED_INCLUDE_DIR}")
 
 foreach(raythm_target IN LISTS RAYTHM_SMOKE_TARGETS)
     target_include_directories(${raythm_target} PRIVATE ${RAYTHM_TEST_INCLUDE_DIRS})
@@ -979,11 +1181,13 @@ target_include_directories(audio_manager_smoke PRIVATE ${RAYTHM_BASS_DIR})
 target_link_libraries(raythm PRIVATE raylib sqlite3 ${RAYTHM_BASS_IMPORT_LIB} comdlg32 crypt32 winhttp)
 target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)
+target_link_libraries(font_atlas_generator PRIVATE raylib)
 target_link_libraries(update_version_smoke PRIVATE winhttp)
 target_link_libraries(song_loader_smoke PRIVATE sqlite3)
 target_link_libraries(local_catalog_database_smoke PRIVATE sqlite3 raylib)
 target_link_libraries(local_content_index_smoke PRIVATE sqlite3)
 target_link_libraries(song_select_state_smoke PRIVATE raylib)
+target_link_libraries(song_select_data_controller_smoke PRIVATE raylib)
 target_link_libraries(settings_io_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
@@ -992,6 +1196,8 @@ target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_transport_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_flow_controller_smoke PRIVATE raylib sqlite3)
 target_link_libraries(editor_timeline_controller_smoke PRIVATE raylib)
+target_link_libraries(editor_note_edit_service_smoke PRIVATE raylib)
+target_link_libraries(editor_timing_edit_service_smoke PRIVATE raylib)
 target_link_libraries(editor_panel_controller_smoke PRIVATE raylib)
 target_link_libraries(audio_manager_smoke PRIVATE ${RAYTHM_BASS_IMPORT_LIB})
 target_link_libraries(mv_lang_smoke PRIVATE raylib)
@@ -1013,19 +1219,19 @@ if(MINGW)
     endforeach()
 endif()
 
-# bass.dll を実行ファイルと同じディレクトリにコピー
-add_custom_command(TARGET raythm POST_BUILD
+add_custom_target(raythm_runtime_files
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+        $<TARGET_FILE_DIR:raythm>
+        $<TARGET_FILE_DIR:raythm>/assets
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${RAYTHM_RUNTIME_DLLS}
         $<TARGET_FILE_DIR:raythm>
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/assets/audio
-        $<TARGET_FILE_DIR:raythm>/assets/audio
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/assets/fonts
-        $<TARGET_FILE_DIR:raythm>/assets/fonts
+        ${CMAKE_SOURCE_DIR}/assets
+        $<TARGET_FILE_DIR:raythm>/assets
         COMMAND_EXPAND_LISTS
 )
+add_dependencies(raythm raythm_runtime_files)
 
 add_custom_command(TARGET audio_manager_smoke POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -1035,8 +1241,7 @@ add_custom_command(TARGET audio_manager_smoke POST_BUILD
 
 install(TARGETS raythm raythm_launcher raythm_updater RUNTIME DESTINATION .)
 install(FILES ${RAYTHM_RUNTIME_DLLS} DESTINATION .)
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets/audio DESTINATION assets)
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets/fonts DESTINATION assets)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets DESTINATION .)
 
 if(WIN32)
     set(CPACK_PACKAGE_NAME "raythm")

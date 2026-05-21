@@ -16,12 +16,12 @@
 #include <vector>
 
 #include "app_paths.h"
-#include "chart_parser.h"
-#include "chart_serializer.h"
+#include "chart_file_storage.h"
 #include "network/json_helpers.h"
 #include "path_utils.h"
 #include "song_writer.h"
 #include "title/local_content_index.h"
+#include "title/online_catalog_data_controller.h"
 #include "title/online_download_remote_client.h"
 #include "ui_notice.h"
 
@@ -66,32 +66,6 @@ bool write_binary_file(const std::filesystem::path& path,
     return true;
 }
 
-bool write_chart_file(const std::filesystem::path& path,
-                      const std::vector<unsigned char>& bytes,
-                      std::string& error_message) {
-    std::filesystem::create_directories(path.parent_path());
-    const std::filesystem::path temp_path = path.parent_path() / (path.filename().string() + ".download.tmp");
-    if (!write_binary_file(temp_path, bytes, error_message)) {
-        return false;
-    }
-
-    const chart_parse_result parsed = chart_parser::parse(path_utils::to_utf8(temp_path));
-    if (!parsed.success || !parsed.data.has_value()) {
-        std::filesystem::remove(temp_path);
-        error_message = parsed.errors.empty() ? "Downloaded chart file was invalid." : parsed.errors.front();
-        return false;
-    }
-
-    if (!chart_serializer::serialize(*parsed.data, path_utils::to_utf8(path))) {
-        std::filesystem::remove(temp_path);
-        error_message = "Failed to write downloaded chart data to disk.";
-        return false;
-    }
-
-    std::filesystem::remove(temp_path);
-    return true;
-}
-
 bool restore_staged_charts(const std::filesystem::path& staged_charts_dir,
                            const std::filesystem::path& charts_dir) {
     std::error_code ec;
@@ -106,6 +80,46 @@ bool restore_staged_charts(const std::filesystem::path& staged_charts_dir,
     return !ec;
 }
 
+std::vector<timing_event> parse_timing_events(const std::string& metadata_json) {
+    std::vector<timing_event> events;
+    const std::optional<std::string> timing_array = json::extract_array(metadata_json, "timingEvents");
+    if (!timing_array.has_value()) {
+        return events;
+    }
+
+    for (const std::string& object : json::extract_objects_from_array(*timing_array)) {
+        const std::string type = json::extract_string(object, "type").value_or("");
+        const std::optional<int> tick = json::extract_int(object, "tick");
+        if (!tick.has_value() || *tick < 0) {
+            continue;
+        }
+
+        timing_event event;
+        event.tick = *tick;
+        if (type == "bpm") {
+            const std::optional<float> bpm = json::extract_float(object, "bpm");
+            if (!bpm.has_value() || *bpm <= 0.0f) {
+                continue;
+            }
+            event.type = timing_event_type::bpm;
+            event.bpm = *bpm;
+        } else if (type == "meter") {
+            const std::optional<int> numerator = json::extract_int(object, "numerator");
+            const std::optional<int> denominator = json::extract_int(object, "denominator");
+            if (!numerator.has_value() || !denominator.has_value() || *numerator <= 0 || *denominator <= 0) {
+                continue;
+            }
+            event.type = timing_event_type::meter;
+            event.numerator = *numerator;
+            event.denominator = *denominator;
+        } else {
+            continue;
+        }
+        events.push_back(event);
+    }
+    return events;
+}
+
 std::optional<song_meta> parse_downloaded_song_metadata(const std::string& metadata_json,
                                                         const std::string& local_song_id,
                                                         int fallback_song_version,
@@ -115,10 +129,28 @@ std::optional<song_meta> parse_downloaded_song_metadata(const std::string& metad
     meta.title = trim_ascii(json::extract_string(metadata_json, "title").value_or(""));
     meta.artist = trim_ascii(json::extract_string(metadata_json, "artist").value_or(""));
     meta.genre = trim_ascii(json::extract_string(metadata_json, "genre").value_or(""));
+    if (const std::optional<std::string> genres = json::extract_array(metadata_json, "genres")) {
+        meta.genres = json::extract_strings_from_array(*genres);
+    }
+    if (meta.genre.empty() && !meta.genres.empty()) {
+        meta.genre = meta.genres.front();
+    }
+    if (meta.genres.empty() && !meta.genre.empty()) {
+        meta.genres.push_back(meta.genre);
+    }
+    if (const std::optional<std::string> keywords = json::extract_array(metadata_json, "keywords")) {
+        meta.keywords = json::extract_strings_from_array(*keywords);
+    }
     meta.audio_file = trim_ascii(json::extract_string(metadata_json, "audioFile").value_or(""));
     meta.jacket_file = trim_ascii(json::extract_string(metadata_json, "jacketFile").value_or(""));
     meta.base_bpm = json::extract_float(metadata_json, "baseBpm").value_or(0.0f);
+    if (const std::optional<int> offset = json::extract_int(metadata_json, "offset")) {
+        meta.offset = *offset;
+        meta.has_offset = true;
+    }
+    meta.timing_events = parse_timing_events(metadata_json);
     meta.duration_seconds = json::extract_float(metadata_json, "durationSec").value_or(0.0f);
+    meta.chart_count = std::max(0, json::extract_int(metadata_json, "chartCount").value_or(0));
     meta.preview_start_ms = json::extract_int(metadata_json, "previewStartMs").value_or(0);
     meta.preview_start_seconds = static_cast<float>(meta.preview_start_ms) / 1000.0f;
     meta.song_version = json::extract_int(metadata_json, "songVersion").value_or(
@@ -160,6 +192,7 @@ void mark_song_downloaded(std::vector<song_entry_state>& songs, const std::strin
 
         song.installed = true;
         song.update_available = false;
+        song.song.status = song.song.source_status;
         song.charts_loaded = true;
         song.charts_loading = false;
         song.charts_has_more = false;
@@ -179,6 +212,7 @@ void mark_chart_downloaded(std::vector<song_entry_state>& songs,
             if (chart.chart.meta.chart_id == chart_id) {
                 chart.installed = true;
                 chart.update_available = false;
+                chart.chart.status = chart.chart.source_status;
             }
         }
     }
@@ -409,9 +443,10 @@ download_song_result download_chart_file(const song_entry_state song,
 
     std::string error_message;
     app_paths::ensure_directories();
-    if (!write_chart_file(app_paths::song_chart_path(local_song_id, local_chart_id),
-                          chart_fetch.bytes,
-                          error_message)) {
+    if (!chart_file_storage::write_validated_raw_chart_file(
+            app_paths::song_chart_path(local_song_id, local_chart_id),
+            chart_fetch.bytes,
+            error_message)) {
         result.message = error_message;
         return result;
     }
@@ -440,10 +475,12 @@ download_song_result download_chart_file(const song_entry_state song,
 }  // namespace
 
 bool needs_download(const song_entry_state& song) {
-    return !song.installed || song.update_available;
+    return !song.installed ||
+           song.update_available ||
+           song.song.status == content_status::modified;
 }
 
-void start_download(state& state) {
+void start_download(state& state, online_catalog::data_controller& data_controller) {
     if (state.download_in_progress) {
         return;
     }
@@ -460,7 +497,7 @@ void start_download(state& state) {
     ui::notify("Downloading song...", ui::notice_tone::info, 1.8f);
     const std::shared_ptr<download_progress_state> progress = state.download_progress;
     std::promise<download_song_result> promise;
-    state.download_future = promise.get_future();
+    data_controller.download_future() = promise.get_future();
     std::thread([promise = std::move(promise), selected, server_url, progress]() mutable {
         try {
             promise.set_value(download_song_package(selected, server_url, progress));
@@ -470,7 +507,7 @@ void start_download(state& state) {
     }).detach();
 }
 
-void start_chart_download(state& state) {
+void start_chart_download(state& state, online_catalog::data_controller& data_controller) {
     if (state.download_in_progress) {
         return;
     }
@@ -484,7 +521,9 @@ void start_chart_download(state& state) {
         ui::notify("Download the song first.", ui::notice_tone::error, 2.6f);
         return;
     }
-    if (chart->installed && !chart->update_available) {
+    if (chart->installed &&
+        !chart->update_available &&
+        chart->chart.status != content_status::modified) {
         return;
     }
 
@@ -496,7 +535,7 @@ void start_chart_download(state& state) {
     ui::notify("Downloading chart...", ui::notice_tone::info, 1.8f);
     const std::shared_ptr<download_progress_state> progress = state.download_progress;
     std::promise<download_song_result> promise;
-    state.download_future = promise.get_future();
+    data_controller.download_future() = promise.get_future();
     std::thread([promise = std::move(promise), selected_song, selected_chart, server_url, progress]() mutable {
         try {
             promise.set_value(download_chart_file(selected_song, selected_chart, server_url, progress));
@@ -506,17 +545,17 @@ void start_chart_download(state& state) {
     }).detach();
 }
 
-bool poll_download(state& state) {
+bool poll_download(state& state, online_catalog::data_controller& data_controller) {
     if (!state.download_in_progress) {
         return false;
     }
-    if (state.download_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+    if (data_controller.download_future().wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
         return false;
     }
 
     download_song_result result;
     try {
-        result = state.download_future.get();
+        result = data_controller.download_future().get();
     } catch (const std::exception& ex) {
         result.success = false;
         result.message = ex.what();
@@ -538,7 +577,7 @@ bool poll_download(state& state) {
             mark_song_downloaded(state.owned_songs, result.song_id);
         }
         ui::notify(result.message, ui::notice_tone::success, 2.4f);
-        reload_catalog(state, true);
+        reload_catalog(state, data_controller, true);
     } else {
         ui::notify(result.message.empty() ? "Download failed." : result.message,
                    ui::notice_tone::error, 3.2f);

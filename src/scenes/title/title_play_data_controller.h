@@ -6,6 +6,7 @@
 
 #include "ranking_service.h"
 #include "song_select/song_catalog_service.h"
+#include "song_select/song_select_data_controller.h"
 #include "song_select/song_select_state.h"
 #include "title/create_upload_client.h"
 
@@ -52,27 +53,10 @@ private:
                             std::string preferred_chart_id,
                             bool sync_media_on_apply,
                             bool calculate_missing_levels);
-    void start_ranking_load(song_select::state& state,
-                            std::string chart_id,
-                            ranking_service::source source);
 
-    std::future<song_select::catalog_data> catalog_future_;
-    bool catalog_loading_ = false;
-    bool catalog_reload_pending_ = false;
+    song_select::data_controller data_controller_;
     bool catalog_sync_media_on_apply_ = false;
     bool queued_catalog_sync_media_on_apply_ = false;
-    bool catalog_calculate_missing_levels_ = false;
-    bool queued_catalog_calculate_missing_levels_ = false;
-    std::string catalog_song_id_;
-    std::string catalog_chart_id_;
-    std::string queued_catalog_song_id_;
-    std::string queued_catalog_chart_id_;
-
-    std::future<ranking_service::listing> ranking_future_;
-    bool ranking_loading_ = false;
-    bool ranking_reload_pending_ = false;
-    int ranking_generation_ = 0;
-    int ranking_pending_generation_ = 0;
 
     std::future<bool> scoring_ruleset_future_;
     bool scoring_ruleset_loading_ = false;

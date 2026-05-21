@@ -18,5 +18,6 @@ std::optional<int> extract_int(const std::string& content, const std::string& ke
 std::optional<float> extract_float(const std::string& content, const std::string& key);
 std::optional<std::string> extract_array(const std::string& content, const std::string& key);
 std::vector<std::string> extract_objects_from_array(const std::string& array_content);
+std::vector<std::string> extract_strings_from_array(const std::string& array_content);
 
 }  // namespace network::json

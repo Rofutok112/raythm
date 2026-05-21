@@ -224,6 +224,46 @@ bool expect_wide_note_bounds_failure() {
         return error.find("width extends beyond keyCount") != std::string::npos;
     });
 }
+
+bool expect_scroll_automation_success() {
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "raythm_parser_scroll_automation.rchart";
+    std::ofstream output(path, std::ios::trunc);
+    output << "[Metadata]\n"
+           << "chartId=parser-scroll-automation\n"
+           << "keyCount=4\n"
+           << "difficulty=Scroll Automation\n"
+           << "chartAuthor=Codex\n"
+           << "formatVersion=4\n"
+           << "resolution=480\n"
+           << "offset=0\n\n"
+           << "[Timing]\n"
+           << "bpm,0,120\n"
+           << "meter,0,4/4\n\n"
+           << "[ScrollAutomation]\n"
+           << "point,0,1.0,hold\n"
+           << "point,960,2.0,linear\n"
+           << "point,1440,0.5,easeInOut\n\n"
+           << "[ScrollAutomationGuides]\n"
+           << "guides,0.25,0.75,2.5,100\n\n"
+           << "[Notes]\n"
+           << "tap,0,0\n";
+    output.close();
+
+    const chart_parse_result result = chart_parser::parse(path.string());
+    std::filesystem::remove(path);
+    if (!result.success || !result.data.has_value() || result.data->scroll_automation.size() != 3) {
+        std::cerr << "Expected scroll automation to parse\n";
+        return false;
+    }
+    return result.data->scroll_automation[1].curve_to_next == scroll_automation_curve::linear &&
+           result.data->scroll_automation[2].curve_to_next == scroll_automation_curve::ease_in_out &&
+           result.data->scroll_guides.values[0] == 0.25f &&
+           result.data->scroll_guides.values[1] == 0.75f &&
+           result.data->scroll_guides.values[2] == 2.5f &&
+           result.data->scroll_guides.values[3] == 100.0f;
+}
+
 }
 
 int main() {
@@ -237,6 +277,7 @@ int main() {
     ok = expect_server_managed_metadata_success() && ok;
     ok = expect_wide_note_success() && ok;
     ok = expect_wide_note_bounds_failure() && ok;
+    ok = expect_scroll_automation_success() && ok;
 
     if (!ok) {
         return EXIT_FAILURE;

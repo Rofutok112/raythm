@@ -37,7 +37,7 @@ void draw_node(const line_node& n) {
 
 void draw_node(const text_node& n) {
     Color col = to_raylib(n.fill, n.opacity);
-    ui::draw_text_auto(n.text.c_str(), {n.x, n.y}, static_cast<float>(n.font_size), 0.0f, col);
+    ui::draw_text_display(n.text.c_str(), {n.x, n.y}, static_cast<float>(n.font_size), 0.0f, col);
 }
 
 void draw_node(const circle_node& n) {

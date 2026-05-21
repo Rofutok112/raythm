@@ -1,16 +1,14 @@
 #pragma once
 
 #include <vector>
-#include <memory>
 #include <string>
 
 #include "editor/editor_scene_types.h"
+#include "play/play_mv_controller.h"
 #include "play/play_note_draw_queue.h"
 #include "play/play_session_types.h"
 #include "raylib.h"
 #include "scene.h"
-
-namespace mv { class mv_runtime; }
 
 // プレイ画面。譜面を読み込み、ノートの描画・入力判定・スコア計算を行うメインのゲームシーン。
 class play_scene final : public scene {
@@ -39,9 +37,7 @@ private:
     play_start_request request_;
     play_session_state state_;
     play_note_draw_queue draw_queue_;
-    std::unique_ptr<mv::mv_runtime> mv_runtime_;
-    std::vector<float> mv_spectrum_buffer_;
-    std::vector<float> mv_oscilloscope_buffer_;
+    play_mv_controller mv_controller_;
     Texture2D jacket_texture_{};
     bool jacket_texture_loaded_ = false;
 };

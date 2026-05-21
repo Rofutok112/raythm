@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -22,14 +23,17 @@ struct editor_resume_state {
     float ticks_per_pixel = 2.0f;
     int snap_index = 4;
     bool waveform_visible = true;
-    std::optional<size_t> selected_note_index;
+    std::vector<size_t> selected_note_indices;
 };
 
 enum class editor_timeline_drag_mode {
     create,
     resize_left,
     resize_right,
+    resize_start,
     resize_end,
+    move_notes,
+    range_select,
 };
 
 struct editor_timeline_note_drag_state {
@@ -40,7 +44,11 @@ struct editor_timeline_note_drag_state {
     int current_lane = 0;
     int start_tick = 0;
     int current_tick = 0;
+    Vector2 start_mouse = {};
+    Vector2 current_mouse = {};
     note_data original_note;
+    std::vector<size_t> note_indices;
+    std::vector<note_data> original_notes;
 };
 
 struct editor_note_palette_selection {
@@ -153,6 +161,7 @@ struct editor_session_load_result {
     int audio_length_tick = 0;
     bool audio_loaded = false;
     bool audio_playing = false;
+    bool pre_audio_playing = false;
     double audio_time_seconds = 0.0;
     int playback_tick = 0;
     int previous_playback_tick = 0;
@@ -166,12 +175,12 @@ struct editor_session_load_result {
     float bottom_tick_target = 0.0f;
     float ticks_per_pixel = 2.0f;
     int snap_index = 4;
-    std::optional<size_t> selected_note_index;
+    std::vector<size_t> selected_note_indices;
 };
 
 struct editor_flow_context {
     const song_data* song = nullptr;
-    const chart_data* chart_for_save = nullptr;
+    std::function<chart_data()> make_chart_data_for_save;
     std::shared_ptr<editor_state> state;
     metadata_panel_state* metadata_panel = nullptr;
     save_dialog_state* save_dialog = nullptr;
@@ -217,11 +226,14 @@ struct editor_transport_context {
     std::optional<double> bgm_length_seconds;
     std::optional<int> seek_tick;
     std::optional<int> space_playback_start_tick;
+    bool pre_audio_playing = false;
+    double dt = 0.0;
 };
 
 struct editor_transport_state {
     bool audio_loaded = false;
     bool audio_playing = false;
+    bool pre_audio_playing = false;
     double audio_time_seconds = 0.0;
     int playback_tick = 0;
     int previous_playback_tick = 0;
@@ -232,6 +244,7 @@ struct editor_transport_state {
 struct editor_transport_result {
     bool audio_loaded = false;
     bool audio_playing = false;
+    bool pre_audio_playing = false;
     double audio_time_seconds = 0.0;
     int playback_tick = 0;
     int previous_playback_tick = 0;
@@ -256,24 +269,29 @@ struct editor_timeline_context {
     bool left_released = false;
     bool right_pressed = false;
     bool escape_pressed = false;
-    bool alt_down = false;
+    bool shift_down = false;
     int snap_division = 1;
-    std::optional<size_t> selected_note_index;
     editor_timeline_note_drag_state drag_state;
     editor_note_palette_selection palette;
+    std::vector<size_t> selected_note_indices;
+    bool ctrl_down = false;
+    bool right_down = false;
+    bool right_released = false;
 };
 
 struct editor_timeline_result {
-    std::optional<size_t> selected_note_index;
+    std::vector<size_t> selected_note_indices;
     editor_timeline_note_drag_state drag_state;
     std::optional<size_t> note_to_delete_index;
     bool request_seek = false;
     int seek_tick = 0;
-    bool scroll_seek_if_paused = false;
     bool request_apply_selected_timing = false;
+    bool request_apply_selected_scroll = false;
+    std::optional<size_t> selected_scroll_event_index;
     std::optional<note_data> note_to_add;
     std::optional<size_t> note_to_modify_index;
     std::optional<note_data> note_to_modify;
+    std::vector<std::pair<size_t, note_data>> notes_to_modify;
 };
 
 struct editor_metadata_panel_actions {
@@ -293,8 +311,14 @@ struct editor_timing_panel_actions {
 
 struct editor_timing_panel_update_result {
     std::optional<size_t> select_timing_event_index;
+    std::optional<size_t> select_scroll_event_index;
     bool request_add_bpm = false;
     bool request_add_meter = false;
+    bool request_add_speed = false;
+    bool request_add_stop = false;
     bool request_delete_selected = false;
+    bool request_delete_selected_scroll = false;
     bool request_apply_selected = false;
+    bool request_apply_selected_scroll = false;
+    bool request_cycle_selected_scroll_curve = false;
 };

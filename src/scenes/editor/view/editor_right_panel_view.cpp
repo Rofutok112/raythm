@@ -11,8 +11,9 @@ namespace {
 namespace layout = editor::layout;
 
 const char* timing_event_type_label(timing_event_type type) {
-    return type == timing_event_type::bpm ? "BPM" : "Meter";
+    return type == timing_event_type::bpm ? "BPM" : "Time Sig";
 }
+
 }
 
 editor_right_panel_view_result editor_right_panel_view::draw(const editor_right_panel_view_model& model,
@@ -35,15 +36,33 @@ editor_right_panel_view_result editor_right_panel_view::draw(const editor_right_
         });
     }
 
+    std::vector<editor_timing_panel_item> scroll_items;
+    scroll_items.reserve(model.scroll_automation->size());
+    for (size_t index = 0; index < model.scroll_automation->size(); ++index) {
+        const scroll_automation_point& point = (*model.scroll_automation)[index];
+        scroll_items.push_back({
+            index,
+            std::string("Automation ") + model.meter_map->bar_beat_label(point.tick),
+            TextFormat("%.2fx", point.multiplier),
+            model.selected_scroll_event_index.has_value() && *model.selected_scroll_event_index == index
+        });
+    }
+
     std::optional<timing_event> selected_event;
     if (model.selected_event_index.has_value() && *model.selected_event_index < model.timing_events->size()) {
         selected_event = (*model.timing_events)[*model.selected_event_index];
     }
+    std::optional<scroll_automation_point> selected_scroll_event;
+    if (model.selected_scroll_event_index.has_value() && *model.selected_scroll_event_index < model.scroll_automation->size()) {
+        selected_scroll_event = (*model.scroll_automation)[*model.selected_scroll_event_index];
+    }
 
     result.panel_result = editor_timing_panel::draw(
-        {content, model.mouse, std::move(items), selected_event, model.delete_enabled},
+        {content, model.mouse, std::move(items), std::move(scroll_items),
+         selected_event, selected_scroll_event, model.selected_note_count, model.selected_note_summary,
+         model.delete_enabled, model.scroll_delete_enabled},
         timing_state);
-    const Rectangle editor_box = {content.x, content.y + 372.0f, content.width, 164.0f};
+    const Rectangle editor_box = {content.x, content.y + 660.0f, content.width, content.height - 660.0f};
     result.clicked_outside_editor = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
                                     !CheckCollisionPointRec(model.mouse, editor_box);
 

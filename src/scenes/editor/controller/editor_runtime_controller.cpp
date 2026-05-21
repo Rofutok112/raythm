@@ -1,6 +1,9 @@
 #include "editor_runtime_controller.h"
 
+#include <algorithm>
+
 #include "editor/editor_timeline_controller.h"
+#include "editor/service/editor_note_edit_service.h"
 #include "editor/service/editor_transport_service.h"
 
 namespace {
@@ -19,13 +22,13 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
 
     const bool metadata_input_active = has_active_metadata_input(context.metadata_panel);
     const bool timing_input_active = context.timing_panel.active_input_field != editor_timing_input_field::none;
+    const bool editing_blocked = metadata_input_active ||
+        timing_input_active ||
+        context.mv_script_editor_active ||
+        context.timing_panel.bar_pick_mode ||
+        context.timeline_drag.active;
 
-    if (!metadata_input_active &&
-        !timing_input_active &&
-        !context.mv_script_editor_active &&
-        !context.timing_panel.bar_pick_mode &&
-        !context.timeline_drag.active &&
-        context.space_pressed) {
+    if (!editing_blocked && context.space_pressed) {
         result.restore_scroll_tick = editor_transport_service::toggle_playback(
             context.transport,
             &context.state,
@@ -36,35 +39,51 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
 
     if (context.ctrl_down && context.z_pressed && !context.mv_script_editor_active) {
         if (context.shift_down) {
-            context.state.redo();
+            result.history_changed = context.state.redo();
         } else {
-            context.state.undo();
+            result.history_changed = context.state.undo();
         }
         editor_scene_sync::sync_after_history_change(context.sync_context);
         editor_transport_service::sync(context.transport, &context.state, context.hitsound_path, context.hitsounds, true);
     }
 
     if (context.ctrl_down && context.y_pressed && !context.mv_script_editor_active) {
-        context.state.redo();
+        result.history_changed = context.state.redo();
         editor_scene_sync::sync_after_history_change(context.sync_context);
         editor_transport_service::sync(context.transport, &context.state, context.hitsound_path, context.hitsounds, true);
     }
 
-    if (!metadata_input_active &&
-        !timing_input_active &&
-        !context.mv_script_editor_active &&
-        context.delete_pressed &&
-        context.selected_note_index.has_value()) {
-        const size_t selected_index = *context.selected_note_index;
-        if (context.state.remove_note(selected_index)) {
-            context.selected_note_index.reset();
+    if (!editing_blocked && context.ctrl_down && context.c_pressed) {
+        context.clipboard_notes =
+            editor_note_edit_service::notes_for_selection(context.state, context.selected_note_indices);
+    }
+
+    if (!editing_blocked && context.ctrl_down && (context.v_pressed || context.d_pressed)) {
+        const editor_note_edit_result edit_result = editor_note_edit_service::paste_or_duplicate(
+            context.state,
+            context.selected_note_indices,
+            context.clipboard_notes,
+            context.d_pressed);
+        if (edit_result.changed) {
+            context.selected_note_indices = edit_result.selected_note_indices;
+            result.history_changed = true;
         }
     }
 
-    if (context.selected_note_index.has_value() &&
-        *context.selected_note_index >= context.state.data().notes.size()) {
-        context.selected_note_index.reset();
+    if (!editing_blocked && context.delete_pressed) {
+        const editor_note_edit_result edit_result =
+            editor_note_edit_service::delete_selection(context.state, context.selected_note_indices);
+        if (edit_result.changed) {
+            context.selected_note_indices = edit_result.selected_note_indices;
+            result.history_changed = true;
+        }
     }
+
+    context.selected_note_indices.erase(
+        std::remove_if(context.selected_note_indices.begin(), context.selected_note_indices.end(), [&](size_t index) {
+            return index >= context.state.data().notes.size();
+        }),
+        context.selected_note_indices.end());
 
     return result;
 }
@@ -82,18 +101,23 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
         context.left_released,
         context.right_pressed,
         context.escape_pressed,
-        context.alt_down,
+        context.shift_down,
         context.snap_division,
-        context.selected_note_index,
         context.drag_state,
         context.palette,
+        context.selected_note_indices,
+        context.ctrl_down,
+        context.right_down,
+        context.right_released,
     });
 
-    context.selected_note_index = timeline_result.selected_note_index;
+    context.selected_note_indices = timeline_result.selected_note_indices;
     context.drag_state = timeline_result.drag_state;
 
     editor_runtime_timeline_result result;
     result.request_apply_selected_timing = timeline_result.request_apply_selected_timing;
+    result.request_apply_selected_scroll = timeline_result.request_apply_selected_scroll;
+    result.selected_scroll_event_index = timeline_result.selected_scroll_event_index;
 
     if (timeline_result.request_seek) {
         const bool was_playing = context.transport.audio_playing;
@@ -111,28 +135,12 @@ editor_runtime_timeline_result editor_runtime_controller::handle_timeline_intera
             timeline_result.seek_tick,
             context.hitsound_path,
             context.hitsounds);
-        if (was_playing || timeline_result.scroll_seek_if_paused) {
-            result.scroll_to_tick = context.transport.playback_tick;
-        }
     }
 
-    if (timeline_result.note_to_delete_index.has_value()) {
-        if (context.state.remove_note(*timeline_result.note_to_delete_index)) {
-            context.selected_note_index.reset();
-        }
-    }
-
-    if (timeline_result.note_to_add.has_value()) {
-        context.state.add_note(*timeline_result.note_to_add);
-        context.selected_note_index = context.state.data().notes.empty()
-            ? std::nullopt
-            : std::optional<size_t>(context.state.data().notes.size() - 1);
-    }
-
-    if (timeline_result.note_to_modify_index.has_value() && timeline_result.note_to_modify.has_value()) {
-        if (context.state.modify_note(*timeline_result.note_to_modify_index, *timeline_result.note_to_modify)) {
-            context.selected_note_index = timeline_result.note_to_modify_index;
-        }
+    const editor_note_edit_result edit_result =
+        editor_note_edit_service::apply_timeline_notes(context.state, timeline_result);
+    if (edit_result.changed) {
+        context.selected_note_indices = edit_result.selected_note_indices;
     }
 
     return result;

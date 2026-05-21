@@ -5,6 +5,21 @@
 #include <string>
 #include <vector>
 
+// タイミングイベントの種類。
+enum class timing_event_type {
+    bpm,
+    meter
+};
+
+// BPM や拍子変更を表す譜面イベント。
+struct timing_event {
+    timing_event_type type = timing_event_type::bpm;
+    int tick = 0;
+    float bpm = 0.0f;
+    int numerator = 4;
+    int denominator = 4;
+};
+
 // Song metadata sourced from song.json or the remote song catalog.
 // Storage and API use camelCase names, but runtime code keeps this normalized
 // snake_case shape with milliseconds as the canonical preview unit.
@@ -13,7 +28,12 @@ struct song_meta {
     std::string title;
     std::string artist;
     std::string genre;
+    std::vector<std::string> genres;
+    std::vector<std::string> keywords;
     float base_bpm = 0.0f;
+    int offset = 0;
+    bool has_offset = false;
+    std::vector<timing_event> timing_events;
     std::string audio_file;
     std::string jacket_file;
     std::string audio_url;
@@ -22,6 +42,9 @@ struct song_meta {
     float preview_start_seconds = 0.0f;
     int preview_start_ms = 0;
     int song_version = 0;
+    int chart_count = 0;
+    int play_count = 0;
+    bool has_play_count = false;
 };
 
 // 曲一覧で扱う読み込み済み楽曲データ。
@@ -53,19 +76,24 @@ struct chart_meta {
     int offset = 0;
 };
 
-// タイミングイベントの種類。
-enum class timing_event_type {
-    bpm,
-    meter
+enum class scroll_automation_curve {
+    hold,
+    linear,
+    ease_in,
+    ease_out,
+    ease_in_out
 };
 
-// BPM や拍子変更を表す譜面イベント。
-struct timing_event {
-    timing_event_type type = timing_event_type::bpm;
+// 表示スクロール倍率を制御点で表すオートメーション。
+// curve_to_next は次の制御点までの補間方法を表す。
+struct scroll_automation_point {
     int tick = 0;
-    float bpm = 0.0f;
-    int numerator = 4;
-    int denominator = 4;
+    float multiplier = 1.0f;
+    scroll_automation_curve curve_to_next = scroll_automation_curve::hold;
+};
+
+struct scroll_automation_guides {
+    std::array<float, 4> values = {0.0f, 0.5f, 1.5f, 2.0f};
 };
 
 // ノート入力の種類。
@@ -115,8 +143,19 @@ inline bool note_covers_lane(const note_data& note, int lane) {
 struct chart_data {
     chart_meta meta;
     std::vector<timing_event> timing_events;
+    std::vector<scroll_automation_point> scroll_automation;
+    scroll_automation_guides scroll_guides;
     std::vector<note_data> notes;
 };
+
+inline const std::vector<timing_event>& effective_timing_events(const song_data& song, const chart_data& chart) {
+    return chart.timing_events.empty() ? song.meta.timing_events : chart.timing_events;
+}
+
+inline int effective_author_offset_ms(const song_data& song, const chart_data& chart) {
+    (void)song;
+    return chart.meta.offset;
+}
 
 enum class content_status {
     local,

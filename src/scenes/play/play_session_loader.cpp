@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <optional>
 
 #include "app_paths.h"
 #include "audio_manager.h"
@@ -47,7 +48,9 @@ double calculate_song_end_ms(const chart_data& chart, const timing_engine& engin
         last_tick = std::max(last_tick, note.type == note_type::hold ? note.end_tick : note.tick);
     }
 
-    return std::max(engine.tick_to_ms(last_tick) + 5000.0, audio.get_bgm_length_seconds() * 1000.0);
+    const double chart_tail_ms = engine.tick_to_ms(last_tick) + play_session_constants::kChartEndTailMs;
+    const double audio_end_ms = audio.get_bgm_length_seconds() * 1000.0;
+    return audio_end_ms > 0.0 ? std::min(chart_tail_ms, audio_end_ms) : chart_tail_ms;
 }
 
 std::vector<float> build_mv_waveform(const std::filesystem::path& audio_path) {
@@ -60,6 +63,20 @@ std::vector<float> build_mv_waveform(const std::filesystem::path& audio_path) {
         waveform.push_back(peak.amplitude);
     }
     return waveform;
+}
+
+std::optional<double> detect_first_audible_ms(const std::filesystem::path& audio_path) {
+    constexpr std::size_t kAnalysisSegmentCount = 4096;
+    constexpr float kAudibleThreshold = 0.02f;
+
+    const audio_waveform_summary summary =
+        audio_waveform::build(path_utils::to_utf8(audio_path), kAnalysisSegmentCount);
+    for (const audio_waveform_peak& peak : summary.peaks) {
+        if (peak.amplitude >= kAudibleThreshold) {
+            return peak.seconds * 1000.0;
+        }
+    }
+    return std::nullopt;
 }
 
 std::string audio_asset_path(const char* file_name) {
@@ -161,12 +178,13 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.input_handler = input_handler(g_settings.keys);
     state.input_handler.set_key_count(state.key_count);
 
-    const int local_chart_offset_ms =
+    const int player_chart_offset_ms =
         load_player_chart_offset(state.chart_data->meta.chart_id);
-    const int effective_offset_ms =
-        state.chart_data->meta.offset + g_settings.global_note_offset_ms + local_chart_offset_ms;
-    state.timing_engine.init(state.chart_data->timing_events, state.chart_data->meta.resolution, effective_offset_ms);
-    state.start_ms = std::max(0.0, state.timing_engine.tick_to_ms(state.start_tick));
+    const int effective_chart_time_offset_ms =
+        state.chart_data->meta.offset + g_settings.global_note_offset_ms + player_chart_offset_ms;
+    state.timing_engine.init(state.chart_data->timing_events, state.chart_data->meta.resolution, effective_chart_time_offset_ms);
+    state.scroll_map.init(*state.chart_data, state.timing_engine);
+    state.start_ms = state.timing_engine.tick_to_ms(state.start_tick);
     state.judge_system.init(state.chart_data->notes, state.timing_engine);
     if (!state.editor_resume_state.has_value()) {
         ranking_service::refresh_scoring_ruleset_cache_for_chart_start(state.chart_data->meta, false);
@@ -182,15 +200,23 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     audio.set_bgm_volume(g_settings.bgm_volume);
     preload_hitsounds(audio, state.hitsounds);
     state.mv_waveform = build_mv_waveform(audio_path);
+    if (!state.editor_resume_state.has_value() && state.start_tick == 0) {
+        if (const std::optional<double> first_audible_ms = detect_first_audible_ms(audio_path);
+            first_audible_ms.has_value()) {
+            state.start_ms = *first_audible_ms - play_session_constants::kAudioLeadInBeforeFirstSoundMs;
+        }
+    }
     if (state.start_ms > 0.0) {
         audio.seek_bgm(state.start_ms / 1000.0);
+    } else {
+        audio.seek_bgm(0.0);
     }
 
-    draw_queue.init_from_note_states(state.key_count, state.judge_system.note_states());
+    draw_queue.init_from_note_states(state.key_count, state.judge_system.note_states(), &state.scroll_map);
 
-    state.song_end_ms = calculate_song_end_ms(*state.chart_data, state.timing_engine, audio);
-    state.current_ms = state.start_ms;
-    state.paused_ms = state.start_ms;
+    state.song_end_chart_time_ms = calculate_song_end_ms(*state.chart_data, state.timing_engine, audio);
+    state.chart_time_ms = state.start_ms;
+    state.paused_chart_time_ms = state.start_ms;
     state.paused = false;
     state.ranking_enabled = !state.editor_resume_state.has_value();
     state.auto_paused_by_focus = false;
@@ -202,12 +228,13 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.lane_judge_effects.fill(lane_judge_effect{});
     state.final_result = {};
     state.judge_feedback_timer = 0.0f;
-    state.intro_playing = true;
+    state.intro_playing = play_session_constants::kIntroDurationSeconds > 0.0f;
     state.intro_timer = play_session_constants::kIntroDurationSeconds;
     state.failure_transition_playing = false;
     state.failure_transition_timer = 0.0f;
     state.result_transition_playing = false;
     state.result_transition_timer = 0.0f;
+    state.chart_end_fade_started = false;
     state.combo_display = 0;
     return state;
 }

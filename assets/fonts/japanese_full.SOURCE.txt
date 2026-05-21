@@ -1,0 +1,13 @@
+japanese_full.txt
+
+Source:
+https://gist.github.com/kgsi/ed2f1c5696a2211c1fd1e1e198c96ee4
+
+Raw file used:
+https://gist.githubusercontent.com/kgsi/ed2f1c5696a2211c1fd1e1e198c96ee4/raw/118bb818cffe159eb4e906f82980465cd0b0021e/japanese_full.txt
+
+Description from source:
+Japanese character range list containing ASCII, hiragana, katakana, and JIS X 0208:1997 level 1 and level 2 kanji.
+
+Note:
+The gist does not show an explicit license. Treat this file as a character set reference; replace it with an internally generated range file if distribution policy requires explicit licensing.

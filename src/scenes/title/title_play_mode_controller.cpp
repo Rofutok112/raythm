@@ -1,7 +1,7 @@
 #include "title/title_play_mode_controller.h"
 
 #include "title/play_session_controller.h"
-#include "title/seamless_song_select_view.h"
+#include "title/title_local_song_select_controller.h"
 
 void title_play_mode_controller::update(scene_manager& manager,
                                         song_select::state& state,
@@ -16,7 +16,8 @@ void title_play_mode_controller::update(scene_manager& manager,
     }
 
     const title_play_view::update_result result =
-        title_play_view::update(state, title_play_view::mode::play, play_view_anim, play_entry_origin_rect, dt);
+        title_local_song_select_controller::update(
+            state, title_play_view::mode::play, play_view_anim, play_entry_origin_rect, dt);
 
     if (result.back_requested) {
         callbacks.enter_home();
@@ -30,6 +31,14 @@ void title_play_mode_controller::update(scene_manager& manager,
     }
     if (result.play_requested) {
         title_play_session::start_selected_chart(manager, state, preview_controller);
+        return;
+    }
+    if (result.preview_toggle_requested) {
+        if (preview_controller.is_playing()) {
+            preview_controller.pause();
+        } else {
+            preview_controller.resume(song_select::selected_song(state));
+        }
         return;
     }
     if (result.update_song_requested) {

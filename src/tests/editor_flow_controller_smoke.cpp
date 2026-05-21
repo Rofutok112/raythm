@@ -44,7 +44,7 @@ editor_flow_context make_context(const song_data& song, const chart_data& chart,
                                  unsaved_changes_dialog_state& unsaved_changes_dialog) {
     editor_flow_context context;
     context.song = &song;
-    context.chart_for_save = &chart;
+    context.make_chart_data_for_save = [&chart]() { return chart; };
     context.state = state;
     context.metadata_panel = &metadata_panel;
     context.save_dialog = &save_dialog;
@@ -194,12 +194,23 @@ int main() {
         metadata_panel_state metadata_panel;
         save_dialog_state save_dialog;
         unsaved_changes_dialog_state unsaved_changes_dialog;
+        int make_chart_call_count = 0;
 
         editor_flow_context context = make_context(song, chart, state, metadata_panel, save_dialog, unsaved_changes_dialog);
+        context.make_chart_data_for_save = [&]() {
+            ++make_chart_call_count;
+            return chart;
+        };
+        const editor_flow_result idle_result = editor_flow_controller::update(context);
+        if (idle_result.consume_update || make_chart_call_count != 0) {
+            std::cerr << "idle update should not build save chart data\n";
+            return EXIT_FAILURE;
+        }
+
         context.ctrl_s_pressed = true;
 
         const editor_flow_result open_result = editor_flow_controller::update(context);
-        if (!open_result.consume_update || !save_dialog.open) {
+        if (!open_result.consume_update || !save_dialog.open || make_chart_call_count != 1) {
             std::cerr << "Ctrl+S should open save dialog for unsaved chart\n";
             return EXIT_FAILURE;
         }

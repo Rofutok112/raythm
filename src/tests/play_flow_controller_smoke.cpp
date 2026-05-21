@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <cmath>
 #include <iostream>
 #include <vector>
 
@@ -6,13 +7,17 @@
 
 namespace {
 
+bool nearly_equal(double left, double right) {
+    return std::fabs(left - right) < 0.001;
+}
+
 play_session_state make_initialized_state() {
     play_session_state state;
     state.initialized = true;
     state.key_count = 4;
     state.input_handler.set_key_count(4);
-    state.song_end_ms = 5000.0;
-    state.current_ms = 1000.0;
+    state.song_end_chart_time_ms = 5000.0;
+    state.chart_time_ms = 1000.0;
     state.start_ms = 0.0;
     state.intro_playing = false;
     return state;
@@ -36,7 +41,7 @@ int main() {
 
         const play_update_result result = play_flow_controller::update(state, draw_queue, context);
         if (!state.paused || !state.auto_paused_by_focus || state.ranking_enabled ||
-            state.paused_ms != 1000.0 || !result.request_pause_bgm) {
+            state.paused_chart_time_ms != 1000.0 || !result.request_pause_bgm) {
             std::cerr << "Auto pause flow failed\n";
             return EXIT_FAILURE;
         }
@@ -61,6 +66,79 @@ int main() {
 
     {
         play_session_state state = make_initialized_state();
+        state.start_ms = -300.0;
+        state.chart_time_ms = -300.0;
+        state.intro_playing = true;
+        state.intro_timer = 0.01f;
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.02f;
+        context.bgm_loaded = true;
+
+        const play_update_result intro_result = play_flow_controller::update(state, draw_queue, context);
+        if (state.intro_playing || intro_result.request_play_bgm || !nearly_equal(state.chart_time_ms, -300.0)) {
+            std::cerr << "Negative start should finish intro without starting BGM\n";
+            return EXIT_FAILURE;
+        }
+
+        context.dt = 0.2f;
+        const play_update_result countdown_result = play_flow_controller::update(state, draw_queue, context);
+        if (countdown_result.request_play_bgm || !nearly_equal(state.chart_time_ms, -100.0)) {
+            std::cerr << "Negative start should advance chart time before audio starts\n";
+            return EXIT_FAILURE;
+        }
+
+        context.dt = 0.2f;
+        const play_update_result start_audio_result = play_flow_controller::update(state, draw_queue, context);
+        if (!start_audio_result.request_play_bgm || !nearly_equal(state.chart_time_ms, 0.0)) {
+            std::cerr << "Negative start should request BGM when chart time reaches zero\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.start_ms = 2000.0;
+        state.chart_time_ms = 2000.0;
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.bgm_loaded = true;
+
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (!result.request_play_bgm || !nearly_equal(state.chart_time_ms, 2000.0)) {
+            std::cerr << "Positive audio lead-in should start BGM without resetting chart time\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.score_system.init(1);
+        state.timing_engine.init({timing_event{timing_event_type::bpm, 0, 120.0f, 4, 4}}, 480, -300);
+        state.judge_system.init({note_data{note_type::tap, 0, 0, 0}}, state.timing_engine);
+        state.chart_time_ms = -300.0;
+
+        play_note_draw_queue draw_queue;
+        draw_queue.init_from_note_states(4, state.judge_system.note_states());
+        state.input_handler.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, -300.0);
+
+        play_update_context context;
+        context.dt = 0.0f;
+        context.input_already_updated = true;
+
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (state.score_system.get_combo() != 1 ||
+            !state.display_judge.has_value() ||
+            state.display_judge->result != judge_result::perfect ||
+            result.navigation.has_value()) {
+            std::cerr << "Negative-time first note should judge correctly at 1:1\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
         state.score_system.init(1);
         for (int i = 0; i < 10; ++i) {
             state.gauge.on_judge(judge_result::miss);
@@ -70,7 +148,7 @@ int main() {
         play_update_context context;
         context.dt = 0.0f;
         context.bgm_loaded = true;
-        context.bgm_audio_time_ms = 1200.0;
+        context.audio_clock_time_ms = 1200.0;
 
         const play_update_result result = play_flow_controller::update(state, draw_queue, context);
         if (!state.failure_transition_playing || !state.final_result.failed || state.ranking_enabled ||
@@ -93,7 +171,7 @@ int main() {
         play_update_context context;
         context.dt = 0.0f;
         context.bgm_loaded = true;
-        context.bgm_audio_time_ms = 1200.0;
+        context.audio_clock_time_ms = 1200.0;
 
         const play_update_result result = play_flow_controller::update(state, draw_queue, context);
         if (state.failure_transition_playing || state.final_result.failed || result.request_pause_bgm) {
@@ -113,12 +191,42 @@ int main() {
 
         play_update_context context;
         context.dt = 0.0f;
-        context.enter_pressed = true;
-        context.bgm_audio_time_ms = 700.0;
+        context.audio_clock_time_ms = 700.0;
 
-        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
-        if (!state.result_transition_playing || !result.request_fade_out_bgm || state.final_result.judge_counts[4] != 1) {
-            std::cerr << "Result skip flow failed\n";
+        const play_update_result after_last_note_result = play_flow_controller::update(state, draw_queue, context);
+        if (state.result_transition_playing || !after_last_note_result.request_fade_out_bgm ||
+            after_last_note_result.fade_out_bgm_duration_ms != play_session_constants::kChartEndFadeOutMs ||
+            after_last_note_result.navigation.has_value()) {
+            std::cerr << "Completed chart should fade BGM and wait for song end before result transition\n";
+            return EXIT_FAILURE;
+        }
+
+        context.enter_pressed = true;
+        const play_update_result enter_result = play_flow_controller::update(state, draw_queue, context);
+        if (!state.result_transition_playing || enter_result.request_fade_out_bgm ||
+            state.final_result.judge_counts[4] != 1) {
+            std::cerr << "Enter after chart completion should start result transition\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.score_system.init(1);
+        state.timing_engine = make_basic_timing_engine();
+        state.judge_system.init({note_data{note_type::tap, 480, 0, 480}}, state.timing_engine);
+
+        play_note_draw_queue draw_queue;
+        draw_queue.init_from_note_states(4, state.judge_system.note_states());
+
+        play_update_context context;
+        context.dt = 0.0f;
+        context.audio_clock_time_ms = state.song_end_chart_time_ms;
+        const play_update_result song_end_result = play_flow_controller::update(state, draw_queue, context);
+        if (!state.result_transition_playing || !song_end_result.request_fade_out_bgm ||
+            song_end_result.fade_out_bgm_duration_ms != play_session_constants::kChartEndFadeOutMs ||
+            state.final_result.judge_counts[4] != 1) {
+            std::cerr << "Song end should start result transition\n";
             return EXIT_FAILURE;
         }
     }
@@ -164,7 +272,7 @@ int main() {
         play_note_draw_queue draw_queue;
         play_update_context context;
         context.dt = 0.0f;
-        context.bgm_audio_time_ms = 1000.0;
+        context.audio_clock_time_ms = 1000.0;
 
         state.input_handler.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 1000.0);
         const play_update_result result = play_flow_controller::update(state, draw_queue, context);
@@ -188,10 +296,10 @@ int main() {
         play_note_draw_queue draw_queue;
         play_update_context context;
         context.dt = 0.05f;
-        context.bgm_audio_time_ms = 1010.0;
+        context.audio_clock_time_ms = 1010.0;
 
         const play_update_result result = play_flow_controller::update(state, draw_queue, context);
-        if (result.navigation.has_value() || state.current_ms != 1010.0) {
+        if (result.navigation.has_value() || state.chart_time_ms != 1010.0) {
             std::cerr << "Gameplay clock should follow audio time without running ahead on dt\n";
             return EXIT_FAILURE;
         }
@@ -208,7 +316,7 @@ int main() {
         int immediate_hitsound_count = 0;
         play_update_context context;
         context.dt = 0.0f;
-        context.bgm_audio_time_ms = 500.0;
+        context.audio_clock_time_ms = 500.0;
         context.input_already_updated = true;
         context.play_hitsound_immediately = [&immediate_hitsound_count](const judge_event&) {
             ++immediate_hitsound_count;
