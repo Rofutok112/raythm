@@ -735,6 +735,13 @@ add_executable(timing_engine_smoke
         src/gameplay/timing_engine.h
         src/tests/timing_engine_smoke.cpp)
 
+add_executable(scene_manager_smoke
+        src/core/scene.cpp
+        src/core/scene.h
+        src/core/scene_manager.cpp
+        src/core/scene_manager.h
+        src/tests/scene_manager_smoke.cpp)
+
 add_executable(judge_system_smoke
         src/models/data_models.h
         src/platform/windows_input_source.cpp
@@ -1138,6 +1145,7 @@ set(RAYTHM_SMOKE_TARGETS
         lane_input_tracker_smoke
         input_handler_smoke
         timing_engine_smoke
+        scene_manager_smoke
         chart_judge_events_smoke
         judge_system_smoke
         score_system_smoke
