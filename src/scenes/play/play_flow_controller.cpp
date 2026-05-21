@@ -56,6 +56,19 @@ void capture_final_result(play_session_state& state) {
     state.final_result.rc_value = state.performance_system.current_rc();
 }
 
+bool all_notes_completed(const play_session_state& state) {
+    const std::vector<note_state>& note_states = state.judge_system.note_states();
+    return !note_states.empty() &&
+        std::all_of(note_states.begin(), note_states.end(), [](const note_state& note_state) {
+            return note_state.is_completed();
+        });
+}
+
+void request_bgm_fade_out(play_update_result& result, unsigned int duration_ms) {
+    result.request_fade_out_bgm = true;
+    result.fade_out_bgm_duration_ms = duration_ms;
+}
+
 }  // namespace
 
 play_update_result play_flow_controller::update(play_session_state& state, play_note_draw_queue& draw_queue,
@@ -155,11 +168,14 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         return result;
     }
 
+    const double previous_chart_time_ms = state.chart_time_ms;
     const double advanced_ms = state.chart_time_ms + static_cast<double>(context.dt) * 1000.0;
     state.chart_time_ms = context.audio_clock_time_ms.value_or(advanced_ms);
     if (!context.audio_clock_time_ms.has_value() && context.bgm_loaded && !context.bgm_playing &&
         state.chart_time_ms >= 0.0) {
-        state.chart_time_ms = 0.0;
+        if (previous_chart_time_ms < 0.0) {
+            state.chart_time_ms = 0.0;
+        }
         result.request_play_bgm = true;
     }
     if (!context.input_already_updated) {
@@ -207,25 +223,21 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
                                          context.draw_window->lane_end_z, context.draw_window->visual_time_ms);
     }
 
-    const std::vector<note_state>& note_states = state.judge_system.note_states();
-    const bool chart_finished = !note_states.empty() &&
-        std::all_of(note_states.begin(), note_states.end(), [](const note_state& note_state) {
-            return note_state.is_completed();
-        });
+    const bool chart_finished = all_notes_completed(state);
 
-    if (chart_finished) {
-        capture_final_result(state);
-        state.result_transition_playing = true;
-        state.result_transition_timer = 0.0f;
-        result.request_fade_out_bgm = true;
-        return result;
+    if (chart_finished && !state.chart_end_fade_started) {
+        state.chart_end_fade_started = true;
+        request_bgm_fade_out(result, play_session_constants::kChartEndFadeOutMs);
     }
 
-    if (state.chart_time_ms >= state.song_end_chart_time_ms) {
+    if (state.chart_time_ms >= state.song_end_chart_time_ms || (chart_finished && context.enter_pressed)) {
         capture_final_result(state);
         state.result_transition_playing = true;
         state.result_transition_timer = 0.0f;
-        result.request_fade_out_bgm = true;
+        if (!state.chart_end_fade_started) {
+            state.chart_end_fade_started = true;
+            request_bgm_fade_out(result, play_session_constants::kResultSkipFadeOutMs);
+        }
     } else if (context.backspace_pressed) {
         result.navigation = {play_navigation_target::song_select};
     }

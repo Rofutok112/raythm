@@ -98,6 +98,22 @@ int main() {
 
     {
         play_session_state state = make_initialized_state();
+        state.start_ms = 2000.0;
+        state.chart_time_ms = 2000.0;
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.bgm_loaded = true;
+
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (!result.request_play_bgm || !nearly_equal(state.chart_time_ms, 2000.0)) {
+            std::cerr << "Positive audio lead-in should start BGM without resetting chart time\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
         state.score_system.init(1);
         state.timing_engine.init({timing_event{timing_event_type::bpm, 0, 120.0f, 4, 4}}, 480, -300);
         state.judge_system.init({note_data{note_type::tap, 0, 0, 0}}, state.timing_engine);
@@ -175,12 +191,42 @@ int main() {
 
         play_update_context context;
         context.dt = 0.0f;
-        context.enter_pressed = true;
         context.audio_clock_time_ms = 700.0;
 
-        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
-        if (!state.result_transition_playing || !result.request_fade_out_bgm || state.final_result.judge_counts[4] != 1) {
-            std::cerr << "Result skip flow failed\n";
+        const play_update_result after_last_note_result = play_flow_controller::update(state, draw_queue, context);
+        if (state.result_transition_playing || !after_last_note_result.request_fade_out_bgm ||
+            after_last_note_result.fade_out_bgm_duration_ms != play_session_constants::kChartEndFadeOutMs ||
+            after_last_note_result.navigation.has_value()) {
+            std::cerr << "Completed chart should fade BGM and wait for song end before result transition\n";
+            return EXIT_FAILURE;
+        }
+
+        context.enter_pressed = true;
+        const play_update_result enter_result = play_flow_controller::update(state, draw_queue, context);
+        if (!state.result_transition_playing || enter_result.request_fade_out_bgm ||
+            state.final_result.judge_counts[4] != 1) {
+            std::cerr << "Enter after chart completion should start result transition\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.score_system.init(1);
+        state.timing_engine = make_basic_timing_engine();
+        state.judge_system.init({note_data{note_type::tap, 480, 0, 480}}, state.timing_engine);
+
+        play_note_draw_queue draw_queue;
+        draw_queue.init_from_note_states(4, state.judge_system.note_states());
+
+        play_update_context context;
+        context.dt = 0.0f;
+        context.audio_clock_time_ms = state.song_end_chart_time_ms;
+        const play_update_result song_end_result = play_flow_controller::update(state, draw_queue, context);
+        if (!state.result_transition_playing || !song_end_result.request_fade_out_bgm ||
+            song_end_result.fade_out_bgm_duration_ms != play_session_constants::kChartEndFadeOutMs ||
+            state.final_result.judge_counts[4] != 1) {
+            std::cerr << "Song end should start result transition\n";
             return EXIT_FAILURE;
         }
     }

@@ -29,6 +29,7 @@ struct play_update_result {
     bool request_play_bgm = false;
     bool request_pause_bgm = false;
     bool request_fade_out_bgm = false;
+    unsigned int fade_out_bgm_duration_ms = 0;
     int hitsound_count = 0;
 };
 
