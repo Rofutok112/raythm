@@ -910,17 +910,20 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     const unsigned char detail_alpha =
         static_cast<unsigned char>(static_cast<float>(alpha) * detail_content_t);
 
-    ui::draw_button_colored(current.back_rect, "HOME", 16,
+    ui::draw_button_colored(current.back_rect, "戻る", 16,
                             with_alpha(button_base, normal_row_alpha),
                             with_alpha(button_hover, hover_row_alpha),
                             with_alpha(t.text, alpha), 1.5f);
 
     ui::draw_rect_f(current.sidebar_rect, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * grid_fade_t / 2.0f)));
     ui::draw_rect_lines(current.sidebar_rect, 1.2f, with_alpha(t.border_light, grid_alpha));
+    const unsigned char faded_normal_row_alpha = static_cast<unsigned char>(normal_row_alpha * grid_fade_t);
+    const unsigned char faded_hover_row_alpha = static_cast<unsigned char>(hover_row_alpha * grid_fade_t);
+    const unsigned char faded_selected_row_alpha = static_cast<unsigned char>(selected_row_alpha * grid_fade_t);
     draw_song_search_input(current.search_rect, state.search_input, "", localization::tr_literal("Search"),
                            14, 64,
                            button_base, button_hover, button_selected,
-                           normal_row_alpha, hover_row_alpha, selected_row_alpha,
+                           faded_normal_row_alpha, faded_hover_row_alpha, faded_selected_row_alpha,
                            grid_alpha);
     constexpr float kSidebarTitleY = 106.0f;
     constexpr float kSourceTitleY = 594.0f;

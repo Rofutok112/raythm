@@ -10,17 +10,17 @@
 namespace title_online_view {
 namespace {
 
-constexpr Rectangle kBackRect = {72.0f, 57.0f, 147.0f, 57.0f};
+constexpr Rectangle kBackRect = {39.0f, 983.0f, 330.0f, 58.0f};
 constexpr Rectangle kOfficialTabRect = {24.0f, 160.0f, 214.0f, 58.0f};
 constexpr Rectangle kCommunityTabRect = {24.0f, 220.0f, 214.0f, 58.0f};
 constexpr Rectangle kOwnedTabRect = {24.0f, 280.0f, 214.0f, 58.0f};
-constexpr Rectangle kContentRect = {310.0f, 150.0f, 1140.0f, 880.0f};
-constexpr Rectangle kSidebarRect = {50.0f, 150.0f, 240.0f, 880.0f};
-constexpr Rectangle kPreviewPanelRect = {1462.0f, 150.0f, 408.0f, 880.0f};
-constexpr Rectangle kDetailLeftRect = {32.0f, 174.0f, 310.0f, 830.0f};
-constexpr Rectangle kDetailRightRect = {366.0f, 174.0f, 780.0f, 830.0f};
-constexpr Rectangle kDetailPreviewRect = {1168.0f, 174.0f, 720.0f, 830.0f};
-constexpr Rectangle kHeroJacketRect = {1198.0f, 210.0f, 212.0f, 212.0f};
+constexpr Rectangle kContentRect = {390.0f, 109.0f, 1062.0f, 932.0f};
+constexpr Rectangle kSidebarRect = {39.0f, 109.0f, 330.0f, 854.0f};
+constexpr Rectangle kPreviewPanelRect = {1470.0f, 109.0f, 408.0f, 932.0f};
+constexpr Rectangle kDetailLeftRect = {39.0f, 109.0f, 330.0f, 854.0f};
+constexpr Rectangle kDetailRightRect = {390.0f, 109.0f, 820.0f, 932.0f};
+constexpr Rectangle kDetailPreviewRect = {1228.0f, 109.0f, 650.0f, 932.0f};
+constexpr Rectangle kHeroJacketRect = {1258.0f, 141.0f, 212.0f, 212.0f};
 constexpr Rectangle kPreviewBarRect = {1198.0f, 500.0f, 660.0f, 12.0f};
 constexpr Rectangle kPreviewPlayRect = {1450.0f, 536.0f, 154.0f, 54.0f};
 constexpr Rectangle kPrimaryActionRect = {1538.0f, 934.0f, 320.0f, 58.0f};

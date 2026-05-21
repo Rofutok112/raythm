@@ -766,6 +766,15 @@ update_result update(state& state,
     state.detail_transition = tween::damp(state.detail_transition, detail_target, dt, detail_lerp_speed, 0.002f);
     update_overview_shelf_scrolls(state, dt);
 
+    if (state.detail_open && ui::is_clicked(current.back_rect)) {
+        state.detail_open = false;
+        state.preview_bar_dragging = false;
+        state.preview_bar_resume_after_drag = false;
+        state.preview_bar_drag_position_seconds = 0.0;
+        reset_chart_scroll(state);
+        return result;
+    }
+
     if (ui::is_clicked(current.back_rect)) {
         result.back_requested = true;
         return result;
