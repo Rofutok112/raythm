@@ -8,8 +8,6 @@ void scene_manager::update(float dt) {
     if (current_scene_ != nullptr) {
         current_scene_->update(dt);
     }
-
-    apply_pending_transition();
 }
 
 void scene_manager::draw() {
