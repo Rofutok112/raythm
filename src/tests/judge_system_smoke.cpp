@@ -584,6 +584,36 @@ int main() {
         }
     }
 
+    const struct {
+        double release_ms;
+        judge_result expected_hold_result;
+        const char* label;
+    } early_hold_tail_near_stay_cases[] = {
+        {1470.0, judge_result::perfect, "perfect"},
+        {1430.0, judge_result::great, "great"},
+    };
+    for (const auto& test_case : early_hold_tail_near_stay_cases) {
+        judge_system early_hold_tail_near_stay_release_judge;
+        early_hold_tail_near_stay_release_judge.init({
+            note_data{note_type::hold, 960, 1, 1440},
+            note_data{note_type::stay, 1440, 1, 1440},
+        }, engine);
+        input = input_handler();
+        input.set_key_count(4);
+        input.update_from_lane_states(std::array<bool, 4>{false, true, false, false}, 1000.0);
+        early_hold_tail_near_stay_release_judge.update(1000.0, input);
+        input.update_from_lane_states(std::array<bool, 4>{false, false, false, false}, test_case.release_ms);
+        early_hold_tail_near_stay_release_judge.update(test_case.release_ms, input);
+        if (!early_hold_tail_near_stay_release_judge.note_states()[0].is_completed() ||
+            early_hold_tail_near_stay_release_judge.note_states()[0].result != test_case.expected_hold_result ||
+            !early_hold_tail_near_stay_release_judge.note_states()[1].is_completed() ||
+            early_hold_tail_near_stay_release_judge.note_states()[1].result > judge_result::great) {
+            std::cerr << "Early " << test_case.label
+                      << " release on a hold tail should also judge the stacked stay at Great or better\n";
+            return EXIT_FAILURE;
+        }
+    }
+
     judge_system stay_release_judge;
     stay_release_judge.init({
         note_data{note_type::stay, 960, 2, 960},

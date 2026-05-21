@@ -26,9 +26,6 @@ struct editor_shortcut_context {
     bool c_pressed = false;
     bool v_pressed = false;
     bool d_pressed = false;
-    bool l_pressed = false;
-    bool left_bracket_pressed = false;
-    bool right_bracket_pressed = false;
     bool z_pressed = false;
     bool y_pressed = false;
     bool delete_pressed = false;

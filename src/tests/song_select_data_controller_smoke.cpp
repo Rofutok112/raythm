@@ -54,6 +54,10 @@ listing load_chart_ranking(const std::string&, source ranking_source, int) {
     return result;
 }
 
+std::optional<entry> load_chart_personal_best(const std::string&, source) {
+    return std::nullopt;
+}
+
 }  // namespace ranking_service
 
 int main() {

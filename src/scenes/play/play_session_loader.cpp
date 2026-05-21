@@ -167,7 +167,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
         state.chart_data->meta.offset + g_settings.global_note_offset_ms + player_chart_offset_ms;
     state.timing_engine.init(state.chart_data->timing_events, state.chart_data->meta.resolution, effective_chart_time_offset_ms);
     state.scroll_map.init(*state.chart_data, state.timing_engine);
-    state.start_ms = std::max(0.0, state.timing_engine.tick_to_ms(state.start_tick));
+    state.start_ms = state.timing_engine.tick_to_ms(state.start_tick);
     state.judge_system.init(state.chart_data->notes, state.timing_engine);
     if (!state.editor_resume_state.has_value()) {
         ranking_service::refresh_scoring_ruleset_cache_for_chart_start(state.chart_data->meta, false);
@@ -185,6 +185,8 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.mv_waveform = build_mv_waveform(audio_path);
     if (state.start_ms > 0.0) {
         audio.seek_bgm(state.start_ms / 1000.0);
+    } else {
+        audio.seek_bgm(0.0);
     }
 
     draw_queue.init_from_note_states(state.key_count, state.judge_system.note_states(), &state.scroll_map);

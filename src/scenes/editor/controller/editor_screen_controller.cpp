@@ -206,8 +206,8 @@ void draw_and_update(const context& context) {
             context.scroll_to_tick(*restore_scroll_tick);
         }
     }
-    if (header_result.loop_toggled && context.transport.loop_end_tick > context.transport.loop_start_tick) {
-        context.transport.loop_enabled = !context.transport.loop_enabled;
+    if (header_result.playtest_requested) {
+        context.playtest_button_requested = true;
     }
     if (header_result.metadata_modal_requested) {
         context.metadata_modal_open = true;

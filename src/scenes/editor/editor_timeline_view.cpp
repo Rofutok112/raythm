@@ -133,7 +133,7 @@ void draw_timeline_header(const editor_timeline_view_model& model, const ui_them
     ui::draw_text_in_rect("Timeline", 20,
                           {header.x + 14.0f, header.y + 5.0f, 140.0f, 22.0f},
                           t.text, ui::text_align::left);
-    ui::draw_text_in_rect("Notes / loop region / scroll automation",
+    ui::draw_text_in_rect("Notes / scroll automation",
                           13,
                           {header.x + 14.0f, header.y + 27.0f, 260.0f, 16.0f},
                           t.text_muted, ui::text_align::left);
@@ -154,11 +154,6 @@ void draw_timeline_header(const editor_timeline_view_model& model, const ui_them
     ui::draw_rect_lines(snap_badge, 1.0f, t.border_light);
     ui::draw_text_in_rect(TextFormat("Snap %dt", model.snap_interval), 13, snap_badge, t.text_secondary);
 
-    const Rectangle loop_badge = {snap_badge.x + snap_badge.width + 8.0f, snap_badge.y, 120.0f, 30.0f};
-    ui::draw_rect_f(loop_badge, model.loop_enabled ? with_alpha(t.success, 120) : with_alpha(t.row, 235));
-    ui::draw_rect_lines(loop_badge, 1.0f, model.loop_enabled ? t.success : t.border_light);
-    ui::draw_text_in_rect(model.loop_enabled ? "Loop active" : "Loop off", 13,
-                          loop_badge, model.loop_enabled ? t.text : t.text_muted);
 }
 
 void draw_lane_header(const editor_timeline_view_model& model, Rectangle content, const ui_theme& t) {
@@ -317,23 +312,6 @@ void editor_timeline_view::draw(const editor_timeline_view_model& model) {
         };
 
         draw_waveform(model, content, t);
-        if (model.loop_end_tick > model.loop_start_tick &&
-            model.loop_end_tick >= model.min_tick && model.loop_start_tick <= model.max_tick) {
-            const float start_y = model.metrics.tick_to_y(model.loop_start_tick);
-            const float end_y = model.metrics.tick_to_y(model.loop_end_tick);
-            const float top = std::min(start_y, end_y);
-            const float height = std::max(8.0f, std::fabs(end_y - start_y));
-            const Rectangle band = {content.x, top, content.width, height};
-            ui::draw_rect_f(band, with_alpha(t.success, model.loop_enabled ? 38 : 18));
-            ui::draw_rect_lines(band, model.loop_enabled ? 2.0f : 1.0f,
-                                with_alpha(t.success, model.loop_enabled ? 210 : 120));
-            ui::draw_rect_f({band.x, start_y - 4.0f, band.width, 8.0f},
-                            with_alpha(t.success, model.loop_enabled ? 230 : 130));
-            ui::draw_rect_f({band.x, end_y - 4.0f, band.width, 8.0f},
-                            with_alpha(t.success, model.loop_enabled ? 230 : 130));
-            ui::draw_text_f(model.loop_enabled ? "LOOP" : "loop", band.x + band.width - 58.0f, band.y + 5.0f,
-                            14, model.loop_enabled ? t.text : t.text_secondary);
-        }
         draw_lane_header(model, content, t);
 
         for (int lane = 0; lane < std::max(1, model.metrics.key_count); ++lane) {

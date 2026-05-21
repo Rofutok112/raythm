@@ -82,6 +82,7 @@ void editor_scene::on_enter() {
     transport_.audio_length_tick = load_result.audio_length_tick;
     transport_.audio_loaded = load_result.audio_loaded;
     transport_.audio_playing = load_result.audio_playing;
+    transport_.pre_audio_playing = load_result.pre_audio_playing;
     transport_.audio_time_seconds = load_result.audio_time_seconds;
     transport_.playback_tick = load_result.playback_tick;
     transport_.previous_playback_tick = load_result.previous_playback_tick;
@@ -111,7 +112,7 @@ void editor_scene::on_exit() {
 
 void editor_scene::update(float dt) {
     rebuild_hit_regions();
-    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_);
+    editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, false, dt);
 
     if ((metadata_modal_open_ || timing_modal_open_) &&
         !metadata_panel_.key_count_confirm_open &&
@@ -129,6 +130,8 @@ void editor_scene::update(float dt) {
     const bool save_dialog_submit = save_dialog_.submit_requested ||
         (save_dialog_.open && ui::is_clicked(layout::save_submit_button_rect(), ui::draw_layer::modal));
     save_dialog_.submit_requested = false;
+    const bool playtest_requested = IsKeyPressed(KEY_F5) || playtest_button_requested_;
+    playtest_button_requested_ = false;
 
     const editor_flow_result flow_result = editor_flow_controller::update({
         &song_,
@@ -140,7 +143,7 @@ void editor_scene::update(float dt) {
         IsKeyPressed(KEY_ESCAPE),
         ui::is_clicked(layout::kBackButtonRect),
         (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_S),
-        IsKeyPressed(KEY_F5),
+        playtest_requested,
         IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
         has_active_metadata_input(),
         timing_panel_.active_input_field != editor_timing_input_field::none,
@@ -187,9 +190,6 @@ void editor_scene::update(float dt) {
         IsKeyPressed(KEY_C),
         IsKeyPressed(KEY_V),
         IsKeyPressed(KEY_D),
-        IsKeyPressed(KEY_L),
-        IsKeyPressed(KEY_LEFT_BRACKET),
-        IsKeyPressed(KEY_RIGHT_BRACKET),
         IsKeyPressed(KEY_Z),
         IsKeyPressed(KEY_Y),
         IsKeyPressed(KEY_DELETE),
@@ -300,6 +300,7 @@ void editor_scene::draw() {
         unsaved_changes_dialog_,
         metadata_modal_open_,
         timing_modal_open_,
+        playtest_button_requested_,
         [this]() { rebuild_hit_regions(); },
         [this]() {
             return editor_timeline_screen_controller::draw({
@@ -439,7 +440,7 @@ void editor_scene::apply_scroll_and_zoom(float dt) {
         mouse,
         GetMouseWheelMove(),
         IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
-        transport_.audio_playing,
+        transport_.audio_playing || transport_.pre_audio_playing,
         transport_.playback_tick,
         dt,
     });

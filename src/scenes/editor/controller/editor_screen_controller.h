@@ -33,6 +33,7 @@ struct context {
     unsaved_changes_dialog_state& unsaved_changes_dialog;
     bool& metadata_modal_open;
     bool& timing_modal_open;
+    bool& playtest_button_requested;
     std::function<void()> rebuild_hit_regions;
     std::function<editor_right_panel_view_result()> draw_timeline;
     std::function<editor_scene_sync_context()> make_sync_context;

@@ -65,6 +65,14 @@
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/trash-2.svg"
     },
     {
+      "name": "triangle_alert",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/triangle-alert.svg"
+    },
+    {
+      "name": "flask_conical",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/flask-conical.svg"
+    },
+    {
       "name": "layers",
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/layers.svg"
     },

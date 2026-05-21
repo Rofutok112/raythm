@@ -23,18 +23,18 @@ using title_play_view::layout;
 using title_play_view::mode;
 using title_play_view::update_result;
 
-constexpr Rectangle kPlayBackButtonRect = {72.0f, 57.0f, 147.0f, 57.0f};
-constexpr Rectangle kPlaySongColumnRect = {39.0f, 146.0f, 330.0f, 850.0f};
-constexpr Rectangle kPlayMainColumnRect = {390.0f, 146.0f, 820.0f, 850.0f};
-constexpr Rectangle kPlayRankingColumnRect = {1228.0f, 146.0f, 650.0f, 850.0f};
-constexpr Rectangle kPlayJacketRect = {1258.0f, 182.0f, 212.0f, 212.0f};
-constexpr Rectangle kPlayChartDetailRect = {1494.0f, 186.0f, 350.0f, 246.0f};
-constexpr Rectangle kPlayMetaRect = {1258.0f, 418.0f, 590.0f, 10.0f};
-constexpr Rectangle kPlayChartButtonsRect = {414.0f, 205.0f, 772.0f, 740.0f};
-constexpr Rectangle kPlayRankingHeaderRect = {1256.0f, 616.0f, 596.0f, 26.0f};
-constexpr Rectangle kPlayRankingSourceLocalRect = {1394.0f, 650.0f, 134.0f, 34.0f};
-constexpr Rectangle kPlayRankingSourceOnlineRect = {1256.0f, 650.0f, 134.0f, 34.0f};
-constexpr Rectangle kPlayRankingListRect = {1256.0f, 692.0f, 596.0f, 200.0f};
+constexpr Rectangle kPlayBackButtonRect = {39.0f, 983.0f, 330.0f, 58.0f};
+constexpr Rectangle kPlaySongColumnRect = {39.0f, 109.0f, 330.0f, 854.0f};
+constexpr Rectangle kPlayMainColumnRect = {390.0f, 109.0f, 820.0f, 932.0f};
+constexpr Rectangle kPlayRankingColumnRect = {1228.0f, 109.0f, 650.0f, 932.0f};
+constexpr Rectangle kPlayJacketRect = {1258.0f, 141.0f, 212.0f, 212.0f};
+constexpr Rectangle kPlayChartDetailRect = {1494.0f, 145.0f, 350.0f, 224.0f};
+constexpr Rectangle kPlayMetaRect = {1258.0f, 383.0f, 590.0f, 10.0f};
+constexpr Rectangle kPlayChartButtonsRect = {414.0f, 168.0f, 772.0f, 822.0f};
+constexpr Rectangle kPlayRankingHeaderRect = {1256.0f, 678.0f, 596.0f, 38.0f};
+constexpr Rectangle kPlayRankingSourceLocalRect = {1708.0f, 678.0f, 144.0f, 38.0f};
+constexpr Rectangle kPlayRankingSourceOnlineRect = {1556.0f, 678.0f, 144.0f, 38.0f};
+constexpr Rectangle kPlayRankingListRect = {1256.0f, 724.0f, 596.0f, 219.0f};
 constexpr Rectangle kCreateSongColumnRect = {99.0f, 162.0f, 507.0f, 756.0f};
 constexpr Rectangle kCreateMainColumnRect = {657.0f, 150.0f, 603.0f, 780.0f};
 constexpr Rectangle kCreateRankingColumnRect = {1317.0f, 153.0f, 507.0f, 774.0f};
@@ -82,17 +82,17 @@ Rectangle start_button_rect(Rectangle ranking_column) {
 }
 
 Rectangle preview_prev_button_rect(const layout& current) {
-    return {current.ranking_column.x + 30.0f, current.ranking_column.y + 308.0f, 174.0f, 48.0f};
+    return {current.ranking_column.x + 30.0f, current.ranking_column.y + 306.0f, 174.0f, 48.0f};
 }
 
 Rectangle preview_play_button_rect(const layout& current) {
     return {current.ranking_column.x + current.ranking_column.width * 0.5f - 77.0f,
-            current.ranking_column.y + 305.0f, 154.0f, 54.0f};
+            current.ranking_column.y + 303.0f, 154.0f, 54.0f};
 }
 
 Rectangle preview_next_button_rect(const layout& current) {
     return {current.ranking_column.x + current.ranking_column.width - 204.0f,
-            current.ranking_column.y + 308.0f, 174.0f, 48.0f};
+            current.ranking_column.y + 306.0f, 174.0f, 48.0f};
 }
 
 Rectangle play_filter_source_button_rect(Rectangle panel, int index) {

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "raylib.h"
+#include "ranking_service.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "song_select/song_catalog_service.h"
@@ -120,6 +121,7 @@ void title_scene::enter_play_mode() {
     mode_ = hub_mode::play;
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
+    play_state_.ranking_panel.selected_source = ranking_service::source::online;
     sync_play_media();
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
 }
@@ -681,6 +683,9 @@ void title_scene::on_enter() {
     }
     mode_ = start_in_create_view_ ? hub_mode::create
         : (start_in_play_view_ ? hub_mode::play : (start_with_home_open_ ? hub_mode::home : hub_mode::title));
+    if (mode_ == hub_mode::play) {
+        play_state_.ranking_panel.selected_source = ranking_service::source::online;
+    }
     suppress_home_pointer_until_release_ = false;
     settings_return_mode_ = hub_mode::home;
     home_menu_anim_ = mode_ == hub_mode::title ? 0.0f : 1.0f;

@@ -19,9 +19,9 @@ constexpr float kRankingRowHeight = 34.0f;
 constexpr float kScrollPadding = 12.0f;
 constexpr float kEmptyMessageOffsetY = 60.0f;
 constexpr float kEmptyMessageHeight = 42.0f;
-constexpr float kHeaderRowHeight = 34.0f;
-constexpr float kBrowseRankRowHeight = 27.0f;
-constexpr float kBrowseRankRowStep = 30.0f;
+constexpr float kHeaderRowHeight = 38.0f;
+constexpr float kBrowseRankRowHeight = 38.0f;
+constexpr float kBrowseRankRowStep = 42.0f;
 constexpr float kRevealOffsetX = 0.0f;
 constexpr float kClipSlack = 6.0f;
 
@@ -144,41 +144,61 @@ std::optional<ranking_service::source> hit_test_source(const draw_config& config
 
 void draw(const song_select::ranking_panel_state& panel, const draw_config& config) {
     const auto& t = *g_theme;
-    ui::draw_text_in_rect(panel.selected_source == ranking_service::source::online ? "GLOBAL RANKING" : "LOCAL RANKING",
-                          14, config.header_rect,
+    ui::draw_text_in_rect(panel.selected_source == ranking_service::source::online ? "GLOBAL RANKING" : "ローカルランキング",
+                          16, {config.header_rect.x, config.header_rect.y, 280.0f, config.header_rect.height},
                           with_alpha(t.accent, config.alpha), ui::text_align::left);
-    ui::draw_button_colored(config.source_online_rect, "GLOBAL", 13,
+    ui::draw_button_colored(config.source_online_rect, "GLOBAL", 14,
                             with_alpha(panel.selected_source == ranking_service::source::online ? config.button_selected : config.button_base,
                                        panel.selected_source == ranking_service::source::online ? config.selected_row_alpha : config.normal_row_alpha),
                             with_alpha(panel.selected_source == ranking_service::source::online ? config.button_selected_hover : config.button_hover,
                                        panel.selected_source == ranking_service::source::online ? config.selected_hover_row_alpha : config.hover_row_alpha),
                             with_alpha(t.text, config.alpha), 1.5f);
-    ui::draw_button_colored(config.source_local_rect, "LOCAL", 13,
+    ui::draw_button_colored(config.source_local_rect, "LOCAL", 14,
                             with_alpha(panel.selected_source == ranking_service::source::local ? config.button_selected : config.button_base,
                                        panel.selected_source == ranking_service::source::local ? config.selected_row_alpha : config.normal_row_alpha),
                             with_alpha(panel.selected_source == ranking_service::source::local ? config.button_selected_hover : config.button_hover,
                                        panel.selected_source == ranking_service::source::local ? config.selected_hover_row_alpha : config.hover_row_alpha),
                             with_alpha(t.text, config.alpha), 1.5f);
 
-    ui::scoped_clip_rect clip(config.list_rect);
     ui::draw_rect_f(config.list_rect, with_alpha(config.button_base, config.normal_row_alpha));
     ui::draw_rect_lines(config.list_rect, 1.0f, with_alpha(t.border_light, config.alpha));
-    ui::draw_text_in_rect("#", 10, {config.list_rect.x + 12.0f, config.list_rect.y + 10.0f, 32.0f, 16.0f},
-                          with_alpha(t.text_muted, config.alpha), ui::text_align::left);
-    ui::draw_text_in_rect("PLAYER", 10, {config.list_rect.x + 58.0f, config.list_rect.y + 10.0f, 180.0f, 16.0f},
-                          with_alpha(t.text_muted, config.alpha), ui::text_align::left);
-    ui::draw_text_in_rect("SCORE", 10,
-                          {config.list_rect.x + config.list_rect.width - 306.0f, config.list_rect.y + 10.0f, 116.0f, 16.0f},
-                          with_alpha(t.text_muted, config.alpha), ui::text_align::right);
-    ui::draw_text_in_rect("ACC", 10,
-                          {config.list_rect.x + config.list_rect.width - 154.0f, config.list_rect.y + 10.0f, 80.0f, 16.0f},
-                          with_alpha(t.text_muted, config.alpha), ui::text_align::right);
-    ui::draw_text_in_rect("CLEAR", 10,
-                          {config.list_rect.x + config.list_rect.width - 76.0f, config.list_rect.y + 10.0f, 60.0f, 16.0f},
-                          with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+    const float list_right = config.list_rect.x + config.list_rect.width;
+    const float clear_right = list_right - 18.0f;
+    const float acc_right = clear_right - 78.0f;
+    const float date_right = acc_right - 88.0f;
+    const float score_right = date_right - 92.0f;
+    const float score_width = 126.0f;
+    const float date_width = 58.0f;
+    const float acc_width = 76.0f;
+    const float clear_width = 56.0f;
+    {
+        const Rectangle header_clip_rect = {config.list_rect.x, config.list_rect.y,
+                                            config.list_rect.width, kHeaderRowHeight};
+        ui::scoped_clip_rect header_clip(header_clip_rect);
+        ui::draw_text_in_rect("#", 11, {config.list_rect.x + 12.0f, config.list_rect.y + 12.0f, 32.0f, 16.0f},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
+        ui::draw_text_in_rect("PLAYER", 11, {config.list_rect.x + 62.0f, config.list_rect.y + 12.0f, 178.0f, 16.0f},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
+        ui::draw_text_in_rect("SCORE", 11,
+                              {score_right - score_width, config.list_rect.y + 12.0f, score_width, 16.0f},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+        ui::draw_text_in_rect("DATE", 11,
+                              {date_right - date_width, config.list_rect.y + 12.0f, date_width, 16.0f},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+        ui::draw_text_in_rect("ACC", 11,
+                              {acc_right - acc_width, config.list_rect.y + 12.0f, acc_width, 16.0f},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+        ui::draw_text_in_rect("CLEAR", 11,
+                              {clear_right - clear_width, config.list_rect.y + 12.0f, clear_width, 16.0f},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+    }
 
     const float base_y = config.list_rect.y + kHeaderRowHeight - panel.scroll_y;
     const float reveal_anim = panel.reveal_anim;
+    const Rectangle entries_clip_rect = {config.list_rect.x, config.list_rect.y + kHeaderRowHeight,
+                                         config.list_rect.width,
+                                         std::max(0.0f, config.list_rect.height - kHeaderRowHeight)};
+    ui::scoped_clip_rect entries_clip(entries_clip_rect);
     if (!panel.listing.available || panel.listing.entries.empty()) {
         const std::string message = panel.listing.message.empty()
             ? std::string("No ") + (panel.selected_source == ranking_service::source::local ? "local" : "online") + " entries yet."
@@ -218,20 +238,23 @@ void draw(const song_select::ranking_panel_state& panel, const draw_config& conf
         const unsigned char row_alpha = static_cast<unsigned char>(config.normal_row_alpha * row_reveal_t);
         const unsigned char content_alpha = static_cast<unsigned char>(config.alpha * row_reveal_t);
         ui::draw_rect_f(row, with_alpha(i % 2 == 0 ? t.section : config.button_base, row_alpha));
-        ui::draw_text_in_rect(TextFormat("%d", entry.placement > 0 ? entry.placement : i + 1), 12,
-                              {row.x + 4.0f, row.y + 5.0f, 34.0f, 16.0f},
+        ui::draw_text_in_rect(TextFormat("%d", entry.placement > 0 ? entry.placement : i + 1), 14,
+                              {row.x + 4.0f, row.y + 9.0f, 36.0f, 18.0f},
                               with_alpha(t.text, content_alpha), ui::text_align::left);
         draw_marquee_text(entry.player_display_name.empty() ? "Unknown Player" : entry.player_display_name.c_str(),
-                          {row.x + 48.0f, row.y + 5.0f, 190.0f, 16.0f},
-                          12, with_alpha(t.text, content_alpha), GetTime());
-        ui::draw_text_in_rect(format_score(entry.score).c_str(), 12,
-                              {row.x + row.width - 316.0f, row.y + 5.0f, 128.0f, 16.0f},
+                          {row.x + 52.0f, row.y + 9.0f, 178.0f, 18.0f},
+                          14, with_alpha(t.text, content_alpha), GetTime());
+        ui::draw_text_in_rect(format_score(entry.score).c_str(), 14,
+                              {score_right - score_width, row.y + 9.0f, score_width, 18.0f},
                               with_alpha(t.text_secondary, content_alpha), ui::text_align::right);
-        ui::draw_text_in_rect(TextFormat("%.2f%%", entry.accuracy), 12,
-                              {row.x + row.width - 162.0f, row.y + 5.0f, 78.0f, 16.0f},
+        ui::draw_text_in_rect(format_relative_recorded_at(entry.recorded_at).c_str(), 13,
+                              {date_right - date_width, row.y + 9.0f, date_width, 18.0f},
+                              with_alpha(t.text_muted, content_alpha), ui::text_align::right);
+        ui::draw_text_in_rect(TextFormat("%.2f%%", entry.accuracy), 14,
+                              {acc_right - acc_width, row.y + 9.0f, acc_width, 18.0f},
                               with_alpha(t.text_secondary, content_alpha), ui::text_align::right);
-        ui::draw_text_in_rect(rank_label(entry.clear_rank()), 13,
-                              {row.x + row.width - 54.0f, row.y + 4.0f, 44.0f, 18.0f},
+        ui::draw_text_in_rect(rank_label(entry.clear_rank()), 15,
+                              {clear_right - clear_width, row.y + 8.0f, clear_width, 20.0f},
                               with_alpha(rank_color(entry.clear_rank()), content_alpha), ui::text_align::right);
     }
 }

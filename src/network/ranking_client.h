@@ -24,6 +24,15 @@ struct operation_result {
     std::optional<listing_response> listing;
 };
 
+struct personal_best_operation_result {
+    bool success = false;
+    bool unauthorized = false;
+    bool maintenance = false;
+    std::string message;
+    std::string retry_after;
+    std::optional<ranking_service::entry> entry;
+};
+
 struct submit_response {
     bool available = true;
     bool updated = false;
@@ -96,6 +105,10 @@ operation_result fetch_chart_ranking(const std::string& server_url,
                                      const std::string& access_token,
                                      const std::string& chart_id,
                                      int limit = 50);
+
+personal_best_operation_result fetch_my_chart_ranking(const std::string& server_url,
+                                                      const std::string& access_token,
+                                                      const std::string& chart_id);
 
 submit_operation_result submit_chart_ranking(const std::string& server_url,
                                              const std::string& access_token,

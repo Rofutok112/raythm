@@ -56,8 +56,20 @@ public:
     ranking_reload_result poll_ranking_reload(state& state);
 
 private:
+    struct ranking_load_data {
+        ranking_service::listing listing;
+        ranking_service::source best_source = ranking_service::source::local;
+        std::string best_chart_id;
+        bool best_refreshed = false;
+        std::optional<ranking_service::entry> best_entry;
+    };
+
     void start_catalog_load(state& state, catalog_reload_request request);
-    void start_ranking_load(state& state, std::string chart_id, ranking_service::source source);
+    void start_ranking_load(state& state,
+                            std::string chart_id,
+                            ranking_service::source source,
+                            ranking_service::source best_source,
+                            bool refresh_best);
     void mark_online_ranking_loading(state& state) const;
     void reset_ranking_panel_scroll(state& state) const;
 
@@ -70,7 +82,7 @@ private:
     catalog_reload_request active_catalog_request_;
     catalog_reload_request queued_catalog_request_;
 
-    std::future<ranking_service::listing> ranking_future_;
+    std::future<ranking_load_data> ranking_future_;
     bool ranking_loading_ = false;
     bool ranking_reload_pending_ = false;
     int ranking_generation_ = 0;

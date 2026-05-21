@@ -11,7 +11,8 @@ void sync(editor_transport_state& transport,
           const editor_state* state,
           const std::string& hitsound_path,
           const editor_hitsound_paths* hitsounds = nullptr,
-          bool suppress_hitsounds = false);
+          bool suppress_hitsounds = false,
+          double dt = 0.0);
 
 std::optional<int> toggle_playback(editor_transport_state& transport,
                                    const editor_state* state,

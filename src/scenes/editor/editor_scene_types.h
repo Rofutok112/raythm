@@ -161,6 +161,7 @@ struct editor_session_load_result {
     int audio_length_tick = 0;
     bool audio_loaded = false;
     bool audio_playing = false;
+    bool pre_audio_playing = false;
     double audio_time_seconds = 0.0;
     int playback_tick = 0;
     int previous_playback_tick = 0;
@@ -225,27 +226,25 @@ struct editor_transport_context {
     std::optional<double> bgm_length_seconds;
     std::optional<int> seek_tick;
     std::optional<int> space_playback_start_tick;
-    bool loop_enabled = false;
-    int loop_start_tick = 0;
-    int loop_end_tick = 0;
+    bool pre_audio_playing = false;
+    double dt = 0.0;
 };
 
 struct editor_transport_state {
     bool audio_loaded = false;
     bool audio_playing = false;
+    bool pre_audio_playing = false;
     double audio_time_seconds = 0.0;
     int playback_tick = 0;
     int previous_playback_tick = 0;
     bool previous_audio_playing = false;
     int audio_length_tick = 0;
-    bool loop_enabled = false;
-    int loop_start_tick = 0;
-    int loop_end_tick = 0;
 };
 
 struct editor_transport_result {
     bool audio_loaded = false;
     bool audio_playing = false;
+    bool pre_audio_playing = false;
     double audio_time_seconds = 0.0;
     int playback_tick = 0;
     int previous_playback_tick = 0;
@@ -257,7 +256,6 @@ struct editor_transport_result {
     int hitsound_count = 0;
     std::vector<editor_hitsound_request> hitsound_requests;
     std::optional<int> next_space_playback_start_tick;
-    bool loop_seeked = false;
 };
 
 struct editor_timeline_context {

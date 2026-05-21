@@ -196,6 +196,9 @@ editor_session_load_result load(const editor_start_request& request) {
     editor_transport_context transport_context;
     transport_context.state = result.state.get();
     transport_context.audio_loaded = result.audio_loaded;
+    transport_context.playback_tick = request.resume_state.has_value()
+        ? request.resume_state->playback_tick
+        : 0;
     transport_context.previous_playback_tick = 0;
     transport_context.previous_audio_playing = false;
     transport_context.hitsound_path = &result.hitsound_path;
@@ -208,6 +211,7 @@ editor_session_load_result load(const editor_start_request& request) {
     const editor_transport_result transport_result = editor_transport_controller::sync(transport_context);
     result.audio_loaded = transport_result.audio_loaded;
     result.audio_playing = transport_result.audio_playing;
+    result.pre_audio_playing = transport_result.pre_audio_playing;
     result.audio_time_seconds = transport_result.audio_time_seconds;
     result.playback_tick = transport_result.playback_tick;
     result.previous_playback_tick = transport_result.previous_playback_tick;

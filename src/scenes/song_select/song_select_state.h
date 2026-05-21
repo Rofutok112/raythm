@@ -23,6 +23,7 @@ struct chart_option {
     content_status source_status = content_status::local;
     int local_note_offset_ms = 0;
     std::optional<rank> best_local_rank;
+    std::optional<int> best_local_score;
     int note_count = 0;
     float min_bpm = 0.0f;
     float max_bpm = 0.0f;
@@ -128,6 +129,10 @@ struct recent_result_offset {
 struct ranking_panel_state {
     ranking_service::source selected_source = ranking_service::source::local;
     ranking_service::listing listing;
+    ranking_service::source best_source = ranking_service::source::local;
+    std::optional<ranking_service::entry> best_entry;
+    std::string best_chart_id;
+    bool best_loaded = false;
     bool source_dropdown_open = false;
     float scroll_y = 0.0f;
     float scroll_y_target = 0.0f;

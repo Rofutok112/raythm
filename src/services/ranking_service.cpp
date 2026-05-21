@@ -963,6 +963,45 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
     return result;
 }
 
+std::optional<entry> load_chart_personal_best(const std::string& chart_id, source ranking_source) {
+    if (chart_id.empty()) {
+        return std::nullopt;
+    }
+
+    if (ranking_source == source::local) {
+        listing local = load_chart_ranking(chart_id, source::local, 1);
+        if (local.available && !local.entries.empty()) {
+            return local.entries.front();
+        }
+        return std::nullopt;
+    }
+
+    const std::optional<auth::session> stored = auth::load_saved_session();
+    if (!stored.has_value()) {
+        return std::nullopt;
+    }
+
+    const std::string remote_chart_id = expected_remote_chart_id(stored->server_url, chart_id);
+    ranking_client::personal_best_operation_result request =
+        ranking_client::fetch_my_chart_ranking(stored->server_url, stored->access_token, remote_chart_id);
+
+    if (request.unauthorized) {
+        const auth::operation_result restored = auth::restore_saved_session();
+        if (!restored.success || !restored.session_data.has_value()) {
+            return std::nullopt;
+        }
+        request = ranking_client::fetch_my_chart_ranking(
+            restored.session_data->server_url,
+            restored.session_data->access_token,
+            expected_remote_chart_id(restored.session_data->server_url, chart_id));
+    }
+
+    if (!request.success || !request.entry.has_value()) {
+        return std::nullopt;
+    }
+    return request.entry;
+}
+
 local_submit_result submit_local_result_detailed(const chart_meta& chart, const result_data& result) {
     local_submit_result submission;
     if (chart.chart_id.empty() || result.failed) {

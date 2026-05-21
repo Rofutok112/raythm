@@ -79,6 +79,7 @@ private:
     unsaved_changes_dialog_state unsaved_changes_dialog_;
     bool metadata_modal_open_ = false;
     bool timing_modal_open_ = false;
+    bool playtest_button_requested_ = false;
     size_t pending_level_refresh_generation_ = 0;
     double level_refresh_after_time_ = 0.0;
 };

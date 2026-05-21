@@ -1,10 +1,15 @@
 #include <cstdlib>
+#include <cmath>
 #include <iostream>
 #include <vector>
 
 #include "play/play_flow_controller.h"
 
 namespace {
+
+bool nearly_equal(double left, double right) {
+    return std::fabs(left - right) < 0.001;
+}
 
 play_session_state make_initialized_state() {
     play_session_state state;
@@ -55,6 +60,63 @@ int main() {
         const play_update_result result = play_flow_controller::update(state, draw_queue, context);
         if (state.intro_playing || !result.request_play_bgm) {
             std::cerr << "Intro completion flow failed\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.start_ms = -300.0;
+        state.chart_time_ms = -300.0;
+        state.intro_playing = true;
+        state.intro_timer = 0.01f;
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.02f;
+        context.bgm_loaded = true;
+
+        const play_update_result intro_result = play_flow_controller::update(state, draw_queue, context);
+        if (state.intro_playing || intro_result.request_play_bgm || !nearly_equal(state.chart_time_ms, -300.0)) {
+            std::cerr << "Negative start should finish intro without starting BGM\n";
+            return EXIT_FAILURE;
+        }
+
+        context.dt = 0.2f;
+        const play_update_result countdown_result = play_flow_controller::update(state, draw_queue, context);
+        if (countdown_result.request_play_bgm || !nearly_equal(state.chart_time_ms, -100.0)) {
+            std::cerr << "Negative start should advance chart time before audio starts\n";
+            return EXIT_FAILURE;
+        }
+
+        context.dt = 0.2f;
+        const play_update_result start_audio_result = play_flow_controller::update(state, draw_queue, context);
+        if (!start_audio_result.request_play_bgm || !nearly_equal(state.chart_time_ms, 0.0)) {
+            std::cerr << "Negative start should request BGM when chart time reaches zero\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.score_system.init(1);
+        state.timing_engine.init({timing_event{timing_event_type::bpm, 0, 120.0f, 4, 4}}, 480, -300);
+        state.judge_system.init({note_data{note_type::tap, 0, 0, 0}}, state.timing_engine);
+        state.chart_time_ms = -300.0;
+
+        play_note_draw_queue draw_queue;
+        draw_queue.init_from_note_states(4, state.judge_system.note_states());
+        state.input_handler.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, -300.0);
+
+        play_update_context context;
+        context.dt = 0.0f;
+        context.input_already_updated = true;
+
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (state.score_system.get_combo() != 1 ||
+            !state.display_judge.has_value() ||
+            state.display_judge->result != judge_result::perfect ||
+            result.navigation.has_value()) {
+            std::cerr << "Negative-time first note should judge correctly at 1:1\n";
             return EXIT_FAILURE;
         }
     }

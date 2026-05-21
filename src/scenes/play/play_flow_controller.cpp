@@ -139,9 +139,6 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
 
     if (state.intro_playing) {
         state.intro_timer = std::max(0.0f, state.intro_timer - context.dt);
-        if (!context.input_already_updated) {
-            state.input_handler.update(state.chart_time_ms);
-        }
         update_lane_hold_dimming(state, context.dt);
         if (context.draw_window.has_value()) {
             draw_queue.update_visible_window(state.judge_system.note_states(), static_cast<float>(state.lane_speed),
@@ -151,7 +148,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
 
         if (state.intro_timer <= 0.0f) {
             state.intro_playing = false;
-            if (context.bgm_loaded) {
+            if (context.bgm_loaded && state.chart_time_ms >= 0.0) {
                 result.request_play_bgm = true;
             }
         }
@@ -160,6 +157,11 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
 
     const double advanced_ms = state.chart_time_ms + static_cast<double>(context.dt) * 1000.0;
     state.chart_time_ms = context.audio_clock_time_ms.value_or(advanced_ms);
+    if (!context.audio_clock_time_ms.has_value() && context.bgm_loaded && !context.bgm_playing &&
+        state.chart_time_ms >= 0.0) {
+        state.chart_time_ms = 0.0;
+        result.request_play_bgm = true;
+    }
     if (!context.input_already_updated) {
         state.input_handler.update(state.chart_time_ms);
     }

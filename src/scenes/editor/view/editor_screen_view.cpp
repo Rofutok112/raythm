@@ -16,14 +16,6 @@ Rectangle snap_dropdown_menu_rect() {
         static_cast<int>(editor_timeline_viewport::snap_labels().size()));
 }
 
-std::string loop_region_label(const editor_transport_state& transport, const editor_meter_map& meter_map) {
-    if (transport.loop_end_tick <= transport.loop_start_tick) {
-        return "Set [ ]";
-    }
-    return meter_map.bar_beat_label(transport.loop_start_tick) + " - " +
-        meter_map.bar_beat_label(transport.loop_end_tick);
-}
-
 std::string selected_note_summary(const std::vector<size_t>& selected_note_indices) {
     if (selected_note_indices.empty()) {
         return "No notes selected";
@@ -63,15 +55,12 @@ editor_right_panel_view_result draw_timeline(
 }
 
 editor_header_view_result draw_header(const header_context& context) {
-    const std::string loop_label = loop_region_label(context.transport, context.meter_map);
     return editor::daw::draw_header({
         "",
         context.transport.audio_loaded,
-        context.transport.audio_playing,
+        context.transport.audio_playing || context.transport.pre_audio_playing,
         context.offset_label,
         context.waveform_visible,
-        context.transport.loop_enabled,
-        loop_label.c_str(),
         editor_timeline_viewport::snap_labels(),
         context.viewport.snap_index,
         context.snap_dropdown_open,

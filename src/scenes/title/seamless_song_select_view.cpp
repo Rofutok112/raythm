@@ -14,6 +14,7 @@
 #include "ranking_service.h"
 #include "raylib.h"
 #include "scene_common.h"
+#include "shared/content_status_badge.h"
 #include "song_loader.h"
 #include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_layout.h"
@@ -32,22 +33,22 @@
 namespace title_play_view {
 namespace {
 
-constexpr Rectangle kPlayBackButtonRect = {72.0f, 57.0f, 147.0f, 57.0f};
-constexpr Rectangle kPlaySongColumnRect = {39.0f, 146.0f, 330.0f, 850.0f};
-constexpr Rectangle kPlayMainColumnRect = {390.0f, 146.0f, 820.0f, 850.0f};
-constexpr Rectangle kPlayRankingColumnRect = {1228.0f, 146.0f, 650.0f, 850.0f};
-constexpr Rectangle kPlayJacketRect = {1258.0f, 182.0f, 212.0f, 212.0f};
-constexpr Rectangle kPlayChartDetailRect = {1494.0f, 186.0f, 350.0f, 246.0f};
-constexpr Rectangle kPlayMetaRect = {1258.0f, 418.0f, 590.0f, 10.0f};
+constexpr Rectangle kPlayBackButtonRect = {39.0f, 983.0f, 330.0f, 58.0f};
+constexpr Rectangle kPlaySongColumnRect = {39.0f, 109.0f, 330.0f, 854.0f};
+constexpr Rectangle kPlayMainColumnRect = {390.0f, 109.0f, 820.0f, 932.0f};
+constexpr Rectangle kPlayRankingColumnRect = {1228.0f, 109.0f, 650.0f, 932.0f};
+constexpr Rectangle kPlayJacketRect = {1258.0f, 141.0f, 212.0f, 212.0f};
+constexpr Rectangle kPlayChartDetailRect = {1494.0f, 145.0f, 350.0f, 224.0f};
+constexpr Rectangle kPlayMetaRect = {1258.0f, 383.0f, 590.0f, 10.0f};
 constexpr float kChartFilterMinLevel = 0.0f;
 constexpr float kChartFilterUsefulMaxLevel = 15.0f;
 constexpr float kChartFilterMaxLevel = 99.0f;
 constexpr float kChartFilterUsefulTrack = 0.97f;
-constexpr Rectangle kPlayChartButtonsRect = {414.0f, 205.0f, 772.0f, 740.0f};
-constexpr Rectangle kPlayRankingHeaderRect = {1256.0f, 616.0f, 596.0f, 26.0f};
-constexpr Rectangle kPlayRankingSourceLocalRect = {1394.0f, 650.0f, 134.0f, 34.0f};
-constexpr Rectangle kPlayRankingSourceOnlineRect = {1256.0f, 650.0f, 134.0f, 34.0f};
-constexpr Rectangle kPlayRankingListRect = {1256.0f, 692.0f, 596.0f, 200.0f};
+constexpr Rectangle kPlayChartButtonsRect = {414.0f, 168.0f, 772.0f, 822.0f};
+constexpr Rectangle kPlayRankingHeaderRect = {1256.0f, 678.0f, 596.0f, 38.0f};
+constexpr Rectangle kPlayRankingSourceLocalRect = {1708.0f, 678.0f, 144.0f, 38.0f};
+constexpr Rectangle kPlayRankingSourceOnlineRect = {1556.0f, 678.0f, 144.0f, 38.0f};
+constexpr Rectangle kPlayRankingListRect = {1256.0f, 724.0f, 596.0f, 219.0f};
 constexpr Rectangle kCreateSongColumnRect = {99.0f, 162.0f, 507.0f, 756.0f};
 constexpr Rectangle kCreateMainColumnRect = {657.0f, 150.0f, 603.0f, 780.0f};
 constexpr Rectangle kCreateRankingColumnRect = {1317.0f, 153.0f, 507.0f, 774.0f};
@@ -192,6 +193,41 @@ std::string format_duration_label(float seconds) {
     return TextFormat("%d:%02d", total_seconds / 60, total_seconds % 60);
 }
 
+const char* rank_label(rank value) {
+    switch (value) {
+        case rank::ss: return "SS";
+        case rank::s: return "S";
+        case rank::aa: return "AA";
+        case rank::a: return "A";
+        case rank::b: return "B";
+        case rank::c: return "C";
+        case rank::f: return "F";
+    }
+    return "?";
+}
+
+Color rank_color(rank value) {
+    const auto& t = *g_theme;
+    switch (value) {
+        case rank::ss: return t.rank_ss;
+        case rank::s: return t.rank_s;
+        case rank::aa: return t.rank_aa;
+        case rank::a: return t.rank_a;
+        case rank::b: return t.rank_b;
+        case rank::c: return t.rank_c;
+        case rank::f: return t.rank_f;
+    }
+    return t.text_secondary;
+}
+
+std::string format_score(int value) {
+    std::string digits = std::to_string(std::max(0, value));
+    for (int insert_at = static_cast<int>(digits.size()) - 3; insert_at > 0; insert_at -= 3) {
+        digits.insert(static_cast<size_t>(insert_at), ",");
+    }
+    return digits;
+}
+
 std::string format_bpm_range(float min_bpm, float max_bpm, float fallback_bpm) {
     if (min_bpm <= 0.0f && max_bpm <= 0.0f) {
         return TextFormat("%.0f", fallback_bpm);
@@ -220,10 +256,23 @@ Rectangle best_score_rect(Rectangle ranking_column) {
     };
 }
 
+Rectangle play_info_panel_rect(Rectangle ranking_column) {
+    return {ranking_column.x, ranking_column.y, ranking_column.width, 387.0f};
+}
+
+Rectangle play_ranking_panel_rect(Rectangle ranking_column) {
+    return {
+        ranking_column.x,
+        ranking_column.y + 403.0f,
+        ranking_column.width,
+        ranking_column.height - 403.0f,
+    };
+}
+
 Rectangle preview_prev_button_rect(const title_play_view::layout& current) {
     return {
         current.ranking_column.x + 30.0f,
-        current.ranking_column.y + 308.0f,
+        current.ranking_column.y + 306.0f,
         174.0f,
         48.0f,
     };
@@ -232,7 +281,7 @@ Rectangle preview_prev_button_rect(const title_play_view::layout& current) {
 Rectangle preview_play_button_rect(const title_play_view::layout& current) {
     return {
         current.ranking_column.x + current.ranking_column.width * 0.5f - 77.0f,
-        current.ranking_column.y + 305.0f,
+        current.ranking_column.y + 303.0f,
         154.0f,
         54.0f,
     };
@@ -241,7 +290,7 @@ Rectangle preview_play_button_rect(const title_play_view::layout& current) {
 Rectangle preview_next_button_rect(const title_play_view::layout& current) {
     return {
         current.ranking_column.x + current.ranking_column.width - 204.0f,
-        current.ranking_column.y + 308.0f,
+        current.ranking_column.y + 306.0f,
         174.0f,
         48.0f,
     };
@@ -643,6 +692,31 @@ Color difficulty_factor_color(const std::string& name) {
     return g_theme->accent;
 }
 
+unsigned char scaled_alpha(unsigned char alpha, float scale) {
+    return static_cast<unsigned char>(
+        std::clamp(static_cast<float>(alpha) * scale, 0.0f, 255.0f));
+}
+
+float status_badge_width(content_status status) {
+    switch (status) {
+        case content_status::community: return 92.0f;
+        case content_status::official: return 78.0f;
+        case content_status::modified: return 76.0f;
+        case content_status::checking: return 76.0f;
+        case content_status::update: return 64.0f;
+        case content_status::local: return 54.0f;
+    }
+    return 54.0f;
+}
+
+void draw_square_status_badge(Rectangle rect, content_status status, unsigned char alpha, int font_size = 10) {
+    const Color color = content_status_badge::color(status);
+    ui::draw_rect_f(rect, with_alpha(g_theme->row_soft, scaled_alpha(alpha, 0.27f)));
+    ui::draw_rect_lines(rect, 1.0f, with_alpha(color, alpha));
+    ui::draw_text_in_rect(content_status_badge::label(status), font_size, rect,
+                          with_alpha(color, alpha), ui::text_align::center);
+}
+
 std::optional<chart_difficulty::difficulty_breakdown> cached_difficulty_breakdown(const song_select::chart_option* chart) {
     static std::unordered_map<std::string, std::optional<chart_difficulty::difficulty_breakdown>> cache;
     if (chart == nullptr || chart->path.empty()) {
@@ -670,9 +744,11 @@ void draw_difficulty_breakdown(Rectangle rect,
                                unsigned char normal_row_alpha,
                                float chart_change_anim_t) {
     const auto& t = *g_theme;
+    const Rectangle header_line = {rect.x, rect.y + 15.0f, rect.width, 1.0f};
     ui::draw_text_in_rect("DIFFICULTY FACTORS", 11,
                           {rect.x, rect.y, rect.width, 15.0f},
                           with_alpha(t.text_muted, alpha), ui::text_align::left);
+    ui::draw_rect_f(header_line, with_alpha(t.border_light, scaled_alpha(alpha, 0.55f)));
 
     const std::optional<chart_difficulty::difficulty_breakdown> breakdown = cached_difficulty_breakdown(chart);
     if (!breakdown.has_value() || breakdown->factors.empty()) {
@@ -730,6 +806,8 @@ void draw_difficulty_breakdown(Rectangle rect,
         ui::draw_text_in_rect(difficulty_factor_label(factor.name), 10, label_rect,
                               with_alpha(factor_color, alpha), ui::text_align::left);
         ui::draw_rect_f(bar_track, with_alpha(t.bg_alt, normal_row_alpha));
+        ui::draw_rect_f({bar_track.x, bar_track.y, bar_track.width, 1.0f},
+                        with_alpha(t.border_light, scaled_alpha(alpha, 0.35f)));
         ui::draw_rect_f({bar_track.x, bar_track.y, bar_width, bar_track.height},
                         with_alpha(factor_color, alpha));
         if (chart_change_anim_t > 0.001f && bar_width > 3.0f) {
@@ -746,6 +824,78 @@ void draw_difficulty_breakdown(Rectangle rect,
     }
 }
 
+void draw_chart_summary(Rectangle rect,
+                        const song_select::chart_option* chart,
+                        unsigned char alpha,
+                        unsigned char normal_row_alpha) {
+    const auto& t = *g_theme;
+    const Color level_color = chart != nullptr ? difficulty_level_color(chart->meta.level) : t.accent;
+    const Color fill = lerp_color(t.bg_alt, level_color, chart != nullptr ? 0.08f : 0.0f);
+    ui::draw_rect_f(rect, with_alpha(fill, normal_row_alpha));
+    ui::draw_rect_f({rect.x, rect.y, 4.0f, rect.height}, with_alpha(level_color, alpha));
+    ui::draw_rect_f({rect.x + 4.0f, rect.y, rect.width - 4.0f, 1.0f},
+                    with_alpha(t.border_light, scaled_alpha(alpha, 0.65f)));
+    ui::draw_rect_f({rect.x + 4.0f, rect.y + rect.height - 1.0f, rect.width - 4.0f, 1.0f},
+                    with_alpha(t.border_light, scaled_alpha(alpha, 0.45f)));
+
+    if (chart == nullptr) {
+        ui::draw_text_in_rect("No chart selected", 18, ui::inset(rect, 12.0f),
+                              with_alpha(t.text_muted, alpha), ui::text_align::left);
+        return;
+    }
+
+    const int keys = chart->meta.key_count > 0 ? chart->meta.key_count : 4;
+    const Rectangle content = ui::inset(rect, ui::edge_insets::symmetric(0.0f, 16.0f));
+    const float source_width = status_badge_width(chart->source_status);
+    const Rectangle key_chip = {content.x, content.y + 8.0f, 42.0f, 26.0f};
+    const Rectangle badge_rect = {content.x + content.width - 82.0f, content.y + 7.0f, 78.0f, 28.0f};
+    const Rectangle source_rect = {
+        badge_rect.x - source_width - 10.0f,
+        content.y + 10.0f,
+        source_width,
+        22.0f
+    };
+    constexpr float kAuthorReservedWidth = 220.0f;
+    const float difficulty_x = key_chip.x + key_chip.width + 14.0f;
+    const float max_difficulty_width = std::max(0.0f, source_rect.x - difficulty_x - kAuthorReservedWidth - 24.0f);
+    const float measured_difficulty_width = ui::measure_text_size(chart->meta.difficulty.c_str(), 22.0f).x + 8.0f;
+    const float difficulty_width = std::clamp(measured_difficulty_width, 64.0f, max_difficulty_width);
+    const Rectangle difficulty_rect = {
+        difficulty_x,
+        content.y + 5.0f,
+        difficulty_width,
+        32.0f,
+    };
+    const float author_x = std::max(difficulty_rect.x + difficulty_rect.width + 18.0f,
+                                    content.x + 210.0f);
+    const Rectangle author_rect = {
+        author_x,
+        content.y + 10.0f,
+        std::max(0.0f, source_rect.x - author_x - 10.0f),
+        22.0f
+    };
+    const Rectangle author_prefix_rect = {author_rect.x, author_rect.y, 18.0f, author_rect.height};
+    const Rectangle author_name_rect = {
+        author_prefix_rect.x + author_prefix_rect.width + 8.0f,
+        author_rect.y,
+        std::max(0.0f, author_rect.width - author_prefix_rect.width - 8.0f),
+        author_rect.height
+    };
+
+    ui::draw_rect_f(key_chip, with_alpha(lerp_color(t.section, level_color, 0.18f), scaled_alpha(alpha, 0.88f)));
+    ui::draw_rect_lines(key_chip, 1.0f, with_alpha(level_color, scaled_alpha(alpha, 0.72f)));
+    ui::draw_text_in_rect(TextFormat("%dK", keys), 15, key_chip,
+                          with_alpha(t.text, alpha), ui::text_align::center);
+    draw_square_status_badge(source_rect, chart->source_status, alpha, 10);
+    draw_marquee_text(chart->meta.difficulty.c_str(), difficulty_rect,
+                      22, with_alpha(t.text, alpha), GetTime());
+    draw_difficulty_level_badge(chart->meta.level, badge_rect, 15, alpha);
+    ui::draw_text_in_rect("by", 13, author_prefix_rect,
+                          with_alpha(t.text_muted, alpha), ui::text_align::left);
+    draw_marquee_text(chart->meta.chart_author.empty() ? "Unknown" : chart->meta.chart_author.c_str(),
+                      author_name_rect, 13, with_alpha(t.text_muted, alpha), GetTime());
+}
+
 void draw_preview_and_start_panel(const title_play_view::layout& current,
                                   const song_select::state& state,
                                   const song_select::preview_controller& preview_controller,
@@ -760,8 +910,12 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
                                   unsigned char selected_row_alpha) {
     const auto& t = *g_theme;
     const Rectangle panel = current.ranking_column;
-    ui::draw_rect_f(panel, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha / 2)));
-    ui::draw_rect_lines(panel, 1.2f, with_alpha(t.border_light, alpha));
+    const Rectangle info_panel = play_info_panel_rect(panel);
+    const Rectangle ranking_panel = play_ranking_panel_rect(panel);
+    ui::draw_rect_f(info_panel, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha / 2)));
+    ui::draw_rect_lines(info_panel, 1.2f, with_alpha(t.border_light, alpha));
+    ui::draw_rect_f(ranking_panel, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha / 2)));
+    ui::draw_rect_lines(ranking_panel, 1.2f, with_alpha(t.border_light, alpha));
 
     if (song != nullptr) {
         if (preview_controller.jacket_loaded()) {
@@ -786,25 +940,6 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
         draw_marquee_text(song->song.meta.artist.c_str(),
                           {title_rect.x, title_rect.y + 40.0f, title_rect.width, 24.0f},
                           15, with_alpha(t.text_secondary, alpha), GetTime());
-        if (chart != nullptr) {
-            ui::draw_text_in_rect(
-                TextFormat("%dK  %s",
-                           chart->meta.key_count > 0 ? chart->meta.key_count : 4,
-                           chart->meta.difficulty.c_str()),
-                13,
-                {title_rect.x, title_rect.y + 82.0f, title_rect.width * 0.42f, 24.0f},
-                with_alpha(t.text, alpha), ui::text_align::left);
-            draw_difficulty_level_badge(chart->meta.level,
-                                        {title_rect.x + title_rect.width * 0.43f, title_rect.y + 82.0f,
-                                         70.0f, 21.0f},
-                                        12, alpha);
-            ui::draw_text_in_rect(
-                TextFormat("by %s", chart->meta.chart_author.empty() ? "Unknown" : chart->meta.chart_author.c_str()),
-                12,
-                {title_rect.x + title_rect.width * 0.58f, title_rect.y + 82.0f, title_rect.width * 0.42f, 24.0f},
-                with_alpha(t.text_muted, alpha), ui::text_align::right);
-        }
-
         const auto draw_tag_row = [&](const char* heading,
                                       const std::vector<std::string>& labels,
                                       float y,
@@ -836,8 +971,8 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
                 x += width + 8.0f;
             }
         };
-        draw_tag_row("GENRES", genre_labels(song->song.meta), title_rect.y + 118.0f, 1);
-        draw_tag_row("KEYWORDS", song->song.meta.keywords, title_rect.y + 170.0f, 2);
+        draw_tag_row("GENRES", genre_labels(song->song.meta), title_rect.y + 84.0f, 2);
+        draw_tag_row("KEYWORDS", song->song.meta.keywords, title_rect.y + 166.0f, 2);
     }
 
     const Rectangle progress = current.meta_rect;
@@ -864,8 +999,11 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
     draw_transport_toggle_button(play_button, audio_manager::instance().is_preview_playing(), alpha);
     draw_transport_skip_button(next_button, true, alpha);
 
+    const Rectangle lower_panel = play_ranking_panel_rect(panel);
+    draw_chart_summary({lower_panel.x + 28.0f, lower_panel.y + 24.0f, lower_panel.width - 56.0f, 42.0f},
+                       chart, alpha, normal_row_alpha);
     draw_difficulty_breakdown(
-        {panel.x + 28.0f, panel.y + 370.0f, panel.width - 56.0f, 76.0f},
+        {lower_panel.x + 28.0f, lower_panel.y + 76.0f, lower_panel.width - 56.0f, 76.0f},
         chart, alpha, normal_row_alpha, state.chart_change_anim_t);
 
     const Rectangle best = best_score_rect(panel);
@@ -873,8 +1011,25 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
     ui::draw_rect_lines(best, 1.0f, with_alpha(t.border_light, alpha));
     ui::draw_text_in_rect("BEST SCORE", 10, {best.x + 18.0f, best.y + 10.0f, 100.0f, 16.0f},
                           with_alpha(t.text_muted, alpha), ui::text_align::left);
-    ui::draw_text_in_rect("-", 16, {best.x + 18.0f, best.y + 30.0f, 100.0f, 20.0f},
-                          with_alpha(t.text, alpha), ui::text_align::left);
+    if (state.ranking_panel.best_entry.has_value()) {
+        const ranking_service::entry& best_entry = *state.ranking_panel.best_entry;
+        ui::draw_text_in_rect(format_score(best_entry.score).c_str(), 17,
+                              {best.x + 18.0f, best.y + 30.0f, 152.0f, 20.0f},
+                              with_alpha(t.text, alpha), ui::text_align::left);
+        ui::draw_text_in_rect(rank_label(best_entry.clear_rank()), 18,
+                              {best.x + best.width - 64.0f, best.y + 26.0f, 42.0f, 26.0f},
+                              with_alpha(rank_color(best_entry.clear_rank()), alpha), ui::text_align::right);
+    } else if (chart != nullptr && chart->best_local_score.has_value() && chart->best_local_rank.has_value()) {
+        ui::draw_text_in_rect(format_score(*chart->best_local_score).c_str(), 17,
+                              {best.x + 18.0f, best.y + 30.0f, 152.0f, 20.0f},
+                              with_alpha(t.text, alpha), ui::text_align::left);
+        ui::draw_text_in_rect(rank_label(*chart->best_local_rank), 18,
+                              {best.x + best.width - 64.0f, best.y + 26.0f, 42.0f, 26.0f},
+                              with_alpha(rank_color(*chart->best_local_rank), alpha), ui::text_align::right);
+    } else {
+        ui::draw_text_in_rect("-", 16, {best.x + 18.0f, best.y + 30.0f, 100.0f, 20.0f},
+                              with_alpha(t.text, alpha), ui::text_align::left);
+    }
     ui::draw_button_colored(start_button_rect(panel), "START", 22,
                             with_alpha(button_selected, selected_row_alpha),
                             with_alpha(button_hover, hover_row_alpha),
@@ -1042,7 +1197,7 @@ void draw(song_select::state& state,
         static_cast<unsigned char>((static_cast<unsigned short>(alpha) * t.row_soft_selected_alpha) / 255);
     const unsigned char selected_hover_row_alpha =
         static_cast<unsigned char>((static_cast<unsigned short>(alpha) * t.row_soft_selected_hover_alpha) / 255);
-    ui::draw_button_colored(current.back_rect, "HOME", 16,
+    ui::draw_button_colored(current.back_rect, "戻る", 16,
                             with_alpha(button_base, normal_row_alpha), with_alpha(button_hover, hover_row_alpha), with_alpha(t.text, alpha), 1.5f);
 
     if (view_mode == mode::play) {

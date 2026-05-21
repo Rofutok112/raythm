@@ -14,7 +14,7 @@ int snap_tick(const editor_timeline_context& context, int raw_tick) {
 }
 
 int seek_tick(int raw_tick) {
-    return std::max(0, raw_tick);
+    return raw_tick;
 }
 
 std::optional<int> lane_at_position(const editor_timeline_context& context, Vector2 point) {

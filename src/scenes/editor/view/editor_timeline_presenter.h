@@ -17,9 +17,6 @@ struct editor_timeline_presenter_model {
     int waveform_offset_ms = 0;
     bool audio_loaded = false;
     int playback_tick = 0;
-    bool loop_enabled = false;
-    int loop_start_tick = 0;
-    int loop_end_tick = 0;
     std::vector<size_t> selected_note_indices;
     std::optional<size_t> selected_scroll_event_index;
     std::vector<note_data> preview_notes;

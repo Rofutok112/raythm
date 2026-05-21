@@ -118,7 +118,8 @@ void play_scene::update(float dt) {
 
     const audio_clock_snapshot bgm_clock = audio_manager::instance().get_bgm_clock();
     context.bgm_loaded = bgm_clock.loaded;
-    if (bgm_clock.loaded) {
+    context.bgm_playing = bgm_clock.playing;
+    if (bgm_clock.loaded && bgm_clock.playing) {
         context.audio_clock_time_ms = bgm_clock.audio_time_seconds * 1000.0;
     }
 

@@ -36,6 +36,20 @@ chart_data make_chart() {
     return data;
 }
 
+chart_data make_negative_offset_chart() {
+    chart_data data = make_chart();
+    data.meta.chart_id = "negative-offset-transport-smoke";
+    data.meta.offset = -300;
+    return data;
+}
+
+chart_data make_positive_offset_chart() {
+    chart_data data = make_chart();
+    data.meta.chart_id = "positive-offset-transport-smoke";
+    data.meta.offset = 300;
+    return data;
+}
+
 }  // namespace
 
 int main() {
@@ -108,22 +122,57 @@ int main() {
     }
 
     {
+        const auto negative_offset_state = std::make_shared<editor_state>(make_negative_offset_chart(), "");
         editor_transport_context context;
-        context.state = state.get();
+        context.state = negative_offset_state.get();
         context.audio_loaded = true;
-        context.previous_playback_tick = 700;
-        context.previous_audio_playing = true;
-        context.loop_enabled = true;
-        context.loop_start_tick = 240;
-        context.loop_end_tick = 960;
-        context.bgm_clock = audio_clock_snapshot{true, true, 0.0, state->engine().tick_to_ms(1000) / 1000.0, 0.0, 0.0};
+        context.playback_tick = 0;
+        context.bgm_clock = audio_clock_snapshot{true, false, 0.0, 0.0, 0.0, 0.0};
         context.bgm_length_seconds = 8.0;
 
         const editor_transport_result result = editor_transport_controller::sync(context);
-        if (!result.loop_seeked || !result.seek_bgm_seconds.has_value() ||
-            !nearly_equal(*result.seek_bgm_seconds, state->engine().tick_to_ms(240) / 1000.0) ||
-            result.playback_tick != 240 || result.previous_playback_tick != 240) {
-            std::cerr << "sync should seek to loop start after crossing loop end\n";
+        if (!result.audio_loaded || result.audio_playing || result.playback_tick != 0 ||
+            !nearly_equal(result.audio_time_seconds, -0.3)) {
+            std::cerr << "stopped sync should preserve editor tick before audio zero\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        const auto negative_offset_state = std::make_shared<editor_state>(make_negative_offset_chart(), "");
+        editor_transport_context context;
+        context.state = negative_offset_state.get();
+        context.audio_loaded = true;
+        context.audio_playing = false;
+        context.playback_tick = 0;
+
+        const editor_transport_result start = editor_transport_controller::toggle_playback(context);
+        if (start.request_play_bgm || !start.pre_audio_playing ||
+            !nearly_equal(start.audio_time_seconds, -0.3) ||
+            start.next_space_playback_start_tick != 0) {
+            std::cerr << "toggle_playback should start pre-audio playback before audio zero\n";
+            return EXIT_FAILURE;
+        }
+
+        context.pre_audio_playing = true;
+        context.audio_time_seconds = -0.3;
+        context.bgm_clock = audio_clock_snapshot{true, false, 0.0, 0.0, 0.0, 0.0};
+        context.dt = 0.2;
+        const editor_transport_result before_zero = editor_transport_controller::sync(context);
+        if (!before_zero.pre_audio_playing || before_zero.request_play_bgm ||
+            !nearly_equal(before_zero.audio_time_seconds, -0.1) ||
+            before_zero.playback_tick != 192) {
+            std::cerr << "pre-audio playback should advance editor time before audio starts\n";
+            return EXIT_FAILURE;
+        }
+
+        context.audio_time_seconds = -0.1;
+        context.dt = 0.2;
+        const editor_transport_result reaches_zero = editor_transport_controller::sync(context);
+        if (reaches_zero.pre_audio_playing || !reaches_zero.request_play_bgm ||
+            !nearly_equal(reaches_zero.audio_time_seconds, 0.0) ||
+            reaches_zero.playback_tick != 288) {
+            std::cerr << "pre-audio playback should request BGM at audio zero\n";
             return EXIT_FAILURE;
         }
     }
@@ -154,6 +203,33 @@ int main() {
         if (!result.seek_bgm_seconds.has_value() ||
             !nearly_equal(*result.seek_bgm_seconds, state->engine().tick_to_ms(480) / 1000.0)) {
             std::cerr << "seek_to_tick should convert tick to audio seconds\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        const auto positive_offset_state = std::make_shared<editor_state>(make_positive_offset_chart(), "");
+        editor_transport_context context;
+        context.state = positive_offset_state.get();
+        context.audio_loaded = true;
+
+        const editor_transport_result result = editor_transport_controller::seek_to_tick(context, -240);
+        if (!result.seek_bgm_seconds.has_value() ||
+            !nearly_equal(*result.seek_bgm_seconds, 0.05)) {
+            std::cerr << "seek_to_tick should allow pre-chart ticks before 1:1\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        editor_transport_context context;
+        context.state = state.get();
+        context.audio_loaded = true;
+
+        const editor_transport_result result = editor_transport_controller::seek_to_tick(context, -240);
+        if (!result.seek_bgm_seconds.has_value() ||
+            !nearly_equal(*result.seek_bgm_seconds, -0.25)) {
+            std::cerr << "seek_to_tick should preserve negative pre-audio seconds\n";
             return EXIT_FAILURE;
         }
     }

@@ -104,6 +104,10 @@ std::string build_ranking_url(const std::string& server_url, const std::string& 
     return server_url + "/charts/" + chart_id + "/rankings?page=1&pageSize=" + std::to_string(clamped_limit);
 }
 
+std::string build_my_ranking_url(const std::string& server_url, const std::string& chart_id) {
+    return server_url + "/charts/" + chart_id + "/rankings/me";
+}
+
 std::string build_submit_ranking_url(const std::string& server_url, const std::string& chart_id) {
     return server_url + "/charts/" + chart_id + "/rankings";
 }
@@ -363,6 +367,60 @@ operation_result fetch_chart_ranking(const std::string& server_url,
         .message = listing->message,
         .listing = listing,
     };
+}
+
+personal_best_operation_result fetch_my_chart_ranking(const std::string& server_url,
+                                                      const std::string& access_token,
+                                                      const std::string& chart_id) {
+    personal_best_operation_result result;
+    if (server_url.empty()) {
+        result.message = "No server URL is configured.";
+        return result;
+    }
+    if (access_token.empty()) {
+        result.unauthorized = true;
+        result.message = "Sign in to view your online best.";
+        return result;
+    }
+    if (chart_id.empty()) {
+        result.message = "No chart selected.";
+        return result;
+    }
+
+    const http_response response = send_request(
+        "GET",
+        build_my_ranking_url(server_url, chart_id),
+        {
+            {"Accept", "application/json"},
+            {"Authorization", "Bearer " + access_token},
+            {"User-Agent", "raythm/0.1"},
+        });
+
+    if (!response.error_message.empty()) {
+        result.message = response.error_message;
+        return result;
+    }
+    if (response.status_code == 401) {
+        result.unauthorized = true;
+        result.message = "Sign in to view your online best.";
+        return result;
+    }
+    if (response.status_code == 404) {
+        result.success = true;
+        return result;
+    }
+    if (response.status_code < 200 || response.status_code >= 300) {
+        apply_error_classification(result, classify_response_error(response, "Failed to load your online best."));
+        return result;
+    }
+
+    if (const auto entry_object = json::extract_object(response.body, "entry"); entry_object.has_value()) {
+        result.entry = parse_ranking_entry(*entry_object);
+    } else {
+        result.entry = parse_ranking_entry(response.body);
+    }
+    result.success = true;
+    return result;
 }
 
 submit_operation_result submit_chart_ranking(const std::string& server_url,

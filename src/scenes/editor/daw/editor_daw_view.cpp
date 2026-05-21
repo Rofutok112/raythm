@@ -17,6 +17,7 @@
 #include "ui_text_input.h"
 #include "ui/icons/raythm_icons.h"
 #include "ui_layout.h"
+#include "ui_tooltip.h"
 #include "virtual_screen.h"
 
 namespace {
@@ -493,9 +494,6 @@ editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_m
         model.selected_note_indices,
         model.selected_scroll_event_index,
         model.audio_loaded ? std::optional<int>(model.playback_tick) : std::nullopt,
-        model.loop_enabled,
-        model.loop_start_tick,
-        model.loop_end_tick,
         model.waveform_summary,
         &model.state.engine(),
         model.waveform_visible,
@@ -1247,12 +1245,11 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
         ? draw_icon_button(play_rect, raythm_icons::draw_pause, true, t.accent)
         : draw_icon_button(play_rect, raythm_icons::draw_play, false, t.text);
     result.playback_toggled = play_button.clicked;
-    const Rectangle loop_button_rect = {play_rect.x + play_rect.width + transport_button_gap, play_rect.y,
-                                        transport_button_size, transport_button_size};
-    const ui::button_state loop_button = draw_icon_button(loop_button_rect, raythm_icons::draw_repeat_2,
-                                                          model.loop_enabled, t.success);
-    result.loop_toggled = loop_button.clicked;
-
+    const Rectangle playtest_rect = {play_rect.x + play_rect.width + transport_button_gap, play_rect.y,
+                                     transport_button_size, transport_button_size};
+    result.playtest_requested =
+        draw_icon_button(playtest_rect, raythm_icons::draw_flask_conical, false, t.text).clicked;
+    ui::enqueue_hover_tooltip(playtest_rect, "プレイテスト");
     const ui::dropdown_state dropdown = ui::enqueue_dropdown(
         layout::kSnapDropdownRect, snap_menu_rect,
         "Snap", model.snap_labels[model.snap_index],
@@ -1302,17 +1299,6 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
             lane_rect.height = arrange.height;
             ui::draw_rect_f(lane_rect, lane % 2 == 0 ? with_alpha(t.row, 28) : with_alpha(t.section, 36));
             ui::draw_rect_lines(lane_rect, 1.0f, with_alpha(t.border_light, 150));
-        }
-
-        if (model.loop_end_tick > model.loop_start_tick &&
-            model.loop_end_tick >= model.min_tick && model.loop_start_tick <= model.max_tick) {
-            const float start_y = model.metrics.tick_to_y(model.loop_start_tick);
-            const float end_y = model.metrics.tick_to_y(model.loop_end_tick);
-            const Rectangle loop = {arrange.x, std::min(start_y, end_y), arrange.width,
-                                    std::max(8.0f, std::fabs(end_y - start_y))};
-            ui::draw_rect_f(loop, with_alpha(t.success, model.loop_enabled ? 48 : 20));
-            ui::draw_rect_lines(loop, model.loop_enabled ? 2.0f : 1.0f,
-                                with_alpha(t.success, model.loop_enabled ? 220 : 130));
         }
 
         const int snap_interval = std::max(1, model.snap_interval);

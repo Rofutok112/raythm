@@ -48,7 +48,7 @@ bool is_within_root(const std::filesystem::path& path, const std::filesystem::pa
     return true;
 }
 
-std::optional<rank> load_best_local_rank(const std::string& chart_id) {
+std::optional<ranking_service::entry> load_best_local_entry(const std::string& chart_id) {
     if (chart_id.empty()) {
         return std::nullopt;
     }
@@ -58,7 +58,7 @@ std::optional<rank> load_best_local_rank(const std::string& chart_id) {
     if (listing.entries.empty()) {
         return std::nullopt;
     }
-    return listing.entries.front().clear_rank();
+    return listing.entries.front();
 }
 
 std::string trim(std::string_view value) {
@@ -361,7 +361,10 @@ catalog_data load_catalog(bool calculate_missing_levels) {
                     chart.local_note_offset_ms = chart_offsets.contains(chart.meta.chart_id)
                         ? chart_offsets.at(chart.meta.chart_id)
                         : 0;
-                    chart.best_local_rank = load_best_local_rank(chart.meta.chart_id);
+                    if (const auto best = load_best_local_entry(chart.meta.chart_id)) {
+                        chart.best_local_rank = best->clear_rank();
+                        chart.best_local_score = best->score;
+                    }
                 }
                 std::sort(song.charts.begin(), song.charts.end(), chart_source_less);
             }
@@ -401,13 +404,15 @@ catalog_data load_catalog(bool calculate_missing_levels) {
             }
             const auto [min_bpm, max_bpm] = collect_bpm_range(effective_chart);
 
+            const auto best_local = load_best_local_entry(meta.chart_id);
             chart_option option{
                 chart_path,
                 meta,
                 content_status::local,
                 content_status::local,
                 chart_offsets.contains(meta.chart_id) ? chart_offsets.at(meta.chart_id) : 0,
-                load_best_local_rank(meta.chart_id),
+                best_local.has_value() ? std::optional<rank>(best_local->clear_rank()) : std::nullopt,
+                best_local.has_value() ? std::optional<int>(best_local->score) : std::nullopt,
                 static_cast<int>(parse_result.data->notes.size()),
                 min_bpm,
                 max_bpm,

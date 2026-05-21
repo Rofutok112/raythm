@@ -11,6 +11,8 @@
 #include "tween.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_tooltip.h"
+#include "ui/icons/raythm_icons.h"
 
 namespace {
 
@@ -40,6 +42,34 @@ constexpr float kEmbeddedChartScrollPadding = 8.0f;
 constexpr float kTagHeight = 23.0f;
 constexpr float kTagFontSize = 11.0f;
 constexpr float kChartMinDrawableHeight = 70.0f;
+constexpr float kModifiedStatusWidth = 22.0f;
+
+struct chart_columns {
+    Rectangle key;
+    Rectangle level;
+    Rectangle difficulty;
+    Rectangle creator;
+    Rectangle notes;
+    Rectangle status;
+    Rectangle rank;
+};
+
+chart_columns make_chart_columns(Rectangle row) {
+    return {
+        {row.x + 14.0f, row.y + 7.0f, 44.0f, 18.0f},
+        {row.x + 68.0f, row.y + 5.0f, 70.0f, 22.0f},
+        {row.x + 152.0f, row.y + 7.0f, 118.0f, 18.0f},
+        {row.x + 288.0f, row.y + 7.0f, 112.0f, 18.0f},
+        {row.x + row.width - 214.0f, row.y + 7.0f, 56.0f, 18.0f},
+        {row.x + row.width - 128.0f, row.y + 6.0f, 76.0f, 20.0f},
+        {row.x + row.width - 54.0f, row.y + 6.0f, 40.0f, 20.0f},
+    };
+}
+
+chart_columns make_chart_header_columns(Rectangle charts) {
+    Rectangle row = {charts.x, charts.y - 3.0f, charts.width, kChartRowHeight};
+    return make_chart_columns(row);
+}
 
 float row_height(const song_select::state& state, int index) {
     if (index != state.selected_song_index) {
@@ -115,6 +145,33 @@ Color key_mode_color(int key_count) {
     return theme.rank_b;
 }
 
+const char* rank_label(rank value) {
+    switch (value) {
+        case rank::ss: return "SS";
+        case rank::s: return "S";
+        case rank::aa: return "AA";
+        case rank::a: return "A";
+        case rank::b: return "B";
+        case rank::c: return "C";
+        case rank::f: return "F";
+    }
+    return "?";
+}
+
+Color rank_color(rank value) {
+    const auto& theme = *g_theme;
+    switch (value) {
+        case rank::ss: return theme.rank_ss;
+        case rank::s: return theme.rank_s;
+        case rank::aa: return theme.rank_aa;
+        case rank::a: return theme.rank_a;
+        case rank::b: return theme.rank_b;
+        case rank::c: return theme.rank_c;
+        case rank::f: return theme.rank_f;
+    }
+    return theme.text_secondary;
+}
+
 Rectangle chart_area_rect(Rectangle row) {
     return {row.x + 18.0f, row.y + 126.0f, row.width - 36.0f, row.height - 144.0f};
 }
@@ -145,20 +202,69 @@ void draw_tag(Rectangle rect, const std::string& label, unsigned char alpha) {
     ui::draw_text_in_rect(label.c_str(), static_cast<int>(kTagFontSize), rect, with_alpha(color, alpha), ui::text_align::center);
 }
 
-void draw_status_tag(Rectangle rect, content_status status, unsigned char alpha) {
+void draw_status_tag(Rectangle rect, content_status status, unsigned char alpha, int font_size = 11) {
     const Color color = content_status_badge::color(status);
+    if (status == content_status::modified) {
+        const float icon_size = std::max(1.0f, std::min(rect.width, rect.height) - 1.0f);
+        const Rectangle icon_rect = {
+            rect.x + (rect.width - icon_size) * 0.5f,
+            rect.y + (rect.height - icon_size) * 0.5f,
+            icon_size,
+            icon_size,
+        };
+        raythm_icons::draw_triangle_alert(icon_rect, with_alpha(color, alpha), 2.6f);
+        ui::enqueue_hover_tooltip(icon_rect, "変更されています", alpha);
+        return;
+    }
+
     ui::draw_rect_f(rect, with_alpha(g_theme->row_soft, static_cast<unsigned char>(70.0f * (static_cast<float>(alpha) / 255.0f))));
     ui::draw_rect_lines(rect, 1.0f, with_alpha(color, alpha));
-    ui::draw_text_in_rect(content_status_badge::label(status), static_cast<int>(kTagFontSize), rect, with_alpha(color, alpha), ui::text_align::center);
+    ui::draw_text_in_rect(content_status_badge::label(status), font_size, rect,
+                          with_alpha(color, alpha), ui::text_align::center);
 }
 
-void draw_status_tags(Rectangle anchor, content_status source_status, content_status status, unsigned char alpha) {
-    constexpr float kGap = 7.0f;
-    const bool show_source = content_status_badge::should_show_source(source_status, status);
-    if (show_source) {
-        draw_status_tag({anchor.x - anchor.width - kGap, anchor.y, anchor.width, anchor.height}, source_status, alpha);
+float status_tag_gap(content_status status) {
+    return status == content_status::modified ? 4.0f : 7.0f;
+}
+
+float status_tag_width(content_status status, int font_size) {
+    if (status == content_status::modified) {
+        return kModifiedStatusWidth;
     }
-    draw_status_tag(anchor, status, alpha);
+    return std::clamp(ui::measure_text_size(content_status_badge::label(status), static_cast<float>(font_size)).x + 18.0f,
+                      48.0f, 92.0f);
+}
+
+void draw_status_tags(Rectangle anchor, content_status source_status, content_status status, unsigned char alpha, int font_size = 11) {
+    const float status_width = status_tag_width(status, font_size);
+    const Rectangle status_rect = {
+        anchor.x + anchor.width - status_width,
+        anchor.y,
+        status_width,
+        anchor.height,
+    };
+    if (content_status_badge::should_show_source(source_status, status)) {
+        const float source_width = status_tag_width(source_status, font_size);
+        draw_status_tag({status_rect.x - source_width - status_tag_gap(status), anchor.y, source_width, anchor.height},
+                        source_status, alpha, font_size);
+    }
+    draw_status_tag(status_rect, status, alpha, font_size);
+}
+
+void draw_status_tags_fit(Rectangle bounds, content_status source_status, content_status status, unsigned char alpha, int font_size = 11) {
+    const float status_width = status_tag_width(status, font_size);
+    const Rectangle status_rect = {
+        bounds.x + bounds.width - status_width,
+        bounds.y,
+        status_width,
+        bounds.height,
+    };
+    if (content_status_badge::should_show_source(source_status, status)) {
+        const float source_width = status_tag_width(source_status, font_size);
+        draw_status_tag({status_rect.x - source_width - status_tag_gap(status), bounds.y, source_width, bounds.height},
+                        source_status, alpha, font_size);
+    }
+    draw_status_tag(status_rect, status, alpha, font_size);
 }
 
 void draw_chart_row(const song_select::chart_option& chart,
@@ -173,26 +279,31 @@ void draw_chart_row(const song_select::chart_option& chart,
     ui::draw_rect_f(row, with_alpha(selected ? config.button_selected : config.button_base, row_alpha));
     ui::draw_rect_lines(row, 1.0f, with_alpha(selected ? t.border_active : t.border_light, config.alpha));
 
+    const chart_columns columns = make_chart_columns(row);
     const Color key_color = key_mode_color(chart.meta.key_count);
     ui::draw_text_in_rect(key_mode_label(chart.meta.key_count).c_str(), 13,
-                          {row.x + 14.0f, row.y + 7.0f, 44.0f, 18.0f},
+                          columns.key,
                           with_alpha(key_color, config.alpha), ui::text_align::left);
-    draw_difficulty_level_badge(chart.meta.level, {row.x + 68.0f, row.y + 5.0f, 70.0f, 22.0f},
-                                12, config.alpha);
+    draw_difficulty_level_badge(chart.meta.level, columns.level, 12, config.alpha);
     ui::draw_text_in_rect(chart.meta.difficulty.c_str(), 13,
-                          {row.x + 152.0f, row.y + 7.0f, 132.0f, 18.0f},
+                          columns.difficulty,
                           with_alpha(t.text, config.alpha), ui::text_align::left);
     ui::draw_text_in_rect(chart.meta.chart_author.empty() ? "-" : chart.meta.chart_author.c_str(), 12,
-                          {row.x + 306.0f, row.y + 7.0f, 152.0f, 18.0f},
+                          columns.creator,
                           with_alpha(t.text_secondary, config.alpha), ui::text_align::left);
     ui::draw_text_in_rect(chart.note_count > 0 ? TextFormat("%d", chart.note_count) : "-",
                           12,
-                          {row.x + row.width - 138.0f, row.y + 7.0f, 70.0f, 18.0f},
+                          columns.notes,
                           with_alpha(t.text_secondary, config.alpha), ui::text_align::right);
+    draw_status_tags_fit(columns.status, chart.source_status, chart.status, config.alpha, 9);
     if (chart.best_local_rank.has_value()) {
-        ui::draw_text_in_rect("local", 10,
-                              {row.x + row.width - 58.0f, row.y + 7.0f, 44.0f, 18.0f},
-                              with_alpha(t.success, config.alpha), ui::text_align::right);
+        ui::draw_text_in_rect(rank_label(*chart.best_local_rank), 13,
+                              columns.rank,
+                              with_alpha(rank_color(*chart.best_local_rank), config.alpha), ui::text_align::right);
+    } else {
+        ui::draw_text_in_rect("-", 12,
+                              columns.rank,
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
     }
 }
 
@@ -496,7 +607,7 @@ void draw(const song_select::state& state, const draw_config& config) {
                                   with_alpha(t.text_muted, config.alpha), ui::text_align::right);
         }
         draw_status_tags({row.x + row.width - 124.0f, tag_y, 88.0f, kTagHeight},
-                         song.source_status, song.status, config.alpha);
+                         song.source_status, song.status, config.alpha, 11);
 
         if (!selected || state.selected_song_expand_t <= 0.02f) {
             continue;
@@ -511,16 +622,21 @@ void draw(const song_select::state& state, const draw_config& config) {
             static_cast<unsigned char>(static_cast<float>(config.alpha) * chart_t);
         ui::draw_rect_f(charts, with_alpha(t.panel, static_cast<unsigned char>(52.0f * chart_t * (static_cast<float>(config.alpha) / 255.0f))));
         ui::draw_rect_lines(charts, 1.0f, with_alpha(t.border_light, chart_alpha));
-        ui::draw_text_in_rect("CHARTS", 11,
-                              {charts.x + 12.0f, charts.y + 4.0f, 90.0f, 16.0f},
+        const chart_columns header_columns = make_chart_header_columns(charts);
+        ui::draw_text_in_rect("KEYS", 10,
+                              header_columns.key,
                               with_alpha(t.text_muted, chart_alpha), ui::text_align::left);
-        ui::draw_text_in_rect("LV", 10, {charts.x + 66.0f, charts.y + 4.0f, 48.0f, 16.0f},
+        ui::draw_text_in_rect("LV", 10, header_columns.level,
                               with_alpha(t.text_muted, chart_alpha), ui::text_align::left);
-        ui::draw_text_in_rect("DIFF", 10, {charts.x + 148.0f, charts.y + 4.0f, 70.0f, 16.0f},
+        ui::draw_text_in_rect("DIFF", 10, header_columns.difficulty,
                               with_alpha(t.text_muted, chart_alpha), ui::text_align::left);
-        ui::draw_text_in_rect("CREATOR", 10, {charts.x + 302.0f, charts.y + 4.0f, 100.0f, 16.0f},
+        ui::draw_text_in_rect("CREATOR", 10, header_columns.creator,
                               with_alpha(t.text_muted, chart_alpha), ui::text_align::left);
-        ui::draw_text_in_rect("NOTES", 10, {charts.x + charts.width - 138.0f, charts.y + 4.0f, 70.0f, 16.0f},
+        ui::draw_text_in_rect("NOTES", 10, header_columns.notes,
+                              with_alpha(t.text_muted, chart_alpha), ui::text_align::right);
+        ui::draw_text_in_rect("SOURCE", 10, header_columns.status,
+                              with_alpha(t.text_muted, chart_alpha), ui::text_align::center);
+        ui::draw_text_in_rect("RANK", 10, header_columns.rank,
                               with_alpha(t.text_muted, chart_alpha), ui::text_align::right);
 
         const auto filtered = song_select::filtered_charts_for_selected_song(state);

@@ -55,6 +55,7 @@ struct online_submit_result {
 };
 
 listing load_chart_ranking(const std::string& chart_id, source ranking_source, int limit = 50);
+std::optional<entry> load_chart_personal_best(const std::string& chart_id, source ranking_source);
 local_submit_result submit_local_result_detailed(const chart_meta& chart, const result_data& result);
 bool submit_local_result(const chart_meta& chart, const result_data& result);
 bool should_attempt_online_submit(const local_submit_result& local_result);

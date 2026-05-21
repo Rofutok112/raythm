@@ -70,26 +70,6 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
         }
     }
 
-    if (!editing_blocked && context.left_bracket_pressed) {
-        context.transport.loop_start_tick = context.state.snap_tick(context.transport.playback_tick, 4);
-        if (context.transport.loop_end_tick <= context.transport.loop_start_tick) {
-            context.transport.loop_end_tick = context.transport.loop_start_tick + context.state.data().meta.resolution * 4;
-        }
-        context.transport.loop_enabled = true;
-    }
-
-    if (!editing_blocked && context.right_bracket_pressed) {
-        context.transport.loop_end_tick = std::max(
-            context.transport.loop_start_tick + 1,
-            context.state.snap_tick(context.transport.playback_tick, 4));
-        context.transport.loop_enabled = true;
-    }
-
-    if (!editing_blocked && context.l_pressed &&
-        context.transport.loop_end_tick > context.transport.loop_start_tick) {
-        context.transport.loop_enabled = !context.transport.loop_enabled;
-    }
-
     if (!editing_blocked && context.delete_pressed) {
         const editor_note_edit_result edit_result =
             editor_note_edit_service::delete_selection(context.state, context.selected_note_indices);

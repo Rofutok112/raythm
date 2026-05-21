@@ -14,6 +14,7 @@ struct play_update_context {
     bool backspace_pressed = false;
     bool window_focused = true;
     bool bgm_loaded = false;
+    bool bgm_playing = false;
     std::optional<double> audio_clock_time_ms;
     bool input_already_updated = false;
     bool pause_resume_clicked = false;

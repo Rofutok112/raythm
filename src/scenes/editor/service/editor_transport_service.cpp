@@ -15,11 +15,13 @@ editor_transport_context build_context(const editor_transport_state& transport,
                                        const editor_state* state,
                                        const std::string& hitsound_path,
                                        const editor_hitsound_paths* hitsounds,
-                                       bool suppress_hitsounds) {
+                                       bool suppress_hitsounds,
+                                       double dt) {
     editor_transport_context context;
     context.state = state;
     context.audio_loaded = transport.audio_loaded;
     context.audio_playing = transport.audio_playing;
+    context.pre_audio_playing = transport.pre_audio_playing;
     context.audio_time_seconds = transport.audio_time_seconds;
     context.playback_tick = transport.playback_tick;
     context.previous_playback_tick = suppress_hitsounds
@@ -28,11 +30,9 @@ editor_transport_context build_context(const editor_transport_state& transport,
     context.previous_audio_playing = suppress_hitsounds
         ? false
         : transport.previous_audio_playing;
+    context.dt = dt;
     context.hitsound_path = &hitsound_path;
     context.hitsounds = hitsounds;
-    context.loop_enabled = transport.loop_enabled;
-    context.loop_start_tick = transport.loop_start_tick;
-    context.loop_end_tick = transport.loop_end_tick;
     if (transport.audio_loaded && audio_manager::instance().is_bgm_loaded()) {
         context.bgm_clock = audio_manager::instance().get_bgm_clock();
         context.bgm_length_seconds = audio_manager::instance().get_bgm_length_seconds();
@@ -46,14 +46,15 @@ void apply_result(editor_transport_state& transport,
                   const editor_hitsound_paths* hitsounds) {
     transport.audio_loaded = result.audio_loaded;
     transport.audio_playing = result.audio_playing;
+    transport.pre_audio_playing = result.pre_audio_playing;
     transport.audio_time_seconds = result.audio_time_seconds;
     transport.playback_tick = result.playback_tick;
     transport.previous_playback_tick = result.previous_playback_tick;
     transport.previous_audio_playing = result.previous_audio_playing;
     transport.audio_length_tick = result.audio_length_tick;
 
-    if (result.seek_bgm_seconds.has_value() && result.loop_seeked) {
-        audio_manager::instance().seek_bgm(*result.seek_bgm_seconds);
+    if (result.request_play_bgm && audio_manager::instance().is_bgm_loaded()) {
+        audio_manager::instance().play_bgm(false);
     }
 
     if (!result.hitsound_requests.empty()) {
@@ -74,12 +75,14 @@ void apply_result(editor_transport_state& transport,
 }
 
 std::string format_playback_time(double seconds) {
-    const int total_ms = std::max(0, static_cast<int>(std::lround(seconds * 1000.0)));
+    const bool negative = seconds < 0.0;
+    const int total_ms = std::max(0, static_cast<int>(std::lround(std::fabs(seconds) * 1000.0)));
     const int minutes = total_ms / 60000;
     const int whole_seconds = (total_ms / 1000) % 60;
     const int centiseconds = (total_ms % 1000) / 10;
     char buffer[32];
-    std::snprintf(buffer, sizeof(buffer), "%02d:%02d.%02d", minutes, whole_seconds, centiseconds);
+    std::snprintf(buffer, sizeof(buffer), "%s%02d:%02d.%02d",
+                  negative ? "-" : "", minutes, whole_seconds, centiseconds);
     return buffer;
 }
 
@@ -89,10 +92,11 @@ void editor_transport_service::sync(editor_transport_state& transport,
                                     const editor_state* state,
                                     const std::string& hitsound_path,
                                     const editor_hitsound_paths* hitsounds,
-                                    bool suppress_hitsounds) {
+                                    bool suppress_hitsounds,
+                                    double dt) {
     apply_result(
         transport,
-        editor_transport_controller::sync(build_context(transport, state, hitsound_path, hitsounds, suppress_hitsounds)),
+        editor_transport_controller::sync(build_context(transport, state, hitsound_path, hitsounds, suppress_hitsounds, dt)),
         hitsound_path,
         hitsounds);
 }
@@ -106,6 +110,8 @@ std::optional<int> editor_transport_service::toggle_playback(editor_transport_st
     context.state = state;
     context.audio_loaded = transport.audio_loaded;
     context.audio_playing = transport.audio_playing;
+    context.pre_audio_playing = transport.pre_audio_playing;
+    context.audio_time_seconds = transport.audio_time_seconds;
     context.playback_tick = transport.playback_tick;
     context.space_playback_start_tick = space_playback_start_tick;
 
@@ -115,8 +121,14 @@ std::optional<int> editor_transport_service::toggle_playback(editor_transport_st
 
     if (result.request_pause_bgm) {
         audio_manager::instance().pause_bgm();
+        transport.pre_audio_playing = false;
         if (result.seek_bgm_seconds.has_value()) {
             audio_manager::instance().seek_bgm(*result.seek_bgm_seconds);
+        }
+        if (restore_tick.has_value() && state != nullptr) {
+            transport.playback_tick = *restore_tick;
+            transport.previous_playback_tick = transport.playback_tick;
+            transport.previous_audio_playing = false;
         }
     } else if (result.request_play_bgm && audio_manager::instance().is_bgm_loaded()) {
         const double length_seconds = audio_manager::instance().get_bgm_length_seconds();
@@ -126,6 +138,15 @@ std::optional<int> editor_transport_service::toggle_playback(editor_transport_st
         audio_manager::instance().play_bgm(restart);
     }
 
+    transport.pre_audio_playing = result.pre_audio_playing;
+    if (result.pre_audio_playing) {
+        transport.audio_loaded = result.audio_loaded;
+        transport.audio_playing = false;
+        transport.audio_time_seconds = result.audio_time_seconds;
+        transport.playback_tick = result.playback_tick;
+        transport.previous_playback_tick = result.previous_playback_tick;
+        transport.previous_audio_playing = false;
+    }
     sync(transport, state, hitsound_path, hitsounds, true);
     return result.request_pause_bgm ? restore_tick : std::nullopt;
 }
@@ -136,6 +157,7 @@ void editor_transport_service::pause_for_seek(editor_transport_state& transport,
                                               const std::string& hitsound_path,
                                               const editor_hitsound_paths* hitsounds) {
     audio_manager::instance().pause_bgm();
+    transport.pre_audio_playing = false;
     space_playback_start_tick.reset();
     sync(transport, state, hitsound_path, hitsounds, true);
 }
@@ -154,6 +176,12 @@ void editor_transport_service::seek_to_tick(editor_transport_state& transport,
     }
 
     audio_manager::instance().seek_bgm(*result.seek_bgm_seconds);
+    transport.playback_tick = tick;
+    transport.previous_playback_tick = transport.playback_tick;
+    transport.previous_audio_playing = false;
+    transport.audio_time_seconds = *result.seek_bgm_seconds;
+    transport.audio_playing = false;
+    transport.pre_audio_playing = false;
     sync(transport, state, hitsound_path, hitsounds, true);
 }
 
@@ -162,6 +190,6 @@ std::string editor_transport_service::playback_status_text(const editor_transpor
         return "No audio";
     }
 
-    return std::string(transport.audio_playing ? "Playing " : "Paused ") +
+    return std::string((transport.audio_playing || transport.pre_audio_playing) ? "Playing " : "Paused ") +
         format_playback_time(transport.audio_time_seconds);
 }
