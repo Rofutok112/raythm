@@ -41,10 +41,11 @@ if(NOT RAYTHM_API_BASE_URL STREQUAL "")
 endif()
 
 include(FetchContent)
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 FetchContent_Declare(
         raylib
-        GIT_REPOSITORY  https://github.com/raysan5/raylib.git
-        GIT_TAG         5.5
+        URL https://github.com/raysan5/raylib/archive/refs/tags/5.5.zip
+        URL_HASH SHA256=00e8a7c85f7a5221e56ee8e4e1c6642b773eae73d29379a91c8ac5149e803f42
 )
 FetchContent_MakeAvailable(raylib)
 
