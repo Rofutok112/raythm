@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "audio_loudness.h"
+
 class audio;
 
 struct audio_clock_snapshot {
@@ -39,6 +41,10 @@ public:
     void fade_out_bgm(unsigned int duration_ms);
     void stop_bgm();
     void set_bgm_volume(float volume);
+    void set_loudness_normalization_enabled(bool enabled);
+    bool is_loudness_normalization_enabled() const;
+    audio_loudness_analysis get_bgm_loudness_analysis() const;
+    audio_loudness_analysis get_preview_loudness_analysis() const;
     void seek_bgm(double seconds);
     bool is_bgm_loaded() const;
     bool is_bgm_playing() const;
@@ -112,6 +118,7 @@ private:
     bool ensure_initialized();
     unsigned long create_stream(const std::string& file_path) const;
     void replace_voice(unsigned long& handle, const std::string& file_path) const;
+    audio_loudness_analysis analyze_or_get_cached_loudness(const std::string& file_path) const;
     void apply_bgm_volume() const;
     void apply_preview_volume() const;
 
@@ -120,6 +127,10 @@ private:
     float bgm_volume_ = 1.0f;
     float preview_volume_ = 1.0f;
     float se_volume_ = 1.0f;
+    bool loudness_normalization_enabled_ = false;
+    std::string preview_path_;
+    audio_loudness_analysis bgm_loudness_;
+    audio_loudness_analysis preview_loudness_;
     unsigned long bgm_handle_ = 0;
     unsigned long preview_handle_ = 0;
     std::future<preview_load_payload> preview_load_future_;

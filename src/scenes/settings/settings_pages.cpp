@@ -159,6 +159,12 @@ void settings_audio_page::update() {
             runtime_applier_.apply_se_volume(settings_.se_volume);
         }
     }
+
+    if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[2]), settings::kLayer) ||
+        ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[2]), settings::kLayer)) {
+        settings_.loudness_normalization_enabled = !settings_.loudness_normalization_enabled;
+        runtime_applier_.apply_loudness_normalization(settings_.loudness_normalization_enabled);
+    }
 }
 
 void settings_audio_page::draw() const {
@@ -174,6 +180,10 @@ void settings_audio_page::draw() const {
                                  settings::kSliderLeftInset, settings::kSliderRightInset,
                                  settings::kLayer, 22, settings::kSliderTopOffset);
     }
+
+    ui::draw_value_selector(settings::kGeneralRows[2], ltr(text_key::loudness_normalization),
+                            settings_.loudness_normalization_enabled ? ltr(text_key::enabled) : ltr(text_key::disabled),
+                            settings::kLayer);
 }
 
 settings_video_page::settings_video_page(game_settings& settings, const settings_runtime_applier& runtime_applier)

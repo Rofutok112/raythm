@@ -25,6 +25,7 @@ int main() {
     set_theme(g_settings.dark_mode);
     audio_manager::instance().set_bgm_volume(g_settings.bgm_volume);
     audio_manager::instance().set_se_volume(g_settings.se_volume);
+    audio_manager::instance().set_loudness_normalization_enabled(g_settings.loudness_normalization_enabled);
 
 #ifdef _WIN32
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_UNDECORATED);

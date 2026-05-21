@@ -19,6 +19,10 @@ void settings_runtime_applier::apply_se_volume(float volume) const {
     audio_manager::instance().set_se_volume(volume);
 }
 
+void settings_runtime_applier::apply_loudness_normalization(bool enabled) const {
+    audio_manager::instance().set_loudness_normalization_enabled(enabled);
+}
+
 void settings_runtime_applier::apply_fullscreen(bool fullscreen) const {
     if (fullscreen) {
         g_settings.window_maximized = window_chrome::is_maximized();
