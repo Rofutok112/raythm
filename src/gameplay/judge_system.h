@@ -83,6 +83,9 @@ private:
     std::vector<size_t> find_press_candidates(int lane, double timestamp_ms);
     std::vector<size_t> find_release_candidates(int lane, double timestamp_ms,
                                                 std::optional<input_session_id> input_id);
+    void complete_stays_stacked_with_hold_tail_release(const chart_judge_event& hold_tail,
+                                                       double timestamp_ms,
+                                                       judge_result hold_result);
     bool arm_release_candidate(input_session_id input_id, double timestamp_ms);
     void arm_stay_candidate(input_session_id input_id, double timestamp_ms);
     bool complete_armed_stay_candidate(input_session* input, const input_event& event);

@@ -219,6 +219,9 @@ void judge_system::handle_hold_release(const input_event& event) {
                 options.show_feedback = false;
             }
             complete_event(release_candidate, result, offset_ms, options);
+            if (descriptor.role == chart_judge_event_role::hold_tail) {
+                complete_stays_stacked_with_hold_tail_release(descriptor, event.timestamp_ms, result);
+            }
         }
         const chart_judge_event& descriptor = event_descriptors_[release_candidates.front()];
         const double offset_ms = event.timestamp_ms - descriptor.time_ms;
@@ -897,6 +900,35 @@ std::vector<size_t> judge_system::find_release_candidates(int lane, double times
         }
     }
     return candidates;
+}
+
+void judge_system::complete_stays_stacked_with_hold_tail_release(const chart_judge_event& hold_tail,
+                                                                 double timestamp_ms,
+                                                                 judge_result hold_result) {
+    if (hold_result > judge_result::great) {
+        return;
+    }
+
+    const int hold_tail_last_lane = hold_tail.lane + std::max(1, hold_tail.lane_width) - 1;
+    for (size_t event_index = 0; event_index < event_descriptors_.size(); ++event_index) {
+        if (event_completed_[event_index]) {
+            continue;
+        }
+
+        const chart_judge_event& descriptor = event_descriptors_[event_index];
+        if (descriptor.kind != chart_judge_event_kind::stay ||
+            !same_judgement_time(descriptor.time_ms, hold_tail.time_ms)) {
+            continue;
+        }
+
+        const int descriptor_last_lane = descriptor.lane + std::max(1, descriptor.lane_width) - 1;
+        if (hold_tail.lane > descriptor_last_lane || descriptor.lane > hold_tail_last_lane) {
+            continue;
+        }
+
+        const double offset_ms = timestamp_ms - descriptor.time_ms;
+        complete_event(event_index, evaluate_stay_offset(offset_ms), offset_ms);
+    }
 }
 
 bool judge_system::arm_release_candidate(input_session_id input_id, double timestamp_ms) {
