@@ -163,22 +163,22 @@ struct login_dialog_state {
     ui::text_input_state verification_code_input;
 };
 
-struct state {
+struct catalog_state {
     std::vector<song_entry> songs;
     std::vector<std::string> load_errors;
     std::shared_ptr<jacket_cache> jackets;
     bool catalog_loading = false;
     bool catalog_loaded_once = false;
+};
+
+struct selection_state {
     int selected_song_index = 0;
     int difficulty_index = 0;
-    float scroll_y = 0.0f;
-    float scroll_y_target = 0.0f;
-    float chart_scroll_y = 0.0f;
-    float chart_scroll_y_target = 0.0f;
-    float embedded_chart_scroll_y = 0.0f;
-    float embedded_chart_scroll_y_target = 0.0f;
     bool selected_song_expanded = true;
     float selected_song_expand_t = 1.0f;
+};
+
+struct filter_state {
     ui::text_input_state play_search_input;
     chart_source_filter chart_source = chart_source_filter::all;
     int chart_key_filter = 0;
@@ -186,20 +186,88 @@ struct state {
     float chart_max_level = 99.0f;
     bool chart_level_filter_dragging = false;
     bool chart_level_filter_dragging_min = false;
+};
+
+struct scroll_state {
+    float scroll_y = 0.0f;
+    float scroll_y_target = 0.0f;
+    float chart_scroll_y = 0.0f;
+    float chart_scroll_y_target = 0.0f;
+    float embedded_chart_scroll_y = 0.0f;
+    float embedded_chart_scroll_y_target = 0.0f;
+    bool scrollbar_dragging = false;
+    float scrollbar_drag_offset = 0.0f;
+};
+
+struct preview_state {
     bool preview_bar_dragging = false;
     bool preview_bar_resume_after_drag = false;
     double preview_bar_drag_position_seconds = 0.0;
     float song_change_anim_t = 0.0f;
     float chart_change_anim_t = 0.0f;
     scene_fade scene_fade_in{scene_fade::direction::in, 0.3f, 0.65f};
-    bool scrollbar_dragging = false;
-    float scrollbar_drag_offset = 0.0f;
+    std::optional<recent_result_offset> recent_result_offset;
+};
+
+struct dialog_state {
     context_menu_state context_menu;
     confirmation_dialog_state confirmation_dialog;
-    std::optional<recent_result_offset> recent_result_offset;
-    ranking_panel_state ranking_panel;
+};
+
+struct auth_ui_state {
     auth_state auth;
     login_dialog_state login_dialog;
+};
+
+struct state {
+    state();
+    state(const state& other);
+    state& operator=(const state& other);
+
+    catalog_state catalog;
+    selection_state selection;
+    filter_state filter;
+    scroll_state scroll;
+    preview_state preview;
+    dialog_state dialog;
+    ranking_panel_state ranking_panel;
+    auth_ui_state auth_ui;
+
+    std::vector<song_entry>& songs;
+    std::vector<std::string>& load_errors;
+    std::shared_ptr<jacket_cache>& jackets;
+    bool& catalog_loading;
+    bool& catalog_loaded_once;
+    int& selected_song_index;
+    int& difficulty_index;
+    float& scroll_y;
+    float& scroll_y_target;
+    float& chart_scroll_y;
+    float& chart_scroll_y_target;
+    float& embedded_chart_scroll_y;
+    float& embedded_chart_scroll_y_target;
+    bool& selected_song_expanded;
+    float& selected_song_expand_t;
+    ui::text_input_state& play_search_input;
+    chart_source_filter& chart_source;
+    int& chart_key_filter;
+    float& chart_min_level;
+    float& chart_max_level;
+    bool& chart_level_filter_dragging;
+    bool& chart_level_filter_dragging_min;
+    bool& preview_bar_dragging;
+    bool& preview_bar_resume_after_drag;
+    double& preview_bar_drag_position_seconds;
+    float& song_change_anim_t;
+    float& chart_change_anim_t;
+    scene_fade& scene_fade_in;
+    bool& scrollbar_dragging;
+    float& scrollbar_drag_offset;
+    context_menu_state& context_menu;
+    confirmation_dialog_state& confirmation_dialog;
+    std::optional<recent_result_offset>& recent_result_offset;
+    auth_state& auth;
+    login_dialog_state& login_dialog;
 };
 
 const song_entry* selected_song(const state& state);

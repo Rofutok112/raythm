@@ -9,29 +9,16 @@
 #include "ui_notice.h"
 
 void title_play_data_controller::reset(song_select::state& state) {
-    catalog_loading_ = false;
-    catalog_reload_pending_ = false;
+    data_controller_.reset(state);
     catalog_sync_media_on_apply_ = false;
     queued_catalog_sync_media_on_apply_ = false;
-    catalog_calculate_missing_levels_ = false;
-    queued_catalog_calculate_missing_levels_ = false;
-    catalog_song_id_.clear();
-    catalog_chart_id_.clear();
-    queued_catalog_song_id_.clear();
-    queued_catalog_chart_id_.clear();
-
-    ranking_loading_ = false;
-    ranking_reload_pending_ = false;
-    ranking_generation_ = 0;
-    ranking_pending_generation_ = 0;
-    state.ranking_panel.selected_source = ranking_service::source::local;
 
     scoring_ruleset_loading_ = false;
     upload_in_progress_ = false;
 }
 
 bool title_play_data_controller::catalog_loading() const {
-    return catalog_loading_;
+    return data_controller_.catalog_loading();
 }
 
 bool title_play_data_controller::scoring_ruleset_loading() const {
@@ -47,20 +34,18 @@ void title_play_data_controller::request_catalog_reload(song_select::state& stat
                                                         std::string preferred_chart_id,
                                                         bool sync_media_on_apply,
                                                         bool calculate_missing_levels) {
-    if (catalog_loading_) {
-        catalog_reload_pending_ = true;
-        queued_catalog_song_id_ = std::move(preferred_song_id);
-        queued_catalog_chart_id_ = std::move(preferred_chart_id);
+    if (data_controller_.catalog_loading()) {
         queued_catalog_sync_media_on_apply_ =
             queued_catalog_sync_media_on_apply_ || sync_media_on_apply;
-        queued_catalog_calculate_missing_levels_ =
-            queued_catalog_calculate_missing_levels_ || calculate_missing_levels;
-        state.catalog_loading = true;
-        return;
+    } else {
+        catalog_sync_media_on_apply_ = sync_media_on_apply;
     }
 
-    start_catalog_load(state, std::move(preferred_song_id), std::move(preferred_chart_id),
-                       sync_media_on_apply, calculate_missing_levels);
+    data_controller_.request_catalog_reload(
+        state,
+        song_select::catalog_reload_request{std::move(preferred_song_id),
+                                            std::move(preferred_chart_id),
+                                            calculate_missing_levels});
 }
 
 title_play_data_controller::catalog_poll_result title_play_data_controller::poll_catalog_reload(
@@ -68,102 +53,29 @@ title_play_data_controller::catalog_poll_result title_play_data_controller::poll
     bool play_mode_active,
     bool create_mode_active) {
     catalog_poll_result result;
-    if (!catalog_loading_) {
-        return result;
-    }
-    if (catalog_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+    const song_select::catalog_reload_result reload = data_controller_.poll_catalog_reload(state);
+    if (!reload.completed) {
         return result;
     }
 
-    try {
-        song_select::apply_catalog(state, catalog_future_.get(), catalog_song_id_, catalog_chart_id_);
-    } catch (const std::exception& ex) {
-        song_select::apply_catalog(state, {}, catalog_song_id_, catalog_chart_id_);
-        state.load_errors = {ex.what()};
-    }
-    catalog_loading_ = false;
     result.sync_play_media = catalog_sync_media_on_apply_ || play_mode_active;
     result.sync_create_preview = !result.sync_play_media && create_mode_active;
     catalog_sync_media_on_apply_ = false;
-    catalog_calculate_missing_levels_ = false;
 
-    if (catalog_reload_pending_) {
-        catalog_reload_pending_ = false;
-        start_catalog_load(state, queued_catalog_song_id_, queued_catalog_chart_id_,
-                           queued_catalog_sync_media_on_apply_,
-                           queued_catalog_calculate_missing_levels_);
-        queued_catalog_song_id_.clear();
-        queued_catalog_chart_id_.clear();
+    if (reload.queued_reload_started) {
+        catalog_sync_media_on_apply_ = queued_catalog_sync_media_on_apply_;
         queued_catalog_sync_media_on_apply_ = false;
-        queued_catalog_calculate_missing_levels_ = false;
     }
 
     return result;
 }
 
 void title_play_data_controller::request_ranking_reload(song_select::state& state) {
-    if (ranking_loading_) {
-        ++ranking_generation_;
-        ranking_reload_pending_ = true;
-        if (state.ranking_panel.selected_source == ranking_service::source::online) {
-            state.ranking_panel.listing = {};
-            state.ranking_panel.listing.ranking_source = state.ranking_panel.selected_source;
-            state.ranking_panel.listing.available = false;
-            state.ranking_panel.listing.message = "Loading online rankings...";
-        }
-        return;
-    }
-
-    const auto filtered = song_select::filtered_charts_for_selected_song(state);
-    const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
-    const std::string chart_id = chart != nullptr ? chart->meta.chart_id : "";
-    const ranking_service::source source = state.ranking_panel.selected_source;
-
-    ++ranking_generation_;
-    ranking_pending_generation_ = ranking_generation_;
-    state.ranking_panel.source_dropdown_open = false;
-    state.ranking_panel.scroll_y = 0.0f;
-    state.ranking_panel.scroll_y_target = 0.0f;
-    state.ranking_panel.scrollbar_dragging = false;
-    state.ranking_panel.scrollbar_drag_offset = 0.0f;
-
-    if (source == ranking_service::source::online) {
-        state.ranking_panel.listing = {};
-        state.ranking_panel.listing.ranking_source = source;
-        state.ranking_panel.listing.available = false;
-        state.ranking_panel.listing.message = "Loading online rankings...";
-    }
-
-    start_ranking_load(state, chart_id, source);
+    data_controller_.request_ranking_reload(state);
 }
 
 void title_play_data_controller::poll_ranking_reload(song_select::state& state) {
-    if (!ranking_loading_) {
-        return;
-    }
-    if (ranking_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
-        return;
-    }
-
-    ranking_service::listing listing;
-    try {
-        listing = ranking_future_.get();
-    } catch (const std::exception& ex) {
-        listing.available = false;
-        listing.message = ex.what();
-        listing.ranking_source = state.ranking_panel.selected_source;
-    }
-    ranking_loading_ = false;
-    const bool stale = ranking_pending_generation_ != ranking_generation_;
-    if (!stale) {
-        state.ranking_panel.listing = std::move(listing);
-        state.ranking_panel.reveal_anim = 0.0f;
-    }
-
-    if (ranking_reload_pending_) {
-        ranking_reload_pending_ = false;
-        request_ranking_reload(state);
-    }
+    data_controller_.poll_ranking_reload(state);
 }
 
 void title_play_data_controller::request_scoring_ruleset_warm(bool force_refresh) {
@@ -268,34 +180,9 @@ void title_play_data_controller::start_catalog_load(song_select::state& state,
                                                     std::string preferred_chart_id,
                                                     bool sync_media_on_apply,
                                                     bool calculate_missing_levels) {
-    catalog_song_id_ = std::move(preferred_song_id);
-    catalog_chart_id_ = std::move(preferred_chart_id);
-    catalog_sync_media_on_apply_ = sync_media_on_apply;
-    catalog_calculate_missing_levels_ = calculate_missing_levels;
-    catalog_loading_ = true;
-    state.catalog_loading = true;
-    std::promise<song_select::catalog_data> promise;
-    catalog_future_ = promise.get_future();
-    std::thread([promise = std::move(promise), calculate_missing_levels]() mutable {
-        try {
-            promise.set_value(song_select::load_catalog(calculate_missing_levels));
-        } catch (...) {
-            promise.set_exception(std::current_exception());
-        }
-    }).detach();
-}
-
-void title_play_data_controller::start_ranking_load(song_select::state&,
-                                                    std::string chart_id,
-                                                    ranking_service::source source) {
-    ranking_loading_ = true;
-    std::promise<ranking_service::listing> promise;
-    ranking_future_ = promise.get_future();
-    std::thread([promise = std::move(promise), chart_id = std::move(chart_id), source]() mutable {
-        try {
-            promise.set_value(ranking_service::load_chart_ranking(chart_id, source, 50));
-        } catch (...) {
-            promise.set_exception(std::current_exception());
-        }
-    }).detach();
+    request_catalog_reload(state,
+                           std::move(preferred_song_id),
+                           std::move(preferred_chart_id),
+                           sync_media_on_apply,
+                           calculate_missing_levels);
 }

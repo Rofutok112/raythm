@@ -28,15 +28,13 @@ private:
 
     void draw_song_metadata();
     void draw_song_saved();
-    void draw_timing_summary(Rectangle rect);
-    void draw_timing_modal();
-    void draw_timing_editor(Rectangle rect, ui::draw_layer layer);
 
     bool create_song();
     bool save_song_edits();
     bool export_jacket_image(const std::filesystem::path& source_path,
                              const std::filesystem::path& song_dir,
-                             std::string& jacket_filename);
+                             std::string& jacket_filename,
+                             std::string& error_message);
     void ensure_timing_events_initialized();
     void sync_selected_timing_inputs();
     void add_timing_event(timing_event_type type);

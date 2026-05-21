@@ -793,7 +793,7 @@ void draw_world_background() {
 }
 
 void draw_world(const play_session_state& state, const play_note_draw_queue& draw_queue,
-                const Camera3D& camera, float lane_start_z, float judgement_z, float lane_end_z, double visual_ms) {
+                const Camera3D& camera, float lane_start_z, float judgement_z, float lane_end_z, double visual_time_ms) {
     for (int lane = 0; lane < state.key_count; ++lane) {
         const float center_x = lane_center_x(lane, state.key_count);
         const float lane_dim = std::clamp(state.lane_hold_dim_amounts[static_cast<std::size_t>(lane)], 0.0f, 1.0f);
@@ -820,7 +820,7 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
 
                     const Color note_color_for_type = note_draw_color(note_state, note_color);
                     const double head_visual_ms = draw_queue.visual_target_ms(idx);
-                    const float head_z = static_cast<float>(judgement_z + state.lane_speed * (head_visual_ms - visual_ms));
+                    const float head_z = static_cast<float>(judgement_z + state.lane_speed * (head_visual_ms - visual_time_ms));
                     const float center_x = note_center_x(note_state.note_ref, state.key_count);
                     const float visual_width = note_visual_width(note_state.note_ref);
                     const float body_width = note_body_width(note_state.note_ref);
@@ -828,7 +828,7 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
 
                     if (note_state.note_ref.type == note_type::hold) {
                         const double tail_target_ms = draw_queue.visual_end_target_ms(idx);
-                        const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_ms));
+                        const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_time_ms));
                         const float visual_head_z = note_state.is_holding() ? judgement_z : head_z;
                         const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);
                         const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);

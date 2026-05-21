@@ -57,13 +57,13 @@ void play_note_draw_queue::init_from_note_states(int key_count, const std::vecto
 
 void play_note_draw_queue::update_visible_window(const std::vector<note_state>& note_states, float lane_speed,
                                                  float judgement_z, float lane_start_z, float lane_end_z,
-                                                 double visual_ms) {
+                                                 double visual_time_ms) {
     for (int lane = 0; lane < key_count_; ++lane) {
         std::deque<size_t>& inactive = inactive_draw_notes_by_lane_[static_cast<size_t>(lane)];
         std::vector<size_t>& active = active_draw_notes_by_lane_[static_cast<size_t>(lane)];
         while (!inactive.empty()) {
             const size_t idx = inactive.front();
-            const float head_z = static_cast<float>(judgement_z + lane_speed * (note_visual_target_ms_[idx] - visual_ms));
+            const float head_z = static_cast<float>(judgement_z + lane_speed * (note_visual_target_ms_[idx] - visual_time_ms));
             if (head_z > lane_end_z) {
                 break;
             }
@@ -85,7 +85,7 @@ void play_note_draw_queue::update_visible_window(const std::vector<note_state>& 
             if (state.is_holding()) {
                 return false;
             }
-            const float head_z = static_cast<float>(judgement_z + lane_speed * (note_visual_target_ms_[idx] - visual_ms));
+            const float head_z = static_cast<float>(judgement_z + lane_speed * (note_visual_target_ms_[idx] - visual_time_ms));
             return head_z < lane_start_z;
         });
     }

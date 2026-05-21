@@ -137,7 +137,7 @@
 クライアント:
 
 - `src/scenes/result_scene.cpp`
-- `src/gameplay/ranking_service.cpp`
+- `src/services/ranking_service.cpp`
 - `src/network/ranking_client.cpp`
 
 サーバー:

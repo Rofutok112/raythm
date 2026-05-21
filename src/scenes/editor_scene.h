@@ -6,9 +6,9 @@
 #include <vector>
 
 #include "audio_waveform.h"
+#include "editor/controller/editor_timing_action_controller.h"
 #include "editor/editor_meter_map.h"
 #include "editor/editor_state.h"
-#include "editor/editor_timeline_view.h"
 #include "editor/editor_timing_panel.h"
 #include "editor/editor_panel_controller.h"
 #include "editor/editor_scene_sync.h"
@@ -36,13 +36,9 @@ private:
     editor_resume_state build_resume_state() const;
     editor_scene_sync_context make_sync_context();
     editor_timeline_viewport_model viewport_model() const;
-    std::optional<note_data> dragged_note() const;
-    std::vector<note_data> dragged_notes() const;
     std::vector<size_t> sorted_timing_event_indices() const;
     editor_timeline_metrics timeline_metrics() const;
-    int timeline_mouse_cursor(Vector2 mouse, const editor_timeline_metrics& metrics) const;
-    void update_mouse_cursor(Vector2 mouse, const editor_timeline_metrics& metrics) const;
-    int default_timing_event_tick() const;
+    editor_timing_action_controller::context timing_action_context();
     void apply_flow_result(const editor_flow_result& result);
     void rebuild_hit_regions() const;
     void apply_scroll_and_zoom(float dt);
@@ -50,16 +46,6 @@ private:
     void select_timing_event(std::optional<size_t> index, bool scroll_into_view);
     void select_scroll_event(std::optional<size_t> index, bool scroll_into_view);
     void scroll_to_tick(int tick);
-    bool apply_selected_timing_event();
-    bool apply_selected_scroll_event();
-    void cycle_selected_scroll_curve();
-    void add_timing_event(timing_event_type type);
-    void add_scroll_event();
-    void delete_selected_timing_event();
-    void delete_selected_scroll_event();
-    bool can_delete_selected_timing_event() const;
-    bool can_delete_selected_scroll_event() const;
-    editor_right_panel_view_result draw_timeline();
     bool has_active_metadata_input() const;
     bool apply_metadata_changes(bool clear_notes_for_key_count_change);
     bool apply_chart_offset(int offset_ms);
