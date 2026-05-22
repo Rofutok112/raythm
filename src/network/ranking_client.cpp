@@ -136,7 +136,7 @@ std::string judge_result_label(judge_result result) {
     return "miss";
 }
 
-std::string build_note_results_json(const std::vector<note_result_entry>& note_results) {
+std::string build_replay_events_json(const std::vector<note_result_entry>& note_results) {
     std::string json = "[";
     for (size_t i = 0; i < note_results.size(); ++i) {
         const note_result_entry& entry = note_results[i];
@@ -155,11 +155,13 @@ std::string build_note_results_json(const std::vector<note_result_entry>& note_r
 
 std::string build_submit_payload(const result_data& result,
                                  const std::string& recorded_at,
-                                 const std::string& ruleset_version) {
+                                 const std::string& ruleset_version,
+                                 const std::string& scoring_content_hash) {
     return "{"
         "\"recordedAt\":\"" + json::escape_string(recorded_at) + "\","
         "\"rulesetVersion\":\"" + json::escape_string(ruleset_version) + "\","
-        "\"noteResults\":" + build_note_results_json(result.note_results) +
+        "\"scoringContentHash\":\"" + json::escape_string(scoring_content_hash) + "\","
+        "\"replay\":{\"schemaVersion\":1,\"events\":" + build_replay_events_json(result.note_results) + "}" +
         "}";
 }
 
@@ -199,6 +201,9 @@ std::optional<ranking_client::chart_manifest> parse_chart_manifest_response(cons
         .jacket_sha256 = json::extract_string(body, "jacketSha256").value_or(""),
         .chart_sha256 = json::extract_string(body, "chartSha256").value_or(""),
         .chart_fingerprint = json::extract_string(body, "chartFingerprint").value_or(""),
+        .scoring_content_hash = json::extract_string(body, "scoringContentHash").value_or(""),
+        .scoring_ruleset_version = json::extract_string(body, "scoringRulesetVersion").value_or(""),
+        .judge_event_schema_version = json::extract_int(body, "judgeEventSchemaVersion").value_or(0),
     };
 }
 
@@ -428,7 +433,8 @@ submit_operation_result submit_chart_ranking(const std::string& server_url,
                                              const std::string& chart_id,
                                              const result_data& result,
                                              const std::string& recorded_at,
-                                             const std::string& ruleset_version) {
+                                             const std::string& ruleset_version,
+                                             const std::string& scoring_content_hash) {
     if (server_url.empty()) {
         return {
             .success = false,
@@ -456,7 +462,7 @@ submit_operation_result submit_chart_ranking(const std::string& server_url,
             {"Content-Type", "application/json"},
             {"User-Agent", "raythm/0.1"},
         },
-        build_submit_payload(result, recorded_at, ruleset_version));
+        build_submit_payload(result, recorded_at, ruleset_version, scoring_content_hash));
 
     if (!response.error_message.empty()) {
         return {

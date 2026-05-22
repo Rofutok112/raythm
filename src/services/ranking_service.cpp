@@ -33,8 +33,7 @@
 namespace {
 
 constexpr char kLocalRankingFileHeader[] = "RAYTHM_LOCAL_RANKING_V6";
-constexpr char kAuthoritativeAcceptedInput[] = "noteResultsV1";
-constexpr char kLegacyAuthoritativeAcceptedInput[] = "note_results_v1";
+constexpr char kAuthoritativeAcceptedInput[] = "replayEventsV1";
 constexpr wchar_t kEntropyLabel[] = L"raythm-local-ranking";
 
 std::string trim(std::string_view value) {
@@ -52,10 +51,12 @@ std::string trim(std::string_view value) {
 }
 
 std::string normalize_accepted_input(std::string_view value) {
-    const std::string normalized = trim(value);
-    return normalized == kLegacyAuthoritativeAcceptedInput
-        ? std::string(kAuthoritativeAcceptedInput)
-        : normalized;
+    return trim(value);
+}
+
+bool supports_authoritative_submit(const ranking_client::scoring_ruleset& ruleset) {
+    return ruleset.active &&
+           normalize_accepted_input(ruleset.accepted_input) == kAuthoritativeAcceptedInput;
 }
 
 std::string current_timestamp_utc() {
@@ -619,6 +620,9 @@ struct local_manifest_hashes {
 struct verification_result {
     bool success = false;
     std::string message;
+    std::string scoring_content_hash;
+    std::string scoring_ruleset_version;
+    int judge_event_schema_version = 0;
 };
 
 verification_result compare_hash(const std::string& label,
@@ -771,6 +775,9 @@ verification_result verify_chart_manifest(const song_data& song,
     return {
         .success = true,
         .message = {},
+        .scoring_content_hash = manifest.scoring_content_hash,
+        .scoring_ruleset_version = manifest.scoring_ruleset_version,
+        .judge_event_schema_version = manifest.judge_event_schema_version,
     };
 }
 
@@ -1096,7 +1103,7 @@ bool warm_scoring_ruleset_cache(bool force_refresh) {
     if (!force_refresh) {
         if (const std::optional<ranking_client::scoring_ruleset> cached =
                 load_cached_ruleset_for_server(server_url);
-            cached.has_value()) {
+            cached.has_value() && supports_authoritative_submit(*cached)) {
             scoring_ruleset_runtime::apply_server_ruleset(*cached);
             return true;
         }
@@ -1148,7 +1155,7 @@ online_submit_result submit_online_result(const song_data& song,
 
     std::optional<ranking_client::scoring_ruleset> ruleset =
         load_cached_ruleset_for_server(stored->server_url);
-    if (!ruleset.has_value()) {
+    if (!ruleset.has_value() || !supports_authoritative_submit(*ruleset)) {
         ruleset = fetch_and_cache_scoring_ruleset(stored->server_url);
     }
 
@@ -1161,6 +1168,10 @@ online_submit_result submit_online_result(const song_data& song,
     if (!ruleset->active ||
         ruleset->accepted_input != kAuthoritativeAcceptedInput) {
         submission.message = "The server does not accept this ranking submission format.";
+        return submission;
+    }
+    if (verification.scoring_content_hash.empty()) {
+        submission.message = "The server did not provide replay metadata for this chart.";
         return submission;
     }
 
@@ -1181,6 +1192,11 @@ online_submit_result submit_online_result(const song_data& song,
         submission.message = "The scoring ruleset changed. Start the chart again to submit online ranking.";
         return submission;
     }
+    if (!verification.scoring_ruleset_version.empty() &&
+        submission_ruleset_version != verification.scoring_ruleset_version) {
+        submission.message = "The chart replay metadata changed. Start the chart again to submit online ranking.";
+        return submission;
+    }
 
     submission.attempted = true;
 
@@ -1191,7 +1207,8 @@ online_submit_result submit_online_result(const song_data& song,
             expected_remote_chart_id(stored->server_url, chart.chart_id),
             result,
             recorded_at,
-            submission_ruleset_version);
+            submission_ruleset_version,
+            verification.scoring_content_hash);
 
     if (request.unauthorized) {
         const auth::operation_result restored = auth::restore_saved_session();
@@ -1211,7 +1228,8 @@ online_submit_result submit_online_result(const song_data& song,
             expected_remote_chart_id(restored.session_data->server_url, chart.chart_id),
             result,
             recorded_at,
-            submission_ruleset_version);
+            submission_ruleset_version,
+            verification.scoring_content_hash);
     }
 
     submission.success = request.success;
