@@ -22,8 +22,8 @@
 
 - `ranking_service::submit_local_result_detailed()` を呼ぶ
 - 保存先は `chart_id` ごとのローカルランキングファイル
-- `result_data.note_results` がある場合は、その判定列を保存する
-- ローカル順位は保存済み `note_results` から再計算される
+- `result_data.note_results` がある場合は、ローカル用の判定リプレイとして保存する
+- ローカル順位は保存済み判定リプレイから再計算される
 
 ### 3. オンライン送信判定
 
@@ -40,9 +40,10 @@
 - メール認証済み
 - Official 譜面である
 - サーバーの scoring ruleset が active
-- サーバーの `acceptedInput` が `note_results_v1`
+- サーバーの `acceptedInput` が `replayEventsV1`
 
-さらに Official 譜面では、送信前に manifest を取得してローカルファイルの hash を照合する。
+さらに Official 譜面では、送信前に manifest を取得してローカルファイルの hash を照合し、
+`scoringContentHash` を取得する。
 
 照合対象:
 
@@ -64,18 +65,22 @@
 ```json
 {
   "recordedAt": "2026-04-23T02:00:00Z",
-  "rulesetVersion": "2026-04-v1",
-  "noteResults": [
-    {
-      "eventIndex": 0,
-      "result": "perfect",
-      "offsetMs": 3.2
-    }
-  ]
+  "rulesetVersion": "2026-05-v1",
+  "scoringContentHash": "sha256...",
+  "replay": {
+    "schemaVersion": 1,
+    "events": [
+      {
+        "eventIndex": 0,
+        "result": "perfect",
+        "offsetMs": 3.2
+      }
+    ]
+  }
 }
 ```
 
-送っているのは最終スコアではなく、`noteResults` 本体と `recordedAt`、`rulesetVersion`。
+送っているのは最終スコアではなく、判定リプレイ `replay.events` と `recordedAt`、`rulesetVersion`、`scoringContentHash`。
 
 ## サーバー側フロー
 
@@ -91,15 +96,16 @@
 - Official かつ public 譜面であること
 - ユーザーのメール認証済みであること
 - `rulesetVersion` が現在の active ruleset version と一致すること
-- `noteResults` の形式が正しいこと
+- `scoringContentHash` が現在の譜面 scoring content hash と一致すること
+- `replay.events` の形式が正しいこと
 
 ### 3. authoritative score 再計算
 
-- サーバーは譜面ファイルを読み、総判定点数を数える
-- 受け取った `noteResults` から `score / accuracy / clearRank / maxCombo / isFullCombo` を再計算する
+- サーバーは譜面バージョンの scoring metadata を参照する
+- 受け取った `replay.events` から `score / accuracy / clearRank / maxCombo / isFullCombo` を再計算する
 
 つまり、クライアントが送ったスコア値は信用していない。
-信頼しているのは `noteResults` と、サーバー側にある譜面ファイル。
+信頼しているのは `scoringContentHash` で固定された譜面イベント列と、`replay.events` の判定列。
 
 ### 4. DB 保存ルール
 

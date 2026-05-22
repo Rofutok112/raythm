@@ -269,6 +269,6 @@ struct result_data {
     bool is_full_combo = false;
     bool is_all_perfect = false;
     std::string scoring_ruleset_version;
-    std::string scoring_accepted_input = "noteResultsV1";
+    std::string scoring_accepted_input = "replayEventsV1";
     std::vector<note_result_entry> note_results;
 };

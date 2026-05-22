@@ -63,6 +63,9 @@ struct chart_manifest {
     std::string jacket_sha256;
     std::string chart_sha256;
     std::string chart_fingerprint;
+    std::string scoring_content_hash;
+    std::string scoring_ruleset_version;
+    int judge_event_schema_version = 0;
 };
 
 struct song_manifest {
@@ -102,7 +105,8 @@ submit_operation_result submit_chart_ranking(const std::string& server_url,
                                              const std::string& chart_id,
                                              const result_data& result,
                                              const std::string& recorded_at,
-                                             const std::string& ruleset_version);
+                                             const std::string& ruleset_version,
+                                             const std::string& scoring_content_hash);
 
 scoring_ruleset_operation_result fetch_scoring_ruleset(const std::string& server_url);
 
