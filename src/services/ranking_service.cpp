@@ -54,6 +54,11 @@ std::string normalize_accepted_input(std::string_view value) {
     return trim(value);
 }
 
+bool supports_authoritative_submit(const ranking_client::scoring_ruleset& ruleset) {
+    return ruleset.active &&
+           normalize_accepted_input(ruleset.accepted_input) == kAuthoritativeAcceptedInput;
+}
+
 std::string current_timestamp_utc() {
     using clock = std::chrono::system_clock;
     const auto now = clock::now();
@@ -1059,7 +1064,7 @@ bool warm_scoring_ruleset_cache(bool force_refresh) {
     if (!force_refresh) {
         if (const std::optional<ranking_client::scoring_ruleset> cached =
                 load_cached_ruleset_for_server(server_url);
-            cached.has_value()) {
+            cached.has_value() && supports_authoritative_submit(*cached)) {
             scoring_ruleset_runtime::apply_server_ruleset(*cached);
             return true;
         }
@@ -1111,7 +1116,7 @@ online_submit_result submit_online_result(const song_data& song,
 
     std::optional<ranking_client::scoring_ruleset> ruleset =
         load_cached_ruleset_for_server(stored->server_url);
-    if (!ruleset.has_value()) {
+    if (!ruleset.has_value() || !supports_authoritative_submit(*ruleset)) {
         ruleset = fetch_and_cache_scoring_ruleset(stored->server_url);
     }
 
