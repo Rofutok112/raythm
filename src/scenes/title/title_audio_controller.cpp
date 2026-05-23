@@ -38,6 +38,23 @@ void title_audio_controller::update(title_audio_policy::hub_mode mode,
     spectrum_visualizer_.update(current_state_.spectrum, dt);
 }
 
+void title_audio_controller::update_preview_only(const song_select::song_entry* selected_song, float dt) {
+    if (selected_song == nullptr) {
+        preview_controller_.stop();
+    } else {
+        preview_controller_.select_song(selected_song);
+        preview_controller_.update(dt, selected_song);
+    }
+    current_state_ = {
+        .music = title_audio_policy::music_source::preview_song,
+        .spectrum = title_spectrum_visualizer::source::preview,
+        .update_preview = selected_song != nullptr,
+    };
+    bgm_controller_.suspend();
+    bgm_controller_.update();
+    spectrum_visualizer_.update(current_state_.spectrum, dt);
+}
+
 void title_audio_controller::draw_spectrum(const Rectangle& rect, float alpha_scale) const {
     spectrum_visualizer_.draw(rect, alpha_scale);
 }

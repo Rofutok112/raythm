@@ -66,6 +66,8 @@ private:
     void update_play_mode(float dt);
     bool return_to_multiplayer_room(bool queue_selected_chart);
     bool add_selected_chart_to_multiplayer_room();
+    const song_select::song_entry* multiplayer_queue_preview_song() const;
+    void update_multiplayer_audio(float dt);
     void update_multiplayer_mode(float dt);
     void update_online_mode(float dt);
     void update_create_mode(float dt);

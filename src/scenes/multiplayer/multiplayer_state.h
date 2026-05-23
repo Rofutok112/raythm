@@ -140,6 +140,7 @@ enum class ui_command {
     move_queue_item_down,
     toggle_queue_permission,
     start_match,
+    toggle_queue_preview,
     back_to_home,
 };
 
@@ -163,6 +164,12 @@ struct state {
     std::string requested_download_chart_id;
     bool current_queue_chart_installed = false;
     std::vector<std::string> installed_queue_item_ids;
+    bool queue_preview_available = false;
+    bool queue_preview_playing = false;
+    double queue_preview_position_seconds = 0.0;
+    double queue_preview_duration_seconds = 0.0;
+    bool queue_preview_seek_requested = false;
+    double queue_preview_seek_seconds = 0.0;
     screen_mode screen = screen_mode::list;
     modal_mode modal = modal_mode::none;
     pending_operation pending = pending_operation::none;

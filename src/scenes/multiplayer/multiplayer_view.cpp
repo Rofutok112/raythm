@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,6 +16,7 @@
 #include "ui/icons/raythm_icons.h"
 #include "ui_notice.h"
 #include "ui_text_input.h"
+#include "virtual_screen.h"
 
 namespace multiplayer::view {
 namespace {
@@ -34,8 +36,11 @@ constexpr Rectangle kChatInputRect{1351.0f, 983.0f, 370.0f, 58.0f};
 constexpr Rectangle kChatButtonRect{1740.0f, 983.0f, 138.0f, 58.0f};
 constexpr Rectangle kQueuePermissionButtonRect{kQueuePanelRect.x + kQueuePanelRect.width - 244.0f,
                                                kQueuePanelRect.y + 15.0f, 220.0f, 42.0f};
-constexpr Rectangle kQueueListRect{kQueuePanelRect.x + 16.0f, kQueuePanelRect.y + 140.0f,
-                                   kQueuePanelRect.width - 44.0f, kQueuePanelRect.height - 158.0f};
+constexpr Rectangle kQueuePreviewButtonRect{kQueuePanelRect.x + 18.0f, kQueuePanelRect.y + 138.0f, 48.0f, 48.0f};
+constexpr Rectangle kQueuePreviewBarRect{kQueuePanelRect.x + 82.0f, kQueuePanelRect.y + 155.0f,
+                                         kQueuePanelRect.width - 116.0f, 14.0f};
+constexpr Rectangle kQueueListRect{kQueuePanelRect.x + 16.0f, kQueuePanelRect.y + 210.0f,
+                                   kQueuePanelRect.width - 44.0f, kQueuePanelRect.height - 228.0f};
 constexpr Rectangle kQueueScrollbarTrackRect{kQueuePanelRect.x + kQueuePanelRect.width - 18.0f,
                                              kQueueListRect.y, 8.0f, kQueueListRect.height};
 constexpr float kQueueRowHeight = 86.0f;
@@ -130,6 +135,18 @@ std::string room_status_label(const room_summary& room) {
     return room.host_name + " " + localization::tr_literal("host") + "  " +
            std::to_string(room.player_count) + "/" +
            std::to_string(room.max_players) + "  " + status;
+}
+
+std::string format_duration_label(double seconds) {
+    if (seconds < 0.0) {
+        seconds = 0.0;
+    }
+    const int total = static_cast<int>(seconds + 0.5);
+    const int minutes = total / 60;
+    const int secs = total % 60;
+    char buffer[16];
+    std::snprintf(buffer, sizeof(buffer), "%d:%02d", minutes, secs);
+    return buffer;
 }
 
 void draw_panel_title(Rectangle rect, const char* title) {
@@ -246,6 +263,51 @@ ui::button_state draw_icon_button(Rectangle rect,
               enabled ? (button.hovered ? hover_icon : icon) : g_theme->text_dim,
               3.0f);
     return button;
+}
+
+void draw_queue_preview_controls(state& state, const room_detail& room) {
+    const bool has_queue = !room.queue.empty();
+    const bool available = has_queue && state.queue_preview_available;
+    const Color muted = available ? g_theme->text_muted : with_alpha(g_theme->text_muted, 120);
+    const ui::button_state toggle =
+        draw_icon_button(kQueuePreviewButtonRect,
+                         state.queue_preview_playing ? raythm_icons::draw_pause : raythm_icons::draw_play,
+                         available ? g_theme->row : g_theme->panel,
+                         available ? g_theme->row_hover : g_theme->panel,
+                         muted,
+                         available,
+                         11.0f,
+                         g_theme->text);
+    if (toggle.clicked && available) {
+        state.command = ui_command::toggle_queue_preview;
+    }
+
+    const double duration = state.queue_preview_duration_seconds;
+    const double position = state.queue_preview_position_seconds;
+    const float ratio = duration > 0.0
+        ? std::clamp(static_cast<float>(position / duration), 0.0f, 1.0f)
+        : 0.0f;
+    ui::draw_rect_f(kQueuePreviewBarRect, with_alpha(g_theme->bg_alt, 220));
+    ui::draw_rect_f({kQueuePreviewBarRect.x, kQueuePreviewBarRect.y,
+                     kQueuePreviewBarRect.width * ratio, kQueuePreviewBarRect.height},
+                    available ? with_alpha(g_theme->accent, 220) : with_alpha(g_theme->text_muted, 80));
+    ui::draw_rect_lines(kQueuePreviewBarRect, 1.0f, with_alpha(g_theme->border_light, 190));
+    const Rectangle hit{kQueuePreviewBarRect.x, kQueuePreviewBarRect.y - 12.0f,
+                        kQueuePreviewBarRect.width, kQueuePreviewBarRect.height + 24.0f};
+    if (available && duration > 0.0 && ui::is_clicked(hit)) {
+        const Vector2 mouse = virtual_screen::get_virtual_mouse();
+        const float seek_ratio = std::clamp((mouse.x - kQueuePreviewBarRect.x) / kQueuePreviewBarRect.width, 0.0f, 1.0f);
+        state.queue_preview_seek_seconds = static_cast<double>(seek_ratio) * duration;
+        state.queue_preview_seek_requested = true;
+    }
+
+    const std::string label = available
+        ? format_duration_label(position) + " / " + format_duration_label(duration)
+        : (has_queue ? localization::tr_literal("Not installed") : localization::tr_literal("No queued songs"));
+    ui::draw_text_in_rect(label.c_str(), 13,
+                          {kQueuePreviewBarRect.x, kQueuePreviewBarRect.y + 18.0f,
+                           kQueuePreviewBarRect.width, 20.0f},
+                          muted, ui::text_align::right);
 }
 
 void draw_room_card(state& state, const room_summary& room, int index) {
@@ -378,10 +440,11 @@ void draw_queue(state& state, const room_detail& room) {
         !busy(state)) {
         state.command = ui_command::open_song_select;
     }
+    draw_queue_preview_controls(state, room);
 
     if (room.queue.empty()) {
         ui::draw_text_in_rect(localization::tr_literal("No queued songs yet."), 21,
-                              kQueueListRect,
+                              {kQueueListRect.x, kQueueListRect.y + 80.0f, kQueueListRect.width, kQueueListRect.height - 80.0f},
                               g_theme->text_muted);
         return;
     }
