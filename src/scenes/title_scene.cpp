@@ -367,9 +367,6 @@ title_play_transfer_controller::catalog_callbacks title_scene::play_transfer_cal
 }
 
 void title_scene::update_play_mode(float dt) {
-    if (handle_return_to_multiplayer_room_input()) {
-        return;
-    }
     title_play_mode_controller::update(
         manager_,
         play_state_,
@@ -405,19 +402,6 @@ void title_scene::update_play_mode(float dt) {
                 return add_selected_chart_to_multiplayer_room();
             },
         });
-}
-
-bool title_scene::handle_return_to_multiplayer_room_input() {
-    if (!multiplayer_chart_pick_active_) {
-        return false;
-    }
-    constexpr Rectangle kReturnToRoomRect{390.0f, 983.0f, 330.0f, 58.0f};
-    const bool clicked = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-        CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), kReturnToRoomRect);
-    if (!clicked) {
-        return false;
-    }
-    return return_to_multiplayer_room(false);
 }
 
 bool title_scene::return_to_multiplayer_room(bool queue_selected_chart) {
@@ -1070,8 +1054,6 @@ void title_scene::draw() {
             home_menu_selected_index_,
             home_status_message_,
             play_entry_origin_rect_,
-            mode_ == hub_mode::play && multiplayer_chart_pick_active_,
-            multiplayer_state_.current_room.has_value() ? multiplayer_state_.current_room->name : std::string_view{},
         },
         play_state_,
         multiplayer_state_,

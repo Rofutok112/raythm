@@ -65,7 +65,6 @@ private:
     void enter_settings_mode();
     void close_settings_mode();
     void update_play_mode(float dt);
-    bool handle_return_to_multiplayer_room_input();
     bool return_to_multiplayer_room(bool queue_selected_chart);
     bool add_selected_chart_to_multiplayer_room();
     void update_multiplayer_mode(float dt);

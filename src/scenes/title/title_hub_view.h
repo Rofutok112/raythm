@@ -33,8 +33,6 @@ struct model {
     int home_menu_selected_index = 0;
     std::string_view home_status_message;
     Rectangle play_entry_origin_rect{};
-    bool can_return_to_multiplayer_room = false;
-    std::string_view multiplayer_room_name;
 };
 
 struct draw_context {
