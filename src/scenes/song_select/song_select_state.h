@@ -9,6 +9,7 @@
 
 #include "data_models.h"
 #include "network/auth_client.h"
+#include "online_content_identity.h"
 #include "ranking_service.h"
 #include "raylib.h"
 #include "shared/scene_fade.h"
@@ -21,6 +22,7 @@ struct chart_option {
     chart_meta meta;
     content_status status = content_status::local;
     content_status source_status = content_status::local;
+    std::optional<online_content::chart_identity> online_identity;
     int local_note_offset_ms = 0;
     std::optional<rank> best_local_rank;
     std::optional<int> best_local_score;
@@ -33,6 +35,7 @@ struct song_entry {
     song_data song;
     content_status status = content_status::local;
     content_status source_status = content_status::local;
+    std::optional<online_content::song_identity> online_identity;
     std::vector<chart_option> charts;
 };
 

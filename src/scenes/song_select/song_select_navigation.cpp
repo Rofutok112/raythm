@@ -46,6 +46,23 @@ std::unique_ptr<scene> make_seamless_create_scene(scene_manager& manager,
         true);
 }
 
+std::unique_ptr<scene> make_multiplayer_title_scene(scene_manager& manager,
+                                                    std::string room_id,
+                                                    std::string preferred_song_id,
+                                                    std::string preferred_chart_id) {
+    return std::make_unique<title_scene>(
+        manager,
+        true,
+        false,
+        std::move(preferred_song_id),
+        std::move(preferred_chart_id),
+        std::nullopt,
+        false,
+        false,
+        std::move(room_id),
+        true);
+}
+
 std::unique_ptr<scene> make_legacy_song_select_scene(scene_manager& manager,
                                                      std::string preferred_song_id,
                                                      std::string preferred_chart_id,
@@ -85,6 +102,17 @@ std::unique_ptr<scene> make_edit_chart_scene(scene_manager& manager, const song_
 std::unique_ptr<scene> make_play_scene(scene_manager& manager, const song_entry& song, const chart_option& chart) {
     save_last_played_selection(song.song.meta.song_id, chart.meta.chart_id);
     return std::make_unique<play_scene>(manager, song.song, chart.path, chart.meta.key_count, chart.meta.level);
+}
+
+std::unique_ptr<scene> make_multiplayer_play_scene(scene_manager& manager,
+                                                   const song_entry& song,
+                                                   const chart_option& chart,
+                                                   std::string room_id,
+                                                   std::string match_id) {
+    save_last_played_selection(song.song.meta.song_id, chart.meta.chart_id);
+    return std::make_unique<play_scene>(
+        manager, song.song, chart.path, chart.meta.key_count, chart.meta.level,
+        std::move(room_id), std::move(match_id));
 }
 
 std::unique_ptr<scene> make_mv_editor_scene(scene_manager& manager, const song_entry& song) {

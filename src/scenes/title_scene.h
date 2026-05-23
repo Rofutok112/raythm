@@ -2,6 +2,7 @@
 
 #include "scene.h"
 #include "network/auth_client.h"
+#include "multiplayer/multiplayer_state.h"
 #include "shared/auth_overlay_controller.h"
 #include "shared/scene_fade.h"
 #include "song_select/song_select_state.h"
@@ -24,6 +25,7 @@ public:
         title,
         home,
         play,
+        multiplayer,
         online,
         create,
         settings,
@@ -31,6 +33,7 @@ public:
 
     enum class transition_target {
         song_select,
+        multiplayer,
         online_download,
         create_tools,
     };
@@ -39,10 +42,12 @@ public:
                          bool start_with_home_open = false,
                          bool play_intro_fade = true,
                          std::string preferred_song_id = "",
-                         std::string preferred_chart_id = "",
-                         std::optional<song_select::recent_result_offset> recent_result_offset = std::nullopt,
-                         bool start_in_play_view = false,
-                         bool start_in_create_view = false);
+                          std::string preferred_chart_id = "",
+                          std::optional<song_select::recent_result_offset> recent_result_offset = std::nullopt,
+                          bool start_in_play_view = false,
+                          bool start_in_create_view = false,
+                          std::string preferred_multiplayer_room_id = "",
+                          bool start_in_multiplayer_view = false);
 
     void on_enter() override;
     void on_exit() override;
@@ -54,11 +59,16 @@ private:
     void enter_title_mode();
     void enter_home_mode(bool suppress_pointer = false);
     void enter_play_mode();
+    void enter_multiplayer_mode();
     void enter_online_mode();
     void enter_create_mode();
     void enter_settings_mode();
     void close_settings_mode();
     void update_play_mode(float dt);
+    bool handle_return_to_multiplayer_room_input();
+    bool return_to_multiplayer_room(bool queue_selected_chart);
+    bool add_selected_chart_to_multiplayer_room();
+    void update_multiplayer_mode(float dt);
     void update_online_mode(float dt);
     void update_create_mode(float dt);
     void update_settings_mode(float dt);
@@ -106,6 +116,10 @@ private:
     std::optional<song_select::recent_result_offset> recent_result_offset_;
     bool start_in_play_view_ = false;
     bool start_in_create_view_ = false;
+    std::string preferred_multiplayer_room_id_;
+    bool start_in_multiplayer_view_ = false;
+    bool multiplayer_chart_pick_active_ = false;
+    bool queue_selected_chart_on_multiplayer_return_ = false;
     title_startup_controller::state startup_;
     bool suppress_home_pointer_until_release_ = false;
     hub_mode mode_ = hub_mode::title;
@@ -120,6 +134,7 @@ private:
     title_play_data_controller play_data_controller_;
     title_play_transfer_controller play_transfer_controller_;
     title_profile_controller profile_controller_;
+    multiplayer::state multiplayer_state_;
     title_online_view::state online_state_;
     online_catalog::data_controller online_data_controller_;
     title_audio_controller audio_controller_;

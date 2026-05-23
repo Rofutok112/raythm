@@ -866,6 +866,21 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
 
 void draw_overlay(const play_session_state& state, const Texture2D* jacket_texture) {
     draw_hud(state);
+    if (!state.multiplayer_room_id.empty()) {
+        const Rectangle panel{32.0f, 118.0f, 330.0f, 42.0f + 30.0f * static_cast<float>(state.multiplayer_scores.size())};
+        ui::draw_rect_f(panel, with_alpha(g_theme->panel, 185));
+        ui::draw_rect_lines(panel, 2.0f, g_theme->border);
+        ui::draw_text_in_rect("MULTIPLAY", 18, {panel.x + 16.0f, panel.y + 10.0f, panel.width - 32.0f, 24.0f},
+                              g_theme->text_muted, ui::text_align::left);
+        for (int i = 0; i < static_cast<int>(state.multiplayer_scores.size()); ++i) {
+            const auto& [name, score] = state.multiplayer_scores[static_cast<size_t>(i)];
+            const std::string row = std::to_string(i + 1) + ". " + name + "  " + std::to_string(score);
+            ui::draw_text_in_rect(row.c_str(), 18,
+                                  {panel.x + 16.0f, panel.y + 40.0f + static_cast<float>(i) * 30.0f,
+                                   panel.width - 32.0f, 24.0f},
+                                  g_theme->text, ui::text_align::left);
+        }
+    }
     draw_song_info_panel(state, jacket_texture);
     draw_judge_feedback(state);
     draw_low_health_vignette(state);

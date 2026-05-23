@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <thread>
 
 #include "audio_manager.h"
 #include "core/app_paths.h"
@@ -18,6 +20,8 @@
 #include "result_scene.h"
 #include "scene_common.h"
 #include "scene_manager.h"
+#include "multiplayer/multiplayer_client.h"
+#include "network/json_helpers.h"
 #include "song_select/song_select_navigation.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
@@ -78,6 +82,13 @@ play_scene::play_scene(scene_manager& manager, song_data song, std::string chart
     }
 }
 
+play_scene::play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
+                       float chart_level, std::string multiplayer_room_id, std::string multiplayer_match_id)
+    : play_scene(manager, std::move(song), std::move(chart_path), key_count, chart_level) {
+    request_.multiplayer_room_id = std::move(multiplayer_room_id);
+    request_.multiplayer_match_id = std::move(multiplayer_match_id);
+}
+
 play_scene::play_scene(scene_manager& manager, song_data song, chart_data chart, int start_tick,
                        editor_resume_state editor_resume)
     : scene(manager) {
@@ -96,9 +107,19 @@ void play_scene::on_enter() {
     state_ = play_session_loader::load(request_, draw_queue_);
     load_jacket_texture();
     mv_controller_.load_for_song(state_.song_data);
+    if (!state_.multiplayer_room_id.empty()) {
+        multiplayer_realtime_ = std::make_unique<multiplayer::client::realtime_client>();
+        if (!multiplayer_realtime_->connect(auth::load_session_summary(), state_.multiplayer_room_id)) {
+            multiplayer_realtime_.reset();
+        }
+    }
 }
 
 void play_scene::on_exit() {
+    if (multiplayer_realtime_ != nullptr) {
+        multiplayer_realtime_->close();
+        multiplayer_realtime_.reset();
+    }
     audio_manager::instance().stop_bgm();
     audio_manager::instance().stop_all_se();
     mv_controller_.reset();
@@ -154,6 +175,7 @@ void play_scene::update(float dt) {
     }
 
     const play_update_result result = play_flow_controller::update(state_, draw_queue_, context);
+    sync_multiplayer_score(dt);
 
     if (result.request_pause_bgm) {
         audio_manager::instance().pause_bgm();
@@ -299,6 +321,71 @@ void play_scene::draw() {
     present_virtual_screen_overlay();
 }
 
+void play_scene::sync_multiplayer_score(float dt) {
+    if (state_.multiplayer_room_id.empty()) {
+        return;
+    }
+
+    if (multiplayer_realtime_ != nullptr) {
+        for (const multiplayer::room_operation_result& event : multiplayer_realtime_->poll_room_events()) {
+            if (event.room.has_value()) {
+                state_.multiplayer_scores.clear();
+                for (const multiplayer::live_score& score : event.room->live_scores) {
+                    state_.multiplayer_scores.emplace_back(score.display_name, score.score);
+                }
+            }
+        }
+    }
+
+    if (multiplayer_score_future_.has_value() &&
+        multiplayer_score_future_->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        (void)multiplayer_score_future_->get();
+        multiplayer_score_future_.reset();
+    }
+    if (multiplayer_room_future_.has_value() &&
+        multiplayer_room_future_->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        const multiplayer::room_operation_result result = multiplayer_room_future_->get();
+        multiplayer_room_future_.reset();
+        if (result.room.has_value()) {
+            state_.multiplayer_scores.clear();
+            for (const multiplayer::live_score& score : result.room->live_scores) {
+                state_.multiplayer_scores.emplace_back(score.display_name, score.score);
+            }
+        }
+    }
+
+    multiplayer_score_sync_t_ += dt;
+    if (multiplayer_score_sync_t_ < 0.5f) {
+        return;
+    }
+    multiplayer_score_sync_t_ = 0.0f;
+
+    const auth::session_summary session = auth::load_session_summary();
+    const std::string room_id = state_.multiplayer_room_id;
+    const std::string match_id = state_.multiplayer_match_id;
+    const int score = state_.score_system.get_score();
+    const int combo = state_.score_system.get_combo();
+    if (multiplayer_realtime_ != nullptr && multiplayer_realtime_->connected()) {
+        const std::string body = "{\"score\":" + std::to_string(score) +
+            ",\"combo\":" + std::to_string(combo) +
+            (match_id.empty() ? "" : ",\"matchId\":\"" + network::json::escape_string(match_id) + "\"") +
+            "}";
+        if (multiplayer_realtime_->send_command("score.update", body)) {
+            return;
+        }
+    }
+    if (!multiplayer_score_future_.has_value()) {
+        multiplayer_score_future_ = std::async(std::launch::async, [session, room_id, match_id, score, combo]() {
+            return multiplayer::client::update_score(session, room_id, match_id, score, combo);
+        });
+    }
+    if (!multiplayer_room_future_.has_value()) {
+        multiplayer_room_future_ = std::async(std::launch::async, [session, room_id]() {
+            return multiplayer::client::fetch_room(session, room_id);
+        });
+    }
+}
+
 double play_scene::get_visual_ms() const {
     double source_ms = state_.chart_time_ms;
     if (state_.intro_playing) {
@@ -318,6 +405,21 @@ void play_scene::apply_navigation(play_navigation_request navigation) {
                 state_.chart_data.has_value() ? state_.chart_data->meta.chart_id : ""));
             return;
         case play_navigation_target::result:
+            if (!state_.multiplayer_room_id.empty()) {
+                if (!state_.multiplayer_match_id.empty()) {
+                    const auth::session_summary session = auth::load_session_summary();
+                    const std::string match_id = state_.multiplayer_match_id;
+                    std::thread([session, match_id]() {
+                        (void)multiplayer::client::complete_match(session, match_id);
+                    }).detach();
+                }
+                manager_.change_scene(song_select::make_multiplayer_title_scene(
+                    manager_,
+                    state_.multiplayer_room_id,
+                    state_.song_data.has_value() ? state_.song_data->meta.song_id : "",
+                    state_.chart_data.has_value() ? state_.chart_data->meta.chart_id : ""));
+                return;
+            }
             if (state_.song_data.has_value() && state_.chart_data.has_value()) {
                 manager_.change_scene(std::make_unique<result_scene>(
                     manager_, state_.final_result, state_.ranking_enabled,

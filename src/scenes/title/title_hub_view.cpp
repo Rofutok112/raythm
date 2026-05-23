@@ -5,6 +5,7 @@
 #include <string>
 
 #include "scene_common.h"
+#include "multiplayer/multiplayer_view.h"
 #include "song_select/song_select_login_dialog.h"
 #include "theme.h"
 #include "title/home_menu_view.h"
@@ -71,6 +72,8 @@ bool is_play_surface(title_hub_view::mode mode) {
     return mode == title_hub_view::mode::play || mode == title_hub_view::mode::create;
 }
 
+constexpr Rectangle kReturnToRoomRect{390.0f, 983.0f, 330.0f, 58.0f};
+
 }  // namespace
 
 namespace title_hub_view {
@@ -130,8 +133,22 @@ draw_result draw(draw_context context) {
             context.view.current_mode == mode::create ? title_play_view::mode::create : title_play_view::mode::play,
             context.view.play_view_anim,
             context.view.play_entry_origin_rect);
+        if (context.view.current_mode == mode::play && context.view.can_return_to_multiplayer_room) {
+            const std::string label = context.view.multiplayer_room_name.empty()
+                ? "Return to room"
+                : "Return: " + std::string(context.view.multiplayer_room_name);
+            ui::draw_button_colored(kReturnToRoomRect,
+                                    label.c_str(),
+                                    16,
+                                    t.row_soft,
+                                    t.row_soft_hover,
+                                    t.text,
+                                    1.5f);
+        }
     } else if (context.view.current_mode == mode::online) {
         title_online_view::draw(context.online_state, context.view.play_view_anim, context.view.play_entry_origin_rect);
+    } else if (context.view.current_mode == mode::multiplayer) {
+        multiplayer::view::draw(context.multiplayer_state);
     }
 
     const Rectangle account_dialog_anchor = {

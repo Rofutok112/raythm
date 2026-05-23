@@ -123,6 +123,8 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.chart_data = request.chart_data;
     state.editor_resume_state = request.editor_resume_state;
     state.start_tick = std::max(0, request.start_tick);
+    state.multiplayer_room_id = request.multiplayer_room_id;
+    state.multiplayer_match_id = request.multiplayer_match_id;
     state.camera_angle_degrees = g_settings.camera_angle_degrees;
     state.lane_speed =
         play_speed_compensation::compensated_lane_speed(g_settings.note_speed, state.camera_angle_degrees);

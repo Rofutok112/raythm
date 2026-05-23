@@ -29,6 +29,10 @@ void title_play_mode_controller::update(scene_manager& manager,
     if (result.delete_chart_requested) {
         return;
     }
+    if ((result.chart_selection_changed || result.play_requested) &&
+        callbacks.add_selected_to_multiplayer && callbacks.add_selected_to_multiplayer()) {
+        return;
+    }
     if (result.play_requested) {
         title_play_session::start_selected_chart(manager, state, preview_controller);
         return;

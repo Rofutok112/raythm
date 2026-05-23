@@ -54,6 +54,8 @@ struct play_start_request {
     std::optional<chart_data> chart_data;
     std::optional<editor_resume_state> editor_resume_state;
     int start_tick = 0;
+    std::string multiplayer_room_id;
+    std::string multiplayer_match_id;
 };
 
 struct play_draw_window {
@@ -144,4 +146,7 @@ struct play_session_state {
     std::vector<float> mv_waveform;
     int start_tick = 0;
     double start_ms = 0.0;
+    std::string multiplayer_room_id;
+    std::string multiplayer_match_id;
+    std::vector<std::pair<std::string, int>> multiplayer_scores;
 };
