@@ -172,6 +172,7 @@ void finish_operation(state& state, room_operation_result operation) {
     if (completed == pending_operation::chat) {
         state.chat_input.value.clear();
         state.chat_input.cursor = 0;
+        state.chat_input.active = true;
     }
     if (completed == pending_operation::queue_remove) {
         state.selected_queue_item_id.clear();
@@ -283,6 +284,7 @@ bool handle_command(state& state) {
                                   "Sending message...")) {
             state.chat_input.value.clear();
             state.chat_input.cursor = 0;
+            state.chat_input.active = true;
             return false;
         }
         start_operation(state,
