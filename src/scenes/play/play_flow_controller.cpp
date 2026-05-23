@@ -16,6 +16,10 @@ bool is_no_fail_playtest(const play_session_state& state) {
     return state.editor_resume_state.has_value() || !state.multiplayer_room_id.empty();
 }
 
+bool is_multiplayer_play(const play_session_state& state) {
+    return !state.multiplayer_room_id.empty();
+}
+
 void update_visual_effect_timers(play_session_state& state, float dt) {
     state.judge_feedback_timer = std::max(0.0f, state.judge_feedback_timer - dt);
     for (lane_judge_effect& effect : state.lane_judge_effects) {
@@ -85,7 +89,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         return result;
     }
 
-    if (!context.window_focused && !state.paused) {
+    if (!context.window_focused && !state.paused && !is_multiplayer_play(state)) {
         state.paused = true;
         state.auto_paused_by_focus = true;
         state.ranking_enabled = false;
@@ -98,7 +102,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         return result;
     }
 
-    if (context.escape_pressed) {
+    if (context.escape_pressed && !is_multiplayer_play(state)) {
         state.paused = !state.paused;
         state.paused_chart_time_ms = state.chart_time_ms;
         if (state.paused) {
@@ -243,7 +247,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
             state.chart_end_fade_started = true;
             request_bgm_fade_out(result, play_session_constants::kResultSkipFadeOutMs);
         }
-    } else if (context.backspace_pressed) {
+    } else if (context.backspace_pressed && !is_multiplayer_play(state)) {
         result.navigation = {play_navigation_target::song_select};
     }
 

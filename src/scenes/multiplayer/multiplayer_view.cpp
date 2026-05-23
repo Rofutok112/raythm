@@ -55,6 +55,10 @@ bool all_joined_members_ready(const room_detail& room) {
     return has_joined;
 }
 
+bool visible_member_status(const std::string& status) {
+    return status == "JOINED" || status == "PLAYING";
+}
+
 std::string room_status_label(const room_summary& room) {
     const std::string status = room.playing ? "playing" : "lobby";
     return room.host_name + "  " + std::to_string(room.player_count) + "/" +
@@ -141,7 +145,7 @@ void draw_members(const state& state, const room_detail& room) {
     ui::draw_panel(kMemberPanelRect);
     Rectangle row{kMemberPanelRect.x + 16.0f, kMemberPanelRect.y + 18.0f, kMemberPanelRect.width - 32.0f, 56.0f};
     for (const room_member& member : room.members) {
-        if (member.status != "JOINED") {
+        if (!visible_member_status(member.status)) {
             continue;
         }
         const bool self = (!state.self_user_id.empty() && member.user_id == state.self_user_id);
@@ -150,9 +154,13 @@ void draw_members(const state& state, const room_detail& room) {
         const std::string name = (member.role == "HOST" ? "[HOST] " : "") + member.display_name;
         ui::draw_text_in_rect(name.c_str(), 19, {row.x + 14.0f, row.y, row.width - 170.0f, row.height},
                               g_theme->text, ui::text_align::left);
-        ui::draw_text_in_rect(member.connected ? "online" : "away", 15,
+        const std::string presence = member.status == "PLAYING" ? "playing" : (member.connected ? "online" : "away");
+        const Color presence_color = member.status == "PLAYING"
+            ? g_theme->accent
+            : (member.connected ? g_theme->text_muted : g_theme->text_dim);
+        ui::draw_text_in_rect(presence.c_str(), 15,
                               {row.x + row.width - 160.0f, row.y, 70.0f, row.height},
-                              member.connected ? g_theme->text_muted : g_theme->text_dim);
+                              presence_color);
         ui::draw_text_in_rect(member.ready ? "READY" : "WAIT", 16,
                               {row.x + row.width - 82.0f, row.y, 72.0f, row.height},
                               member.ready ? g_theme->success : g_theme->text_muted);
