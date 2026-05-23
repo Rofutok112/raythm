@@ -164,6 +164,14 @@ Vector2 get_virtual_mouse() {
     };
 }
 
+Vector2 virtual_to_screen(Vector2 virtual_position) {
+    const presentation_layout layout = make_presentation_layout();
+    return {
+        layout.offset_x + (virtual_position.x / static_cast<float>(kDesignWidth)) * layout.dest_w,
+        layout.offset_y + (virtual_position.y / static_cast<float>(kDesignHeight)) * layout.dest_h,
+    };
+}
+
 Rectangle visible_rect() {
     const presentation_layout layout = make_presentation_layout();
     const float scale_x = static_cast<float>(kDesignWidth) / std::max(1.0f, layout.dest_w);

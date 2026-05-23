@@ -24,6 +24,17 @@ void scene_manager::request_exit() {
     exit_requested_ = true;
 }
 
+void scene_manager::notify_app_exit() {
+    if (app_exit_notified_) {
+        return;
+    }
+    app_exit_notified_ = true;
+    next_scene_.reset();
+    if (current_scene_ != nullptr) {
+        current_scene_->on_app_exit();
+    }
+}
+
 bool scene_manager::exit_requested() const {
     return exit_requested_;
 }

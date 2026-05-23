@@ -13,6 +13,7 @@ public:
     void change_scene(std::unique_ptr<scene> next_scene);
     void set_initial_scene(std::unique_ptr<scene> initial_scene);
     void request_exit();
+    void notify_app_exit();
     void shutdown();
 
     [[nodiscard]] bool exit_requested() const;
@@ -23,4 +24,5 @@ private:
     std::unique_ptr<scene> current_scene_;
     std::unique_ptr<scene> next_scene_;
     bool exit_requested_ = false;
+    bool app_exit_notified_ = false;
 };

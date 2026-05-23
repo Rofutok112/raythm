@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "localization/localization.h"
 #include "scene_common.h"
@@ -13,6 +16,7 @@
 #include "ui/icons/raythm_icons.h"
 #include "ui_notice.h"
 #include "ui_text_input.h"
+#include "virtual_screen.h"
 
 namespace multiplayer::view {
 namespace {
@@ -32,8 +36,11 @@ constexpr Rectangle kChatInputRect{1351.0f, 983.0f, 370.0f, 58.0f};
 constexpr Rectangle kChatButtonRect{1740.0f, 983.0f, 138.0f, 58.0f};
 constexpr Rectangle kQueuePermissionButtonRect{kQueuePanelRect.x + kQueuePanelRect.width - 244.0f,
                                                kQueuePanelRect.y + 15.0f, 220.0f, 42.0f};
-constexpr Rectangle kQueueListRect{kQueuePanelRect.x + 16.0f, kQueuePanelRect.y + 140.0f,
-                                   kQueuePanelRect.width - 44.0f, kQueuePanelRect.height - 158.0f};
+constexpr Rectangle kQueuePreviewButtonRect{kQueuePanelRect.x + 18.0f, kQueuePanelRect.y + 138.0f, 48.0f, 48.0f};
+constexpr Rectangle kQueuePreviewBarRect{kQueuePanelRect.x + 82.0f, kQueuePanelRect.y + 155.0f,
+                                         kQueuePanelRect.width - 116.0f, 14.0f};
+constexpr Rectangle kQueueListRect{kQueuePanelRect.x + 16.0f, kQueuePanelRect.y + 210.0f,
+                                   kQueuePanelRect.width - 44.0f, kQueuePanelRect.height - 228.0f};
 constexpr Rectangle kQueueScrollbarTrackRect{kQueuePanelRect.x + kQueuePanelRect.width - 18.0f,
                                              kQueueListRect.y, 8.0f, kQueueListRect.height};
 constexpr float kQueueRowHeight = 86.0f;
@@ -44,6 +51,10 @@ constexpr Rectangle kPasswordModalRect{660.0f, 310.0f, 600.0f, 300.0f};
 constexpr int kRoomGridColumns = 3;
 constexpr float kRoomCardGap = 16.0f;
 constexpr float kRoomCardHeight = 132.0f;
+constexpr float kChatMessageGap = 8.0f;
+constexpr float kChatMessagePaddingX = 12.0f;
+constexpr float kChatMessagePaddingY = 9.0f;
+constexpr float kChatLineHeight = 21.0f;
 
 bool busy(const state& state) {
     return state.pending != pending_operation::none;
@@ -126,9 +137,69 @@ std::string room_status_label(const room_summary& room) {
            std::to_string(room.max_players) + "  " + status;
 }
 
+std::string format_duration_label(double seconds) {
+    if (seconds < 0.0) {
+        seconds = 0.0;
+    }
+    const int total = static_cast<int>(seconds + 0.5);
+    const int minutes = total / 60;
+    const int secs = total % 60;
+    char buffer[16];
+    std::snprintf(buffer, sizeof(buffer), "%d:%02d", minutes, secs);
+    return buffer;
+}
+
 void draw_panel_title(Rectangle rect, const char* title) {
     ui::draw_text_in_rect(title, 22, {rect.x + 24.0f, rect.y + 15.0f, rect.width - 48.0f, 34.0f},
                           g_theme->text, ui::text_align::left);
+}
+
+size_t utf8_codepoint_length(unsigned char ch) {
+    if ((ch & 0x80) == 0) {
+        return 1;
+    }
+    if ((ch & 0xE0) == 0xC0) {
+        return 2;
+    }
+    if ((ch & 0xF0) == 0xE0) {
+        return 3;
+    }
+    if ((ch & 0xF8) == 0xF0) {
+        return 4;
+    }
+    return 1;
+}
+
+std::vector<std::string> wrap_chat_text(const std::string& text, float max_width, int font_size) {
+    std::vector<std::string> lines;
+    std::string line;
+    for (size_t index = 0; index < text.size();) {
+        const unsigned char ch = static_cast<unsigned char>(text[index]);
+        const size_t length = std::min(utf8_codepoint_length(ch), text.size() - index);
+        const std::string next = text.substr(index, length);
+        index += length;
+
+        if (next == "\r") {
+            continue;
+        }
+        if (next == "\n") {
+            lines.push_back(line);
+            line.clear();
+            continue;
+        }
+
+        const std::string candidate = line + next;
+        if (!line.empty() && ui::measure_text_size(candidate, static_cast<float>(font_size), 0.0f).x > max_width) {
+            lines.push_back(line);
+            line = next == " " ? "" : next;
+        } else {
+            line = candidate;
+        }
+    }
+    if (!line.empty() || lines.empty()) {
+        lines.push_back(line);
+    }
+    return lines;
 }
 
 Rectangle centered_icon_rect(Rectangle rect, float inset) {
@@ -192,6 +263,51 @@ ui::button_state draw_icon_button(Rectangle rect,
               enabled ? (button.hovered ? hover_icon : icon) : g_theme->text_dim,
               3.0f);
     return button;
+}
+
+void draw_queue_preview_controls(state& state, const room_detail& room) {
+    const bool has_queue = !room.queue.empty();
+    const bool available = has_queue && state.queue_preview_available;
+    const Color muted = available ? g_theme->text_muted : with_alpha(g_theme->text_muted, 120);
+    const ui::button_state toggle =
+        draw_icon_button(kQueuePreviewButtonRect,
+                         state.queue_preview_playing ? raythm_icons::draw_pause : raythm_icons::draw_play,
+                         available ? g_theme->row : g_theme->panel,
+                         available ? g_theme->row_hover : g_theme->panel,
+                         muted,
+                         available,
+                         11.0f,
+                         g_theme->text);
+    if (toggle.clicked && available) {
+        state.command = ui_command::toggle_queue_preview;
+    }
+
+    const double duration = state.queue_preview_duration_seconds;
+    const double position = state.queue_preview_position_seconds;
+    const float ratio = duration > 0.0
+        ? std::clamp(static_cast<float>(position / duration), 0.0f, 1.0f)
+        : 0.0f;
+    ui::draw_rect_f(kQueuePreviewBarRect, with_alpha(g_theme->bg_alt, 220));
+    ui::draw_rect_f({kQueuePreviewBarRect.x, kQueuePreviewBarRect.y,
+                     kQueuePreviewBarRect.width * ratio, kQueuePreviewBarRect.height},
+                    available ? with_alpha(g_theme->accent, 220) : with_alpha(g_theme->text_muted, 80));
+    ui::draw_rect_lines(kQueuePreviewBarRect, 1.0f, with_alpha(g_theme->border_light, 190));
+    const Rectangle hit{kQueuePreviewBarRect.x, kQueuePreviewBarRect.y - 12.0f,
+                        kQueuePreviewBarRect.width, kQueuePreviewBarRect.height + 24.0f};
+    if (available && duration > 0.0 && ui::is_clicked(hit)) {
+        const Vector2 mouse = virtual_screen::get_virtual_mouse();
+        const float seek_ratio = std::clamp((mouse.x - kQueuePreviewBarRect.x) / kQueuePreviewBarRect.width, 0.0f, 1.0f);
+        state.queue_preview_seek_seconds = static_cast<double>(seek_ratio) * duration;
+        state.queue_preview_seek_requested = true;
+    }
+
+    const std::string label = available
+        ? format_duration_label(position) + " / " + format_duration_label(duration)
+        : (has_queue ? localization::tr_literal("Not installed") : localization::tr_literal("No queued songs"));
+    ui::draw_text_in_rect(label.c_str(), 13,
+                          {kQueuePreviewBarRect.x, kQueuePreviewBarRect.y + 18.0f,
+                           kQueuePreviewBarRect.width, 20.0f},
+                          muted, ui::text_align::right);
 }
 
 void draw_room_card(state& state, const room_summary& room, int index) {
@@ -324,10 +440,11 @@ void draw_queue(state& state, const room_detail& room) {
         !busy(state)) {
         state.command = ui_command::open_song_select;
     }
+    draw_queue_preview_controls(state, room);
 
     if (room.queue.empty()) {
         ui::draw_text_in_rect(localization::tr_literal("No queued songs yet."), 21,
-                              kQueueListRect,
+                              {kQueueListRect.x, kQueueListRect.y + 80.0f, kQueueListRect.width, kQueueListRect.height - 80.0f},
                               g_theme->text_muted);
         return;
     }
@@ -453,18 +570,46 @@ void draw_queue(state& state, const room_detail& room) {
 void draw_chat(state& state, const room_detail& room) {
     ui::draw_panel(kChatPanelRect);
     draw_panel_title(kChatPanelRect, localization::tr_literal("Chat"));
-    Rectangle row{kChatPanelRect.x + 16.0f, kChatPanelRect.y + 72.0f, kChatPanelRect.width - 32.0f, 46.0f};
-    const int first = std::max(0, static_cast<int>(room.chat.size()) - 11);
-    for (int i = first; i < static_cast<int>(room.chat.size()); ++i) {
+    struct chat_row {
+        std::vector<std::string> lines;
+        float height = 0.0f;
+    };
+    std::vector<chat_row> rows;
+    const Rectangle message_area{kChatPanelRect.x + 16.0f, kChatPanelRect.y + 66.0f,
+                                 kChatPanelRect.width - 32.0f, kChatPanelRect.height - 86.0f};
+    const float text_width = message_area.width - kChatMessagePaddingX * 2.0f;
+    float total_height = 0.0f;
+    for (int i = static_cast<int>(room.chat.size()) - 1; i >= 0; --i) {
         const chat_message& message = room.chat[static_cast<size_t>(i)];
-        const std::string line = message.display_name + ": " + message.message;
-        ui::draw_text_in_rect(line.c_str(), 16, row, g_theme->text_muted, ui::text_align::left);
-        row.y += row.height + 6.0f;
+        chat_row row;
+        row.lines = wrap_chat_text(message.display_name + ": " + message.message, text_width, 16);
+        row.height = std::max(42.0f,
+                              kChatMessagePaddingY * 2.0f +
+                              static_cast<float>(row.lines.size()) * kChatLineHeight);
+        const float next_total = total_height + (rows.empty() ? 0.0f : kChatMessageGap) + row.height;
+        if (next_total > message_area.height && !rows.empty()) {
+            break;
+        }
+        total_height = next_total;
+        rows.push_back(std::move(row));
+    }
+    std::reverse(rows.begin(), rows.end());
+    float y = message_area.y + std::max(0.0f, message_area.height - total_height);
+    for (const chat_row& row : rows) {
+        const Rectangle box{message_area.x, y, message_area.width, row.height};
+        ui::draw_rect_f(box, with_alpha(g_theme->row, 190));
+        ui::draw_rect_lines(box, 1.0f, with_alpha(g_theme->border_light, 190));
+        float text_y = box.y + kChatMessagePaddingY;
+        for (const std::string& line : row.lines) {
+            ui::draw_text_f(line.c_str(), box.x + kChatMessagePaddingX, text_y, 16, g_theme->text_muted);
+            text_y += kChatLineHeight;
+        }
+        y += row.height + kChatMessageGap;
     }
     const ui::text_input_result chat_result =
         ui::draw_text_input(kChatInputRect, state.chat_input, "", localization::tr_literal("Message..."), nullptr,
                             ui::draw_layer::base, 16, 160, ui::default_text_input_filter, 0.0f,
-                            false, true);
+                            false, true, false, false, ui::text_align::left);
     if (chat_result.submitted) {
         state.command = ui_command::send_chat;
     }
@@ -519,7 +664,7 @@ void draw_create_modal(state& state) {
         ui::draw_text_input({kCreateModalRect.x + 40.0f, kCreateModalRect.y + 162.0f, 620.0f, 56.0f},
                             state.create_password_input, localization::tr_literal("Password"), localization::tr_literal("Optional"), nullptr,
                             ui::draw_layer::modal, 18, 128, ui::default_text_input_filter, 110.0f, true);
-    if ((name_result.submitted || password_result.submitted)) {
+    if ((name_result.submitted || password_result.submitted) && !busy(state)) {
         state.command = ui_command::submit_create_room;
     }
 
@@ -552,7 +697,7 @@ void draw_create_modal(state& state) {
     if (cancel.clicked) {
         state.command = ui_command::cancel_modal;
     }
-    if (create.clicked) {
+    if (create.clicked && !busy(state)) {
         state.command = ui_command::submit_create_room;
     }
 }
@@ -569,7 +714,7 @@ void draw_password_modal(state& state) {
         ui::draw_text_input({kPasswordModalRect.x + 40.0f, kPasswordModalRect.y + 96.0f, 520.0f, 56.0f},
                             state.join_password_input, localization::tr_literal("Password"), "", nullptr,
                             ui::draw_layer::modal, 18, 128, ui::default_text_input_filter, 120.0f, true);
-    if (password_result.submitted) {
+    if (password_result.submitted && !busy(state)) {
         state.command = ui_command::submit_password;
     }
     const ui::button_state cancel =
@@ -581,7 +726,7 @@ void draw_password_modal(state& state) {
     if (cancel.clicked) {
         state.command = ui_command::cancel_modal;
     }
-    if (join.clicked) {
+    if (join.clicked && !busy(state)) {
         state.command = ui_command::submit_password;
     }
 }

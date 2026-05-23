@@ -337,6 +337,7 @@ room_operation_result parse_room_operation(const network::http::response& respon
     result.type = "http";
     result.match_id = network::json::extract_string(response.body, "matchId").value_or("");
     result.match_start_at = network::json::extract_string(response.body, "startAt").value_or("");
+    result.match_server_now = network::json::extract_string(response.body, "serverNow").value_or("");
     result.success = true;
     result.message = success_message;
     return result;
@@ -439,6 +440,7 @@ std::vector<room_operation_result> realtime_client::poll_room_events() {
         result.message = "Room updated.";
         result.match_id = network::json::extract_string(*payload, "matchId").value_or("");
         result.match_start_at = network::json::extract_string(*payload, "startAt").value_or("");
+        result.match_server_now = network::json::extract_string(*payload, "serverNow").value_or("");
         const std::optional<std::string> scores = network::json::extract_array(*payload, "liveScores");
         if (scores.has_value()) {
             for (const std::string& score : network::json::extract_objects_from_array(*scores)) {
