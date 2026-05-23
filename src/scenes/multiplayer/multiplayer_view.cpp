@@ -546,7 +546,7 @@ void draw_chat(state& state, const room_detail& room) {
     const ui::text_input_result chat_result =
         ui::draw_text_input(kChatInputRect, state.chat_input, "", localization::tr_literal("Message..."), nullptr,
                             ui::draw_layer::base, 16, 160, ui::default_text_input_filter, 0.0f,
-                            false, true);
+                            false, true, false, false, ui::text_align::left);
     if (chat_result.submitted) {
         state.command = ui_command::send_chat;
     }

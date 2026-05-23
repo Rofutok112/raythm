@@ -301,7 +301,9 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
                                          float label_width = 84.0f,
                                          bool obscure_value = false,
                                          bool single_rect = false,
-                                         bool plain_when_inactive = false) {
+                                         bool plain_when_inactive = false,
+                                         bool submit_deactivates = true,
+                                         text_align single_rect_align = text_align::center) {
     text_input_result result;
     clamp_text_input_state(state);
     const auto visual_value_for_state = [&]() {
@@ -351,7 +353,7 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
         input_rect.height
     };
     const auto active_text_offset = [&](const std::string& value) {
-        if (!single_rect) {
+        if (!single_rect || single_rect_align != text_align::center) {
             return 0.0f;
         }
         const float text_width = text_input_prefix_width(value, utf8_codepoint_count(value), font_size);
@@ -488,10 +490,12 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
         if (IsKeyPressed(KEY_ENTER)) {
             apply_default_if_empty();
             result.submitted = true;
-            state.active = false;
             state.mouse_selecting = false;
             clear_text_input_selection(state);
-            result.deactivated = true;
+            if (submit_deactivates) {
+                state.active = false;
+                result.deactivated = true;
+            }
         }
     }
 
@@ -520,7 +524,7 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
     if (single_rect && !state.active) {
         draw_text_in_rect(display_value.c_str(), font_size,
                           {text_rect.x, text_rect.y + kTextInputBaselineNudge, text_rect.width, text_rect.height},
-                          text_color, text_align::center);
+                          text_color, single_rect_align);
     } else if (!state.active && !state.value.empty()) {
         draw_marquee_text(display_value.c_str(), text_rect.x, text_y, font_size, text_color,
                           text_rect.width, GetTime());
