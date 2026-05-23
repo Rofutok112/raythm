@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "data_models.h"
@@ -10,6 +11,11 @@ struct native_key_event {
     input_event_type type = input_event_type::press;
     double timestamp_ms = 0.0;
     std::uint64_t sequence = 0;
+};
+
+struct native_text_input_update {
+    std::string committed_text;
+    std::string composition_text;
 };
 
 class windows_input_source final {
@@ -23,9 +29,11 @@ public:
 
     void begin_frame();
     void request_text_input();
+    void set_text_input_screen_position(int x, int y);
     void end_frame();
 
     std::vector<native_key_event> drain_events();
+    native_text_input_update drain_text_input();
 
     void enable_test_mode();
     void set_test_current_time_ms(double current_time_ms);

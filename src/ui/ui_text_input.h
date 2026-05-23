@@ -9,6 +9,7 @@
 #include "platform/windows_input_source.h"
 #include "raylib.h"
 #include "ui_draw.h"
+#include "virtual_screen.h"
 
 namespace ui {
 
@@ -247,14 +248,16 @@ inline size_t text_input_cursor_from_mouse(const std::string& value, float local
 }
 
 inline void update_text_input_scroll(text_input_state& state, float viewport_width, int font_size,
-                                     const std::string* visual_value = nullptr) {
+                                     const std::string* visual_value = nullptr,
+                                     size_t visual_cursor = static_cast<size_t>(-1)) {
     if (!state.active) {
         state.scroll_x = 0.0f;
         return;
     }
 
     const std::string& measured_value = visual_value != nullptr ? *visual_value : state.value;
-    const float cursor_x = text_input_prefix_width(measured_value, state.cursor, font_size);
+    const size_t cursor = visual_cursor == static_cast<size_t>(-1) ? state.cursor : visual_cursor;
+    const float cursor_x = text_input_prefix_width(measured_value, cursor, font_size);
     const float padding = 8.0f;
     const float max_scroll = std::max(0.0f,
                                       measure_text_size(measured_value, static_cast<float>(font_size)).x -
@@ -312,6 +315,15 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
         }
         return std::string(utf8_codepoint_count(state.value), '*');
     };
+    const auto insert_text_at_cursor_for_display = [](const std::string& value,
+                                                      size_t cursor,
+                                                      const std::string& text) {
+        if (text.empty()) {
+            return value;
+        }
+        const size_t byte_index = utf8_codepoint_to_byte_index(value, cursor);
+        return value.substr(0, byte_index) + text + value.substr(byte_index);
+    };
 
     const auto apply_default_if_empty = [&]() {
         if (default_value != nullptr && state.value.empty()) {
@@ -359,6 +371,7 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
         const float text_width = text_input_prefix_width(value, utf8_codepoint_count(value), font_size);
         return std::max(0.0f, (text_rect.width - text_width) * 0.5f);
     };
+    std::string composition_text;
 
     if (clicked) {
         result.clicked = true;
@@ -401,6 +414,15 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
 
     if (state.active) {
         windows_input_source::instance().request_text_input();
+        const native_text_input_update text_update = windows_input_source::instance().drain_text_input();
+        composition_text = obscure_value ? "" : text_update.composition_text;
+        if (!text_update.committed_text.empty()) {
+            if (state.has_selection) {
+                result.changed = delete_text_input_selection(state) || result.changed;
+            }
+            result.changed = paste_text_input_at_cursor(state, text_update.committed_text, max_length, filter) ||
+                             result.changed;
+        }
 
         const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
         const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
@@ -509,12 +531,21 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
     }
 
     std::string display_value = visual_value_for_state();
+    const size_t composition_codepoints = utf8_codepoint_count(composition_text);
+    const size_t display_cursor = state.active ? state.cursor + composition_codepoints : state.cursor;
+    if (state.active && !composition_text.empty()) {
+        display_value = insert_text_at_cursor_for_display(display_value, state.cursor, composition_text);
+    }
     if (display_value.empty() && !state.active && placeholder != nullptr) {
         display_value = placeholder;
     }
     const std::string scroll_visual_value = visual_value_for_state();
+    const std::string scroll_display_value = state.active && !composition_text.empty() && !obscure_value
+        ? display_value
+        : scroll_visual_value;
     update_text_input_scroll(state, text_rect.width, font_size,
-                             obscure_value ? &scroll_visual_value : nullptr);
+                             state.active && (!composition_text.empty() || obscure_value) ? &scroll_display_value : nullptr,
+                             display_cursor);
 
     const Color text_color = state.value.empty() && !state.active ? g_theme->text_hint : g_theme->text;
     const float layout_font_size = text_layout_font_size(static_cast<float>(font_size));
@@ -551,11 +582,27 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
         draw_text_f(display_value.c_str(), text_rect.x + active_offset_x - state.scroll_x, text_y,
                     font_size, g_theme->text);
 
+        if (!composition_text.empty()) {
+            const float composition_x = text_rect.x + active_offset_x +
+                                        text_input_prefix_width(display_value, state.cursor, font_size) -
+                                        state.scroll_x;
+            const float composition_end_x = text_rect.x + active_offset_x +
+                                            text_input_prefix_width(display_value, display_cursor, font_size) -
+                                            state.scroll_x;
+            draw_line_ex({composition_x, text_y + layout_font_size + 2.0f},
+                         {composition_end_x, text_y + layout_font_size + 2.0f},
+                         1.5f, g_theme->border_active);
+        }
+
+        const float cursor_x = text_rect.x + active_offset_x +
+                               text_input_prefix_width(display_value, display_cursor, font_size) -
+                               state.scroll_x;
+        const Vector2 screen_pos = virtual_screen::virtual_to_screen({cursor_x, text_y + layout_font_size + 6.0f});
+        windows_input_source::instance().set_text_input_screen_position(static_cast<int>(std::round(screen_pos.x)),
+                                                                        static_cast<int>(std::round(screen_pos.y)));
+
         const double blink = GetTime() * 1.6;
         if (std::fmod(blink, 1.0) < 0.6) {
-            const float cursor_x = text_rect.x + active_offset_x +
-                                   text_input_prefix_width(display_value, state.cursor, font_size) -
-                                   state.scroll_x;
             draw_rect_span({cursor_x, input_rect.y + kTextInputSelectionInsetY, kTextInputCursorWidth,
                             input_rect.height - kTextInputSelectionInsetTotalY},
                            g_theme->text);
