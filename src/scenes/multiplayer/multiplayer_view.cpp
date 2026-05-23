@@ -601,7 +601,7 @@ void draw_create_modal(state& state) {
         ui::draw_text_input({kCreateModalRect.x + 40.0f, kCreateModalRect.y + 162.0f, 620.0f, 56.0f},
                             state.create_password_input, localization::tr_literal("Password"), localization::tr_literal("Optional"), nullptr,
                             ui::draw_layer::modal, 18, 128, ui::default_text_input_filter, 110.0f, true);
-    if ((name_result.submitted || password_result.submitted)) {
+    if ((name_result.submitted || password_result.submitted) && !busy(state)) {
         state.command = ui_command::submit_create_room;
     }
 
@@ -634,7 +634,7 @@ void draw_create_modal(state& state) {
     if (cancel.clicked) {
         state.command = ui_command::cancel_modal;
     }
-    if (create.clicked) {
+    if (create.clicked && !busy(state)) {
         state.command = ui_command::submit_create_room;
     }
 }
@@ -651,7 +651,7 @@ void draw_password_modal(state& state) {
         ui::draw_text_input({kPasswordModalRect.x + 40.0f, kPasswordModalRect.y + 96.0f, 520.0f, 56.0f},
                             state.join_password_input, localization::tr_literal("Password"), "", nullptr,
                             ui::draw_layer::modal, 18, 128, ui::default_text_input_filter, 120.0f, true);
-    if (password_result.submitted) {
+    if (password_result.submitted && !busy(state)) {
         state.command = ui_command::submit_password;
     }
     const ui::button_state cancel =
@@ -663,7 +663,7 @@ void draw_password_modal(state& state) {
     if (cancel.clicked) {
         state.command = ui_command::cancel_modal;
     }
-    if (join.clicked) {
+    if (join.clicked && !busy(state)) {
         state.command = ui_command::submit_password;
     }
 }

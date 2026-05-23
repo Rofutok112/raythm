@@ -218,6 +218,7 @@ bool handle_command(state& state) {
         return false;
     }
     if (operation_busy(state)) {
+        state.command = ui_command::none;
         return false;
     }
     state.command = ui_command::none;
@@ -507,7 +508,7 @@ update_result update(state& state, float dt) {
     if (state.modal == modal_mode::password && IsKeyPressed(KEY_ENTER)) {
         state.command = ui_command::submit_password;
         result.open_song_select_requested = handle_command(state) || result.open_song_select_requested;
-    } else if (state.modal == modal_mode::create_room && IsKeyPressed(KEY_ENTER)) {
+    } else if (state.modal == modal_mode::create_room && IsKeyPressed(KEY_ENTER) && !operation_busy(state)) {
         state.command = ui_command::submit_create_room;
         result.open_song_select_requested = handle_command(state) || result.open_song_select_requested;
     } else if (state.screen == screen_mode::room && state.chat_input.active && IsKeyPressed(KEY_ENTER)) {
