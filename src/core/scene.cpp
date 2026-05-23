@@ -8,3 +8,6 @@ void scene::on_enter() {
 
 void scene::on_exit() {
 }
+
+void scene::on_app_exit() {
+}

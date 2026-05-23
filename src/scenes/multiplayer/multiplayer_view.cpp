@@ -4,6 +4,8 @@
 #include <cctype>
 #include <cmath>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "localization/localization.h"
 #include "scene_common.h"
@@ -44,6 +46,10 @@ constexpr Rectangle kPasswordModalRect{660.0f, 310.0f, 600.0f, 300.0f};
 constexpr int kRoomGridColumns = 3;
 constexpr float kRoomCardGap = 16.0f;
 constexpr float kRoomCardHeight = 132.0f;
+constexpr float kChatMessageGap = 8.0f;
+constexpr float kChatMessagePaddingX = 12.0f;
+constexpr float kChatMessagePaddingY = 9.0f;
+constexpr float kChatLineHeight = 21.0f;
 
 bool busy(const state& state) {
     return state.pending != pending_operation::none;
@@ -129,6 +135,54 @@ std::string room_status_label(const room_summary& room) {
 void draw_panel_title(Rectangle rect, const char* title) {
     ui::draw_text_in_rect(title, 22, {rect.x + 24.0f, rect.y + 15.0f, rect.width - 48.0f, 34.0f},
                           g_theme->text, ui::text_align::left);
+}
+
+size_t utf8_codepoint_length(unsigned char ch) {
+    if ((ch & 0x80) == 0) {
+        return 1;
+    }
+    if ((ch & 0xE0) == 0xC0) {
+        return 2;
+    }
+    if ((ch & 0xF0) == 0xE0) {
+        return 3;
+    }
+    if ((ch & 0xF8) == 0xF0) {
+        return 4;
+    }
+    return 1;
+}
+
+std::vector<std::string> wrap_chat_text(const std::string& text, float max_width, int font_size) {
+    std::vector<std::string> lines;
+    std::string line;
+    for (size_t index = 0; index < text.size();) {
+        const unsigned char ch = static_cast<unsigned char>(text[index]);
+        const size_t length = std::min(utf8_codepoint_length(ch), text.size() - index);
+        const std::string next = text.substr(index, length);
+        index += length;
+
+        if (next == "\r") {
+            continue;
+        }
+        if (next == "\n") {
+            lines.push_back(line);
+            line.clear();
+            continue;
+        }
+
+        const std::string candidate = line + next;
+        if (!line.empty() && ui::measure_text_size(candidate, static_cast<float>(font_size), 0.0f).x > max_width) {
+            lines.push_back(line);
+            line = next == " " ? "" : next;
+        } else {
+            line = candidate;
+        }
+    }
+    if (!line.empty() || lines.empty()) {
+        lines.push_back(line);
+    }
+    return lines;
 }
 
 Rectangle centered_icon_rect(Rectangle rect, float inset) {
@@ -453,13 +507,41 @@ void draw_queue(state& state, const room_detail& room) {
 void draw_chat(state& state, const room_detail& room) {
     ui::draw_panel(kChatPanelRect);
     draw_panel_title(kChatPanelRect, localization::tr_literal("Chat"));
-    Rectangle row{kChatPanelRect.x + 16.0f, kChatPanelRect.y + 72.0f, kChatPanelRect.width - 32.0f, 46.0f};
-    const int first = std::max(0, static_cast<int>(room.chat.size()) - 11);
-    for (int i = first; i < static_cast<int>(room.chat.size()); ++i) {
+    struct chat_row {
+        std::vector<std::string> lines;
+        float height = 0.0f;
+    };
+    std::vector<chat_row> rows;
+    const Rectangle message_area{kChatPanelRect.x + 16.0f, kChatPanelRect.y + 66.0f,
+                                 kChatPanelRect.width - 32.0f, kChatPanelRect.height - 86.0f};
+    const float text_width = message_area.width - kChatMessagePaddingX * 2.0f;
+    float total_height = 0.0f;
+    for (int i = static_cast<int>(room.chat.size()) - 1; i >= 0; --i) {
         const chat_message& message = room.chat[static_cast<size_t>(i)];
-        const std::string line = message.display_name + ": " + message.message;
-        ui::draw_text_in_rect(line.c_str(), 16, row, g_theme->text_muted, ui::text_align::left);
-        row.y += row.height + 6.0f;
+        chat_row row;
+        row.lines = wrap_chat_text(message.display_name + ": " + message.message, text_width, 16);
+        row.height = std::max(42.0f,
+                              kChatMessagePaddingY * 2.0f +
+                              static_cast<float>(row.lines.size()) * kChatLineHeight);
+        const float next_total = total_height + (rows.empty() ? 0.0f : kChatMessageGap) + row.height;
+        if (next_total > message_area.height && !rows.empty()) {
+            break;
+        }
+        total_height = next_total;
+        rows.push_back(std::move(row));
+    }
+    std::reverse(rows.begin(), rows.end());
+    float y = message_area.y + std::max(0.0f, message_area.height - total_height);
+    for (const chat_row& row : rows) {
+        const Rectangle box{message_area.x, y, message_area.width, row.height};
+        ui::draw_rect_f(box, with_alpha(g_theme->row, 190));
+        ui::draw_rect_lines(box, 1.0f, with_alpha(g_theme->border_light, 190));
+        float text_y = box.y + kChatMessagePaddingY;
+        for (const std::string& line : row.lines) {
+            ui::draw_text_f(line.c_str(), box.x + kChatMessagePaddingX, text_y, 16, g_theme->text_muted);
+            text_y += kChatLineHeight;
+        }
+        y += row.height + kChatMessageGap;
     }
     const ui::text_input_result chat_result =
         ui::draw_text_input(kChatInputRect, state.chat_input, "", localization::tr_literal("Message..."), nullptr,

@@ -147,6 +147,7 @@ int main() {
         windows_input_source::instance().end_frame();
     }
 
+    manager.notify_app_exit();
     manager.shutdown();
     save_settings(g_settings);
     virtual_screen::cleanup();

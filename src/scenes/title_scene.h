@@ -49,6 +49,7 @@ public:
 
     void on_enter() override;
     void on_exit() override;
+    void on_app_exit() override;
     void update(float dt) override;
     void draw() override;
 

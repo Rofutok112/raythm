@@ -788,6 +788,13 @@ void title_scene::on_exit() {
     audio_controller_.on_exit();
 }
 
+void title_scene::on_app_exit() {
+    if (mode_ == hub_mode::settings) {
+        settings_overlay_.save();
+    }
+    multiplayer::leave_current_room_best_effort(multiplayer_state_);
+}
+
 // Title 上で Home 展開、Play/Create への遷移、Account 導線を扱う。
 void title_scene::update(float dt) {
     ui::begin_hit_regions();

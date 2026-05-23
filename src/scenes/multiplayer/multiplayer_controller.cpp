@@ -552,4 +552,22 @@ update_result update(state& state, float dt) {
     return result;
 }
 
+void leave_current_room_best_effort(state& state) {
+    if (!state.current_room.has_value()) {
+        return;
+    }
+    const std::string room_id = state.current_room->id;
+    if (state.realtime != nullptr) {
+        (void)state.realtime->send_command("room.leave", "{}");
+        state.realtime->close();
+        state.realtime.reset();
+    }
+    const auth::session_summary session = state.auth.logged_in ? state.auth : auth::load_session_summary();
+    (void)client::leave_room(session, room_id);
+    state.current_room.reset();
+    state.selected_room_id.clear();
+    state.screen = screen_mode::list;
+    state.local_ready = false;
+}
+
 }  // namespace multiplayer

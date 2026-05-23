@@ -222,6 +222,18 @@ void play_scene::on_exit() {
     unload_jacket_texture();
 }
 
+void play_scene::on_app_exit() {
+    if (state_.multiplayer_room_id.empty()) {
+        return;
+    }
+    if (multiplayer_realtime_ != nullptr) {
+        (void)multiplayer_realtime_->send_command("room.leave", "{}");
+        multiplayer_realtime_->close();
+        multiplayer_realtime_.reset();
+    }
+    (void)multiplayer::client::leave_room(auth::load_session_summary(), state_.multiplayer_room_id);
+}
+
 void play_scene::update(float dt) {
     rebuild_hit_regions();
 
