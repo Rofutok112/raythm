@@ -360,10 +360,12 @@ private:
             constexpr int kCandidateEstimateHeight = 72;
             const bool prefer_above = y + kCandidateEstimateHeight > client.bottom;
             const int candidate_y = prefer_above ? std::max(0, y - kCandidateEstimateHeight) : y + 24;
+            const int candidate_x = std::min(std::max(0, x + 96),
+                                             std::max(0, static_cast<int>(client.right) - 260));
             CANDIDATEFORM candidate = {};
             candidate.dwIndex = 0;
             candidate.dwStyle = CFS_CANDIDATEPOS;
-            candidate.ptCurrentPos = {x, candidate_y};
+            candidate.ptCurrentPos = {candidate_x, candidate_y};
             functions.set_candidate_window(context, &candidate);
         }
 
