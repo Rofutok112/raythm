@@ -32,6 +32,9 @@ constexpr float kCameraHeight = 42.0f;
 constexpr float kCameraFovY = 42.0f;
 constexpr float kJudgeLineWorldZ = 12.0f;
 constexpr float kMaxGroundDistance = 1000.0f;
+constexpr float kSoloStartGateSeconds = 0.75f;
+constexpr float kMatchLoadedPollSeconds = 1.0f;
+constexpr float kFallbackMatchCountdownSeconds = 3.0f;
 
 Vector3 build_camera_forward(float camera_angle_degrees) {
     const float angle_rad = std::clamp(camera_angle_degrees, 5.0f, 90.0f) * DEG2RAD;
@@ -103,6 +106,7 @@ play_scene::~play_scene() {
 }
 
 void play_scene::on_enter() {
+    state_.status_text = "Loading...";
     state_ = play_session_loader::load(request_, draw_queue_);
     load_jacket_texture();
     mv_controller_.load_for_song(state_.song_data);
@@ -112,12 +116,26 @@ void play_scene::on_enter() {
             multiplayer_realtime_.reset();
         }
     }
+    start_gate_active_ = state_.initialized;
+    multiplayer_loaded_sent_ = false;
+    multiplayer_countdown_started_ = false;
+    start_gate_timer_ = state_.multiplayer_room_id.empty() ? kSoloStartGateSeconds : 0.0f;
+    match_loaded_poll_t_ = 0.0f;
+    if (start_gate_active_) {
+        state_.status_text = state_.multiplayer_room_id.empty()
+            ? "Ready"
+            : "Loaded. Waiting for players...";
+    }
 }
 
 void play_scene::on_exit() {
     if (multiplayer_realtime_ != nullptr) {
         multiplayer_realtime_->close();
         multiplayer_realtime_.reset();
+    }
+    if (multiplayer_loaded_future_.has_value()) {
+        (void)multiplayer_loaded_future_->wait_for(std::chrono::milliseconds(0));
+        multiplayer_loaded_future_.reset();
     }
     audio_manager::instance().stop_bgm();
     audio_manager::instance().stop_all_se();
@@ -135,6 +153,11 @@ void play_scene::update(float dt) {
     context.left_click_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     context.backspace_pressed = IsKeyPressed(KEY_BACKSPACE);
     context.window_focused = IsWindowFocused();
+
+    if (start_gate_active_) {
+        update_start_gate(dt);
+        return;
+    }
 
     const audio_clock_snapshot bgm_clock = audio_manager::instance().get_bgm_clock();
     context.bgm_loaded = bgm_clock.loaded;
@@ -279,7 +302,7 @@ void play_scene::unload_jacket_texture() {
 }
 
 void play_scene::draw() {
-    if (!state_.initialized) {
+    if (!state_.initialized || start_gate_active_) {
         virtual_screen::begin_ui();
         play_renderer::draw_status(state_);
         virtual_screen::end();
@@ -318,6 +341,76 @@ void play_scene::draw() {
     virtual_screen::end();
 
     present_virtual_screen_overlay();
+}
+
+void play_scene::update_start_gate(float dt) {
+    if (!state_.initialized) {
+        return;
+    }
+
+    if (state_.multiplayer_room_id.empty()) {
+        start_gate_timer_ -= dt;
+        state_.status_text = "Starting...";
+        if (start_gate_timer_ <= 0.0f) {
+            start_gate_active_ = false;
+            state_.status_text.clear();
+        }
+        return;
+    }
+
+    if (multiplayer_realtime_ != nullptr) {
+        for (const multiplayer::room_operation_result& event : multiplayer_realtime_->poll_room_events()) {
+            if (event.match_id == state_.multiplayer_match_id && !event.match_start_at.empty()) {
+                multiplayer_countdown_started_ = true;
+                start_gate_timer_ = kFallbackMatchCountdownSeconds;
+            }
+        }
+    }
+
+    if (!multiplayer_countdown_started_) {
+        if (!multiplayer_loaded_sent_ && multiplayer_realtime_ != nullptr && multiplayer_realtime_->connected()) {
+            const std::string body = "{\"matchId\":\"" +
+                network::json::escape_string(state_.multiplayer_match_id) + "\"}";
+            multiplayer_loaded_sent_ = multiplayer_realtime_->send_command("match.loaded", body);
+        }
+
+        if (multiplayer_loaded_future_.has_value() &&
+            multiplayer_loaded_future_->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            const multiplayer::room_operation_result result = multiplayer_loaded_future_->get();
+            multiplayer_loaded_future_.reset();
+            multiplayer_loaded_sent_ = multiplayer_loaded_sent_ || result.success;
+            if (result.match_id == state_.multiplayer_match_id && !result.match_start_at.empty()) {
+                multiplayer_countdown_started_ = true;
+                start_gate_timer_ = kFallbackMatchCountdownSeconds;
+            }
+        }
+
+        match_loaded_poll_t_ += dt;
+        if (!multiplayer_loaded_future_.has_value() &&
+            (multiplayer_realtime_ == nullptr || !multiplayer_realtime_->connected()) &&
+            match_loaded_poll_t_ >= kMatchLoadedPollSeconds) {
+            match_loaded_poll_t_ = 0.0f;
+            const auth::session_summary session = auth::load_session_summary();
+            const std::string room_id = state_.multiplayer_room_id;
+            const std::string match_id = state_.multiplayer_match_id;
+            multiplayer_loaded_future_ = std::async(std::launch::async, [session, room_id, match_id]() {
+                return multiplayer::client::mark_match_loaded(session, room_id, match_id);
+            });
+        }
+
+        state_.status_text = multiplayer_loaded_sent_
+            ? "Waiting for other players..."
+            : "Loaded. Waiting for players...";
+        return;
+    }
+
+    start_gate_timer_ -= dt;
+    const int countdown = std::max(1, static_cast<int>(std::ceil(start_gate_timer_)));
+    state_.status_text = "Starting in " + std::to_string(countdown) + "...";
+    if (start_gate_timer_ <= 0.0f) {
+        start_gate_active_ = false;
+        state_.status_text.clear();
+    }
 }
 
 void play_scene::sync_multiplayer_score(float dt) {

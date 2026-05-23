@@ -59,6 +59,9 @@ room_operation_result set_queue_permission(const auth::session_summary& session,
                                            const std::string& room_id,
                                            bool host_only);
 room_operation_result start_match(const auth::session_summary& session, const std::string& room_id);
+room_operation_result mark_match_loaded(const auth::session_summary& session,
+                                        const std::string& room_id,
+                                        const std::string& match_id);
 room_operation_result complete_match(const auth::session_summary& session, const std::string& match_id);
 room_operation_result update_score(const auth::session_summary& session,
                                    const std::string& room_id,
