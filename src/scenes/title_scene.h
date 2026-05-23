@@ -6,11 +6,9 @@
 #include "shared/auth_overlay_controller.h"
 #include "shared/scene_fade.h"
 #include "song_select/song_select_state.h"
-#include "title/online_catalog_data_controller.h"
-#include "title/online_download_view.h"
 #include "title/title_audio_controller.h"
-#include "title/title_play_data_controller.h"
-#include "title/title_play_transfer_controller.h"
+#include "title/title_browse_feature.h"
+#include "title/title_play_create_feature.h"
 #include "title/title_profile_controller.h"
 #include "title/title_settings_overlay.h"
 #include "title/title_startup_controller.h"
@@ -73,26 +71,11 @@ private:
     void update_settings_mode(float dt);
     void update_common_animation(float dt);
     void update_startup_loading();
-    [[nodiscard]] title_play_transfer_controller::catalog_callbacks play_transfer_callbacks();
+    [[nodiscard]] title_play_create_feature::cross_callbacks play_cross_callbacks();
     bool handle_account_input();
     bool handle_settings_button_input();
     bool handle_refresh_button_input();
     bool handle_login_dialog_input();
-    void request_play_catalog_reload(std::string preferred_song_id = "",
-                                     std::string preferred_chart_id = "",
-                                     bool sync_media_on_apply = false,
-                                     bool calculate_missing_levels = false);
-    void poll_play_catalog_reload();
-    void capture_current_play_selection();
-    void sync_play_media();
-    void request_play_ranking_reload();
-    void poll_play_ranking_reload();
-    void request_scoring_ruleset_warm(bool force_refresh = false);
-    void poll_scoring_ruleset_warm();
-    void start_song_upload(const song_select::song_entry& song);
-    void start_chart_upload(const song_select::song_entry& song,
-                            const song_select::chart_option& chart);
-    void poll_create_upload();
     bool handle_profile_input();
     bool update_home_pointer_suppression();
     bool handle_title_input(bool left_click_for_home, bool right_click_for_home);
@@ -129,13 +112,10 @@ private:
     float play_view_anim_ = 0.0f;
     Rectangle play_entry_origin_rect_{};
     title_settings_overlay settings_overlay_;
-    song_select::state play_state_;
-    title_play_data_controller play_data_controller_;
-    title_play_transfer_controller play_transfer_controller_;
+    title_play_create_feature play_create_feature_;
     title_profile_controller profile_controller_;
     multiplayer::state multiplayer_state_;
-    title_online_view::state online_state_;
-    online_catalog::data_controller online_data_controller_;
+    title_browse_feature browse_feature_;
     title_audio_controller audio_controller_;
     auth_overlay::controller auth_controller_;
 };

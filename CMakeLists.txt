@@ -267,8 +267,6 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/home_menu_view.h
         src/scenes/title/title_home_input_controller.cpp
         src/scenes/title/title_home_input_controller.h
-        src/scenes/title/title_hub_update_coordinator.cpp
-        src/scenes/title/title_hub_update_coordinator.h
         src/scenes/title/title_hub_view.cpp
         src/scenes/title/title_hub_view.h
         src/scenes/title/title_audio_controller.cpp
@@ -283,8 +281,12 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/profile_view.h
         src/scenes/title/title_create_mode_controller.cpp
         src/scenes/title/title_create_mode_controller.h
+        src/scenes/title/title_browse_feature.cpp
+        src/scenes/title/title_browse_feature.h
         src/scenes/title/title_online_mode_controller.cpp
         src/scenes/title/title_online_mode_controller.h
+        src/scenes/title/title_play_create_feature.cpp
+        src/scenes/title/title_play_create_feature.h
         src/scenes/title/title_play_data_controller.cpp
         src/scenes/title/title_play_data_controller.h
         src/scenes/title/title_play_mode_controller.cpp

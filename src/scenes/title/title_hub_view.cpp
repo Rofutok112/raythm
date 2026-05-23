@@ -78,6 +78,7 @@ namespace title_hub_view {
 
 draw_result draw(draw_context context) {
     draw_result result;
+    song_select::state& play_state = context.play_create_feature.state();
     const auto& t = *g_theme;
     const float menu_t = tween::ease_out_cubic(context.view.home_menu_anim);
     const float play_t = tween::ease_out_cubic(context.view.play_view_anim);
@@ -95,11 +96,11 @@ draw_result draw(draw_context context) {
         .account_chip_rect = account_chip_rect,
         .menu_t = menu_t,
         .play_t = play_t,
-        .account_name = account_name_for(context.play_state.auth),
-        .account_status = account_status_for(context.play_state.auth),
-        .avatar_label = make_avatar_label(context.play_state.auth),
-        .logged_in = context.play_state.auth.logged_in,
-        .email_verified = context.play_state.auth.email_verified,
+        .account_name = account_name_for(play_state.auth),
+        .account_status = account_status_for(play_state.auth),
+        .avatar_label = make_avatar_label(play_state.auth),
+        .logged_in = play_state.auth.logged_in,
+        .email_verified = play_state.auth.email_verified,
         .now = GetTime(),
     };
 
@@ -126,13 +127,13 @@ draw_result draw(draw_context context) {
         context.settings_overlay.draw();
     } else if (is_play_surface(context.view.current_mode)) {
         title_play_view::draw(
-            context.play_state,
+            play_state,
             context.audio_controller.preview(),
             context.view.current_mode == mode::create ? title_play_view::mode::create : title_play_view::mode::play,
             context.view.play_view_anim,
             context.view.play_entry_origin_rect);
     } else if (context.view.current_mode == mode::online) {
-        title_online_view::draw(context.online_state, context.view.play_view_anim, context.view.play_entry_origin_rect);
+        context.browse_feature.draw(context.view.play_view_anim, context.view.play_entry_origin_rect);
     } else if (context.view.current_mode == mode::multiplayer) {
         multiplayer::view::draw(context.multiplayer_state);
     }
@@ -144,16 +145,15 @@ draw_result draw(draw_context context) {
         account_chip_rect.height
     };
     if (is_play_surface(context.view.current_mode)) {
-        context.play_transfer_controller.draw_or_apply_confirmation(
-            context.play_state,
+        context.play_create_feature.draw_or_apply_confirmation(
             context.audio_controller.preview(),
-            context.transfer_callbacks,
-            true);
+            context.play_cross_callbacks,
+            context.play_sync_media_on_transfer);
     }
-    context.profile_controller.draw(context.play_state.auth, context.auth_controller.request_active, kTitleModalLayer);
+    context.profile_controller.draw(play_state.auth, context.auth_controller.request_active, kTitleModalLayer);
     result.login_command = song_select::draw_login_dialog(
-        context.play_state.auth,
-        context.play_state.login_dialog,
+        play_state.auth,
+        play_state.login_dialog,
         account_dialog_anchor,
         screen_rect,
         context.auth_controller.request_active,
