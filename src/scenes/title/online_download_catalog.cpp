@@ -8,11 +8,11 @@
 #include <future>
 #include <optional>
 #include <thread>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "path_utils.h"
+#include "services/online_content_availability.h"
 #include "song_select/song_catalog_service.h"
 #include "title/local_content_index.h"
 #include "title/online_catalog_data_controller.h"
@@ -26,55 +26,12 @@ constexpr int kSongPageSize = 12;
 constexpr int kChartPageSize = 8;
 constexpr int kDiscoveryShelfSize = 12;
 
-struct local_song_ref {
-    const song_select::song_entry* song = nullptr;
-    std::string local_song_id;
-};
-
-using local_song_lookup = std::unordered_map<std::string, local_song_ref>;
-
-local_song_lookup build_local_lookup(const std::vector<song_select::song_entry>& local_songs,
-                                     const std::string& server_url,
-                                     const local_content_index::snapshot& index) {
-    local_song_lookup lookup;
-    for (const song_select::song_entry& song : local_songs) {
-        const std::string& local_song_id = song.song.meta.song_id;
-        lookup[local_song_id] = local_song_ref{
-            .song = &song,
-            .local_song_id = local_song_id,
-        };
-
-        const std::optional<local_content_index::online_song_binding> binding =
-            local_content_index::find_song_by_local(index, server_url, local_song_id);
-        if (binding.has_value() && !binding->remote_song_id.empty()) {
-            lookup[binding->remote_song_id] = local_song_ref{
-                .song = &song,
-                .local_song_id = local_song_id,
-            };
-        }
-    }
-    return lookup;
-}
-
-const song_select::song_entry* find_local_song(const std::vector<song_select::song_entry>& local_songs,
-                                               const std::string& song_id) {
-    for (const song_select::song_entry& song : local_songs) {
-        if (song.song.meta.song_id == song_id) {
-            return &song;
-        }
-    }
-    return nullptr;
-}
-
 content_status source_status_from_remote(const std::string& content_source) {
     return content_source == "official" ? content_status::official : content_status::community;
 }
 
-content_status remote_display_status(content_status local_status, content_status remote_source_status) {
-    if (local_status == content_status::modified || local_status == content_status::update) {
-        return local_status;
-    }
-    return remote_source_status;
+online_content::source online_source_from_remote(const std::string& content_source) {
+    return content_source == "official" ? online_content::source::official : online_content::source::community;
 }
 
 song_select::song_entry make_remote_song_entry(const remote_song_payload& song, const std::string& server_url) {
@@ -99,29 +56,36 @@ song_select::song_entry make_remote_song_entry(const remote_song_payload& song, 
     entry.song.meta.play_count = song.play_count;
     entry.song.meta.has_play_count = song.has_play_count;
     entry.source_status = source_status_from_remote(song.content_source);
+    entry.online_identity = online_content::song_identity{
+        .server_url = server_url,
+        .remote_song_id = song.id,
+        .content_source = online_source_from_remote(song.content_source),
+    };
     entry.song.directory.clear();
     return entry;
 }
 
 song_entry_state build_song_state(const remote_song_payload& remote_song,
                                   const std::string& server_url,
-                                  const local_song_lookup& local_lookup) {
+                                  const std::vector<song_select::song_entry>& local_songs,
+                                  const local_content_index::snapshot& index) {
     song_entry_state state_entry;
     state_entry.song = make_remote_song_entry(remote_song, server_url);
 
-    local_song_ref local_song;
-    if (const auto it = local_lookup.find(remote_song.id); it != local_lookup.end()) {
-        local_song = it->second;
-    }
-
-    state_entry.installed = local_song.song != nullptr;
-    state_entry.installed_local_song_id = local_song.local_song_id;
-    if (local_song.song != nullptr) {
-        state_entry.song.status =
-            remote_display_status(local_song.song->status, state_entry.song.source_status);
-    }
-    state_entry.update_available = local_song.song != nullptr &&
-                                   local_song.song->song.meta.song_version < state_entry.song.song.meta.song_version;
+    const online_content_availability::resolved_song availability =
+        online_content_availability::resolve_song(
+            local_songs,
+            index,
+            {
+                .server_url = server_url,
+                .remote_song_id = remote_song.id,
+                .remote_song_version = remote_song.song_version,
+            },
+            state_entry.song.source_status);
+    state_entry.installed = availability.installed;
+    state_entry.installed_local_song_id = availability.local_song_id;
+    state_entry.song.status = availability.installed ? availability.display_status : state_entry.song.source_status;
+    state_entry.update_available = availability.update_available;
     state_entry.charts_loaded = false;
     state_entry.charts_loading = false;
     state_entry.charts_has_more = false;
@@ -166,6 +130,13 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
         remote_chart.meta.chart_id = binding.has_value() && !binding->remote_chart_id.empty()
             ? binding->remote_chart_id
             : chart.meta.chart_id;
+        remote_chart.online_identity = online_content::chart_identity{
+            .server_url = server_url,
+            .remote_song_id = remote_song.id,
+            .remote_chart_id = remote_chart.meta.chart_id,
+            .content_source = online_source_from_remote(remote_song.content_source),
+            .remote_chart_version = binding.has_value() ? binding->remote_chart_version : chart.meta.chart_version,
+        };
         state_entry.charts.push_back({
             remote_chart,
             chart.meta.chart_id,
@@ -208,7 +179,8 @@ const char* shelf_key_for_view(discovery_view view) {
 
 std::vector<discovery_shelf_state> build_discovery_shelves(
     const remote_discovery_fetch_result& discovery,
-    const local_song_lookup& local_lookup) {
+    const std::vector<song_select::song_entry>& local_songs,
+    const local_content_index::snapshot& index) {
     std::vector<discovery_shelf_state> shelves;
     shelves.reserve(discovery.shelves.size());
     for (const remote_discovery_shelf_payload& remote_shelf : discovery.shelves) {
@@ -217,7 +189,7 @@ std::vector<discovery_shelf_state> build_discovery_shelves(
         shelf.title = remote_shelf.title;
         shelf.songs.reserve(remote_shelf.songs.size());
         for (const remote_song_payload& remote_song : remote_shelf.songs) {
-            shelf.songs.push_back(build_song_state(remote_song, discovery.server_url, local_lookup));
+            shelf.songs.push_back(build_song_state(remote_song, discovery.server_url, local_songs, index));
         }
         shelves.push_back(std::move(shelf));
     }
@@ -228,10 +200,22 @@ void append_chart_page(song_entry_state& song_state,
                        const std::vector<song_select::song_entry>& local_songs,
                        const remote_chart_page_fetch_result& page_result) {
     const local_content_index::snapshot index = local_content_index::load_snapshot();
-    const std::string local_song_id = !song_state.installed_local_song_id.empty()
-        ? song_state.installed_local_song_id
-        : song_state.song.song.meta.song_id;
-    const song_select::song_entry* local_song = find_local_song(local_songs, local_song_id);
+    const online_content_availability::resolved_song resolved_song =
+        online_content_availability::resolve_song(
+            local_songs,
+            index,
+            {
+                .server_url = page_result.server_url,
+                .remote_song_id = song_state.song.song.meta.song_id,
+                .remote_song_version = song_state.song.song.meta.song_version,
+            },
+            song_state.song.source_status);
+    song_state.installed = resolved_song.installed;
+    song_state.installed_local_song_id = resolved_song.local_song_id;
+    song_state.update_available = resolved_song.update_available;
+    if (resolved_song.installed) {
+        song_state.song.status = resolved_song.display_status;
+    }
     for (const remote_chart_payload& chart : page_result.charts) {
         const auto exists = std::find_if(song_state.charts.begin(), song_state.charts.end(),
                                          [&](const chart_entry_state& state_chart) {
@@ -241,35 +225,21 @@ void append_chart_page(song_entry_state& song_state,
             continue;
         }
 
-        const std::optional<local_content_index::online_chart_binding> binding =
-            local_content_index::find_chart_by_remote(index, page_result.server_url, chart.id);
-        const std::optional<std::string> mapped_local_chart_id =
-            binding.has_value() ? std::optional<std::string>(binding->local_chart_id) : std::nullopt;
-        std::string installed_local_chart_id;
-        const song_select::chart_option* installed_local_chart = nullptr;
-        const bool local_chart_installed = local_song != nullptr &&
-            std::any_of(local_song->charts.begin(), local_song->charts.end(),
-                        [&](const song_select::chart_option& local_chart) {
-                            const bool matches = local_chart.meta.chart_id == chart.id ||
-                                (mapped_local_chart_id.has_value() &&
-                                 local_chart.meta.chart_id == *mapped_local_chart_id);
-                            if (matches) {
-                                installed_local_chart_id = local_chart.meta.chart_id;
-                                installed_local_chart = &local_chart;
-                            }
-                            return matches;
-                        });
-        const bool chart_update_available =
-            local_chart_installed &&
-            binding.has_value() &&
-            chart.chart_version > (binding->remote_chart_version > 0
-                ? binding->remote_chart_version
-                : 1);
-
         const content_status chart_source_status = source_status_from_remote(chart.content_source);
-        const content_status chart_status = installed_local_chart != nullptr
-            ? remote_display_status(installed_local_chart->status, chart_source_status)
-            : chart_source_status;
+        const online_content_availability::resolved_chart availability =
+            online_content_availability::resolve_chart(
+                local_songs,
+                index,
+                resolved_song,
+                {
+                    .server_url = page_result.server_url,
+                    .remote_song_id = chart.song_id,
+                    .remote_chart_id = chart.id,
+                    .remote_chart_version = chart.chart_version,
+                },
+                chart_source_status);
+        const content_status chart_status =
+            availability.installed ? availability.display_status : chart_source_status;
         song_state.charts.push_back({
             {
                 {},
@@ -287,6 +257,13 @@ void append_chart_page(song_entry_state& song_state,
                 },
                 chart_status,
                 chart_source_status,
+                online_content::chart_identity{
+                    .server_url = page_result.server_url,
+                    .remote_song_id = chart.song_id,
+                    .remote_chart_id = chart.id,
+                    .content_source = online_source_from_remote(chart.content_source),
+                    .remote_chart_version = chart.chart_version,
+                },
                 0,
                 std::nullopt,
                 std::nullopt,
@@ -294,10 +271,10 @@ void append_chart_page(song_entry_state& song_state,
                 chart.min_bpm > 0.0f ? chart.min_bpm : song_state.song.song.meta.base_bpm,
                 chart.max_bpm > 0.0f ? chart.max_bpm : song_state.song.song.meta.base_bpm,
             },
-            installed_local_chart_id,
+            availability.local_chart_id,
             chart.uploader_id,
-            local_chart_installed,
-            chart_update_available,
+            availability.installed,
+            availability.update_available,
         });
     }
 
@@ -630,10 +607,8 @@ catalog_load_result load_catalog_result(source_filter source) {
     result.community_has_more = false;
 
     const local_content_index::snapshot index = local_content_index::load_snapshot();
-    const local_song_lookup local_lookup =
-        build_local_lookup(local_catalog.songs, discovery.server_url, index);
     if (discovery.success) {
-        result.discovery_shelves = build_discovery_shelves(discovery, local_lookup);
+        result.discovery_shelves = build_discovery_shelves(discovery, local_catalog.songs, index);
     }
 
     return result;
@@ -910,11 +885,10 @@ bool poll_song_page(state& state, online_catalog::data_controller& data_controll
     }
 
     const local_content_index::snapshot index = local_content_index::load_snapshot();
-    const local_song_lookup local_lookup = build_local_lookup(state.local_songs, page_result.server_url, index);
     std::vector<song_entry_state> page_items;
     page_items.reserve(page_result.songs.size());
     for (const remote_song_payload& song : page_result.songs) {
-        page_items.push_back(build_song_state(song, page_result.server_url, local_lookup));
+        page_items.push_back(build_song_state(song, page_result.server_url, state.local_songs, index));
     }
 
     append_song_page(songs_for_mode(state, state.song_page_mode), std::move(page_items));

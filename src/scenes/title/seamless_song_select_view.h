@@ -29,6 +29,7 @@ struct layout {
 struct update_result {
     bool back_requested = false;
     bool play_requested = false;
+    bool multiplayer_select_requested = false;
     bool preview_toggle_requested = false;
     bool song_selection_changed = false;
     bool chart_selection_changed = false;

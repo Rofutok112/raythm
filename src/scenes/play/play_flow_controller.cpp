@@ -13,7 +13,11 @@ play_navigation_request navigate_after_transition(const play_session_state& stat
 }
 
 bool is_no_fail_playtest(const play_session_state& state) {
-    return state.editor_resume_state.has_value();
+    return state.editor_resume_state.has_value() || !state.multiplayer_room_id.empty();
+}
+
+bool is_multiplayer_play(const play_session_state& state) {
+    return !state.multiplayer_room_id.empty();
 }
 
 void update_visual_effect_timers(play_session_state& state, float dt) {
@@ -69,6 +73,12 @@ void request_bgm_fade_out(play_update_result& result, unsigned int duration_ms) 
     result.fade_out_bgm_duration_ms = duration_ms;
 }
 
+void start_result_transition(play_session_state& state) {
+    capture_final_result(state);
+    state.result_transition_playing = true;
+    state.result_transition_timer = 0.0f;
+}
+
 }  // namespace
 
 play_update_result play_flow_controller::update(play_session_state& state, play_note_draw_queue& draw_queue,
@@ -85,7 +95,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         return result;
     }
 
-    if (!context.window_focused && !state.paused) {
+    if (!context.window_focused && !state.paused && !is_multiplayer_play(state)) {
         state.paused = true;
         state.auto_paused_by_focus = true;
         state.ranking_enabled = false;
@@ -98,7 +108,7 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         return result;
     }
 
-    if (context.escape_pressed) {
+    if (context.escape_pressed && !is_multiplayer_play(state)) {
         state.paused = !state.paused;
         state.paused_chart_time_ms = state.chart_time_ms;
         if (state.paused) {
@@ -207,6 +217,11 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
     }
     state.combo_display = state.score_system.get_combo();
 
+    if (!state.multiplayer_room_id.empty() && state.gauge.get_value() <= 0.0f) {
+        state.multiplayer_failed = true;
+        state.ranking_enabled = false;
+    }
+
     if (!is_no_fail_playtest(state) && state.gauge.get_value() <= 0.0f) {
         capture_final_result(state);
         state.final_result.failed = true;
@@ -227,18 +242,21 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
 
     if (chart_finished && !state.chart_end_fade_started) {
         state.chart_end_fade_started = true;
+        state.chart_end_hold_timer = 0.0f;
         request_bgm_fade_out(result, play_session_constants::kChartEndFadeOutMs);
+    } else if (chart_finished) {
+        state.chart_end_hold_timer += context.dt;
     }
 
-    if (state.chart_time_ms >= state.song_end_chart_time_ms || (chart_finished && context.enter_pressed)) {
-        capture_final_result(state);
-        state.result_transition_playing = true;
-        state.result_transition_timer = 0.0f;
+    if ((chart_finished && state.chart_end_hold_timer >= play_session_constants::kChartEndTailMs / 1000.0) ||
+        state.chart_time_ms >= state.song_end_chart_time_ms ||
+        (chart_finished && context.enter_pressed && !is_multiplayer_play(state))) {
+        start_result_transition(state);
         if (!state.chart_end_fade_started) {
             state.chart_end_fade_started = true;
             request_bgm_fade_out(result, play_session_constants::kResultSkipFadeOutMs);
         }
-    } else if (context.backspace_pressed) {
+    } else if (context.backspace_pressed && !is_multiplayer_play(state)) {
         result.navigation = {play_navigation_target::song_select};
     }
 

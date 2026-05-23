@@ -28,7 +28,7 @@ constexpr float kStatusHeight = 27.0f;
 
 constexpr std::array<title_home_view::entry, 4> kHomeEntries = {{
     {"PLAY", "Solo song select.", true, title_home_view::action::play},
-    {"MULTIPLAY", "Room battles soon.", false, title_home_view::action::multiplayer},
+    {"MULTIPLAY", "Room battles.", true, title_home_view::action::multiplayer},
     {"BROWSE", "Browse and download.", true, title_home_view::action::online},
     {"CREATE", "Create, import, export.", true, title_home_view::action::create},
 }};

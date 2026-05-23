@@ -10,6 +10,7 @@
 
 #include "audio_manager.h"
 #include "chart_difficulty.h"
+#include "localization/localization.h"
 #include "platform/windows_input_source.h"
 #include "ranking_service.h"
 #include "raylib.h"
@@ -1030,7 +1031,7 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
         ui::draw_text_in_rect("-", 16, {best.x + 18.0f, best.y + 30.0f, 100.0f, 20.0f},
                               with_alpha(t.text, alpha), ui::text_align::left);
     }
-    ui::draw_button_colored(start_button_rect(panel), "START", 22,
+    ui::draw_button_colored(start_button_rect(panel), localization::tr_literal(state.filter.multiplayer_queueable_only ? "SELECT" : "START"), 22,
                             with_alpha(button_selected, selected_row_alpha),
                             with_alpha(button_hover, hover_row_alpha),
                             with_alpha(t.text, alpha), 1.4f);

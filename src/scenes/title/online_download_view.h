@@ -249,6 +249,10 @@ void request_next_song_page(state& state, online_catalog::data_controller& data_
 void request_charts_for_selected_song(state& state, online_catalog::data_controller& data_controller);
 void start_download(state& state, online_catalog::data_controller& data_controller);
 void start_chart_download(state& state, online_catalog::data_controller& data_controller);
+void start_chart_download_by_remote_id(state& state,
+                                       online_catalog::data_controller& data_controller,
+                                       const std::string& remote_song_id,
+                                       const std::string& remote_chart_id);
 bool poll_download(state& state, online_catalog::data_controller& data_controller);
 void mark_song_removed(state& state, const std::string& song_id);
 void on_enter(state& state,

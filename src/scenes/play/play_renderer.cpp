@@ -7,6 +7,7 @@
 #include <string>
 
 #include "game_settings.h"
+#include "localization/localization.h"
 #include "scene_common.h"
 #include "theme.h"
 #include "ui_clip.h"
@@ -40,6 +41,7 @@ constexpr Rectangle kScoreRect = ui::place(kScreenRect, 600.0f, 90.0f,
 constexpr Rectangle kRcRect = ui::place(kScreenRect, 360.0f, 42.0f,
                                         ui::anchor::top_left, ui::anchor::top_left,
                                         Vector2{72.0f, 100.0f});
+constexpr float kMultiplayerScoreboardY = 172.0f;
 constexpr Rectangle kTimeRect = ui::place(kScreenRect, 300.0f, 45.0f,
                                           ui::anchor::top_center, ui::anchor::top_center,
                                           Vector2{0.0f, 51.0f});
@@ -78,6 +80,14 @@ constexpr Rectangle kJudgeFeedbackRect = ui::place(kScreenRect, 480.0f, 63.0f,
                                                    Vector2{0.0f, 51.0f});
 constexpr Rectangle kFailureTextRect = ui::place(kScreenRect, 540.0f, 66.0f,
                                                  ui::anchor::center, ui::anchor::center);
+constexpr Rectangle kLoadingPanelRect{690.0f, 702.0f, 540.0f, 122.0f};
+constexpr Rectangle kLoadingTitleRect{kLoadingPanelRect.x, kLoadingPanelRect.y, kLoadingPanelRect.width, 38.0f};
+constexpr Rectangle kLoadingDetailRect{kLoadingPanelRect.x, kLoadingPanelRect.y + 38.0f,
+                                       kLoadingPanelRect.width, 30.0f};
+constexpr Rectangle kLoadingBarRect{kLoadingPanelRect.x + 2.0f, kLoadingPanelRect.y + 84.0f,
+                                    kLoadingPanelRect.width - 4.0f, 8.0f};
+constexpr Rectangle kLoadingHintRect{kLoadingPanelRect.x - 120.0f, kLoadingPanelRect.y + 100.0f,
+                                     kLoadingPanelRect.width + 240.0f, 28.0f};
 constexpr float kTapNoteBaseLength = 0.78f;
 constexpr float kJudgeLineY = 0.40f;
 constexpr float kJudgeLineGlowY = 0.46f;
@@ -165,6 +175,34 @@ void draw_play_marquee_text(const char* text, Rectangle clip_rect, int font_size
     }
 
     draw_play_text_clipped(text, clip_rect.x - offset, draw_y, font_size, color, clip_rect);
+}
+
+bool is_status_error(const play_session_state& state) {
+    if (state.initialized || state.status_text.empty() || state.status_text == "Loading...") {
+        return false;
+    }
+    return true;
+}
+
+std::string localized_status_text(const std::string& status_text) {
+    constexpr const char* kStartingInPrefix = "Starting in ";
+    if (status_text.rfind(kStartingInPrefix, 0) == 0) {
+        const std::string seconds =
+            status_text.substr(std::char_traits<char>::length(kStartingInPrefix));
+        return std::string(localization::tr_literal("Starting in")) + " " + seconds;
+    }
+    return localization::tr_literal(status_text.c_str());
+}
+
+float loading_progress_value(const play_session_state& state) {
+    if (is_status_error(state)) {
+        return 1.0f;
+    }
+    if (state.status_text == "Ready") {
+        return 0.92f;
+    }
+    const float pulse = 0.5f + 0.5f * std::sin(static_cast<float>(GetTime()) * 3.4f);
+    return 0.18f + 0.64f * pulse;
 }
 
 void draw_note_plane(float center_x, float y, float center_z, float width, float length, Color fill) {
@@ -783,9 +821,26 @@ std::array<Rectangle, 3> pause_button_rects() {
 
 void draw_status(const play_session_state& state) {
     draw_scene_background(*g_theme);
-    ui::draw_text_body("Play", {144.0f, 135.0f}, 44.0f, 0.0f, g_theme->error);
-    ui::draw_text_body(state.status_text.c_str(), {144.0f, 255.0f}, 28.0f, 0.0f, g_theme->text);
-    ui::draw_text_body("ESC: Back to Song Select", {144.0f, 337.5f}, 22.0f, 0.0f, g_theme->text_hint);
+    const bool error = is_status_error(state);
+    const Color tone = error ? g_theme->error : g_theme->accent;
+    const std::string detail = localized_status_text(state.status_text.empty() ? "Loading..." : state.status_text);
+
+    ui::draw_display_text_in_rect("raythm", 28, kLoadingTitleRect, g_theme->text);
+    ui::draw_text_in_rect(detail.c_str(), 18, kLoadingDetailRect,
+                          error ? g_theme->error : g_theme->text_muted);
+    ui::draw_progress_bar(kLoadingBarRect,
+                          loading_progress_value(state),
+                          with_alpha(g_theme->row, 180),
+                          tone,
+                          with_alpha(g_theme->border, 180),
+                          1.5f,
+                          1.5f);
+    if (error) {
+        ui::draw_text_in_rect(localization::tr_literal("ESC: Back to Song Select"),
+                              15,
+                              kLoadingHintRect,
+                              g_theme->text_hint);
+    }
 }
 
 void draw_world_background() {
@@ -866,6 +921,22 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
 
 void draw_overlay(const play_session_state& state, const Texture2D* jacket_texture) {
     draw_hud(state);
+    if (!state.multiplayer_room_id.empty()) {
+        const Rectangle panel{32.0f, kMultiplayerScoreboardY, 330.0f,
+                              42.0f + 30.0f * static_cast<float>(state.multiplayer_scores.size())};
+        ui::draw_rect_f(panel, with_alpha(g_theme->panel, 185));
+        ui::draw_rect_lines(panel, 2.0f, g_theme->border);
+        ui::draw_text_in_rect("MULTIPLAY", 18, {panel.x + 16.0f, panel.y + 10.0f, panel.width - 32.0f, 24.0f},
+                              g_theme->text_muted, ui::text_align::left);
+        for (int i = 0; i < static_cast<int>(state.multiplayer_scores.size()); ++i) {
+            const play_multiplayer_score_row& score = state.multiplayer_scores[static_cast<size_t>(i)];
+            const std::string row = std::to_string(i + 1) + ". " + score.display_name + "  " + std::to_string(score.score);
+            ui::draw_text_in_rect(row.c_str(), 18,
+                                  {panel.x + 16.0f, panel.y + 40.0f + static_cast<float>(i) * 30.0f,
+                                   panel.width - 32.0f, 24.0f},
+                                  score.failed ? g_theme->error : g_theme->text, ui::text_align::left);
+        }
+    }
     draw_song_info_panel(state, jacket_texture);
     draw_judge_feedback(state);
     draw_low_health_vignette(state);

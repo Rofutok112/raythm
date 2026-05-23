@@ -21,18 +21,26 @@ using local_sqlite::column_text;
 using local_sqlite::exec;
 using local_sqlite::statement;
 
-constexpr const char* kCatalogStatusSchema = "source-v3";
+constexpr const char* kCatalogStatusSchema = "online-identity-v1";
 
 void ensure_optional_schema(sqlite3* database) {
     exec(database, "ALTER TABLE local_songs ADD COLUMN genre TEXT NOT NULL DEFAULT '';");
     exec(database, "ALTER TABLE local_songs ADD COLUMN duration_seconds REAL NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_songs ADD COLUMN source_status TEXT NOT NULL DEFAULT 'local';");
+    exec(database, "ALTER TABLE local_songs ADD COLUMN online_server_url TEXT NOT NULL DEFAULT '';");
+    exec(database, "ALTER TABLE local_songs ADD COLUMN online_song_id TEXT NOT NULL DEFAULT '';");
+    exec(database, "ALTER TABLE local_songs ADD COLUMN online_source TEXT NOT NULL DEFAULT '';");
     exec(database, "ALTER TABLE local_songs ADD COLUMN song_offset INTEGER NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_songs ADD COLUMN song_has_offset INTEGER NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_songs ADD COLUMN timing_events TEXT NOT NULL DEFAULT '';");
     exec(database, "ALTER TABLE local_charts ADD COLUMN min_bpm REAL NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_charts ADD COLUMN max_bpm REAL NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_charts ADD COLUMN source_status TEXT NOT NULL DEFAULT 'local';");
+    exec(database, "ALTER TABLE local_charts ADD COLUMN online_server_url TEXT NOT NULL DEFAULT '';");
+    exec(database, "ALTER TABLE local_charts ADD COLUMN online_song_id TEXT NOT NULL DEFAULT '';");
+    exec(database, "ALTER TABLE local_charts ADD COLUMN online_chart_id TEXT NOT NULL DEFAULT '';");
+    exec(database, "ALTER TABLE local_charts ADD COLUMN online_source TEXT NOT NULL DEFAULT '';");
+    exec(database, "ALTER TABLE local_charts ADD COLUMN online_chart_version INTEGER NOT NULL DEFAULT 0;");
 }
 
 bool ensure_schema(sqlite3* database) {
@@ -53,6 +61,9 @@ bool ensure_schema(sqlite3* database) {
              "song_version INTEGER NOT NULL,"
              "status TEXT NOT NULL,"
              "source_status TEXT NOT NULL DEFAULT 'local',"
+             "online_server_url TEXT NOT NULL DEFAULT '',"
+             "online_song_id TEXT NOT NULL DEFAULT '',"
+             "online_source TEXT NOT NULL DEFAULT '',"
              "song_offset INTEGER NOT NULL DEFAULT 0,"
              "song_has_offset INTEGER NOT NULL DEFAULT 0,"
              "timing_events TEXT NOT NULL DEFAULT '',"
@@ -73,6 +84,11 @@ bool ensure_schema(sqlite3* database) {
              "max_bpm REAL NOT NULL DEFAULT 0,"
              "status TEXT NOT NULL,"
              "source_status TEXT NOT NULL DEFAULT 'local',"
+             "online_server_url TEXT NOT NULL DEFAULT '',"
+             "online_song_id TEXT NOT NULL DEFAULT '',"
+             "online_chart_id TEXT NOT NULL DEFAULT '',"
+             "online_source TEXT NOT NULL DEFAULT '',"
+             "online_chart_version INTEGER NOT NULL DEFAULT 0,"
              "updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))"
              ");");
     if (ready) {
@@ -262,8 +278,8 @@ void put_song(sqlite3* database, const song_entry& song) {
     statement query(database,
                     "INSERT INTO local_songs(song_id, title, artist, genre, directory, audio_file, jacket_file, "
                     "base_bpm, duration_seconds, preview_start_ms, song_version, status, source_status, "
-                    "song_offset, song_has_offset, timing_events, updated_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
+                    "online_server_url, online_song_id, online_source, song_offset, song_has_offset, timing_events, updated_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
                     "ON CONFLICT(song_id) DO UPDATE SET "
                     "title = excluded.title,"
                     "artist = excluded.artist,"
@@ -277,6 +293,9 @@ void put_song(sqlite3* database, const song_entry& song) {
                     "song_version = excluded.song_version,"
                     "status = excluded.status,"
                     "source_status = excluded.source_status,"
+                    "online_server_url = excluded.online_server_url,"
+                    "online_song_id = excluded.online_song_id,"
+                    "online_source = excluded.online_source,"
                     "song_offset = excluded.song_offset,"
                     "song_has_offset = excluded.song_has_offset,"
                     "timing_events = excluded.timing_events,"
@@ -298,17 +317,23 @@ void put_song(sqlite3* database, const song_entry& song) {
     sqlite3_bind_int(query.get(), 11, song.song.meta.song_version);
     bind_text(query.get(), 12, status_label(song.status));
     bind_text(query.get(), 13, status_label(song.source_status));
-    sqlite3_bind_int(query.get(), 14, song.song.meta.offset);
-    sqlite3_bind_int(query.get(), 15, song.song.meta.has_offset ? 1 : 0);
-    bind_text(query.get(), 16, serialize_timing_events(song.song.meta.timing_events));
+    bind_text(query.get(), 14, song.online_identity.has_value() ? song.online_identity->server_url : "");
+    bind_text(query.get(), 15, song.online_identity.has_value() ? song.online_identity->remote_song_id : "");
+    bind_text(query.get(), 16, song.online_identity.has_value()
+        ? online_content::source_label(song.online_identity->content_source)
+        : "");
+    sqlite3_bind_int(query.get(), 17, song.song.meta.offset);
+    sqlite3_bind_int(query.get(), 18, song.song.meta.has_offset ? 1 : 0);
+    bind_text(query.get(), 19, serialize_timing_events(song.song.meta.timing_events));
     sqlite3_step(query.get());
 }
 
 void put_chart(sqlite3* database, const chart_option& chart) {
     statement query(database,
                     "INSERT INTO local_charts(chart_id, song_id, path, difficulty, level, key_count, "
-                    "chart_author, format_version, note_count, min_bpm, max_bpm, status, source_status, updated_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
+                    "chart_author, format_version, note_count, min_bpm, max_bpm, status, source_status, "
+                    "online_server_url, online_song_id, online_chart_id, online_source, online_chart_version, updated_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
                     "ON CONFLICT(chart_id) DO UPDATE SET "
                     "song_id = excluded.song_id,"
                     "path = excluded.path,"
@@ -322,6 +347,11 @@ void put_chart(sqlite3* database, const chart_option& chart) {
                     "max_bpm = excluded.max_bpm,"
                     "status = excluded.status,"
                     "source_status = excluded.source_status,"
+                    "online_server_url = excluded.online_server_url,"
+                    "online_song_id = excluded.online_song_id,"
+                    "online_chart_id = excluded.online_chart_id,"
+                    "online_source = excluded.online_source,"
+                    "online_chart_version = excluded.online_chart_version,"
                     "updated_at = excluded.updated_at;");
     if (!query.valid() || chart.meta.chart_id.empty()) {
         return;
@@ -340,6 +370,15 @@ void put_chart(sqlite3* database, const chart_option& chart) {
     sqlite3_bind_double(query.get(), 11, chart.max_bpm);
     bind_text(query.get(), 12, status_label(chart.status));
     bind_text(query.get(), 13, status_label(chart.source_status));
+    bind_text(query.get(), 14, chart.online_identity.has_value() ? chart.online_identity->server_url : "");
+    bind_text(query.get(), 15, chart.online_identity.has_value() ? chart.online_identity->remote_song_id : "");
+    bind_text(query.get(), 16, chart.online_identity.has_value() ? chart.online_identity->remote_chart_id : "");
+    bind_text(query.get(), 17, chart.online_identity.has_value()
+        ? online_content::source_label(chart.online_identity->content_source)
+        : "");
+    sqlite3_bind_int(query.get(), 18, chart.online_identity.has_value()
+        ? chart.online_identity->remote_chart_version
+        : 0);
     sqlite3_step(query.get());
 }
 
@@ -363,7 +402,7 @@ catalog_data load_cached_catalog() {
     statement songs(database.get(),
                     "SELECT song_id, title, artist, genre, directory, audio_file, jacket_file, base_bpm, "
                     "duration_seconds, preview_start_ms, song_version, status, source_status, "
-                    "song_offset, song_has_offset, timing_events "
+                    "online_server_url, online_song_id, online_source, song_offset, song_has_offset, timing_events "
                     "FROM local_songs ORDER BY title, song_id;");
     if (!songs.valid()) {
         return catalog;
@@ -384,9 +423,20 @@ catalog_data load_cached_catalog() {
         entry.song.meta.song_version = sqlite3_column_int(songs.get(), 10);
         entry.status = parse_status(column_text(songs.get(), 11));
         entry.source_status = parse_status(column_text(songs.get(), 12));
-        entry.song.meta.offset = sqlite3_column_int(songs.get(), 13);
-        entry.song.meta.has_offset = sqlite3_column_int(songs.get(), 14) != 0;
-        entry.song.meta.timing_events = parse_timing_events(column_text(songs.get(), 15));
+        const std::string online_server_url = column_text(songs.get(), 13);
+        const std::string online_song_id = column_text(songs.get(), 14);
+        const std::optional<online_content::source> online_source =
+            online_content::source_from_string(column_text(songs.get(), 15));
+        if (!online_server_url.empty() && !online_song_id.empty() && online_source.has_value()) {
+            entry.online_identity = online_content::song_identity{
+                .server_url = online_server_url,
+                .remote_song_id = online_song_id,
+                .content_source = *online_source,
+            };
+        }
+        entry.song.meta.offset = sqlite3_column_int(songs.get(), 16);
+        entry.song.meta.has_offset = sqlite3_column_int(songs.get(), 17) != 0;
+        entry.song.meta.timing_events = parse_timing_events(column_text(songs.get(), 18));
         if ((entry.status == content_status::official || entry.status == content_status::community) &&
             entry.source_status == content_status::local) {
             entry.source_status = entry.status;
@@ -396,7 +446,8 @@ catalog_data load_cached_catalog() {
 
     statement charts(database.get(),
                      "SELECT chart_id, song_id, path, difficulty, level, key_count, chart_author, "
-                     "format_version, note_count, min_bpm, max_bpm, status, source_status "
+                     "format_version, note_count, min_bpm, max_bpm, status, source_status, "
+                     "online_server_url, online_song_id, online_chart_id, online_source, online_chart_version "
                      "FROM local_charts ORDER BY song_id, level, difficulty;");
     if (!charts.valid()) {
         return catalog;
@@ -422,6 +473,21 @@ catalog_data load_cached_catalog() {
         chart.max_bpm = static_cast<float>(sqlite3_column_double(charts.get(), 10));
         chart.status = parse_status(column_text(charts.get(), 11));
         chart.source_status = parse_status(column_text(charts.get(), 12));
+        const std::string online_server_url = column_text(charts.get(), 13);
+        const std::string online_song_id = column_text(charts.get(), 14);
+        const std::string online_chart_id = column_text(charts.get(), 15);
+        const std::optional<online_content::source> online_source =
+            online_content::source_from_string(column_text(charts.get(), 16));
+        if (!online_server_url.empty() && !online_song_id.empty() &&
+            !online_chart_id.empty() && online_source.has_value()) {
+            chart.online_identity = online_content::chart_identity{
+                .server_url = online_server_url,
+                .remote_song_id = online_song_id,
+                .remote_chart_id = online_chart_id,
+                .content_source = *online_source,
+                .remote_chart_version = sqlite3_column_int(charts.get(), 17),
+            };
+        }
         if ((chart.status == content_status::official || chart.status == content_status::community) &&
             chart.source_status == content_status::local) {
             chart.source_status = chart.status;
