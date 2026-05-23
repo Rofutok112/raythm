@@ -704,7 +704,7 @@ void start_chart_download_by_remote_id(state& state,
             std::string cursor;
             do {
                 const remote_chart_page_fetch_result chart_page =
-                    fetch_remote_chart_page(song_lookup.server_url, remote_song_id, cursor, 100);
+                    fetch_remote_chart_page(song_lookup.server_url, remote_song_id, cursor, 50);
                 if (!chart_page.success) {
                     result.message = chart_page.error_message.empty()
                         ? "Failed to load queued chart."
