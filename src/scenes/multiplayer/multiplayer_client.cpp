@@ -46,6 +46,31 @@ std::string error_message_from_response(const network::http::response& response,
     return network::json::extract_string(response.body, "message").value_or(fallback);
 }
 
+network::http::response send_authenticated_request(const auth::session_summary& session,
+                                                   const std::string& method,
+                                                   const std::string& url,
+                                                   const std::vector<std::pair<std::string, std::string>>& headers,
+                                                   const std::string& body = "") {
+    network::http::response response = network::http::send_request(method, url, headers, body);
+    if (!response.error_message.empty() || response.status_code != 401) {
+        return response;
+    }
+
+    const auth::operation_result restored = auth::restore_saved_session();
+    if (!restored.success || !restored.session_data.has_value()) {
+        return response;
+    }
+    if (server_environment::normalize_url(restored.session_data->server_url) !=
+        server_environment::normalize_url(session.server_url)) {
+        return response;
+    }
+
+    const bool json_body = std::any_of(headers.begin(), headers.end(), [](const auto& header) {
+        return header.first == "Content-Type" && header.second == "application/json";
+    });
+    return network::http::send_request(method, url, auth_headers(*restored.session_data, json_body), body);
+}
+
 std::optional<size_t> find_top_level_value_start(const std::string& object, const std::string& key) {
     const std::string token = "\"" + key + "\"";
     int object_depth = 0;
@@ -312,8 +337,8 @@ room_operation_result send_room_request(const auth::session_summary& session,
         result.message = message;
         return result;
     }
-    const network::http::response response = network::http::send_request(
-        method, room_url(session, path), auth_headers(*saved_session, !body.empty()), body);
+    const network::http::response response = send_authenticated_request(
+        session, method, room_url(session, path), auth_headers(*saved_session, !body.empty()), body);
     if (!response.error_message.empty()) {
         result.message = response.error_message;
         return result;
@@ -344,7 +369,20 @@ bool realtime_client::connect(const auth::session_summary& session, const std::s
         return false;
     }
     impl_->room_id = room_id;
-    return impl_->socket.connect(room_url(session, "/" + room_id + "/ws"), auth_headers(*saved_session));
+    if (impl_->socket.connect(room_url(session, "/" + room_id + "/ws"), auth_headers(*saved_session))) {
+        return true;
+    }
+    const auth::operation_result restored = auth::restore_saved_session();
+    if (!restored.success || !restored.session_data.has_value()) {
+        return false;
+    }
+    if (server_environment::normalize_url(restored.session_data->server_url) !=
+        server_environment::normalize_url(session.server_url)) {
+        return false;
+    }
+    close();
+    impl_->room_id = room_id;
+    return impl_->socket.connect(room_url(session, "/" + room_id + "/ws"), auth_headers(*restored.session_data));
 }
 
 void realtime_client::close() {
@@ -414,7 +452,8 @@ room_list_result fetch_room_list(const auth::session_summary& session) {
         return result;
     }
 
-    const network::http::response response = network::http::send_request(
+    const network::http::response response = send_authenticated_request(
+        session,
         "GET",
         room_url(session, ""),
         auth_headers(*saved_session));
@@ -525,7 +564,8 @@ room_operation_result complete_match(const auth::session_summary& session, const
         result.message = message;
         return result;
     }
-    const network::http::response response = network::http::send_request(
+    const network::http::response response = send_authenticated_request(
+        session,
         "POST",
         server_environment::normalize_url(session.server_url) + "/matches/" + match_id + "/complete",
         auth_headers(*saved_session, true),
