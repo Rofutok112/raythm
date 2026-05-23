@@ -222,7 +222,9 @@ void title_scene::update_startup_loading() {
             browse_feature_.request_reload();
         },
         [this]() {
-            auth_overlay::start_restore(auth_controller_, play_create_feature_.state().login_dialog);
+            if (!start_in_multiplayer_view_) {
+                auth_overlay::start_restore(auth_controller_, play_create_feature_.state().login_dialog);
+            }
         },
         [this](bool force_refresh) {
             play_create_feature_.request_scoring_ruleset_warm(force_refresh);
@@ -369,15 +371,19 @@ void title_scene::update_multiplayer_mode(float dt) {
         multiplayer_state_.queue_candidate_message = "Select an online chart from Play.";
     }
     multiplayer_state_.current_queue_chart_installed = false;
-    multiplayer_state_.current_queue_chart_message.clear();
-    if (multiplayer_state_.current_room.has_value() && !multiplayer_state_.current_room->queue.empty()) {
-        const multiplayer::room_queue_item& item = multiplayer_state_.current_room->queue.front();
-        const local_chart_match match =
-            find_online_chart_match(play_create_feature_.state(), room_server_url, item.song_id, item.chart_id);
-        multiplayer_state_.current_queue_chart_installed = match.song != nullptr && match.chart != nullptr;
-        multiplayer_state_.current_queue_chart_message = multiplayer_state_.current_queue_chart_installed
-            ? "Up next is installed locally."
-            : "Up next is not installed locally.";
+    multiplayer_state_.installed_queue_item_ids.clear();
+    if (multiplayer_state_.current_room.has_value()) {
+        for (const multiplayer::room_queue_item& item : multiplayer_state_.current_room->queue) {
+            const local_chart_match match =
+                find_online_chart_match(play_create_feature_.state(), room_server_url, item.song_id, item.chart_id);
+            const bool installed = match.song != nullptr && match.chart != nullptr;
+            if (installed) {
+                multiplayer_state_.installed_queue_item_ids.push_back(item.id);
+            }
+            if (&item == &multiplayer_state_.current_room->queue.front()) {
+                multiplayer_state_.current_queue_chart_installed = installed;
+            }
+        }
     }
     if (queue_selected_chart_on_multiplayer_return_ && multiplayer_state_.current_room.has_value()) {
         queue_selected_chart_on_multiplayer_return_ = false;
@@ -404,9 +410,13 @@ void title_scene::update_multiplayer_mode(float dt) {
     }
     if (multiplayer_state_.current_queue_download_requested) {
         multiplayer_state_.current_queue_download_requested = false;
-        if (multiplayer_state_.current_room.has_value() && !multiplayer_state_.current_room->queue.empty()) {
-            const multiplayer::room_queue_item& item = multiplayer_state_.current_room->queue.front();
-            browse_feature_.start_chart_download_by_remote_id(item.song_id, item.chart_id);
+        if (!multiplayer_state_.requested_download_song_id.empty() &&
+            !multiplayer_state_.requested_download_chart_id.empty()) {
+            browse_feature_.start_chart_download_by_remote_id(
+                multiplayer_state_.requested_download_song_id,
+                multiplayer_state_.requested_download_chart_id);
+            multiplayer_state_.requested_download_song_id.clear();
+            multiplayer_state_.requested_download_chart_id.clear();
             multiplayer_state_.status_message = "Downloading queued chart...";
         }
     }

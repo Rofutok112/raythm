@@ -216,8 +216,8 @@ room_member parse_room_member(const std::string& object, const std::string& room
 
 room_queue_item parse_queue_item(const std::string& object) {
     room_queue_item item;
-    item.id = network::json::extract_string(object, "id").value_or("");
-    item.status = network::json::extract_string(object, "status").value_or("");
+    item.id = extract_top_level_string(object, "id").value_or("");
+    item.status = extract_top_level_string(object, "status").value_or("");
     const std::optional<std::string> requester = network::json::extract_object(object, "requestedBy");
     if (requester.has_value()) {
         item.requested_by = network::json::extract_string(*requester, "displayName").value_or("");
@@ -227,6 +227,8 @@ room_queue_item parse_queue_item(const std::string& object) {
     if (chart.has_value()) {
         item.chart_id = network::json::extract_string(*chart, "id").value_or("");
         item.difficulty_name = network::json::extract_string(*chart, "difficultyName").value_or("");
+        const std::optional<float> calculated_level = network::json::extract_float(*chart, "calculatedLevel");
+        item.level = calculated_level.value_or(network::json::extract_float(*chart, "level").value_or(0.0f));
         const std::optional<std::string> song = network::json::extract_object(*chart, "song");
         if (song.has_value()) {
             item.song_id = network::json::extract_string(*song, "id").value_or("");
@@ -332,6 +334,7 @@ room_operation_result parse_room_operation(const network::http::response& respon
             result.live_scores.push_back(parse_live_score(score));
         }
     }
+    result.type = "http";
     result.match_id = network::json::extract_string(response.body, "matchId").value_or("");
     result.match_start_at = network::json::extract_string(response.body, "startAt").value_or("");
     result.success = true;
@@ -432,6 +435,7 @@ std::vector<room_operation_result> realtime_client::poll_room_events() {
         }
         room_operation_result result;
         result.success = true;
+        result.type = network::json::extract_string(message, "type").value_or("");
         result.message = "Room updated.";
         result.match_id = network::json::extract_string(*payload, "matchId").value_or("");
         result.match_start_at = network::json::extract_string(*payload, "startAt").value_or("");
@@ -444,7 +448,7 @@ std::vector<room_operation_result> realtime_client::poll_room_events() {
         const std::optional<std::string> room = network::json::extract_object(*payload, "room");
         if (room.has_value()) {
             result.room = parse_room_detail(*room);
-        } else if (network::json::extract_string(message, "type").value_or("") == "error") {
+        } else if (result.type == "error") {
             result.success = false;
             result.message = network::json::extract_string(*payload, "message").value_or("Room WebSocket error.");
         }

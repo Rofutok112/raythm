@@ -33,6 +33,14 @@
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/chevron-right.svg"
     },
     {
+      "name": "chevron_up",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/chevron-up.svg"
+    },
+    {
+      "name": "chevron_down",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/chevron-down.svg"
+    },
+    {
       "name": "chevrons_left",
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/chevrons-left.svg"
     },
@@ -63,6 +71,18 @@
     {
       "name": "trash_2",
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/trash-2.svg"
+    },
+    {
+      "name": "circle_check",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/circle-check.svg"
+    },
+    {
+      "name": "clock_3",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/clock-3.svg"
+    },
+    {
+      "name": "crown",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/crown.svg"
     },
     {
       "name": "triangle_alert",
