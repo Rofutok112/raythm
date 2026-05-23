@@ -30,6 +30,7 @@ public:
     void begin_frame();
     void request_text_input();
     void set_text_input_screen_position(int x, int y);
+    void cancel_text_input();
     void end_frame();
 
     std::vector<native_key_event> drain_events();

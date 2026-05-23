@@ -171,6 +171,18 @@ public:
 #endif
     }
 
+    void cancel_text_input() {
+        {
+            std::scoped_lock lock(mutex_);
+            committed_text_.clear();
+            composition_text_.clear();
+            ime_requested_this_frame_ = false;
+        }
+        set_ime_context_enabled(false);
+        std::scoped_lock lock(mutex_);
+        ime_context_enabled_ = false;
+    }
+
     void end_frame() {
         bool should_disable_ime = false;
         {
@@ -232,6 +244,9 @@ public:
 #ifdef _WIN32
     static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_param) {
         windows_input_source_state& state = instance();
+        if (message == WM_KILLFOCUS || (message == WM_ACTIVATEAPP && w_param == FALSE)) {
+            state.cancel_text_input();
+        }
         if (state.try_capture_ime(hwnd, message, l_param)) {
             return 0;
         }
@@ -340,10 +355,15 @@ private:
         functions.set_composition_window(context, &composition);
 
         if (functions.set_candidate_window != nullptr) {
+            RECT client = {};
+            GetClientRect(hwnd, &client);
+            constexpr int kCandidateEstimateHeight = 180;
+            const bool prefer_above = y + kCandidateEstimateHeight > client.bottom;
+            const int candidate_y = prefer_above ? std::max(0, y - kCandidateEstimateHeight) : y + 24;
             CANDIDATEFORM candidate = {};
             candidate.dwIndex = 0;
             candidate.dwStyle = CFS_CANDIDATEPOS;
-            candidate.ptCurrentPos = {x, y + 24};
+            candidate.ptCurrentPos = {x, candidate_y};
             functions.set_candidate_window(context, &candidate);
         }
 
@@ -584,6 +604,10 @@ void windows_input_source::request_text_input() {
 
 void windows_input_source::set_text_input_screen_position(int x, int y) {
     windows_input_source_state::instance().set_text_input_screen_position(x, y);
+}
+
+void windows_input_source::cancel_text_input() {
+    windows_input_source_state::instance().cancel_text_input();
 }
 
 void windows_input_source::end_frame() {

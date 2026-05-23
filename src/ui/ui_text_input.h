@@ -412,6 +412,14 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
         state.mouse_selecting = false;
     }
 
+    if (state.active && !IsWindowFocused()) {
+        windows_input_source::instance().cancel_text_input();
+        state.active = false;
+        state.mouse_selecting = false;
+        clear_text_input_selection(state);
+        result.deactivated = true;
+    }
+
     if (state.active) {
         windows_input_source::instance().request_text_input();
         const native_text_input_update text_update = windows_input_source::instance().drain_text_input();
