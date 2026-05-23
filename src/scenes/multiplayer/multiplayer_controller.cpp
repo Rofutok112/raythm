@@ -107,14 +107,14 @@ void set_requested_start_from_room(state& state) {
     if (!state.current_room.has_value()) {
         return;
     }
-    if (!state.current_room->queue.empty()) {
-        state.requested_start_song_id = state.current_room->queue.front().song_id;
-        state.requested_start_chart_id = state.current_room->queue.front().chart_id;
-        return;
-    }
     if (!state.current_room->current_song_id.empty() && !state.current_room->current_chart_id.empty()) {
         state.requested_start_song_id = state.current_room->current_song_id;
         state.requested_start_chart_id = state.current_room->current_chart_id;
+        return;
+    }
+    if (!state.current_room->queue.empty()) {
+        state.requested_start_song_id = state.current_room->queue.front().song_id;
+        state.requested_start_chart_id = state.current_room->queue.front().chart_id;
     }
 }
 
