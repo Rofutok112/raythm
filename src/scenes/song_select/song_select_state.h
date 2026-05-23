@@ -189,6 +189,8 @@ struct selection_state {
 struct filter_state {
     ui::text_input_state play_search_input;
     chart_source_filter chart_source = chart_source_filter::all;
+    bool multiplayer_queueable_only = false;
+    std::string multiplayer_queue_server_url;
     int chart_key_filter = 0;
     float chart_min_level = 0.0f;
     float chart_max_level = 99.0f;

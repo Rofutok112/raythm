@@ -168,6 +168,10 @@ void title_scene::enter_play_mode() {
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
     play_state_.ranking_panel.selected_source = ranking_service::source::online;
+    play_state_.filter.multiplayer_queueable_only = multiplayer_chart_pick_active_;
+    play_state_.filter.multiplayer_queue_server_url = multiplayer_chart_pick_active_
+        ? server_environment::normalize_url(multiplayer_state_.auth.server_url)
+        : "";
     sync_play_media();
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_state_, online_state_), 0.0f);
 }

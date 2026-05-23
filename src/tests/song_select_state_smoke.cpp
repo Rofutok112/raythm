@@ -20,6 +20,22 @@ song_select::chart_option make_chart(const char* chart_id, const char* difficult
     return chart;
 }
 
+song_select::chart_option make_online_chart(const char* chart_id,
+                                            const char* difficulty,
+                                            float level,
+                                            const char* server_url) {
+    song_select::chart_option chart = make_chart(chart_id, difficulty, level);
+    chart.source_status = content_status::community;
+    chart.online_identity = online_content::chart_identity{
+        .server_url = server_url,
+        .remote_song_id = "remote-song",
+        .remote_chart_id = chart_id,
+        .content_source = online_content::source::community,
+        .remote_chart_version = 1,
+    };
+    return chart;
+}
+
 song_select::song_entry make_song(const char* song_id, const char* title, std::vector<song_select::chart_option> charts) {
     song_select::song_entry song;
     song.song.meta.song_id = song_id;
@@ -92,6 +108,28 @@ int main() {
     assert(scrolled_state.selected_song_index == 15);
     assert(scrolled_state.scroll_y > 0.0f);
     assert(std::fabs(scrolled_state.scroll_y - scrolled_state.scroll_y_target) < 0.01f);
+
+    song_select::catalog_data multiplayer_catalog;
+    multiplayer_catalog.songs.push_back(make_song("local-song", "Local",
+                                                  {make_chart("local-chart", "Normal", 4)}));
+    multiplayer_catalog.songs.push_back(make_song("other-server-song", "Other",
+                                                  {make_online_chart("other-chart", "Normal", 4,
+                                                                     "https://other.example")}));
+    multiplayer_catalog.songs.push_back(make_song("online-song", "Online",
+                                                  {make_online_chart("online-chart", "Normal", 4,
+                                                                     "https://api.example")}));
+
+    song_select::state multiplayer_state;
+    multiplayer_state.filter.multiplayer_queueable_only = true;
+    multiplayer_state.filter.multiplayer_queue_server_url = "https://api.example";
+    song_select::apply_catalog(multiplayer_state, std::move(multiplayer_catalog), "local-song", "local-chart");
+    const std::vector<int> multiplayer_song_indices = song_select::filtered_song_indices(multiplayer_state);
+    assert(multiplayer_song_indices.size() == 1);
+    assert(multiplayer_song_indices.front() == 2);
+    assert(multiplayer_state.selected_song_index == 2);
+    const auto multiplayer_charts = song_select::filtered_charts_for_selected_song(multiplayer_state);
+    assert(multiplayer_charts.size() == 1);
+    assert(multiplayer_charts.front()->meta.chart_id == "online-chart");
 
     return 0;
 }

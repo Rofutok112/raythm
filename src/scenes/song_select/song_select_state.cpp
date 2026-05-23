@@ -238,6 +238,16 @@ const song_entry* selected_song(const state& state) {
 }
 
 bool chart_matches_filters(const state& state, const chart_option& chart) {
+    if (state.filter.multiplayer_queueable_only) {
+        if (!online_content::is_queueable(chart.online_identity)) {
+            return false;
+        }
+        if (!state.filter.multiplayer_queue_server_url.empty() &&
+            chart.online_identity->server_url != state.filter.multiplayer_queue_server_url) {
+            return false;
+        }
+    }
+
     switch (state.chart_source) {
     case chart_source_filter::official:
         if (chart.source_status != content_status::official) {
@@ -362,6 +372,8 @@ void reset_for_enter(state& state) {
     state.selected_song_expand_t = 1.0f;
     state.play_search_input = {};
     state.chart_source = chart_source_filter::all;
+    state.filter.multiplayer_queueable_only = false;
+    state.filter.multiplayer_queue_server_url.clear();
     state.chart_key_filter = 0;
     state.chart_min_level = 0.0f;
     state.chart_max_level = 99.0f;
@@ -456,6 +468,20 @@ void apply_catalog(state& state, catalog_data catalog,
                 break;
             }
         }
+    }
+
+    const std::vector<int> visible_song_indices = filtered_song_indices(state);
+    if (!visible_song_indices.empty() &&
+        std::find(visible_song_indices.begin(), visible_song_indices.end(), state.selected_song_index) ==
+            visible_song_indices.end()) {
+        state.selected_song_index = visible_song_indices.front();
+        state.difficulty_index = 0;
+    }
+    const auto filtered_charts = filtered_charts_for_selected_song(state);
+    if (filtered_charts.empty()) {
+        state.difficulty_index = 0;
+    } else {
+        state.difficulty_index = std::clamp(state.difficulty_index, 0, static_cast<int>(filtered_charts.size()) - 1);
     }
 
     if (!state.songs.empty()) {
