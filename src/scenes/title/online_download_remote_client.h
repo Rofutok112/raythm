@@ -126,7 +126,7 @@ struct remote_binary_fetch_result {
 
 using remote_binary_progress_callback = std::function<void(size_t bytes_received, size_t total_bytes)>;
 
-remote_catalog_fetch_result fetch_remote_catalog();
+remote_catalog_fetch_result fetch_remote_catalog(const std::string& preferred_server_url = "");
 remote_discovery_fetch_result fetch_remote_discovery(
     source_filter source,
     int page_size,

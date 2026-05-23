@@ -11,6 +11,7 @@
 #include "title/play_session_controller.h"
 #include "title/title_header_view.h"
 #include "title/title_layout.h"
+#include "title/title_multiplayer_view.h"
 #include "title/seamless_song_select_view.h"
 #include "tween.h"
 #include "ui_clip.h"
@@ -128,6 +129,12 @@ draw_result draw(draw_context context) {
             context.play_state,
             context.audio_controller.preview(),
             context.view.current_mode == mode::create ? title_play_view::mode::create : title_play_view::mode::play,
+            context.view.play_view_anim,
+            context.view.play_entry_origin_rect);
+    } else if (context.view.current_mode == mode::multiplayer) {
+        title_multiplayer_view::draw(
+            context.multiplayer_state,
+            context.play_state,
             context.view.play_view_anim,
             context.view.play_entry_origin_rect);
     } else if (context.view.current_mode == mode::online) {

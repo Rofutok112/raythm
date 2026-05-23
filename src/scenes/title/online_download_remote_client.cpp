@@ -59,7 +59,7 @@ struct remote_chart_fetch_result {
     std::string retry_after;
 };
 
-constexpr int kRemotePageSize = 100;
+constexpr int kRemotePageSize = 50;
 
 #ifdef _WIN32
 struct http_url_parts {
@@ -926,9 +926,9 @@ std::string make_absolute_remote_url(const std::string& server_url, const std::s
     return server_url + "/" + value;
 }
 
-remote_catalog_fetch_result fetch_remote_catalog() {
+remote_catalog_fetch_result fetch_remote_catalog(const std::string& preferred_server_url) {
     remote_catalog_fetch_result result;
-    const std::vector<std::string> server_urls = resolve_server_urls();
+    const std::vector<std::string> server_urls = prioritize_server_url(preferred_server_url);
 
     for (const std::string& server_url : server_urls) {
         const remote_song_fetch_result songs = fetch_remote_songs(server_url);

@@ -222,6 +222,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/network/http_client.h
         src/network/json_helpers.cpp
         src/network/json_helpers.h
+        src/network/multiplayer_client.cpp
+        src/network/multiplayer_client.h
         src/network/network_error.cpp
         src/network/network_error.h
         src/network/ranking_client.cpp
@@ -276,8 +278,15 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/play_session_controller.h
         src/scenes/title/profile_view.cpp
         src/scenes/title/profile_view.h
+        src/scenes/title/multiplayer_content_resolver.cpp
+        src/scenes/title/multiplayer_content_resolver.h
+        src/scenes/title/multiplayer_online_catalog.cpp
+        src/scenes/title/multiplayer_playable_catalog.cpp
+        src/scenes/title/multiplayer_playable_catalog.h
         src/scenes/title/title_create_mode_controller.cpp
         src/scenes/title/title_create_mode_controller.h
+        src/scenes/title/title_multiplayer_view.cpp
+        src/scenes/title/title_multiplayer_view.h
         src/scenes/title/title_online_mode_controller.cpp
         src/scenes/title/title_online_mode_controller.h
         src/scenes/title/title_play_data_controller.cpp
@@ -827,6 +836,38 @@ add_executable(network_error_smoke
         src/network/network_error.h
         src/tests/network_error_smoke.cpp)
 
+add_executable(multiplayer_client_smoke
+        src/network/http_client.cpp
+        src/network/http_client.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/network/multiplayer_client.cpp
+        src/network/multiplayer_client.h
+        src/network/network_error.cpp
+        src/network/network_error.h
+        src/tests/multiplayer_client_smoke.cpp)
+
+add_executable(multiplayer_content_resolver_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/local_sqlite.cpp
+        src/core/local_sqlite.h
+        src/models/data_models.h
+        src/network/auth_client.h
+        src/network/multiplayer_client.h
+        src/scenes/shared/scene_fade.h
+        src/scenes/song_select/song_select_state.h
+        src/scenes/title/local_content_binding.h
+        src/scenes/title/local_content_database.cpp
+        src/scenes/title/local_content_database.h
+        src/scenes/title/local_content_index.cpp
+        src/scenes/title/local_content_index.h
+        src/scenes/title/multiplayer_content_resolver.cpp
+        src/scenes/title/multiplayer_content_resolver.h
+        src/scenes/title/multiplayer_playable_catalog.cpp
+        src/scenes/title/multiplayer_playable_catalog.h
+        src/tests/multiplayer_content_resolver_smoke.cpp)
+
 add_executable(play_note_draw_queue_smoke
         src/models/data_models.h
         src/scenes/play/play_note_draw_queue.cpp
@@ -1152,6 +1193,8 @@ set(RAYTHM_SMOKE_TARGETS
         performance_system_smoke
         ranking_service_smoke
         network_error_smoke
+        multiplayer_client_smoke
+        multiplayer_content_resolver_smoke
         play_note_draw_queue_smoke
         play_chart_filter_smoke
         play_flow_controller_smoke
@@ -1200,6 +1243,8 @@ target_link_libraries(settings_io_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
 target_link_libraries(ranking_service_smoke PRIVATE sqlite3 crypt32 winhttp)
+target_link_libraries(multiplayer_client_smoke PRIVATE winhttp)
+target_link_libraries(multiplayer_content_resolver_smoke PRIVATE sqlite3 raylib)
 target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_transport_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_flow_controller_smoke PRIVATE raylib sqlite3)

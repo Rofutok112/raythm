@@ -8,6 +8,7 @@
 #include "title/online_catalog_data_controller.h"
 #include "title/online_download_view.h"
 #include "title/title_audio_controller.h"
+#include "title/title_multiplayer_view.h"
 #include "title/title_play_data_controller.h"
 #include "title/title_play_transfer_controller.h"
 #include "title/title_profile_controller.h"
@@ -24,6 +25,7 @@ public:
         title,
         home,
         play,
+        multiplayer,
         online,
         create,
         settings,
@@ -31,6 +33,7 @@ public:
 
     enum class transition_target {
         song_select,
+        multiplayer,
         online_download,
         create_tools,
     };
@@ -54,11 +57,13 @@ private:
     void enter_title_mode();
     void enter_home_mode(bool suppress_pointer = false);
     void enter_play_mode();
+    void enter_multiplayer_mode();
     void enter_online_mode();
     void enter_create_mode();
     void enter_settings_mode();
     void close_settings_mode();
     void update_play_mode(float dt);
+    void update_multiplayer_mode(float dt);
     void update_online_mode(float dt);
     void update_create_mode(float dt);
     void update_settings_mode(float dt);
@@ -120,6 +125,7 @@ private:
     title_play_data_controller play_data_controller_;
     title_play_transfer_controller play_transfer_controller_;
     title_profile_controller profile_controller_;
+    title_multiplayer_view::state multiplayer_state_;
     title_online_view::state online_state_;
     online_catalog::data_controller online_data_controller_;
     title_audio_controller audio_controller_;

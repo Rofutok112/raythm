@@ -5,6 +5,7 @@
 #include "song_select/song_select_state.h"
 #include "title/online_download_view.h"
 #include "title/title_audio_controller.h"
+#include "title/title_multiplayer_view.h"
 #include "title/title_play_transfer_controller.h"
 #include "title/title_profile_controller.h"
 #include "title/title_settings_overlay.h"
@@ -16,6 +17,7 @@ enum class mode {
     title,
     home,
     play,
+    multiplayer,
     online,
     create,
     settings,
@@ -42,6 +44,7 @@ struct draw_context {
     title_settings_overlay& settings_overlay;
     title_play_transfer_controller& play_transfer_controller;
     title_profile_controller& profile_controller;
+    title_multiplayer_view::state& multiplayer_state;
     auth_overlay::controller& auth_controller;
     const title_play_transfer_controller::catalog_callbacks& transfer_callbacks;
     scene_fade& intro_fade;
