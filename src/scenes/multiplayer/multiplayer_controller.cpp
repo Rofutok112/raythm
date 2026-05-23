@@ -102,21 +102,33 @@ void apply_room(state& state, const room_detail& room) {
     ensure_realtime(state);
 }
 
+void set_requested_start_from_room(state& state) {
+    if (!state.current_room.has_value()) {
+        return;
+    }
+    if (!state.current_room->queue.empty()) {
+        state.requested_start_song_id = state.current_room->queue.front().song_id;
+        state.requested_start_chart_id = state.current_room->queue.front().chart_id;
+        return;
+    }
+    if (!state.current_room->current_song_id.empty() && !state.current_room->current_chart_id.empty()) {
+        state.requested_start_song_id = state.current_room->current_song_id;
+        state.requested_start_chart_id = state.current_room->current_chart_id;
+    }
+}
+
 void apply_realtime_event(state& state, const room_operation_result& event) {
     if (!event.success) {
         state.status_message = event.message;
         return;
     }
-    if (!event.match_id.empty()) {
-        state.active_match_id = event.match_id;
-        if (state.current_room.has_value() && !state.current_room->queue.empty()) {
-            state.requested_start_song_id = state.current_room->queue.front().song_id;
-            state.requested_start_chart_id = state.current_room->queue.front().chart_id;
-        }
-        state.start_play_requested = true;
-    }
     if (event.room.has_value()) {
         apply_room(state, *event.room);
+    }
+    if (!event.match_id.empty()) {
+        state.active_match_id = event.match_id;
+        set_requested_start_from_room(state);
+        state.start_play_requested = true;
     }
 }
 
@@ -131,9 +143,11 @@ void finish_operation(state& state, room_operation_result operation) {
 
     if (completed == pending_operation::start_match) {
         state.active_match_id = operation.match_id;
-        if (state.requested_start_chart_id.empty() && operation.room.has_value() && !operation.room->queue.empty()) {
-            state.requested_start_song_id = operation.room->queue.front().song_id;
-            state.requested_start_chart_id = operation.room->queue.front().chart_id;
+        if (operation.room.has_value()) {
+            apply_room(state, *operation.room);
+        }
+        if (state.requested_start_chart_id.empty()) {
+            set_requested_start_from_room(state);
         }
         state.start_play_requested = true;
     }

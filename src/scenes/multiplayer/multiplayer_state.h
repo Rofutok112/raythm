@@ -66,6 +66,8 @@ struct room_detail {
     std::string host_name;
     std::string status;
     std::string chart_title;
+    std::string current_song_id;
+    std::string current_chart_id;
     std::string queue_permission;
     int player_count = 0;
     int max_players = 0;
@@ -88,6 +90,7 @@ struct room_operation_result {
     std::string match_id;
     std::string match_start_at;
     std::optional<room_detail> room;
+    std::vector<live_score> live_scores;
 };
 
 enum class screen_mode {

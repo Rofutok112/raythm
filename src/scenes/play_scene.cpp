@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <chrono>
+#include <cstdio>
+#include <ctime>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -35,6 +37,70 @@ constexpr float kMaxGroundDistance = 1000.0f;
 constexpr float kSoloStartGateSeconds = 0.75f;
 constexpr float kMatchLoadedPollSeconds = 1.0f;
 constexpr float kFallbackMatchCountdownSeconds = 3.0f;
+
+std::optional<float> seconds_until_iso_utc(const std::string& iso_utc) {
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = 0;
+    int minute = 0;
+    int second = 0;
+    int consumed = 0;
+    if (std::sscanf(iso_utc.c_str(),
+                    "%d-%d-%dT%d:%d:%d%n",
+                    &year,
+                    &month,
+                    &day,
+                    &hour,
+                    &minute,
+                    &second,
+                    &consumed) != 6) {
+        return std::nullopt;
+    }
+
+    int milliseconds = 0;
+    if (consumed > 0 && static_cast<size_t>(consumed) < iso_utc.size() && iso_utc[consumed] == '.') {
+        int fraction = 0;
+        int fraction_digits = 0;
+        for (size_t i = static_cast<size_t>(consumed + 1); i < iso_utc.size() && fraction_digits < 3; ++i) {
+            if (iso_utc[i] < '0' || iso_utc[i] > '9') {
+                break;
+            }
+            fraction = fraction * 10 + (iso_utc[i] - '0');
+            ++fraction_digits;
+        }
+        while (fraction_digits > 0 && fraction_digits < 3) {
+            fraction *= 10;
+            ++fraction_digits;
+        }
+        milliseconds = fraction;
+    }
+
+    std::tm utc_tm = {};
+    utc_tm.tm_year = year - 1900;
+    utc_tm.tm_mon = month - 1;
+    utc_tm.tm_mday = day;
+    utc_tm.tm_hour = hour;
+    utc_tm.tm_min = minute;
+    utc_tm.tm_sec = second;
+#if defined(_WIN32)
+    const std::time_t utc_time = _mkgmtime(&utc_tm);
+#else
+    const std::time_t utc_time = timegm(&utc_tm);
+#endif
+    if (utc_time == static_cast<std::time_t>(-1)) {
+        return std::nullopt;
+    }
+
+    const auto start_time =
+        std::chrono::system_clock::from_time_t(utc_time) + std::chrono::milliseconds(milliseconds);
+    const auto remaining = std::chrono::duration<float>(start_time - std::chrono::system_clock::now()).count();
+    return std::max(0.0f, remaining);
+}
+
+float countdown_seconds_from_start_at(const std::string& start_at) {
+    return seconds_until_iso_utc(start_at).value_or(kFallbackMatchCountdownSeconds);
+}
 
 Vector3 build_camera_forward(float camera_angle_degrees) {
     const float angle_rad = std::clamp(camera_angle_degrees, 5.0f, 90.0f) * DEG2RAD;
@@ -362,7 +428,7 @@ void play_scene::update_start_gate(float dt) {
         for (const multiplayer::room_operation_result& event : multiplayer_realtime_->poll_room_events()) {
             if (event.match_id == state_.multiplayer_match_id && !event.match_start_at.empty()) {
                 multiplayer_countdown_started_ = true;
-                start_gate_timer_ = kFallbackMatchCountdownSeconds;
+                start_gate_timer_ = countdown_seconds_from_start_at(event.match_start_at);
             }
         }
     }
@@ -381,7 +447,7 @@ void play_scene::update_start_gate(float dt) {
             multiplayer_loaded_sent_ = multiplayer_loaded_sent_ || result.success;
             if (result.match_id == state_.multiplayer_match_id && !result.match_start_at.empty()) {
                 multiplayer_countdown_started_ = true;
-                start_gate_timer_ = kFallbackMatchCountdownSeconds;
+                start_gate_timer_ = countdown_seconds_from_start_at(result.match_start_at);
             }
         }
 
@@ -420,6 +486,16 @@ void play_scene::sync_multiplayer_score(float dt) {
 
     if (multiplayer_realtime_ != nullptr) {
         for (const multiplayer::room_operation_result& event : multiplayer_realtime_->poll_room_events()) {
+            if (!event.live_scores.empty()) {
+                state_.multiplayer_scores.clear();
+                for (const multiplayer::live_score& score : event.live_scores) {
+                    state_.multiplayer_scores.push_back({
+                        score.display_name,
+                        score.score,
+                        score.failed,
+                    });
+                }
+            }
             if (event.room.has_value()) {
                 state_.multiplayer_scores.clear();
                 for (const multiplayer::live_score& score : event.room->live_scores) {
@@ -442,6 +518,16 @@ void play_scene::sync_multiplayer_score(float dt) {
         multiplayer_room_future_->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         const multiplayer::room_operation_result result = multiplayer_room_future_->get();
         multiplayer_room_future_.reset();
+        if (!result.live_scores.empty()) {
+            state_.multiplayer_scores.clear();
+            for (const multiplayer::live_score& score : result.live_scores) {
+                state_.multiplayer_scores.push_back({
+                    score.display_name,
+                    score.score,
+                    score.failed,
+                });
+            }
+        }
         if (result.room.has_value()) {
             state_.multiplayer_scores.clear();
             for (const multiplayer::live_score& score : result.room->live_scores) {
