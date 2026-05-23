@@ -357,7 +357,7 @@ private:
         if (functions.set_candidate_window != nullptr) {
             RECT client = {};
             GetClientRect(hwnd, &client);
-            constexpr int kCandidateEstimateHeight = 112;
+            constexpr int kCandidateEstimateHeight = 72;
             const bool prefer_above = y + kCandidateEstimateHeight > client.bottom;
             const int candidate_y = prefer_above ? std::max(0, y - kCandidateEstimateHeight) : y + 24;
             CANDIDATEFORM candidate = {};
