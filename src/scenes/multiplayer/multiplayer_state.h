@@ -170,6 +170,7 @@ struct state {
     std::string queue_candidate_message = "Select an online chart from Play.";
     float list_refresh_t = 0.0f;
     float room_refresh_t = 0.0f;
+    float realtime_ping_t = 0.0f;
     bool loading_rooms = false;
     bool room_request_started = false;
     bool local_ready = false;

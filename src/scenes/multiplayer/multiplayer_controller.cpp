@@ -12,6 +12,7 @@ namespace {
 
 constexpr float kListRefreshSeconds = 15.0f;
 constexpr float kRoomRefreshSeconds = 2.5f;
+constexpr float kRealtimePingSeconds = 25.0f;
 
 bool modal_open(const state& state) {
     return state.modal != modal_mode::none;
@@ -89,6 +90,7 @@ void apply_room(state& state, const room_detail& room) {
     state.screen = screen_mode::room;
     state.modal = modal_mode::none;
     state.room_refresh_t = 0.0f;
+    state.realtime_ping_t = 0.0f;
     state.local_ready = false;
     for (const room_member& member : room.members) {
         if ((!state.self_user_id.empty() && member.user_id == state.self_user_id) ||
@@ -485,6 +487,13 @@ update_result update(state& state, float dt) {
             refresh_rooms(state);
         }
     } else if (state.screen == screen_mode::room && state.current_room.has_value()) {
+        if (realtime_connected(state)) {
+            state.realtime_ping_t += dt;
+            if (state.realtime_ping_t >= kRealtimePingSeconds) {
+                state.realtime_ping_t = 0.0f;
+                (void)send_realtime_command(state, "ping", "", state.status_message);
+            }
+        }
         state.room_refresh_t += dt;
         if (state.room_refresh_t >= kRoomRefreshSeconds && !operation_busy(state) && !realtime_connected(state)) {
             state.room_refresh_t = 0.0f;
