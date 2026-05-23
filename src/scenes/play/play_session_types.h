@@ -147,6 +147,7 @@ struct play_session_state {
     bool result_transition_playing = false;
     float result_transition_timer = 0.0f;
     bool chart_end_fade_started = false;
+    float chart_end_hold_timer = 0.0f;
     std::string hitsound_path;
     play_hitsound_paths hitsounds;
     std::vector<float> mv_waveform;

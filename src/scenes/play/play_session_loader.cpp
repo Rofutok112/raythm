@@ -237,6 +237,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.result_transition_playing = false;
     state.result_transition_timer = 0.0f;
     state.chart_end_fade_started = false;
+    state.chart_end_hold_timer = 0.0f;
     state.combo_display = 0;
     return state;
 }

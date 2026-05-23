@@ -73,6 +73,12 @@ void request_bgm_fade_out(play_update_result& result, unsigned int duration_ms) 
     result.fade_out_bgm_duration_ms = duration_ms;
 }
 
+void start_result_transition(play_session_state& state) {
+    capture_final_result(state);
+    state.result_transition_playing = true;
+    state.result_transition_timer = 0.0f;
+}
+
 }  // namespace
 
 play_update_result play_flow_controller::update(play_session_state& state, play_note_draw_queue& draw_queue,
@@ -236,14 +242,16 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
 
     if (chart_finished && !state.chart_end_fade_started) {
         state.chart_end_fade_started = true;
+        state.chart_end_hold_timer = 0.0f;
         request_bgm_fade_out(result, play_session_constants::kChartEndFadeOutMs);
+    } else if (chart_finished) {
+        state.chart_end_hold_timer += context.dt;
     }
 
-    if (state.chart_time_ms >= state.song_end_chart_time_ms ||
+    if ((chart_finished && state.chart_end_hold_timer >= play_session_constants::kChartEndTailMs / 1000.0) ||
+        state.chart_time_ms >= state.song_end_chart_time_ms ||
         (chart_finished && context.enter_pressed && !is_multiplayer_play(state))) {
-        capture_final_result(state);
-        state.result_transition_playing = true;
-        state.result_transition_timer = 0.0f;
+        start_result_transition(state);
         if (!state.chart_end_fade_started) {
             state.chart_end_fade_started = true;
             request_bgm_fade_out(result, play_session_constants::kResultSkipFadeOutMs);
