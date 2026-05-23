@@ -1,6 +1,7 @@
 #pragma once
 
 #include "shared/auth_overlay_controller.h"
+#include "multiplayer/multiplayer_state.h"
 #include "shared/scene_fade.h"
 #include "song_select/song_select_state.h"
 #include "title/online_download_view.h"
@@ -16,6 +17,7 @@ enum class mode {
     title,
     home,
     play,
+    multiplayer,
     online,
     create,
     settings,
@@ -36,6 +38,7 @@ struct model {
 struct draw_context {
     model view;
     song_select::state& play_state;
+    multiplayer::state& multiplayer_state;
     title_online_view::state& online_state;
     title_startup_controller::state& startup;
     title_audio_controller& audio_controller;

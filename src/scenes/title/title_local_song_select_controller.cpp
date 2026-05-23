@@ -515,7 +515,9 @@ title_play_view::update_result update(song_select::state& state, title_play_view
                                                           static_cast<int>(filtered.size()))};
         if (clicked_chart.chart_index >= 0) {
             if (state.difficulty_index == clicked_chart.chart_index) {
-                result.play_requested = true;
+                if (!state.filter.multiplayer_queueable_only) {
+                    result.play_requested = true;
+                }
             } else {
                 state.difficulty_index = clicked_chart.chart_index;
                 state.chart_change_anim_t = 1.0f;

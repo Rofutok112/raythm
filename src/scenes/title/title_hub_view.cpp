@@ -5,6 +5,7 @@
 #include <string>
 
 #include "scene_common.h"
+#include "multiplayer/multiplayer_view.h"
 #include "song_select/song_select_login_dialog.h"
 #include "theme.h"
 #include "title/home_menu_view.h"
@@ -132,6 +133,8 @@ draw_result draw(draw_context context) {
             context.view.play_entry_origin_rect);
     } else if (context.view.current_mode == mode::online) {
         title_online_view::draw(context.online_state, context.view.play_view_anim, context.view.play_entry_origin_rect);
+    } else if (context.view.current_mode == mode::multiplayer) {
+        multiplayer::view::draw(context.multiplayer_state);
     }
 
     const Rectangle account_dialog_anchor = {

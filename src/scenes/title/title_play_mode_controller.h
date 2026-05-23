@@ -15,6 +15,7 @@ public:
         std::function<void()> sync_media;
         std::function<void()> request_ranking_reload;
         std::function<void(bool)> open_update_catalog;
+        std::function<bool()> add_selected_to_multiplayer;
     };
 
     static void update(scene_manager& manager,

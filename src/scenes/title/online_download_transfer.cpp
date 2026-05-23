@@ -29,6 +29,123 @@ namespace title_online_view {
 namespace {
 namespace json = network::json;
 
+content_status source_status_from_remote_download(const std::string& content_source) {
+    return content_source == "official" ? content_status::official : content_status::community;
+}
+
+online_content::source online_source_from_remote_download(const std::string& content_source) {
+    return content_source == "official" ? online_content::source::official : online_content::source::community;
+}
+
+const song_select::song_entry* find_local_song_by_remote(const std::vector<song_select::song_entry>& local_songs,
+                                                         const local_content_index::snapshot& index,
+                                                         const std::string& server_url,
+                                                         const std::string& remote_song_id,
+                                                         std::string& local_song_id) {
+    for (const song_select::song_entry& song : local_songs) {
+        const std::string& candidate_id = song.song.meta.song_id;
+        if (candidate_id == remote_song_id) {
+            local_song_id = candidate_id;
+            return &song;
+        }
+        const std::optional<local_content_index::online_song_binding> binding =
+            local_content_index::find_song_by_local(index, server_url, candidate_id);
+        if (binding.has_value() && binding->remote_song_id == remote_song_id) {
+            local_song_id = candidate_id;
+            return &song;
+        }
+    }
+    local_song_id.clear();
+    return nullptr;
+}
+
+song_entry_state make_download_song_state(const remote_song_payload& remote_song,
+                                          const std::string& server_url,
+                                          const std::vector<song_select::song_entry>& local_songs,
+                                          const local_content_index::snapshot& index) {
+    song_entry_state song;
+    song.song.song.meta.song_id = remote_song.id;
+    song.song.song.meta.title = remote_song.title;
+    song.song.song.meta.artist = remote_song.artist;
+    song.song.song.meta.genre = remote_song.genre;
+    song.song.song.meta.genres = remote_song.genres;
+    song.song.song.meta.keywords = remote_song.keywords;
+    song.song.song.meta.base_bpm = remote_song.base_bpm;
+    song.song.song.meta.offset = remote_song.offset;
+    song.song.song.meta.has_offset = remote_song.has_offset;
+    song.song.song.meta.timing_events = remote_song.timing_events;
+    song.song.song.meta.duration_seconds = remote_song.duration_seconds;
+    song.song.song.meta.audio_url = make_absolute_remote_url(server_url, remote_song.audio_url);
+    song.song.song.meta.jacket_url = make_absolute_remote_url(server_url, remote_song.jacket_url);
+    song.song.song.meta.preview_start_ms = remote_song.preview_start_ms;
+    song.song.song.meta.preview_start_seconds = static_cast<float>(remote_song.preview_start_ms) / 1000.0f;
+    song.song.song.meta.song_version = remote_song.song_version;
+    song.song.song.meta.chart_count = remote_song.chart_count;
+    song.song.song.meta.play_count = remote_song.play_count;
+    song.song.song.meta.has_play_count = remote_song.has_play_count;
+    song.song.source_status = source_status_from_remote_download(remote_song.content_source);
+    song.song.online_identity = online_content::song_identity{
+        .server_url = server_url,
+        .remote_song_id = remote_song.id,
+        .content_source = online_source_from_remote_download(remote_song.content_source),
+    };
+    std::string local_song_id;
+    const song_select::song_entry* local_song =
+        find_local_song_by_remote(local_songs, index, server_url, remote_song.id, local_song_id);
+    song.installed = local_song != nullptr;
+    song.installed_local_song_id = local_song_id;
+    if (local_song != nullptr) {
+        song.song.status = local_song->status == content_status::modified
+            ? content_status::modified
+            : song.song.source_status;
+        song.update_available = local_song->song.meta.song_version < remote_song.song_version;
+    }
+    return song;
+}
+
+chart_entry_state make_download_chart_state(const remote_chart_payload& remote_chart,
+                                            const remote_song_payload& remote_song,
+                                            const std::string& server_url,
+                                            const song_entry_state& song,
+                                            const local_content_index::snapshot& index) {
+    chart_entry_state chart;
+    chart.chart.meta.chart_id = remote_chart.id;
+    chart.chart.meta.song_id = remote_chart.song_id;
+    chart.chart.meta.chart_version = remote_chart.chart_version;
+    chart.chart.meta.key_count = remote_chart.key_count;
+    chart.chart.meta.difficulty = remote_chart.difficulty_name;
+    chart.chart.meta.level = remote_chart.level;
+    chart.chart.meta.chart_author = remote_chart.chart_author;
+    chart.chart.meta.format_version = remote_chart.format_version;
+    chart.chart.meta.resolution = remote_chart.resolution;
+    chart.chart.meta.offset = remote_chart.offset;
+    chart.chart.source_status = source_status_from_remote_download(remote_chart.content_source);
+    chart.chart.status = chart.chart.source_status;
+    chart.chart.online_identity = online_content::chart_identity{
+        .server_url = server_url,
+        .remote_song_id = remote_chart.song_id,
+        .remote_chart_id = remote_chart.id,
+        .content_source = online_source_from_remote_download(remote_chart.content_source),
+        .remote_chart_version = remote_chart.chart_version,
+    };
+    chart.chart.note_count = remote_chart.note_count;
+    chart.chart.min_bpm = remote_chart.min_bpm > 0.0f ? remote_chart.min_bpm : remote_song.base_bpm;
+    chart.chart.max_bpm = remote_chart.max_bpm > 0.0f ? remote_chart.max_bpm : remote_song.base_bpm;
+    chart.uploader_id = remote_chart.uploader_id;
+
+    const std::optional<local_content_index::online_chart_binding> binding =
+        local_content_index::find_chart_by_remote(index, server_url, remote_chart.id);
+    chart.installed_local_chart_id = binding.has_value() ? binding->local_chart_id : "";
+    chart.installed = binding.has_value() && !binding->local_chart_id.empty();
+    chart.update_available = chart.installed &&
+                             remote_chart.chart_version > std::max(1, binding->remote_chart_version);
+    if (chart.installed && song.installed_local_song_id.empty()) {
+        chart.installed = false;
+        chart.installed_local_chart_id.clear();
+    }
+    return chart;
+}
+
 std::string trim_ascii(std::string_view value) {
     size_t start = 0;
     while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
@@ -539,6 +656,99 @@ void start_chart_download(state& state, online_catalog::data_controller& data_co
     std::thread([promise = std::move(promise), selected_song, selected_chart, server_url, progress]() mutable {
         try {
             promise.set_value(download_chart_file(selected_song, selected_chart, server_url, progress));
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    }).detach();
+}
+
+void start_chart_download_by_remote_id(state& state,
+                                       online_catalog::data_controller& data_controller,
+                                       const std::string& remote_song_id,
+                                       const std::string& remote_chart_id) {
+    if (state.download_in_progress) {
+        return;
+    }
+    if (remote_song_id.empty() || remote_chart_id.empty()) {
+        ui::notify("Missing online chart identity.", ui::notice_tone::error, 2.6f);
+        return;
+    }
+
+    state.download_in_progress = true;
+    state.download_progress = std::make_shared<download_progress_state>();
+    ui::notify("Downloading queued chart...", ui::notice_tone::info, 1.8f);
+    const std::shared_ptr<download_progress_state> progress = state.download_progress;
+    const std::string preferred_server_url = state.catalog_server_url;
+    const std::vector<song_select::song_entry> local_songs = state.local_songs;
+    std::promise<download_song_result> promise;
+    data_controller.download_future() = promise.get_future();
+    std::thread([promise = std::move(promise),
+                 remote_song_id,
+                 remote_chart_id,
+                 preferred_server_url,
+                 local_songs,
+                 progress]() mutable {
+        try {
+            download_song_result result;
+            const remote_song_lookup_result song_lookup =
+                fetch_remote_song_by_id(remote_song_id, preferred_server_url);
+            if (!song_lookup.success) {
+                result.message = song_lookup.not_found ? "Queued song was not found." :
+                    (song_lookup.error_message.empty() ? "Failed to load queued song." : song_lookup.error_message);
+                promise.set_value(std::move(result));
+                return;
+            }
+
+            remote_chart_payload remote_chart;
+            bool found_chart = false;
+            std::string cursor;
+            do {
+                const remote_chart_page_fetch_result chart_page =
+                    fetch_remote_chart_page(song_lookup.server_url, remote_song_id, cursor, 50);
+                if (!chart_page.success) {
+                    result.message = chart_page.error_message.empty()
+                        ? "Failed to load queued chart."
+                        : chart_page.error_message;
+                    promise.set_value(std::move(result));
+                    return;
+                }
+                for (const remote_chart_payload& chart : chart_page.charts) {
+                    if (chart.id == remote_chart_id) {
+                        remote_chart = chart;
+                        found_chart = true;
+                        break;
+                    }
+                }
+                cursor = chart_page.next_cursor;
+                if (found_chart || !chart_page.has_more) {
+                    break;
+                }
+            } while (!cursor.empty());
+
+            if (!found_chart) {
+                result.message = "Queued chart was not found.";
+                promise.set_value(std::move(result));
+                return;
+            }
+
+            const local_content_index::snapshot index = local_content_index::load_snapshot();
+            song_entry_state song =
+                make_download_song_state(song_lookup.song, song_lookup.server_url, local_songs, index);
+            if (!song.installed || song.update_available || song.song.status == content_status::modified) {
+                result = download_song_package(song, song_lookup.server_url, progress);
+                if (!result.success) {
+                    promise.set_value(std::move(result));
+                    return;
+                }
+                song.installed = true;
+                song.installed_local_song_id = result.song_id;
+            }
+
+            const local_content_index::snapshot chart_index = local_content_index::load_snapshot();
+            const chart_entry_state chart =
+                make_download_chart_state(remote_chart, song_lookup.song, song_lookup.server_url, song, chart_index);
+            result = download_chart_file(song, chart, song_lookup.server_url, progress);
+            promise.set_value(std::move(result));
         } catch (...) {
             promise.set_exception(std::current_exception());
         }
