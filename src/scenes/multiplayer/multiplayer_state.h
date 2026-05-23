@@ -40,6 +40,7 @@ struct room_queue_item {
     std::string chart_id;
     std::string song_title;
     std::string difficulty_name;
+    float level = 0.0f;
     std::string requested_by;
     std::string requested_by_user_id;
     std::string status;
@@ -137,6 +138,7 @@ enum class ui_command {
     move_queue_item_down,
     toggle_queue_permission,
     start_match,
+    back_to_home,
 };
 
 struct state {
@@ -155,8 +157,10 @@ struct state {
     std::string requested_start_chart_id;
     bool start_play_requested = false;
     bool current_queue_download_requested = false;
+    std::string requested_download_song_id;
+    std::string requested_download_chart_id;
     bool current_queue_chart_installed = false;
-    std::string current_queue_chart_message;
+    std::vector<std::string> installed_queue_item_ids;
     screen_mode screen = screen_mode::list;
     modal_mode modal = modal_mode::none;
     pending_operation pending = pending_operation::none;
@@ -175,6 +179,8 @@ struct state {
     float list_refresh_t = 0.0f;
     float room_refresh_t = 0.0f;
     float realtime_ping_t = 0.0f;
+    float queue_scroll_y = 0.0f;
+    float queue_scroll_y_target = 0.0f;
     bool loading_rooms = false;
     bool room_request_started = false;
     bool local_ready = false;

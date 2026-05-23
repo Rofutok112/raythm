@@ -377,8 +377,10 @@ void on_enter(state& state, const std::string& preferred_room_id) {
     state.selected_queue_item_id.clear();
     state.start_play_requested = false;
     state.current_queue_download_requested = false;
+    state.requested_download_song_id.clear();
+    state.requested_download_chart_id.clear();
     state.current_queue_chart_installed = false;
-    state.current_queue_chart_message.clear();
+    state.installed_queue_item_ids.clear();
     state.loading_rooms = false;
     state.room_request_started = false;
     state.room_list_future.reset();
@@ -402,6 +404,9 @@ void on_enter(state& state, const std::string& preferred_room_id) {
     state.queue_candidate_message = "Select an online chart from Play.";
     state.list_refresh_t = 0.0f;
     state.room_refresh_t = 0.0f;
+    state.realtime_ping_t = 0.0f;
+    state.queue_scroll_y = 0.0f;
+    state.queue_scroll_y_target = 0.0f;
     state.status_message = state.auth.logged_in ? "Loading rooms..." : "Login required.";
     if (!preferred_room_id.empty() && state.auth.logged_in) {
         state.selected_room_id = preferred_room_id;
@@ -430,6 +435,12 @@ update_result update(state& state, float dt) {
         }
     } else if (modal_open(state) && IsKeyPressed(KEY_ESCAPE)) {
         state.modal = modal_mode::none;
+    }
+
+    if (state.command == ui_command::back_to_home) {
+        state.command = ui_command::none;
+        result.back_requested = true;
+        return result;
     }
 
     result.open_song_select_requested = handle_command(state);

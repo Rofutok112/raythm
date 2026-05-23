@@ -414,7 +414,11 @@ title_play_view::update_result update(song_select::state& state, title_play_view
     }
 
     if (!state.play_search_input.active && IsKeyPressed(KEY_ENTER) && has_selection) {
-        result.play_requested = true;
+        if (state.filter.multiplayer_queueable_only) {
+            result.multiplayer_select_requested = true;
+        } else {
+            result.play_requested = true;
+        }
         return result;
     }
 
@@ -422,7 +426,11 @@ title_play_view::update_result update(song_select::state& state, title_play_view
         const song_select::song_entry* song = song_select::selected_song(state);
         const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
         if (left_pressed && has_selection && CheckCollisionPointRec(mouse, start_button_rect(current.ranking_column))) {
-            result.play_requested = true;
+            if (state.filter.multiplayer_queueable_only) {
+                result.multiplayer_select_requested = true;
+            } else {
+                result.play_requested = true;
+            }
             return result;
         }
         if (left_pressed && CheckCollisionPointRec(mouse, preview_play_button_rect(current))) {
@@ -515,7 +523,9 @@ title_play_view::update_result update(song_select::state& state, title_play_view
                                                           static_cast<int>(filtered.size()))};
         if (clicked_chart.chart_index >= 0) {
             if (state.difficulty_index == clicked_chart.chart_index) {
-                if (!state.filter.multiplayer_queueable_only) {
+                if (state.filter.multiplayer_queueable_only) {
+                    result.multiplayer_select_requested = true;
+                } else {
                     result.play_requested = true;
                 }
             } else {

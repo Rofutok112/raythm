@@ -41,9 +41,16 @@ void append_common_localized_texts(std::vector<std::string>& texts) {
     }
 
     constexpr const char* kLiterals[] = {
-        "PLAY", "MULTIPLAY", "BROWSE", "CREATE",
+        "PLAY", "MULTIPLAY", "BROWSE", "CREATE", "SELECT",
         "Solo song select.", "Room battles soon.", "Browse and download.",
         "Create, import, export.", "This route is still warming up.",
+        "Rooms", "Create Room", "Sign in from the account menu before joining multiplayer.",
+        "No rooms yet.", "No chart selected", "host", "lobby", "playing", "online", "away",
+        "Players", "READY", "WAIT", "Beatmap queue", "Add song", "No queued songs yet.",
+        "Installed", "Not installed", "Up", "Down", "Remove", "Chat", "Message...", "Send", "Playing:",
+        "Queue: host only", "Queue: all players", "Leave", "Cancel Ready",
+        "Ready (queue empty)", "Ready", "Ready (download needed)", "Download", "Start",
+        "Room name", "Optional", "Players:", "Max", "Room password", "Joining...", "Join",
         "HOME", "CREATE TOOLS", "ACCOUNT", "SETTINGS",
         "Manage account", "Verified profile", "Email verification pending",
         "SONG", "CHARTS", "Overview", "Rising", "Hidden gems", "Recommended",

@@ -216,8 +216,8 @@ room_member parse_room_member(const std::string& object, const std::string& room
 
 room_queue_item parse_queue_item(const std::string& object) {
     room_queue_item item;
-    item.id = network::json::extract_string(object, "id").value_or("");
-    item.status = network::json::extract_string(object, "status").value_or("");
+    item.id = extract_top_level_string(object, "id").value_or("");
+    item.status = extract_top_level_string(object, "status").value_or("");
     const std::optional<std::string> requester = network::json::extract_object(object, "requestedBy");
     if (requester.has_value()) {
         item.requested_by = network::json::extract_string(*requester, "displayName").value_or("");
@@ -227,6 +227,8 @@ room_queue_item parse_queue_item(const std::string& object) {
     if (chart.has_value()) {
         item.chart_id = network::json::extract_string(*chart, "id").value_or("");
         item.difficulty_name = network::json::extract_string(*chart, "difficultyName").value_or("");
+        const std::optional<float> calculated_level = network::json::extract_float(*chart, "calculatedLevel");
+        item.level = calculated_level.value_or(network::json::extract_float(*chart, "level").value_or(0.0f));
         const std::optional<std::string> song = network::json::extract_object(*chart, "song");
         if (song.has_value()) {
             item.song_id = network::json::extract_string(*song, "id").value_or("");
