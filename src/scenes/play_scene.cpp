@@ -6,7 +6,6 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <thread>
 
 #include "audio_manager.h"
 #include "core/app_paths.h"
@@ -425,11 +424,9 @@ void play_scene::apply_navigation(play_navigation_request navigation) {
         case play_navigation_target::result:
             if (!state_.multiplayer_room_id.empty()) {
                 if (!state_.multiplayer_match_id.empty()) {
-                    const auth::session_summary session = auth::load_session_summary();
-                    const std::string match_id = state_.multiplayer_match_id;
-                    std::thread([session, match_id]() {
-                        (void)multiplayer::client::complete_match(session, match_id);
-                    }).detach();
+                    (void)multiplayer::client::complete_match(
+                        auth::load_session_summary(),
+                        state_.multiplayer_match_id);
                 }
                 manager_.change_scene(song_select::make_multiplayer_title_scene(
                     manager_,
