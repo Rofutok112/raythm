@@ -87,6 +87,7 @@ struct room_list_result {
 
 struct room_operation_result {
     bool success = false;
+    std::string type;
     std::string message;
     std::string match_id;
     std::string match_start_at;

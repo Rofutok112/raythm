@@ -125,7 +125,7 @@ void apply_realtime_event(state& state, const room_operation_result& event) {
     if (event.room.has_value()) {
         apply_room(state, *event.room);
     }
-    if (!event.match_id.empty()) {
+    if (event.type == "room.match_started" && !event.match_id.empty()) {
         state.active_match_id = event.match_id;
         set_requested_start_from_room(state);
         state.start_play_requested = true;

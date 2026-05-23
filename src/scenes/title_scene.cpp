@@ -222,7 +222,9 @@ void title_scene::update_startup_loading() {
             browse_feature_.request_reload();
         },
         [this]() {
-            auth_overlay::start_restore(auth_controller_, play_create_feature_.state().login_dialog);
+            if (!start_in_multiplayer_view_) {
+                auth_overlay::start_restore(auth_controller_, play_create_feature_.state().login_dialog);
+            }
         },
         [this](bool force_refresh) {
             play_create_feature_.request_scoring_ruleset_warm(force_refresh);
