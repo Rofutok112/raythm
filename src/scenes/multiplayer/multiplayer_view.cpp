@@ -277,6 +277,12 @@ void draw_room(state& state) {
     const std::string subtitle = room.host_name + " host  " + std::to_string(room.player_count) + "/" +
                                  std::to_string(room.max_players) + "  " + room.queue_permission;
     ui::draw_text_in_rect(subtitle.c_str(), 18, kStatusRect, g_theme->text_muted, ui::text_align::left);
+    if (room.status == "IN_MATCH" && !room.chart_title.empty()) {
+        const std::string now_playing = "Playing: " + room.chart_title;
+        ui::draw_text_in_rect(now_playing.c_str(), 17,
+                              {kStatusRect.x, kStatusRect.y + 26.0f, 620.0f, kStatusRect.height},
+                              g_theme->accent, ui::text_align::left);
+    }
     if (is_self_host(state, room)) {
         ui::draw_text_in_rect(state.status_message.c_str(), 17,
                               {kStatusRect.x + 860.0f, kStatusRect.y, 530.0f, kStatusRect.height},

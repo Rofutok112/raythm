@@ -409,6 +409,14 @@ void play_scene::apply_navigation(play_navigation_request navigation) {
         case play_navigation_target::none:
             return;
         case play_navigation_target::song_select:
+            if (!state_.multiplayer_room_id.empty()) {
+                manager_.change_scene(song_select::make_multiplayer_title_scene(
+                    manager_,
+                    state_.multiplayer_room_id,
+                    state_.song_data.has_value() ? state_.song_data->meta.song_id : "",
+                    state_.chart_data.has_value() ? state_.chart_data->meta.chart_id : ""));
+                return;
+            }
             manager_.change_scene(song_select::make_seamless_song_select_scene(
                 manager_,
                 state_.song_data.has_value() ? state_.song_data->meta.song_id : "",
@@ -447,6 +455,14 @@ void play_scene::apply_navigation(play_navigation_request navigation) {
             }
             return;
         case play_navigation_target::restart:
+            if (!state_.multiplayer_room_id.empty()) {
+                manager_.change_scene(song_select::make_multiplayer_title_scene(
+                    manager_,
+                    state_.multiplayer_room_id,
+                    state_.song_data.has_value() ? state_.song_data->meta.song_id : "",
+                    state_.chart_data.has_value() ? state_.chart_data->meta.chart_id : ""));
+                return;
+            }
             if (state_.editor_resume_state.has_value() && state_.song_data.has_value() && state_.chart_data.has_value()) {
                 manager_.change_scene(std::make_unique<play_scene>(
                     manager_, *state_.song_data, *state_.chart_data, state_.start_tick, std::move(*state_.editor_resume_state)));

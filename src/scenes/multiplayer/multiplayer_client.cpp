@@ -241,6 +241,7 @@ room_detail parse_room_detail(const std::string& object) {
     room.name = extract_top_level_string(object, "name").value_or("Untitled room");
     room.host_name = extract_top_level_string(object, "hostName").value_or("");
     room.status = extract_top_level_string(object, "status").value_or("");
+    room.chart_title = extract_top_level_string(object, "chartTitle").value_or("");
     room.queue_permission = extract_top_level_string(object, "queuePermission").value_or("ALL_PLAYERS");
     room.player_count = extract_top_level_int(object, "playerCount").value_or(0);
     room.max_players = extract_top_level_int(object, "maxPlayers").value_or(0);

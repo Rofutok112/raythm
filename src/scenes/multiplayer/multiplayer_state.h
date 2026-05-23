@@ -65,6 +65,7 @@ struct room_detail {
     std::string host_user_id;
     std::string host_name;
     std::string status;
+    std::string chart_title;
     std::string queue_permission;
     int player_count = 0;
     int max_players = 0;

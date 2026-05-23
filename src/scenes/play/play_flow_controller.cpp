@@ -239,7 +239,8 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         request_bgm_fade_out(result, play_session_constants::kChartEndFadeOutMs);
     }
 
-    if (state.chart_time_ms >= state.song_end_chart_time_ms || (chart_finished && context.enter_pressed)) {
+    if (state.chart_time_ms >= state.song_end_chart_time_ms ||
+        (chart_finished && context.enter_pressed && !is_multiplayer_play(state))) {
         capture_final_result(state);
         state.result_transition_playing = true;
         state.result_transition_timer = 0.0f;
