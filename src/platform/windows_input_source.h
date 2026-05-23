@@ -29,7 +29,7 @@ public:
 
     void begin_frame();
     void request_text_input();
-    void set_text_input_screen_position(int x, int y);
+    void set_text_input_screen_position(int x, int y, int input_top, int input_bottom);
     void cancel_text_input();
     void end_frame();
 

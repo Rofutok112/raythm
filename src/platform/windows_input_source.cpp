@@ -154,7 +154,7 @@ public:
         }
     }
 
-    void set_text_input_screen_position(int x, int y) {
+    void set_text_input_screen_position(int x, int y, int input_top, int input_bottom) {
 #ifdef _WIN32
         HWND hwnd = nullptr;
         {
@@ -164,10 +164,12 @@ public:
             }
             hwnd = hwnd_;
         }
-        update_ime_window(hwnd, x, y);
+        update_ime_window(hwnd, x, y, input_top, input_bottom);
 #else
         (void)x;
         (void)y;
+        (void)input_top;
+        (void)input_bottom;
 #endif
     }
 
@@ -338,7 +340,7 @@ private:
         return utf8_from_wide(wide);
     }
 
-    void update_ime_window(HWND hwnd, int x, int y) {
+    void update_ime_window(HWND hwnd, int x, int y, int input_top, int input_bottom) {
         const ime_functions& functions = loaded_ime_functions();
         if (functions.get_context == nullptr || functions.release_context == nullptr ||
             functions.set_composition_window == nullptr) {
@@ -357,11 +359,16 @@ private:
         if (functions.set_candidate_window != nullptr) {
             RECT client = {};
             GetClientRect(hwnd, &client);
-            constexpr int kCandidateEstimateHeight = 72;
-            const bool prefer_above = y + kCandidateEstimateHeight > client.bottom;
-            const int candidate_y = prefer_above ? std::max(0, y - kCandidateEstimateHeight) : y + 24;
-            const int candidate_x = std::min(std::max(0, x + 96),
-                                             std::max(0, static_cast<int>(client.right) - 260));
+            constexpr int kCandidateEstimateWidth = 300;
+            constexpr int kCandidateEstimateHeight = 112;
+            constexpr int kCandidateGap = 6;
+            const int client_bottom = static_cast<int>(client.bottom);
+            const int room_below = client_bottom - input_bottom;
+            const int candidate_y = room_below >= kCandidateEstimateHeight + kCandidateGap
+                ? input_bottom + kCandidateGap
+                : std::max(0, input_top - kCandidateEstimateHeight - kCandidateGap);
+            const int candidate_x = std::min(std::max(0, x),
+                                             std::max(0, static_cast<int>(client.right) - kCandidateEstimateWidth));
             CANDIDATEFORM candidate = {};
             candidate.dwIndex = 0;
             candidate.dwStyle = CFS_CANDIDATEPOS;
@@ -604,8 +611,8 @@ void windows_input_source::request_text_input() {
     windows_input_source_state::instance().request_text_input();
 }
 
-void windows_input_source::set_text_input_screen_position(int x, int y) {
-    windows_input_source_state::instance().set_text_input_screen_position(x, y);
+void windows_input_source::set_text_input_screen_position(int x, int y, int input_top, int input_bottom) {
+    windows_input_source_state::instance().set_text_input_screen_position(x, y, input_top, input_bottom);
 }
 
 void windows_input_source::cancel_text_input() {

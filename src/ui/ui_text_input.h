@@ -606,8 +606,12 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
                                text_input_prefix_width(display_value, display_cursor, font_size) -
                                state.scroll_x;
         const Vector2 screen_pos = virtual_screen::virtual_to_screen({cursor_x, text_y + layout_font_size + 6.0f});
+        const Vector2 input_top = virtual_screen::virtual_to_screen({input_rect.x, input_rect.y});
+        const Vector2 input_bottom = virtual_screen::virtual_to_screen({input_rect.x, input_rect.y + input_rect.height});
         windows_input_source::instance().set_text_input_screen_position(static_cast<int>(std::round(screen_pos.x)),
-                                                                        static_cast<int>(std::round(screen_pos.y)));
+                                                                        static_cast<int>(std::round(screen_pos.y)),
+                                                                        static_cast<int>(std::round(input_top.y)),
+                                                                        static_cast<int>(std::round(input_bottom.y)));
 
         const double blink = GetTime() * 1.6;
         if (std::fmod(blink, 1.0) < 0.6) {
