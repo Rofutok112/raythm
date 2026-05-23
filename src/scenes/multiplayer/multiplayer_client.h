@@ -64,6 +64,7 @@ room_operation_result update_score(const auth::session_summary& session,
                                    const std::string& room_id,
                                    const std::string& match_id,
                                    int score,
-                                   int combo);
+                                   int combo,
+                                   bool failed = false);
 
 }  // namespace multiplayer::client

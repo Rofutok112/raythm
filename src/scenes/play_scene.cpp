@@ -331,7 +331,11 @@ void play_scene::sync_multiplayer_score(float dt) {
             if (event.room.has_value()) {
                 state_.multiplayer_scores.clear();
                 for (const multiplayer::live_score& score : event.room->live_scores) {
-                    state_.multiplayer_scores.emplace_back(score.display_name, score.score);
+                    state_.multiplayer_scores.push_back({
+                        score.display_name,
+                        score.score,
+                        score.failed,
+                    });
                 }
             }
         }
@@ -349,7 +353,11 @@ void play_scene::sync_multiplayer_score(float dt) {
         if (result.room.has_value()) {
             state_.multiplayer_scores.clear();
             for (const multiplayer::live_score& score : result.room->live_scores) {
-                state_.multiplayer_scores.emplace_back(score.display_name, score.score);
+                state_.multiplayer_scores.push_back({
+                    score.display_name,
+                    score.score,
+                    score.failed,
+                });
             }
         }
     }
@@ -365,9 +373,11 @@ void play_scene::sync_multiplayer_score(float dt) {
     const std::string match_id = state_.multiplayer_match_id;
     const int score = state_.score_system.get_score();
     const int combo = state_.score_system.get_combo();
+    const bool failed = state_.multiplayer_failed;
     if (multiplayer_realtime_ != nullptr && multiplayer_realtime_->connected()) {
         const std::string body = "{\"score\":" + std::to_string(score) +
             ",\"combo\":" + std::to_string(combo) +
+            ",\"failed\":" + std::string(state_.multiplayer_failed ? "true" : "false") +
             (match_id.empty() ? "" : ",\"matchId\":\"" + network::json::escape_string(match_id) + "\"") +
             "}";
         if (multiplayer_realtime_->send_command("score.update", body)) {
@@ -375,8 +385,8 @@ void play_scene::sync_multiplayer_score(float dt) {
         }
     }
     if (!multiplayer_score_future_.has_value()) {
-        multiplayer_score_future_ = std::async(std::launch::async, [session, room_id, match_id, score, combo]() {
-            return multiplayer::client::update_score(session, room_id, match_id, score, combo);
+        multiplayer_score_future_ = std::async(std::launch::async, [session, room_id, match_id, score, combo, failed]() {
+            return multiplayer::client::update_score(session, room_id, match_id, score, combo, failed);
         });
     }
     if (!multiplayer_room_future_.has_value()) {

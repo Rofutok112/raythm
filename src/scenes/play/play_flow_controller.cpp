@@ -13,7 +13,7 @@ play_navigation_request navigate_after_transition(const play_session_state& stat
 }
 
 bool is_no_fail_playtest(const play_session_state& state) {
-    return state.editor_resume_state.has_value();
+    return state.editor_resume_state.has_value() || !state.multiplayer_room_id.empty();
 }
 
 void update_visual_effect_timers(play_session_state& state, float dt) {
@@ -206,6 +206,11 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         }
     }
     state.combo_display = state.score_system.get_combo();
+
+    if (!state.multiplayer_room_id.empty() && state.gauge.get_value() <= 0.0f) {
+        state.multiplayer_failed = true;
+        state.ranking_enabled = false;
+    }
 
     if (!is_no_fail_playtest(state) && state.gauge.get_value() <= 0.0f) {
         capture_final_result(state);

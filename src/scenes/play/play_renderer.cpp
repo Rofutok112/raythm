@@ -873,12 +873,12 @@ void draw_overlay(const play_session_state& state, const Texture2D* jacket_textu
         ui::draw_text_in_rect("MULTIPLAY", 18, {panel.x + 16.0f, panel.y + 10.0f, panel.width - 32.0f, 24.0f},
                               g_theme->text_muted, ui::text_align::left);
         for (int i = 0; i < static_cast<int>(state.multiplayer_scores.size()); ++i) {
-            const auto& [name, score] = state.multiplayer_scores[static_cast<size_t>(i)];
-            const std::string row = std::to_string(i + 1) + ". " + name + "  " + std::to_string(score);
+            const play_multiplayer_score_row& score = state.multiplayer_scores[static_cast<size_t>(i)];
+            const std::string row = std::to_string(i + 1) + ". " + score.display_name + "  " + std::to_string(score.score);
             ui::draw_text_in_rect(row.c_str(), 18,
                                   {panel.x + 16.0f, panel.y + 40.0f + static_cast<float>(i) * 30.0f,
                                    panel.width - 32.0f, 24.0f},
-                                  g_theme->text, ui::text_align::left);
+                                  score.failed ? g_theme->error : g_theme->text, ui::text_align::left);
         }
     }
     draw_song_info_panel(state, jacket_texture);

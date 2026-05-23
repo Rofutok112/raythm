@@ -58,6 +58,12 @@ struct play_start_request {
     std::string multiplayer_match_id;
 };
 
+struct play_multiplayer_score_row {
+    std::string display_name;
+    int score = 0;
+    bool failed = false;
+};
+
 struct play_draw_window {
     float lane_start_z = 0.0f;
     float judgement_z = 0.0f;
@@ -148,5 +154,6 @@ struct play_session_state {
     double start_ms = 0.0;
     std::string multiplayer_room_id;
     std::string multiplayer_match_id;
-    std::vector<std::pair<std::string, int>> multiplayer_scores;
+    bool multiplayer_failed = false;
+    std::vector<play_multiplayer_score_row> multiplayer_scores;
 };

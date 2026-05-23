@@ -229,8 +229,9 @@ live_score parse_live_score(const std::string& object) {
     const std::optional<std::string> user = network::json::extract_object(object, "user");
     if (user.has_value()) {
         score.user_id = network::json::extract_string(*user, "id").value_or("");
-        score.display_name = network::json::extract_string(*user, "displayName").value_or("Player");
+    score.display_name = network::json::extract_string(*user, "displayName").value_or("Player");
     }
+    score.failed = network::json::extract_bool(object, "failed").value_or(false);
     return score;
 }
 
@@ -545,10 +546,12 @@ room_operation_result update_score(const auth::session_summary& session,
                                    const std::string& room_id,
                                    const std::string& match_id,
                                    int score,
-                                   int combo) {
+                                   int combo,
+                                   bool failed) {
     std::ostringstream body;
     body << "{\"score\":" << std::clamp(score, 0, 1000000)
-         << ",\"combo\":" << std::max(0, combo);
+         << ",\"combo\":" << std::max(0, combo)
+         << ",\"failed\":" << (failed ? "true" : "false");
     if (!match_id.empty()) {
         body << "," << json_string_field("matchId", match_id);
     }

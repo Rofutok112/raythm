@@ -56,6 +56,7 @@ struct live_score {
     std::string display_name;
     int score = 0;
     int combo = 0;
+    bool failed = false;
 };
 
 struct room_detail {
