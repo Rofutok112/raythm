@@ -165,12 +165,14 @@ void title_scene::enter_play_mode() {
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_create_feature_.state(), browse_feature_.state()), 0.0f);
 }
 
-void title_scene::enter_multiplayer_mode() {
+void title_scene::enter_multiplayer_mode(bool reset_room_state) {
     mode_ = hub_mode::multiplayer;
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
-    multiplayer::on_enter(multiplayer_state_, preferred_multiplayer_room_id_);
-    preferred_multiplayer_room_id_.clear();
+    if (reset_room_state) {
+        multiplayer::on_enter(multiplayer_state_, preferred_multiplayer_room_id_);
+        preferred_multiplayer_room_id_.clear();
+    }
     audio_controller_.update(current_audio_mode(), song_select::selected_song(play_create_feature_.state()), 0.0f);
 }
 
@@ -661,7 +663,7 @@ void title_scene::update_settings_mode(float dt) {
                     enter_play_mode();
                     break;
                 case hub_mode::multiplayer:
-                    enter_multiplayer_mode();
+                    enter_multiplayer_mode(false);
                     break;
                 case hub_mode::online:
                     enter_online_mode();

@@ -38,7 +38,7 @@ constexpr float kSoloStartGateSeconds = 0.75f;
 constexpr float kMatchLoadedPollSeconds = 1.0f;
 constexpr float kFallbackMatchCountdownSeconds = 3.0f;
 
-std::optional<float> seconds_until_iso_utc(const std::string& iso_utc) {
+std::optional<std::chrono::system_clock::time_point> parse_iso_utc_time(const std::string& iso_utc) {
     int year = 0;
     int month = 0;
     int day = 0;
@@ -92,13 +92,26 @@ std::optional<float> seconds_until_iso_utc(const std::string& iso_utc) {
         return std::nullopt;
     }
 
-    const auto start_time =
-        std::chrono::system_clock::from_time_t(utc_time) + std::chrono::milliseconds(milliseconds);
-    const auto remaining = std::chrono::duration<float>(start_time - std::chrono::system_clock::now()).count();
+    return std::chrono::system_clock::from_time_t(utc_time) + std::chrono::milliseconds(milliseconds);
+}
+
+std::optional<float> seconds_until_iso_utc(const std::string& iso_utc) {
+    const std::optional<std::chrono::system_clock::time_point> start_time = parse_iso_utc_time(iso_utc);
+    if (!start_time.has_value()) {
+        return std::nullopt;
+    }
+    const auto remaining = std::chrono::duration<float>(*start_time - std::chrono::system_clock::now()).count();
     return std::max(0.0f, remaining);
 }
 
-float countdown_seconds_from_start_at(const std::string& start_at) {
+float countdown_seconds_from_start_at(const std::string& start_at, const std::string& server_now) {
+    const std::optional<std::chrono::system_clock::time_point> start_time = parse_iso_utc_time(start_at);
+    const std::optional<std::chrono::system_clock::time_point> server_time = parse_iso_utc_time(server_now);
+    if (start_time.has_value() && server_time.has_value()) {
+        const auto server_relative_seconds =
+            std::chrono::duration<float>(*start_time - *server_time).count();
+        return std::max(0.0f, server_relative_seconds);
+    }
     return seconds_until_iso_utc(start_at).value_or(kFallbackMatchCountdownSeconds);
 }
 
@@ -428,7 +441,7 @@ void play_scene::update_start_gate(float dt) {
         for (const multiplayer::room_operation_result& event : multiplayer_realtime_->poll_room_events()) {
             if (event.match_id == state_.multiplayer_match_id && !event.match_start_at.empty()) {
                 multiplayer_countdown_started_ = true;
-                start_gate_timer_ = countdown_seconds_from_start_at(event.match_start_at);
+                start_gate_timer_ = countdown_seconds_from_start_at(event.match_start_at, event.match_server_now);
             }
         }
     }
@@ -447,7 +460,7 @@ void play_scene::update_start_gate(float dt) {
             multiplayer_loaded_sent_ = multiplayer_loaded_sent_ || result.success;
             if (result.match_id == state_.multiplayer_match_id && !result.match_start_at.empty()) {
                 multiplayer_countdown_started_ = true;
-                start_gate_timer_ = countdown_seconds_from_start_at(result.match_start_at);
+                start_gate_timer_ = countdown_seconds_from_start_at(result.match_start_at, result.match_server_now);
             }
         }
 

@@ -91,6 +91,7 @@ struct room_operation_result {
     std::string message;
     std::string match_id;
     std::string match_start_at;
+    std::string match_server_now;
     std::optional<room_detail> room;
     std::vector<live_score> live_scores;
 };

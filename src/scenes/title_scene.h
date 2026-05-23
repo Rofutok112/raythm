@@ -57,7 +57,7 @@ private:
     void enter_title_mode();
     void enter_home_mode(bool suppress_pointer = false);
     void enter_play_mode();
-    void enter_multiplayer_mode();
+    void enter_multiplayer_mode(bool reset_room_state = true);
     void enter_online_mode();
     void enter_create_mode();
     void enter_settings_mode();

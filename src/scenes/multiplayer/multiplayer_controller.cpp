@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <future>
+#include <thread>
 
 #include "multiplayer/multiplayer_client.h"
 #include "network/json_helpers.h"
@@ -223,6 +224,18 @@ bool handle_command(state& state) {
     if (command == ui_command::refresh_rooms) {
         refresh_rooms(state);
     } else if (command == ui_command::open_song_select) {
+        if (state.current_room.has_value() && state.local_ready) {
+            state.local_ready = false;
+            const std::string body = "{\"ready\":false}";
+            if (!send_realtime_command(state, "ready.set", body, "Cancelling ready...")) {
+                const auth::session_summary session = state.auth;
+                const std::string room_id = state.current_room->id;
+                state.status_message = "Cancelling ready...";
+                std::thread([session, room_id]() {
+                    (void)client::set_ready(session, room_id, false);
+                }).detach();
+            }
+        }
         return true;
     } else if (command == ui_command::open_create_room) {
         state.create_name_input.value.clear();
@@ -427,10 +440,14 @@ void on_enter(state& state) {
 
 update_result update(state& state, float dt) {
     update_result result;
-    if (!modal_open(state) && (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))) {
+    if (!modal_open(state) && IsKeyPressed(KEY_ESCAPE)) {
         if (state.screen == screen_mode::room) {
             state.command = ui_command::leave_room;
         } else {
+            result.back_requested = true;
+        }
+    } else if (!modal_open(state) && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+        if (state.screen != screen_mode::room) {
             result.back_requested = true;
         }
     } else if (modal_open(state) && IsKeyPressed(KEY_ESCAPE)) {
