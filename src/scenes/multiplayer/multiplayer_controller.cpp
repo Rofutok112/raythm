@@ -556,10 +556,12 @@ update_result update(state& state, float dt) {
 }
 
 void leave_current_room_best_effort(state& state) {
-    if (!state.current_room.has_value()) {
+    const std::string room_id = state.current_room.has_value()
+        ? state.current_room->id
+        : state.selected_room_id;
+    if (room_id.empty()) {
         return;
     }
-    const std::string room_id = state.current_room->id;
     if (state.realtime != nullptr) {
         (void)state.realtime->send_command("room.leave", "{}");
         state.realtime->close();

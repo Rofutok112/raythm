@@ -264,6 +264,17 @@ void multiplayer_result_scene::on_exit() {
     unload_jacket_texture();
 }
 
+void multiplayer_result_scene::on_app_exit() {
+    if (room_id_.empty()) {
+        return;
+    }
+    const auth::session_summary session = auth::load_session_summary();
+    if (!match_id_.empty()) {
+        (void)multiplayer::client::complete_match(session, match_id_);
+    }
+    (void)multiplayer::client::leave_room(session, room_id_);
+}
+
 void multiplayer_result_scene::update(float dt) {
     reveal_t_ = std::min(1.0f, reveal_t_ + dt * 1.8f);
 
