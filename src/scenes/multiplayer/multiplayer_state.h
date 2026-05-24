@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <future>
 #include <memory>
 #include <optional>
@@ -59,6 +60,15 @@ struct live_score {
     int combo = 0;
     float accuracy = 0.0f;
     bool failed = false;
+    bool has_result_details = false;
+    std::array<int, 5> judge_counts = {};
+    float rc_value = 0.0f;
+    float avg_offset = 0.0f;
+    int fast_count = 0;
+    int slow_count = 0;
+    std::string clear_rank;
+    bool is_full_combo = false;
+    bool is_all_perfect = false;
 };
 
 struct room_detail {

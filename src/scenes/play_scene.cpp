@@ -653,7 +653,8 @@ void play_scene::apply_navigation(play_navigation_request navigation) {
                         result_payload.score,
                         result_payload.max_combo,
                         result_payload.accuracy,
-                        result_payload.failed);
+                        result_payload.failed,
+                        &result_payload);
                 }
                 const std::optional<auth::session> saved_session = auth::load_saved_session();
                 if (state_.song_data.has_value() && state_.chart_data.has_value()) {

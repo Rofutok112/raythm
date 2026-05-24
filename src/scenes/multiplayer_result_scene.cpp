@@ -88,6 +88,16 @@ Color result_rank_color(rank value) {
     return g_theme->rank_f;
 }
 
+rank parse_rank_label(const std::string& value) {
+    if (value == "ss") return rank::ss;
+    if (value == "s") return rank::s;
+    if (value == "aa") return rank::aa;
+    if (value == "a") return rank::a;
+    if (value == "b") return rank::b;
+    if (value == "c") return rank::c;
+    return rank::f;
+}
+
 void draw_chip(Rectangle rect, const char* text, Color color, int font_size = 18) {
     ui::draw_rect_f(rect, with_alpha(color, 34));
     ui::draw_rect_lines(rect, 1.5f, with_alpha(color, 180));
@@ -325,6 +335,15 @@ void multiplayer_result_scene::apply_live_scores(const std::vector<multiplayer::
             score.combo,
             score.accuracy,
             score.failed,
+            score.has_result_details,
+            score.judge_counts,
+            score.rc_value,
+            score.avg_offset,
+            score.fast_count,
+            score.slow_count,
+            score.clear_rank.empty() ? rank::f : parse_rank_label(score.clear_rank),
+            score.is_full_combo,
+            score.is_all_perfect,
         });
     }
     upsert_self_score();
@@ -348,6 +367,15 @@ void multiplayer_result_scene::upsert_self_score() {
         result_.max_combo,
         result_.accuracy,
         result_.failed,
+        true,
+        result_.judge_counts,
+        result_.rc_value,
+        result_.avg_offset,
+        result_.fast_count,
+        result_.slow_count,
+        result_.clear_rank,
+        result_.is_full_combo,
+        result_.is_all_perfect,
     };
     if (self == scores_.end()) {
         scores_.push_back(row);
@@ -409,6 +437,15 @@ void multiplayer_result_scene::draw() {
         result_.max_combo,
         result_.accuracy,
         result_.failed,
+        true,
+        result_.judge_counts,
+        result_.rc_value,
+        result_.avg_offset,
+        result_.fast_count,
+        result_.slow_count,
+        result_.clear_rank,
+        result_.is_full_combo,
+        result_.is_all_perfect,
     };
     const play_multiplayer_score_row* selected = find_score(scores_, selected_score_key_);
     if (selected == nullptr) {
@@ -416,8 +453,9 @@ void multiplayer_result_scene::draw() {
     }
     const std::string self_key = !self_user_id_.empty() ? self_user_id_ : score_key(fallback_score);
     const bool selected_self = score_key(*selected) == self_key;
-    const rank selected_rank = selected_self
-        ? result_.clear_rank
+    const bool selected_has_details = selected_self || selected->has_result_details;
+    const rank selected_rank = selected_has_details
+        ? selected->clear_rank
         : (selected->failed ? rank::f : compute_rank(selected->accuracy, false));
     const Color selected_rank_color = result_rank_color(selected_rank);
     const int selected_place = find_score_placement(scores_, score_key(*selected));
@@ -466,15 +504,15 @@ void multiplayer_result_scene::draw() {
                           {736.0f, 152.0f, 414.0f, 96.0f},
                           g_theme->text, ui::text_align::right);
     ui::draw_rect_f({736.0f, 270.0f, 414.0f, 3.0f}, selected_rank_color);
-    ui::draw_text_in_rect(selected_self ? TextFormat("RC %.1f", result_.rc_value) : "RC --", 28,
+    ui::draw_text_in_rect(selected_has_details ? TextFormat("RC %.1f", selected->rc_value) : "RC --", 28,
                           {736.0f, 284.0f, 190.0f, 42.0f}, g_theme->text_secondary,
                           ui::text_align::left);
     const char* clear_label = selected->failed ? "FAILED" :
-        (selected_self && result_.is_all_perfect ? "ALL PERFECT" :
-         (selected_self && result_.is_full_combo ? "FULL COMBO" : "CLEAR"));
+        (selected_has_details && selected->is_all_perfect ? "ALL PERFECT" :
+         (selected_has_details && selected->is_full_combo ? "FULL COMBO" : "CLEAR"));
     const Color clear_color = selected->failed ? g_theme->error :
-        (selected_self && result_.is_all_perfect ? g_theme->all_perfect :
-         (selected_self && result_.is_full_combo ? g_theme->full_combo : g_theme->success));
+        (selected_has_details && selected->is_all_perfect ? g_theme->all_perfect :
+         (selected_has_details && selected->is_full_combo ? g_theme->full_combo : g_theme->success));
     ui::draw_text_in_rect(clear_label, 28, {942.0f, 284.0f, 208.0f, 42.0f},
                           clear_color, ui::text_align::right);
 
@@ -486,10 +524,10 @@ void multiplayer_result_scene::draw() {
                         "Place", selected_place > 0 ? TextFormat("#%d", selected_place) : "--",
                         selected_place > 0 ? rank_color(selected_place - 1) : g_theme->text_secondary);
     draw_compact_metric({430.0f, 518.0f, 344.0f, 118.0f},
-                        "Avg Offset", selected_self ? TextFormat("%+.1fms", result_.avg_offset) : "--",
+                        "Avg Offset", selected_has_details ? TextFormat("%+.1fms", selected->avg_offset) : "--",
                         g_theme->text_secondary);
     draw_compact_metric({806.0f, 518.0f, 344.0f, 118.0f},
-                        "Fast / Slow", selected_self ? TextFormat("%d / %d", result_.fast_count, result_.slow_count) : "--",
+                        "Fast / Slow", selected_has_details ? TextFormat("%d / %d", selected->fast_count, selected->slow_count) : "--",
                         g_theme->slow);
 
     const Rectangle judge_rect{430.0f, 674.0f, 720.0f, 246.0f};
@@ -508,9 +546,9 @@ void multiplayer_result_scene::draw() {
         const Rectangle row{judge_content.x, judge_content.y + judge_row_h * static_cast<float>(i),
                             judge_content.width, judge_row_h};
         ui::draw_text_in_rect(judge_labels[i], 23, {row.x, row.y, 220.0f, row.height},
-                              selected_self ? judge_colors[i] : g_theme->text_muted, ui::text_align::left);
-        const std::string count_text = selected_self
-            ? std::to_string(result_.judge_counts[static_cast<size_t>(i)])
+                              selected_has_details ? judge_colors[i] : g_theme->text_muted, ui::text_align::left);
+        const std::string count_text = selected_has_details
+            ? std::to_string(selected->judge_counts[static_cast<size_t>(i)])
             : "--";
         ui::draw_text_in_rect(count_text.c_str(), 30,
                               {row.x + 240.0f, row.y, row.width - 240.0f, row.height},
