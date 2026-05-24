@@ -18,12 +18,12 @@
 namespace {
 
 constexpr Rectangle kScreenRect{0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
-constexpr Rectangle kBackButtonRect{39.0f, 983.0f, 330.0f, 58.0f};
-constexpr Rectangle kLeftPanelRect{39.0f, 109.0f, 330.0f, 854.0f};
-constexpr Rectangle kMainPanelRect{390.0f, 109.0f, 820.0f, 932.0f};
-constexpr Rectangle kRankingPanelRect{1228.0f, 109.0f, 650.0f, 932.0f};
+constexpr Rectangle kBackButtonRect{39.0f, 944.0f, 330.0f, 58.0f};
+constexpr Rectangle kLeftPanelRect{39.0f, 109.0f, 330.0f, 815.0f};
+constexpr Rectangle kMainPanelRect{390.0f, 109.0f, 820.0f, 815.0f};
+constexpr Rectangle kRankingPanelRect{1228.0f, 109.0f, 650.0f, 815.0f};
 constexpr Rectangle kJacketRect{69.0f, 139.0f, 270.0f, 270.0f};
-constexpr Rectangle kListViewportRect{1258.0f, 246.0f, 590.0f, 754.0f};
+constexpr Rectangle kListViewportRect{1258.0f, 246.0f, 590.0f, 616.0f};
 constexpr Rectangle kListHeaderRect{1258.0f, 192.0f, 590.0f, 36.0f};
 constexpr float kRowHeight = 88.0f;
 constexpr float kRowGap = 10.0f;
