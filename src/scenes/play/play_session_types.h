@@ -59,8 +59,11 @@ struct play_start_request {
 };
 
 struct play_multiplayer_score_row {
+    std::string user_id;
     std::string display_name;
     int score = 0;
+    int combo = 0;
+    float accuracy = 0.0f;
     bool failed = false;
 };
 

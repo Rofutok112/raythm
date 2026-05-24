@@ -346,6 +346,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/multiplayer/multiplayer_state.h
         src/scenes/multiplayer/multiplayer_view.cpp
         src/scenes/multiplayer/multiplayer_view.h
+        src/scenes/multiplayer_result_scene.cpp
+        src/scenes/multiplayer_result_scene.h
         src/scenes/mv_editor_scene.cpp
         src/scenes/mv_editor_scene.h
          src/scenes/song_create_scene.cpp

@@ -57,6 +57,7 @@ struct live_score {
     std::string display_name;
     int score = 0;
     int combo = 0;
+    float accuracy = 0.0f;
     bool failed = false;
 };
 
