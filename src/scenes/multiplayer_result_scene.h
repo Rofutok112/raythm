@@ -54,6 +54,7 @@ private:
     bool scrollbar_dragging_ = false;
     float scrollbar_drag_offset_ = 0.0f;
     bool returning_ = false;
+    std::string selected_score_key_;
     std::string status_message_;
     std::optional<std::future<multiplayer::room_operation_result>> room_future_;
     std::optional<std::future<multiplayer::room_operation_result>> complete_future_;
