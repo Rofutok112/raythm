@@ -49,6 +49,7 @@ public:
 
     void on_enter() override;
     void on_exit() override;
+    void on_app_exit() override;
     void update(float dt) override;
     void draw() override;
 
@@ -57,7 +58,7 @@ private:
     void enter_title_mode();
     void enter_home_mode(bool suppress_pointer = false);
     void enter_play_mode();
-    void enter_multiplayer_mode();
+    void enter_multiplayer_mode(bool reset_room_state = true);
     void enter_online_mode();
     void enter_create_mode();
     void enter_settings_mode();
@@ -65,6 +66,8 @@ private:
     void update_play_mode(float dt);
     bool return_to_multiplayer_room(bool queue_selected_chart);
     bool add_selected_chart_to_multiplayer_room();
+    const song_select::song_entry* multiplayer_queue_preview_song() const;
+    void update_multiplayer_audio(float dt);
     void update_multiplayer_mode(float dt);
     void update_online_mode(float dt);
     void update_create_mode(float dt);

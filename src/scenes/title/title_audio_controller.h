@@ -14,6 +14,7 @@ public:
     void on_enter();
     void on_exit();
     void update(title_audio_policy::hub_mode mode, const song_select::song_entry* selected_song, float dt);
+    void update_preview_only(const song_select::song_entry* selected_song, float dt);
     void draw_spectrum(const Rectangle& rect, float alpha_scale = 1.0f) const;
 
     [[nodiscard]] title_audio_policy::resolved_state current_state() const;
