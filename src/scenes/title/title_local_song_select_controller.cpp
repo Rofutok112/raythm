@@ -23,42 +23,6 @@ using title_play_view::layout;
 using title_play_view::mode;
 using title_play_view::update_result;
 
-constexpr Rectangle kPlayBackButtonRect = {39.0f, 983.0f, 480.0f, 58.0f};
-constexpr Rectangle kPlaySongColumnRect = {39.0f, 109.0f, 480.0f, 854.0f};
-constexpr Rectangle kPlayMainColumnRect = {541.0f, 109.0f, 665.0f, 932.0f};
-constexpr Rectangle kPlayRankingColumnRect = {1228.0f, 109.0f, 650.0f, 932.0f};
-constexpr Rectangle kPlayJacketRect = {1258.0f, 141.0f, 212.0f, 212.0f};
-constexpr Rectangle kPlayChartDetailRect = {1494.0f, 145.0f, 350.0f, 224.0f};
-constexpr Rectangle kPlayMetaRect = {860.0f, 347.0f, 286.0f, 10.0f};
-constexpr Rectangle kPlayChartButtonsRect = {565.0f, 542.0f, 617.0f, 444.0f};
-constexpr Rectangle kPlayRankingHeaderRect = {1256.0f, 466.0f, 596.0f, 38.0f};
-constexpr Rectangle kPlayRankingSourceLocalRect = {1708.0f, 466.0f, 144.0f, 38.0f};
-constexpr Rectangle kPlayRankingSourceOnlineRect = {1556.0f, 466.0f, 144.0f, 38.0f};
-constexpr Rectangle kPlayRankingListRect = {1256.0f, 512.0f, 596.0f, 431.0f};
-constexpr Rectangle kCreateSongColumnRect = {99.0f, 162.0f, 507.0f, 756.0f};
-constexpr Rectangle kCreateMainColumnRect = {657.0f, 150.0f, 603.0f, 780.0f};
-constexpr Rectangle kCreateRankingColumnRect = {1317.0f, 153.0f, 507.0f, 774.0f};
-constexpr Rectangle kCreateJacketRect = {684.0f, 273.0f, 282.0f, 282.0f};
-constexpr Rectangle kCreateChartDetailRect = {1002.0f, 273.0f, 258.0f, 135.0f};
-constexpr Rectangle kCreateMetaRect = {684.0f, 582.0f, 576.0f, 90.0f};
-constexpr Rectangle kCreateChartButtonsRect = {684.0f, 600.0f, 576.0f, 327.0f};
-constexpr Rectangle kCreateRankingHeaderRect = {1317.0f, 153.0f, 507.0f, 54.0f};
-constexpr Rectangle kCreateRankingSourceLocalRect = {1551.0f, 147.0f, 129.0f, 51.0f};
-constexpr Rectangle kCreateRankingSourceOnlineRect = {1689.0f, 147.0f, 135.0f, 51.0f};
-constexpr Rectangle kCreateRankingListRect = {1317.0f, 225.0f, 507.0f, 702.0f};
-constexpr Rectangle kFallbackOriginRect = {840.0f, 564.0f, 240.0f, 90.0f};
-constexpr Vector2 kSeedSongOffset = {-495.0f, 33.0f};
-constexpr Vector2 kSeedMainOffset = {0.0f, 9.0f};
-constexpr Vector2 kSeedRankingOffset = {495.0f, 39.0f};
-constexpr Vector2 kSeedBackOffset = {-642.0f, -291.0f};
-constexpr Vector2 kSeedJacketOffset = {-102.0f, -39.0f};
-constexpr Vector2 kSeedMetaOffset = {15.0f, 138.0f};
-constexpr Vector2 kSeedChartDetailOffset = {228.0f, -15.0f};
-constexpr Vector2 kSeedChartButtonsOffset = {81.0f, 240.0f};
-constexpr Vector2 kSeedRankingHeaderOffset = {522.0f, -276.0f};
-constexpr Vector2 kSeedRankingSourceLocalOffset = {627.0f, -285.0f};
-constexpr Vector2 kSeedRankingSourceOnlineOffset = {768.0f, -285.0f};
-constexpr Vector2 kSeedRankingListOffset = {522.0f, 30.0f};
 constexpr float kContextMenuInnerPadding = 6.0f;
 constexpr float kChartFilterMinLevel = 0.0f;
 constexpr float kChartFilterUsefulMaxLevel = 15.0f;
@@ -180,72 +144,6 @@ double selected_preview_length_seconds(const song_select::song_entry* song) {
     return song != nullptr ? static_cast<double>(song->song.meta.duration_seconds) : 0.0;
 }
 
-Rectangle centered_scaled_rect(Rectangle anchor, Rectangle target, float scale, Vector2 offset = {0.0f, 0.0f}) {
-    const Vector2 center = {anchor.x + anchor.width * 0.5f + offset.x,
-                            anchor.y + anchor.height * 0.5f + offset.y};
-    const float width = target.width * scale;
-    const float height = target.height * scale;
-    return {center.x - width * 0.5f, center.y - height * 0.5f, width, height};
-}
-
-Rectangle resolve_origin_rect(Rectangle origin_rect) {
-    return origin_rect.width > 0.0f && origin_rect.height > 0.0f ? origin_rect : kFallbackOriginRect;
-}
-
-layout make_layout_for_targets(float anim_t,
-                               Rectangle origin_rect,
-                               Rectangle song_rect,
-                               Rectangle main_rect,
-                               Rectangle ranking_rect,
-                               Rectangle jacket_rect,
-                               Rectangle meta_rect,
-                               Rectangle chart_detail_rect,
-                               Rectangle chart_buttons_rect,
-                               Rectangle ranking_header_rect,
-                               Rectangle ranking_source_local_rect,
-                               Rectangle ranking_source_online_rect,
-                               Rectangle ranking_list_rect) {
-    const float t = tween::ease_out_cubic(anim_t);
-    const Rectangle origin = resolve_origin_rect(origin_rect);
-    const Rectangle seed_song = centered_scaled_rect(origin, song_rect, 0.68f, kSeedSongOffset);
-    const Rectangle seed_main = centered_scaled_rect(origin, main_rect, 0.74f, kSeedMainOffset);
-    const Rectangle seed_ranking = centered_scaled_rect(origin, ranking_rect, 0.68f, kSeedRankingOffset);
-    const Rectangle seed_back = centered_scaled_rect(origin, kPlayBackButtonRect, 0.9f, kSeedBackOffset);
-    const Rectangle seed_jacket = centered_scaled_rect(origin, jacket_rect, 0.82f, kSeedJacketOffset);
-    const Rectangle seed_meta = centered_scaled_rect(origin, meta_rect, 0.8f, kSeedMetaOffset);
-    const Rectangle seed_chart_detail = centered_scaled_rect(origin, chart_detail_rect, 0.76f, kSeedChartDetailOffset);
-    const Rectangle seed_chart_buttons = centered_scaled_rect(origin, chart_buttons_rect, 0.88f, kSeedChartButtonsOffset);
-    const Rectangle seed_ranking_header = centered_scaled_rect(origin, ranking_header_rect, 0.7f, kSeedRankingHeaderOffset);
-    const Rectangle seed_ranking_source_local = centered_scaled_rect(origin, ranking_source_local_rect, 0.8f, kSeedRankingSourceLocalOffset);
-    const Rectangle seed_ranking_source_online = centered_scaled_rect(origin, ranking_source_online_rect, 0.8f, kSeedRankingSourceOnlineOffset);
-    const Rectangle seed_ranking_list = centered_scaled_rect(origin, ranking_list_rect, 0.7f, kSeedRankingListOffset);
-    return {tween::lerp(seed_back, kPlayBackButtonRect, t), tween::lerp(seed_song, song_rect, t),
-            tween::lerp(seed_main, main_rect, t), tween::lerp(seed_ranking, ranking_rect, t),
-            tween::lerp(seed_jacket, jacket_rect, t), tween::lerp(seed_meta, meta_rect, t),
-            tween::lerp(seed_chart_detail, chart_detail_rect, t), tween::lerp(seed_chart_buttons, chart_buttons_rect, t),
-            tween::lerp(seed_ranking_header, ranking_header_rect, t),
-            tween::lerp(seed_ranking_source_local, ranking_source_local_rect, t),
-            tween::lerp(seed_ranking_source_online, ranking_source_online_rect, t),
-            tween::lerp(seed_ranking_list, ranking_list_rect, t)};
-}
-
-layout make_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode) {
-    const bool play = view_mode == mode::play;
-    return make_layout_for_targets(
-        anim_t, origin_rect,
-        play ? kPlaySongColumnRect : kCreateSongColumnRect,
-        play ? kPlayMainColumnRect : kCreateMainColumnRect,
-        play ? kPlayRankingColumnRect : kCreateRankingColumnRect,
-        play ? kPlayJacketRect : kCreateJacketRect,
-        play ? kPlayMetaRect : kCreateMetaRect,
-        play ? kPlayChartDetailRect : kCreateChartDetailRect,
-        play ? kPlayChartButtonsRect : kCreateChartButtonsRect,
-        play ? kPlayRankingHeaderRect : kCreateRankingHeaderRect,
-        play ? kPlayRankingSourceLocalRect : kCreateRankingSourceLocalRect,
-        play ? kPlayRankingSourceOnlineRect : kCreateRankingSourceOnlineRect,
-        play ? kPlayRankingListRect : kCreateRankingListRect);
-}
-
 }  // namespace
 title_play_view::update_result update(song_select::state& state, title_play_view::mode view_mode, float anim_t, Rectangle origin_rect, float dt) {
     update_result result;
@@ -253,7 +151,7 @@ title_play_view::update_result update(song_select::state& state, title_play_view
     const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     const bool right_pressed = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
     const float wheel = GetMouseWheelMove();
-    const layout current = make_mode_layout(anim_t, origin_rect, view_mode);
+    const layout current = title_play_view::make_mode_layout(anim_t, origin_rect, view_mode);
     const auto filtered = song_select::filtered_charts_for_selected_song(state);
     const bool has_selection = song_select::selected_song(state) != nullptr &&
                                song_select::selected_chart_for(state, filtered) != nullptr;

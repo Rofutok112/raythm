@@ -1162,7 +1162,7 @@ layout make_layout_for_targets(float anim_t,
     };
 }
 
-layout make_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode) {
+layout build_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode) {
     const bool play = view_mode == mode::play;
     return make_layout_for_targets(
         anim_t,
@@ -1183,19 +1183,11 @@ layout make_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode) {
 }  // namespace
 
 layout make_layout(float anim_t, Rectangle origin_rect) {
-    return make_layout_for_targets(anim_t,
-                                   origin_rect,
-                                   kPlaySongColumnRect,
-                                   kPlayMainColumnRect,
-                                   kPlayRankingColumnRect,
-                                   kPlayJacketRect,
-                                   kPlayMetaRect,
-                                   kPlayChartDetailRect,
-                                   kPlayChartButtonsRect,
-                                   kPlayRankingHeaderRect,
-                                   kPlayRankingSourceLocalRect,
-                                   kPlayRankingSourceOnlineRect,
-                                   kPlayRankingListRect);
+    return make_mode_layout(anim_t, origin_rect, mode::play);
+}
+
+layout make_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode) {
+    return build_mode_layout(anim_t, origin_rect, view_mode);
 }
 
 void draw(song_select::state& state,
@@ -1324,6 +1316,7 @@ void draw(song_select::state& state,
             .selected_row_alpha = selected_row_alpha,
             .selected_hover_row_alpha = selected_hover_row_alpha,
             .self_player_display_name = state.auth.display_name,
+            .avatar_base_url = state.auth.server_url,
         });
     } else {
         title_create_tools_view::draw(state, {

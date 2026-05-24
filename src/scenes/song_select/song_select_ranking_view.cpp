@@ -1,11 +1,13 @@
 #include "song_select/song_select_ranking_view.h"
 
 #include <chrono>
+#include <cctype>
 #include <cstdio>
 #include <ctime>
 #include <string>
 
 #include "song_select/song_select_layout.h"
+#include "shared/avatar_texture_cache.h"
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
@@ -159,6 +161,20 @@ std::string format_score(int value) {
     return digits;
 }
 
+std::string avatar_label_for(const std::string& name) {
+    std::string result;
+    result.reserve(2);
+    for (char ch : name) {
+        if (std::isalnum(static_cast<unsigned char>(ch))) {
+            result.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
+            if (result.size() == 2) {
+                break;
+            }
+        }
+    }
+    return result.empty() ? "?" : result;
+}
+
 void draw_score_text(const std::string& text, Rectangle rect, Color color) {
     constexpr float font_size = 19.0f;
     constexpr float spacing = 5.0f;
@@ -170,7 +186,11 @@ void draw_score_text(const std::string& text, Rectangle rect, Color color) {
     ui::draw_text_auto(text.c_str(), pos, font_size, spacing, color);
 }
 
-void draw_ranking_row(const ranking_service::entry& entry, float y, float offset_x, unsigned char alpha) {
+void draw_ranking_row(const ranking_service::entry& entry,
+                      float y,
+                      float offset_x,
+                      unsigned char alpha,
+                      const std::string& avatar_base_url) {
     const auto& theme = *g_theme;
     const Rectangle row_rect = {
         song_select::layout::kRankingPanelRect.x + 16.0f + offset_x,
@@ -184,19 +204,28 @@ void draw_ranking_row(const ranking_service::entry& entry, float y, float offset
     const Rectangle content = ui::inset(row_state.visual, ui::edge_insets::symmetric(4.0f, 10.0f));
 
     const Rectangle placement_rect = {content.x, content.y, 36.0f, content.height};
-    const Rectangle rank_rect = {content.x + 52.0f, content.y, 48.0f, content.height};
-    const Rectangle name_rect = {content.x + 124.0f, content.y, 248.0f, 18.0f};
-    const Rectangle accuracy_rect = {content.x + 124.0f, content.y + 20.0f, 108.0f, 16.0f};
-    const Rectangle combo_rect = {content.x + 236.0f, content.y + 20.0f, 110.0f, 16.0f};
-    const Rectangle recorded_at_rect = {content.x + 350.0f, content.y + 20.0f, 92.0f, 16.0f};
+    const Rectangle avatar_rect = {content.x + 48.0f, content.y + 4.0f, 38.0f, 38.0f};
+    const Rectangle rank_rect = {content.x + 98.0f, content.y, 48.0f, content.height};
+    const Rectangle name_rect = {content.x + 164.0f, content.y, 208.0f, 18.0f};
+    const Rectangle accuracy_rect = {content.x + 164.0f, content.y + 20.0f, 108.0f, 16.0f};
+    const Rectangle combo_rect = {content.x + 276.0f, content.y + 20.0f, 90.0f, 16.0f};
+    const Rectangle recorded_at_rect = {content.x + 370.0f, content.y + 20.0f, 72.0f, 16.0f};
     const Rectangle score_rect = {content.x + 446.0f, content.y, content.width - 446.0f, content.height};
 
     ui::draw_rect_f(rank_rect, with_alpha(theme.section, alpha));
     ui::draw_rect_lines(rank_rect, 1.5f, with_alpha(theme.border_light, alpha));
 
+    const std::string player_name = entry.player_display_name.empty() ? "Unknown Player" : entry.player_display_name;
     ui::draw_text_in_rect(TextFormat("%02d", entry.placement), 18, placement_rect, with_alpha(theme.text, alpha), ui::text_align::center);
+    avatar_texture_cache::draw_avatar(avatar_rect,
+                                      entry.player_avatar_url,
+                                      avatar_label_for(player_name),
+                                      with_alpha(theme.accent, alpha),
+                                      with_alpha(theme.panel, alpha),
+                                      12,
+                                      avatar_base_url);
     ui::draw_text_in_rect(rank_label(entry.clear_rank()), 17, rank_rect, with_alpha(rank_color(entry.clear_rank()), alpha), ui::text_align::center);
-    ui::draw_text_in_rect(entry.player_display_name.empty() ? "Unknown Player" : entry.player_display_name.c_str(),
+    ui::draw_text_in_rect(player_name.c_str(),
                           15,
                           name_rect,
                           with_alpha(theme.text, alpha),
@@ -275,7 +304,7 @@ ranking_panel_result draw_ranking_panel(const state& state, bool source_dropdown
             if (row_y > layout::kRankingListRect.y + layout::kRankingListRect.height) {
                 break;
             }
-            draw_ranking_row(entry, row_y, content_offset_x, content_alpha);
+            draw_ranking_row(entry, row_y, content_offset_x, content_alpha, state.auth.server_url);
             row_y += layout::kRankingRowHeight;
         }
     }

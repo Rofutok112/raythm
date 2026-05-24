@@ -17,6 +17,8 @@ struct draw_config {
     std::string_view account_name;
     std::string_view account_status;
     std::string_view avatar_label;
+    std::string_view avatar_url;
+    std::string_view avatar_base_url;
     bool logged_in = false;
     bool email_verified = false;
     double now = 0.0;

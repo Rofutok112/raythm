@@ -516,12 +516,13 @@ void play_scene::sync_multiplayer_score(float dt) {
                 state_.multiplayer_scores.clear();
                 for (const multiplayer::live_score& score : event.live_scores) {
                     state_.multiplayer_scores.push_back({
-                        score.user_id,
-                        score.display_name,
-                        score.score,
-                        score.combo,
-                        score.accuracy,
-                        score.failed,
+                        .user_id = score.user_id,
+                        .display_name = score.display_name,
+                        .avatar_url = score.avatar_url,
+                        .score = score.score,
+                        .combo = score.combo,
+                        .accuracy = score.accuracy,
+                        .failed = score.failed,
                     });
                 }
             }
@@ -529,12 +530,13 @@ void play_scene::sync_multiplayer_score(float dt) {
                 state_.multiplayer_scores.clear();
                 for (const multiplayer::live_score& score : event.room->live_scores) {
                     state_.multiplayer_scores.push_back({
-                        score.user_id,
-                        score.display_name,
-                        score.score,
-                        score.combo,
-                        score.accuracy,
-                        score.failed,
+                        .user_id = score.user_id,
+                        .display_name = score.display_name,
+                        .avatar_url = score.avatar_url,
+                        .score = score.score,
+                        .combo = score.combo,
+                        .accuracy = score.accuracy,
+                        .failed = score.failed,
                     });
                 }
             }
@@ -554,12 +556,13 @@ void play_scene::sync_multiplayer_score(float dt) {
             state_.multiplayer_scores.clear();
             for (const multiplayer::live_score& score : result.live_scores) {
                 state_.multiplayer_scores.push_back({
-                    score.user_id,
-                    score.display_name,
-                    score.score,
-                    score.combo,
-                    score.accuracy,
-                    score.failed,
+                    .user_id = score.user_id,
+                    .display_name = score.display_name,
+                    .avatar_url = score.avatar_url,
+                    .score = score.score,
+                    .combo = score.combo,
+                    .accuracy = score.accuracy,
+                    .failed = score.failed,
                 });
             }
         }
@@ -567,12 +570,13 @@ void play_scene::sync_multiplayer_score(float dt) {
             state_.multiplayer_scores.clear();
             for (const multiplayer::live_score& score : result.room->live_scores) {
                 state_.multiplayer_scores.push_back({
-                    score.user_id,
-                    score.display_name,
-                    score.score,
-                    score.combo,
-                    score.accuracy,
-                    score.failed,
+                    .user_id = score.user_id,
+                    .display_name = score.display_name,
+                    .avatar_url = score.avatar_url,
+                    .score = score.score,
+                    .combo = score.combo,
+                    .accuracy = score.accuracy,
+                    .failed = score.failed,
                 });
             }
         }

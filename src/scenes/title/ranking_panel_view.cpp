@@ -1,6 +1,7 @@
 #include "title/ranking_panel_view.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <ctime>
@@ -8,6 +9,7 @@
 
 #include "ranking_service.h"
 #include "scene_common.h"
+#include "shared/avatar_texture_cache.h"
 #include "theme.h"
 #include "tween.h"
 #include "ui_clip.h"
@@ -125,14 +127,32 @@ std::string avatar_initial(const ranking_service::entry& entry) {
     if (name.empty()) {
         return "?";
     }
-    return name.substr(0, 1);
+    std::string result;
+    result.reserve(2);
+    for (char ch : name) {
+        if (std::isalnum(static_cast<unsigned char>(ch))) {
+            result.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
+            if (result.size() == 2) {
+                break;
+            }
+        }
+    }
+    return result.empty() ? "?" : result;
 }
 
-void draw_avatar_placeholder(Rectangle rect, const ranking_service::entry& entry, unsigned char alpha) {
-    ui::draw_rect_f(rect, with_alpha(g_theme->row_soft_selected, static_cast<unsigned char>(alpha * 0.78f)));
+void draw_avatar(Rectangle rect,
+                 const ranking_service::entry& entry,
+                 unsigned char alpha,
+                 const std::string& avatar_base_url) {
+    avatar_texture_cache::draw_avatar(
+        rect,
+        entry.player_avatar_url,
+        avatar_initial(entry),
+        with_alpha(g_theme->row_soft_selected, static_cast<unsigned char>(alpha * 0.78f)),
+        with_alpha(g_theme->text_secondary, alpha),
+        13,
+        avatar_base_url);
     ui::draw_rect_lines(rect, 1.0f, with_alpha(g_theme->border_light, alpha));
-    ui::draw_text_in_rect(avatar_initial(entry).c_str(), 13, rect,
-                          with_alpha(g_theme->text_secondary, alpha), ui::text_align::center);
 }
 
 bool is_self_entry(const ranking_service::entry& entry,
@@ -276,8 +296,8 @@ void draw(const song_select::ranking_panel_state& panel, const draw_config& conf
         ui::draw_text_in_rect(TextFormat("%d", entry.placement > 0 ? entry.placement : i + 1), 18,
                               {row.x + 14.0f, row.y + 16.0f, 34.0f, 22.0f},
                               with_alpha(t.text, content_alpha), ui::text_align::left);
-        draw_avatar_placeholder({row.x + 46.0f, row.y + 6.0f, kAvatarSize, kAvatarSize},
-                                entry, content_alpha);
+        draw_avatar({row.x + 46.0f, row.y + 6.0f, kAvatarSize, kAvatarSize},
+                    entry, content_alpha, config.avatar_base_url);
         draw_marquee_text(entry.player_display_name.empty() ? "Unknown Player" : entry.player_display_name.c_str(),
                           {row.x + 100.0f, row.y + 18.0f, 132.0f, 22.0f},
                           17, with_alpha(t.text, content_alpha), GetTime());

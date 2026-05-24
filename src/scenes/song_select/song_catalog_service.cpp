@@ -5,7 +5,6 @@
 #include <filesystem>
 #include <optional>
 #include <system_error>
-#include <unordered_map>
 #include <utility>
 
 #include "app_paths.h"
@@ -60,36 +59,6 @@ std::optional<ranking_service::entry> load_best_local_entry(const std::string& c
         return std::nullopt;
     }
     return listing.entries.front();
-}
-
-std::unordered_map<std::string, int> chart_id_counts(const std::vector<song_select::song_entry>& songs) {
-    std::unordered_map<std::string, int> counts;
-    for (const song_select::song_entry& song : songs) {
-        for (const song_select::chart_option& chart : song.charts) {
-            if (!chart.meta.chart_id.empty()) {
-                ++counts[chart.meta.chart_id];
-            }
-        }
-    }
-    return counts;
-}
-
-void populate_unambiguous_best_local_scores(std::vector<song_select::song_entry>& songs) {
-    const std::unordered_map<std::string, int> counts = chart_id_counts(songs);
-    for (song_select::song_entry& song : songs) {
-        for (song_select::chart_option& chart : song.charts) {
-            chart.best_local_rank.reset();
-            chart.best_local_score.reset();
-            const auto count_it = counts.find(chart.meta.chart_id);
-            if (count_it == counts.end() || count_it->second != 1) {
-                continue;
-            }
-            if (const auto best = load_best_local_entry(chart.meta.chart_id)) {
-                chart.best_local_rank = best->clear_rank();
-                chart.best_local_score = best->score;
-            }
-        }
-    }
 }
 
 std::string trim(std::string_view value) {
@@ -415,10 +384,11 @@ catalog_data load_catalog(bool calculate_missing_levels) {
                     chart.local_note_offset_ms = chart_offsets.contains(chart.meta.chart_id)
                         ? chart_offsets.at(chart.meta.chart_id)
                         : 0;
+                    if (const auto best = load_best_local_entry(chart.meta.chart_id)) {
+                        chart.best_local_rank = best->clear_rank();
+                        chart.best_local_score = best->score;
+                    }
                 }
-            }
-            populate_unambiguous_best_local_scores(cached_catalog.songs);
-            for (song_entry& song : cached_catalog.songs) {
                 std::sort(song.charts.begin(), song.charts.end(), chart_source_less);
             }
             std::sort(cached_catalog.songs.begin(), cached_catalog.songs.end(), song_source_less);
@@ -457,6 +427,7 @@ catalog_data load_catalog(bool calculate_missing_levels) {
             }
             const auto [min_bpm, max_bpm] = collect_bpm_range(effective_chart);
 
+            const auto best_local = load_best_local_entry(meta.chart_id);
             chart_option option{
                 chart_path,
                 meta,
@@ -464,8 +435,8 @@ catalog_data load_catalog(bool calculate_missing_levels) {
                 content_status::local,
                 std::nullopt,
                 chart_offsets.contains(meta.chart_id) ? chart_offsets.at(meta.chart_id) : 0,
-                std::nullopt,
-                std::nullopt,
+                best_local.has_value() ? std::optional<rank>(best_local->clear_rank()) : std::nullopt,
+                best_local.has_value() ? std::optional<int>(best_local->score) : std::nullopt,
                 static_cast<int>(parse_result.data->notes.size()),
                 min_bpm,
                 max_bpm,
@@ -487,7 +458,6 @@ catalog_data load_catalog(bool calculate_missing_levels) {
         catalog.songs.push_back(std::move(entry));
     }
 
-    populate_unambiguous_best_local_scores(catalog.songs);
     std::sort(catalog.songs.begin(), catalog.songs.end(), song_source_less);
 
     local_catalog_database::replace_catalog(catalog.songs);

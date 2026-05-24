@@ -25,6 +25,7 @@ struct draw_config {
     unsigned char selected_row_alpha = 255;
     unsigned char selected_hover_row_alpha = 255;
     std::string self_player_display_name;
+    std::string avatar_base_url;
 };
 
 float content_height(const ranking_service::listing& listing);

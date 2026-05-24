@@ -146,8 +146,10 @@ struct ranking_panel_state {
 
 struct auth_state {
     bool logged_in = false;
+    std::string server_url;
     std::string email;
     std::string display_name;
+    std::string avatar_url;
     bool email_verified = false;
     std::vector<auth::external_link> external_links;
 };

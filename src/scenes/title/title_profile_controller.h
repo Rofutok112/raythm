@@ -35,11 +35,15 @@ public:
 private:
     void request_reload();
     void start_save_external_links(std::vector<auth::external_link> links);
+    void start_save_avatar(std::string image_path);
+    void start_delete_avatar();
     void start_delete_song(std::string song_id);
     void start_delete_chart(std::string chart_id);
 
     title_profile_view::state state_;
+    square_image_picker::state avatar_picker_;
     std::future<title_profile_view::load_result> load_future_;
     std::future<auth::operation_result> save_links_future_;
+    std::future<auth::operation_result> save_avatar_future_;
     std::future<auth::operation_result> delete_future_;
 };

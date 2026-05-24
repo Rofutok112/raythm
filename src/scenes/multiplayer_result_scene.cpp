@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <filesystem>
 
 #include "app_paths.h"
@@ -9,6 +10,7 @@
 #include "path_utils.h"
 #include "scene_common.h"
 #include "scene_manager.h"
+#include "shared/avatar_texture_cache.h"
 #include "song_select/song_select_navigation.h"
 #include "theme.h"
 #include "ui_clip.h"
@@ -105,8 +107,31 @@ void draw_chip(Rectangle rect, const char* text, Color color, int font_size = 18
     ui::draw_text_in_rect(text, font_size, rect, color, ui::text_align::center);
 }
 
-void draw_profile_image_slot(Rectangle rect) {
-    ui::draw_rect_f(rect, with_alpha(g_theme->section, 235));
+std::string avatar_label_for(const std::string& name) {
+    std::string result;
+    result.reserve(2);
+    for (char ch : name) {
+        if (std::isalnum(static_cast<unsigned char>(ch))) {
+            result.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
+            if (result.size() == 2) {
+                break;
+            }
+        }
+    }
+    return result.empty() ? "?" : result;
+}
+
+void draw_profile_image_slot(Rectangle rect,
+                             const std::string& avatar_url,
+                             const std::string& display_name,
+                             const std::string& base_url) {
+    avatar_texture_cache::draw_avatar(rect,
+                                      avatar_url,
+                                      avatar_label_for(display_name),
+                                      with_alpha(g_theme->section, 235),
+                                      g_theme->text_secondary,
+                                      13,
+                                      base_url);
 }
 
 void draw_compact_metric(Rectangle rect, const char* label, const char* value, Color value_color) {
@@ -374,21 +399,22 @@ void multiplayer_result_scene::apply_live_scores(const std::vector<multiplayer::
     scores_.reserve(scores.size() + 1);
     for (const multiplayer::live_score& score : scores) {
         scores_.push_back({
-            score.user_id,
-            score.display_name,
-            score.score,
-            score.combo,
-            score.accuracy,
-            score.failed,
-            score.has_result_details,
-            score.judge_counts,
-            score.rc_value,
-            score.avg_offset,
-            score.fast_count,
-            score.slow_count,
-            score.clear_rank.empty() ? rank::f : parse_rank_label(score.clear_rank),
-            score.is_full_combo,
-            score.is_all_perfect,
+            .user_id = score.user_id,
+            .display_name = score.display_name,
+            .avatar_url = score.avatar_url,
+            .score = score.score,
+            .combo = score.combo,
+            .accuracy = score.accuracy,
+            .failed = score.failed,
+            .has_result_details = score.has_result_details,
+            .judge_counts = score.judge_counts,
+            .rc_value = score.rc_value,
+            .avg_offset = score.avg_offset,
+            .fast_count = score.fast_count,
+            .slow_count = score.slow_count,
+            .clear_rank = score.clear_rank.empty() ? rank::f : parse_rank_label(score.clear_rank),
+            .is_full_combo = score.is_full_combo,
+            .is_all_perfect = score.is_all_perfect,
         });
     }
     upsert_self_score();
@@ -406,21 +432,22 @@ void multiplayer_result_scene::upsert_self_score() {
 
     const auth::session_summary session = auth::load_session_summary();
     const play_multiplayer_score_row row{
-        self_user_id_,
-        session.display_name.empty() ? "You" : session.display_name,
-        result_.score,
-        result_.max_combo,
-        result_.accuracy,
-        result_.failed,
-        true,
-        result_.judge_counts,
-        result_.rc_value,
-        result_.avg_offset,
-        result_.fast_count,
-        result_.slow_count,
-        result_.clear_rank,
-        result_.is_full_combo,
-        result_.is_all_perfect,
+        .user_id = self_user_id_,
+        .display_name = session.display_name.empty() ? "You" : session.display_name,
+        .avatar_url = session.avatar_url,
+        .score = result_.score,
+        .combo = result_.max_combo,
+        .accuracy = result_.accuracy,
+        .failed = result_.failed,
+        .has_result_details = true,
+        .judge_counts = result_.judge_counts,
+        .rc_value = result_.rc_value,
+        .avg_offset = result_.avg_offset,
+        .fast_count = result_.fast_count,
+        .slow_count = result_.slow_count,
+        .clear_rank = result_.clear_rank,
+        .is_full_combo = result_.is_full_combo,
+        .is_all_perfect = result_.is_all_perfect,
     };
     if (self == scores_.end()) {
         scores_.push_back(row);
@@ -477,21 +504,22 @@ void multiplayer_result_scene::draw() {
     draw_song_select_column(kRankingPanelRect);
 
     const play_multiplayer_score_row fallback_score{
-        self_user_id_,
-        "You",
-        result_.score,
-        result_.max_combo,
-        result_.accuracy,
-        result_.failed,
-        true,
-        result_.judge_counts,
-        result_.rc_value,
-        result_.avg_offset,
-        result_.fast_count,
-        result_.slow_count,
-        result_.clear_rank,
-        result_.is_full_combo,
-        result_.is_all_perfect,
+        .user_id = self_user_id_,
+        .display_name = "You",
+        .avatar_url = auth::load_session_summary().avatar_url,
+        .score = result_.score,
+        .combo = result_.max_combo,
+        .accuracy = result_.accuracy,
+        .failed = result_.failed,
+        .has_result_details = true,
+        .judge_counts = result_.judge_counts,
+        .rc_value = result_.rc_value,
+        .avg_offset = result_.avg_offset,
+        .fast_count = result_.fast_count,
+        .slow_count = result_.slow_count,
+        .clear_rank = result_.clear_rank,
+        .is_full_combo = result_.is_full_combo,
+        .is_all_perfect = result_.is_all_perfect,
     };
     const play_multiplayer_score_row* selected = find_score(scores_, selected_score_key_);
     if (selected == nullptr) {
@@ -505,6 +533,7 @@ void multiplayer_result_scene::draw() {
         : (selected->failed ? rank::f : compute_rank(selected->accuracy, false));
     const Color selected_rank_color = result_rank_color(selected_rank);
     const int selected_place = find_score_placement(scores_, score_key(*selected));
+    const std::string avatar_base_url = auth::load_session_summary().server_url;
 
     const Rectangle jacket_rect = kJacketRect;
     if (jacket_texture_loaded_) {
@@ -528,7 +557,10 @@ void multiplayer_result_scene::draw() {
     ui::draw_rect_lines({69.0f, 610.0f, 270.0f, 112.0f}, 1.5f, g_theme->border_light);
     ui::draw_text_in_rect("YOUR PLACE", 18, {89.0f, 628.0f, 230.0f, 24.0f},
                           g_theme->text_muted, ui::text_align::left);
-    draw_profile_image_slot({89.0f, 652.0f, 58.0f, 58.0f});
+    draw_profile_image_slot({89.0f, 652.0f, 58.0f, 58.0f},
+                            fallback_score.avatar_url,
+                            fallback_score.display_name,
+                            avatar_base_url);
     ui::draw_text_in_rect(self_place > 0 ? TextFormat("#%d", self_place) : "--", 52,
                           {165.0f, 656.0f, 82.0f, 54.0f},
                           self_place > 0 ? rank_color(self_place - 1) : g_theme->text_muted,
@@ -630,7 +662,10 @@ void multiplayer_result_scene::draw() {
                 ui::draw_text_in_rect(TextFormat("#%d", i + 1), 27,
                                       {row_rect.x + 18.0f, row_rect.y, 50.0f, row_rect.height},
                                       rank_color(i), ui::text_align::left);
-                draw_profile_image_slot({row_rect.x + 74.0f, row_rect.y + 20.0f, 48.0f, 48.0f});
+                draw_profile_image_slot({row_rect.x + 74.0f, row_rect.y + 20.0f, 48.0f, 48.0f},
+                                        score.avatar_url,
+                                        score.display_name,
+                                        avatar_base_url);
                 const Rectangle name_rect{row_rect.x + 138.0f, row_rect.y + 9.0f, 96.0f, 34.0f};
                 {
                     ui::scoped_clip_rect name_clip(name_rect);

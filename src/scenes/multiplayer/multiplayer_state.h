@@ -56,6 +56,7 @@ struct chat_message {
 struct live_score {
     std::string user_id;
     std::string display_name;
+    std::string avatar_url;
     int score = 0;
     int combo = 0;
     float accuracy = 0.0f;

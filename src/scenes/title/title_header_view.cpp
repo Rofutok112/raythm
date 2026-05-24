@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "title/title_layout.h"
+#include "shared/avatar_texture_cache.h"
 #include "theme.h"
 #include "tween.h"
 #include "ui_draw.h"
@@ -25,7 +26,6 @@ constexpr float kPlaySubtitleOffsetY = 153.0f;
 constexpr float kPlaySubtitleHeight = 36.0f;
 constexpr float kTopBarHeight = 70.0f;
 constexpr float kAvatarSize = 42.0f;
-constexpr float kAvatarRadius = 21.0f;
 
 void draw_top_bar_item_background(Rectangle rect, Color bg, unsigned char alpha) {
     const bool hovered = ui::is_hovered(rect);
@@ -91,10 +91,14 @@ void draw_top_bar_controls(const title_header_view::draw_config& config) {
     const Rectangle avatar_rect = {config.account_chip_rect.x + 16.0f,
                                    config.account_chip_rect.y + 14.0f,
                                    kAvatarSize, kAvatarSize};
-    const Vector2 avatar_center = {avatar_rect.x + avatar_rect.width * 0.5f, avatar_rect.y + avatar_rect.height * 0.5f};
-    DrawCircleV(avatar_center, kAvatarRadius, with_alpha(config.logged_in ? t.accent : t.row_selected, account_alpha));
-    ui::draw_text_in_rect(std::string(config.avatar_label).c_str(), 14, avatar_rect,
-                          with_alpha(config.logged_in ? t.panel : bar_text, account_alpha), ui::text_align::center);
+    avatar_texture_cache::draw_avatar(
+        avatar_rect,
+        std::string(config.avatar_url),
+        std::string(config.avatar_label),
+        with_alpha(config.logged_in ? t.accent : t.row_selected, account_alpha),
+        with_alpha(config.logged_in ? t.panel : bar_text, account_alpha),
+        14,
+        std::string(config.avatar_base_url));
     const Rectangle account_name_rect = {
         avatar_rect.x + avatar_rect.width + 14.0f, config.account_chip_rect.y + 8.0f,
         config.account_chip_rect.width - 104.0f, 30.0f

@@ -14,6 +14,7 @@
 #include "network/http_client.h"
 #include "network/json_helpers.h"
 #include "network/network_error.h"
+#include "path_utils.h"
 
 namespace {
 namespace fs = std::filesystem;
@@ -62,6 +63,7 @@ std::optional<auth::public_user> parse_user_object(const std::string& content) {
         .id = *id,
         .email = *email,
         .display_name = *display_name,
+        .avatar_url = json::extract_string(content, "avatarUrl").value_or(""),
         .email_verified = email_verified,
         .external_links = std::move(external_links),
     };
@@ -281,6 +283,7 @@ bool write_session_file(const auth::session& session_data) {
     output << "    \"id\": \"" << json::escape_string(session_data.user.id) << "\",\n";
     output << "    \"email\": \"" << json::escape_string(session_data.user.email) << "\",\n";
     output << "    \"displayName\": \"" << json::escape_string(session_data.user.display_name) << "\",\n";
+    output << "    \"avatarUrl\": \"" << json::escape_string(session_data.user.avatar_url) << "\",\n";
     output << "    \"emailVerified\": " << (session_data.user.email_verified ? "true" : "false") << ",\n";
     output << "    \"externalLinks\": [";
     for (size_t i = 0; i < session_data.user.external_links.size(); ++i) {
@@ -489,6 +492,7 @@ session_summary load_session_summary() {
             .server_url = kDefaultServerUrl,
             .email = {},
             .display_name = {},
+            .avatar_url = {},
             .email_verified = false,
             .external_links = {},
         };
@@ -499,6 +503,7 @@ session_summary load_session_summary() {
         .server_url = stored->server_url,
         .email = stored->user.email,
         .display_name = stored->user.display_name,
+        .avatar_url = stored->user.avatar_url,
         .email_verified = stored->user.email_verified,
         .external_links = stored->user.external_links,
     };
@@ -956,6 +961,158 @@ operation_result update_profile_external_links(const std::vector<external_link>&
     return finish_with_session({
         .success = true,
         .message = "Profile links saved.",
+        .session_data = std::nullopt,
+    }, updated);
+}
+
+operation_result update_profile_avatar(const std::string& image_path) {
+    std::optional<session> stored = load_saved_session();
+    if (!stored.has_value()) {
+        return {
+            .success = false,
+            .message = "Login required.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    const std::string image_bytes = read_file(path_utils::from_utf8(image_path));
+    if (image_bytes.empty()) {
+        return {
+            .success = false,
+            .message = "Avatar image could not be read.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    const std::string boundary = "----raythm-avatar-upload-402";
+    std::string body;
+    body.reserve(image_bytes.size() + 256);
+    body += "--" + boundary + "\r\n";
+    body += "Content-Disposition: form-data; name=\"avatar\"; filename=\"avatar.png\"\r\n";
+    body += "Content-Type: image/png\r\n\r\n";
+    body += image_bytes;
+    body += "\r\n--" + boundary + "--\r\n";
+
+    auto send_update = [&](const session& session_data) {
+        return send_request(
+            "PUT",
+            build_auth_url(session_data.server_url, "/me/avatar"),
+            body,
+            {
+                {"Accept", "application/json"},
+                {"Authorization", "Bearer " + session_data.access_token},
+                {"Content-Type", "multipart/form-data; boundary=" + boundary},
+                {"User-Agent", "raythm/0.1"},
+            });
+    };
+
+    http_response response = send_update(*stored);
+    if (response.error_message.empty() && response.status_code == 401) {
+        const operation_result restored = restore_saved_session();
+        if (restored.success && restored.session_data.has_value()) {
+            stored = restored.session_data;
+            response = send_update(*stored);
+        }
+    }
+
+    if (!response.error_message.empty()) {
+        return {
+            .success = false,
+            .message = response.error_message,
+            .session_data = std::nullopt,
+        };
+    }
+    if (response.status_code < 200 || response.status_code >= 300) {
+        return make_operation_http_error(response, "Failed to upload profile image.");
+    }
+
+    std::optional<public_user> user;
+    if (response.status_code == 204 || response.body.empty()) {
+        user = stored->user;
+        user->avatar_url.clear();
+    } else {
+        user = parse_me_response(response.body);
+    }
+    if (!user.has_value()) {
+        return {
+            .success = false,
+            .message = "Server returned an unexpected profile response.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    session updated = *stored;
+    updated.user = *user;
+    if (!write_session_file(updated)) {
+        return {
+            .success = false,
+            .message = "Profile image uploaded, but the local session could not be updated.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    return finish_with_session({
+        .success = true,
+        .message = "Profile image updated.",
+        .session_data = std::nullopt,
+    }, updated);
+}
+
+operation_result delete_profile_avatar() {
+    std::optional<session> stored = load_saved_session();
+    if (!stored.has_value()) {
+        return {
+            .success = false,
+            .message = "Login required.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    auto send_delete = [&](const session& session_data) {
+        return send_authenticated_request(session_data, "DELETE", "/me/avatar");
+    };
+
+    http_response response = send_delete(*stored);
+    if (response.error_message.empty() && response.status_code == 401) {
+        const operation_result restored = restore_saved_session();
+        if (restored.success && restored.session_data.has_value()) {
+            stored = restored.session_data;
+            response = send_delete(*stored);
+        }
+    }
+    if (!response.error_message.empty()) {
+        return {
+            .success = false,
+            .message = response.error_message,
+            .session_data = std::nullopt,
+        };
+    }
+    if (response.status_code < 200 || response.status_code >= 300) {
+        return make_operation_http_error(response, "Failed to remove profile image.");
+    }
+
+    const std::optional<public_user> user = parse_me_response(response.body);
+    if (!user.has_value()) {
+        return {
+            .success = false,
+            .message = "Server returned an unexpected profile response.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    session updated = *stored;
+    updated.user = *user;
+    if (!write_session_file(updated)) {
+        return {
+            .success = false,
+            .message = "Profile image removed, but the local session could not be updated.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    return finish_with_session({
+        .success = true,
+        .message = "Profile image removed.",
         .session_data = std::nullopt,
     }, updated);
 }

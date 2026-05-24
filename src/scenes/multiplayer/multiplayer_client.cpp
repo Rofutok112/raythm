@@ -302,7 +302,8 @@ live_score parse_live_score(const std::string& object) {
     const std::optional<std::string> user = network::json::extract_object(object, "user");
     if (user.has_value()) {
         score.user_id = network::json::extract_string(*user, "id").value_or("");
-    score.display_name = network::json::extract_string(*user, "displayName").value_or("Player");
+        score.display_name = network::json::extract_string(*user, "displayName").value_or("Player");
+        score.avatar_url = network::json::extract_string(*user, "avatarUrl").value_or("");
     }
     score.failed = network::json::extract_bool(object, "failed").value_or(false);
     return score;

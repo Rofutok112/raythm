@@ -5,6 +5,7 @@
 #include <string>
 
 #include "scene_common.h"
+#include "shared/avatar_texture_cache.h"
 #include "theme.h"
 #include "tween.h"
 #include "ui_clip.h"
@@ -93,11 +94,19 @@ Rectangle overview_card_rect(Rectangle content, int index) {
 }
 
 Rectangle settings_delete_account_rect(Rectangle content) {
-    return {content.x + 18.0f, content.y + 378.0f, 238.0f, 42.0f};
+    return {content.x + 18.0f, content.y + 450.0f, 238.0f, 42.0f};
 }
 
 Rectangle settings_save_links_rect(Rectangle content) {
     return {content.x + content.width - 202.0f, content.y + 256.0f, 164.0f, 42.0f};
+}
+
+Rectangle settings_change_avatar_rect(Rectangle content) {
+    return {content.x + 18.0f, content.y + 330.0f, 176.0f, 42.0f};
+}
+
+Rectangle settings_remove_avatar_rect(Rectangle content) {
+    return {content.x + 210.0f, content.y + 330.0f, 176.0f, 42.0f};
 }
 
 Rectangle settings_link_label_rect(Rectangle content, int index) {
@@ -352,7 +361,7 @@ command update(state& profile, bool request_active) {
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     const float wheel = GetMouseWheelMove();
-    const bool busy = profile.loading || profile.deleting || profile.saving_links || request_active;
+    const bool busy = profile.loading || profile.deleting || profile.saving_links || profile.saving_avatar || request_active;
     const Rectangle content = content_rect();
 
     if (!busy && profile.pending_delete != delete_target::none &&
@@ -468,6 +477,16 @@ command update(state& profile, bool request_active) {
     }
 
     if (!busy && profile.selected_tab == tab::settings &&
+        CheckCollisionPointRec(mouse, settings_change_avatar_rect(content))) {
+        return {.type = command_type::change_avatar};
+    }
+
+    if (!busy && profile.selected_tab == tab::settings &&
+        CheckCollisionPointRec(mouse, settings_remove_avatar_rect(content))) {
+        return {.type = command_type::remove_avatar};
+    }
+
+    if (!busy && profile.selected_tab == tab::settings &&
         CheckCollisionPointRec(mouse, settings_delete_account_rect(content))) {
         profile.pending_delete = delete_target::account;
         profile.delete_password_input.value.clear();
@@ -483,16 +502,21 @@ command update(state& profile, bool request_active) {
     return {};
 }
 
-void draw(state& profile, const song_select::auth_state& auth_state, bool request_active, ui::draw_layer layer) {
+void draw(state& profile,
+          const song_select::auth_state& auth_state,
+          square_image_picker::state& avatar_picker,
+          bool request_active,
+          ui::draw_layer layer) {
     if (!profile.open) {
         return;
     }
     sync_settings_links(profile, auth_state);
 
-    ui::enqueue_draw_command(layer, [&profile, auth_state, request_active, layer]() {
+    ui::enqueue_draw_command(layer, [&profile, &avatar_picker, auth_state, request_active, layer]() {
         const auto& t = *g_theme;
         const Vector2 mouse = virtual_screen::get_virtual_mouse();
-        const bool busy = profile.loading || profile.deleting || profile.saving_links || request_active || profile.closing;
+        const bool busy = profile.loading || profile.deleting || profile.saving_links ||
+            profile.saving_avatar || request_active || profile.closing;
         const float anim_t = tween::ease_out_cubic(std::clamp(profile.open_anim, 0.0f, 1.0f));
         const float scale = 1.0f - (1.0f - anim_t) * kOpenAnimScaleInset;
         const float offset_y = (1.0f - anim_t) * kOpenAnimOffsetY;
@@ -510,9 +534,15 @@ void draw(state& profile, const song_select::auth_state& auth_state, bool reques
         ui::draw_panel(kDialogRect);
 
         const Rectangle avatar = {kDialogRect.x + 44.0f, kDialogRect.y + 42.0f, 96.0f, 96.0f};
-        ui::draw_rect_f(avatar, with_alpha(t.accent, 210));
+        avatar_texture_cache::draw_avatar(
+            avatar,
+            auth_state.avatar_url,
+            make_avatar_label(auth_state),
+            with_alpha(t.accent, 210),
+            t.bg,
+            28,
+            auth_state.server_url);
         ui::draw_rect_lines(avatar, 2.0f, with_alpha(t.border_active, 230));
-        ui::draw_text_in_rect(make_avatar_label(auth_state).c_str(), 28, avatar, t.bg);
 
         const std::string display_name =
             auth_state.display_name.empty() ? auth_state.email : auth_state.display_name;
@@ -753,13 +783,22 @@ void draw(state& profile, const song_select::auth_state& auth_state, bool reques
                                   t.text_muted, ui::text_align::left);
             ui::draw_rect_lines({content.x + 18.0f, content.y + 306.0f, content.width - 36.0f, 1.0f},
                                 1.0f, with_alpha(t.border, 150));
+            ui::draw_text_in_rect("Profile Image",
+                                  13,
+                                  {content.x + 18.0f, content.y + 316.0f, 560.0f, 22.0f},
+                                  t.text_secondary, ui::text_align::left);
+            draw_profile_button(settings_change_avatar_rect(content), "CHANGE IMAGE", !busy, t.accent);
+            draw_profile_button(settings_remove_avatar_rect(content), "REMOVE IMAGE",
+                                !busy && !auth_state.avatar_url.empty(), t.error);
+            ui::draw_rect_lines({content.x + 18.0f, content.y + 410.0f, content.width - 36.0f, 1.0f},
+                                1.0f, with_alpha(t.border, 150));
             ui::draw_text_in_rect("Delete this account from raythm-Server.",
                                   13,
-                                  {content.x + 18.0f, content.y + 318.0f, 560.0f, 22.0f},
+                                  {content.x + 18.0f, content.y + 422.0f, 560.0f, 22.0f},
                                   t.text_secondary, ui::text_align::left);
             ui::draw_text_in_rect("This does not delete local songs or charts.",
                                   12,
-                                  {content.x + 18.0f, content.y + 340.0f, 560.0f, 20.0f},
+                                  {content.x + 18.0f, content.y + 444.0f, 560.0f, 20.0f},
                                   t.text_muted, ui::text_align::left);
             draw_profile_button(settings_delete_account_rect(content), "DELETE ACCOUNT", !busy, t.error);
         }
@@ -780,6 +819,12 @@ void draw(state& profile, const song_select::auth_state& auth_state, bool reques
             ui::draw_text_in_rect("Saving links...", 13,
                                   {kDialogRect.x + 42.0f, kDialogRect.y + kDialogRect.height - 104.0f,
                                    260.0f, 24.0f},
+                                  t.text_muted, ui::text_align::left);
+        }
+        if (profile.saving_avatar) {
+            ui::draw_text_in_rect("Saving profile image...", 13,
+                                  {kDialogRect.x + 42.0f, kDialogRect.y + kDialogRect.height - 104.0f,
+                                   320.0f, 24.0f},
                                   t.text_muted, ui::text_align::left);
         }
 
@@ -819,6 +864,9 @@ void draw(state& profile, const song_select::auth_state& auth_state, bool reques
             draw_profile_button(cancel_rect(), "CANCEL", !busy, t.text_muted);
         }
         rlPopMatrix();
+        if (avatar_picker.is_open()) {
+            avatar_picker.draw();
+        }
     });
 }
 
