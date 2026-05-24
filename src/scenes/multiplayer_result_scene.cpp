@@ -19,11 +19,11 @@ namespace {
 
 constexpr Rectangle kScreenRect{0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
 constexpr Rectangle kBackButtonRect{39.0f, 983.0f, 330.0f, 58.0f};
-constexpr Rectangle kLeftPanelRect{39.0f, 109.0f, 330.0f, 854.0f};
+constexpr Rectangle kLeftPanelRect{39.0f, 109.0f, 330.0f, 932.0f};
 constexpr Rectangle kMainPanelRect{390.0f, 109.0f, 820.0f, 932.0f};
 constexpr Rectangle kRankingPanelRect{1228.0f, 109.0f, 650.0f, 932.0f};
 constexpr Rectangle kJacketRect{69.0f, 139.0f, 270.0f, 270.0f};
-constexpr Rectangle kListViewportRect{1258.0f, 246.0f, 590.0f, 718.0f};
+constexpr Rectangle kListViewportRect{1258.0f, 246.0f, 590.0f, 754.0f};
 constexpr Rectangle kListHeaderRect{1258.0f, 192.0f, 590.0f, 36.0f};
 constexpr float kRowHeight = 88.0f;
 constexpr float kRowGap = 10.0f;
@@ -381,7 +381,7 @@ void multiplayer_result_scene::draw() {
     ui::draw_text_in_rect(TextFormat("%d players", static_cast<int>(scores_.size())), 24,
                           {206.0f, 690.0f, 114.0f, 34.0f}, g_theme->text_secondary,
                           ui::text_align::right);
-    ui::draw_text_in_rect(status_message_.c_str(), 18, {69.0f, 782.0f, 270.0f, 74.0f},
+    ui::draw_text_in_rect(status_message_.c_str(), 18, {69.0f, 794.0f, 270.0f, 74.0f},
                           g_theme->text_hint, ui::text_align::left);
 
     const Rectangle rank_rect{430.0f, 164.0f, 254.0f, 218.0f};
