@@ -885,6 +885,10 @@ bool save_local_records(const std::string& chart_id, const std::vector<stored_lo
 
 namespace ranking_service {
 
+std::string make_recorded_at_timestamp() {
+    return current_timestamp_utc();
+}
+
 listing load_chart_ranking(const std::string& chart_id, source ranking_source, int limit) {
     listing result;
     result.ranking_source = ranking_source;
@@ -1009,7 +1013,9 @@ std::optional<entry> load_chart_personal_best(const std::string& chart_id, sourc
     return request.entry;
 }
 
-local_submit_result submit_local_result_detailed(const chart_meta& chart, const result_data& result) {
+local_submit_result submit_local_result_detailed(const chart_meta& chart,
+                                                 const result_data& result,
+                                                 const std::string& recorded_at) {
     local_submit_result submission;
     if (chart.chart_id.empty() || result.failed) {
         return submission;
@@ -1029,14 +1035,15 @@ local_submit_result submit_local_result_detailed(const chart_meta& chart, const 
         entries[i].placement = static_cast<int>(i) + 1;
     }
 
-    const std::string recorded_at = current_timestamp_utc();
+    const std::string resolved_recorded_at =
+        recorded_at.empty() ? make_recorded_at_timestamp() : recorded_at;
     const std::string player_display_name = current_local_player_display_name();
     if (result.note_results.empty()) {
         return submission;
     }
 
     stored_local_record new_record;
-    new_record.recorded_at = recorded_at;
+    new_record.recorded_at = resolved_recorded_at;
     new_record.player_display_name = player_display_name;
     new_record.scoring_ruleset_version =
         result.scoring_ruleset_version.empty()
@@ -1062,7 +1069,7 @@ local_submit_result submit_local_result_detailed(const chart_meta& chart, const 
         entries[i].placement = static_cast<int>(i) + 1;
     }
     for (const entry& sorted_entry : entries) {
-        if (sorted_entry.recorded_at == recorded_at &&
+        if (sorted_entry.recorded_at == resolved_recorded_at &&
             sorted_entry.player_display_name == player_display_name &&
             sorted_entry.score == new_entry.score) {
             new_entry = sorted_entry;
@@ -1092,6 +1099,10 @@ bool submit_local_result(const chart_meta& chart, const result_data& result) {
 
 bool should_attempt_online_submit(const local_submit_result& local_result) {
     return local_result.success && local_result.submitted_entry.has_value();
+}
+
+bool should_attempt_online_submit(const chart_meta& chart, const result_data& result) {
+    return !chart.chart_id.empty() && !result.failed && !result.note_results.empty();
 }
 
 bool warm_scoring_ruleset_cache(bool force_refresh) {

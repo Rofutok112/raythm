@@ -30,11 +30,15 @@ private:
         Texture2D texture{};
         std::future<pending_image> future;
         bool requested = false;
+        bool loading = false;
         bool loaded = false;
         bool missing = false;
     };
 
+    void start_pending_requests();
+
     std::unordered_map<std::string, entry> entries_;
+    int active_requests_ = 0;
 };
 
 cache& shared();

@@ -11,6 +11,31 @@ enum class mode {
     create,
 };
 
+namespace mod_layout {
+
+inline constexpr float kButtonLeftInset = 24.0f;
+inline constexpr float kButtonBottomInset = 78.0f;
+inline constexpr float kButtonWidth = 276.0f;
+inline constexpr float kButtonHeight = 58.0f;
+inline constexpr float kModalGapFromButton = 16.0f;
+inline constexpr float kModalSidePadding = 18.0f;
+inline constexpr float kModalTopPadding = 18.0f;
+inline constexpr float kModalBottomPadding = 18.0f;
+inline constexpr float kHeaderHeight = 18.0f;
+inline constexpr float kHeaderToDescriptionGap = 6.0f;
+inline constexpr float kDescriptionHeight = 26.0f;
+inline constexpr float kDescriptionToRowsGap = 10.0f;
+inline constexpr float kRowHeight = 54.0f;
+inline constexpr float kRowGap = 10.0f;
+inline constexpr int kRowCount = 2;
+inline constexpr float kModalWidth = kButtonWidth;
+inline constexpr float kModalHeight = kModalTopPadding + kHeaderHeight + kHeaderToDescriptionGap +
+                                      kDescriptionHeight + kDescriptionToRowsGap +
+                                      kRowHeight * kRowCount + kRowGap * (kRowCount - 1) +
+                                      kModalBottomPadding;
+
+}  // namespace mod_layout
+
 struct layout {
     Rectangle back_rect;
     Rectangle song_column;

@@ -229,6 +229,24 @@ std::string format_score(int value) {
     return digits;
 }
 
+std::string mod_summary(const play_mods& mods) {
+    std::vector<std::string> labels;
+    if (mods.auto_play) {
+        labels.push_back("AUTO");
+    }
+    if (mods.no_fail) {
+        labels.push_back("NOFAIL");
+    }
+    if (labels.empty()) {
+        return "No Mod";
+    }
+    std::string summary = labels.front();
+    for (size_t i = 1; i < labels.size(); ++i) {
+        summary += " + " + labels[i];
+    }
+    return summary;
+}
+
 std::string format_bpm_range(float min_bpm, float max_bpm, float fallback_bpm) {
     if (min_bpm <= 0.0f && max_bpm <= 0.0f) {
         return TextFormat("%.0f", fallback_bpm);
@@ -249,11 +267,46 @@ Rectangle start_button_rect(Rectangle ranking_column) {
 }
 
 Rectangle best_score_rect(Rectangle ranking_column) {
+    using namespace title_play_view::mod_layout;
     return {
-        ranking_column.x + 24.0f,
-        ranking_column.y + ranking_column.height - 78.0f,
-        276.0f,
-        58.0f,
+        ranking_column.x + kButtonLeftInset,
+        ranking_column.y + ranking_column.height - kButtonBottomInset,
+        kButtonWidth,
+        kButtonHeight,
+    };
+}
+
+Rectangle mod_modal_rect(Rectangle ranking_column) {
+    using namespace title_play_view::mod_layout;
+    const Rectangle button = best_score_rect(ranking_column);
+    return {
+        button.x,
+        button.y - kModalGapFromButton - kModalHeight,
+        kModalWidth,
+        kModalHeight,
+    };
+}
+
+Rectangle auto_mod_toggle_rect(Rectangle modal) {
+    using namespace title_play_view::mod_layout;
+    const float row_y = modal.y + kModalTopPadding + kHeaderHeight + kHeaderToDescriptionGap +
+                        kDescriptionHeight + kDescriptionToRowsGap;
+    return {
+        modal.x + kModalSidePadding,
+        row_y,
+        modal.width - kModalSidePadding * 2.0f,
+        kRowHeight,
+    };
+}
+
+Rectangle no_fail_mod_toggle_rect(Rectangle modal) {
+    using namespace title_play_view::mod_layout;
+    const Rectangle auto_row = auto_mod_toggle_rect(modal);
+    return {
+        auto_row.x,
+        auto_row.y + kRowHeight + kRowGap,
+        auto_row.width,
+        kRowHeight,
     };
 }
 
@@ -1036,34 +1089,94 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
     draw_transport_toggle_button(play_button, audio_manager::instance().is_preview_playing(), alpha);
     draw_transport_skip_button(next_button, true, alpha);
 
-    const Rectangle best = best_score_rect(panel);
-    ui::draw_rect_f(best, with_alpha(button_base, normal_row_alpha));
-    ui::draw_rect_lines(best, 1.0f, with_alpha(t.border_light, alpha));
-    ui::draw_text_in_rect("BEST SCORE", 10, {best.x + 18.0f, best.y + 10.0f, 100.0f, 16.0f},
-                          with_alpha(t.text_muted, alpha), ui::text_align::left);
-    if (state.ranking_panel.best_entry.has_value()) {
-        const ranking_service::entry& best_entry = *state.ranking_panel.best_entry;
-        ui::draw_text_in_rect(format_score(best_entry.score).c_str(), 17,
-                              {best.x + 18.0f, best.y + 30.0f, 152.0f, 20.0f},
-                              with_alpha(t.text, alpha), ui::text_align::left);
-        ui::draw_text_in_rect(rank_label(best_entry.clear_rank()), 18,
-                              {best.x + best.width - 64.0f, best.y + 26.0f, 42.0f, 26.0f},
-                              with_alpha(rank_color(best_entry.clear_rank()), alpha), ui::text_align::right);
-    } else if (chart != nullptr && chart->best_local_score.has_value() && chart->best_local_rank.has_value()) {
-        ui::draw_text_in_rect(format_score(*chart->best_local_score).c_str(), 17,
-                              {best.x + 18.0f, best.y + 30.0f, 152.0f, 20.0f},
-                              with_alpha(t.text, alpha), ui::text_align::left);
-        ui::draw_text_in_rect(rank_label(*chart->best_local_rank), 18,
-                              {best.x + best.width - 64.0f, best.y + 26.0f, 42.0f, 26.0f},
-                              with_alpha(rank_color(*chart->best_local_rank), alpha), ui::text_align::right);
-    } else {
-        ui::draw_text_in_rect("-", 16, {best.x + 18.0f, best.y + 30.0f, 100.0f, 20.0f},
-                              with_alpha(t.text, alpha), ui::text_align::left);
-    }
+    const Rectangle mods = best_score_rect(panel);
+    const bool mods_hovered = ui::is_hovered(mods);
+    const bool mods_pressed = ui::is_pressed(mods);
+    const Rectangle mods_visual = mods_pressed ? ui::inset(mods, 1.5f) : mods;
+    const bool mods_active = state.mods.any_enabled();
+    ui::draw_rect_f(mods_visual,
+                    with_alpha(mods_active ? button_selected : button_base,
+                               mods_hovered ? hover_row_alpha : normal_row_alpha));
+    ui::draw_rect_lines(mods_visual, mods_active ? 1.6f : 1.0f,
+                        with_alpha(mods_active ? t.accent : t.border_light, alpha));
+    raythm_icons::draw_settings_gear(
+        centered_icon_rect({mods_visual.x + 14.0f, mods_visual.y, 42.0f, mods_visual.height}, 8.0f),
+        with_alpha(mods_active ? t.accent : t.text_secondary, alpha), 3.0f);
+    ui::draw_text_in_rect("MODS", 18, {mods_visual.x + 62.0f, mods_visual.y + 8.0f, 112.0f, 24.0f},
+                          with_alpha(t.text, alpha), ui::text_align::left);
+    const std::string mods_label = mod_summary(state.mods);
+    ui::draw_text_in_rect(mods_label.c_str(), 14,
+                          {mods_visual.x + 62.0f, mods_visual.y + 30.0f, 130.0f, 20.0f},
+                          with_alpha(mods_active ? t.accent : t.text_muted, alpha), ui::text_align::left);
     ui::draw_button_colored(start_button_rect(panel), localization::tr_literal(state.filter.multiplayer_queueable_only ? "SELECT" : "START"), 22,
                             with_alpha(button_selected, selected_row_alpha),
                             with_alpha(button_hover, hover_row_alpha),
                             with_alpha(t.text, alpha), 1.4f);
+}
+
+void draw_mod_toggle(Rectangle rect,
+                     const char* label,
+                     const char* description,
+                     bool enabled,
+                     unsigned char alpha,
+                     unsigned char normal_row_alpha,
+                     unsigned char hover_row_alpha) {
+    const auto& t = *g_theme;
+    const bool hovered = ui::is_hovered(rect, song_select::layout::kContextMenuLayer);
+    const bool pressed = ui::is_pressed(rect, song_select::layout::kContextMenuLayer);
+    const Rectangle visual = pressed ? ui::inset(rect, 1.5f) : rect;
+    const Color fill = enabled ? lerp_color(t.row_soft_selected, t.accent, 0.20f) : t.row_soft;
+    ui::draw_rect_f(visual, with_alpha(fill, hovered ? hover_row_alpha : normal_row_alpha));
+    ui::draw_rect_lines(visual, enabled ? 1.6f : 1.0f, with_alpha(enabled ? t.accent : t.border_light, alpha));
+    ui::draw_text_in_rect(label, 18,
+                          {visual.x + 14.0f, visual.y + 5.0f, visual.width - 100.0f, 24.0f},
+                          with_alpha(t.text, alpha), ui::text_align::left);
+    ui::draw_text_in_rect(description, 12,
+                          {visual.x + 14.0f, visual.y + 29.0f, visual.width - 100.0f, 18.0f},
+                          with_alpha(t.text_muted, alpha), ui::text_align::left);
+    const Rectangle track = {visual.x + visual.width - 70.0f, visual.y + 17.0f, 48.0f, 20.0f};
+    ui::draw_rect_f(track, enabled ? with_alpha(t.accent, 160) : with_alpha(t.text_muted, 70));
+    ui::draw_rect_lines(track, 1.0f, with_alpha(enabled ? t.accent : t.border_light, alpha));
+    const float knob_x = enabled ? track.x + track.width - 18.0f : track.x + 2.0f;
+    ui::draw_rect_f({knob_x, track.y + 2.0f, 16.0f, 16.0f},
+                    with_alpha(enabled ? t.text : t.text_secondary, alpha));
+}
+
+void draw_mod_modal(const title_play_view::layout& current,
+                    const song_select::state& state,
+                    unsigned char alpha,
+                    unsigned char normal_row_alpha,
+                    unsigned char hover_row_alpha) {
+    if (!state.play_mod_modal_open) {
+        return;
+    }
+    const Rectangle modal = mod_modal_rect(current.ranking_column);
+    ui::enqueue_draw_command(song_select::layout::kContextMenuLayer,
+                             [modal, mods = state.mods, alpha, normal_row_alpha, hover_row_alpha]() {
+        using namespace title_play_view::mod_layout;
+        const auto& theme = *g_theme;
+        ui::draw_rect_f(modal, with_alpha(theme.section, 242));
+        ui::draw_rect_lines(modal, 1.4f, with_alpha(theme.border_light, alpha));
+        const Rectangle content = {
+            modal.x + kModalSidePadding,
+            modal.y + kModalTopPadding,
+            modal.width - kModalSidePadding * 2.0f,
+            modal.height - kModalTopPadding - kModalBottomPadding,
+        };
+        ui::draw_text_in_rect("MOD SETTINGS", 13,
+                              {content.x, content.y, content.width, kHeaderHeight},
+                              with_alpha(theme.text_muted, alpha), ui::text_align::left);
+        ui::draw_text_in_rect("Score submission is disabled while mods are active.", 11,
+                              {content.x,
+                               content.y + kHeaderHeight + kHeaderToDescriptionGap,
+                               content.width,
+                               kDescriptionHeight},
+                              with_alpha(theme.text_muted, alpha), ui::text_align::left);
+        draw_mod_toggle(auto_mod_toggle_rect(modal), "Auto", "Perfect autoplay",
+                        mods.auto_play, alpha, normal_row_alpha, hover_row_alpha);
+        draw_mod_toggle(no_fail_mod_toggle_rect(modal), "NoFail", "Survive gauge failure",
+                        mods.no_fail, alpha, normal_row_alpha, hover_row_alpha);
+    });
 }
 
 void enqueue_delete_context_menu(Rectangle menu_rect, const char* label) {
@@ -1330,6 +1443,7 @@ void draw(song_select::state& state,
 
     if (view_mode == mode::play) {
         draw_play_filter_modal(current, state, alpha, button_base, button_selected, normal_row_alpha, selected_row_alpha);
+        draw_mod_modal(current, state, alpha, normal_row_alpha, hover_row_alpha);
     }
 
     if (view_mode == mode::play &&

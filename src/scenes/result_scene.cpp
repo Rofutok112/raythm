@@ -34,9 +34,9 @@ void play_result_bgm(bool failed) {
 
 }  // namespace
 
-result_scene::result_scene(scene_manager& manager, result_data result, bool ranking_enabled,
+result_scene::result_scene(scene_manager& manager, result_data result, bool local_ranking_enabled, bool ranking_enabled,
                            song_data song, std::string chart_path, chart_meta chart, int key_count)
-    : scene(manager), result_(result), ranking_enabled_(ranking_enabled),
+    : scene(manager), result_(result), local_ranking_enabled_(local_ranking_enabled), ranking_enabled_(ranking_enabled),
       song_(std::move(song)), chart_path_(std::move(chart_path)), chart_(std::move(chart)), key_count_(key_count) {
 }
 
@@ -49,13 +49,17 @@ void result_scene::on_enter() {
     load_jacket_texture();
     play_result_bgm(result_.failed);
 
-    local_submit_result_ = ranking_service::submit_local_result_detailed(chart_, result_);
+    const std::string recorded_at = ranking_service::make_recorded_at_timestamp();
+    if (local_ranking_enabled_) {
+        local_submit_result_ =
+            ranking_service::submit_local_result_detailed(chart_, result_, recorded_at);
+    }
 
     if (local_submit_result_.success && local_submit_result_.best_updated) {
         ui::notify("Local best updated.", ui::notice_tone::success, 2.0f);
     }
 
-    if (ranking_enabled_ && ranking_service::should_attempt_online_submit(local_submit_result_)) {
+    if (ranking_enabled_ && ranking_service::should_attempt_online_submit(chart_, result_)) {
         online_submit_status_message_ = "Submitting online ranking...";
         online_submit_status_is_error_ = false;
 
@@ -64,7 +68,6 @@ void result_scene::on_enter() {
         const song_data song = song_;
         const std::string chart_path = chart_path_;
         const chart_meta chart = chart_;
-        const std::string recorded_at = local_submit_result_.submitted_entry->recorded_at;
         const result_data result_payload = result_;
         std::thread([task, song, chart_path, chart, result_payload, recorded_at]() {
             ranking_service::online_submit_result submit_result =
@@ -75,6 +78,9 @@ void result_scene::on_enter() {
             }
             task->done.store(true);
         }).detach();
+    } else if (!local_ranking_enabled_) {
+        online_submit_status_message_ = "Score submission disabled for this play.";
+        online_submit_status_is_error_ = false;
     } else if (!ranking_enabled_) {
         online_submit_status_message_ = "Online ranking disabled for this play.";
         online_submit_status_is_error_ = false;
