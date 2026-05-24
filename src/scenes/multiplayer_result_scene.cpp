@@ -27,6 +27,7 @@ constexpr Rectangle kListHeaderRect{1258.0f, 192.0f, 590.0f, 36.0f};
 constexpr float kRowHeight = 88.0f;
 constexpr float kRowGap = 10.0f;
 constexpr float kRefreshSeconds = 1.5f;
+constexpr float kSongSelectTopBarHeight = 70.0f;
 
 std::string result_bgm_path(bool failed) {
     const std::filesystem::path path =
@@ -126,6 +127,15 @@ void draw_background() {
         ui::draw_line_ex({0.0f, static_cast<float>(y)}, {static_cast<float>(kScreenWidth), static_cast<float>(y)},
                          1.0f, with_alpha(g_theme->border_light, 16));
     }
+}
+
+void draw_song_select_top_bar() {
+    const Rectangle visible = virtual_screen::visible_rect();
+    const Rectangle top_bar{visible.x, visible.y, visible.width, kSongSelectTopBarHeight};
+    const Color bar_color = lerp_color(g_theme->panel, BLACK, 0.58f);
+    ui::draw_rect_f(top_bar, with_alpha(bar_color, 235));
+    ui::draw_rect_f({top_bar.x, top_bar.y + top_bar.height - 2.0f, top_bar.width, 2.0f},
+                    with_alpha(g_theme->border, 150));
 }
 
 void draw_result_panel(Rectangle rect, Color border = {0, 0, 0, 0}) {
@@ -425,6 +435,7 @@ void multiplayer_result_scene::draw() {
     virtual_screen::begin_ui();
 
     draw_background();
+    draw_song_select_top_bar();
 
     draw_song_select_column(kLeftPanelRect);
     draw_song_select_column(kMainPanelRect);
