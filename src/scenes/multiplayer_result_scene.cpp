@@ -527,13 +527,10 @@ void multiplayer_result_scene::draw() {
     ui::draw_text_in_rect(clear_label, 28, {942.0f, 284.0f, 208.0f, 42.0f},
                           clear_color, ui::text_align::right);
 
-    draw_compact_metric({430.0f, 376.0f, 236.0f, 118.0f},
+    draw_compact_metric({430.0f, 376.0f, 344.0f, 118.0f},
                         "Accuracy", TextFormat("%.2f%%", selected->accuracy), g_theme->fast);
-    draw_compact_metric({688.0f, 376.0f, 210.0f, 118.0f},
+    draw_compact_metric({806.0f, 376.0f, 344.0f, 118.0f},
                         "Max Combo", std::to_string(selected->combo).c_str(), g_theme->accent);
-    draw_compact_metric({920.0f, 376.0f, 230.0f, 118.0f},
-                        "Place", selected_place > 0 ? TextFormat("#%d", selected_place) : "--",
-                        selected_place > 0 ? rank_color(selected_place - 1) : g_theme->text_secondary);
     draw_compact_metric({430.0f, 518.0f, 344.0f, 118.0f},
                         "Avg Offset", selected_has_details ? TextFormat("%+.1fms", selected->avg_offset) : "--",
                         g_theme->text_secondary);
@@ -541,7 +538,7 @@ void multiplayer_result_scene::draw() {
                         "Fast / Slow", selected_has_details ? TextFormat("%d / %d", selected->fast_count, selected->slow_count) : "--",
                         g_theme->slow);
 
-    const Rectangle judge_rect{430.0f, 674.0f, 720.0f, 246.0f};
+    const Rectangle judge_rect{430.0f, 674.0f, 720.0f, 330.0f};
     draw_result_panel(judge_rect);
     const Rectangle judge_content = ui::inset(judge_rect, ui::edge_insets::symmetric(24.0f, 22.0f));
     const char* judge_labels[5] = {"Perfect", "Great", "Good", "Bad", "Miss"};
@@ -556,12 +553,12 @@ void multiplayer_result_scene::draw() {
     for (int i = 0; i < 5; ++i) {
         const Rectangle row{judge_content.x, judge_content.y + judge_row_h * static_cast<float>(i),
                             judge_content.width, judge_row_h};
-        ui::draw_text_in_rect(judge_labels[i], 23, {row.x, row.y, 220.0f, row.height},
+        ui::draw_text_in_rect(judge_labels[i], 26, {row.x, row.y, 220.0f, row.height},
                               selected_has_details ? judge_colors[i] : g_theme->text_muted, ui::text_align::left);
         const std::string count_text = selected_has_details
             ? std::to_string(selected->judge_counts[static_cast<size_t>(i)])
             : "--";
-        ui::draw_text_in_rect(count_text.c_str(), 30,
+        ui::draw_text_in_rect(count_text.c_str(), 34,
                               {row.x + 240.0f, row.y, row.width - 240.0f, row.height},
                               g_theme->text, ui::text_align::right);
         if (i < 4) {
