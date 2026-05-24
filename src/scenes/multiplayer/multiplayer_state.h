@@ -29,6 +29,7 @@ struct room_summary {
 struct room_member {
     std::string user_id;
     std::string display_name;
+    std::string avatar_url;
     std::string role;
     std::string status;
     bool ready = false;

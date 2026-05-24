@@ -242,6 +242,7 @@ room_member parse_room_member(const std::string& object, const std::string& room
     if (user.has_value()) {
         member.user_id = network::json::extract_string(*user, "id").value_or("");
         member.display_name = network::json::extract_string(*user, "displayName").value_or("Player");
+        member.avatar_url = network::json::extract_string(*user, "avatarUrl").value_or("");
     }
     member.role = network::json::extract_string(object, "role").value_or("PLAYER");
     member.status = network::json::extract_string(object, "status").value_or("JOINED");
