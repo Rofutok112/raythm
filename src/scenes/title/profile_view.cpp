@@ -94,7 +94,7 @@ Rectangle overview_card_rect(Rectangle content, int index) {
 }
 
 Rectangle settings_delete_account_rect(Rectangle content) {
-    return {content.x + 18.0f, content.y + 450.0f, 238.0f, 42.0f};
+    return {content.x + 18.0f, content.y + 502.0f, 238.0f, 42.0f};
 }
 
 Rectangle settings_save_links_rect(Rectangle content) {
@@ -790,15 +790,15 @@ void draw(state& profile,
             draw_profile_button(settings_change_avatar_rect(content), "CHANGE IMAGE", !busy, t.accent);
             draw_profile_button(settings_remove_avatar_rect(content), "REMOVE IMAGE",
                                 !busy && !auth_state.avatar_url.empty(), t.error);
-            ui::draw_rect_lines({content.x + 18.0f, content.y + 410.0f, content.width - 36.0f, 1.0f},
+            ui::draw_rect_lines({content.x + 18.0f, content.y + 432.0f, content.width - 36.0f, 1.0f},
                                 1.0f, with_alpha(t.border, 150));
             ui::draw_text_in_rect("Delete this account from raythm-Server.",
                                   13,
-                                  {content.x + 18.0f, content.y + 422.0f, 560.0f, 22.0f},
+                                  {content.x + 18.0f, content.y + 446.0f, 560.0f, 22.0f},
                                   t.text_secondary, ui::text_align::left);
             ui::draw_text_in_rect("This does not delete local songs or charts.",
                                   12,
-                                  {content.x + 18.0f, content.y + 444.0f, 560.0f, 20.0f},
+                                  {content.x + 18.0f, content.y + 470.0f, 560.0f, 20.0f},
                                   t.text_muted, ui::text_align::left);
             draw_profile_button(settings_delete_account_rect(content), "DELETE ACCOUNT", !busy, t.error);
         }
