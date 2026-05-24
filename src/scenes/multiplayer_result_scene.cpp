@@ -114,6 +114,26 @@ void draw_compact_metric(Rectangle rect, const char* label, const char* value, C
                           value_color, ui::text_align::left);
 }
 
+void draw_fast_slow_panel(Rectangle rect, bool has_details, int fast_count, int slow_count) {
+    ui::draw_rect_f(rect, g_theme->section);
+    ui::draw_rect_lines(rect, 1.5f, g_theme->border_light);
+    const Rectangle left{rect.x + 26.0f, rect.y + 22.0f, 112.0f, 74.0f};
+    const Rectangle right{rect.x + rect.width * 0.5f + 24.0f, rect.y + 22.0f, 112.0f, 74.0f};
+    const Color fast_color = has_details ? g_theme->fast : g_theme->text_muted;
+    const Color slow_color = has_details ? g_theme->slow : g_theme->text_muted;
+    ui::draw_text_in_rect("FAST", 18, {left.x, left.y, left.width, 24.0f}, fast_color, ui::text_align::left);
+    ui::draw_rect_f({left.x, left.y + 30.0f, 50.0f, 2.0f}, fast_color);
+    ui::draw_text_in_rect(has_details ? std::to_string(fast_count).c_str() : "--", 34,
+                          {left.x, left.y + 42.0f, left.width, 38.0f}, fast_color, ui::text_align::left);
+    ui::draw_line_ex({rect.x + rect.width * 0.5f, rect.y + 24.0f},
+                     {rect.x + rect.width * 0.5f, rect.y + rect.height - 24.0f},
+                     1.0f, g_theme->border);
+    ui::draw_text_in_rect("SLOW", 18, {right.x, right.y, right.width, 24.0f}, slow_color, ui::text_align::left);
+    ui::draw_rect_f({right.x, right.y + 30.0f, 50.0f, 2.0f}, slow_color);
+    ui::draw_text_in_rect(has_details ? std::to_string(slow_count).c_str() : "--", 34,
+                          {right.x, right.y + 42.0f, right.width, 38.0f}, slow_color, ui::text_align::left);
+}
+
 void draw_background() {
     draw_scene_background(*g_theme);
     DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight,
@@ -534,9 +554,8 @@ void multiplayer_result_scene::draw() {
     draw_compact_metric({430.0f, 518.0f, 344.0f, 118.0f},
                         "Avg Offset", selected_has_details ? TextFormat("%+.1fms", selected->avg_offset) : "--",
                         g_theme->text_secondary);
-    draw_compact_metric({806.0f, 518.0f, 344.0f, 118.0f},
-                        "Fast / Slow", selected_has_details ? TextFormat("%d / %d", selected->fast_count, selected->slow_count) : "--",
-                        g_theme->slow);
+    draw_fast_slow_panel({806.0f, 518.0f, 344.0f, 118.0f},
+                         selected_has_details, selected->fast_count, selected->slow_count);
 
     const Rectangle judge_rect{430.0f, 674.0f, 720.0f, 330.0f};
     draw_result_panel(judge_rect);
@@ -567,18 +586,18 @@ void multiplayer_result_scene::draw() {
         }
     }
 
-    ui::draw_text_in_rect("Ranking", 40,
+    ui::draw_text_in_rect("Ranking", 38,
                           {kRankingPanelRect.x + 30.0f, kRankingPanelRect.y + 18.0f, 260.0f, 54.0f},
                           g_theme->text, ui::text_align::left);
     ui::draw_rect_f({kRankingPanelRect.x + 30.0f, kRankingPanelRect.y + 80.0f, 590.0f, 3.0f}, g_theme->border);
-    ui::draw_text_in_rect(TextFormat("%d players", static_cast<int>(scores_.size())), 24,
+    ui::draw_text_in_rect(TextFormat("%d players", static_cast<int>(scores_.size())), 22,
                           {kRankingPanelRect.x + 402.0f, kRankingPanelRect.y + 30.0f, 176.0f, 34.0f},
                           g_theme->text_muted, ui::text_align::right);
-    ui::draw_text_in_rect("SCORE", 17, {kListHeaderRect.x + 264.0f, kListHeaderRect.y, 122.0f, kListHeaderRect.height},
+    ui::draw_text_in_rect("SCORE", 16, {kListHeaderRect.x + 248.0f, kListHeaderRect.y, 112.0f, kListHeaderRect.height},
                           g_theme->text_muted, ui::text_align::right);
-    ui::draw_text_in_rect("ACC", 17, {kListHeaderRect.x + 398.0f, kListHeaderRect.y, 84.0f, kListHeaderRect.height},
+    ui::draw_text_in_rect("ACC", 16, {kListHeaderRect.x + 374.0f, kListHeaderRect.y, 78.0f, kListHeaderRect.height},
                           g_theme->text_muted, ui::text_align::right);
-    ui::draw_text_in_rect("COMBO", 17, {kListHeaderRect.x + 494.0f, kListHeaderRect.y, 96.0f, kListHeaderRect.height},
+    ui::draw_text_in_rect("COMBO", 16, {kListHeaderRect.x + 464.0f, kListHeaderRect.y, 78.0f, kListHeaderRect.height},
                           g_theme->text_muted, ui::text_align::right);
 
     const float content_height = score_content_height(static_cast<int>(scores_.size()));
@@ -597,24 +616,24 @@ void multiplayer_result_scene::draw() {
                 ui::draw_row(row_rect, bg, selected_row ? g_theme->row_soft_selected_hover : g_theme->row_hover,
                              selected_row ? g_theme->border_active : g_theme->border,
                              selected_row ? 3.0f : 1.5f);
-                ui::draw_text_in_rect(TextFormat("#%d", i + 1), 30,
+                ui::draw_text_in_rect(TextFormat("#%d", i + 1), 27,
                                       {row_rect.x + 18.0f, row_rect.y, 70.0f, row_rect.height},
                                       rank_color(i), ui::text_align::left);
-                ui::draw_text_in_rect(score.display_name.c_str(), 29,
-                                      {row_rect.x + 92.0f, row_rect.y + 6.0f, 190.0f, 42.0f},
+                ui::draw_text_in_rect(score.display_name.c_str(), 26,
+                                      {row_rect.x + 92.0f, row_rect.y + 7.0f, 156.0f, 38.0f},
                                       score.failed ? g_theme->text_muted : g_theme->text, ui::text_align::left);
                 if (self) {
-                    draw_chip({row_rect.x + 92.0f, row_rect.y + 50.0f, 60.0f, 24.0f},
-                              "YOU", g_theme->accent, 14);
+                    draw_chip({row_rect.x + 92.0f, row_rect.y + 50.0f, 56.0f, 22.0f},
+                              "YOU", g_theme->accent, 13);
                 }
-                ui::draw_text_in_rect(format_score(score.score).c_str(), 25,
-                                      {row_rect.x + 264.0f, row_rect.y, 122.0f, row_rect.height},
+                ui::draw_text_in_rect(format_score(score.score).c_str(), 22,
+                                      {row_rect.x + 248.0f, row_rect.y, 112.0f, row_rect.height},
                                       g_theme->text, ui::text_align::right);
-                ui::draw_text_in_rect(TextFormat("%.1f%%", score.accuracy), 23,
-                                      {row_rect.x + 398.0f, row_rect.y, 84.0f, row_rect.height},
+                ui::draw_text_in_rect(TextFormat("%.1f%%", score.accuracy), 20,
+                                      {row_rect.x + 374.0f, row_rect.y, 78.0f, row_rect.height},
                                       g_theme->fast, ui::text_align::right);
-                ui::draw_text_in_rect(std::to_string(score.combo).c_str(), 23,
-                                      {row_rect.x + 494.0f, row_rect.y, 96.0f, row_rect.height},
+                ui::draw_text_in_rect(std::to_string(score.combo).c_str(), 20,
+                                      {row_rect.x + 464.0f, row_rect.y, 78.0f, row_rect.height},
                                       g_theme->text_secondary, ui::text_align::right);
                 ui::draw_rect_f({row_rect.x, row_rect.y, 4.0f, row_rect.height},
                                 selected_row ? rank_color(i) : (score.failed ? g_theme->error : g_theme->success));
