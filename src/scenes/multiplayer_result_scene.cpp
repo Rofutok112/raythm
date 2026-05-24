@@ -350,6 +350,8 @@ void multiplayer_result_scene::unload_jacket_texture() {
 }
 
 void multiplayer_result_scene::draw() {
+    virtual_screen::begin_ui();
+
     draw_background(jacket_texture_loaded_ ? &jacket_texture_ : nullptr);
 
     draw_song_select_column(kLeftPanelRect);
@@ -514,4 +516,8 @@ void multiplayer_result_scene::draw() {
         !returning_) {
         request_return_to_room();
     }
+
+    virtual_screen::end();
+    ClearBackground(BLACK);
+    virtual_screen::draw_to_screen();
 }
