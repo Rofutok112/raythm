@@ -29,6 +29,16 @@ constexpr int kEditableExternalLinkCount = 3;
 constexpr float kRowHeight = 70.0f;
 constexpr float kRowGap = 10.0f;
 constexpr float kWheelStep = 78.0f;
+constexpr float kSettingsInsetX = 18.0f;
+constexpr float kSettingsDividerY = 306.0f;
+constexpr float kSettingsAvatarLabelY = 316.0f;
+constexpr float kSettingsAvatarButtonY = 354.0f;
+constexpr float kSettingsAccountDividerY = 432.0f;
+constexpr float kSettingsAccountLabelY = 446.0f;
+constexpr float kSettingsAccountDescriptionY = 470.0f;
+constexpr float kSettingsAccountButtonY = 502.0f;
+constexpr float kSettingsLabelHeight = 22.0f;
+constexpr float kSettingsButtonHeight = 42.0f;
 
 Rectangle content_rect() {
     return {
@@ -94,7 +104,10 @@ Rectangle overview_card_rect(Rectangle content, int index) {
 }
 
 Rectangle settings_delete_account_rect(Rectangle content) {
-    return {content.x + 18.0f, content.y + 502.0f, 238.0f, 42.0f};
+    return {content.x + kSettingsInsetX,
+            content.y + kSettingsAccountButtonY,
+            238.0f,
+            kSettingsButtonHeight};
 }
 
 Rectangle settings_save_links_rect(Rectangle content) {
@@ -102,11 +115,17 @@ Rectangle settings_save_links_rect(Rectangle content) {
 }
 
 Rectangle settings_change_avatar_rect(Rectangle content) {
-    return {content.x + 18.0f, content.y + 330.0f, 176.0f, 42.0f};
+    return {content.x + kSettingsInsetX,
+            content.y + kSettingsAvatarButtonY,
+            176.0f,
+            kSettingsButtonHeight};
 }
 
 Rectangle settings_remove_avatar_rect(Rectangle content) {
-    return {content.x + 210.0f, content.y + 330.0f, 176.0f, 42.0f};
+    return {content.x + 210.0f,
+            content.y + kSettingsAvatarButtonY,
+            176.0f,
+            kSettingsButtonHeight};
 }
 
 Rectangle settings_link_label_rect(Rectangle content, int index) {
@@ -781,24 +800,39 @@ void draw(state& profile,
                                   12,
                                   {content.x + 18.0f, content.y + 262.0f, 560.0f, 20.0f},
                                   t.text_muted, ui::text_align::left);
-            ui::draw_rect_lines({content.x + 18.0f, content.y + 306.0f, content.width - 36.0f, 1.0f},
+            ui::draw_rect_lines({content.x + kSettingsInsetX,
+                                 content.y + kSettingsDividerY,
+                                 content.width - kSettingsInsetX * 2.0f,
+                                 1.0f},
                                 1.0f, with_alpha(t.border, 150));
             ui::draw_text_in_rect("Profile Image",
                                   13,
-                                  {content.x + 18.0f, content.y + 316.0f, 560.0f, 22.0f},
+                                  {content.x + kSettingsInsetX,
+                                   content.y + kSettingsAvatarLabelY,
+                                   560.0f,
+                                   kSettingsLabelHeight},
                                   t.text_secondary, ui::text_align::left);
             draw_profile_button(settings_change_avatar_rect(content), "CHANGE IMAGE", !busy, t.accent);
             draw_profile_button(settings_remove_avatar_rect(content), "REMOVE IMAGE",
                                 !busy && !auth_state.avatar_url.empty(), t.error);
-            ui::draw_rect_lines({content.x + 18.0f, content.y + 432.0f, content.width - 36.0f, 1.0f},
+            ui::draw_rect_lines({content.x + kSettingsInsetX,
+                                 content.y + kSettingsAccountDividerY,
+                                 content.width - kSettingsInsetX * 2.0f,
+                                 1.0f},
                                 1.0f, with_alpha(t.border, 150));
             ui::draw_text_in_rect("Delete this account from raythm-Server.",
                                   13,
-                                  {content.x + 18.0f, content.y + 446.0f, 560.0f, 22.0f},
+                                  {content.x + kSettingsInsetX,
+                                   content.y + kSettingsAccountLabelY,
+                                   560.0f,
+                                   kSettingsLabelHeight},
                                   t.text_secondary, ui::text_align::left);
             ui::draw_text_in_rect("This does not delete local songs or charts.",
                                   12,
-                                  {content.x + 18.0f, content.y + 470.0f, 560.0f, 20.0f},
+                                  {content.x + kSettingsInsetX,
+                                   content.y + kSettingsAccountDescriptionY,
+                                   560.0f,
+                                   20.0f},
                                   t.text_muted, ui::text_align::left);
             draw_profile_button(settings_delete_account_rect(content), "DELETE ACCOUNT", !busy, t.error);
         }
