@@ -455,19 +455,19 @@ void multiplayer_result_scene::draw() {
                           g_theme->text_hint, ui::text_align::left);
 
     ui::draw_text_in_rect(selected->display_name.c_str(), 26,
-                          {430.0f, 126.0f, 720.0f, 34.0f}, g_theme->text_secondary,
+                          {430.0f, 127.0f, 720.0f, 34.0f}, g_theme->text_secondary,
                           ui::text_align::left);
-    const Rectangle rank_rect{430.0f, 156.0f, 254.0f, 190.0f};
+    const Rectangle rank_rect{430.0f, 142.0f, 254.0f, 190.0f};
     ui::draw_text_in_rect(rank_label(selected_rank), selected_rank == rank::aa ? 108 : 138,
                           rank_rect, selected_rank_color, ui::text_align::center);
-    ui::draw_line_ex({704.0f, 174.0f}, {704.0f, 336.0f}, 1.5f, g_theme->border);
+    ui::draw_line_ex({704.0f, 160.0f}, {704.0f, 322.0f}, 1.5f, g_theme->border);
 
     ui::draw_text_in_rect(format_score(selected->score).c_str(), 82,
-                          {736.0f, 166.0f, 414.0f, 96.0f},
+                          {736.0f, 152.0f, 414.0f, 96.0f},
                           g_theme->text, ui::text_align::right);
-    ui::draw_rect_f({736.0f, 284.0f, 414.0f, 3.0f}, selected_rank_color);
+    ui::draw_rect_f({736.0f, 270.0f, 414.0f, 3.0f}, selected_rank_color);
     ui::draw_text_in_rect(selected_self ? TextFormat("RC %.1f", result_.rc_value) : "RC --", 28,
-                          {736.0f, 298.0f, 190.0f, 42.0f}, g_theme->text_secondary,
+                          {736.0f, 284.0f, 190.0f, 42.0f}, g_theme->text_secondary,
                           ui::text_align::left);
     const char* clear_label = selected->failed ? "FAILED" :
         (selected_self && result_.is_all_perfect ? "ALL PERFECT" :
@@ -475,24 +475,24 @@ void multiplayer_result_scene::draw() {
     const Color clear_color = selected->failed ? g_theme->error :
         (selected_self && result_.is_all_perfect ? g_theme->all_perfect :
          (selected_self && result_.is_full_combo ? g_theme->full_combo : g_theme->success));
-    ui::draw_text_in_rect(clear_label, 28, {942.0f, 298.0f, 208.0f, 42.0f},
+    ui::draw_text_in_rect(clear_label, 28, {942.0f, 284.0f, 208.0f, 42.0f},
                           clear_color, ui::text_align::right);
 
-    draw_compact_metric({430.0f, 394.0f, 236.0f, 118.0f},
+    draw_compact_metric({430.0f, 376.0f, 236.0f, 118.0f},
                         "Accuracy", TextFormat("%.2f%%", selected->accuracy), g_theme->fast);
-    draw_compact_metric({688.0f, 394.0f, 210.0f, 118.0f},
+    draw_compact_metric({688.0f, 376.0f, 210.0f, 118.0f},
                         "Max Combo", std::to_string(selected->combo).c_str(), g_theme->accent);
-    draw_compact_metric({920.0f, 394.0f, 230.0f, 118.0f},
+    draw_compact_metric({920.0f, 376.0f, 230.0f, 118.0f},
                         "Place", selected_place > 0 ? TextFormat("#%d", selected_place) : "--",
                         selected_place > 0 ? rank_color(selected_place - 1) : g_theme->text_secondary);
-    draw_compact_metric({430.0f, 536.0f, 344.0f, 118.0f},
+    draw_compact_metric({430.0f, 518.0f, 344.0f, 118.0f},
                         "Avg Offset", selected_self ? TextFormat("%+.1fms", result_.avg_offset) : "--",
                         g_theme->text_secondary);
-    draw_compact_metric({806.0f, 536.0f, 344.0f, 118.0f},
+    draw_compact_metric({806.0f, 518.0f, 344.0f, 118.0f},
                         "Fast / Slow", selected_self ? TextFormat("%d / %d", result_.fast_count, result_.slow_count) : "--",
                         g_theme->slow);
 
-    const Rectangle judge_rect{430.0f, 692.0f, 720.0f, 246.0f};
+    const Rectangle judge_rect{430.0f, 674.0f, 720.0f, 246.0f};
     draw_result_panel(judge_rect);
     const Rectangle judge_content = ui::inset(judge_rect, ui::edge_insets::symmetric(24.0f, 22.0f));
     const char* judge_labels[5] = {"Perfect", "Great", "Good", "Bad", "Miss"};
@@ -522,11 +522,11 @@ void multiplayer_result_scene::draw() {
     }
 
     ui::draw_text_in_rect("Ranking", 40,
-                          {kRankingPanelRect.x + 30.0f, kRankingPanelRect.y + 32.0f, 260.0f, 54.0f},
+                          {kRankingPanelRect.x + 30.0f, kRankingPanelRect.y + 18.0f, 260.0f, 54.0f},
                           g_theme->text, ui::text_align::left);
-    ui::draw_rect_f({kRankingPanelRect.x + 30.0f, kRankingPanelRect.y + 94.0f, 590.0f, 3.0f}, g_theme->border);
+    ui::draw_rect_f({kRankingPanelRect.x + 30.0f, kRankingPanelRect.y + 80.0f, 590.0f, 3.0f}, g_theme->border);
     ui::draw_text_in_rect(TextFormat("%d players", static_cast<int>(scores_.size())), 24,
-                          {kRankingPanelRect.x + 402.0f, kRankingPanelRect.y + 44.0f, 176.0f, 34.0f},
+                          {kRankingPanelRect.x + 402.0f, kRankingPanelRect.y + 30.0f, 176.0f, 34.0f},
                           g_theme->text_muted, ui::text_align::right);
     ui::draw_text_in_rect("SCORE", 17, {kListHeaderRect.x + 264.0f, kListHeaderRect.y, 122.0f, kListHeaderRect.height},
                           g_theme->text_muted, ui::text_align::right);
