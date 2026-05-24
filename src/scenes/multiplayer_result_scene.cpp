@@ -19,7 +19,7 @@ namespace {
 
 constexpr Rectangle kScreenRect{0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
 constexpr Rectangle kBackButtonRect{39.0f, 983.0f, 330.0f, 58.0f};
-constexpr Rectangle kLeftPanelRect{39.0f, 109.0f, 330.0f, 932.0f};
+constexpr Rectangle kLeftPanelRect{39.0f, 109.0f, 330.0f, 854.0f};
 constexpr Rectangle kMainPanelRect{390.0f, 109.0f, 820.0f, 932.0f};
 constexpr Rectangle kRankingPanelRect{1228.0f, 109.0f, 650.0f, 932.0f};
 constexpr Rectangle kJacketRect{69.0f, 139.0f, 270.0f, 270.0f};
@@ -384,39 +384,39 @@ void multiplayer_result_scene::draw() {
     ui::draw_text_in_rect(status_message_.c_str(), 18, {69.0f, 794.0f, 270.0f, 74.0f},
                           g_theme->text_hint, ui::text_align::left);
 
-    const Rectangle rank_rect{430.0f, 164.0f, 254.0f, 218.0f};
+    const Rectangle rank_rect{430.0f, 136.0f, 254.0f, 218.0f};
     const Color rcolor = result_rank_color(result_.clear_rank);
     ui::draw_text_in_rect(rank_label(result_.clear_rank), result_.clear_rank == rank::aa ? 118 : 150,
                           rank_rect, rcolor, ui::text_align::center);
-    ui::draw_line_ex({704.0f, 194.0f}, {704.0f, 366.0f}, 1.5f, g_theme->border);
+    ui::draw_line_ex({704.0f, 166.0f}, {704.0f, 338.0f}, 1.5f, g_theme->border);
 
     ui::draw_text_in_rect(format_score(result_.score).c_str(), 82,
-                          {736.0f, 200.0f, 414.0f, 96.0f},
+                          {736.0f, 172.0f, 414.0f, 96.0f},
                           g_theme->text, ui::text_align::right);
-    ui::draw_rect_f({736.0f, 318.0f, 414.0f, 3.0f}, rcolor);
+    ui::draw_rect_f({736.0f, 290.0f, 414.0f, 3.0f}, rcolor);
     const char* clear_label = result_.failed ? "FAILED" :
         (result_.is_all_perfect ? "ALL PERFECT" :
          (result_.is_full_combo ? "FULL COMBO" : "CLEAR"));
     const Color clear_color = result_.failed ? g_theme->error :
          (result_.is_all_perfect ? g_theme->all_perfect :
          (result_.is_full_combo ? g_theme->full_combo : g_theme->success));
-    ui::draw_text_in_rect(clear_label, 28, {736.0f, 336.0f, 414.0f, 42.0f},
+    ui::draw_text_in_rect(clear_label, 28, {736.0f, 308.0f, 414.0f, 42.0f},
                           clear_color, ui::text_align::right);
 
-    draw_compact_metric({430.0f, 442.0f, 236.0f, 118.0f},
+    draw_compact_metric({430.0f, 408.0f, 236.0f, 118.0f},
                         "Accuracy", TextFormat("%.2f%%", result_.accuracy), g_theme->fast);
-    draw_compact_metric({688.0f, 442.0f, 210.0f, 118.0f},
+    draw_compact_metric({688.0f, 408.0f, 210.0f, 118.0f},
                         "Max Combo", std::to_string(result_.max_combo).c_str(), g_theme->accent);
-    draw_compact_metric({920.0f, 442.0f, 230.0f, 118.0f},
+    draw_compact_metric({920.0f, 408.0f, 230.0f, 118.0f},
                         "Avg Offset", TextFormat("%+.1fms", result_.avg_offset), g_theme->text_secondary);
-    draw_compact_metric({430.0f, 574.0f, 236.0f, 118.0f},
+    draw_compact_metric({430.0f, 540.0f, 236.0f, 118.0f},
                         "Gauge", TextFormat("%.0f%%", result_.gauge_value), g_theme->success);
-    draw_compact_metric({688.0f, 574.0f, 210.0f, 118.0f},
+    draw_compact_metric({688.0f, 540.0f, 210.0f, 118.0f},
                         "RC", TextFormat("%.1f", result_.rc_value), g_theme->text);
-    draw_compact_metric({920.0f, 574.0f, 230.0f, 118.0f},
+    draw_compact_metric({920.0f, 540.0f, 230.0f, 118.0f},
                         "Fast / Slow", TextFormat("%d / %d", result_.fast_count, result_.slow_count), g_theme->slow);
 
-    const Rectangle judge_rect{430.0f, 736.0f, 720.0f, 176.0f};
+    const Rectangle judge_rect{430.0f, 702.0f, 720.0f, 176.0f};
     draw_result_panel(judge_rect);
     const Rectangle judge_content = ui::inset(judge_rect, ui::edge_insets::symmetric(24.0f, 22.0f));
     const char* judge_labels[5] = {"Perfect", "Great", "Good", "Bad", "Miss"};
