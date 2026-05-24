@@ -526,7 +526,13 @@ void title_scene::update_common_animation(float dt) {
         audio_controller_.preview(), mode_ == hub_mode::play, mode_ == hub_mode::create);
     play_create_feature_.poll_transfer(play_cross_callbacks(), content_mode_is_play_or_create);
     play_create_feature_.poll_ranking_reload();
-    play_create_feature_.poll_scoring_ruleset_warm();
+    if (play_create_feature_.poll_scoring_ruleset_warm()) {
+        play_create_feature_.capture_current_selection();
+        play_create_feature_.request_catalog_reload(
+            play_create_feature_.preferred_song_id(),
+            play_create_feature_.preferred_chart_id(),
+            content_mode_is_play_or_create);
+    }
     if (play_create_feature_.poll_create_upload(content_mode_is_play_or_create)) {
         browse_feature_.request_reload(true);
     }

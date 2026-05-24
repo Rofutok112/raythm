@@ -95,19 +95,21 @@ void title_play_data_controller::request_scoring_ruleset_warm(bool force_refresh
     }).detach();
 }
 
-void title_play_data_controller::poll_scoring_ruleset_warm() {
+bool title_play_data_controller::poll_scoring_ruleset_warm() {
     if (!scoring_ruleset_loading_) {
-        return;
+        return false;
     }
     if (scoring_ruleset_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
-        return;
+        return false;
     }
 
+    bool warmed = false;
     try {
-        scoring_ruleset_future_.get();
+        warmed = scoring_ruleset_future_.get();
     } catch (...) {
     }
     scoring_ruleset_loading_ = false;
+    return warmed;
 }
 
 void title_play_data_controller::start_song_upload(const song_select::song_entry& song) {

@@ -20,6 +20,7 @@ struct draw_config {
     unsigned char normal_row_alpha = 255;
     unsigned char hover_row_alpha = 255;
     unsigned char selected_row_alpha = 255;
+    bool compact_song_header = false;
     double now = 0.0;
 };
 
