@@ -106,11 +106,7 @@ void draw_chip(Rectangle rect, const char* text, Color color, int font_size = 18
 }
 
 void draw_profile_image_slot(Rectangle rect) {
-    ui::draw_rect_f(rect, with_alpha(g_theme->row_soft, 220));
-    ui::draw_rect_lines(rect, 1.5f, with_alpha(g_theme->border_light, 255));
-    const Rectangle inner = ui::inset(rect, 8.0f);
-    ui::draw_rect_f(inner, with_alpha(g_theme->section, 230));
-    ui::draw_rect_lines(inner, 1.0f, with_alpha(g_theme->border, 180));
+    ui::draw_rect_f(rect, with_alpha(g_theme->section, 235));
 }
 
 void draw_compact_metric(Rectangle rect, const char* label, const char* value, Color value_color) {
@@ -532,12 +528,13 @@ void multiplayer_result_scene::draw() {
     ui::draw_rect_lines({69.0f, 610.0f, 270.0f, 112.0f}, 1.5f, g_theme->border_light);
     ui::draw_text_in_rect("YOUR PLACE", 18, {89.0f, 628.0f, 230.0f, 24.0f},
                           g_theme->text_muted, ui::text_align::left);
+    draw_profile_image_slot({89.0f, 652.0f, 58.0f, 58.0f});
     ui::draw_text_in_rect(self_place > 0 ? TextFormat("#%d", self_place) : "--", 52,
-                          {89.0f, 656.0f, 116.0f, 54.0f},
+                          {165.0f, 656.0f, 82.0f, 54.0f},
                           self_place > 0 ? rank_color(self_place - 1) : g_theme->text_muted,
                           ui::text_align::left);
     ui::draw_text_in_rect(TextFormat("%d players", static_cast<int>(scores_.size())), 24,
-                          {206.0f, 670.0f, 114.0f, 34.0f}, g_theme->text_secondary,
+                          {248.0f, 670.0f, 72.0f, 34.0f}, g_theme->text_secondary,
                           ui::text_align::right);
     ui::draw_text_in_rect(status_message_.c_str(), 18, {69.0f, 774.0f, 270.0f, 74.0f},
                           g_theme->text_hint, ui::text_align::left);
@@ -639,8 +636,8 @@ void multiplayer_result_scene::draw() {
                                       {row_rect.x + 18.0f, row_rect.y, 50.0f, row_rect.height},
                                       rank_color(i), ui::text_align::left);
                 draw_profile_image_slot({row_rect.x + 74.0f, row_rect.y + 20.0f, 48.0f, 48.0f});
-                ui::draw_text_in_rect(score.display_name.c_str(), 26,
-                                      {row_rect.x + 138.0f, row_rect.y + 7.0f, 110.0f, 38.0f},
+                ui::draw_text_in_rect(score.display_name.c_str(), 22,
+                                      {row_rect.x + 138.0f, row_rect.y + 9.0f, 110.0f, 34.0f},
                                       score.failed ? g_theme->text_muted : g_theme->text, ui::text_align::left);
                 if (self) {
                     draw_chip({row_rect.x + 138.0f, row_rect.y + 50.0f, 56.0f, 22.0f},
