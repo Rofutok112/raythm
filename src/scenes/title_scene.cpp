@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "audio_manager.h"
 #include "raylib.h"
 #include "scene_common.h"
 #include "scene_manager.h"
@@ -165,12 +166,14 @@ void title_scene::enter_play_mode() {
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_create_feature_.state(), browse_feature_.state()), 0.0f);
 }
 
-void title_scene::enter_multiplayer_mode() {
+void title_scene::enter_multiplayer_mode(bool reset_room_state) {
     mode_ = hub_mode::multiplayer;
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
-    multiplayer::on_enter(multiplayer_state_, preferred_multiplayer_room_id_);
-    preferred_multiplayer_room_id_.clear();
+    if (reset_room_state) {
+        multiplayer::on_enter(multiplayer_state_, preferred_multiplayer_room_id_);
+        preferred_multiplayer_room_id_.clear();
+    }
     audio_controller_.update(current_audio_mode(), song_select::selected_song(play_create_feature_.state()), 0.0f);
 }
 
@@ -394,6 +397,7 @@ void title_scene::update_multiplayer_mode(float dt) {
             multiplayer_state_.status_message = multiplayer_state_.queue_candidate_message;
         }
     }
+    update_multiplayer_audio(dt);
     const multiplayer::update_result result = multiplayer::update(multiplayer_state_, dt);
     if (result.back_requested) {
         enter_home_mode(false);
@@ -440,6 +444,43 @@ void title_scene::update_multiplayer_mode(float dt) {
             multiplayer_state_.selected_room_id,
             multiplayer_state_.active_match_id));
     }
+}
+
+const song_select::song_entry* title_scene::multiplayer_queue_preview_song() const {
+    if (!multiplayer_state_.current_room.has_value() || multiplayer_state_.current_room->queue.empty()) {
+        return nullptr;
+    }
+    const multiplayer::room_queue_item& item = multiplayer_state_.current_room->queue.front();
+    const std::string room_server_url = server_environment::normalize_url(multiplayer_state_.auth.server_url);
+    const local_chart_match match =
+        find_online_chart_match(play_create_feature_.state(), room_server_url, item.song_id, item.chart_id);
+    return match.song;
+}
+
+void title_scene::update_multiplayer_audio(float dt) {
+    const song_select::song_entry* preview_song = multiplayer_queue_preview_song();
+    if (multiplayer_state_.queue_preview_seek_requested) {
+        multiplayer_state_.queue_preview_seek_requested = false;
+        audio_manager::instance().seek_preview(multiplayer_state_.queue_preview_seek_seconds);
+    }
+    if (multiplayer_state_.command == multiplayer::ui_command::toggle_queue_preview) {
+        multiplayer_state_.command = multiplayer::ui_command::none;
+        if (audio_manager::instance().is_preview_playing()) {
+            audio_controller_.preview().pause();
+        } else {
+            audio_controller_.preview().resume(preview_song);
+        }
+    }
+    audio_controller_.update_preview_only(preview_song, dt);
+    multiplayer_state_.queue_preview_available = preview_song != nullptr;
+    multiplayer_state_.queue_preview_playing = audio_manager::instance().is_preview_playing();
+    multiplayer_state_.queue_preview_position_seconds = preview_song != nullptr
+        ? audio_manager::instance().get_preview_position_seconds()
+        : 0.0;
+    const double stream_length = audio_manager::instance().get_preview_length_seconds();
+    multiplayer_state_.queue_preview_duration_seconds = preview_song != nullptr
+        ? (stream_length > 0.0 ? stream_length : static_cast<double>(preview_song->song.meta.duration_seconds))
+        : 0.0;
 }
 
 void title_scene::update_online_mode(float dt) {
@@ -540,7 +581,11 @@ void title_scene::update_common_animation(float dt) {
     if (play_view_anim_ > 0.0f && (content_mode == hub_mode::play || content_mode == hub_mode::create)) {
         song_select::tick_animations(play_create_feature_.state(), dt);
     }
-    audio_controller_.update(current_audio_mode(), selected_audio_song(content_mode, play_create_feature_.state(), browse_feature_.state()), dt);
+    if (content_mode != hub_mode::multiplayer) {
+        audio_controller_.update(current_audio_mode(),
+                                 selected_audio_song(content_mode, play_create_feature_.state(), browse_feature_.state()),
+                                 dt);
+    }
 }
 
 bool title_scene::handle_account_input() {
@@ -661,7 +706,7 @@ void title_scene::update_settings_mode(float dt) {
                     enter_play_mode();
                     break;
                 case hub_mode::multiplayer:
-                    enter_multiplayer_mode();
+                    enter_multiplayer_mode(false);
                     break;
                 case hub_mode::online:
                     enter_online_mode();
@@ -784,6 +829,13 @@ void title_scene::on_exit() {
     play_create_feature_.on_exit();
     browse_feature_.on_exit();
     audio_controller_.on_exit();
+}
+
+void title_scene::on_app_exit() {
+    if (mode_ == hub_mode::settings) {
+        settings_overlay_.save();
+    }
+    multiplayer::leave_current_room_best_effort(multiplayer_state_);
 }
 
 // Title 上で Home 展開、Play/Create への遷移、Account 導線を扱う。

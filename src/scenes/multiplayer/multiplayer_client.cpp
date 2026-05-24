@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <memory>
 #include <sstream>
 
@@ -147,6 +148,41 @@ std::string json_string_field(const char* name, const std::string& value) {
     return "\"" + std::string(name) + "\":\"" + network::json::escape_string(value) + "\"";
 }
 
+std::array<int, 5> parse_judge_counts(const std::string& object) {
+    std::array<int, 5> counts{};
+    const std::optional<std::string> array = network::json::extract_array(object, "judgeCounts");
+    if (!array.has_value()) {
+        return counts;
+    }
+    size_t index = 0;
+    for (int& count : counts) {
+        while (index < array->size() && ((*array)[index] == '[' || (*array)[index] == ',' || std::isspace(static_cast<unsigned char>((*array)[index])))) {
+            ++index;
+        }
+        char* end = nullptr;
+        const long value = std::strtol(array->c_str() + index, &end, 10);
+        if (end == array->c_str() + index) {
+            break;
+        }
+        count = static_cast<int>(std::max(0L, value));
+        index = static_cast<size_t>(end - array->c_str());
+    }
+    return counts;
+}
+
+const char* rank_json_label(rank value) {
+    switch (value) {
+        case rank::ss: return "ss";
+        case rank::s: return "s";
+        case rank::aa: return "aa";
+        case rank::a: return "a";
+        case rank::b: return "b";
+        case rank::c: return "c";
+        case rank::f: return "f";
+    }
+    return "f";
+}
+
 std::string create_room_body(const std::string& name, const std::string& password,
                              int max_players, bool host_only) {
     std::ostringstream body;
@@ -253,6 +289,16 @@ live_score parse_live_score(const std::string& object) {
     live_score score;
     score.score = network::json::extract_int(object, "score").value_or(0);
     score.combo = network::json::extract_int(object, "combo").value_or(0);
+    score.accuracy = network::json::extract_float(object, "accuracy").value_or(0.0f);
+    score.rc_value = network::json::extract_float(object, "rcValue").value_or(0.0f);
+    score.avg_offset = network::json::extract_float(object, "avgOffset").value_or(0.0f);
+    score.fast_count = network::json::extract_int(object, "fastCount").value_or(0);
+    score.slow_count = network::json::extract_int(object, "slowCount").value_or(0);
+    score.clear_rank = network::json::extract_string(object, "clearRank").value_or("");
+    score.is_full_combo = network::json::extract_bool(object, "isFullCombo").value_or(false);
+    score.is_all_perfect = network::json::extract_bool(object, "isAllPerfect").value_or(false);
+    score.judge_counts = parse_judge_counts(object);
+    score.has_result_details = network::json::extract_array(object, "judgeCounts").has_value();
     const std::optional<std::string> user = network::json::extract_object(object, "user");
     if (user.has_value()) {
         score.user_id = network::json::extract_string(*user, "id").value_or("");
@@ -337,6 +383,7 @@ room_operation_result parse_room_operation(const network::http::response& respon
     result.type = "http";
     result.match_id = network::json::extract_string(response.body, "matchId").value_or("");
     result.match_start_at = network::json::extract_string(response.body, "startAt").value_or("");
+    result.match_server_now = network::json::extract_string(response.body, "serverNow").value_or("");
     result.success = true;
     result.message = success_message;
     return result;
@@ -439,6 +486,7 @@ std::vector<room_operation_result> realtime_client::poll_room_events() {
         result.message = "Room updated.";
         result.match_id = network::json::extract_string(*payload, "matchId").value_or("");
         result.match_start_at = network::json::extract_string(*payload, "startAt").value_or("");
+        result.match_server_now = network::json::extract_string(*payload, "serverNow").value_or("");
         const std::optional<std::string> scores = network::json::extract_array(*payload, "liveScores");
         if (scores.has_value()) {
             for (const std::string& score : network::json::extract_objects_from_array(*scores)) {
@@ -614,11 +662,31 @@ room_operation_result update_score(const auth::session_summary& session,
                                    const std::string& match_id,
                                    int score,
                                    int combo,
-                                   bool failed) {
+                                   float accuracy,
+                                   bool failed,
+                                   const result_data* details) {
     std::ostringstream body;
     body << "{\"score\":" << std::clamp(score, 0, 1000000)
          << ",\"combo\":" << std::max(0, combo)
+         << ",\"accuracy\":" << std::clamp(accuracy, 0.0f, 100.0f)
          << ",\"failed\":" << (failed ? "true" : "false");
+    if (details != nullptr) {
+        body << ",\"rcValue\":" << details->rc_value
+             << ",\"avgOffset\":" << details->avg_offset
+             << ",\"fastCount\":" << std::max(0, details->fast_count)
+             << ",\"slowCount\":" << std::max(0, details->slow_count)
+             << ",\"isFullCombo\":" << (details->is_full_combo ? "true" : "false")
+             << ",\"isAllPerfect\":" << (details->is_all_perfect ? "true" : "false")
+             << "," << json_string_field("clearRank", rank_json_label(details->clear_rank))
+             << ",\"judgeCounts\":[";
+        for (size_t i = 0; i < details->judge_counts.size(); ++i) {
+            if (i > 0) {
+                body << ",";
+            }
+            body << std::max(0, details->judge_counts[i]);
+        }
+        body << "]";
+    }
     if (!match_id.empty()) {
         body << "," << json_string_field("matchId", match_id);
     }

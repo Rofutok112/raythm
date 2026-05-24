@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <future>
 #include <memory>
 #include <optional>
@@ -57,7 +58,17 @@ struct live_score {
     std::string display_name;
     int score = 0;
     int combo = 0;
+    float accuracy = 0.0f;
     bool failed = false;
+    bool has_result_details = false;
+    std::array<int, 5> judge_counts = {};
+    float rc_value = 0.0f;
+    float avg_offset = 0.0f;
+    int fast_count = 0;
+    int slow_count = 0;
+    std::string clear_rank;
+    bool is_full_combo = false;
+    bool is_all_perfect = false;
 };
 
 struct room_detail {
@@ -91,6 +102,7 @@ struct room_operation_result {
     std::string message;
     std::string match_id;
     std::string match_start_at;
+    std::string match_server_now;
     std::optional<room_detail> room;
     std::vector<live_score> live_scores;
 };
@@ -139,6 +151,7 @@ enum class ui_command {
     move_queue_item_down,
     toggle_queue_permission,
     start_match,
+    toggle_queue_preview,
     back_to_home,
 };
 
@@ -162,6 +175,12 @@ struct state {
     std::string requested_download_chart_id;
     bool current_queue_chart_installed = false;
     std::vector<std::string> installed_queue_item_ids;
+    bool queue_preview_available = false;
+    bool queue_preview_playing = false;
+    double queue_preview_position_seconds = 0.0;
+    double queue_preview_duration_seconds = 0.0;
+    bool queue_preview_seek_requested = false;
+    double queue_preview_seek_seconds = 0.0;
     screen_mode screen = screen_mode::list;
     modal_mode modal = modal_mode::none;
     pending_operation pending = pending_operation::none;

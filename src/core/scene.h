@@ -11,6 +11,7 @@ public:
     virtual void draw() = 0;
     virtual void on_enter();
     virtual void on_exit();
+    virtual void on_app_exit();
 
 protected:
     scene_manager& manager_;

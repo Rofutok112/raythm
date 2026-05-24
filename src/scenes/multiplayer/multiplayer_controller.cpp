@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <future>
+#include <thread>
 
 #include "multiplayer/multiplayer_client.h"
 #include "network/json_helpers.h"
@@ -106,14 +107,14 @@ void set_requested_start_from_room(state& state) {
     if (!state.current_room.has_value()) {
         return;
     }
-    if (!state.current_room->queue.empty()) {
-        state.requested_start_song_id = state.current_room->queue.front().song_id;
-        state.requested_start_chart_id = state.current_room->queue.front().chart_id;
-        return;
-    }
     if (!state.current_room->current_song_id.empty() && !state.current_room->current_chart_id.empty()) {
         state.requested_start_song_id = state.current_room->current_song_id;
         state.requested_start_chart_id = state.current_room->current_chart_id;
+        return;
+    }
+    if (!state.current_room->queue.empty()) {
+        state.requested_start_song_id = state.current_room->queue.front().song_id;
+        state.requested_start_chart_id = state.current_room->queue.front().chart_id;
     }
 }
 
@@ -171,6 +172,7 @@ void finish_operation(state& state, room_operation_result operation) {
     if (completed == pending_operation::chat) {
         state.chat_input.value.clear();
         state.chat_input.cursor = 0;
+        state.chat_input.active = true;
     }
     if (completed == pending_operation::queue_remove) {
         state.selected_queue_item_id.clear();
@@ -216,6 +218,7 @@ bool handle_command(state& state) {
         return false;
     }
     if (operation_busy(state)) {
+        state.command = ui_command::none;
         return false;
     }
     state.command = ui_command::none;
@@ -223,6 +226,18 @@ bool handle_command(state& state) {
     if (command == ui_command::refresh_rooms) {
         refresh_rooms(state);
     } else if (command == ui_command::open_song_select) {
+        if (state.current_room.has_value() && state.local_ready) {
+            state.local_ready = false;
+            const std::string body = "{\"ready\":false}";
+            if (!send_realtime_command(state, "ready.set", body, "Cancelling ready...")) {
+                const auth::session_summary session = state.auth;
+                const std::string room_id = state.current_room->id;
+                state.status_message = "Cancelling ready...";
+                std::thread([session, room_id]() {
+                    (void)client::set_ready(session, room_id, false);
+                }).detach();
+            }
+        }
         return true;
     } else if (command == ui_command::open_create_room) {
         state.create_name_input.value.clear();
@@ -270,6 +285,7 @@ bool handle_command(state& state) {
                                   "Sending message...")) {
             state.chat_input.value.clear();
             state.chat_input.cursor = 0;
+            state.chat_input.active = true;
             return false;
         }
         start_operation(state,
@@ -427,10 +443,14 @@ void on_enter(state& state) {
 
 update_result update(state& state, float dt) {
     update_result result;
-    if (!modal_open(state) && (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))) {
+    if (!modal_open(state) && IsKeyPressed(KEY_ESCAPE)) {
         if (state.screen == screen_mode::room) {
             state.command = ui_command::leave_room;
         } else {
+            result.back_requested = true;
+        }
+    } else if (!modal_open(state) && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+        if (state.screen != screen_mode::room) {
             result.back_requested = true;
         }
     } else if (modal_open(state) && IsKeyPressed(KEY_ESCAPE)) {
@@ -488,7 +508,7 @@ update_result update(state& state, float dt) {
     if (state.modal == modal_mode::password && IsKeyPressed(KEY_ENTER)) {
         state.command = ui_command::submit_password;
         result.open_song_select_requested = handle_command(state) || result.open_song_select_requested;
-    } else if (state.modal == modal_mode::create_room && IsKeyPressed(KEY_ENTER)) {
+    } else if (state.modal == modal_mode::create_room && IsKeyPressed(KEY_ENTER) && !operation_busy(state)) {
         state.command = ui_command::submit_create_room;
         result.open_song_select_requested = handle_command(state) || result.open_song_select_requested;
     } else if (state.screen == screen_mode::room && state.chat_input.active && IsKeyPressed(KEY_ENTER)) {
@@ -533,6 +553,26 @@ update_result update(state& state, float dt) {
     }
 
     return result;
+}
+
+void leave_current_room_best_effort(state& state) {
+    const std::string room_id = state.current_room.has_value()
+        ? state.current_room->id
+        : state.selected_room_id;
+    if (room_id.empty()) {
+        return;
+    }
+    if (state.realtime != nullptr) {
+        (void)state.realtime->send_command("room.leave", "{}");
+        state.realtime->close();
+        state.realtime.reset();
+    }
+    const auth::session_summary session = state.auth.logged_in ? state.auth : auth::load_session_summary();
+    (void)client::leave_room(session, room_id);
+    state.current_room.reset();
+    state.selected_room_id.clear();
+    state.screen = screen_mode::list;
+    state.local_ready = false;
 }
 
 }  // namespace multiplayer

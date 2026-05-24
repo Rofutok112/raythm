@@ -1,12 +1,14 @@
 #include <algorithm>
 #include <deque>
 #include <mutex>
+#include <string>
 #include <utility>
 #include <vector>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <imm.h>
 #endif
 
 #include "windows_input_source.h"
@@ -152,6 +154,37 @@ public:
         }
     }
 
+    void set_text_input_screen_position(int x, int y, int input_top, int input_bottom) {
+#ifdef _WIN32
+        HWND hwnd = nullptr;
+        {
+            std::scoped_lock lock(mutex_);
+            if (!installed_ || hwnd_ == nullptr) {
+                return;
+            }
+            hwnd = hwnd_;
+        }
+        update_ime_window(hwnd, x, y, input_top, input_bottom);
+#else
+        (void)x;
+        (void)y;
+        (void)input_top;
+        (void)input_bottom;
+#endif
+    }
+
+    void cancel_text_input() {
+        {
+            std::scoped_lock lock(mutex_);
+            committed_text_.clear();
+            composition_text_.clear();
+            ime_requested_this_frame_ = false;
+        }
+        set_ime_context_enabled(false);
+        std::scoped_lock lock(mutex_);
+        ime_context_enabled_ = false;
+    }
+
     void end_frame() {
         bool should_disable_ime = false;
         {
@@ -176,6 +209,15 @@ public:
             queued_events_.pop_front();
         }
         return drained;
+    }
+
+    native_text_input_update drain_text_input() {
+        std::scoped_lock lock(mutex_);
+        native_text_input_update update;
+        update.committed_text = std::move(committed_text_);
+        committed_text_.clear();
+        update.composition_text = composition_text_;
+        return update;
     }
 
     void enable_test_mode() {
@@ -204,6 +246,12 @@ public:
 #ifdef _WIN32
     static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT message, WPARAM w_param, LPARAM l_param) {
         windows_input_source_state& state = instance();
+        if (message == WM_KILLFOCUS || (message == WM_ACTIVATEAPP && w_param == FALSE)) {
+            state.cancel_text_input();
+        }
+        if (state.try_capture_ime(hwnd, message, l_param)) {
+            return 0;
+        }
         if (state.try_capture_event(message, w_param, l_param)) {
             return CallWindowProcW(state.previous_wnd_proc_, hwnd, message, w_param, l_param);
         }
@@ -220,10 +268,20 @@ public:
 private:
 #ifdef _WIN32
     using imm_associate_context_fn = HIMC(WINAPI*)(HWND, HIMC);
+    using imm_get_context_fn = HIMC(WINAPI*)(HWND);
+    using imm_release_context_fn = BOOL(WINAPI*)(HWND, HIMC);
+    using imm_get_composition_string_fn = LONG(WINAPI*)(HIMC, DWORD, LPVOID, DWORD);
+    using imm_set_composition_window_fn = BOOL(WINAPI*)(HIMC, LPCOMPOSITIONFORM);
+    using imm_set_candidate_window_fn = BOOL(WINAPI*)(HIMC, LPCANDIDATEFORM);
 
     struct ime_functions {
         HMODULE module = nullptr;
         imm_associate_context_fn associate_context = nullptr;
+        imm_get_context_fn get_context = nullptr;
+        imm_release_context_fn release_context = nullptr;
+        imm_get_composition_string_fn get_composition_string = nullptr;
+        imm_set_composition_window_fn set_composition_window = nullptr;
+        imm_set_candidate_window_fn set_candidate_window = nullptr;
         bool available = false;
     };
 
@@ -237,10 +295,88 @@ private:
 
             loaded.associate_context =
                 reinterpret_cast<imm_associate_context_fn>(GetProcAddress(loaded.module, "ImmAssociateContext"));
+            loaded.get_context =
+                reinterpret_cast<imm_get_context_fn>(GetProcAddress(loaded.module, "ImmGetContext"));
+            loaded.release_context =
+                reinterpret_cast<imm_release_context_fn>(GetProcAddress(loaded.module, "ImmReleaseContext"));
+            loaded.get_composition_string =
+                reinterpret_cast<imm_get_composition_string_fn>(GetProcAddress(loaded.module, "ImmGetCompositionStringW"));
+            loaded.set_composition_window =
+                reinterpret_cast<imm_set_composition_window_fn>(GetProcAddress(loaded.module, "ImmSetCompositionWindow"));
+            loaded.set_candidate_window =
+                reinterpret_cast<imm_set_candidate_window_fn>(GetProcAddress(loaded.module, "ImmSetCandidateWindow"));
             loaded.available = loaded.associate_context != nullptr;
             return loaded;
         }();
         return functions;
+    }
+
+    static std::string utf8_from_wide(const std::wstring& text) {
+        if (text.empty()) {
+            return {};
+        }
+        const int size = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
+                                             nullptr, 0, nullptr, nullptr);
+        if (size <= 0) {
+            return {};
+        }
+        std::string utf8(static_cast<size_t>(size), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
+                            utf8.data(), size, nullptr, nullptr);
+        return utf8;
+    }
+
+    static std::string read_composition_string(HIMC context, DWORD index) {
+        const ime_functions& functions = loaded_ime_functions();
+        if (context == nullptr || functions.get_composition_string == nullptr) {
+            return {};
+        }
+        const LONG byte_count = functions.get_composition_string(context, index, nullptr, 0);
+        if (byte_count <= 0) {
+            return {};
+        }
+        std::wstring wide(static_cast<size_t>(byte_count) / sizeof(wchar_t), L'\0');
+        functions.get_composition_string(context, index, wide.data(), static_cast<DWORD>(byte_count));
+        return utf8_from_wide(wide);
+    }
+
+    void update_ime_window(HWND hwnd, int x, int y, int input_top, int input_bottom) {
+        const ime_functions& functions = loaded_ime_functions();
+        if (functions.get_context == nullptr || functions.release_context == nullptr ||
+            functions.set_composition_window == nullptr) {
+            return;
+        }
+        HIMC context = functions.get_context(hwnd);
+        if (context == nullptr) {
+            return;
+        }
+
+        COMPOSITIONFORM composition = {};
+        composition.dwStyle = CFS_FORCE_POSITION;
+        composition.ptCurrentPos = {x, y};
+        functions.set_composition_window(context, &composition);
+
+        if (functions.set_candidate_window != nullptr) {
+            RECT client = {};
+            GetClientRect(hwnd, &client);
+            constexpr int kCandidateEstimateWidth = 300;
+            constexpr int kCandidateEstimateHeight = 112;
+            constexpr int kCandidateGap = 6;
+            const int client_bottom = static_cast<int>(client.bottom);
+            const int room_below = client_bottom - input_bottom;
+            const int candidate_y = room_below >= kCandidateEstimateHeight + kCandidateGap
+                ? input_bottom + kCandidateGap
+                : std::max(0, input_top - kCandidateEstimateHeight - kCandidateGap);
+            const int candidate_x = std::min(std::max(0, x),
+                                             std::max(0, static_cast<int>(client.right) - kCandidateEstimateWidth));
+            CANDIDATEFORM candidate = {};
+            candidate.dwIndex = 0;
+            candidate.dwStyle = CFS_CANDIDATEPOS;
+            candidate.ptCurrentPos = {candidate_x, candidate_y};
+            functions.set_candidate_window(context, &candidate);
+        }
+
+        functions.release_context(hwnd, context);
     }
 
     bool set_ime_context_enabled(bool enabled) {
@@ -320,6 +456,50 @@ private:
         return true;
     }
 
+    bool try_capture_ime(HWND hwnd, UINT message, LPARAM l_param) {
+        if (message == WM_IME_STARTCOMPOSITION) {
+            std::scoped_lock lock(mutex_);
+            composition_text_.clear();
+            return true;
+        }
+        if (message == WM_IME_ENDCOMPOSITION) {
+            std::scoped_lock lock(mutex_);
+            composition_text_.clear();
+            return true;
+        }
+        if (message != WM_IME_COMPOSITION) {
+            return false;
+        }
+
+        const ime_functions& functions = loaded_ime_functions();
+        if (functions.get_context == nullptr || functions.release_context == nullptr) {
+            return false;
+        }
+        HIMC context = functions.get_context(hwnd);
+        if (context == nullptr) {
+            return false;
+        }
+
+        std::string committed;
+        std::string composition;
+        if ((l_param & GCS_RESULTSTR) != 0) {
+            committed = read_composition_string(context, GCS_RESULTSTR);
+        }
+        if ((l_param & GCS_COMPSTR) != 0) {
+            composition = read_composition_string(context, GCS_COMPSTR);
+        }
+        functions.release_context(hwnd, context);
+
+        {
+            std::scoped_lock lock(mutex_);
+            if (!committed.empty()) {
+                committed_text_ += committed;
+            }
+            composition_text_ = composition;
+        }
+        return true;
+    }
+
     static int translate_key(WPARAM w_param, LPARAM l_param) {
         UINT virtual_key = static_cast<UINT>(w_param);
         const UINT scan_code = (static_cast<UINT>(l_param) >> 16) & 0xff;
@@ -390,6 +570,8 @@ private:
 
     mutable std::mutex mutex_;
     std::deque<native_key_event> queued_events_;
+    std::string committed_text_;
+    std::string composition_text_;
     std::uint64_t sequence_ = 0;
     bool test_mode_ = false;
     bool installed_ = false;
@@ -429,12 +611,24 @@ void windows_input_source::request_text_input() {
     windows_input_source_state::instance().request_text_input();
 }
 
+void windows_input_source::set_text_input_screen_position(int x, int y, int input_top, int input_bottom) {
+    windows_input_source_state::instance().set_text_input_screen_position(x, y, input_top, input_bottom);
+}
+
+void windows_input_source::cancel_text_input() {
+    windows_input_source_state::instance().cancel_text_input();
+}
+
 void windows_input_source::end_frame() {
     windows_input_source_state::instance().end_frame();
 }
 
 std::vector<native_key_event> windows_input_source::drain_events() {
     return windows_input_source_state::instance().drain_events();
+}
+
+native_text_input_update windows_input_source::drain_text_input() {
+    return windows_input_source_state::instance().drain_text_input();
 }
 
 void windows_input_source::enable_test_mode() {
