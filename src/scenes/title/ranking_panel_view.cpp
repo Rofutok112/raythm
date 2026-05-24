@@ -1,6 +1,7 @@
 #include "title/ranking_panel_view.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <ctime>
@@ -8,6 +9,7 @@
 
 #include "ranking_service.h"
 #include "scene_common.h"
+#include "shared/avatar_texture_cache.h"
 #include "theme.h"
 #include "tween.h"
 #include "ui_clip.h"
@@ -15,13 +17,14 @@
 
 namespace {
 
-constexpr float kRankingRowHeight = 34.0f;
+constexpr float kRankingRowHeight = 52.0f;
 constexpr float kScrollPadding = 12.0f;
 constexpr float kEmptyMessageOffsetY = 60.0f;
 constexpr float kEmptyMessageHeight = 42.0f;
 constexpr float kHeaderRowHeight = 38.0f;
-constexpr float kBrowseRankRowHeight = 38.0f;
-constexpr float kBrowseRankRowStep = 42.0f;
+constexpr float kBrowseRankRowHeight = 56.0f;
+constexpr float kBrowseRankRowStep = 61.0f;
+constexpr float kAvatarSize = 44.0f;
 constexpr float kRevealOffsetX = 0.0f;
 constexpr float kClipSlack = 6.0f;
 
@@ -119,6 +122,51 @@ std::string format_relative_recorded_at(const std::string& recorded_at) {
     return std::to_string(diff / 86400) + "d";
 }
 
+std::string avatar_initial(const ranking_service::entry& entry) {
+    const std::string& name = entry.player_display_name;
+    if (name.empty()) {
+        return "?";
+    }
+    std::string result;
+    result.reserve(2);
+    for (char ch : name) {
+        if (std::isalnum(static_cast<unsigned char>(ch))) {
+            result.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
+            if (result.size() == 2) {
+                break;
+            }
+        }
+    }
+    return result.empty() ? "?" : result;
+}
+
+void draw_avatar(Rectangle rect,
+                 const ranking_service::entry& entry,
+                 unsigned char alpha,
+                 const std::string& avatar_base_url) {
+    avatar_texture_cache::draw_avatar(
+        rect,
+        entry.player_avatar_url,
+        avatar_initial(entry),
+        with_alpha(g_theme->row_soft_selected, static_cast<unsigned char>(alpha * 0.78f)),
+        with_alpha(g_theme->text_secondary, alpha),
+        13,
+        avatar_base_url);
+    ui::draw_rect_lines(rect, 1.0f, with_alpha(g_theme->border_light, alpha));
+}
+
+bool is_self_entry(const ranking_service::entry& entry,
+                   const song_select::ranking_panel_state& panel,
+                   const title_ranking_view::draw_config& config) {
+    if (!config.self_player_display_name.empty() &&
+        entry.player_display_name == config.self_player_display_name) {
+        return true;
+    }
+    return panel.best_entry.has_value() &&
+           panel.best_entry->player_display_name == entry.player_display_name &&
+           panel.best_entry->score == entry.score;
+}
+
 }  // namespace
 
 namespace title_ranking_view {
@@ -164,7 +212,7 @@ void draw(const song_select::ranking_panel_state& panel, const draw_config& conf
     ui::draw_rect_lines(config.list_rect, 1.0f, with_alpha(t.border_light, config.alpha));
     const float list_right = config.list_rect.x + config.list_rect.width;
     const float clear_right = list_right - 18.0f;
-    const float acc_right = clear_right - 78.0f;
+    const float acc_right = clear_right - 58.0f;
     const float date_right = acc_right - 88.0f;
     const float score_right = date_right - 92.0f;
     const float score_width = 126.0f;
@@ -177,7 +225,7 @@ void draw(const song_select::ranking_panel_state& panel, const draw_config& conf
         ui::scoped_clip_rect header_clip(header_clip_rect);
         ui::draw_text_in_rect("#", 11, {config.list_rect.x + 12.0f, config.list_rect.y + 12.0f, 32.0f, 16.0f},
                               with_alpha(t.text_muted, config.alpha), ui::text_align::left);
-        ui::draw_text_in_rect("PLAYER", 11, {config.list_rect.x + 62.0f, config.list_rect.y + 12.0f, 178.0f, 16.0f},
+        ui::draw_text_in_rect("PLAYER", 11, {config.list_rect.x + 104.0f, config.list_rect.y + 12.0f, 138.0f, 16.0f},
                               with_alpha(t.text_muted, config.alpha), ui::text_align::left);
         ui::draw_text_in_rect("SCORE", 11,
                               {score_right - score_width, config.list_rect.y + 12.0f, score_width, 16.0f},
@@ -237,24 +285,33 @@ void draw(const song_select::ranking_panel_state& panel, const draw_config& conf
 
         const unsigned char row_alpha = static_cast<unsigned char>(config.normal_row_alpha * row_reveal_t);
         const unsigned char content_alpha = static_cast<unsigned char>(config.alpha * row_reveal_t);
-        ui::draw_rect_f(row, with_alpha(i % 2 == 0 ? t.section : config.button_base, row_alpha));
-        ui::draw_text_in_rect(TextFormat("%d", entry.placement > 0 ? entry.placement : i + 1), 14,
-                              {row.x + 4.0f, row.y + 9.0f, 36.0f, 18.0f},
+        const bool self_entry = is_self_entry(entry, panel, config);
+        const Color row_base = i % 2 == 0 ? t.section : config.button_base;
+        ui::draw_rect_f(row, with_alpha(self_entry ? lerp_color(row_base, t.accent, 0.13f) : row_base, row_alpha));
+        if (self_entry) {
+            ui::draw_rect_f({row.x, row.y + 4.0f, 3.0f, row.height - 8.0f},
+                            with_alpha(t.accent, static_cast<unsigned char>(content_alpha * 0.72f)));
+            ui::draw_rect_lines(row, 1.0f, with_alpha(t.accent, static_cast<unsigned char>(content_alpha * 0.34f)));
+        }
+        ui::draw_text_in_rect(TextFormat("%d", entry.placement > 0 ? entry.placement : i + 1), 18,
+                              {row.x + 14.0f, row.y + 16.0f, 34.0f, 22.0f},
                               with_alpha(t.text, content_alpha), ui::text_align::left);
+        draw_avatar({row.x + 46.0f, row.y + 6.0f, kAvatarSize, kAvatarSize},
+                    entry, content_alpha, config.avatar_base_url);
         draw_marquee_text(entry.player_display_name.empty() ? "Unknown Player" : entry.player_display_name.c_str(),
-                          {row.x + 52.0f, row.y + 9.0f, 178.0f, 18.0f},
-                          14, with_alpha(t.text, content_alpha), GetTime());
+                          {row.x + 100.0f, row.y + 18.0f, 132.0f, 22.0f},
+                          17, with_alpha(t.text, content_alpha), GetTime());
         ui::draw_text_in_rect(format_score(entry.score).c_str(), 14,
-                              {score_right - score_width, row.y + 9.0f, score_width, 18.0f},
+                              {score_right - score_width, row.y + 18.0f, score_width, 18.0f},
                               with_alpha(t.text_secondary, content_alpha), ui::text_align::right);
         ui::draw_text_in_rect(format_relative_recorded_at(entry.recorded_at).c_str(), 13,
-                              {date_right - date_width, row.y + 9.0f, date_width, 18.0f},
+                              {date_right - date_width, row.y + 18.0f, date_width, 18.0f},
                               with_alpha(t.text_muted, content_alpha), ui::text_align::right);
         ui::draw_text_in_rect(TextFormat("%.2f%%", entry.accuracy), 14,
-                              {acc_right - acc_width, row.y + 9.0f, acc_width, 18.0f},
+                              {acc_right - acc_width, row.y + 18.0f, acc_width, 18.0f},
                               with_alpha(t.text_secondary, content_alpha), ui::text_align::right);
-        ui::draw_text_in_rect(rank_label(entry.clear_rank()), 15,
-                              {clear_right - clear_width, row.y + 8.0f, clear_width, 20.0f},
+        ui::draw_text_in_rect(rank_label(entry.clear_rank()), 17,
+                              {clear_right - clear_width, row.y + 16.0f, clear_width, 22.0f},
                               with_alpha(rank_color(entry.clear_rank()), content_alpha), ui::text_align::right);
     }
 }

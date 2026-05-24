@@ -53,7 +53,7 @@ public:
     void request_ranking_reload();
     void poll_ranking_reload();
     void request_scoring_ruleset_warm(bool force_refresh = false);
-    void poll_scoring_ruleset_warm();
+    bool poll_scoring_ruleset_warm();
 
     [[nodiscard]] bool catalog_loading() const;
     [[nodiscard]] bool scoring_ruleset_loading() const;

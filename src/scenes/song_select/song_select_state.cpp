@@ -110,6 +110,7 @@ state::state()
       selected_song_expand_t(selection.selected_song_expand_t),
       play_search_input(filter.play_search_input),
       chart_source(filter.chart_source),
+      play_filter_modal_open(filter.play_filter_modal_open),
       chart_key_filter(filter.chart_key_filter),
       chart_min_level(filter.chart_min_level),
       chart_max_level(filter.chart_max_level),
@@ -372,6 +373,7 @@ void reset_for_enter(state& state) {
     state.selected_song_expand_t = 1.0f;
     state.play_search_input = {};
     state.chart_source = chart_source_filter::all;
+    state.play_filter_modal_open = false;
     state.filter.multiplayer_queueable_only = false;
     state.filter.multiplayer_queue_server_url.clear();
     state.chart_key_filter = 0;
@@ -432,6 +434,7 @@ void apply_catalog(state& state, catalog_data catalog,
     state.selected_song_expand_t = 1.0f;
     state.play_search_input = {};
     state.chart_source = chart_source_filter::all;
+    state.play_filter_modal_open = false;
     state.chart_key_filter = 0;
     state.chart_min_level = 0.0f;
     state.chart_max_level = 99.0f;

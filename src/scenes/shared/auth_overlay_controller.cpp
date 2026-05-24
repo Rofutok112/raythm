@@ -45,8 +45,10 @@ namespace auth_overlay {
 void refresh_auth_state(song_select::auth_state& auth_state) {
     const auth::session_summary summary = auth::load_session_summary();
     auth_state.logged_in = summary.logged_in;
+    auth_state.server_url = summary.server_url;
     auth_state.email = summary.email;
     auth_state.display_name = summary.display_name;
+    auth_state.avatar_url = summary.avatar_url;
     auth_state.email_verified = summary.email_verified;
     auth_state.external_links = summary.external_links;
 }

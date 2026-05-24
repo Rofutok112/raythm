@@ -146,8 +146,10 @@ struct ranking_panel_state {
 
 struct auth_state {
     bool logged_in = false;
+    std::string server_url;
     std::string email;
     std::string display_name;
+    std::string avatar_url;
     bool email_verified = false;
     std::vector<auth::external_link> external_links;
 };
@@ -189,6 +191,7 @@ struct selection_state {
 struct filter_state {
     ui::text_input_state play_search_input;
     chart_source_filter chart_source = chart_source_filter::all;
+    bool play_filter_modal_open = false;
     bool multiplayer_queueable_only = false;
     std::string multiplayer_queue_server_url;
     int chart_key_filter = 0;
@@ -260,6 +263,7 @@ struct state {
     float& selected_song_expand_t;
     ui::text_input_state& play_search_input;
     chart_source_filter& chart_source;
+    bool& play_filter_modal_open;
     int& chart_key_filter;
     float& chart_min_level;
     float& chart_max_level;

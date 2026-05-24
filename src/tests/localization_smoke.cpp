@@ -54,6 +54,12 @@ int main() {
     expect(std::string(localization::tr_literal("SAVE LINKS")) == "リンクを保存",
            "Expected profile link actions to translate.",
            ok);
+    expect(std::string(localization::tr_literal("CHANGE IMAGE")) == "画像を変更",
+           "Expected profile image actions to translate.",
+           ok);
+    expect(std::string(localization::tr_literal("Saving profile image...")) == "プロフィール画像を保存中...",
+           "Expected profile image status text to translate.",
+           ok);
     localization::set_current_locale(localization::locale::english);
     expect(std::string(localization::tr_literal("SETTINGS")) == "SETTINGS",
            "Expected literal lookup to preserve English labels in English locale.",

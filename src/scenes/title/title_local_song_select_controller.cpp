@@ -23,42 +23,6 @@ using title_play_view::layout;
 using title_play_view::mode;
 using title_play_view::update_result;
 
-constexpr Rectangle kPlayBackButtonRect = {39.0f, 983.0f, 330.0f, 58.0f};
-constexpr Rectangle kPlaySongColumnRect = {39.0f, 109.0f, 330.0f, 854.0f};
-constexpr Rectangle kPlayMainColumnRect = {390.0f, 109.0f, 820.0f, 932.0f};
-constexpr Rectangle kPlayRankingColumnRect = {1228.0f, 109.0f, 650.0f, 932.0f};
-constexpr Rectangle kPlayJacketRect = {1258.0f, 141.0f, 212.0f, 212.0f};
-constexpr Rectangle kPlayChartDetailRect = {1494.0f, 145.0f, 350.0f, 224.0f};
-constexpr Rectangle kPlayMetaRect = {1258.0f, 383.0f, 590.0f, 10.0f};
-constexpr Rectangle kPlayChartButtonsRect = {414.0f, 168.0f, 772.0f, 822.0f};
-constexpr Rectangle kPlayRankingHeaderRect = {1256.0f, 678.0f, 596.0f, 38.0f};
-constexpr Rectangle kPlayRankingSourceLocalRect = {1708.0f, 678.0f, 144.0f, 38.0f};
-constexpr Rectangle kPlayRankingSourceOnlineRect = {1556.0f, 678.0f, 144.0f, 38.0f};
-constexpr Rectangle kPlayRankingListRect = {1256.0f, 724.0f, 596.0f, 219.0f};
-constexpr Rectangle kCreateSongColumnRect = {99.0f, 162.0f, 507.0f, 756.0f};
-constexpr Rectangle kCreateMainColumnRect = {657.0f, 150.0f, 603.0f, 780.0f};
-constexpr Rectangle kCreateRankingColumnRect = {1317.0f, 153.0f, 507.0f, 774.0f};
-constexpr Rectangle kCreateJacketRect = {684.0f, 273.0f, 282.0f, 282.0f};
-constexpr Rectangle kCreateChartDetailRect = {1002.0f, 273.0f, 258.0f, 135.0f};
-constexpr Rectangle kCreateMetaRect = {684.0f, 582.0f, 576.0f, 90.0f};
-constexpr Rectangle kCreateChartButtonsRect = {684.0f, 600.0f, 576.0f, 327.0f};
-constexpr Rectangle kCreateRankingHeaderRect = {1317.0f, 153.0f, 507.0f, 54.0f};
-constexpr Rectangle kCreateRankingSourceLocalRect = {1551.0f, 147.0f, 129.0f, 51.0f};
-constexpr Rectangle kCreateRankingSourceOnlineRect = {1689.0f, 147.0f, 135.0f, 51.0f};
-constexpr Rectangle kCreateRankingListRect = {1317.0f, 225.0f, 507.0f, 702.0f};
-constexpr Rectangle kFallbackOriginRect = {840.0f, 564.0f, 240.0f, 90.0f};
-constexpr Vector2 kSeedSongOffset = {-495.0f, 33.0f};
-constexpr Vector2 kSeedMainOffset = {0.0f, 9.0f};
-constexpr Vector2 kSeedRankingOffset = {495.0f, 39.0f};
-constexpr Vector2 kSeedBackOffset = {-642.0f, -291.0f};
-constexpr Vector2 kSeedJacketOffset = {-102.0f, -39.0f};
-constexpr Vector2 kSeedMetaOffset = {15.0f, 138.0f};
-constexpr Vector2 kSeedChartDetailOffset = {228.0f, -15.0f};
-constexpr Vector2 kSeedChartButtonsOffset = {81.0f, 240.0f};
-constexpr Vector2 kSeedRankingHeaderOffset = {522.0f, -276.0f};
-constexpr Vector2 kSeedRankingSourceLocalOffset = {627.0f, -285.0f};
-constexpr Vector2 kSeedRankingSourceOnlineOffset = {768.0f, -285.0f};
-constexpr Vector2 kSeedRankingListOffset = {522.0f, 30.0f};
 constexpr float kContextMenuInnerPadding = 6.0f;
 constexpr float kChartFilterMinLevel = 0.0f;
 constexpr float kChartFilterUsefulMaxLevel = 15.0f;
@@ -82,21 +46,19 @@ Rectangle start_button_rect(Rectangle ranking_column) {
 }
 
 Rectangle preview_prev_button_rect(const layout& current) {
-    return {current.ranking_column.x + 30.0f, current.ranking_column.y + 306.0f, 174.0f, 48.0f};
+    return {current.meta_rect.x, current.meta_rect.y + 26.0f, 86.0f, 42.0f};
 }
 
 Rectangle preview_play_button_rect(const layout& current) {
-    return {current.ranking_column.x + current.ranking_column.width * 0.5f - 77.0f,
-            current.ranking_column.y + 303.0f, 154.0f, 54.0f};
+    return {current.meta_rect.x + 100.0f, current.meta_rect.y + 26.0f, 86.0f, 42.0f};
 }
 
 Rectangle preview_next_button_rect(const layout& current) {
-    return {current.ranking_column.x + current.ranking_column.width - 204.0f,
-            current.ranking_column.y + 306.0f, 174.0f, 48.0f};
+    return {current.meta_rect.x + 200.0f, current.meta_rect.y + 26.0f, 86.0f, 42.0f};
 }
 
 Rectangle play_filter_source_button_rect(Rectangle panel, int index) {
-    const float source_y = panel.y + 122.0f;
+    const float source_y = panel.y + 90.0f;
     const float source_w = (panel.width - 48.0f) / 3.0f;
     return {panel.x + 18.0f + static_cast<float>(index) * (source_w + 6.0f), source_y, source_w, 36.0f};
 }
@@ -105,15 +67,28 @@ Rectangle play_filter_key_button_rect(Rectangle panel, int index) {
     constexpr float key_w = 46.0f;
     constexpr float key_gap = 7.0f;
     const float keys_x = panel.x + (panel.width - (key_w * 5.0f + key_gap * 4.0f)) * 0.5f;
-    return {keys_x + static_cast<float>(index) * (key_w + key_gap), panel.y + 368.0f, key_w, 30.0f};
+    return {keys_x + static_cast<float>(index) * (key_w + key_gap), panel.y + 318.0f, key_w, 30.0f};
 }
 
 Rectangle play_filter_clear_button_rect(Rectangle panel) {
-    return {panel.x + 18.0f, panel.y + 456.0f, panel.width - 36.0f, 42.0f};
+    return {panel.x + 18.0f, panel.y + 378.0f, panel.width - 36.0f, 42.0f};
 }
 
 Rectangle play_filter_level_slider_rect(Rectangle panel) {
-    return {panel.x + 34.0f, panel.y + 252.0f, panel.width - 68.0f, 18.0f};
+    return {panel.x + 34.0f, panel.y + 208.0f, panel.width - 68.0f, 18.0f};
+}
+
+Rectangle play_filter_button_rect(Rectangle panel) {
+    return {panel.x + panel.width - 58.0f, panel.y + 62.0f, 40.0f, 46.0f};
+}
+
+Rectangle play_filter_modal_rect(const layout& current) {
+    return {current.song_column.x + 70.0f, current.song_column.y + 146.0f, 360.0f, 438.0f};
+}
+
+Rectangle play_song_list_rect(const layout& current) {
+    return {current.song_column.x + 18.0f, current.song_column.y + 128.0f,
+            current.song_column.width - 36.0f, current.song_column.height - 146.0f};
 }
 
 float level_filter_t(float level) {
@@ -169,72 +144,6 @@ double selected_preview_length_seconds(const song_select::song_entry* song) {
     return song != nullptr ? static_cast<double>(song->song.meta.duration_seconds) : 0.0;
 }
 
-Rectangle centered_scaled_rect(Rectangle anchor, Rectangle target, float scale, Vector2 offset = {0.0f, 0.0f}) {
-    const Vector2 center = {anchor.x + anchor.width * 0.5f + offset.x,
-                            anchor.y + anchor.height * 0.5f + offset.y};
-    const float width = target.width * scale;
-    const float height = target.height * scale;
-    return {center.x - width * 0.5f, center.y - height * 0.5f, width, height};
-}
-
-Rectangle resolve_origin_rect(Rectangle origin_rect) {
-    return origin_rect.width > 0.0f && origin_rect.height > 0.0f ? origin_rect : kFallbackOriginRect;
-}
-
-layout make_layout_for_targets(float anim_t,
-                               Rectangle origin_rect,
-                               Rectangle song_rect,
-                               Rectangle main_rect,
-                               Rectangle ranking_rect,
-                               Rectangle jacket_rect,
-                               Rectangle meta_rect,
-                               Rectangle chart_detail_rect,
-                               Rectangle chart_buttons_rect,
-                               Rectangle ranking_header_rect,
-                               Rectangle ranking_source_local_rect,
-                               Rectangle ranking_source_online_rect,
-                               Rectangle ranking_list_rect) {
-    const float t = tween::ease_out_cubic(anim_t);
-    const Rectangle origin = resolve_origin_rect(origin_rect);
-    const Rectangle seed_song = centered_scaled_rect(origin, song_rect, 0.68f, kSeedSongOffset);
-    const Rectangle seed_main = centered_scaled_rect(origin, main_rect, 0.74f, kSeedMainOffset);
-    const Rectangle seed_ranking = centered_scaled_rect(origin, ranking_rect, 0.68f, kSeedRankingOffset);
-    const Rectangle seed_back = centered_scaled_rect(origin, kPlayBackButtonRect, 0.9f, kSeedBackOffset);
-    const Rectangle seed_jacket = centered_scaled_rect(origin, jacket_rect, 0.82f, kSeedJacketOffset);
-    const Rectangle seed_meta = centered_scaled_rect(origin, meta_rect, 0.8f, kSeedMetaOffset);
-    const Rectangle seed_chart_detail = centered_scaled_rect(origin, chart_detail_rect, 0.76f, kSeedChartDetailOffset);
-    const Rectangle seed_chart_buttons = centered_scaled_rect(origin, chart_buttons_rect, 0.88f, kSeedChartButtonsOffset);
-    const Rectangle seed_ranking_header = centered_scaled_rect(origin, ranking_header_rect, 0.7f, kSeedRankingHeaderOffset);
-    const Rectangle seed_ranking_source_local = centered_scaled_rect(origin, ranking_source_local_rect, 0.8f, kSeedRankingSourceLocalOffset);
-    const Rectangle seed_ranking_source_online = centered_scaled_rect(origin, ranking_source_online_rect, 0.8f, kSeedRankingSourceOnlineOffset);
-    const Rectangle seed_ranking_list = centered_scaled_rect(origin, ranking_list_rect, 0.7f, kSeedRankingListOffset);
-    return {tween::lerp(seed_back, kPlayBackButtonRect, t), tween::lerp(seed_song, song_rect, t),
-            tween::lerp(seed_main, main_rect, t), tween::lerp(seed_ranking, ranking_rect, t),
-            tween::lerp(seed_jacket, jacket_rect, t), tween::lerp(seed_meta, meta_rect, t),
-            tween::lerp(seed_chart_detail, chart_detail_rect, t), tween::lerp(seed_chart_buttons, chart_buttons_rect, t),
-            tween::lerp(seed_ranking_header, ranking_header_rect, t),
-            tween::lerp(seed_ranking_source_local, ranking_source_local_rect, t),
-            tween::lerp(seed_ranking_source_online, ranking_source_online_rect, t),
-            tween::lerp(seed_ranking_list, ranking_list_rect, t)};
-}
-
-layout make_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode) {
-    const bool play = view_mode == mode::play;
-    return make_layout_for_targets(
-        anim_t, origin_rect,
-        play ? kPlaySongColumnRect : kCreateSongColumnRect,
-        play ? kPlayMainColumnRect : kCreateMainColumnRect,
-        play ? kPlayRankingColumnRect : kCreateRankingColumnRect,
-        play ? kPlayJacketRect : kCreateJacketRect,
-        play ? kPlayMetaRect : kCreateMetaRect,
-        play ? kPlayChartDetailRect : kCreateChartDetailRect,
-        play ? kPlayChartButtonsRect : kCreateChartButtonsRect,
-        play ? kPlayRankingHeaderRect : kCreateRankingHeaderRect,
-        play ? kPlayRankingSourceLocalRect : kCreateRankingSourceLocalRect,
-        play ? kPlayRankingSourceOnlineRect : kCreateRankingSourceOnlineRect,
-        play ? kPlayRankingListRect : kCreateRankingListRect);
-}
-
 }  // namespace
 title_play_view::update_result update(song_select::state& state, title_play_view::mode view_mode, float anim_t, Rectangle origin_rect, float dt) {
     update_result result;
@@ -242,7 +151,7 @@ title_play_view::update_result update(song_select::state& state, title_play_view
     const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     const bool right_pressed = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
     const float wheel = GetMouseWheelMove();
-    const layout current = make_mode_layout(anim_t, origin_rect, view_mode);
+    const layout current = title_play_view::make_mode_layout(anim_t, origin_rect, view_mode);
     const auto filtered = song_select::filtered_charts_for_selected_song(state);
     const bool has_selection = song_select::selected_song(state) != nullptr &&
                                song_select::selected_chart_for(state, filtered) != nullptr;
@@ -290,6 +199,16 @@ title_play_view::update_result update(song_select::state& state, title_play_view
         return result;
     }
 
+    if (view_mode == mode::play && state.play_filter_modal_open) {
+        const Rectangle modal = play_filter_modal_rect(current);
+        if (IsKeyPressed(KEY_ESCAPE) ||
+            (left_pressed && !CheckCollisionPointRec(mouse, modal))) {
+            state.play_filter_modal_open = false;
+            state.chart_level_filter_dragging = false;
+            return result;
+        }
+    }
+
     if (ui::is_clicked(current.back_rect) || IsKeyPressed(KEY_ESCAPE)) {
         result.back_requested = true;
         return result;
@@ -306,14 +225,21 @@ title_play_view::update_result update(song_select::state& state, title_play_view
         }
     }
 
-    if (view_mode == mode::play && left_pressed) {
+    if (view_mode == mode::play && left_pressed &&
+        CheckCollisionPointRec(mouse, play_filter_button_rect(current.song_column))) {
+        state.play_filter_modal_open = !state.play_filter_modal_open;
+        return result;
+    }
+
+    if (view_mode == mode::play && state.play_filter_modal_open && left_pressed) {
+        const Rectangle filter_panel = play_filter_modal_rect(current);
         const song_select::chart_source_filter source_values[] = {
             song_select::chart_source_filter::all,
             song_select::chart_source_filter::official,
             song_select::chart_source_filter::community,
         };
         for (int index = 0; index < 3; ++index) {
-            if (CheckCollisionPointRec(mouse, play_filter_source_button_rect(current.song_column, index))) {
+            if (CheckCollisionPointRec(mouse, play_filter_source_button_rect(filter_panel, index))) {
                 if (apply_play_filter_change(state, source_values[index],
                                              state.chart_key_filter, state.chart_min_level, state.chart_max_level, result)) {
                     return result;
@@ -323,7 +249,7 @@ title_play_view::update_result update(song_select::state& state, title_play_view
 
         const int key_values[] = {0, 4, 5, 6, 7};
         for (int index = 0; index < 5; ++index) {
-            if (CheckCollisionPointRec(mouse, play_filter_key_button_rect(current.song_column, index))) {
+            if (CheckCollisionPointRec(mouse, play_filter_key_button_rect(filter_panel, index))) {
                 if (apply_play_filter_change(state, state.chart_source, key_values[index],
                                              state.chart_min_level, state.chart_max_level, result)) {
                     return result;
@@ -331,7 +257,7 @@ title_play_view::update_result update(song_select::state& state, title_play_view
             }
         }
 
-        if (CheckCollisionPointRec(mouse, play_filter_clear_button_rect(current.song_column))) {
+        if (CheckCollisionPointRec(mouse, play_filter_clear_button_rect(filter_panel))) {
             const bool search_changed = !state.play_search_input.value.empty();
             if (search_changed) {
                 state.play_search_input = {};
@@ -356,8 +282,9 @@ title_play_view::update_result update(song_select::state& state, title_play_view
         }
     }
 
-    if (view_mode == mode::play && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        const Rectangle slider = play_filter_level_slider_rect(current.song_column);
+    if (view_mode == mode::play && state.play_filter_modal_open && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        const Rectangle filter_panel = play_filter_modal_rect(current);
+        const Rectangle slider = play_filter_level_slider_rect(filter_panel);
         const Rectangle min_chip = level_filter_chip_rect(slider, state.chart_min_level);
         const Rectangle max_chip = level_filter_chip_rect(slider, state.chart_max_level);
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -383,6 +310,10 @@ title_play_view::update_result update(song_select::state& state, title_play_view
     }
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
         state.chart_level_filter_dragging = false;
+    }
+    if (view_mode == mode::play && state.play_filter_modal_open &&
+        CheckCollisionPointRec(mouse, play_filter_modal_rect(current))) {
+        return result;
     }
 
     if (view_mode == mode::play) {
@@ -516,8 +447,9 @@ title_play_view::update_result update(song_select::state& state, title_play_view
     if (left_pressed) {
         const auto clicked_chart =
             view_mode == mode::play
-                ? title_song_list_view::hit_test_chart(
-                      state, current.chart_buttons_rect, state.scroll_y, state.embedded_chart_scroll_y, mouse)
+                ? title_song_list_view::chart_hit{-1, title_center_view::hit_test_chart(
+                                                          current.chart_buttons_rect, state.chart_scroll_y, mouse,
+                                                          static_cast<int>(filtered.size()))}
                 : title_song_list_view::chart_hit{-1, title_center_view::hit_test_chart(
                                                           current.chart_buttons_rect, state.chart_scroll_y, mouse,
                                                           static_cast<int>(filtered.size()))};
@@ -539,8 +471,9 @@ title_play_view::update_result update(song_select::state& state, title_play_view
 
     if (right_pressed && view_mode == mode::play && !state.songs.empty()) {
         const auto clicked_chart =
-            title_song_list_view::hit_test_chart(
-                state, current.chart_buttons_rect, state.scroll_y, state.embedded_chart_scroll_y, mouse);
+            title_song_list_view::chart_hit{-1, title_center_view::hit_test_chart(
+                                                    current.chart_buttons_rect, state.chart_scroll_y, mouse,
+                                                    static_cast<int>(filtered.size()))};
         if (clicked_chart.chart_index >= 0) {
             if (state.difficulty_index != clicked_chart.chart_index) {
                 state.difficulty_index = clicked_chart.chart_index;
@@ -560,7 +493,7 @@ title_play_view::update_result update(song_select::state& state, title_play_view
 
     if (right_pressed && view_mode == mode::play && !state.songs.empty()) {
         const int clicked_song =
-            title_song_list_view::hit_test(state, current.chart_buttons_rect, state.scroll_y, mouse);
+            title_song_list_view::hit_test(state, play_song_list_rect(current), state.scroll_y, mouse);
         if (clicked_song >= 0) {
             if (song_select::apply_song_selection(state, clicked_song, 0)) {
                 result.song_selection_changed = true;
@@ -579,17 +512,11 @@ title_play_view::update_result update(song_select::state& state, title_play_view
     if (left_pressed && !state.songs.empty()) {
         const int clicked_song =
             view_mode == mode::play
-                ? title_song_list_view::hit_test(state, current.chart_buttons_rect, state.scroll_y, mouse)
+                ? title_song_list_view::hit_test(state, play_song_list_rect(current), state.scroll_y, mouse)
                 : title_song_list_view::hit_test(current.song_column, state.scroll_y, mouse,
                                                  static_cast<int>(state.songs.size()));
         if (clicked_song >= 0) {
-            if (view_mode == mode::play && clicked_song == state.selected_song_index) {
-                state.selected_song_expanded = !state.selected_song_expanded;
-                if (!state.selected_song_expanded) {
-                    state.embedded_chart_scroll_y = 0.0f;
-                    state.embedded_chart_scroll_y_target = 0.0f;
-                }
-            } else if (song_select::apply_song_selection(state, clicked_song, 0)) {
+            if (song_select::apply_song_selection(state, clicked_song, 0)) {
                 result.song_selection_changed = true;
             }
             return result;
@@ -628,16 +555,10 @@ title_play_view::update_result update(song_select::state& state, title_play_view
         }
     }
 
-    const Rectangle song_scroll_area = view_mode == mode::play ? current.chart_buttons_rect : current.song_column;
-    const Rectangle embedded_chart_list =
-        view_mode == mode::play
-            ? title_song_list_view::selected_chart_list_rect(state, current.chart_buttons_rect, state.scroll_y)
-            : Rectangle{};
-    if (view_mode == mode::play && CheckCollisionPointRec(mouse, embedded_chart_list) && wheel != 0.0f) {
-        state.embedded_chart_scroll_y_target -= wheel * kWheelScrollStep;
-    } else if (CheckCollisionPointRec(mouse, song_scroll_area) && wheel != 0.0f) {
+    const Rectangle song_scroll_area = view_mode == mode::play ? play_song_list_rect(current) : current.song_column;
+    if (CheckCollisionPointRec(mouse, song_scroll_area) && wheel != 0.0f) {
         state.scroll_y_target -= wheel * kWheelScrollStep;
-    } else if (view_mode != mode::play && CheckCollisionPointRec(mouse, current.chart_buttons_rect) && wheel != 0.0f) {
+    } else if (CheckCollisionPointRec(mouse, current.chart_buttons_rect) && wheel != 0.0f) {
         state.chart_scroll_y_target -= wheel * kWheelScrollStep;
     } else if (view_mode == mode::play && CheckCollisionPointRec(mouse, current.ranking_list_rect) && wheel != 0.0f) {
         state.ranking_panel.scroll_y_target -= wheel * kWheelScrollStep;
@@ -646,22 +567,16 @@ title_play_view::update_result update(song_select::state& state, title_play_view
     state.scroll_y_target = std::clamp(
         state.scroll_y_target, 0.0f,
         view_mode == mode::play
-            ? title_song_list_view::max_scroll(current.chart_buttons_rect, state)
+            ? title_song_list_view::max_scroll(play_song_list_rect(current), state)
             : title_song_list_view::max_scroll(current.song_column, static_cast<int>(state.songs.size())));
     state.scroll_y = tween::damp(state.scroll_y, state.scroll_y_target, dt, 12.0f, 0.5f);
 
     state.chart_scroll_y_target = std::clamp(
         state.chart_scroll_y_target, 0.0f,
-        view_mode == mode::play
-            ? 0.0f
-            : title_center_view::max_chart_scroll(current.chart_buttons_rect, static_cast<int>(filtered.size())));
+        title_center_view::max_chart_scroll(current.chart_buttons_rect, static_cast<int>(filtered.size())));
     state.chart_scroll_y = tween::damp(state.chart_scroll_y, state.chart_scroll_y_target, dt, 12.0f, 0.5f);
 
-    state.embedded_chart_scroll_y_target = std::clamp(
-        state.embedded_chart_scroll_y_target, 0.0f,
-        view_mode == mode::play
-            ? title_song_list_view::max_embedded_chart_scroll(state, current.chart_buttons_rect, state.scroll_y)
-            : 0.0f);
+    state.embedded_chart_scroll_y_target = std::clamp(state.embedded_chart_scroll_y_target, 0.0f, 0.0f);
     state.embedded_chart_scroll_y =
         tween::damp(state.embedded_chart_scroll_y, state.embedded_chart_scroll_y_target, dt, 12.0f, 0.5f);
 

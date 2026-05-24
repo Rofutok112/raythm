@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "data_models.h"
 #include "multiplayer/multiplayer_state.h"
 
 namespace multiplayer::client {
@@ -68,6 +69,8 @@ room_operation_result update_score(const auth::session_summary& session,
                                    const std::string& match_id,
                                    int score,
                                    int combo,
-                                   bool failed = false);
+                                   float accuracy,
+                                   bool failed = false,
+                                   const result_data* details = nullptr);
 
 }  // namespace multiplayer::client

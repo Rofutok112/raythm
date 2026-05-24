@@ -10,6 +10,7 @@
 
 #include "localization/localization.h"
 #include "scene_common.h"
+#include "shared/avatar_texture_cache.h"
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
@@ -55,6 +56,7 @@ constexpr float kChatMessageGap = 8.0f;
 constexpr float kChatMessagePaddingX = 12.0f;
 constexpr float kChatMessagePaddingY = 9.0f;
 constexpr float kChatLineHeight = 21.0f;
+constexpr float kMemberAvatarSize = 40.0f;
 
 bool busy(const state& state) {
     return state.pending != pending_operation::none;
@@ -217,6 +219,21 @@ Color member_presence_color(const room_member& member) {
         return g_theme->accent;
     }
     return member.connected ? g_theme->success : g_theme->text_dim;
+}
+
+std::string member_avatar_label(const room_member& member) {
+    const std::string& source = member.display_name.empty() ? member.user_id : member.display_name;
+    std::string result;
+    result.reserve(2);
+    for (char ch : source) {
+        if (std::isalnum(static_cast<unsigned char>(ch))) {
+            result.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
+            if (result.size() == 2) {
+                break;
+            }
+        }
+    }
+    return result.empty() ? "P" : result;
 }
 
 void draw_member_presence_icon(Rectangle rect, const room_member& member) {
@@ -397,9 +414,20 @@ void draw_members(const state& state, const room_detail& room) {
                      member.role == "HOST" ? g_theme->slow : g_theme->border, 1.5f);
         const bool host = member.role == "HOST";
         const std::string name = member.display_name;
+        const Rectangle avatar_rect{row.x + 12.0f,
+                                    row.y + (row.height - kMemberAvatarSize) * 0.5f,
+                                    kMemberAvatarSize,
+                                    kMemberAvatarSize};
         const Rectangle host_icon{row.x + row.width - 150.0f, row.y + 14.0f, 28.0f, 28.0f};
+        avatar_texture_cache::draw_avatar(avatar_rect,
+                                          member.avatar_url,
+                                          member_avatar_label(member),
+                                          g_theme->row_soft,
+                                          g_theme->text,
+                                          14,
+                                          state.auth.server_url);
         ui::draw_text_in_rect(name.c_str(), 19,
-                              {row.x + 14.0f, row.y, row.width - (host ? 172.0f : 132.0f), row.height},
+                              {row.x + 64.0f, row.y, row.width - (host ? 222.0f : 182.0f), row.height},
                               g_theme->text, ui::text_align::left);
         if (host) {
             raythm_icons::draw_crown(centered_icon_rect(host_icon, 2.0f), g_theme->slow, 3.0f);

@@ -40,7 +40,7 @@ public:
     void poll_ranking_reload(song_select::state& state);
 
     void request_scoring_ruleset_warm(bool force_refresh = false);
-    void poll_scoring_ruleset_warm();
+    bool poll_scoring_ruleset_warm();
 
     void start_song_upload(const song_select::song_entry& song);
     void start_chart_upload(const song_select::song_entry& song,

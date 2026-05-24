@@ -22,6 +22,7 @@
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "multiplayer/multiplayer_client.h"
+#include "multiplayer_result_scene.h"
 #include "network/json_helpers.h"
 #include "song_select/song_select_navigation.h"
 #include "ui_draw.h"
@@ -515,9 +516,13 @@ void play_scene::sync_multiplayer_score(float dt) {
                 state_.multiplayer_scores.clear();
                 for (const multiplayer::live_score& score : event.live_scores) {
                     state_.multiplayer_scores.push_back({
-                        score.display_name,
-                        score.score,
-                        score.failed,
+                        .user_id = score.user_id,
+                        .display_name = score.display_name,
+                        .avatar_url = score.avatar_url,
+                        .score = score.score,
+                        .combo = score.combo,
+                        .accuracy = score.accuracy,
+                        .failed = score.failed,
                     });
                 }
             }
@@ -525,9 +530,13 @@ void play_scene::sync_multiplayer_score(float dt) {
                 state_.multiplayer_scores.clear();
                 for (const multiplayer::live_score& score : event.room->live_scores) {
                     state_.multiplayer_scores.push_back({
-                        score.display_name,
-                        score.score,
-                        score.failed,
+                        .user_id = score.user_id,
+                        .display_name = score.display_name,
+                        .avatar_url = score.avatar_url,
+                        .score = score.score,
+                        .combo = score.combo,
+                        .accuracy = score.accuracy,
+                        .failed = score.failed,
                     });
                 }
             }
@@ -547,9 +556,13 @@ void play_scene::sync_multiplayer_score(float dt) {
             state_.multiplayer_scores.clear();
             for (const multiplayer::live_score& score : result.live_scores) {
                 state_.multiplayer_scores.push_back({
-                    score.display_name,
-                    score.score,
-                    score.failed,
+                    .user_id = score.user_id,
+                    .display_name = score.display_name,
+                    .avatar_url = score.avatar_url,
+                    .score = score.score,
+                    .combo = score.combo,
+                    .accuracy = score.accuracy,
+                    .failed = score.failed,
                 });
             }
         }
@@ -557,9 +570,13 @@ void play_scene::sync_multiplayer_score(float dt) {
             state_.multiplayer_scores.clear();
             for (const multiplayer::live_score& score : result.room->live_scores) {
                 state_.multiplayer_scores.push_back({
-                    score.display_name,
-                    score.score,
-                    score.failed,
+                    .user_id = score.user_id,
+                    .display_name = score.display_name,
+                    .avatar_url = score.avatar_url,
+                    .score = score.score,
+                    .combo = score.combo,
+                    .accuracy = score.accuracy,
+                    .failed = score.failed,
                 });
             }
         }
@@ -576,10 +593,12 @@ void play_scene::sync_multiplayer_score(float dt) {
     const std::string match_id = state_.multiplayer_match_id;
     const int score = state_.score_system.get_score();
     const int combo = state_.score_system.get_combo();
+    const float accuracy = state_.score_system.get_live_accuracy();
     const bool failed = state_.multiplayer_failed;
     if (multiplayer_realtime_ != nullptr && multiplayer_realtime_->connected()) {
         const std::string body = "{\"score\":" + std::to_string(score) +
             ",\"combo\":" + std::to_string(combo) +
+            ",\"accuracy\":" + std::to_string(accuracy) +
             ",\"failed\":" + std::string(state_.multiplayer_failed ? "true" : "false") +
             (match_id.empty() ? "" : ",\"matchId\":\"" + network::json::escape_string(match_id) + "\"") +
             "}";
@@ -588,8 +607,8 @@ void play_scene::sync_multiplayer_score(float dt) {
         }
     }
     if (!multiplayer_score_future_.has_value()) {
-        multiplayer_score_future_ = std::async(std::launch::async, [session, room_id, match_id, score, combo, failed]() {
-            return multiplayer::client::update_score(session, room_id, match_id, score, combo, failed);
+        multiplayer_score_future_ = std::async(std::launch::async, [session, room_id, match_id, score, combo, accuracy, failed]() {
+            return multiplayer::client::update_score(session, room_id, match_id, score, combo, accuracy, failed);
         });
     }
     if (!multiplayer_room_future_.has_value()) {
@@ -627,16 +646,39 @@ void play_scene::apply_navigation(play_navigation_request navigation) {
             return;
         case play_navigation_target::result:
             if (!state_.multiplayer_room_id.empty()) {
+                const auth::session_summary session = auth::load_session_summary();
+                result_data result_payload = state_.final_result;
+                result_payload.failed = result_payload.failed || state_.multiplayer_failed;
                 if (!state_.multiplayer_match_id.empty()) {
-                    (void)multiplayer::client::complete_match(
-                        auth::load_session_summary(),
-                        state_.multiplayer_match_id);
+                    (void)multiplayer::client::update_score(
+                        session,
+                        state_.multiplayer_room_id,
+                        state_.multiplayer_match_id,
+                        result_payload.score,
+                        result_payload.max_combo,
+                        result_payload.accuracy,
+                        result_payload.failed,
+                        &result_payload);
                 }
-                manager_.change_scene(song_select::make_multiplayer_title_scene(
-                    manager_,
-                    state_.multiplayer_room_id,
-                    state_.song_data.has_value() ? state_.song_data->meta.song_id : "",
-                    state_.chart_data.has_value() ? state_.chart_data->meta.chart_id : ""));
+                const std::optional<auth::session> saved_session = auth::load_saved_session();
+                if (state_.song_data.has_value() && state_.chart_data.has_value()) {
+                    manager_.change_scene(std::make_unique<multiplayer_result_scene>(
+                        manager_,
+                        result_payload,
+                        *state_.song_data,
+                        state_.chart_data->meta,
+                        state_.key_count,
+                        state_.multiplayer_room_id,
+                        state_.multiplayer_match_id,
+                        saved_session.has_value() ? saved_session->user.id : "",
+                        state_.multiplayer_scores));
+                } else {
+                    manager_.change_scene(song_select::make_multiplayer_title_scene(
+                        manager_,
+                        state_.multiplayer_room_id,
+                        state_.song_data.has_value() ? state_.song_data->meta.song_id : "",
+                        state_.chart_data.has_value() ? state_.chart_data->meta.chart_id : ""));
+                }
                 return;
             }
             if (state_.song_data.has_value() && state_.chart_data.has_value()) {

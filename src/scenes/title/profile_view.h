@@ -6,6 +6,7 @@
 
 #include "network/auth_client.h"
 #include "raylib.h"
+#include "shared/square_image_picker.h"
 #include "song_select/song_select_state.h"
 #include "ui_draw.h"
 #include "ui_text_input.h"
@@ -34,6 +35,8 @@ enum class command_type {
     delete_song,
     delete_chart,
     save_external_links,
+    change_avatar,
+    remove_avatar,
 };
 
 struct command {
@@ -65,6 +68,7 @@ struct state {
     bool loading = false;
     bool deleting = false;
     bool saving_links = false;
+    bool saving_avatar = false;
     bool loaded_once = false;
     bool settings_links_initialized = false;
     float open_anim = 0.0f;
@@ -91,6 +95,7 @@ void clamp_scroll(state& profile);
 command update(state& profile, bool request_active);
 void draw(state& profile,
           const song_select::auth_state& auth_state,
+          square_image_picker::state& avatar_picker,
           bool request_active,
           ui::draw_layer layer = ui::draw_layer::modal);
 

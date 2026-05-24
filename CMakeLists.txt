@@ -258,6 +258,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/scene_common.h
         src/scenes/shared/auth_overlay_controller.cpp
         src/scenes/shared/auth_overlay_controller.h
+        src/scenes/shared/avatar_texture_cache.cpp
+        src/scenes/shared/avatar_texture_cache.h
         src/scenes/shared/square_image_picker.cpp
         src/scenes/shared/square_image_picker.h
         src/scenes/shared/content_status_badge.h
@@ -346,6 +348,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/multiplayer/multiplayer_state.h
         src/scenes/multiplayer/multiplayer_view.cpp
         src/scenes/multiplayer/multiplayer_view.h
+        src/scenes/multiplayer_result_scene.cpp
+        src/scenes/multiplayer_result_scene.h
         src/scenes/mv_editor_scene.cpp
         src/scenes/mv_editor_scene.h
          src/scenes/song_create_scene.cpp

@@ -21,6 +21,7 @@ struct public_user {
     std::string id;
     std::string email;
     std::string display_name;
+    std::string avatar_url;
     bool email_verified = false;
     std::vector<external_link> external_links;
 };
@@ -37,6 +38,7 @@ struct session_summary {
     std::string server_url;
     std::string email;
     std::string display_name;
+    std::string avatar_url;
     bool email_verified = false;
     std::vector<external_link> external_links;
 };
@@ -154,6 +156,8 @@ operation_result restore_saved_session();
 operation_result logout_saved_session();
 operation_result delete_saved_account(const std::string& password);
 operation_result update_profile_external_links(const std::vector<external_link>& links);
+operation_result update_profile_avatar(const std::string& image_path);
+operation_result delete_profile_avatar();
 my_uploads_result fetch_my_community_uploads();
 profile_rankings_result fetch_my_profile_rankings();
 operation_result delete_community_song_upload(const std::string& song_id);

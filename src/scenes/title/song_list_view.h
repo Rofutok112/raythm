@@ -20,6 +20,7 @@ struct draw_config {
     unsigned char hover_row_alpha = 255;
     unsigned char selected_row_alpha = 255;
     bool expanded_cards = false;
+    bool show_header = true;
     float embedded_chart_scroll_y = 0.0f;
     double now = 0.0;
 };

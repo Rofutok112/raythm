@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <future>
 #include <memory>
 #include <optional>
@@ -28,6 +29,7 @@ struct room_summary {
 struct room_member {
     std::string user_id;
     std::string display_name;
+    std::string avatar_url;
     std::string role;
     std::string status;
     bool ready = false;
@@ -55,9 +57,20 @@ struct chat_message {
 struct live_score {
     std::string user_id;
     std::string display_name;
+    std::string avatar_url;
     int score = 0;
     int combo = 0;
+    float accuracy = 0.0f;
     bool failed = false;
+    bool has_result_details = false;
+    std::array<int, 5> judge_counts = {};
+    float rc_value = 0.0f;
+    float avg_offset = 0.0f;
+    int fast_count = 0;
+    int slow_count = 0;
+    std::string clear_rank;
+    bool is_full_combo = false;
+    bool is_all_perfect = false;
 };
 
 struct room_detail {

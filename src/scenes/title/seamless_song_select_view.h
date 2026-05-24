@@ -53,6 +53,7 @@ struct update_result {
 };
 
 layout make_layout(float anim_t, Rectangle origin_rect);
+layout make_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode);
 void draw(song_select::state& state,
           const song_select::preview_controller& preview_controller,
           mode view_mode,

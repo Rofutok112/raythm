@@ -45,11 +45,13 @@ std::string make_avatar_label(const auth::session_summary& summary) {
 
 std::string make_avatar_label(const song_select::auth_state& auth_state) {
     const auth::session_summary summary = {
-        auth_state.logged_in,
-        {},
-        auth_state.email,
-        auth_state.display_name,
-        auth_state.email_verified,
+        .logged_in = auth_state.logged_in,
+        .server_url = auth_state.server_url,
+        .email = auth_state.email,
+        .display_name = auth_state.display_name,
+        .avatar_url = auth_state.avatar_url,
+        .email_verified = auth_state.email_verified,
+        .external_links = auth_state.external_links,
     };
     return make_avatar_label(summary);
 }
@@ -99,6 +101,8 @@ draw_result draw(draw_context context) {
         .account_name = account_name_for(play_state.auth),
         .account_status = account_status_for(play_state.auth),
         .avatar_label = make_avatar_label(play_state.auth),
+        .avatar_url = play_state.auth.avatar_url,
+        .avatar_base_url = play_state.auth.server_url,
         .logged_in = play_state.auth.logged_in,
         .email_verified = play_state.auth.email_verified,
         .now = GetTime(),

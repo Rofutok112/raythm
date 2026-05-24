@@ -76,8 +76,8 @@ void title_play_create_feature::request_scoring_ruleset_warm(bool force_refresh)
     data_controller_.request_scoring_ruleset_warm(force_refresh);
 }
 
-void title_play_create_feature::poll_scoring_ruleset_warm() {
-    data_controller_.poll_scoring_ruleset_warm();
+bool title_play_create_feature::poll_scoring_ruleset_warm() {
+    return data_controller_.poll_scoring_ruleset_warm();
 }
 
 bool title_play_create_feature::catalog_loading() const {
