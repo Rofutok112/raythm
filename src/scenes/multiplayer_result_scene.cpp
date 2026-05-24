@@ -18,12 +18,12 @@
 namespace {
 
 constexpr Rectangle kScreenRect{0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
-constexpr Rectangle kBackButtonRect{39.0f, 944.0f, 330.0f, 58.0f};
-constexpr Rectangle kLeftPanelRect{39.0f, 109.0f, 330.0f, 815.0f};
-constexpr Rectangle kMainPanelRect{390.0f, 109.0f, 820.0f, 815.0f};
-constexpr Rectangle kRankingPanelRect{1228.0f, 109.0f, 650.0f, 815.0f};
+constexpr Rectangle kBackButtonRect{39.0f, 983.0f, 330.0f, 58.0f};
+constexpr Rectangle kLeftPanelRect{39.0f, 109.0f, 330.0f, 854.0f};
+constexpr Rectangle kMainPanelRect{390.0f, 109.0f, 820.0f, 932.0f};
+constexpr Rectangle kRankingPanelRect{1228.0f, 109.0f, 650.0f, 932.0f};
 constexpr Rectangle kJacketRect{69.0f, 139.0f, 270.0f, 270.0f};
-constexpr Rectangle kListViewportRect{1258.0f, 246.0f, 590.0f, 616.0f};
+constexpr Rectangle kListViewportRect{1258.0f, 246.0f, 590.0f, 754.0f};
 constexpr Rectangle kListHeaderRect{1258.0f, 192.0f, 590.0f, 36.0f};
 constexpr float kRowHeight = 88.0f;
 constexpr float kRowGap = 10.0f;
@@ -129,6 +129,13 @@ void draw_result_panel(Rectangle rect, Color border = {0, 0, 0, 0}) {
     const Color resolved_border = border.a > 0 ? border : g_theme->border;
     ui::draw_rect_f(rect, with_alpha(g_theme->panel, 214));
     ui::draw_rect_lines(rect, 1.5f, resolved_border);
+}
+
+void draw_song_select_column(Rectangle rect) {
+    const unsigned char fill_alpha =
+        static_cast<unsigned char>(g_theme->row_soft_alpha / 2);
+    ui::draw_rect_f(rect, with_alpha(g_theme->section, fill_alpha));
+    ui::draw_rect_lines(rect, 1.2f, with_alpha(g_theme->border_light, 255));
 }
 
 std::string format_score(int score) {
@@ -345,9 +352,9 @@ void multiplayer_result_scene::unload_jacket_texture() {
 void multiplayer_result_scene::draw() {
     draw_background(jacket_texture_loaded_ ? &jacket_texture_ : nullptr);
 
-    draw_result_panel(kLeftPanelRect);
-    draw_result_panel(kMainPanelRect);
-    draw_result_panel(kRankingPanelRect);
+    draw_song_select_column(kLeftPanelRect);
+    draw_song_select_column(kMainPanelRect);
+    draw_song_select_column(kRankingPanelRect);
 
     const Rectangle jacket_rect = kJacketRect;
     if (jacket_texture_loaded_) {
@@ -497,9 +504,13 @@ void multiplayer_result_scene::draw() {
                         kListViewportRect.y, 10.0f, kListViewportRect.height},
                        content_height, scroll_y_, g_theme->scrollbar_track, g_theme->scrollbar_thumb);
 
-    const Color back_bg = returning_ ? g_theme->row_selected : g_theme->accent;
+    const unsigned char normal_row_alpha = g_theme->row_soft_alpha;
+    const unsigned char hover_row_alpha = g_theme->row_soft_hover_alpha;
+    const Color back_bg = returning_ ? g_theme->row_soft_selected : g_theme->row_soft;
     if (ui::draw_button_colored(kBackButtonRect, returning_ ? "Returning..." : "Back to Room", 24,
-                                back_bg, g_theme->row_hover, g_theme->text).clicked &&
+                                with_alpha(back_bg, normal_row_alpha),
+                                with_alpha(g_theme->row_soft_hover, hover_row_alpha),
+                                g_theme->text, 1.5f).clicked &&
         !returning_) {
         request_return_to_room();
     }
