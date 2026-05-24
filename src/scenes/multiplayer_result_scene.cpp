@@ -409,14 +409,14 @@ void multiplayer_result_scene::draw() {
                         "Max Combo", std::to_string(result_.max_combo).c_str(), g_theme->accent);
     draw_compact_metric({920.0f, 442.0f, 230.0f, 118.0f},
                         "Avg Offset", TextFormat("%+.1fms", result_.avg_offset), g_theme->text_secondary);
-    draw_compact_metric({430.0f, 588.0f, 236.0f, 118.0f},
+    draw_compact_metric({430.0f, 574.0f, 236.0f, 118.0f},
                         "Gauge", TextFormat("%.0f%%", result_.gauge_value), g_theme->success);
-    draw_compact_metric({688.0f, 588.0f, 210.0f, 118.0f},
+    draw_compact_metric({688.0f, 574.0f, 210.0f, 118.0f},
                         "RC", TextFormat("%.1f", result_.rc_value), g_theme->text);
-    draw_compact_metric({920.0f, 588.0f, 230.0f, 118.0f},
+    draw_compact_metric({920.0f, 574.0f, 230.0f, 118.0f},
                         "Fast / Slow", TextFormat("%d / %d", result_.fast_count, result_.slow_count), g_theme->slow);
 
-    const Rectangle judge_rect{430.0f, 764.0f, 720.0f, 190.0f};
+    const Rectangle judge_rect{430.0f, 736.0f, 720.0f, 176.0f};
     draw_result_panel(judge_rect);
     const Rectangle judge_content = ui::inset(judge_rect, ui::edge_insets::symmetric(24.0f, 22.0f));
     const char* judge_labels[5] = {"Perfect", "Great", "Good", "Bad", "Miss"};
