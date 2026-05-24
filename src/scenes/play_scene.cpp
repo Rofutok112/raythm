@@ -165,6 +165,12 @@ play_scene::play_scene(scene_manager& manager, song_data song, std::string chart
 }
 
 play_scene::play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
+                       float chart_level, play_mods mods)
+    : play_scene(manager, std::move(song), std::move(chart_path), key_count, chart_level) {
+    request_.mods = mods;
+}
+
+play_scene::play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
                        float chart_level, std::string multiplayer_room_id, std::string multiplayer_match_id)
     : play_scene(manager, std::move(song), std::move(chart_path), key_count, chart_level) {
     request_.multiplayer_room_id = std::move(multiplayer_room_id);
@@ -683,7 +689,7 @@ void play_scene::apply_navigation(play_navigation_request navigation) {
             }
             if (state_.song_data.has_value() && state_.chart_data.has_value()) {
                 manager_.change_scene(std::make_unique<result_scene>(
-                    manager_, state_.final_result, state_.ranking_enabled,
+                    manager_, state_.final_result, state_.local_ranking_enabled, state_.ranking_enabled,
                     *state_.song_data, state_.selected_chart_path.value_or(""), state_.chart_data->meta, state_.key_count));
             } else {
                 manager_.change_scene(song_select::make_seamless_song_select_scene(manager_));

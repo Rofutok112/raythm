@@ -18,7 +18,7 @@ bool start_selected_chart(scene_manager& manager,
         return false;
     }
     preview_controller.stop();
-    manager.change_scene(song_select::make_play_scene(manager, *song, *chart));
+    manager.change_scene(song_select::make_play_scene(manager, *song, *chart, state.mods));
     return true;
 }
 

@@ -57,9 +57,13 @@ struct online_submit_result {
 
 listing load_chart_ranking(const std::string& chart_id, source ranking_source, int limit = 50);
 std::optional<entry> load_chart_personal_best(const std::string& chart_id, source ranking_source);
-local_submit_result submit_local_result_detailed(const chart_meta& chart, const result_data& result);
+std::string make_recorded_at_timestamp();
+local_submit_result submit_local_result_detailed(const chart_meta& chart,
+                                                 const result_data& result,
+                                                 const std::string& recorded_at = {});
 bool submit_local_result(const chart_meta& chart, const result_data& result);
 bool should_attempt_online_submit(const local_submit_result& local_result);
+bool should_attempt_online_submit(const chart_meta& chart, const result_data& result);
 bool warm_scoring_ruleset_cache(bool force_refresh = false);
 bool refresh_scoring_ruleset_cache_for_chart_start(const chart_meta& chart, bool force_refresh = true);
 online_submit_result submit_online_result(const song_data& song,

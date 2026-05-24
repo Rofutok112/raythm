@@ -7,6 +7,7 @@
 
 #include "editor/editor_scene_types.h"
 #include "multiplayer/multiplayer_client.h"
+#include "play_mods.h"
 #include "play/play_mv_controller.h"
 #include "play/play_note_draw_queue.h"
 #include "play/play_session_types.h"
@@ -19,6 +20,8 @@ public:
     explicit play_scene(scene_manager& manager, int key_count);
     play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
                float chart_level = 0.0f);
+    play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
+               float chart_level, play_mods mods);
     play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
                float chart_level, std::string multiplayer_room_id, std::string multiplayer_match_id);
     play_scene(scene_manager& manager, song_data song, chart_data chart, int start_tick,

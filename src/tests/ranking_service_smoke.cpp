@@ -119,6 +119,15 @@ int main() {
         std::cerr << "Online submit eligibility should not depend on local best updates\n";
         return EXIT_FAILURE;
     }
+    if (!ranking_service::should_attempt_online_submit(chart, lower_result)) {
+        std::cerr << "Online submit eligibility should be based on replay payload\n";
+        return EXIT_FAILURE;
+    }
+    result_data empty_replay_result;
+    if (ranking_service::should_attempt_online_submit(chart, empty_replay_result)) {
+        std::cerr << "Online submit eligibility should reject missing replay payload\n";
+        return EXIT_FAILURE;
+    }
 
     const ranking_service::listing local_listing =
         ranking_service::load_chart_ranking(chart.chart_id, ranking_service::source::local, 50);

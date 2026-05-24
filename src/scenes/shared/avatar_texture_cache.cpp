@@ -15,6 +15,8 @@
 namespace avatar_texture_cache {
 namespace {
 
+constexpr int kMaxConcurrentAvatarRequests = 4;
+
 bool starts_with(std::string_view value, std::string_view prefix) {
     return value.size() >= prefix.size() && value.substr(0, prefix.size()) == prefix;
 }
@@ -52,6 +54,22 @@ const Texture2D* cache::get(const std::string& avatar_url, const std::string& ba
     }
     if (!item.requested) {
         item.requested = true;
+        start_pending_requests();
+    }
+    return nullptr;
+}
+
+void cache::start_pending_requests() {
+    for (auto& [resolved_url, item] : entries_) {
+        if (active_requests_ >= kMaxConcurrentAvatarRequests) {
+            return;
+        }
+        if (!item.requested || item.loading || item.loaded || item.missing) {
+            continue;
+        }
+
+        item.loading = true;
+        ++active_requests_;
         item.future = std::async(std::launch::async, [resolved_url]() {
             const network::http::response response = network::http::send_request(
                 "GET",
@@ -67,17 +85,18 @@ const Texture2D* cache::get(const std::string& avatar_url, const std::string& ba
             return image;
         });
     }
-    return nullptr;
 }
 
 void cache::poll() {
     for (auto& [_, item] : entries_) {
-        if (!item.requested || item.loaded || item.missing ||
+        if (!item.requested || !item.loading || item.loaded || item.missing ||
             item.future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
             continue;
         }
 
         pending_image pending = item.future.get();
+        item.loading = false;
+        active_requests_ = std::max(0, active_requests_ - 1);
         Image image = load_image_from_bytes(pending.bytes);
         if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
             if (image.data != nullptr) {
@@ -97,6 +116,8 @@ void cache::poll() {
         SetTextureFilter(item.texture, TEXTURE_FILTER_BILINEAR);
         item.loaded = true;
     }
+
+    start_pending_requests();
 }
 
 void cache::clear() {
@@ -108,6 +129,7 @@ void cache::clear() {
         item.loaded = false;
     }
     entries_.clear();
+    active_requests_ = 0;
 }
 
 cache& shared() {

@@ -45,6 +45,42 @@ Rectangle start_button_rect(Rectangle ranking_column) {
             ranking_column.width - 344.0f, 58.0f};
 }
 
+Rectangle mod_button_rect(Rectangle ranking_column) {
+    using namespace title_play_view::mod_layout;
+    return {ranking_column.x + kButtonLeftInset,
+            ranking_column.y + ranking_column.height - kButtonBottomInset,
+            kButtonWidth,
+            kButtonHeight};
+}
+
+Rectangle mod_modal_rect(Rectangle ranking_column) {
+    using namespace title_play_view::mod_layout;
+    const Rectangle button = mod_button_rect(ranking_column);
+    return {button.x,
+            button.y - kModalGapFromButton - kModalHeight,
+            kModalWidth,
+            kModalHeight};
+}
+
+Rectangle auto_mod_toggle_rect(Rectangle modal) {
+    using namespace title_play_view::mod_layout;
+    const float row_y = modal.y + kModalTopPadding + kHeaderHeight + kHeaderToDescriptionGap +
+                        kDescriptionHeight + kDescriptionToRowsGap;
+    return {modal.x + kModalSidePadding,
+            row_y,
+            modal.width - kModalSidePadding * 2.0f,
+            kRowHeight};
+}
+
+Rectangle no_fail_mod_toggle_rect(Rectangle modal) {
+    using namespace title_play_view::mod_layout;
+    const Rectangle auto_row = auto_mod_toggle_rect(modal);
+    return {auto_row.x,
+            auto_row.y + kRowHeight + kRowGap,
+            auto_row.width,
+            kRowHeight};
+}
+
 Rectangle preview_prev_button_rect(const layout& current) {
     return {current.meta_rect.x, current.meta_rect.y + 26.0f, 86.0f, 42.0f};
 }
@@ -209,6 +245,28 @@ title_play_view::update_result update(song_select::state& state, title_play_view
         }
     }
 
+    if (view_mode == mode::play && state.play_mod_modal_open) {
+        const Rectangle modal = mod_modal_rect(current.ranking_column);
+        if (IsKeyPressed(KEY_ESCAPE) ||
+            (left_pressed &&
+             !CheckCollisionPointRec(mouse, modal) &&
+             !CheckCollisionPointRec(mouse, mod_button_rect(current.ranking_column)))) {
+            state.play_mod_modal_open = false;
+            return result;
+        }
+        if (left_pressed && CheckCollisionPointRec(mouse, auto_mod_toggle_rect(modal))) {
+            state.mods.auto_play = !state.mods.auto_play;
+            return result;
+        }
+        if (left_pressed && CheckCollisionPointRec(mouse, no_fail_mod_toggle_rect(modal))) {
+            state.mods.no_fail = !state.mods.no_fail;
+            return result;
+        }
+        if (CheckCollisionPointRec(mouse, modal)) {
+            return result;
+        }
+    }
+
     if (ui::is_clicked(current.back_rect) || IsKeyPressed(KEY_ESCAPE)) {
         result.back_requested = true;
         return result;
@@ -228,6 +286,19 @@ title_play_view::update_result update(song_select::state& state, title_play_view
     if (view_mode == mode::play && left_pressed &&
         CheckCollisionPointRec(mouse, play_filter_button_rect(current.song_column))) {
         state.play_filter_modal_open = !state.play_filter_modal_open;
+        if (state.play_filter_modal_open) {
+            state.play_mod_modal_open = false;
+        }
+        return result;
+    }
+
+    if (view_mode == mode::play && left_pressed &&
+        CheckCollisionPointRec(mouse, mod_button_rect(current.ranking_column))) {
+        state.play_mod_modal_open = !state.play_mod_modal_open;
+        if (state.play_mod_modal_open) {
+            state.play_filter_modal_open = false;
+            state.chart_level_filter_dragging = false;
+        }
         return result;
     }
 

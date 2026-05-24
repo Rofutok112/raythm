@@ -9,6 +9,7 @@
 #include "input_handler.h"
 #include "judge_system.h"
 #include "performance_system.h"
+#include "play_mods.h"
 #include "score_system.h"
 #include "song_loader.h"
 #include "play_scroll_map.h"
@@ -56,6 +57,7 @@ struct play_start_request {
     int start_tick = 0;
     std::string multiplayer_room_id;
     std::string multiplayer_match_id;
+    play_mods mods;
 };
 
 struct play_multiplayer_score_row {
@@ -127,7 +129,9 @@ struct play_session_state {
     int key_count = 4;
     bool initialized = false;
     bool paused = false;
+    bool local_ranking_enabled = true;
     bool ranking_enabled = true;
+    play_mods mods;
     bool auto_paused_by_focus = false;
     float camera_angle_degrees = 45.0f;
     double chart_time_ms = 0.0;

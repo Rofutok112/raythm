@@ -1,7 +1,9 @@
 #include "play_flow_controller.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
+#include <span>
 
 namespace {
 
@@ -13,11 +15,55 @@ play_navigation_request navigate_after_transition(const play_session_state& stat
 }
 
 bool is_no_fail_playtest(const play_session_state& state) {
-    return state.editor_resume_state.has_value() || !state.multiplayer_room_id.empty();
+    return state.mods.no_fail || state.editor_resume_state.has_value() || !state.multiplayer_room_id.empty();
 }
 
 bool is_multiplayer_play(const play_session_state& state) {
     return !state.multiplayer_room_id.empty();
+}
+
+std::array<bool, judge_system::kMaxLanes> build_auto_lane_states(const play_session_state& state,
+                                                                 double current_ms) {
+    constexpr double kLeadMs = 36.0;
+    constexpr double kTapHoldMs = 18.0;
+    constexpr double kHoldReleaseDelayMs = 20.0;
+    std::array<bool, judge_system::kMaxLanes> lane_states = {};
+
+    for (const note_state& note_state : state.judge_system.note_states()) {
+        if (note_state.is_completed()) {
+            continue;
+        }
+
+        const note_data& note = note_state.note_ref;
+        const double start_ms = note_state.target_ms;
+        double hold_from_ms = start_ms - kLeadMs;
+        double hold_until_ms = start_ms + kTapHoldMs;
+        switch (note.type) {
+            case note_type::hold:
+                hold_until_ms = note_state.end_target_ms + kHoldReleaseDelayMs;
+                break;
+            case note_type::release:
+                hold_until_ms = start_ms;
+                break;
+            case note_type::stay:
+                hold_until_ms = start_ms + kTapHoldMs;
+                break;
+            case note_type::tap:
+                break;
+        }
+
+        if (current_ms < hold_from_ms || current_ms >= hold_until_ms) {
+            continue;
+        }
+
+        const int first_lane = std::max(0, note.lane);
+        const int last_lane = std::min(state.key_count - 1, note_last_lane(note));
+        for (int lane = first_lane; lane <= last_lane && lane < judge_system::kMaxLanes; ++lane) {
+            lane_states[static_cast<std::size_t>(lane)] = true;
+        }
+    }
+
+    return lane_states;
 }
 
 void update_visual_effect_timers(play_session_state& state, float dt) {
@@ -188,7 +234,14 @@ play_update_result play_flow_controller::update(play_session_state& state, play_
         }
         result.request_play_bgm = true;
     }
-    if (!context.input_already_updated) {
+    if (state.mods.auto_play) {
+        const auto lane_states = build_auto_lane_states(state, state.chart_time_ms);
+        const std::size_t lane_count = static_cast<std::size_t>(
+            std::clamp(state.key_count, 0, judge_system::kMaxLanes));
+        state.input_handler.update_from_lane_states(
+            std::span<const bool>(lane_states.data(), lane_count),
+            state.chart_time_ms);
+    } else if (!context.input_already_updated) {
         state.input_handler.update(state.chart_time_ms);
     }
     update_lane_hold_dimming(state, context.dt);

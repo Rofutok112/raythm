@@ -125,6 +125,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.start_tick = std::max(0, request.start_tick);
     state.multiplayer_room_id = request.multiplayer_room_id;
     state.multiplayer_match_id = request.multiplayer_match_id;
+    state.mods = request.mods;
     state.camera_angle_degrees = g_settings.camera_angle_degrees;
     state.lane_speed =
         play_speed_compensation::compensated_lane_speed(g_settings.note_speed, state.camera_angle_degrees);
@@ -220,7 +221,8 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.chart_time_ms = state.start_ms;
     state.paused_chart_time_ms = state.start_ms;
     state.paused = false;
-    state.ranking_enabled = !state.editor_resume_state.has_value();
+    state.local_ranking_enabled = !state.editor_resume_state.has_value() && !state.mods.any_enabled();
+    state.ranking_enabled = state.local_ranking_enabled;
     state.auto_paused_by_focus = false;
     state.initialized = true;
     state.status_text.clear();

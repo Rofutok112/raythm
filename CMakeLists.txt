@@ -203,6 +203,7 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/player_note_offsets.h
         src/gameplay/performance_system.cpp
         src/gameplay/performance_system.h
+        src/gameplay/play_mods.h
         src/services/ranking_service.cpp
         src/services/ranking_service.h
         src/services/online_content_availability.cpp

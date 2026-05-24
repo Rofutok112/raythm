@@ -10,6 +10,7 @@
 #include "data_models.h"
 #include "network/auth_client.h"
 #include "online_content_identity.h"
+#include "play_mods.h"
 #include "ranking_service.h"
 #include "raylib.h"
 #include "shared/scene_fade.h"
@@ -192,6 +193,8 @@ struct filter_state {
     ui::text_input_state play_search_input;
     chart_source_filter chart_source = chart_source_filter::all;
     bool play_filter_modal_open = false;
+    bool play_mod_modal_open = false;
+    play_mods mods;
     bool multiplayer_queueable_only = false;
     std::string multiplayer_queue_server_url;
     int chart_key_filter = 0;
@@ -264,6 +267,8 @@ struct state {
     ui::text_input_state& play_search_input;
     chart_source_filter& chart_source;
     bool& play_filter_modal_open;
+    bool& play_mod_modal_open;
+    play_mods& mods;
     int& chart_key_filter;
     float& chart_min_level;
     float& chart_max_level;

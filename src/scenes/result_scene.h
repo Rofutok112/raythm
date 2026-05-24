@@ -15,7 +15,7 @@
 // リザルト画面。プレイ終了後のスコア・ランク・判定内訳を表示する。
 class result_scene final : public scene {
 public:
-    result_scene(scene_manager& manager, result_data result, bool ranking_enabled,
+    result_scene(scene_manager& manager, result_data result, bool local_ranking_enabled, bool ranking_enabled,
                  song_data song, std::string chart_path, chart_meta chart, int key_count);
     ~result_scene() override;
 
@@ -38,6 +38,7 @@ private:
     void unload_jacket_texture();
 
     result_data result_;
+    bool local_ranking_enabled_ = true;
     bool ranking_enabled_ = true;
     song_data song_;
     std::string chart_path_;

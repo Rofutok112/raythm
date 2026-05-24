@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <vector>
@@ -40,7 +41,7 @@ int main() {
         context.window_focused = false;
 
         const play_update_result result = play_flow_controller::update(state, draw_queue, context);
-        if (!state.paused || !state.auto_paused_by_focus || state.ranking_enabled ||
+        if (!state.paused || !state.auto_paused_by_focus || !state.local_ranking_enabled || state.ranking_enabled ||
             state.paused_chart_time_ms != 1000.0 || !result.request_pause_bgm) {
             std::cerr << "Auto pause flow failed\n";
             return EXIT_FAILURE;
@@ -182,6 +183,27 @@ int main() {
 
     {
         play_session_state state = make_initialized_state();
+        state.mods.no_fail = true;
+        state.score_system.init(1);
+        for (int i = 0; i < 10; ++i) {
+            state.gauge.on_judge(judge_result::miss);
+        }
+
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.bgm_loaded = true;
+        context.audio_clock_time_ms = 1200.0;
+
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (state.failure_transition_playing || state.final_result.failed || result.request_pause_bgm) {
+            std::cerr << "NoFail mod should not enter failure transition\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
         state.score_system.init(1);
         state.timing_engine = make_basic_timing_engine();
         state.judge_system.init({note_data{note_type::tap, 480, 0, 480}}, state.timing_engine);
@@ -276,7 +298,7 @@ int main() {
         context.escape_pressed = true;
 
         const play_update_result result = play_flow_controller::update(state, draw_queue, context);
-        if (!state.paused || state.ranking_enabled || !result.request_pause_bgm) {
+        if (!state.paused || !state.local_ranking_enabled || state.ranking_enabled || !result.request_pause_bgm) {
             std::cerr << "Normal escape pause flow failed\n";
             return EXIT_FAILURE;
         }
@@ -354,6 +376,29 @@ int main() {
         }
         if (immediate_hitsound_count != 1 || result.hitsound_count != 0) {
             std::cerr << "Gameplay hitsound should use the immediate callback when available\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.mods.auto_play = true;
+        state.score_system.init(1);
+        state.timing_engine = make_basic_timing_engine();
+        state.judge_system.init({note_data{note_type::tap, 480, 0, 480}}, state.timing_engine);
+
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.audio_clock_time_ms = 500.0;
+        context.input_already_updated = true;
+
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (result.navigation.has_value() ||
+            state.score_system.get_combo() != 1 ||
+            !state.display_judge.has_value() ||
+            state.display_judge->result != judge_result::perfect) {
+            std::cerr << "Auto mod should generate perfect lane input\n";
             return EXIT_FAILURE;
         }
     }
