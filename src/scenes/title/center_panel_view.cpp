@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 
+#include "scene_common.h"
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
@@ -12,8 +13,8 @@
 
 namespace {
 
-constexpr float kChartButtonHeight = 81.0f;
-constexpr float kChartButtonGap = 12.0f;
+constexpr float kChartButtonHeight = 56.0f;
+constexpr float kChartButtonGap = 7.0f;
 constexpr float kEmptyMessageOffsetY = 180.0f;
 constexpr float kEmptyMessageHeight = 60.0f;
 constexpr float kJacketFramePadding = 12.0f;
@@ -95,6 +96,26 @@ std::string format_bpm_range(float min_bpm, float max_bpm) {
         return TextFormat("%.0f", min_bpm);
     }
     return TextFormat("%.0f-%.0f", min_bpm, max_bpm);
+}
+
+std::string format_score(int value) {
+    std::string digits = std::to_string(std::max(0, value));
+    for (int insert_at = static_cast<int>(digits.size()) - 3; insert_at > 0; insert_at -= 3) {
+        digits.insert(static_cast<size_t>(insert_at), ",");
+    }
+    return digits;
+}
+
+void draw_source_tag(Rectangle rect, content_status status, unsigned char alpha) {
+    const Color color = content_status_badge::color(status);
+    ui::draw_rect_f(rect, with_alpha(g_theme->row_soft, static_cast<unsigned char>(70.0f * (static_cast<float>(alpha) / 255.0f))));
+    ui::draw_rect_lines(rect, 1.0f, with_alpha(color, alpha));
+    ui::draw_text_in_rect(content_status_badge::label(status), 9, rect,
+                          with_alpha(color, alpha), ui::text_align::center);
+}
+
+unsigned char scale_alpha(unsigned char alpha, float scale) {
+    return static_cast<unsigned char>(std::clamp(static_cast<float>(alpha) * scale, 0.0f, 255.0f));
 }
 
 }  // namespace
@@ -195,34 +216,111 @@ void draw(const song_select::state& state,
         ui::draw_text_in_rect("JACKET", 26, jacket_inner, with_alpha(t.text_muted, config.alpha));
     }
 
-    const Rectangle title_rect = {
-        config.main_column_rect.x + kHeaderPaddingX,
-        config.main_column_rect.y + kTitleOffsetY,
-        config.main_column_rect.width - kHeaderPaddingX * 2.0f,
-        kTitleHeight
-    };
-    const Rectangle song_title_text_rect = {
-        title_rect.x,
-        title_rect.y,
-        title_rect.width - kStatusBadgeWidth - 8.0f,
-        title_rect.height,
-    };
-    const Rectangle artist_rect = {
-        config.main_column_rect.x + kHeaderPaddingX,
-        config.main_column_rect.y + kArtistOffsetY,
-        config.main_column_rect.width - kHeaderPaddingX * 2.0f,
-        kArtistHeight
-    };
-    draw_marquee_text(song->song.meta.title.c_str(),
-                      song_title_text_rect,
-                      28, with_alpha(t.text, config.alpha), config.now);
-    content_status_badge::draw_compound(
-        song_status_badge_rect(config.main_column_rect),
-        song->source_status, song->status, config.alpha, 12);
-    draw_marquee_text(song->song.meta.artist.c_str(),
-                      artist_rect,
-                      18, with_alpha(t.text_secondary, config.alpha), config.now);
-    if (chart != nullptr) {
+    if (config.compact_song_header) {
+        ui::draw_text_in_rect("曲情報", 16,
+                              {config.main_column_rect.x + 28.0f, config.main_column_rect.y + 20.0f,
+                               config.main_column_rect.width - 56.0f, 24.0f},
+                              with_alpha(t.text, config.alpha), ui::text_align::left);
+        const Rectangle title_rect = {
+            config.chart_detail_rect.x,
+            config.chart_detail_rect.y,
+            config.chart_detail_rect.width,
+            42.0f,
+        };
+        draw_marquee_text(song->song.meta.title.c_str(), title_rect,
+                          27, with_alpha(t.text, config.alpha), config.now);
+        draw_marquee_text(song->song.meta.artist.c_str(),
+                          {title_rect.x, title_rect.y + 34.0f, title_rect.width, 22.0f},
+                          16, with_alpha(t.text_secondary, config.alpha), config.now);
+        ui::draw_text_in_rect("BPM", 12,
+                              {title_rect.x, title_rect.y + 70.0f, 56.0f, 18.0f},
+                              with_alpha(t.accent, config.alpha), ui::text_align::left);
+        ui::draw_text_in_rect(TextFormat("%.0f", song->song.meta.base_bpm), 18,
+                              {title_rect.x, title_rect.y + 90.0f, 86.0f, 24.0f},
+                              with_alpha(t.text, config.alpha), ui::text_align::left);
+        ui::draw_text_in_rect("ジャンル", 12,
+                              {title_rect.x + 118.0f, title_rect.y + 70.0f, 160.0f, 18.0f},
+                              with_alpha(t.accent, config.alpha), ui::text_align::left);
+        float tag_x = title_rect.x + 118.0f;
+        const float tag_y = title_rect.y + 92.0f;
+        int drawn = 0;
+        const auto draw_tag = [&](const std::string& label) {
+            if (label.empty() || drawn >= 3) {
+                return;
+            }
+            const float width = std::clamp(ui::measure_text_size(label.c_str(), 12.0f).x + 20.0f, 70.0f, 132.0f);
+            if (tag_x + width > title_rect.x + title_rect.width) {
+                return;
+            }
+            const Rectangle rect = {tag_x, tag_y, width, 26.0f};
+            ui::draw_rect_f(rect, with_alpha(t.row_soft, static_cast<unsigned char>(config.normal_row_alpha * 0.85f)));
+            ui::draw_rect_lines(rect, 1.0f, with_alpha(t.accent, config.alpha));
+            ui::draw_text_in_rect(label.c_str(), 12, rect, with_alpha(t.accent, config.alpha), ui::text_align::center);
+            tag_x += width + 8.0f;
+            ++drawn;
+        };
+        for (const std::string& label : song->song.meta.genres) {
+            draw_tag(label);
+        }
+        if (song->song.meta.genres.empty()) {
+            draw_tag(song->song.meta.genre);
+        }
+        ui::draw_text_in_rect("キーワード", 12,
+                              {title_rect.x, title_rect.y + 120.0f, title_rect.width, 18.0f},
+                              with_alpha(t.accent, config.alpha), ui::text_align::left);
+        float keyword_x = title_rect.x;
+        const float keyword_y = title_rect.y + 140.0f;
+        int keywords = 0;
+        for (const std::string& keyword : song->song.meta.keywords) {
+            if (keyword.empty() || keywords >= 3) {
+                continue;
+            }
+            const float width = std::clamp(ui::measure_text_size(keyword.c_str(), 12.0f).x + 20.0f, 76.0f, 132.0f);
+            if (keyword_x + width > title_rect.x + title_rect.width) {
+                break;
+            }
+            const Rectangle rect = {keyword_x, keyword_y, width, 26.0f};
+            ui::draw_rect_f(rect, with_alpha(t.row_soft, static_cast<unsigned char>(config.normal_row_alpha * 0.65f)));
+            ui::draw_rect_lines(rect, 1.0f, with_alpha(t.border_light, config.alpha));
+            ui::draw_text_in_rect(keyword.c_str(), 12, rect, with_alpha(t.text_secondary, config.alpha), ui::text_align::center);
+            keyword_x += width + 8.0f;
+            ++keywords;
+        }
+        if (keywords == 0) {
+            ui::draw_text_in_rect("-", 14,
+                                  {keyword_x, keyword_y + 2.0f, 40.0f, 22.0f},
+                                  with_alpha(t.text_muted, config.alpha), ui::text_align::left);
+        }
+    } else {
+        const Rectangle title_rect = {
+            config.main_column_rect.x + kHeaderPaddingX,
+            config.main_column_rect.y + kTitleOffsetY,
+            config.main_column_rect.width - kHeaderPaddingX * 2.0f,
+            kTitleHeight
+        };
+        const Rectangle song_title_text_rect = {
+            title_rect.x,
+            title_rect.y,
+            title_rect.width - kStatusBadgeWidth - 8.0f,
+            title_rect.height,
+        };
+        const Rectangle artist_rect = {
+            config.main_column_rect.x + kHeaderPaddingX,
+            config.main_column_rect.y + kArtistOffsetY,
+            config.main_column_rect.width - kHeaderPaddingX * 2.0f,
+            kArtistHeight
+        };
+        draw_marquee_text(song->song.meta.title.c_str(),
+                          song_title_text_rect,
+                          28, with_alpha(t.text, config.alpha), config.now);
+        content_status_badge::draw_compound(
+            song_status_badge_rect(config.main_column_rect),
+            song->source_status, song->status, config.alpha, 12);
+        draw_marquee_text(song->song.meta.artist.c_str(),
+                          artist_rect,
+                          18, with_alpha(t.text_secondary, config.alpha), config.now);
+    }
+    if (chart != nullptr && !config.compact_song_header) {
         const Rectangle difficulty_rect = {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartDifficultyOffsetY,
                                            config.chart_detail_rect.width - 78.0f, kChartDifficultyHeight};
         ui::draw_text_in_rect(chart->meta.difficulty.c_str(),
@@ -253,6 +351,30 @@ void draw(const song_select::state& state,
                           14, with_alpha(t.text_muted, config.alpha), config.now);
     }
 
+    if (config.compact_song_header) {
+        ui::draw_text_in_rect("譜面", 16,
+                              {config.chart_buttons_rect.x, config.chart_buttons_rect.y - 72.0f,
+                               config.chart_buttons_rect.width, 24.0f},
+                              with_alpha(t.text, config.alpha), ui::text_align::left);
+        ui::draw_rect_f({config.chart_buttons_rect.x, config.chart_buttons_rect.y - 8.0f,
+                         config.chart_buttons_rect.width, 1.0f},
+                        with_alpha(t.border_light, config.alpha));
+        const Rectangle header = {config.chart_buttons_rect.x, config.chart_buttons_rect.y - 40.0f,
+                                  config.chart_buttons_rect.width, 22.0f};
+        ui::draw_text_in_rect("キー", 10, {header.x + 16.0f, header.y, 54.0f, header.height},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
+        ui::draw_text_in_rect("レベル", 10, {header.x + 86.0f, header.y, 80.0f, header.height},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::center);
+        ui::draw_text_in_rect("難易度", 10, {header.x + 184.0f, header.y, 120.0f, header.height},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
+        ui::draw_text_in_rect("SOURCE", 10, {header.x + 330.0f, header.y, 76.0f, header.height},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::center);
+        ui::draw_text_in_rect("BEST", 10, {header.x + 430.0f, header.y, 116.0f, header.height},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+        ui::draw_text_in_rect("GRADE", 10, {header.x + header.width - 58.0f, header.y, 44.0f, header.height},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+    }
+
     ui::scoped_clip_rect clip(config.chart_buttons_rect);
     for (int i = 0; i < static_cast<int>(filtered.size()); ++i) {
         const song_select::chart_option& item = *filtered[static_cast<size_t>(i)];
@@ -267,6 +389,38 @@ void draw(const song_select::state& state,
         const unsigned char row_alpha = selected ? config.selected_row_alpha
             : hovered ? config.hover_row_alpha
                       : config.normal_row_alpha;
+        if (config.compact_song_header) {
+            const Color level_color = difficulty_level_color(item.meta.level);
+            ui::draw_rect_f(row, with_alpha(selected ? config.button_selected : config.button_base, row_alpha));
+            ui::draw_rect_lines(row, selected ? 1.5f : 1.0f,
+                                with_alpha(selected ? t.border_active : t.border_light, config.alpha));
+            ui::draw_rect_f({row.x + 2.0f, row.y + 2.0f, 3.0f, row.height - 4.0f},
+                            with_alpha(level_color, scale_alpha(config.alpha, 0.72f)));
+            ui::draw_text_in_rect(key_mode_label(item.meta.key_count).c_str(), 18,
+                                  {row.x + 16.0f, row.y + 13.0f, 54.0f, 26.0f},
+                                  with_alpha(t.text_secondary, config.alpha), ui::text_align::left);
+            draw_difficulty_level_badge(item.meta.level,
+                                        {row.x + 86.0f, row.y + 16.0f, 72.0f, 22.0f},
+                                        12, config.alpha);
+            ui::draw_text_in_rect(item.meta.difficulty.c_str(), 18,
+                                  {row.x + 184.0f, row.y + 12.0f, 110.0f, 28.0f},
+                                  with_alpha(t.text, config.alpha), ui::text_align::left);
+            draw_source_tag({row.x + 332.0f, row.y + 17.0f, 72.0f, 20.0f},
+                            item.source_status, config.alpha);
+            ui::draw_text_in_rect(item.best_local_score.has_value() ? format_score(*item.best_local_score).c_str() : "--",
+                                  16, {row.x + 430.0f, row.y + 14.0f, 116.0f, 28.0f},
+                                  with_alpha(t.text, config.alpha), ui::text_align::right);
+            if (item.best_local_rank.has_value()) {
+                ui::draw_text_in_rect(rank_label(*item.best_local_rank), 19,
+                                      {row.x + row.width - 58.0f, row.y + 13.0f, 42.0f, 28.0f},
+                                      with_alpha(rank_color(*item.best_local_rank), config.alpha), ui::text_align::right);
+            } else {
+                ui::draw_text_in_rect("-", 16,
+                                      {row.x + row.width - 58.0f, row.y + 14.0f, 42.0f, 28.0f},
+                                      with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+            }
+            continue;
+        }
         ui::draw_rect_f(row, with_alpha(selected ? config.button_selected : config.button_base, row_alpha));
         ui::draw_rect_lines(
             row, kChartRowBorderWidth,

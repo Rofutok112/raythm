@@ -72,11 +72,9 @@ chart_columns make_chart_header_columns(Rectangle charts) {
 }
 
 float row_height(const song_select::state& state, int index) {
-    if (index != state.selected_song_index) {
-        return kSongRowHeight;
-    }
-    const float expanded_t = tween::ease_out_cubic(state.selected_song_expand_t);
-    return tween::lerp(kSongRowHeight, kExpandedSongRowHeight, expanded_t);
+    (void)state;
+    (void)index;
+    return kSongRowHeight;
 }
 
 std::vector<std::string> genre_labels(const song_meta& meta) {
@@ -520,16 +518,18 @@ void draw(const song_select::state& state, const draw_config& config) {
         return;
     }
 
-    ui::draw_text_in_rect("ALL SONGS", 14,
-                          {config.column_rect.x, config.column_rect.y - kSongCountOffsetY,
-                           config.column_rect.width * 0.5f, kSongCountHeight},
-                          with_alpha(t.text, config.alpha), ui::text_align::left);
     const std::vector<int> indices = song_select::filtered_song_indices(state);
-    ui::draw_text_in_rect(TextFormat("%d songs", static_cast<int>(indices.size())), 12,
-                          {config.column_rect.x + config.column_rect.width * 0.5f,
-                           config.column_rect.y - kSongCountOffsetY,
-                           config.column_rect.width * 0.5f, kSongCountHeight},
-                          with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+    if (config.show_header) {
+        ui::draw_text_in_rect("ALL SONGS", 14,
+                              {config.column_rect.x, config.column_rect.y - kSongCountOffsetY,
+                               config.column_rect.width * 0.5f, kSongCountHeight},
+                              with_alpha(t.text, config.alpha), ui::text_align::left);
+        ui::draw_text_in_rect(TextFormat("%d songs", static_cast<int>(indices.size())), 12,
+                              {config.column_rect.x + config.column_rect.width * 0.5f,
+                               config.column_rect.y - kSongCountOffsetY,
+                               config.column_rect.width * 0.5f, kSongCountHeight},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+    }
 
     ui::scoped_clip_rect clip(config.column_rect);
     for (const int i : indices) {
