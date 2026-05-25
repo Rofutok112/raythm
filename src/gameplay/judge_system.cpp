@@ -40,6 +40,7 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
     chart.notes = notes;
     event_descriptors_ = chart_judge_events::build(chart, engine);
     event_completed_.assign(event_descriptors_.size(), false);
+    auto_hitsound_emitted_.assign(event_descriptors_.size(), false);
     completed_wide_press_absorb_until_ms_.assign(event_descriptors_.size(), -1.0);
     event_descriptor_indices_by_event_index_.assign(event_descriptors_.size(), kInvalidEventDescriptorIndex);
     standalone_release_events_.assign(event_descriptors_.size(), false);
@@ -85,6 +86,32 @@ void judge_system::update(double current_ms, const input_handler& input) {
     resolve_stay_notes(current_ms, input);
     resolve_hold_completions(current_ms);
     resolve_auto_misses(current_ms);
+}
+
+void judge_system::update_auto(double current_ms, double hitsound_lead_ms) {
+    judge_events_.clear();
+
+    for (size_t event_index = 0; event_index < event_descriptors_.size(); ++event_index) {
+        if (event_completed_[event_index]) {
+            continue;
+        }
+
+        const chart_judge_event& descriptor = event_descriptors_[event_index];
+        if (!auto_hitsound_emitted_[event_index] &&
+            current_ms + std::max(0.0, hitsound_lead_ms) >= descriptor.time_ms) {
+            judge_emit_options options;
+            options.play_hitsound = descriptor.role != chart_judge_event_role::hold_tail;
+            options.apply_gameplay_effects = false;
+            options.show_feedback = false;
+            emit_auto_judge(descriptor.event_index, options);
+            auto_hitsound_emitted_[event_index] = true;
+        }
+        if (current_ms < descriptor.time_ms) {
+            continue;
+        }
+
+        complete_auto_event(event_index);
+    }
 }
 
 std::optional<judge_event> judge_system::get_last_judge() const {
@@ -289,6 +316,8 @@ void judge_system::handle_press(const input_event& event) {
         return;
     }
 
+    const std::optional<double> release_abs_offset =
+        best_armable_release_abs_offset(event.lane, event.timestamp_ms);
     const std::vector<size_t> candidate_indices = find_press_candidates(event.lane, event.timestamp_ms);
     if (candidate_indices.empty()) {
         if (try_adopt_active_wide_hold_lane(event, input_id)) {
@@ -297,6 +326,14 @@ void judge_system::handle_press(const input_event& event) {
         if (!arm_release_candidate(input_id, event.timestamp_ms)) {
             arm_stay_candidate(input_id, event.timestamp_ms);
         }
+        return;
+    }
+
+    const double press_abs_offset =
+        std::fabs(event.timestamp_ms - event_descriptors_[candidate_indices.front()].time_ms);
+    if (release_abs_offset.has_value() &&
+        *release_abs_offset <= press_abs_offset &&
+        arm_release_candidate(input_id, event.timestamp_ms)) {
         return;
     }
 
@@ -972,6 +1009,39 @@ bool judge_system::arm_release_candidate(input_session_id input_id, double times
     return false;
 }
 
+std::optional<double> judge_system::best_armable_release_abs_offset(int lane, double timestamp_ms) const {
+    if (lane < 0 || lane >= kMaxLanes) {
+        return std::nullopt;
+    }
+
+    std::optional<double> best_abs_offset;
+    for (size_t event_index = 0; event_index < event_descriptors_.size(); ++event_index) {
+        if (event_completed_[event_index]) {
+            continue;
+        }
+        const chart_judge_event& descriptor = event_descriptors_[event_index];
+        if (lane < descriptor.lane ||
+            lane >= descriptor.lane + std::max(1, descriptor.lane_width)) {
+            continue;
+        }
+        if (descriptor.role != chart_judge_event_role::release ||
+            !is_standalone_release_event(event_index)) {
+            continue;
+        }
+
+        const double offset_ms = timestamp_ms - descriptor.time_ms;
+        if (offset_ms > 0.0 || offset_ms < -kBadWindowMs) {
+            continue;
+        }
+
+        const double abs_offset = std::fabs(offset_ms);
+        if (!best_abs_offset.has_value() || abs_offset < *best_abs_offset) {
+            best_abs_offset = abs_offset;
+        }
+    }
+    return best_abs_offset;
+}
+
 void judge_system::arm_stay_candidate(input_session_id input_id, double timestamp_ms) {
     input_session* input = session_for_id(input_id);
     if (input == nullptr || input->lane < 0 || input->lane >= kMaxLanes) {
@@ -1094,6 +1164,36 @@ void judge_system::complete_held_note(size_t note_index, bool emit_display_judge
     emit_judge(judge_result::perfect, 0.0, state.note_ref.lane, state.tail_event_index, options);
 }
 
+void judge_system::complete_auto_event(size_t event_descriptor_index) {
+    if (event_descriptor_index >= event_descriptors_.size() || event_completed_[event_descriptor_index]) {
+        return;
+    }
+
+    const chart_judge_event& descriptor = event_descriptors_[event_descriptor_index];
+    mark_event_completed(event_descriptor_index);
+    if (descriptor.note_index < note_states_.size()) {
+        note_state& state = note_states_[descriptor.note_index];
+        state.result = judge_result::perfect;
+        if (state.note_ref.type == note_type::hold && descriptor.role == chart_judge_event_role::hold_head) {
+            state.progress = note_progress_state::holding;
+        } else {
+            state.progress = note_progress_state::completed;
+        }
+    }
+    if (descriptor.role == chart_judge_event_role::hold_tail) {
+        clear_active_hold_for_note(descriptor.note_index);
+    }
+    judge_emit_options options;
+    options.play_hitsound = descriptor.role != chart_judge_event_role::hold_tail &&
+        (event_descriptor_index >= auto_hitsound_emitted_.size() || !auto_hitsound_emitted_[event_descriptor_index]);
+    options.apply_gameplay_effects = true;
+    options.show_feedback = true;
+    emit_auto_judge(descriptor.event_index, options);
+    if (event_descriptor_index < auto_hitsound_emitted_.size() && options.play_hitsound) {
+        auto_hitsound_emitted_[event_descriptor_index] = true;
+    }
+}
+
 void judge_system::complete_event(size_t event_descriptor_index, judge_result result, double offset_ms) {
     complete_event(event_descriptor_index, result, offset_ms, judge_emit_options{});
 }
@@ -1166,6 +1266,40 @@ void judge_system::emit_judge(judge_result result, double offset_ms, int lane,
                       event_index,
                       hitsound_type,
                       is_ray,
-                      lane_width};
+                      lane_width,
+                      judge_feedback_label::normal};
     judge_events_.push_back(event);
+}
+
+void judge_system::emit_auto_judge(int event_index, judge_emit_options options) {
+    bool is_ray = false;
+    note_type hitsound_type = note_type::tap;
+    int lane_width = 1;
+    int display_lane = 0;
+    if (const std::optional<size_t> descriptor_index = descriptor_index_for_event_index(event_index);
+        descriptor_index.has_value()) {
+        const chart_judge_event& descriptor = event_descriptors_[*descriptor_index];
+        is_ray = descriptor.is_ray;
+        lane_width = std::max(1, descriptor.lane_width);
+        display_lane = descriptor.lane;
+        if (descriptor.role == chart_judge_event_role::release) {
+            hitsound_type = note_type::release;
+        } else if (descriptor.role == chart_judge_event_role::stay) {
+            hitsound_type = note_type::stay;
+        }
+    }
+
+    judge_events_.push_back({
+        judge_result::perfect,
+        0.0,
+        display_lane,
+        options.play_hitsound,
+        options.apply_gameplay_effects,
+        options.show_feedback,
+        event_index,
+        hitsound_type,
+        is_ray,
+        lane_width,
+        judge_feedback_label::auto_play,
+    });
 }

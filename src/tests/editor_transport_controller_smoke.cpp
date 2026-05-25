@@ -79,6 +79,28 @@ int main() {
     }
 
     {
+        const std::string hitsound_path = "hitsound.mp3";
+        editor_transport_context context;
+        context.state = state.get();
+        context.audio_loaded = true;
+        context.previous_playback_tick = 600;
+        context.previous_audio_playing = true;
+        context.hitsound_path = &hitsound_path;
+        context.hitsound_schedule_lead_seconds = 0.05;
+        context.bgm_clock = audio_clock_snapshot{true, true, 0.0, state->engine().tick_to_ms(700) / 1000.0, 0.0, 0.0};
+        context.bgm_length_seconds = 8.0;
+
+        const editor_transport_result result = editor_transport_controller::sync(context);
+        if (result.playback_tick != 700 ||
+            result.previous_playback_tick <= result.playback_tick ||
+            result.hitsound_requests.size() != 1 ||
+            result.hitsound_requests.front().type != note_type::tap) {
+            std::cerr << "sync should schedule editor hitsounds ahead of the visible playback tick\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
         editor_hitsound_paths hitsounds;
         hitsounds.tap = "tap.mp3";
         hitsounds.ray_release = "ray-release.mp3";

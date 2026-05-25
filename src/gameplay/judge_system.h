@@ -19,6 +19,7 @@ public:
 
     void init(const std::vector<note_data>& notes, const timing_engine& engine);
     void update(double current_ms, const input_handler& input);
+    void update_auto(double current_ms, double hitsound_lead_ms = 0.0);
     std::optional<judge_event> get_last_judge() const;
     const std::vector<judge_event>& get_judge_events() const;
     const std::vector<note_state>& note_states() const;
@@ -87,6 +88,7 @@ private:
                                                        double timestamp_ms,
                                                        judge_result hold_result);
     bool arm_release_candidate(input_session_id input_id, double timestamp_ms);
+    std::optional<double> best_armable_release_abs_offset(int lane, double timestamp_ms) const;
     void arm_stay_candidate(input_session_id input_id, double timestamp_ms);
     bool complete_armed_stay_candidate(input_session* input, const input_event& event);
     bool is_standalone_release_event(size_t event_descriptor_index) const;
@@ -94,18 +96,21 @@ private:
     void clear_armed_release_event(size_t event_descriptor_index);
     void clear_armed_stay_event(size_t event_descriptor_index);
     void complete_held_note(size_t note_index, bool emit_display_judge);
+    void complete_auto_event(size_t event_descriptor_index);
     void complete_event(size_t event_descriptor_index, judge_result result, double offset_ms);
     void complete_event(size_t event_descriptor_index, judge_result result, double offset_ms,
                         judge_emit_options options);
     void emit_judge(judge_result result, double offset_ms, int lane, int event_index);
     void emit_judge(judge_result result, double offset_ms, int lane,
                     int event_index, judge_emit_options options);
+    void emit_auto_judge(int event_index, judge_emit_options options);
 
     std::vector<note_state> note_states_;
     std::vector<chart_judge_event> event_descriptors_;
     std::vector<size_t> event_descriptor_indices_by_event_index_;
     std::vector<bool> standalone_release_events_;
     std::vector<bool> event_completed_;
+    std::vector<bool> auto_hitsound_emitted_;
     std::vector<double> completed_wide_press_absorb_until_ms_;
     std::array<std::optional<input_session_id>, kMaxLanes> held_input_session_by_lane_;
     std::vector<input_session> input_sessions_;

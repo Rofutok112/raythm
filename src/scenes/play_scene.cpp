@@ -263,6 +263,7 @@ void play_scene::update(float dt) {
     if (bgm_clock.loaded && bgm_clock.playing) {
         context.audio_clock_time_ms = bgm_clock.audio_time_seconds * 1000.0;
     }
+    context.hitsound_schedule_lead_ms = audio_manager::instance().get_output_latency_seconds() * 1000.0;
 
     if (state_.paused) {
         const auto pause_buttons = play_renderer::pause_button_rects();

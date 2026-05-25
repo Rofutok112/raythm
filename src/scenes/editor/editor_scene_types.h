@@ -228,6 +228,7 @@ struct editor_transport_context {
     std::optional<int> space_playback_start_tick;
     bool pre_audio_playing = false;
     double dt = 0.0;
+    double hitsound_schedule_lead_seconds = 0.0;
 };
 
 struct editor_transport_state {

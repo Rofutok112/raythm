@@ -36,6 +36,7 @@ editor_transport_context build_context(const editor_transport_state& transport,
     if (transport.audio_loaded && audio_manager::instance().is_bgm_loaded()) {
         context.bgm_clock = audio_manager::instance().get_bgm_clock();
         context.bgm_length_seconds = audio_manager::instance().get_bgm_length_seconds();
+        context.hitsound_schedule_lead_seconds = audio_manager::instance().get_output_latency_seconds();
     }
     return context;
 }
