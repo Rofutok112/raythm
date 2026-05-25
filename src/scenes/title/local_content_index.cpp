@@ -149,4 +149,8 @@ void remove_chart_bindings(const std::string& local_chart_id) {
     local_content_database::remove_chart_bindings(local_chart_id);
 }
 
+void remove_chart_bindings_for_remote_song(const std::string& server_url, const std::string& remote_song_id) {
+    local_content_database::remove_chart_bindings_for_remote_song(server_url, remote_song_id);
+}
+
 }  // namespace local_content_index

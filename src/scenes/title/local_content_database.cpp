@@ -476,4 +476,18 @@ void remove_chart_bindings(const std::string& local_chart_id) {
     step_done(query.get());
 }
 
+void remove_chart_bindings_for_remote_song(const std::string& server_url, const std::string& remote_song_id) {
+    local_sqlite::database database = open_ready_database();
+    if (!database.valid() || server_url.empty() || remote_song_id.empty()) {
+        return;
+    }
+    statement query(database.get(), "DELETE FROM chart_bindings WHERE server_url = ? AND remote_song_id = ?;");
+    if (!query.valid()) {
+        return;
+    }
+    bind_text(query.get(), 1, server_url);
+    bind_text(query.get(), 2, remote_song_id);
+    step_done(query.get());
+}
+
 }  // namespace local_content_database

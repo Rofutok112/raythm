@@ -93,20 +93,32 @@ float create_tools_height(const std::vector<create_tool_entry>& entries) {
 
 std::optional<local_content_index::online_origin> song_upload_origin(const song_select::song_entry* song,
                                                                      const std::string& server_url) {
-    if (song == nullptr || song->song.meta.song_id.empty()) {
+    if (song == nullptr || song->song.meta.song_id.empty() ||
+        !song->online_identity.has_value() ||
+        song->online_identity->server_url != server_url ||
+        song->online_identity->remote_song_id.empty()) {
         return std::nullopt;
     }
     const auto binding = local_content_index::find_song_by_local(server_url, song->song.meta.song_id);
-    return binding.has_value() ? std::optional<local_content_index::online_origin>(binding->origin) : std::nullopt;
+    if (!binding.has_value() || binding->remote_song_id != song->online_identity->remote_song_id) {
+        return std::nullopt;
+    }
+    return binding->origin;
 }
 
 std::optional<local_content_index::online_origin> chart_upload_origin(const song_select::chart_option* chart,
                                                                       const std::string& server_url) {
-    if (chart == nullptr || chart->meta.chart_id.empty()) {
+    if (chart == nullptr || chart->meta.chart_id.empty() ||
+        !chart->online_identity.has_value() ||
+        chart->online_identity->server_url != server_url ||
+        chart->online_identity->remote_chart_id.empty()) {
         return std::nullopt;
     }
     const auto binding = local_content_index::find_chart_by_local(server_url, chart->meta.chart_id);
-    return binding.has_value() ? std::optional<local_content_index::online_origin>(binding->origin) : std::nullopt;
+    if (!binding.has_value() || binding->remote_chart_id != chart->online_identity->remote_chart_id) {
+        return std::nullopt;
+    }
+    return binding->origin;
 }
 
 bool is_owned_origin(std::optional<local_content_index::online_origin> origin) {
@@ -114,7 +126,8 @@ bool is_owned_origin(std::optional<local_content_index::online_origin> origin) {
 }
 
 std::vector<create_tool_section> build_create_tool_sections(const song_select::song_entry* song,
-                                                            const song_select::chart_option* chart) {
+                                                            const song_select::chart_option* chart,
+                                                            bool online_status_checking) {
     const std::string server_url = server_environment::active_server_url();
     const auto song_origin = song_upload_origin(song, server_url);
     const auto chart_origin = chart_upload_origin(chart, server_url);
@@ -125,10 +138,12 @@ std::vector<create_tool_section> build_create_tool_sections(const song_select::s
     const bool song_can_create_chart = song_selected;
     const bool linked_remote_song = song_origin.has_value();
     const bool song_can_upload =
+        !online_status_checking &&
         song_selected &&
         (song->status == content_status::local ||
          (song->status == content_status::modified && owned_song));
     const bool chart_can_upload =
+        !online_status_checking &&
         chart_selected &&
         linked_remote_song &&
         (chart->status == content_status::local ||
@@ -139,6 +154,9 @@ std::vector<create_tool_section> build_create_tool_sections(const song_select::s
     if (!song_selected) {
         song_publish_title = "SELECT SONG";
         song_publish_detail = "Song publish unavailable";
+    } else if (online_status_checking) {
+        song_publish_title = "CHECKING SONG";
+        song_publish_detail = "Verifying online status";
     } else if (owned_song && song->status == content_status::modified) {
         song_publish_title = "UPDATE SONG";
         song_publish_detail = "Replace your upload";
@@ -158,6 +176,9 @@ std::vector<create_tool_section> build_create_tool_sections(const song_select::s
     if (!chart_selected) {
         chart_publish_title = "SELECT CHART";
         chart_publish_detail = "Chart publish unavailable";
+    } else if (online_status_checking) {
+        chart_publish_title = "CHECKING CHART";
+        chart_publish_detail = "Verifying online status";
     } else if (owned_chart && chart->status == content_status::modified) {
         chart_publish_title = "UPDATE CHART";
         chart_publish_detail = "Replace your upload";
@@ -236,7 +257,7 @@ title_play_view::update_result update(const song_select::state& state,
     const song_select::song_entry* song = song_select::selected_song(state);
     const auto filtered = song_select::filtered_charts_for_selected_song(state);
     const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
-    const std::vector<create_tool_section> sections = build_create_tool_sections(song, chart);
+    const std::vector<create_tool_section> sections = build_create_tool_sections(song, chart, state.catalog_loading);
     float section_y = current.ranking_list_rect.y;
     for (const create_tool_section& section : sections) {
         const float tools_y = section_y + kCreatePanelSectionLabelHeight;
@@ -278,7 +299,7 @@ void draw(const song_select::state& state, const draw_config& config) {
 
     ui::draw_text_in_rect("CREATE", 22, config.current.ranking_header_rect,
                           with_alpha(t.text, config.alpha), ui::text_align::left);
-    const std::vector<create_tool_section> sections = build_create_tool_sections(song, chart);
+    const std::vector<create_tool_section> sections = build_create_tool_sections(song, chart, state.catalog_loading);
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     float section_y = config.current.ranking_list_rect.y;
     for (const create_tool_section& section : sections) {

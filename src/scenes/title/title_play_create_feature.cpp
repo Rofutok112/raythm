@@ -40,6 +40,8 @@ void title_play_create_feature::on_enter_play(bool multiplayer_chart_pick_active
 }
 
 void title_play_create_feature::on_enter_create(song_select::preview_controller& preview_controller) {
+    capture_current_selection();
+    request_catalog_reload(preferred_song_id_, preferred_chart_id_, false, true);
     sync_create_preview(preview_controller);
 }
 

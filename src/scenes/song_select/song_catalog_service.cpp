@@ -213,6 +213,8 @@ verification_result verify_song_content_source(const song_data& song,
         return {};
     }
     if (!request.manifest.has_value() || !request.manifest->available) {
+        local_content_index::remove_song_binding(server_url, song.meta.song_id);
+        local_content_index::remove_chart_bindings_for_remote_song(server_url, remote_song_id);
         return {};
     }
 
@@ -272,6 +274,7 @@ verification_result verify_chart_content_source(const song_data& song,
         return {};
     }
     if (!request.manifest.has_value() || !request.manifest->available) {
+        local_content_index::remove_chart_binding(server_url, chart.meta.chart_id);
         return {};
     }
 

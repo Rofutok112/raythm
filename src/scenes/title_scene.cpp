@@ -540,7 +540,7 @@ void title_scene::update_common_animation(float dt) {
     if (profile_controller_.poll().content_changed) {
         auth_overlay::refresh_auth_state(play_create_feature_.state().auth);
         browse_feature_.request_reload();
-        play_create_feature_.request_catalog_reload("", "", content_mode_is_play_or_create);
+        play_create_feature_.request_catalog_reload("", "", content_mode_is_play_or_create, true);
     }
 
     profile_controller_.close_if_logged_out(play_create_feature_.state().auth.logged_in);

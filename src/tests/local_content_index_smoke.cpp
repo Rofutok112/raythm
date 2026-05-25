@@ -38,6 +38,14 @@ int main() {
         .remote_chart_version = 7,
         .origin = local_content_index::online_origin::downloaded,
     });
+    local_content_index::put_chart_binding({
+        .server_url = "https://server.example",
+        .local_chart_id = "other-local-chart",
+        .remote_chart_id = "other-remote-chart",
+        .remote_song_id = "other-remote-song",
+        .remote_chart_version = 2,
+        .origin = local_content_index::online_origin::downloaded,
+    });
 
     const auto song_by_local =
         local_content_index::find_song_by_local("https://server.example", "local-song");
@@ -56,6 +64,10 @@ int main() {
     ok = chart_by_local.has_value() &&
          chart_by_local->remote_chart_version == 7 &&
          chart_by_local->origin == local_content_index::online_origin::downloaded && ok;
+
+    local_content_index::remove_chart_bindings_for_remote_song("https://server.example", "remote-song");
+    ok = !local_content_index::find_chart_by_local("https://server.example", "local-chart").has_value() && ok;
+    ok = local_content_index::find_chart_by_local("https://server.example", "other-local-chart").has_value() && ok;
 
     std::filesystem::remove_all(appdata_root, ec);
     if (!ok) {
