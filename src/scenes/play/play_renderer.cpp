@@ -528,7 +528,12 @@ Color fade_to_alpha(Color color, float alpha) {
     return color;
 }
 
-const char* judge_text(judge_result result) {
+const char* judge_text(const judge_event& event) {
+    if (event.feedback_label == judge_feedback_label::auto_play) {
+        return "AUTO";
+    }
+
+    const judge_result result = event.result;
     switch (result) {
         case judge_result::perfect: return "PERFECT";
         case judge_result::great: return "GREAT";
@@ -780,7 +785,7 @@ void draw_judge_feedback(const play_session_state& state) {
 
     const Color color = Fade(judge_color(state.display_judge->result),
                              std::min(state.judge_feedback_timer / 1.0f, 1.0f));
-    ui::enqueue_display_text_in_rect(judge_text(state.display_judge->result), 42, kJudgeFeedbackRect, color);
+    ui::enqueue_display_text_in_rect(judge_text(*state.display_judge), 42, kJudgeFeedbackRect, color);
 }
 
 void draw_intro_overlay(const play_session_state& state) {

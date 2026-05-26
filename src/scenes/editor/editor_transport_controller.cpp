@@ -70,6 +70,22 @@ editor_hitsound_request hitsound_request_for_note(const note_data& note) {
     return {type, note.is_ray};
 }
 
+int scheduled_hitsound_tick(const editor_transport_context& context,
+                            const editor_transport_result& result) {
+    if (context.state == nullptr) {
+        return result.playback_tick;
+    }
+
+    const double lead_seconds = std::max(0.0, context.hitsound_schedule_lead_seconds);
+    if (lead_seconds <= 0.0) {
+        return result.playback_tick;
+    }
+
+    return std::max(
+        result.playback_tick,
+        context.state->engine().ms_to_tick((result.audio_time_seconds + lead_seconds) * 1000.0));
+}
+
 }  // namespace
 
 editor_transport_result editor_transport_controller::sync(const editor_transport_context& context) {
@@ -97,23 +113,24 @@ editor_transport_result editor_transport_controller::sync(const editor_transport
         return result;
     }
 
-    if (result.playback_tick <= context.previous_playback_tick || context.state == nullptr) {
-        result.previous_playback_tick = result.playback_tick;
+    const int hitsound_until_tick = scheduled_hitsound_tick(context, result);
+    if (hitsound_until_tick <= context.previous_playback_tick || context.state == nullptr) {
+        result.previous_playback_tick = hitsound_until_tick;
         result.previous_audio_playing = true;
         return result;
     }
 
     const std::vector<size_t> note_indices =
-        context.state->note_indices_in_tick_range(context.previous_playback_tick + 1, result.playback_tick);
+        context.state->note_indices_in_tick_range(context.previous_playback_tick + 1, hitsound_until_tick);
     for (const size_t index : note_indices) {
         const note_data& note = context.state->data().notes[index];
-        if (note.tick > context.previous_playback_tick && note.tick <= result.playback_tick) {
+        if (note.tick > context.previous_playback_tick && note.tick <= hitsound_until_tick) {
             ++result.hitsound_count;
             result.hitsound_requests.push_back(hitsound_request_for_note(note));
         }
     }
 
-    result.previous_playback_tick = result.playback_tick;
+    result.previous_playback_tick = hitsound_until_tick;
     result.previous_audio_playing = true;
     return result;
 }

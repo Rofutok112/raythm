@@ -397,8 +397,223 @@ int main() {
         if (result.navigation.has_value() ||
             state.score_system.get_combo() != 1 ||
             !state.display_judge.has_value() ||
-            state.display_judge->result != judge_result::perfect) {
+            state.display_judge->result != judge_result::perfect ||
+            state.display_judge->feedback_label != judge_feedback_label::auto_play) {
             std::cerr << "Auto mod should generate perfect lane input\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.mods.auto_play = true;
+        state.score_system.init(1);
+        state.timing_engine = make_basic_timing_engine();
+        state.judge_system.init({note_data{note_type::tap, 480, 0, 480}}, state.timing_engine);
+        state.hitsound_path = "hitsound.mp3";
+        state.chart_time_ms = 480.0;
+
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.audio_clock_time_ms = 490.0;
+        context.hitsound_schedule_lead_ms = 10.0;
+
+        const play_update_result scheduled_result = play_flow_controller::update(state, draw_queue, context);
+        if (scheduled_result.hitsound_count != 1 ||
+            state.score_system.get_combo() != 0 ||
+            state.display_judge.has_value()) {
+            std::cerr << "Auto mod should schedule hitsounds before scoring feedback\n";
+            return EXIT_FAILURE;
+        }
+
+        context.audio_clock_time_ms = 500.0;
+        const play_update_result judge_result = play_flow_controller::update(state, draw_queue, context);
+        if (judge_result.hitsound_count != 0 ||
+            state.score_system.get_combo() != 1 ||
+            !state.display_judge.has_value() ||
+            state.display_judge->feedback_label != judge_feedback_label::auto_play) {
+            std::cerr << "Auto mod should not replay scheduled hitsounds at judge time\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.mods.auto_play = true;
+        state.score_system.init(2);
+        state.timing_engine = make_basic_timing_engine();
+        state.judge_system.init({note_data{note_type::hold, 480, 0, 960}}, state.timing_engine);
+        state.chart_time_ms = 499.0;
+
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.audio_clock_time_ms = 500.0;
+        context.input_already_updated = true;
+
+        (void)play_flow_controller::update(state, draw_queue, context);
+        if (!state.judge_system.note_states().front().is_holding() ||
+            state.score_system.get_combo() != 1) {
+            std::cerr << "Auto mod should press and hold long-note heads\n";
+            return EXIT_FAILURE;
+        }
+
+        context.audio_clock_time_ms = 1000.0;
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (result.navigation.has_value() ||
+            !state.judge_system.note_states().front().is_completed() ||
+            state.score_system.get_combo() != 2 ||
+            !state.display_judge.has_value() ||
+            state.display_judge->result != judge_result::perfect) {
+            std::cerr << "Auto mod should complete long-note tails without misses\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.mods.auto_play = true;
+        state.score_system.init(3);
+        state.timing_engine = make_basic_timing_engine();
+        state.judge_system.init({
+            note_data{note_type::hold, 480, 0, 960},
+            note_data{note_type::stay, 720, 0, 720},
+        }, state.timing_engine);
+        state.chart_time_ms = 499.0;
+
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.audio_clock_time_ms = 500.0;
+        context.input_already_updated = true;
+
+        (void)play_flow_controller::update(state, draw_queue, context);
+        context.audio_clock_time_ms = 750.0;
+        (void)play_flow_controller::update(state, draw_queue, context);
+        if (!state.judge_system.note_states()[0].is_holding() ||
+            !state.judge_system.note_states()[1].is_completed() ||
+            state.score_system.get_combo() != 2) {
+            std::cerr << "Auto mod should not release long notes for contained stay notes\n";
+            return EXIT_FAILURE;
+        }
+
+        context.audio_clock_time_ms = 1000.0;
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (result.navigation.has_value() ||
+            !state.judge_system.note_states()[0].is_completed() ||
+            state.score_system.get_combo() != 3 ||
+            !state.display_judge.has_value() ||
+            state.display_judge->result != judge_result::perfect) {
+            std::cerr << "Auto mod should complete long notes after contained stay notes\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.mods.auto_play = true;
+        state.score_system.init(2);
+        state.timing_engine = make_basic_timing_engine();
+        state.judge_system.init({
+            note_data{note_type::tap, 480, 0, 480},
+            note_data{note_type::tap, 482, 0, 482},
+        }, state.timing_engine);
+        state.chart_time_ms = 499.0;
+
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.audio_clock_time_ms = 504.0;
+        context.input_already_updated = true;
+
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (result.navigation.has_value() ||
+            state.score_system.get_combo() != 2 ||
+            !state.display_judge.has_value() ||
+            state.display_judge->result != judge_result::perfect) {
+            std::cerr << "Auto mod should not miss dense same-lane taps in one frame\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.mods.auto_play = true;
+        state.score_system.init(1);
+        state.timing_engine = make_basic_timing_engine();
+        state.judge_system.init({note_data{note_type::release, 480, 0, 480}}, state.timing_engine);
+        state.chart_time_ms = 499.5;
+
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.audio_clock_time_ms = 500.0;
+        context.input_already_updated = true;
+
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (result.navigation.has_value() ||
+            state.score_system.get_combo() != 1 ||
+            !state.display_judge.has_value() ||
+            state.display_judge->result != judge_result::perfect) {
+            std::cerr << "Auto mod should arm standalone release notes inside tight frames\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.mods.auto_play = true;
+        state.score_system.init(2);
+        state.timing_engine = make_basic_timing_engine();
+        state.judge_system.init({
+            note_data{note_type::tap, 480, 0, 480},
+            note_data{note_type::release, 720, 0, 720},
+        }, state.timing_engine);
+        state.chart_time_ms = 499.0;
+
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.audio_clock_time_ms = 500.0;
+        context.input_already_updated = true;
+
+        (void)play_flow_controller::update(state, draw_queue, context);
+        context.audio_clock_time_ms = 750.0;
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (result.navigation.has_value() ||
+            state.score_system.get_combo() != 2 ||
+            !state.display_judge.has_value() ||
+            state.display_judge->result != judge_result::perfect) {
+            std::cerr << "Auto mod should re-arm release notes after prior tap holds are cleared\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        play_session_state state = make_initialized_state();
+        state.mods.auto_play = true;
+        state.score_system.init(3);
+        state.timing_engine = make_basic_timing_engine();
+        state.judge_system.init({
+            note_data{note_type::tap, 480, 0, 480},
+            note_data{note_type::release, 481, 0, 481},
+            note_data{note_type::tap, 482, 0, 482},
+        }, state.timing_engine);
+        state.chart_time_ms = 499.0;
+
+        play_note_draw_queue draw_queue;
+        play_update_context context;
+        context.dt = 0.0f;
+        context.audio_clock_time_ms = 504.0;
+        context.input_already_updated = true;
+
+        const play_update_result result = play_flow_controller::update(state, draw_queue, context);
+        if (result.navigation.has_value() ||
+            state.score_system.get_combo() != 3 ||
+            !state.display_judge.has_value() ||
+            state.display_judge->result != judge_result::perfect) {
+            std::cerr << "Auto mod should catch notes immediately after same-lane release notes\n";
             return EXIT_FAILURE;
         }
     }

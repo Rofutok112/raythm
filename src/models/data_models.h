@@ -188,6 +188,11 @@ enum class note_progress_state {
     completed
 };
 
+enum class judge_feedback_label {
+    normal,
+    auto_play
+};
+
 // 判定処理用に保持する各ノートの状態。
 struct note_state {
     note_data note_ref;
@@ -223,6 +228,7 @@ struct judge_event {
     note_type hitsound_type = note_type::tap;
     bool is_ray = false;
     int lane_width = 1;
+    judge_feedback_label feedback_label = judge_feedback_label::normal;
 };
 
 // 達成率に応じたランク種別。

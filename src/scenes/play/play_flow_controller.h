@@ -20,6 +20,7 @@ struct play_update_context {
     bool pause_resume_clicked = false;
     bool pause_restart_clicked = false;
     bool pause_song_select_clicked = false;
+    double hitsound_schedule_lead_ms = 0.0;
     std::optional<play_draw_window> draw_window;
     std::function<void(const judge_event&)> play_hitsound_immediately;
 };
