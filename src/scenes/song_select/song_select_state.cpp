@@ -37,6 +37,19 @@ bool contains_any_case_insensitive(const std::vector<std::string>& values, const
     });
 }
 
+std::string normalize_server_url(std::string value) {
+    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) {
+        value.erase(value.begin());
+    }
+    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) {
+        value.pop_back();
+    }
+    while (!value.empty() && value.back() == '/') {
+        value.pop_back();
+    }
+    return value;
+}
+
 song_select::jacket_cache::pending_texture load_local_jacket_bytes(const std::filesystem::path& path) {
     song_select::jacket_cache::pending_texture result;
     std::ifstream input(path, std::ios::binary);
@@ -240,13 +253,27 @@ const song_entry* selected_song(const state& state) {
     return &state.songs[static_cast<size_t>(state.selected_song_index)];
 }
 
+bool has_queueable_remote_link(const chart_option& chart, const std::string& server_url) {
+    const std::string normalized_server_url = normalize_server_url(server_url);
+    if (online_content::is_queueable(chart.online_identity)) {
+        if (normalized_server_url.empty() ||
+            normalize_server_url(chart.online_identity->server_url) == normalized_server_url) {
+            return true;
+        }
+    }
+    for (const online_content::chart_identity& link : chart.remote_links) {
+        if (online_content::is_queueable(link) &&
+            (normalized_server_url.empty() ||
+             normalize_server_url(link.server_url) == normalized_server_url)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool chart_matches_filters(const state& state, const chart_option& chart) {
     if (state.filter.multiplayer_queueable_only) {
-        if (!online_content::is_queueable(chart.online_identity)) {
-            return false;
-        }
-        if (!state.filter.multiplayer_queue_server_url.empty() &&
-            chart.online_identity->server_url != state.filter.multiplayer_queue_server_url) {
+        if (!has_queueable_remote_link(chart, state.filter.multiplayer_queue_server_url)) {
             return false;
         }
     }

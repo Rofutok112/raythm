@@ -21,9 +21,13 @@ namespace song_select {
 struct chart_option {
     std::string path;
     chart_meta meta;
+    content_kind kind = content_kind::local;
+    storage_policy storage = storage_policy::plain_workspace;
+    verification_state verification = verification_state::unchecked;
     content_status status = content_status::local;
     content_status source_status = content_status::local;
     std::optional<online_content::chart_identity> online_identity;
+    std::vector<online_content::chart_identity> remote_links;
     int local_note_offset_ms = 0;
     std::optional<rank> best_local_rank;
     std::optional<int> best_local_score;
@@ -34,6 +38,9 @@ struct chart_option {
 
 struct song_entry {
     song_data song;
+    content_kind kind = content_kind::local;
+    storage_policy storage = storage_policy::plain_workspace;
+    verification_state verification = verification_state::unchecked;
     content_status status = content_status::local;
     content_status source_status = content_status::local;
     std::optional<online_content::song_identity> online_identity;

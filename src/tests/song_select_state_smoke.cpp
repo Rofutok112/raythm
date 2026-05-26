@@ -1,4 +1,6 @@
 #include <cassert>
+#include <cstdlib>
+#include <iostream>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -8,6 +10,16 @@
 #include "ui_notice.h"
 
 namespace {
+
+void check(bool condition, const char* expression, const char* file, int line) {
+    if (!condition) {
+        std::cerr << file << ":" << line << ": check failed: " << expression << "\n";
+        std::exit(EXIT_FAILURE);
+    }
+}
+
+#undef assert
+#define assert(expr) check((expr), #expr, __FILE__, __LINE__)
 
 song_select::chart_option make_chart(const char* chart_id, const char* difficulty, float level) {
     song_select::chart_option chart;
@@ -33,6 +45,21 @@ song_select::chart_option make_online_chart(const char* chart_id,
         .content_source = online_content::source::community,
         .remote_chart_version = 1,
     };
+    return chart;
+}
+
+song_select::chart_option make_remote_linked_chart(const char* chart_id,
+                                                   const char* difficulty,
+                                                   float level,
+                                                   const char* server_url) {
+    song_select::chart_option chart = make_chart(chart_id, difficulty, level);
+    chart.remote_links.push_back(online_content::chart_identity{
+        .server_url = server_url,
+        .remote_song_id = "remote-song",
+        .remote_chart_id = chart_id,
+        .content_source = online_content::source::community,
+        .remote_chart_version = 1,
+    });
     return chart;
 }
 
@@ -112,6 +139,9 @@ int main() {
     song_select::catalog_data multiplayer_catalog;
     multiplayer_catalog.songs.push_back(make_song("local-song", "Local",
                                                   {make_chart("local-chart", "Normal", 4)}));
+    multiplayer_catalog.songs.push_back(make_song("linked-song", "Linked",
+                                                  {make_remote_linked_chart("linked-chart", "Normal", 4,
+                                                                            "https://api.example/")}));
     multiplayer_catalog.songs.push_back(make_song("other-server-song", "Other",
                                                   {make_online_chart("other-chart", "Normal", 4,
                                                                      "https://other.example")}));
@@ -124,12 +154,13 @@ int main() {
     multiplayer_state.filter.multiplayer_queue_server_url = "https://api.example";
     song_select::apply_catalog(multiplayer_state, std::move(multiplayer_catalog), "local-song", "local-chart");
     const std::vector<int> multiplayer_song_indices = song_select::filtered_song_indices(multiplayer_state);
-    assert(multiplayer_song_indices.size() == 1);
-    assert(multiplayer_song_indices.front() == 2);
-    assert(multiplayer_state.selected_song_index == 2);
+    assert(multiplayer_song_indices.size() == 2);
+    assert(multiplayer_state.catalog.songs[multiplayer_song_indices[0]].song.meta.song_id == "linked-song");
+    assert(multiplayer_state.catalog.songs[multiplayer_song_indices[1]].song.meta.song_id == "online-song");
+    assert(multiplayer_state.catalog.songs[multiplayer_state.selected_song_index].song.meta.song_id == "linked-song");
     const auto multiplayer_charts = song_select::filtered_charts_for_selected_song(multiplayer_state);
     assert(multiplayer_charts.size() == 1);
-    assert(multiplayer_charts.front()->meta.chart_id == "online-chart");
+    assert(multiplayer_charts.front()->meta.chart_id == "linked-chart");
 
     return 0;
 }
