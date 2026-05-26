@@ -37,6 +37,10 @@ online_content::source online_source_from_remote_download(const std::string& con
     return content_source == "official" ? online_content::source::official : online_content::source::community;
 }
 
+content_kind content_kind_from_remote_download(const std::string& content_source) {
+    return content_source == "official" ? content_kind::official : content_kind::community;
+}
+
 const song_select::song_entry* find_local_song_by_remote(const std::vector<song_select::song_entry>& local_songs,
                                                          const local_content_index::snapshot& index,
                                                          const std::string& server_url,
@@ -83,6 +87,9 @@ song_entry_state make_download_song_state(const remote_song_payload& remote_song
     song.song.song.meta.chart_count = remote_song.chart_count;
     song.song.song.meta.play_count = remote_song.play_count;
     song.song.song.meta.has_play_count = remote_song.has_play_count;
+    song.song.kind = content_kind_from_remote_download(remote_song.content_source);
+    song.song.storage = storage_policy::managed_package;
+    song.song.verification = verification_state::unchecked;
     song.song.source_status = source_status_from_remote_download(remote_song.content_source);
     song.song.online_identity = online_content::song_identity{
         .server_url = server_url,
@@ -119,6 +126,9 @@ chart_entry_state make_download_chart_state(const remote_chart_payload& remote_c
     chart.chart.meta.format_version = remote_chart.format_version;
     chart.chart.meta.resolution = remote_chart.resolution;
     chart.chart.meta.offset = remote_chart.offset;
+    chart.chart.kind = content_kind_from_remote_download(remote_chart.content_source);
+    chart.chart.storage = storage_policy::managed_package;
+    chart.chart.verification = verification_state::unchecked;
     chart.chart.source_status = source_status_from_remote_download(remote_chart.content_source);
     chart.chart.status = chart.chart.source_status;
     chart.chart.online_identity = online_content::chart_identity{

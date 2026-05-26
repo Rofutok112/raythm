@@ -66,4 +66,10 @@ inline bool is_queueable(const std::optional<chart_identity>& identity) {
            !identity->remote_chart_id.empty();
 }
 
+inline bool is_queueable(const chart_identity& identity) {
+    return !identity.server_url.empty() &&
+           !identity.remote_song_id.empty() &&
+           !identity.remote_chart_id.empty();
+}
+
 }  // namespace online_content

@@ -344,21 +344,34 @@ void title_scene::update_multiplayer_mode(float dt) {
     const auto filtered = song_select::filtered_charts_for_selected_song(play_create_feature_.state());
     const song_select::chart_option* chart = song_select::selected_chart_for(play_create_feature_.state(), filtered);
     const std::string room_server_url = server_environment::normalize_url(multiplayer_state_.auth.server_url);
-    multiplayer_state_.queue_candidate_available = chart != nullptr &&
-        online_content::is_queueable(chart->online_identity) &&
-        server_environment::normalize_url(chart->online_identity->server_url) == room_server_url;
+    std::optional<online_content::chart_identity> queue_identity;
+    if (chart != nullptr && online_content::is_queueable(chart->online_identity) &&
+        server_environment::normalize_url(chart->online_identity->server_url) == room_server_url) {
+        queue_identity = chart->online_identity;
+    }
+    if (!queue_identity.has_value() && chart != nullptr) {
+        for (const online_content::chart_identity& link : chart->remote_links) {
+            if (online_content::is_queueable(link) &&
+                server_environment::normalize_url(link.server_url) == room_server_url) {
+                queue_identity = link;
+                break;
+            }
+        }
+    }
+    multiplayer_state_.queue_candidate_available = queue_identity.has_value();
     if (song != nullptr && chart != nullptr) {
         multiplayer_state_.queue_candidate_song_title = song->song.meta.title;
         multiplayer_state_.queue_candidate_chart_name = chart->meta.difficulty;
-        if (chart->online_identity.has_value()) {
-            multiplayer_state_.queue_candidate_remote_song_id = chart->online_identity->remote_song_id;
-            multiplayer_state_.queue_candidate_remote_chart_id = chart->online_identity->remote_chart_id;
-            multiplayer_state_.queue_candidate_remote_chart_version = chart->online_identity->remote_chart_version;
-            multiplayer_state_.queue_candidate_message = multiplayer_state_.queue_candidate_available
-                ? "Selected chart can be queued."
-                : (server_environment::normalize_url(chart->online_identity->server_url) == room_server_url
-                    ? "Selected chart is missing online identity."
-                    : "Selected chart belongs to another server.");
+        if (queue_identity.has_value()) {
+            multiplayer_state_.queue_candidate_remote_song_id = queue_identity->remote_song_id;
+            multiplayer_state_.queue_candidate_remote_chart_id = queue_identity->remote_chart_id;
+            multiplayer_state_.queue_candidate_remote_chart_version = queue_identity->remote_chart_version;
+            multiplayer_state_.queue_candidate_message = "Selected chart can be queued.";
+        } else if (chart->online_identity.has_value() || !chart->remote_links.empty()) {
+            multiplayer_state_.queue_candidate_remote_song_id.clear();
+            multiplayer_state_.queue_candidate_remote_chart_id.clear();
+            multiplayer_state_.queue_candidate_remote_chart_version = 0;
+            multiplayer_state_.queue_candidate_message = "Selected chart belongs to another server.";
         } else {
             multiplayer_state_.queue_candidate_remote_song_id.clear();
             multiplayer_state_.queue_candidate_remote_chart_id.clear();
