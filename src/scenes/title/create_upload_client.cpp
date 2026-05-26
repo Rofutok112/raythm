@@ -76,6 +76,12 @@ struct upload_request_result {
     int remote_chart_version = 0;
 };
 
+struct permission_check_result {
+    bool success = false;
+    bool unauthorized = false;
+    bool can_edit = false;
+};
+
 #ifdef _WIN32
 struct http_url_parts {
     std::wstring host;
@@ -577,6 +583,63 @@ upload_request_result parse_song_upload_response(const http_response& response,
     return result;
 }
 
+permission_check_result parse_permission_response(const http_response& response,
+                                                  const std::string& object_key,
+                                                  const std::string& user_id) {
+    permission_check_result result;
+    if (!response.error_message.empty()) {
+        return result;
+    }
+    if (response.status_code == 401) {
+        result.unauthorized = true;
+        return result;
+    }
+    if (response.status_code < 200 || response.status_code >= 300) {
+        return result;
+    }
+
+    const std::optional<std::string> object = json::extract_object(response.body, object_key);
+    if (!object.has_value()) {
+        return result;
+    }
+    bool uploaded_by_user = false;
+    if (const std::optional<std::string> uploader_object = json::extract_object(*object, "uploader");
+        uploader_object.has_value()) {
+        uploaded_by_user = json::extract_string(*uploader_object, "id").value_or("") == user_id;
+    }
+    const std::optional<bool> can_edit = json::extract_bool(*object, "canEdit");
+    if (!can_edit.has_value() && !uploaded_by_user) {
+        return result;
+    }
+    result.success = true;
+    result.can_edit = can_edit.value_or(uploaded_by_user);
+    return result;
+}
+
+permission_check_result fetch_song_permission(const auth::session& session,
+                                              const std::string& remote_song_id) {
+    const http_response response = send_request("GET",
+                                                session.server_url + "/songs/" + remote_song_id,
+                                                "",
+                                                {
+                                                    {"Authorization", "Bearer " + session.access_token},
+                                                    {"Accept", "application/json"},
+                                                });
+    return parse_permission_response(response, "song", session.user.id);
+}
+
+permission_check_result fetch_chart_permission(const auth::session& session,
+                                               const std::string& remote_chart_id) {
+    const http_response response = send_request("GET",
+                                                session.server_url + "/charts/" + remote_chart_id,
+                                                "",
+                                                {
+                                                    {"Authorization", "Bearer " + session.access_token},
+                                                    {"Accept", "application/json"},
+                                                });
+    return parse_permission_response(response, "chart", session.user.id);
+}
+
 upload_request_result parse_chart_upload_response(const http_response& response,
                                                   bool updated_existing) {
     upload_request_result result;
@@ -904,8 +967,22 @@ upload_result upload_song(const song_select::song_entry& song) {
             : std::nullopt;
     if (existing_song_binding.has_value() &&
         existing_song_binding->origin != local_content_index::online_origin::owned_upload) {
-        result.message = "This song is linked to online content but was not uploaded from this client.";
-        return result;
+        permission_check_result permission =
+            fetch_song_permission(session, existing_song_binding->remote_song_id);
+        if (permission.unauthorized) {
+            std::string restore_error;
+            const std::optional<auth::session> restored = restore_upload_session(restore_error);
+            if (!restored.has_value()) {
+                result.message = std::move(restore_error);
+                return result;
+            }
+            session = *restored;
+            permission = fetch_song_permission(session, existing_song_binding->remote_song_id);
+        }
+        if (!permission.success || !permission.can_edit) {
+            result.message = "This song is linked to online content that your account cannot edit.";
+            return result;
+        }
     }
     upload_request_result request_result =
         send_song_upload_request(session, song, existing_remote_song_id);
@@ -986,12 +1063,30 @@ upload_result upload_chart(const song_select::song_entry& song,
         ? existing_remote_chart_id
         : std::nullopt;
     if (existing_remote_chart_id.has_value() && !updatable_remote_chart_id.has_value()) {
-        result.message = "This chart is linked to online content but was not uploaded from this client.";
-        return result;
+        permission_check_result permission =
+            fetch_chart_permission(session, *existing_remote_chart_id);
+        if (permission.unauthorized) {
+            std::string restore_error;
+            const std::optional<auth::session> restored = restore_upload_session(restore_error);
+            if (!restored.has_value()) {
+                result.message = std::move(restore_error);
+                return result;
+            }
+            session = *restored;
+            permission = fetch_chart_permission(session, *existing_remote_chart_id);
+        }
+        if (!permission.success || !permission.can_edit) {
+            result.message = "This chart is linked to online content that your account cannot edit.";
+            return result;
+        }
     }
+    const std::optional<std::string> effective_remote_chart_id =
+        existing_remote_chart_id.has_value()
+            ? existing_remote_chart_id
+            : updatable_remote_chart_id;
 
     upload_request_result request_result =
-        send_chart_upload_request(session, song, chart, *remote_song_id, updatable_remote_chart_id);
+        send_chart_upload_request(session, song, chart, *remote_song_id, effective_remote_chart_id);
     if (request_result.unauthorized) {
         std::string restore_error;
         const std::optional<auth::session> restored = restore_upload_session(restore_error);
@@ -1000,7 +1095,7 @@ upload_result upload_chart(const song_select::song_entry& song,
             return result;
         }
         session = *restored;
-        request_result = send_chart_upload_request(session, song, chart, *remote_song_id, updatable_remote_chart_id);
+        request_result = send_chart_upload_request(session, song, chart, *remote_song_id, effective_remote_chart_id);
     }
     if (request_result.not_found && existing_remote_chart_id.has_value()) {
         local_content_index::remove_chart_binding(session.server_url, chart.meta.chart_id);

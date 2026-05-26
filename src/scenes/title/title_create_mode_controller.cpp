@@ -11,30 +11,6 @@
 
 namespace {
 
-bool has_owned_song_upload(const song_select::song_entry& song, const std::string& session_server_url) {
-    const std::string server_url = server_environment::normalize_url(session_server_url);
-    if (server_url.empty()) {
-        return false;
-    }
-    const auto binding =
-        local_content_index::find_song_by_local(server_url, song.song.meta.song_id);
-    return binding.has_value() &&
-           !binding->remote_song_id.empty() &&
-           binding->origin == local_content_index::online_origin::owned_upload;
-}
-
-bool has_owned_chart_upload(const song_select::chart_option& chart, const std::string& session_server_url) {
-    const std::string server_url = server_environment::normalize_url(session_server_url);
-    if (server_url.empty()) {
-        return false;
-    }
-    const auto binding =
-        local_content_index::find_chart_by_local(server_url, chart.meta.chart_id);
-    return binding.has_value() &&
-           !binding->remote_chart_id.empty() &&
-           binding->origin == local_content_index::online_origin::owned_upload;
-}
-
 bool has_verified_remote_song(const song_select::song_entry& song, const std::string& session_server_url) {
     const std::string server_url = server_environment::normalize_url(session_server_url);
     if (server_url.empty()) {
@@ -46,37 +22,17 @@ bool has_verified_remote_song(const song_select::song_entry& song, const std::st
            !binding->remote_song_id.empty();
 }
 
-bool has_remote_song_binding(const song_select::song_entry& song, const std::string& session_server_url) {
-    const std::string server_url = server_environment::normalize_url(session_server_url);
-    if (server_url.empty()) {
-        return false;
-    }
-    const auto binding =
-        local_content_index::find_song_by_local(server_url, song.song.meta.song_id);
-    return binding.has_value() && !binding->remote_song_id.empty();
-}
-
-bool has_remote_chart_binding(const song_select::chart_option& chart, const std::string& session_server_url) {
-    const std::string server_url = server_environment::normalize_url(session_server_url);
-    if (server_url.empty()) {
-        return false;
-    }
-    const auto binding =
-        local_content_index::find_chart_by_local(server_url, chart.meta.chart_id);
-    return binding.has_value() && !binding->remote_chart_id.empty();
-}
-
 bool can_upload_song(const song_select::song_entry& song, const std::string& session_server_url) {
-    return !has_remote_song_binding(song, session_server_url) ||
-           has_owned_song_upload(song, session_server_url);
+    (void)song;
+    (void)session_server_url;
+    return true;
 }
 
 bool can_upload_chart(const song_select::song_entry& song,
                       const song_select::chart_option& chart,
                       const std::string& session_server_url) {
-    return has_verified_remote_song(song, session_server_url) &&
-           (!has_remote_chart_binding(chart, session_server_url) ||
-            has_owned_chart_upload(chart, session_server_url));
+    (void)chart;
+    return has_verified_remote_song(song, session_server_url);
 }
 
 }  // namespace

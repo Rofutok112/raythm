@@ -130,13 +130,11 @@ std::vector<create_tool_section> build_create_tool_sections(const song_select::s
     const bool linked_remote_song = song_origin.has_value();
     const bool song_can_upload =
         !online_status_checking &&
-        song_selected &&
-        (!linked_remote_song || owned_song);
+        song_selected;
     const bool chart_can_upload =
         !online_status_checking &&
         chart_selected &&
-        linked_remote_song &&
-        (!chart_origin.has_value() || owned_chart);
+        linked_remote_song;
 
     std::string song_publish_title = "UPLOAD SONG";
     std::string song_publish_detail = "Publish selected song";
@@ -149,12 +147,15 @@ std::vector<create_tool_section> build_create_tool_sections(const song_select::s
     } else if (owned_song) {
         song_publish_title = "UPDATE SONG";
         song_publish_detail = "Replace your upload";
+    } else if (linked_remote_song) {
+        song_publish_title = "UPDATE SONG";
+        song_publish_detail = "Check edit permission";
     } else if (song->source_status == content_status::official) {
         song_publish_title = "OFFICIAL SONG";
         song_publish_detail = "Song is linked online";
-    } else if (song->source_status == content_status::community || linked_remote_song) {
-        song_publish_title = "LINKED SONG";
-        song_publish_detail = "Not your song upload";
+    } else if (song->source_status == content_status::community) {
+        song_publish_title = "COMMUNITY SONG";
+        song_publish_detail = "Check edit permission";
     }
 
     std::string chart_publish_title = "UPLOAD CHART";
@@ -168,12 +169,15 @@ std::vector<create_tool_section> build_create_tool_sections(const song_select::s
     } else if (owned_chart) {
         chart_publish_title = "UPDATE CHART";
         chart_publish_detail = "Replace your upload";
+    } else if (chart_origin.has_value()) {
+        chart_publish_title = "UPDATE CHART";
+        chart_publish_detail = "Check edit permission";
     } else if (chart->source_status == content_status::official) {
         chart_publish_title = "OFFICIAL CHART";
-        chart_publish_detail = "Chart is read-only";
+        chart_publish_detail = "Check edit permission";
     } else if (chart->source_status == content_status::community) {
         chart_publish_title = "COMMUNITY CHART";
-        chart_publish_detail = "Not your chart upload";
+        chart_publish_detail = "Check edit permission";
     }
 
     return {
