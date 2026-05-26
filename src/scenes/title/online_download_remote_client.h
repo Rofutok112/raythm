@@ -29,6 +29,9 @@ struct remote_song_payload {
     int play_count = 0;
     bool has_play_count = false;
     std::string content_source;
+    std::string lifecycle_status;
+    bool can_edit = false;
+    bool has_can_edit = false;
     std::string audio_url;
     std::string jacket_url;
 };
@@ -52,6 +55,9 @@ struct remote_chart_payload {
     std::string chart_fingerprint;
     std::string chart_sha256;
     std::string content_source;
+    std::string lifecycle_status;
+    bool can_edit = false;
+    bool has_can_edit = false;
     std::string uploader_id;
 };
 
