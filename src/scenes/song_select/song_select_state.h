@@ -18,6 +18,28 @@
 
 namespace song_select {
 
+struct managed_song_manifest_metadata {
+    std::string package_id;
+    std::string song_json_hash;
+    std::string song_json_fingerprint;
+    std::string audio_hash;
+    std::string jacket_hash;
+    std::string remote_song_json_hash;
+    std::string remote_song_json_fingerprint;
+    std::string remote_audio_hash;
+    std::string remote_jacket_hash;
+    std::string created_at;
+    std::string updated_at;
+};
+
+struct managed_chart_manifest_metadata {
+    std::string chart_hash;
+    std::string chart_fingerprint;
+    std::string remote_chart_hash;
+    std::string remote_chart_fingerprint;
+    std::string revision_id;
+};
+
 struct chart_option {
     std::string path;
     chart_meta meta;
@@ -27,6 +49,7 @@ struct chart_option {
     content_status status = content_status::local;
     content_status source_status = content_status::local;
     std::optional<online_content::chart_identity> online_identity;
+    std::optional<managed_chart_manifest_metadata> managed_manifest;
     std::vector<online_content::chart_identity> remote_links;
     int local_note_offset_ms = 0;
     std::optional<rank> best_local_rank;
@@ -44,6 +67,7 @@ struct song_entry {
     content_status status = content_status::local;
     content_status source_status = content_status::local;
     std::optional<online_content::song_identity> online_identity;
+    std::optional<managed_song_manifest_metadata> managed_manifest;
     std::vector<chart_option> charts;
 };
 

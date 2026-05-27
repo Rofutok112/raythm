@@ -35,6 +35,10 @@ struct remote_song_payload {
     bool has_can_edit = false;
     std::string audio_url;
     std::string jacket_url;
+    std::string song_json_hash;
+    std::string song_json_fingerprint;
+    std::string audio_hash;
+    std::string jacket_hash;
 };
 
 struct remote_chart_payload {

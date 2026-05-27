@@ -21,7 +21,7 @@ using local_sqlite::column_text;
 using local_sqlite::exec;
 using local_sqlite::statement;
 
-constexpr const char* kCatalogStatusSchema = "managed-content-v1";
+constexpr const char* kCatalogStatusSchema = "managed-content-v2";
 
 void ensure_optional_schema(sqlite3* database) {
     exec(database, "ALTER TABLE local_songs ADD COLUMN genre TEXT NOT NULL DEFAULT '';");
@@ -36,6 +36,7 @@ void ensure_optional_schema(sqlite3* database) {
     exec(database, "ALTER TABLE local_songs ADD COLUMN song_offset INTEGER NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_songs ADD COLUMN song_has_offset INTEGER NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_songs ADD COLUMN timing_events TEXT NOT NULL DEFAULT '';");
+    exec(database, "ALTER TABLE local_songs ADD COLUMN managed_manifest TEXT NOT NULL DEFAULT '';");
     exec(database, "ALTER TABLE local_charts ADD COLUMN min_bpm REAL NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_charts ADD COLUMN max_bpm REAL NOT NULL DEFAULT 0;");
     exec(database, "ALTER TABLE local_charts ADD COLUMN source_status TEXT NOT NULL DEFAULT 'local';");
@@ -47,6 +48,7 @@ void ensure_optional_schema(sqlite3* database) {
     exec(database, "ALTER TABLE local_charts ADD COLUMN online_chart_id TEXT NOT NULL DEFAULT '';");
     exec(database, "ALTER TABLE local_charts ADD COLUMN online_source TEXT NOT NULL DEFAULT '';");
     exec(database, "ALTER TABLE local_charts ADD COLUMN online_chart_version INTEGER NOT NULL DEFAULT 0;");
+    exec(database, "ALTER TABLE local_charts ADD COLUMN managed_manifest TEXT NOT NULL DEFAULT '';");
 }
 
 bool ensure_schema(sqlite3* database) {
@@ -76,6 +78,7 @@ bool ensure_schema(sqlite3* database) {
              "song_offset INTEGER NOT NULL DEFAULT 0,"
              "song_has_offset INTEGER NOT NULL DEFAULT 0,"
              "timing_events TEXT NOT NULL DEFAULT '',"
+             "managed_manifest TEXT NOT NULL DEFAULT '',"
              "updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))"
              ");") &&
         exec(database,
@@ -101,6 +104,7 @@ bool ensure_schema(sqlite3* database) {
              "online_chart_id TEXT NOT NULL DEFAULT '',"
              "online_source TEXT NOT NULL DEFAULT '',"
              "online_chart_version INTEGER NOT NULL DEFAULT 0,"
+             "managed_manifest TEXT NOT NULL DEFAULT '',"
              "updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))"
              ");");
     if (ready) {
@@ -263,6 +267,84 @@ verification_state parse_verification_state_label(const std::string& value) {
     return verification_state::unchecked;
 }
 
+std::string serialize_managed_song_manifest(
+    const std::optional<managed_song_manifest_metadata>& metadata) {
+    if (!metadata.has_value()) {
+        return {};
+    }
+
+    std::ostringstream output;
+    output << "{"
+           << "\"packageId\":\"" << network::json::escape_string(metadata->package_id) << "\","
+           << "\"songJsonHash\":\"" << network::json::escape_string(metadata->song_json_hash) << "\","
+           << "\"songJsonFingerprint\":\"" << network::json::escape_string(metadata->song_json_fingerprint) << "\","
+           << "\"audioHash\":\"" << network::json::escape_string(metadata->audio_hash) << "\","
+           << "\"jacketHash\":\"" << network::json::escape_string(metadata->jacket_hash) << "\","
+           << "\"remoteSongJsonHash\":\"" << network::json::escape_string(metadata->remote_song_json_hash) << "\","
+           << "\"remoteSongJsonFingerprint\":\""
+           << network::json::escape_string(metadata->remote_song_json_fingerprint) << "\","
+           << "\"remoteAudioHash\":\"" << network::json::escape_string(metadata->remote_audio_hash) << "\","
+           << "\"remoteJacketHash\":\"" << network::json::escape_string(metadata->remote_jacket_hash) << "\","
+           << "\"createdAt\":\"" << network::json::escape_string(metadata->created_at) << "\","
+           << "\"updatedAt\":\"" << network::json::escape_string(metadata->updated_at) << "\""
+           << "}";
+    return output.str();
+}
+
+std::optional<managed_song_manifest_metadata> parse_managed_song_manifest(const std::string& value) {
+    if (value.empty()) {
+        return std::nullopt;
+    }
+
+    managed_song_manifest_metadata metadata;
+    metadata.package_id = network::json::extract_string(value, "packageId").value_or("");
+    metadata.song_json_hash = network::json::extract_string(value, "songJsonHash").value_or("");
+    metadata.song_json_fingerprint = network::json::extract_string(value, "songJsonFingerprint").value_or("");
+    metadata.audio_hash = network::json::extract_string(value, "audioHash").value_or("");
+    metadata.jacket_hash = network::json::extract_string(value, "jacketHash").value_or("");
+    metadata.remote_song_json_hash = network::json::extract_string(value, "remoteSongJsonHash").value_or("");
+    metadata.remote_song_json_fingerprint =
+        network::json::extract_string(value, "remoteSongJsonFingerprint").value_or("");
+    metadata.remote_audio_hash = network::json::extract_string(value, "remoteAudioHash").value_or("");
+    metadata.remote_jacket_hash = network::json::extract_string(value, "remoteJacketHash").value_or("");
+    metadata.created_at = network::json::extract_string(value, "createdAt").value_or("");
+    metadata.updated_at = network::json::extract_string(value, "updatedAt").value_or("");
+    return metadata;
+}
+
+std::string serialize_managed_chart_manifest(
+    const std::optional<managed_chart_manifest_metadata>& metadata) {
+    if (!metadata.has_value()) {
+        return {};
+    }
+
+    std::ostringstream output;
+    output << "{"
+           << "\"chartHash\":\"" << network::json::escape_string(metadata->chart_hash) << "\","
+           << "\"chartFingerprint\":\"" << network::json::escape_string(metadata->chart_fingerprint) << "\","
+           << "\"remoteChartHash\":\"" << network::json::escape_string(metadata->remote_chart_hash) << "\","
+           << "\"remoteChartFingerprint\":\""
+           << network::json::escape_string(metadata->remote_chart_fingerprint) << "\","
+           << "\"revisionId\":\"" << network::json::escape_string(metadata->revision_id) << "\""
+           << "}";
+    return output.str();
+}
+
+std::optional<managed_chart_manifest_metadata> parse_managed_chart_manifest(const std::string& value) {
+    if (value.empty()) {
+        return std::nullopt;
+    }
+
+    managed_chart_manifest_metadata metadata;
+    metadata.chart_hash = network::json::extract_string(value, "chartHash").value_or("");
+    metadata.chart_fingerprint = network::json::extract_string(value, "chartFingerprint").value_or("");
+    metadata.remote_chart_hash = network::json::extract_string(value, "remoteChartHash").value_or("");
+    metadata.remote_chart_fingerprint =
+        network::json::extract_string(value, "remoteChartFingerprint").value_or("");
+    metadata.revision_id = network::json::extract_string(value, "revisionId").value_or("");
+    return metadata;
+}
+
 std::string timing_type_label(timing_event_type type) {
     switch (type) {
     case timing_event_type::meter:
@@ -355,8 +437,9 @@ void put_song(sqlite3* database, const song_entry& song) {
                     "INSERT INTO local_songs(song_id, title, artist, genre, directory, audio_file, jacket_file, "
                     "base_bpm, duration_seconds, preview_start_ms, song_version, status, source_status, "
                     "content_kind, storage_policy, verification_state, "
-                    "online_server_url, online_song_id, online_source, song_offset, song_has_offset, timing_events, updated_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
+                    "online_server_url, online_song_id, online_source, song_offset, song_has_offset, "
+                    "timing_events, managed_manifest, updated_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
                     "ON CONFLICT(song_id) DO UPDATE SET "
                     "title = excluded.title,"
                     "artist = excluded.artist,"
@@ -379,6 +462,7 @@ void put_song(sqlite3* database, const song_entry& song) {
                     "song_offset = excluded.song_offset,"
                     "song_has_offset = excluded.song_has_offset,"
                     "timing_events = excluded.timing_events,"
+                    "managed_manifest = excluded.managed_manifest,"
                     "updated_at = excluded.updated_at;");
     if (!query.valid() || song.song.meta.song_id.empty()) {
         return;
@@ -408,6 +492,7 @@ void put_song(sqlite3* database, const song_entry& song) {
     sqlite3_bind_int(query.get(), 20, song.song.meta.offset);
     sqlite3_bind_int(query.get(), 21, song.song.meta.has_offset ? 1 : 0);
     bind_text(query.get(), 22, serialize_timing_events(song.song.meta.timing_events));
+    bind_text(query.get(), 23, serialize_managed_song_manifest(song.managed_manifest));
     sqlite3_step(query.get());
 }
 
@@ -416,8 +501,9 @@ void put_chart(sqlite3* database, const chart_option& chart) {
                     "INSERT INTO local_charts(chart_id, song_id, path, difficulty, level, key_count, "
                     "chart_author, format_version, note_count, min_bpm, max_bpm, status, source_status, "
                     "content_kind, storage_policy, verification_state, "
-                    "online_server_url, online_song_id, online_chart_id, online_source, online_chart_version, updated_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
+                    "online_server_url, online_song_id, online_chart_id, online_source, "
+                    "online_chart_version, managed_manifest, updated_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now')) "
                     "ON CONFLICT(chart_id) DO UPDATE SET "
                     "song_id = excluded.song_id,"
                     "path = excluded.path,"
@@ -439,6 +525,7 @@ void put_chart(sqlite3* database, const chart_option& chart) {
                     "online_chart_id = excluded.online_chart_id,"
                     "online_source = excluded.online_source,"
                     "online_chart_version = excluded.online_chart_version,"
+                    "managed_manifest = excluded.managed_manifest,"
                     "updated_at = excluded.updated_at;");
     if (!query.valid() || chart.meta.chart_id.empty()) {
         return;
@@ -469,6 +556,7 @@ void put_chart(sqlite3* database, const chart_option& chart) {
     sqlite3_bind_int(query.get(), 21, chart.online_identity.has_value()
         ? chart.online_identity->remote_chart_version
         : chart.meta.chart_version);
+    bind_text(query.get(), 22, serialize_managed_chart_manifest(chart.managed_manifest));
     sqlite3_step(query.get());
 }
 
@@ -493,7 +581,7 @@ catalog_data load_cached_catalog() {
                     "SELECT song_id, title, artist, genre, directory, audio_file, jacket_file, base_bpm, "
                     "duration_seconds, preview_start_ms, song_version, song_offset, song_has_offset, timing_events, "
                     "status, source_status, content_kind, storage_policy, verification_state, "
-                    "online_server_url, online_song_id, online_source "
+                    "online_server_url, online_song_id, online_source, managed_manifest "
                     "FROM local_songs ORDER BY title, song_id;");
     if (!songs.valid()) {
         return catalog;
@@ -531,6 +619,7 @@ catalog_data load_cached_catalog() {
                 .content_source = *online_source,
             };
         }
+        entry.managed_manifest = parse_managed_song_manifest(column_text(songs.get(), 22));
         by_song_id[entry.song.meta.song_id] = std::move(entry);
     }
 
@@ -538,7 +627,7 @@ catalog_data load_cached_catalog() {
                      "SELECT chart_id, song_id, path, difficulty, level, key_count, chart_author, "
                      "format_version, note_count, min_bpm, max_bpm, status, source_status, "
                      "content_kind, storage_policy, verification_state, online_server_url, "
-                     "online_song_id, online_chart_id, online_source, online_chart_version "
+                     "online_song_id, online_chart_id, online_source, online_chart_version, managed_manifest "
                      "FROM local_charts ORDER BY song_id, level, difficulty;");
     if (!charts.valid()) {
         return catalog;
@@ -583,6 +672,7 @@ catalog_data load_cached_catalog() {
                 .remote_chart_version = online_chart_version,
             };
         }
+        chart.managed_manifest = parse_managed_chart_manifest(column_text(charts.get(), 21));
         song_it->second.song.chart_paths.push_back(chart.path);
         song_it->second.charts.push_back(std::move(chart));
     }

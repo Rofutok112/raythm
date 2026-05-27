@@ -204,6 +204,34 @@ std::optional<online_content::chart_identity> managed_chart_identity(
     };
 }
 
+song_select::managed_song_manifest_metadata managed_song_metadata(
+    const managed_content_storage::package_manifest& manifest) {
+    return {
+        .package_id = manifest.song.package_id,
+        .song_json_hash = manifest.song_json_hash,
+        .song_json_fingerprint = manifest.song_json_fingerprint,
+        .audio_hash = manifest.audio_hash,
+        .jacket_hash = manifest.jacket_hash,
+        .remote_song_json_hash = manifest.remote_song_json_hash,
+        .remote_song_json_fingerprint = manifest.remote_song_json_fingerprint,
+        .remote_audio_hash = manifest.remote_audio_hash,
+        .remote_jacket_hash = manifest.remote_jacket_hash,
+        .created_at = manifest.created_at,
+        .updated_at = manifest.updated_at,
+    };
+}
+
+song_select::managed_chart_manifest_metadata managed_chart_metadata(
+    const managed_content_storage::chart_manifest_entry& chart) {
+    return {
+        .chart_hash = chart.chart_hash,
+        .chart_fingerprint = chart.chart_fingerprint,
+        .remote_chart_hash = chart.remote_chart_hash,
+        .remote_chart_fingerprint = chart.remote_chart_fingerprint,
+        .revision_id = chart.revision_id,
+    };
+}
+
 void append_loaded_song(song_select::catalog_data& catalog,
                         const song_data& song,
                         const player_chart_offset_map& chart_offsets,
@@ -220,6 +248,7 @@ void append_loaded_song(song_select::catalog_data& catalog,
         entry.status = status_for_source(managed_manifest->song.source);
         entry.source_status = entry.status;
         entry.online_identity = managed_song_identity(*managed_manifest, local_index);
+        entry.managed_manifest = managed_song_metadata(*managed_manifest);
     } else {
         entry.kind = content_kind::local;
         entry.storage = storage_policy::plain_workspace;
@@ -227,6 +256,7 @@ void append_loaded_song(song_select::catalog_data& catalog,
         entry.status = content_status::local;
         entry.source_status = content_status::local;
         entry.online_identity.reset();
+        entry.managed_manifest.reset();
     }
 
     for (const std::string& chart_path : song.chart_paths) {
@@ -259,6 +289,7 @@ void append_loaded_song(song_select::catalog_data& catalog,
             if (const managed_content_storage::chart_manifest_entry* chart =
                     find_manifest_chart(*managed_manifest, meta.chart_id)) {
                 option.online_identity = managed_chart_identity(*managed_manifest, *chart, local_index);
+                option.managed_manifest = managed_chart_metadata(*chart);
                 if (option.online_identity.has_value()) {
                     option.remote_links.push_back(*option.online_identity);
                 }

@@ -96,6 +96,13 @@ song_select::chart_option make_chart(const char* chart_id, const char* song_id, 
         .content_source = online_content::source::community,
         .remote_chart_version = 7,
     };
+    chart.managed_manifest = song_select::managed_chart_manifest_metadata{
+        .chart_hash = "local-chart-sha",
+        .chart_fingerprint = "local-chart-fingerprint",
+        .remote_chart_hash = "remote-chart-sha",
+        .remote_chart_fingerprint = "remote-chart-fingerprint",
+        .revision_id = "chart-rev-a",
+    };
     chart.remote_links.push_back(online_content::chart_identity{
         .server_url = "https://server.example",
         .remote_song_id = "remote-song-a",
@@ -135,6 +142,19 @@ song_select::song_entry make_song(const fs::path& song_dir, const fs::path& char
         .server_url = "https://server.example",
         .remote_song_id = "remote-song-a",
         .content_source = online_content::source::community,
+    };
+    song.managed_manifest = song_select::managed_song_manifest_metadata{
+        .package_id = "package-song-a",
+        .song_json_hash = "local-song-json-sha",
+        .song_json_fingerprint = "local-song-json-fingerprint",
+        .audio_hash = "local-audio-sha",
+        .jacket_hash = "local-jacket-sha",
+        .remote_song_json_hash = "remote-song-json-sha",
+        .remote_song_json_fingerprint = "remote-song-json-fingerprint",
+        .remote_audio_hash = "remote-audio-sha",
+        .remote_jacket_hash = "remote-jacket-sha",
+        .created_at = "2026-01-02T03:04:05Z",
+        .updated_at = "2026-01-02T03:05:06Z",
     };
     song.charts.push_back(make_chart("chart-a", "song-a", chart_path));
     song.song.chart_paths.push_back(chart_path.string());
@@ -182,6 +202,10 @@ int main() {
     assert(cached.songs[0].source_status == content_status::community);
     assert(cached.songs[0].online_identity.has_value());
     assert(cached.songs[0].online_identity->remote_song_id == "remote-song-a");
+    assert(cached.songs[0].managed_manifest.has_value());
+    assert(cached.songs[0].managed_manifest->package_id == "package-song-a");
+    assert(cached.songs[0].managed_manifest->song_json_hash == "local-song-json-sha");
+    assert(cached.songs[0].managed_manifest->remote_audio_hash == "remote-audio-sha");
     assert(cached.songs[0].charts.size() == 1);
     assert(cached.songs[0].charts[0].meta.chart_id == "chart-a");
     assert(cached.songs[0].charts[0].min_bpm == 140.0f);
@@ -193,6 +217,9 @@ int main() {
     assert(cached.songs[0].charts[0].source_status == content_status::community);
     assert(cached.songs[0].charts[0].online_identity.has_value());
     assert(cached.songs[0].charts[0].online_identity->remote_chart_id == "remote-chart-a");
+    assert(cached.songs[0].charts[0].managed_manifest.has_value());
+    assert(cached.songs[0].charts[0].managed_manifest->chart_hash == "local-chart-sha");
+    assert(cached.songs[0].charts[0].managed_manifest->remote_chart_fingerprint == "remote-chart-fingerprint");
     assert(cached.songs[0].charts[0].remote_links.empty());
     assert(cached.songs[0].song.chart_paths.size() == 1);
 

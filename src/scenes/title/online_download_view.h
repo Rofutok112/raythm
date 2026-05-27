@@ -61,6 +61,8 @@ struct chart_entry_state {
     song_select::chart_option chart;
     std::string installed_local_chart_id;
     std::string remote_revision_id;
+    std::string remote_chart_hash;
+    std::string remote_chart_fingerprint;
     std::string uploader_id;
     bool installed = false;
     bool update_available = false;
@@ -71,6 +73,10 @@ struct song_entry_state {
     std::vector<chart_entry_state> charts;
     std::string installed_local_song_id;
     std::string remote_revision_id;
+    std::string remote_song_json_hash;
+    std::string remote_song_json_fingerprint;
+    std::string remote_audio_hash;
+    std::string remote_jacket_hash;
     bool installed = false;
     bool update_available = false;
     bool charts_loaded = false;
