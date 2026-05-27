@@ -554,6 +554,7 @@ std::string chart_status_label(const chart_entry_state& chart) {
 
 bool can_download_chart(const song_entry_state& song, const chart_entry_state& chart) {
     return song.installed &&
+           !title_online_view::needs_download(song) &&
            (!chart.installed ||
             chart.update_available ||
             chart.chart.status == content_status::modified);

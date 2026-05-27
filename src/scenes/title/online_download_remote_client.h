@@ -28,6 +28,7 @@ struct remote_song_payload {
     int chart_count = 0;
     int play_count = 0;
     bool has_play_count = false;
+    std::string revision_id;
     std::string content_source;
     std::string lifecycle_status;
     bool can_edit = false;
@@ -54,6 +55,7 @@ struct remote_chart_payload {
     int difficulty_ruleset_version = 0;
     std::string chart_fingerprint;
     std::string chart_sha256;
+    std::string revision_id;
     std::string content_source;
     std::string lifecycle_status;
     bool can_edit = false;

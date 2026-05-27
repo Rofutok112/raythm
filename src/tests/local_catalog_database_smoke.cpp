@@ -34,7 +34,7 @@ bool set_local_app_data(const fs::path& path) {
 #endif
 }
 
-void assert_database_stored_local_plain_workspace() {
+void assert_database_stored_managed_content() {
     local_sqlite::database database = local_sqlite::open_local_content_database();
     assert(database.valid());
 
@@ -44,14 +44,14 @@ void assert_database_stored_local_plain_workspace() {
                                  "FROM local_songs WHERE song_id = 'song-a';");
     assert(song.valid());
     assert(sqlite3_step(song.get()) == SQLITE_ROW);
-    assert(local_sqlite::column_text(song.get(), 0) == "local");
-    assert(local_sqlite::column_text(song.get(), 1) == "local");
-    assert(local_sqlite::column_text(song.get(), 2) == "local");
-    assert(local_sqlite::column_text(song.get(), 3) == "plain_workspace");
-    assert(local_sqlite::column_text(song.get(), 4) == "unchecked");
-    assert(local_sqlite::column_text(song.get(), 5).empty());
-    assert(local_sqlite::column_text(song.get(), 6).empty());
-    assert(local_sqlite::column_text(song.get(), 7).empty());
+    assert(local_sqlite::column_text(song.get(), 0) == "community");
+    assert(local_sqlite::column_text(song.get(), 1) == "community");
+    assert(local_sqlite::column_text(song.get(), 2) == "community");
+    assert(local_sqlite::column_text(song.get(), 3) == "managed_package");
+    assert(local_sqlite::column_text(song.get(), 4) == "matched");
+    assert(local_sqlite::column_text(song.get(), 5) == "https://server.example");
+    assert(local_sqlite::column_text(song.get(), 6) == "remote-song-a");
+    assert(local_sqlite::column_text(song.get(), 7) == "community");
 
     local_sqlite::statement chart(database.get(),
                                   "SELECT status, source_status, content_kind, storage_policy, verification_state, "
@@ -59,16 +59,16 @@ void assert_database_stored_local_plain_workspace() {
                                   "FROM local_charts WHERE chart_id = 'chart-a';");
     assert(chart.valid());
     assert(sqlite3_step(chart.get()) == SQLITE_ROW);
-    assert(local_sqlite::column_text(chart.get(), 0) == "local");
-    assert(local_sqlite::column_text(chart.get(), 1) == "local");
-    assert(local_sqlite::column_text(chart.get(), 2) == "local");
-    assert(local_sqlite::column_text(chart.get(), 3) == "plain_workspace");
-    assert(local_sqlite::column_text(chart.get(), 4) == "unchecked");
-    assert(local_sqlite::column_text(chart.get(), 5).empty());
-    assert(local_sqlite::column_text(chart.get(), 6).empty());
-    assert(local_sqlite::column_text(chart.get(), 7).empty());
-    assert(local_sqlite::column_text(chart.get(), 8).empty());
-    assert(sqlite3_column_int(chart.get(), 9) == 0);
+    assert(local_sqlite::column_text(chart.get(), 0) == "community");
+    assert(local_sqlite::column_text(chart.get(), 1) == "community");
+    assert(local_sqlite::column_text(chart.get(), 2) == "community");
+    assert(local_sqlite::column_text(chart.get(), 3) == "managed_package");
+    assert(local_sqlite::column_text(chart.get(), 4) == "matched");
+    assert(local_sqlite::column_text(chart.get(), 5) == "https://server.example");
+    assert(local_sqlite::column_text(chart.get(), 6) == "remote-song-a");
+    assert(local_sqlite::column_text(chart.get(), 7) == "remote-chart-a");
+    assert(local_sqlite::column_text(chart.get(), 8) == "community");
+    assert(sqlite3_column_int(chart.get(), 9) == 7);
 }
 
 song_select::chart_option make_chart(const char* chart_id, const char* song_id, const fs::path& path) {
@@ -159,7 +159,7 @@ int main() {
     }
 
     song_select::local_catalog_database::replace_catalog({make_song(song_dir, chart_path)});
-    assert_database_stored_local_plain_workspace();
+    assert_database_stored_managed_content();
 
     song_select::catalog_data cached = song_select::local_catalog_database::load_cached_catalog();
     assert(cached.songs.size() == 1);
@@ -175,22 +175,24 @@ int main() {
     assert(cached.songs[0].song.meta.timing_events[1].type == timing_event_type::meter);
     assert(cached.songs[0].song.meta.timing_events[1].numerator == 3);
     assert(cached.songs[0].song.meta.timing_events[1].denominator == 4);
-    assert(cached.songs[0].kind == content_kind::local);
-    assert(cached.songs[0].storage == storage_policy::plain_workspace);
-    assert(cached.songs[0].verification == verification_state::unchecked);
-    assert(cached.songs[0].status == content_status::local);
-    assert(cached.songs[0].source_status == content_status::local);
-    assert(!cached.songs[0].online_identity.has_value());
+    assert(cached.songs[0].kind == content_kind::community);
+    assert(cached.songs[0].storage == storage_policy::managed_package);
+    assert(cached.songs[0].verification == verification_state::matched);
+    assert(cached.songs[0].status == content_status::community);
+    assert(cached.songs[0].source_status == content_status::community);
+    assert(cached.songs[0].online_identity.has_value());
+    assert(cached.songs[0].online_identity->remote_song_id == "remote-song-a");
     assert(cached.songs[0].charts.size() == 1);
     assert(cached.songs[0].charts[0].meta.chart_id == "chart-a");
     assert(cached.songs[0].charts[0].min_bpm == 140.0f);
     assert(cached.songs[0].charts[0].max_bpm == 190.0f);
-    assert(cached.songs[0].charts[0].kind == content_kind::local);
-    assert(cached.songs[0].charts[0].storage == storage_policy::plain_workspace);
-    assert(cached.songs[0].charts[0].verification == verification_state::unchecked);
-    assert(cached.songs[0].charts[0].status == content_status::local);
-    assert(cached.songs[0].charts[0].source_status == content_status::local);
-    assert(!cached.songs[0].charts[0].online_identity.has_value());
+    assert(cached.songs[0].charts[0].kind == content_kind::community);
+    assert(cached.songs[0].charts[0].storage == storage_policy::managed_package);
+    assert(cached.songs[0].charts[0].verification == verification_state::matched);
+    assert(cached.songs[0].charts[0].status == content_status::community);
+    assert(cached.songs[0].charts[0].source_status == content_status::community);
+    assert(cached.songs[0].charts[0].online_identity.has_value());
+    assert(cached.songs[0].charts[0].online_identity->remote_chart_id == "remote-chart-a");
     assert(cached.songs[0].charts[0].remote_links.empty());
     assert(cached.songs[0].song.chart_paths.size() == 1);
 
