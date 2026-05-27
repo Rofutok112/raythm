@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -118,6 +119,7 @@ int main() {
         .remote_song_id = "remote-song",
         .song_version = 2,
         .revision_id = "song-rev-2",
+        .package_id = "package-remote-song",
     };
     const managed_content_storage::chart_identity chart_identity{
         .source = online_content::source::community,
@@ -127,6 +129,10 @@ int main() {
         .song_version = song_identity.song_version,
         .chart_version = 5,
         .revision_id = "chart-rev-5",
+        .chart_hash = "local-chart-sha",
+        .chart_fingerprint = "local-chart-fingerprint",
+        .remote_chart_hash = "remote-chart-sha",
+        .remote_chart_fingerprint = "remote-chart-fingerprint",
     };
 
     const std::string managed_song_id = managed_content_storage::local_song_id(song_identity);
@@ -145,10 +151,38 @@ int main() {
     managed_content_storage::package_manifest manifest{
         .song = song_identity,
         .local_song_id = managed_song_id,
+        .song_json_hash = "local-song-json-sha",
+        .song_json_fingerprint = "local-song-json-fingerprint",
+        .audio_hash = "local-audio-sha",
+        .jacket_hash = "local-jacket-sha",
+        .remote_song_json_hash = "remote-song-json-sha",
+        .remote_song_json_fingerprint = "remote-song-json-fingerprint",
+        .remote_audio_hash = "remote-audio-sha",
+        .remote_jacket_hash = "remote-jacket-sha",
     };
     managed_content_storage::upsert_chart(manifest, chart_identity);
     std::string error_message;
     assert(managed_content_storage::write_manifest(manifest, error_message));
+    const std::optional<managed_content_storage::package_manifest> stored_manifest =
+        managed_content_storage::read_manifest(managed_song_dir);
+    assert(stored_manifest.has_value());
+    assert(stored_manifest->song.source == online_content::source::community);
+    assert(stored_manifest->song.package_id == "package-remote-song");
+    assert(stored_manifest->song_json_hash == "local-song-json-sha");
+    assert(stored_manifest->song_json_fingerprint == "local-song-json-fingerprint");
+    assert(stored_manifest->audio_hash == "local-audio-sha");
+    assert(stored_manifest->jacket_hash == "local-jacket-sha");
+    assert(stored_manifest->remote_song_json_hash == "remote-song-json-sha");
+    assert(stored_manifest->remote_song_json_fingerprint == "remote-song-json-fingerprint");
+    assert(stored_manifest->remote_audio_hash == "remote-audio-sha");
+    assert(stored_manifest->remote_jacket_hash == "remote-jacket-sha");
+    assert(!stored_manifest->created_at.empty());
+    assert(!stored_manifest->updated_at.empty());
+    assert(stored_manifest->charts.size() == 1);
+    assert(stored_manifest->charts.front().chart_hash == "local-chart-sha");
+    assert(stored_manifest->charts.front().chart_fingerprint == "local-chart-fingerprint");
+    assert(stored_manifest->charts.front().remote_chart_hash == "remote-chart-sha");
+    assert(stored_manifest->charts.front().remote_chart_fingerprint == "remote-chart-fingerprint");
 
     local_content_index::put_song_binding({
         .server_url = song_identity.server_url,
@@ -188,12 +222,19 @@ int main() {
     assert(managed->source_status == content_status::community);
     assert(managed->online_identity.has_value());
     assert(managed->online_identity->remote_song_id == "remote-song");
+    assert(managed->managed_manifest.has_value());
+    assert(managed->managed_manifest->package_id == "package-remote-song");
+    assert(managed->managed_manifest->song_json_hash == "local-song-json-sha");
+    assert(managed->managed_manifest->audio_hash == "local-audio-sha");
     assert(managed->song.directory.find("content-cache") != std::string::npos);
     assert(managed->song.directory.find("community") != std::string::npos);
     assert(managed->charts.size() == 1);
     assert(managed->charts.front().storage == storage_policy::managed_package);
     assert(managed->charts.front().online_identity.has_value());
     assert(managed->charts.front().online_identity->remote_chart_id == "remote-chart");
+    assert(managed->charts.front().managed_manifest.has_value());
+    assert(managed->charts.front().managed_manifest->chart_hash == "local-chart-sha");
+    assert(managed->charts.front().managed_manifest->remote_chart_fingerprint == "remote-chart-fingerprint");
     assert(managed->charts.front().path.find("content-cache") != std::string::npos);
 
     fs::remove_all(temp_root, ec);

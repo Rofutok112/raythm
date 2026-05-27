@@ -15,6 +15,7 @@ struct song_identity {
     std::string remote_song_id;
     int song_version = 0;
     std::string revision_id;
+    std::string package_id;
 };
 
 struct chart_identity {
@@ -25,6 +26,10 @@ struct chart_identity {
     int song_version = 0;
     int chart_version = 0;
     std::string revision_id;
+    std::string chart_hash;
+    std::string chart_fingerprint;
+    std::string remote_chart_hash;
+    std::string remote_chart_fingerprint;
 };
 
 struct chart_manifest_entry {
@@ -32,11 +37,25 @@ struct chart_manifest_entry {
     std::string remote_chart_id;
     int chart_version = 0;
     std::string revision_id;
+    std::string chart_hash;
+    std::string chart_fingerprint;
+    std::string remote_chart_hash;
+    std::string remote_chart_fingerprint;
 };
 
 struct package_manifest {
     song_identity song;
     std::string local_song_id;
+    std::string song_json_hash;
+    std::string song_json_fingerprint;
+    std::string audio_hash;
+    std::string jacket_hash;
+    std::string remote_song_json_hash;
+    std::string remote_song_json_fingerprint;
+    std::string remote_audio_hash;
+    std::string remote_jacket_hash;
+    std::string created_at;
+    std::string updated_at;
     std::vector<chart_manifest_entry> charts;
 };
 

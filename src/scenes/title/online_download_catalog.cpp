@@ -81,6 +81,10 @@ song_entry_state build_song_state(const remote_song_payload& remote_song,
     song_entry_state state_entry;
     state_entry.song = make_remote_song_entry(remote_song, server_url);
     state_entry.remote_revision_id = remote_song.revision_id;
+    state_entry.remote_song_json_hash = remote_song.song_json_hash;
+    state_entry.remote_song_json_fingerprint = remote_song.song_json_fingerprint;
+    state_entry.remote_audio_hash = remote_song.audio_hash;
+    state_entry.remote_jacket_hash = remote_song.jacket_hash;
 
     const online_content_availability::resolved_song availability =
         online_content_availability::resolve_song(
@@ -90,6 +94,10 @@ song_entry_state build_song_state(const remote_song_payload& remote_song,
                 .server_url = server_url,
                 .remote_song_id = remote_song.id,
                 .remote_song_version = remote_song.song_version,
+                .song_json_hash = remote_song.song_json_hash,
+                .song_json_fingerprint = remote_song.song_json_fingerprint,
+                .audio_hash = remote_song.audio_hash,
+                .jacket_hash = remote_song.jacket_hash,
             },
             state_entry.song.source_status);
     state_entry.installed = availability.installed;
@@ -134,9 +142,27 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
         .lifecycle_status = remote_song.lifecycle_status,
     };
     state_entry.remote_revision_id = remote_song.revision_id;
+    state_entry.remote_song_json_hash = remote_song.song_json_hash;
+    state_entry.remote_song_json_fingerprint = remote_song.song_json_fingerprint;
+    state_entry.remote_audio_hash = remote_song.audio_hash;
+    state_entry.remote_jacket_hash = remote_song.jacket_hash;
+    const online_content_availability::resolved_song availability =
+        online_content_availability::resolve_song(
+            {local_song},
+            index,
+            {
+                .server_url = server_url,
+                .remote_song_id = remote_song.id,
+                .remote_song_version = remote_song.song_version,
+                .song_json_hash = remote_song.song_json_hash,
+                .song_json_fingerprint = remote_song.song_json_fingerprint,
+                .audio_hash = remote_song.audio_hash,
+                .jacket_hash = remote_song.jacket_hash,
+            },
+            state_entry.song.source_status);
     state_entry.installed = true;
     state_entry.installed_local_song_id = local_song.song.meta.song_id;
-    state_entry.update_available = local_song.song.meta.song_version < remote_song.song_version;
+    state_entry.update_available = availability.update_available;
     state_entry.charts_loaded = true;
     state_entry.charts_loading = false;
     state_entry.charts_has_more = false;
@@ -167,6 +193,8 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
             .chart = remote_chart,
             .installed_local_chart_id = chart.meta.chart_id,
             .remote_revision_id = "",
+            .remote_chart_hash = "",
+            .remote_chart_fingerprint = "",
             .uploader_id = "",
             .installed = true,
             .update_available = false,
@@ -263,6 +291,8 @@ void append_chart_page(song_entry_state& song_state,
                     .remote_song_id = chart.song_id,
                     .remote_chart_id = chart.id,
                     .remote_chart_version = chart.chart_version,
+                    .chart_hash = chart.chart_sha256,
+                    .chart_fingerprint = chart.chart_fingerprint,
                 },
                 chart_source_status);
         const content_status chart_status =
@@ -301,6 +331,8 @@ void append_chart_page(song_entry_state& song_state,
             .chart = remote_chart,
             .installed_local_chart_id = availability.local_chart_id,
             .remote_revision_id = chart.revision_id,
+            .remote_chart_hash = chart.chart_sha256,
+            .remote_chart_fingerprint = chart.chart_fingerprint,
             .uploader_id = chart.uploader_id,
             .installed = availability.installed,
             .update_available = availability.update_available,

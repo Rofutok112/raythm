@@ -17,13 +17,16 @@
 
 #include "app_paths.h"
 #include "chart_file_storage.h"
+#include "chart_fingerprint.h"
 #include "managed_content_storage.h"
 #include "network/json_helpers.h"
 #include "path_utils.h"
+#include "song_fingerprint.h"
 #include "song_writer.h"
 #include "title/local_content_index.h"
 #include "title/online_catalog_data_controller.h"
 #include "title/online_download_remote_client.h"
+#include "updater/update_verify.h"
 #include "ui_notice.h"
 
 namespace title_online_view {
@@ -131,6 +134,8 @@ managed_content_storage::chart_identity managed_chart_identity_for(const song_en
         .song_version = song.song.song.meta.song_version,
         .chart_version = chart.chart.meta.chart_version,
         .revision_id = chart.remote_revision_id,
+        .remote_chart_hash = chart.remote_chart_hash,
+        .remote_chart_fingerprint = chart.remote_chart_fingerprint,
     };
 }
 
@@ -207,6 +212,10 @@ song_entry_state make_download_song_state(const remote_song_payload& remote_song
         .lifecycle_status = remote_song.lifecycle_status,
     };
     song.remote_revision_id = remote_song.revision_id;
+    song.remote_song_json_hash = remote_song.song_json_hash;
+    song.remote_song_json_fingerprint = remote_song.song_json_fingerprint;
+    song.remote_audio_hash = remote_song.audio_hash;
+    song.remote_jacket_hash = remote_song.jacket_hash;
     std::string local_song_id;
     const song_select::song_entry* local_song =
         find_local_song_by_remote(local_songs, index, server_url, remote_song.id, local_song_id);
@@ -252,6 +261,8 @@ chart_entry_state make_download_chart_state(const remote_chart_payload& remote_c
         .lifecycle_status = remote_chart.lifecycle_status,
     };
     chart.remote_revision_id = remote_chart.revision_id;
+    chart.remote_chart_hash = remote_chart.chart_sha256;
+    chart.remote_chart_fingerprint = remote_chart.chart_fingerprint;
     chart.chart.note_count = remote_chart.note_count;
     chart.chart.min_bpm = remote_chart.min_bpm > 0.0f ? remote_chart.min_bpm : remote_song.base_bpm;
     chart.chart.max_bpm = remote_chart.max_bpm > 0.0f ? remote_chart.max_bpm : remote_song.base_bpm;
@@ -641,8 +652,22 @@ download_song_result download_song_package(const song_entry_state song,
     if (!use_legacy_workspace) {
         managed_content_storage::package_manifest manifest =
             preserved_manifest.has_value() ? *preserved_manifest : manifest_for_song(managed_identity, song_dir);
+        const std::string existing_package_id = manifest.song.package_id;
         manifest.song = managed_identity;
+        if (manifest.song.package_id.empty()) {
+            manifest.song.package_id = existing_package_id;
+        }
         manifest.local_song_id = local_song_id;
+        manifest.remote_song_json_hash = song.remote_song_json_hash;
+        manifest.remote_song_json_fingerprint = song.remote_song_json_fingerprint;
+        manifest.remote_audio_hash = song.remote_audio_hash;
+        manifest.remote_jacket_hash = song.remote_jacket_hash;
+        manifest.song_json_hash = updater::compute_sha256_hex(song_dir / "song.json").value_or("");
+        manifest.song_json_fingerprint = song_fingerprint::compute_sha256_hex(song_dir / "song.json").value_or("");
+        manifest.audio_hash = updater::compute_sha256_hex(audio_path).value_or("");
+        manifest.jacket_hash = local_meta->jacket_file.empty()
+            ? ""
+            : updater::compute_sha256_hex(jacket_path).value_or("");
         if (!managed_content_storage::write_manifest(manifest, error_message)) {
             result.message = error_message;
             return result;
@@ -782,9 +807,15 @@ download_song_result download_chart_file(const song_entry_state song,
         return result;
     }
     if (!use_legacy_workspace) {
+        managed_content_storage::chart_identity chart_manifest_identity = managed_chart_identity;
+        chart_manifest_identity.chart_hash = updater::compute_sha256_hex(target_chart_path).value_or("");
+        chart_manifest_identity.chart_fingerprint =
+            chart_fingerprint::compute_sha256_hex(target_chart_path).value_or("");
+        chart_manifest_identity.remote_chart_hash = chart.remote_chart_hash;
+        chart_manifest_identity.remote_chart_fingerprint = chart.remote_chart_fingerprint;
         managed_content_storage::package_manifest manifest =
             manifest_for_song(managed_song_identity_for(song, server_url), song_dir);
-        managed_content_storage::upsert_chart(manifest, managed_chart_identity);
+        managed_content_storage::upsert_chart(manifest, chart_manifest_identity);
         if (!managed_content_storage::write_manifest(manifest, error_message)) {
             result.message = error_message;
             return result;

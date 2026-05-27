@@ -538,6 +538,10 @@ std::optional<remote_song_payload> parse_remote_song(const std::string& object) 
         .has_can_edit = can_edit.has_value(),
         .audio_url = json::extract_string(object, "audioUrl").value_or(""),
         .jacket_url = json::extract_string(object, "jacketUrl").value_or(""),
+        .song_json_hash = json::extract_string(object, "songJsonSha256").value_or(""),
+        .song_json_fingerprint = json::extract_string(object, "songJsonFingerprint").value_or(""),
+        .audio_hash = json::extract_string(object, "audioSha256").value_or(""),
+        .jacket_hash = json::extract_string(object, "jacketSha256").value_or(""),
     };
 }
 

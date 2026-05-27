@@ -1,8 +1,11 @@
 #include "services/managed_content_storage.h"
 
 #include <algorithm>
+#include <chrono>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 #include <system_error>
 
@@ -43,6 +46,19 @@ std::string read_file(const fs::path& path) {
     std::ostringstream buffer;
     buffer << input.rdbuf();
     return buffer.str();
+}
+
+std::string utc_timestamp_now() {
+    const std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::tm utc{};
+#ifdef _WIN32
+    gmtime_s(&utc, &now);
+#else
+    gmtime_r(&now, &utc);
+#endif
+    std::ostringstream stream;
+    stream << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ");
+    return stream.str();
 }
 
 bool is_within_root(const fs::path& path, const fs::path& root) {
@@ -103,7 +119,8 @@ std::optional<package_manifest> read_manifest(const fs::path& song_directory) {
     }
 
     const std::optional<online_content::source> source =
-        online_content::source_from_string(json::extract_string(content, "source").value_or(""));
+        online_content::source_from_string(json::extract_string(content, "contentSource").value_or(
+            json::extract_string(content, "source").value_or("")));
     if (!source.has_value()) {
         return std::nullopt;
     }
@@ -114,7 +131,18 @@ std::optional<package_manifest> read_manifest(const fs::path& song_directory) {
     manifest.song.remote_song_id = json::extract_string(content, "remoteSongId").value_or("");
     manifest.song.song_version = json::extract_int(content, "songVersion").value_or(0);
     manifest.song.revision_id = json::extract_string(content, "revisionId").value_or("");
+    manifest.song.package_id = json::extract_string(content, "packageId").value_or("");
     manifest.local_song_id = json::extract_string(content, "localSongId").value_or("");
+    manifest.song_json_hash = json::extract_string(content, "songJsonHash").value_or("");
+    manifest.song_json_fingerprint = json::extract_string(content, "songJsonFingerprint").value_or("");
+    manifest.audio_hash = json::extract_string(content, "audioHash").value_or("");
+    manifest.jacket_hash = json::extract_string(content, "jacketHash").value_or("");
+    manifest.remote_song_json_hash = json::extract_string(content, "remoteSongJsonHash").value_or("");
+    manifest.remote_song_json_fingerprint = json::extract_string(content, "remoteSongJsonFingerprint").value_or("");
+    manifest.remote_audio_hash = json::extract_string(content, "remoteAudioHash").value_or("");
+    manifest.remote_jacket_hash = json::extract_string(content, "remoteJacketHash").value_or("");
+    manifest.created_at = json::extract_string(content, "createdAt").value_or("");
+    manifest.updated_at = json::extract_string(content, "updatedAt").value_or("");
 
     if (manifest.song.server_url.empty() || manifest.song.remote_song_id.empty()) {
         return std::nullopt;
@@ -130,6 +158,10 @@ std::optional<package_manifest> read_manifest(const fs::path& song_directory) {
             chart.remote_chart_id = json::extract_string(object, "remoteChartId").value_or("");
             chart.chart_version = json::extract_int(object, "chartVersion").value_or(0);
             chart.revision_id = json::extract_string(object, "revisionId").value_or("");
+            chart.chart_hash = json::extract_string(object, "chartHash").value_or("");
+            chart.chart_fingerprint = json::extract_string(object, "chartFingerprint").value_or("");
+            chart.remote_chart_hash = json::extract_string(object, "remoteChartHash").value_or("");
+            chart.remote_chart_fingerprint = json::extract_string(object, "remoteChartFingerprint").value_or("");
             if (!chart.local_chart_id.empty() && !chart.remote_chart_id.empty()) {
                 manifest.charts.push_back(std::move(chart));
             }
@@ -147,6 +179,10 @@ bool write_manifest(package_manifest manifest, std::string& error_message) {
     if (manifest.local_song_id.empty()) {
         manifest.local_song_id = local_song_id(manifest.song);
     }
+    if (manifest.created_at.empty()) {
+        manifest.created_at = utc_timestamp_now();
+    }
+    manifest.updated_at = utc_timestamp_now();
 
     const fs::path path = manifest_path(manifest.song);
     fs::create_directories(path.parent_path());
@@ -157,13 +193,24 @@ bool write_manifest(package_manifest manifest, std::string& error_message) {
     }
 
     output << "{\n";
-    output << "  \"schemaVersion\": 1,\n";
-    output << "  \"source\": \"" << online_content::source_label(manifest.song.source) << "\",\n";
+    output << "  \"schemaVersion\": 2,\n";
+    output << "  \"contentSource\": \"" << online_content::source_label(manifest.song.source) << "\",\n";
     output << "  \"serverUrl\": \"" << json::escape_string(manifest.song.server_url) << "\",\n";
     output << "  \"remoteSongId\": \"" << json::escape_string(manifest.song.remote_song_id) << "\",\n";
     output << "  \"localSongId\": \"" << json::escape_string(manifest.local_song_id) << "\",\n";
     output << "  \"songVersion\": " << std::max(0, manifest.song.song_version) << ",\n";
     output << "  \"revisionId\": \"" << json::escape_string(manifest.song.revision_id) << "\",\n";
+    output << "  \"packageId\": \"" << json::escape_string(manifest.song.package_id) << "\",\n";
+    output << "  \"songJsonHash\": \"" << json::escape_string(manifest.song_json_hash) << "\",\n";
+    output << "  \"songJsonFingerprint\": \"" << json::escape_string(manifest.song_json_fingerprint) << "\",\n";
+    output << "  \"audioHash\": \"" << json::escape_string(manifest.audio_hash) << "\",\n";
+    output << "  \"jacketHash\": \"" << json::escape_string(manifest.jacket_hash) << "\",\n";
+    output << "  \"remoteSongJsonHash\": \"" << json::escape_string(manifest.remote_song_json_hash) << "\",\n";
+    output << "  \"remoteSongJsonFingerprint\": \"" << json::escape_string(manifest.remote_song_json_fingerprint) << "\",\n";
+    output << "  \"remoteAudioHash\": \"" << json::escape_string(manifest.remote_audio_hash) << "\",\n";
+    output << "  \"remoteJacketHash\": \"" << json::escape_string(manifest.remote_jacket_hash) << "\",\n";
+    output << "  \"createdAt\": \"" << json::escape_string(manifest.created_at) << "\",\n";
+    output << "  \"updatedAt\": \"" << json::escape_string(manifest.updated_at) << "\",\n";
     output << "  \"charts\": [\n";
     for (size_t index = 0; index < manifest.charts.size(); ++index) {
         const chart_manifest_entry& chart = manifest.charts[index];
@@ -171,7 +218,11 @@ bool write_manifest(package_manifest manifest, std::string& error_message) {
                << "\"remoteChartId\": \"" << json::escape_string(chart.remote_chart_id) << "\", "
                << "\"localChartId\": \"" << json::escape_string(chart.local_chart_id) << "\", "
                << "\"chartVersion\": " << std::max(0, chart.chart_version) << ", "
-               << "\"revisionId\": \"" << json::escape_string(chart.revision_id) << "\""
+               << "\"revisionId\": \"" << json::escape_string(chart.revision_id) << "\", "
+               << "\"chartHash\": \"" << json::escape_string(chart.chart_hash) << "\", "
+               << "\"chartFingerprint\": \"" << json::escape_string(chart.chart_fingerprint) << "\", "
+               << "\"remoteChartHash\": \"" << json::escape_string(chart.remote_chart_hash) << "\", "
+               << "\"remoteChartFingerprint\": \"" << json::escape_string(chart.remote_chart_fingerprint) << "\""
                << "}";
         if (index + 1 < manifest.charts.size()) {
             output << ",";
@@ -194,6 +245,10 @@ void upsert_chart(package_manifest& manifest, const chart_identity& identity) {
         .remote_chart_id = identity.remote_chart_id,
         .chart_version = identity.chart_version,
         .revision_id = identity.revision_id,
+        .chart_hash = identity.chart_hash,
+        .chart_fingerprint = identity.chart_fingerprint,
+        .remote_chart_hash = identity.remote_chart_hash,
+        .remote_chart_fingerprint = identity.remote_chart_fingerprint,
     };
 
     const auto existing = std::find_if(manifest.charts.begin(), manifest.charts.end(),
