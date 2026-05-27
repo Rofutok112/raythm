@@ -111,6 +111,83 @@ bool is_owned_origin(std::optional<local_content_index::online_origin> origin) {
     return origin.has_value() && *origin == local_content_index::online_origin::owned_upload;
 }
 
+bool has_explicit_edit_denial(const std::optional<bool>& can_edit) {
+    return can_edit.has_value() && !*can_edit;
+}
+
+bool same_server(const std::string& left, const std::string& right) {
+    return !left.empty() &&
+           server_environment::normalize_url(left) == server_environment::normalize_url(right);
+}
+
+std::optional<bool> effective_song_can_edit(
+    const std::optional<local_content_index::online_song_binding>& binding,
+    const song_select::song_entry* song,
+    const std::string& server_url) {
+    if (song != nullptr && song->online_identity.has_value() &&
+        same_server(song->online_identity->server_url, server_url) &&
+        song->online_identity->can_edit.has_value()) {
+        return song->online_identity->can_edit;
+    }
+    return binding.has_value() ? binding->can_edit : std::nullopt;
+}
+
+std::optional<bool> effective_chart_can_edit(
+    const std::optional<local_content_index::online_chart_binding>& binding,
+    const song_select::chart_option* chart,
+    const std::string& server_url) {
+    if (chart != nullptr && chart->online_identity.has_value() &&
+        same_server(chart->online_identity->server_url, server_url) &&
+        chart->online_identity->can_edit.has_value()) {
+        return chart->online_identity->can_edit;
+    }
+    if (chart != nullptr) {
+        for (const online_content::chart_identity& link : chart->remote_links) {
+            if (same_server(link.server_url, server_url) && link.can_edit.has_value()) {
+                return link.can_edit;
+            }
+        }
+    }
+    return binding.has_value() ? binding->can_edit : std::nullopt;
+}
+
+bool has_song_remote_link(const std::optional<local_content_index::online_song_binding>& binding,
+                          const song_select::song_entry* song,
+                          const std::string& server_url) {
+    return (binding.has_value() && !binding->remote_song_id.empty()) ||
+           (song != nullptr && song->online_identity.has_value() &&
+            same_server(song->online_identity->server_url, server_url) &&
+            !song->online_identity->remote_song_id.empty());
+}
+
+bool has_chart_remote_link(const std::optional<local_content_index::online_chart_binding>& binding,
+                           const song_select::chart_option* chart,
+                           const std::string& server_url) {
+    if (binding.has_value() && !binding->remote_chart_id.empty()) {
+        return true;
+    }
+    if (chart != nullptr && chart->online_identity.has_value() &&
+        same_server(chart->online_identity->server_url, server_url) &&
+        !chart->online_identity->remote_chart_id.empty()) {
+        return true;
+    }
+    if (chart != nullptr) {
+        for (const online_content::chart_identity& link : chart->remote_links) {
+            if (same_server(link.server_url, server_url) && !link.remote_chart_id.empty()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::string edit_allowed_detail(const std::string& lifecycle_status, const std::string& fallback) {
+    if (!lifecycle_status.empty() && lifecycle_status != "active") {
+        return "Edit allowed: " + lifecycle_status;
+    }
+    return fallback;
+}
+
 std::vector<create_tool_section> build_create_tool_sections(const song_select::song_entry* song,
                                                             const song_select::chart_option* chart,
                                                             const std::string& session_server_url,
@@ -127,14 +204,34 @@ std::vector<create_tool_section> build_create_tool_sections(const song_select::s
     const bool owned_song = is_owned_origin(song_origin);
     const bool owned_chart = is_owned_origin(chart_origin);
     const bool song_can_create_chart = song_selected;
-    const bool linked_remote_song = song_origin.has_value();
+    const bool linked_remote_song = has_song_remote_link(song_binding, song, server_url);
+    const bool linked_remote_chart = has_chart_remote_link(chart_binding, chart, server_url);
+    const bool chart_has_remote_target = linked_remote_song || linked_remote_chart;
+    const std::optional<bool> song_can_edit = effective_song_can_edit(song_binding, song, server_url);
+    const std::optional<bool> chart_can_edit = effective_chart_can_edit(chart_binding, chart, server_url);
+    const bool editable_song_binding = song_can_edit.value_or(owned_song);
+    const bool editable_chart_binding = chart_can_edit.value_or(owned_chart);
+    const std::string song_lifecycle =
+        song != nullptr && song->online_identity.has_value() &&
+            same_server(song->online_identity->server_url, server_url)
+        ? song->online_identity->lifecycle_status
+        : (song_binding.has_value() ? song_binding->lifecycle_status : "");
+    const std::string chart_lifecycle =
+        chart != nullptr && chart->online_identity.has_value() &&
+            same_server(chart->online_identity->server_url, server_url)
+        ? chart->online_identity->lifecycle_status
+        : (chart_binding.has_value() ? chart_binding->lifecycle_status : "");
     const bool song_can_upload =
         !online_status_checking &&
-        song_selected;
+        song_selected &&
+        !has_explicit_edit_denial(song_can_edit);
     const bool chart_can_upload =
         !online_status_checking &&
         chart_selected &&
-        linked_remote_song;
+        chart_has_remote_target &&
+        (linked_remote_chart
+            ? !has_explicit_edit_denial(chart_can_edit)
+            : !has_explicit_edit_denial(song_can_edit));
 
     std::string song_publish_title = "UPLOAD SONG";
     std::string song_publish_detail = "Publish selected song";
@@ -144,40 +241,51 @@ std::vector<create_tool_section> build_create_tool_sections(const song_select::s
     } else if (online_status_checking) {
         song_publish_title = "CHECKING SONG";
         song_publish_detail = "Verifying online status";
-    } else if (owned_song) {
+    } else if (linked_remote_song && editable_song_binding) {
         song_publish_title = "UPDATE SONG";
-        song_publish_detail = "Replace your upload";
+        song_publish_detail = song_can_edit.has_value() && *song_can_edit
+            ? edit_allowed_detail(song_lifecycle, "Server edit allowed")
+            : "Replace your upload";
     } else if (linked_remote_song) {
-        song_publish_title = "UPDATE SONG";
-        song_publish_detail = "Check edit permission";
+        song_publish_title = has_explicit_edit_denial(song_can_edit) ? "LINKED SONG" : "UPDATE SONG";
+        song_publish_detail = has_explicit_edit_denial(song_can_edit)
+            ? "No edit permission"
+            : "Check edit permission";
     } else if (song->source_status == content_status::official) {
         song_publish_title = "OFFICIAL SONG";
-        song_publish_detail = "Song is linked online";
+        song_publish_detail = "Server permission unknown";
     } else if (song->source_status == content_status::community) {
         song_publish_title = "COMMUNITY SONG";
-        song_publish_detail = "Check edit permission";
+        song_publish_detail = "Server permission unknown";
     }
 
     std::string chart_publish_title = "UPLOAD CHART";
-    std::string chart_publish_detail = linked_remote_song ? "Publish to this song" : "Upload song first";
+    std::string chart_publish_detail = chart_has_remote_target ? "Publish to this song" : "Upload song first";
     if (!chart_selected) {
         chart_publish_title = "SELECT CHART";
         chart_publish_detail = "Chart publish unavailable";
     } else if (online_status_checking) {
         chart_publish_title = "CHECKING CHART";
         chart_publish_detail = "Verifying online status";
-    } else if (owned_chart) {
+    } else if (linked_remote_chart && editable_chart_binding) {
         chart_publish_title = "UPDATE CHART";
-        chart_publish_detail = "Replace your upload";
-    } else if (chart_origin.has_value()) {
-        chart_publish_title = "UPDATE CHART";
-        chart_publish_detail = "Check edit permission";
+        chart_publish_detail = chart_can_edit.has_value() && *chart_can_edit
+            ? edit_allowed_detail(chart_lifecycle, "Server edit allowed")
+            : "Replace your upload";
+    } else if (linked_remote_chart) {
+        chart_publish_title = has_explicit_edit_denial(chart_can_edit) ? "LINKED CHART" : "UPDATE CHART";
+        chart_publish_detail = has_explicit_edit_denial(chart_can_edit)
+            ? "No edit permission"
+            : "Check edit permission";
+    } else if (linked_remote_song && has_explicit_edit_denial(song_can_edit)) {
+        chart_publish_title = "SONG LOCKED";
+        chart_publish_detail = "No song edit permission";
     } else if (chart->source_status == content_status::official) {
         chart_publish_title = "OFFICIAL CHART";
-        chart_publish_detail = "Check edit permission";
+        chart_publish_detail = "Server permission unknown";
     } else if (chart->source_status == content_status::community) {
         chart_publish_title = "COMMUNITY CHART";
-        chart_publish_detail = "Check edit permission";
+        chart_publish_detail = "Server permission unknown";
     }
 
     return {

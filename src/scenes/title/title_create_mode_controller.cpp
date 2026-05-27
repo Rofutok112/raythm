@@ -3,36 +3,87 @@
 #include <optional>
 
 #include "models/data_models.h"
+#include "models/online_content_identity.h"
 #include "network/server_environment.h"
 #include "song_select/song_select_navigation.h"
+#include "title/create_upload_permissions.h"
 #include "title/local_content_index.h"
 #include "title/title_local_song_select_controller.h"
 #include "ui_notice.h"
 
 namespace {
 
-bool has_verified_remote_song(const song_select::song_entry& song, const std::string& session_server_url) {
-    const std::string server_url = server_environment::normalize_url(session_server_url);
-    if (server_url.empty()) {
-        return false;
-    }
-    const auto binding =
+bool same_server(const std::string& left, const std::string& right) {
+    return !left.empty() &&
+           server_environment::normalize_url(left) == server_environment::normalize_url(right);
+}
+
+std::optional<local_content_index::online_song_binding> song_upload_binding(
+    const song_select::song_entry& song,
+    const std::string& server_url) {
+    std::optional<local_content_index::online_song_binding> binding =
         local_content_index::find_song_by_local(server_url, song.song.meta.song_id);
-    return binding.has_value() &&
-           !binding->remote_song_id.empty();
+    if (binding.has_value() || !song.online_identity.has_value() ||
+        !same_server(song.online_identity->server_url, server_url) ||
+        song.online_identity->remote_song_id.empty()) {
+        return binding;
+    }
+    return local_content_index::online_song_binding{
+        .server_url = server_url,
+        .local_song_id = song.song.meta.song_id,
+        .remote_song_id = song.online_identity->remote_song_id,
+        .origin = local_content_index::online_origin::linked,
+        .can_edit = song.online_identity->can_edit,
+        .lifecycle_status = song.online_identity->lifecycle_status,
+    };
+}
+
+std::optional<local_content_index::online_chart_binding> chart_upload_binding(
+    const song_select::chart_option& chart,
+    const std::string& server_url) {
+    std::optional<local_content_index::online_chart_binding> binding =
+        local_content_index::find_chart_by_local(server_url, chart.meta.chart_id);
+    if (binding.has_value()) {
+        return binding;
+    }
+    const auto make_binding = [&](const online_content::chart_identity& identity) {
+        return local_content_index::online_chart_binding{
+            .server_url = server_url,
+            .local_chart_id = chart.meta.chart_id,
+            .remote_chart_id = identity.remote_chart_id,
+            .remote_song_id = identity.remote_song_id,
+            .remote_chart_version = identity.remote_chart_version,
+            .origin = local_content_index::online_origin::linked,
+            .can_edit = identity.can_edit,
+            .lifecycle_status = identity.lifecycle_status,
+        };
+    };
+    if (chart.online_identity.has_value() &&
+        same_server(chart.online_identity->server_url, server_url) &&
+        !chart.online_identity->remote_chart_id.empty()) {
+        return make_binding(*chart.online_identity);
+    }
+    for (const online_content::chart_identity& link : chart.remote_links) {
+        if (same_server(link.server_url, server_url) && !link.remote_chart_id.empty()) {
+            return make_binding(link);
+        }
+    }
+    return std::nullopt;
 }
 
 bool can_upload_song(const song_select::song_entry& song, const std::string& session_server_url) {
-    (void)song;
-    (void)session_server_url;
-    return true;
+    const std::string server_url = server_environment::normalize_url(session_server_url);
+    const auto binding = song_upload_binding(song, server_url);
+    return title_create_upload_permissions::can_start_song_upload(true, false, binding);
 }
 
 bool can_upload_chart(const song_select::song_entry& song,
                       const song_select::chart_option& chart,
                       const std::string& session_server_url) {
-    (void)chart;
-    return has_verified_remote_song(song, session_server_url);
+    const std::string server_url = server_environment::normalize_url(session_server_url);
+    const auto song_binding = song_upload_binding(song, server_url);
+    const auto chart_binding = chart_upload_binding(chart, server_url);
+    return title_create_upload_permissions::can_start_chart_upload(true, false, song_binding, chart_binding);
 }
 
 }  // namespace
@@ -109,7 +160,7 @@ void title_create_mode_controller::update(scene_manager& manager,
         if (song == nullptr) {
             song_select::queue_status_message(state, "Select a song to upload.", true);
         } else if (!can_upload_song(*song, state.auth.server_url)) {
-            ui::notify("Only Local songs or your Modified uploads can be published.", ui::notice_tone::error, 2.8f);
+            ui::notify("This song cannot be edited by the current account.", ui::notice_tone::error, 2.8f);
         } else {
             callbacks.start_song_upload(*song);
         }
@@ -145,7 +196,7 @@ void title_create_mode_controller::update(scene_manager& manager,
         if (song == nullptr || chart == nullptr) {
             song_select::queue_status_message(state, "Select a chart to upload.", true);
         } else if (!can_upload_chart(*song, *chart, state.auth.server_url)) {
-            ui::notify("Only Local charts or your Modified uploads can be published.", ui::notice_tone::error, 2.8f);
+            ui::notify("This chart cannot be edited by the current account.", ui::notice_tone::error, 2.8f);
         } else {
             callbacks.start_chart_upload(*song, *chart);
         }

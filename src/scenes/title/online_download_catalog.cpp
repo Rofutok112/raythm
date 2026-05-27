@@ -67,6 +67,8 @@ song_select::song_entry make_remote_song_entry(const remote_song_payload& song, 
         .server_url = server_url,
         .remote_song_id = song.id,
         .content_source = online_source_from_remote(song.content_source),
+        .can_edit = song.has_can_edit ? std::optional<bool>(song.can_edit) : std::nullopt,
+        .lifecycle_status = song.lifecycle_status,
     };
     entry.song.directory.clear();
     return entry;
@@ -123,6 +125,13 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
     state_entry.song.song.meta.play_count = remote_song.play_count;
     state_entry.song.song.meta.has_play_count = remote_song.has_play_count;
     state_entry.song.source_status = source_status_from_remote(remote_song.content_source);
+    state_entry.song.online_identity = online_content::song_identity{
+        .server_url = server_url,
+        .remote_song_id = remote_song.id,
+        .content_source = online_source_from_remote(remote_song.content_source),
+        .can_edit = remote_song.has_can_edit ? std::optional<bool>(remote_song.can_edit) : std::nullopt,
+        .lifecycle_status = remote_song.lifecycle_status,
+    };
     state_entry.installed = true;
     state_entry.installed_local_song_id = local_song.song.meta.song_id;
     state_entry.update_available = local_song.song.meta.song_version < remote_song.song_version;
@@ -149,6 +158,8 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
             .remote_chart_id = remote_chart.meta.chart_id,
             .content_source = online_source_from_remote(remote_song.content_source),
             .remote_chart_version = binding.has_value() ? binding->remote_chart_version : chart.meta.chart_version,
+            .can_edit = binding.has_value() ? binding->can_edit : std::nullopt,
+            .lifecycle_status = binding.has_value() ? binding->lifecycle_status : remote_song.lifecycle_status,
         };
         state_entry.charts.push_back({
             remote_chart,
@@ -277,6 +288,8 @@ void append_chart_page(song_entry_state& song_state,
             .remote_chart_id = chart.id,
             .content_source = online_source_from_remote(chart.content_source),
             .remote_chart_version = chart.chart_version,
+            .can_edit = chart.has_can_edit ? std::optional<bool>(chart.can_edit) : std::nullopt,
+            .lifecycle_status = chart.lifecycle_status,
         };
         remote_chart.note_count = chart.note_count;
         remote_chart.min_bpm = chart.min_bpm > 0.0f ? chart.min_bpm : song_state.song.song.meta.base_bpm;
@@ -583,8 +596,7 @@ std::vector<song_entry_state> load_owned_songs(const std::vector<song_select::so
     for (const song_select::song_entry& local_song : local_songs) {
         const std::optional<local_content_index::online_song_binding> binding =
             local_content_index::find_song_by_local(index, server_url, local_song.song.meta.song_id);
-        if (!binding.has_value() || binding->origin != local_content_index::online_origin::owned_upload ||
-            binding->remote_song_id.empty()) {
+        if (!binding.has_value() || binding->remote_song_id.empty()) {
             continue;
         }
 
@@ -592,6 +604,26 @@ std::vector<song_entry_state> load_owned_songs(const std::vector<song_select::so
             fetch_remote_song_by_id(binding->remote_song_id, server_url);
         if (!remote_song.success) {
             continue;
+        }
+        const bool can_edit = remote_song.song.has_can_edit
+            ? remote_song.song.can_edit
+            : binding->origin == local_content_index::online_origin::owned_upload;
+        if (!can_edit) {
+            continue;
+        }
+        if (remote_song.song.has_can_edit || !remote_song.song.lifecycle_status.empty()) {
+            local_content_index::put_song_binding({
+                .server_url = binding->server_url,
+                .local_song_id = binding->local_song_id,
+                .remote_song_id = binding->remote_song_id,
+                .origin = binding->origin,
+                .can_edit = remote_song.song.has_can_edit
+                    ? std::optional<bool>(remote_song.song.can_edit)
+                    : binding->can_edit,
+                .lifecycle_status = !remote_song.song.lifecycle_status.empty()
+                    ? remote_song.song.lifecycle_status
+                    : binding->lifecycle_status,
+            });
         }
         owned.push_back(build_owned_song_state(local_song, remote_song.song, remote_song.server_url, index));
     }

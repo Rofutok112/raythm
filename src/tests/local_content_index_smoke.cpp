@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <optional>
 
 #include "title/local_content_index.h"
 
@@ -29,6 +30,8 @@ int main() {
         .local_song_id = "local-song",
         .remote_song_id = "remote-song",
         .origin = local_content_index::online_origin::owned_upload,
+        .can_edit = true,
+        .lifecycle_status = "active",
     });
     local_content_index::put_chart_binding({
         .server_url = "https://server.example",
@@ -37,6 +40,8 @@ int main() {
         .remote_song_id = "remote-song",
         .remote_chart_version = 7,
         .origin = local_content_index::online_origin::downloaded,
+        .can_edit = false,
+        .lifecycle_status = "archived",
     });
     local_content_index::put_chart_binding({
         .server_url = "https://server.example",
@@ -58,12 +63,16 @@ int main() {
 
     bool ok = true;
     ok = song_by_local.has_value() && song_by_local->remote_song_id == "remote-song" && ok;
+    ok = song_by_local.has_value() && song_by_local->can_edit == std::optional<bool>(true) && ok;
+    ok = song_by_local.has_value() && song_by_local->lifecycle_status == "active" && ok;
     ok = song_by_remote.has_value() && song_by_remote->local_song_id == "local-song" && ok;
     ok = chart_by_local.has_value() && chart_by_local->remote_chart_id == "remote-chart" && ok;
     ok = chart_by_remote.has_value() && chart_by_remote->local_chart_id == "local-chart" && ok;
     ok = chart_by_local.has_value() &&
          chart_by_local->remote_chart_version == 7 &&
-         chart_by_local->origin == local_content_index::online_origin::downloaded && ok;
+         chart_by_local->origin == local_content_index::online_origin::downloaded &&
+         chart_by_local->can_edit == std::optional<bool>(false) &&
+         chart_by_local->lifecycle_status == "archived" && ok;
 
     local_content_index::remove_chart_bindings_for_remote_song("https://server.example", "remote-song");
     ok = !local_content_index::find_chart_by_local("https://server.example", "local-chart").has_value() && ok;

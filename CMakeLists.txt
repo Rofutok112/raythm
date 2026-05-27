@@ -308,6 +308,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_local_song_select_controller.h
         src/scenes/title/create_tools_view.cpp
         src/scenes/title/create_tools_view.h
+        src/scenes/title/create_upload_permissions.cpp
+        src/scenes/title/create_upload_permissions.h
         src/scenes/title/create_upload_client.cpp
         src/scenes/title/create_upload_client.h
         src/scenes/title/online_catalog_data_controller.cpp
@@ -702,6 +704,13 @@ add_executable(online_content_availability_smoke
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
         src/tests/online_content_availability_smoke.cpp)
+
+add_executable(create_upload_permissions_smoke
+        src/scenes/title/create_upload_permissions.cpp
+        src/scenes/title/create_upload_permissions.h
+        src/scenes/title/local_content_binding.h
+        src/scenes/title/local_content_index.h
+        src/tests/create_upload_permissions_smoke.cpp)
 
 add_executable(content_cache_paths_smoke
         src/core/app_paths.cpp
@@ -1189,6 +1198,7 @@ set(RAYTHM_SMOKE_TARGETS
         song_export_identity_smoke
         online_content_identity_smoke
         online_content_availability_smoke
+        create_upload_permissions_smoke
         content_cache_paths_smoke
         settings_io_smoke
         localization_smoke
