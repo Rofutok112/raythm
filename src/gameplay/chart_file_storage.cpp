@@ -4,6 +4,7 @@
 #include <system_error>
 
 #include "chart_parser.h"
+#include "chart_serializer.h"
 #include "path_utils.h"
 
 #ifdef _WIN32
@@ -75,6 +76,58 @@ bool write_validated_raw_chart_file(const std::filesystem::path& path,
 
     if (!replace_file_with_temp(temp_path, path)) {
         std::filesystem::remove(temp_path);
+        error_message = "Failed to write downloaded chart data to disk.";
+        return false;
+    }
+
+    return true;
+}
+
+bool write_validated_chart_file_with_local_id(const std::filesystem::path& path,
+                                              const std::vector<unsigned char>& bytes,
+                                              const std::string& local_chart_id,
+                                              std::string& error_message) {
+    if (local_chart_id.empty()) {
+        error_message = "Downloaded chart file was missing a local chart ID.";
+        return false;
+    }
+
+    std::filesystem::create_directories(path.parent_path());
+    const std::filesystem::path raw_temp_path =
+        path.parent_path() / (path.filename().string() + ".download.tmp");
+    if (!write_binary_file(raw_temp_path, bytes, error_message)) {
+        return false;
+    }
+
+    const chart_parse_result parsed = chart_parser::parse(path_utils::to_utf8(raw_temp_path));
+    std::error_code ec;
+    std::filesystem::remove(raw_temp_path, ec);
+    if (!parsed.success || !parsed.data.has_value()) {
+        error_message = parsed.errors.empty() ? "Downloaded chart file was invalid." : parsed.errors.front();
+        return false;
+    }
+
+    chart_data chart = *parsed.data;
+    chart.meta.chart_id = local_chart_id;
+    const std::filesystem::path rewrite_temp_path =
+        path.parent_path() / (path.filename().string() + ".rewrite.tmp");
+    std::filesystem::remove(rewrite_temp_path, ec);
+    if (!chart_serializer::serialize(chart, path_utils::to_utf8(rewrite_temp_path))) {
+        error_message = "Failed to prepare downloaded chart data for local storage.";
+        std::filesystem::remove(rewrite_temp_path, ec);
+        return false;
+    }
+
+    const chart_parse_result rewritten = chart_parser::parse(path_utils::to_utf8(rewrite_temp_path));
+    if (!rewritten.success || !rewritten.data.has_value() ||
+        rewritten.data->meta.chart_id != local_chart_id) {
+        error_message = "Failed to validate downloaded chart data for local storage.";
+        std::filesystem::remove(rewrite_temp_path, ec);
+        return false;
+    }
+
+    if (!replace_file_with_temp(rewrite_temp_path, path)) {
+        std::filesystem::remove(rewrite_temp_path, ec);
         error_message = "Failed to write downloaded chart data to disk.";
         return false;
     }

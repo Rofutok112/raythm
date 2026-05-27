@@ -21,7 +21,7 @@ using local_sqlite::column_text;
 using local_sqlite::exec;
 using local_sqlite::statement;
 
-constexpr const char* kCatalogStatusSchema = "local-plain-workspace-v1";
+constexpr const char* kCatalogStatusSchema = "managed-content-v1";
 
 void ensure_optional_schema(sqlite3* database) {
     exec(database, "ALTER TABLE local_songs ADD COLUMN genre TEXT NOT NULL DEFAULT '';");
@@ -151,6 +151,7 @@ void append_tree_signature(std::ostringstream& output, const std::filesystem::pa
 std::string current_catalog_signature() {
     std::ostringstream output;
     append_tree_signature(output, app_paths::songs_root(), "songs");
+    append_tree_signature(output, app_paths::content_cache_root(), "content-cache");
     return output.str();
 }
 
@@ -212,23 +213,54 @@ std::string verification_state_label(verification_state state) {
     }
 }
 
-void force_local_plain_workspace(song_entry& song) {
-    song.kind = content_kind::local;
-    song.storage = storage_policy::plain_workspace;
-    song.verification = verification_state::unchecked;
-    song.status = content_status::local;
-    song.source_status = content_status::local;
-    song.online_identity.reset();
+content_status parse_status_label(const std::string& value) {
+    if (value == "official") {
+        return content_status::official;
+    }
+    if (value == "community") {
+        return content_status::community;
+    }
+    if (value == "update") {
+        return content_status::update;
+    }
+    if (value == "modified") {
+        return content_status::modified;
+    }
+    if (value == "checking") {
+        return content_status::checking;
+    }
+    return content_status::local;
 }
 
-void force_local_plain_workspace(chart_option& chart) {
-    chart.kind = content_kind::local;
-    chart.storage = storage_policy::plain_workspace;
-    chart.verification = verification_state::unchecked;
-    chart.status = content_status::local;
-    chart.source_status = content_status::local;
-    chart.online_identity.reset();
-    chart.remote_links.clear();
+content_kind parse_content_kind_label(const std::string& value) {
+    if (value == "official") {
+        return content_kind::official;
+    }
+    if (value == "community") {
+        return content_kind::community;
+    }
+    return content_kind::local;
+}
+
+storage_policy parse_storage_policy_label(const std::string& value) {
+    return value == "managed_package" ? storage_policy::managed_package
+                                      : storage_policy::plain_workspace;
+}
+
+verification_state parse_verification_state_label(const std::string& value) {
+    if (value == "matched") {
+        return verification_state::matched;
+    }
+    if (value == "modified") {
+        return verification_state::modified;
+    }
+    if (value == "unavailable") {
+        return verification_state::unavailable;
+    }
+    if (value == "checking") {
+        return verification_state::checking;
+    }
+    return verification_state::unchecked;
 }
 
 std::string timing_type_label(timing_event_type type) {
@@ -363,20 +395,19 @@ void put_song(sqlite3* database, const song_entry& song) {
     sqlite3_bind_double(query.get(), 9, song.song.meta.duration_seconds);
     sqlite3_bind_int(query.get(), 10, song.song.meta.preview_start_ms);
     sqlite3_bind_int(query.get(), 11, song.song.meta.song_version);
-    song_entry local_song = song;
-    force_local_plain_workspace(local_song);
-
-    bind_text(query.get(), 12, status_label(local_song.status));
-    bind_text(query.get(), 13, status_label(local_song.source_status));
-    bind_text(query.get(), 14, content_kind_label(local_song.kind));
-    bind_text(query.get(), 15, storage_policy_label(local_song.storage));
-    bind_text(query.get(), 16, verification_state_label(local_song.verification));
-    bind_text(query.get(), 17, "");
-    bind_text(query.get(), 18, "");
-    bind_text(query.get(), 19, "");
-    sqlite3_bind_int(query.get(), 20, local_song.song.meta.offset);
-    sqlite3_bind_int(query.get(), 21, local_song.song.meta.has_offset ? 1 : 0);
-    bind_text(query.get(), 22, serialize_timing_events(local_song.song.meta.timing_events));
+    bind_text(query.get(), 12, status_label(song.status));
+    bind_text(query.get(), 13, status_label(song.source_status));
+    bind_text(query.get(), 14, content_kind_label(song.kind));
+    bind_text(query.get(), 15, storage_policy_label(song.storage));
+    bind_text(query.get(), 16, verification_state_label(song.verification));
+    bind_text(query.get(), 17, song.online_identity.has_value() ? song.online_identity->server_url : "");
+    bind_text(query.get(), 18, song.online_identity.has_value() ? song.online_identity->remote_song_id : "");
+    bind_text(query.get(), 19, song.online_identity.has_value()
+        ? online_content::source_label(song.online_identity->content_source)
+        : "");
+    sqlite3_bind_int(query.get(), 20, song.song.meta.offset);
+    sqlite3_bind_int(query.get(), 21, song.song.meta.has_offset ? 1 : 0);
+    bind_text(query.get(), 22, serialize_timing_events(song.song.meta.timing_events));
     sqlite3_step(query.get());
 }
 
@@ -424,19 +455,20 @@ void put_chart(sqlite3* database, const chart_option& chart) {
     sqlite3_bind_int(query.get(), 9, chart.note_count);
     sqlite3_bind_double(query.get(), 10, chart.min_bpm);
     sqlite3_bind_double(query.get(), 11, chart.max_bpm);
-    chart_option local_chart = chart;
-    force_local_plain_workspace(local_chart);
-
-    bind_text(query.get(), 12, status_label(local_chart.status));
-    bind_text(query.get(), 13, status_label(local_chart.source_status));
-    bind_text(query.get(), 14, content_kind_label(local_chart.kind));
-    bind_text(query.get(), 15, storage_policy_label(local_chart.storage));
-    bind_text(query.get(), 16, verification_state_label(local_chart.verification));
-    bind_text(query.get(), 17, "");
-    bind_text(query.get(), 18, "");
-    bind_text(query.get(), 19, "");
-    bind_text(query.get(), 20, "");
-    sqlite3_bind_int(query.get(), 21, 0);
+    bind_text(query.get(), 12, status_label(chart.status));
+    bind_text(query.get(), 13, status_label(chart.source_status));
+    bind_text(query.get(), 14, content_kind_label(chart.kind));
+    bind_text(query.get(), 15, storage_policy_label(chart.storage));
+    bind_text(query.get(), 16, verification_state_label(chart.verification));
+    bind_text(query.get(), 17, chart.online_identity.has_value() ? chart.online_identity->server_url : "");
+    bind_text(query.get(), 18, chart.online_identity.has_value() ? chart.online_identity->remote_song_id : "");
+    bind_text(query.get(), 19, chart.online_identity.has_value() ? chart.online_identity->remote_chart_id : "");
+    bind_text(query.get(), 20, chart.online_identity.has_value()
+        ? online_content::source_label(chart.online_identity->content_source)
+        : "");
+    sqlite3_bind_int(query.get(), 21, chart.online_identity.has_value()
+        ? chart.online_identity->remote_chart_version
+        : chart.meta.chart_version);
     sqlite3_step(query.get());
 }
 
@@ -459,7 +491,9 @@ catalog_data load_cached_catalog() {
     std::map<std::string, song_entry> by_song_id;
     statement songs(database.get(),
                     "SELECT song_id, title, artist, genre, directory, audio_file, jacket_file, base_bpm, "
-                    "duration_seconds, preview_start_ms, song_version, song_offset, song_has_offset, timing_events "
+                    "duration_seconds, preview_start_ms, song_version, song_offset, song_has_offset, timing_events, "
+                    "status, source_status, content_kind, storage_policy, verification_state, "
+                    "online_server_url, online_song_id, online_source "
                     "FROM local_songs ORDER BY title, song_id;");
     if (!songs.valid()) {
         return catalog;
@@ -481,13 +515,30 @@ catalog_data load_cached_catalog() {
         entry.song.meta.offset = sqlite3_column_int(songs.get(), 11);
         entry.song.meta.has_offset = sqlite3_column_int(songs.get(), 12) != 0;
         entry.song.meta.timing_events = parse_timing_events(column_text(songs.get(), 13));
-        force_local_plain_workspace(entry);
+        entry.status = parse_status_label(column_text(songs.get(), 14));
+        entry.source_status = parse_status_label(column_text(songs.get(), 15));
+        entry.kind = parse_content_kind_label(column_text(songs.get(), 16));
+        entry.storage = parse_storage_policy_label(column_text(songs.get(), 17));
+        entry.verification = parse_verification_state_label(column_text(songs.get(), 18));
+        const std::string online_server_url = column_text(songs.get(), 19);
+        const std::string online_song_id = column_text(songs.get(), 20);
+        const std::optional<online_content::source> online_source =
+            online_content::source_from_string(column_text(songs.get(), 21));
+        if (!online_server_url.empty() && !online_song_id.empty() && online_source.has_value()) {
+            entry.online_identity = online_content::song_identity{
+                .server_url = online_server_url,
+                .remote_song_id = online_song_id,
+                .content_source = *online_source,
+            };
+        }
         by_song_id[entry.song.meta.song_id] = std::move(entry);
     }
 
     statement charts(database.get(),
                      "SELECT chart_id, song_id, path, difficulty, level, key_count, chart_author, "
-                     "format_version, note_count, min_bpm, max_bpm "
+                     "format_version, note_count, min_bpm, max_bpm, status, source_status, "
+                     "content_kind, storage_policy, verification_state, online_server_url, "
+                     "online_song_id, online_chart_id, online_source, online_chart_version "
                      "FROM local_charts ORDER BY song_id, level, difficulty;");
     if (!charts.valid()) {
         return catalog;
@@ -511,7 +562,27 @@ catalog_data load_cached_catalog() {
         chart.note_count = sqlite3_column_int(charts.get(), 8);
         chart.min_bpm = static_cast<float>(sqlite3_column_double(charts.get(), 9));
         chart.max_bpm = static_cast<float>(sqlite3_column_double(charts.get(), 10));
-        force_local_plain_workspace(chart);
+        chart.status = parse_status_label(column_text(charts.get(), 11));
+        chart.source_status = parse_status_label(column_text(charts.get(), 12));
+        chart.kind = parse_content_kind_label(column_text(charts.get(), 13));
+        chart.storage = parse_storage_policy_label(column_text(charts.get(), 14));
+        chart.verification = parse_verification_state_label(column_text(charts.get(), 15));
+        const std::string online_server_url = column_text(charts.get(), 16);
+        const std::string online_song_id = column_text(charts.get(), 17);
+        const std::string online_chart_id = column_text(charts.get(), 18);
+        const std::optional<online_content::source> online_source =
+            online_content::source_from_string(column_text(charts.get(), 19));
+        const int online_chart_version = sqlite3_column_int(charts.get(), 20);
+        if (!online_server_url.empty() && !online_song_id.empty() &&
+            !online_chart_id.empty() && online_source.has_value()) {
+            chart.online_identity = online_content::chart_identity{
+                .server_url = online_server_url,
+                .remote_song_id = online_song_id,
+                .remote_chart_id = online_chart_id,
+                .content_source = *online_source,
+                .remote_chart_version = online_chart_version,
+            };
+        }
         song_it->second.song.chart_paths.push_back(chart.path);
         song_it->second.charts.push_back(std::move(chart));
     }

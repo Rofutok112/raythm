@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "chart_file_storage.h"
+#include "chart_parser.h"
 
 namespace {
 
@@ -57,8 +58,17 @@ int main() {
         path, bytes_from_string(invalid_chart), error_message) && ok;
     ok = read_text_file(path) == chart && ok;
 
+    const std::filesystem::path managed_path =
+        std::filesystem::temp_directory_path() / "raythm_chart_file_storage_managed_smoke.rchart";
+    ok = chart_file_storage::write_validated_chart_file_with_local_id(
+        managed_path, bytes_from_string(chart), "local-managed-chart", error_message) && ok;
+    const chart_parse_result managed_chart = chart_parser::parse(managed_path.string());
+    ok = managed_chart.success && managed_chart.data.has_value() &&
+         managed_chart.data->meta.chart_id == "local-managed-chart" && ok;
+
     std::error_code ec;
     std::filesystem::remove(path, ec);
+    std::filesystem::remove(managed_path, ec);
 
     if (!ok) {
         std::cerr << "chart_file_storage smoke test failed\n";

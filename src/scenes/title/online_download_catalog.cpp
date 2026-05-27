@@ -80,6 +80,7 @@ song_entry_state build_song_state(const remote_song_payload& remote_song,
                                   const local_content_index::snapshot& index) {
     song_entry_state state_entry;
     state_entry.song = make_remote_song_entry(remote_song, server_url);
+    state_entry.remote_revision_id = remote_song.revision_id;
 
     const online_content_availability::resolved_song availability =
         online_content_availability::resolve_song(
@@ -132,6 +133,7 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
         .can_edit = remote_song.has_can_edit ? std::optional<bool>(remote_song.can_edit) : std::nullopt,
         .lifecycle_status = remote_song.lifecycle_status,
     };
+    state_entry.remote_revision_id = remote_song.revision_id;
     state_entry.installed = true;
     state_entry.installed_local_song_id = local_song.song.meta.song_id;
     state_entry.update_available = local_song.song.meta.song_version < remote_song.song_version;
@@ -162,11 +164,12 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
             .lifecycle_status = binding.has_value() ? binding->lifecycle_status : remote_song.lifecycle_status,
         };
         state_entry.charts.push_back({
-            remote_chart,
-            chart.meta.chart_id,
-            {},
-            true,
-            false,
+            .chart = remote_chart,
+            .installed_local_chart_id = chart.meta.chart_id,
+            .remote_revision_id = "",
+            .uploader_id = "",
+            .installed = true,
+            .update_available = false,
         });
     }
     return state_entry;
@@ -295,11 +298,12 @@ void append_chart_page(song_entry_state& song_state,
         remote_chart.min_bpm = chart.min_bpm > 0.0f ? chart.min_bpm : song_state.song.song.meta.base_bpm;
         remote_chart.max_bpm = chart.max_bpm > 0.0f ? chart.max_bpm : song_state.song.song.meta.base_bpm;
         song_state.charts.push_back({
-            remote_chart,
-            availability.local_chart_id,
-            chart.uploader_id,
-            availability.installed,
-            availability.update_available,
+            .chart = remote_chart,
+            .installed_local_chart_id = availability.local_chart_id,
+            .remote_revision_id = chart.revision_id,
+            .uploader_id = chart.uploader_id,
+            .installed = availability.installed,
+            .update_available = availability.update_available,
         });
     }
 

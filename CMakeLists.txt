@@ -208,6 +208,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/services/ranking_service.h
         src/services/online_content_availability.cpp
         src/services/online_content_availability.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
         src/gameplay/scoring_ruleset_runtime.cpp
         src/gameplay/scoring_ruleset_runtime.h
         src/gameplay/score_system.cpp
@@ -593,6 +595,8 @@ add_executable(chart_file_storage_smoke
         src/gameplay/chart_file_storage.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
+        src/gameplay/chart_serializer.cpp
+        src/gameplay/chart_serializer.h
         src/tests/chart_file_storage_smoke.cpp
         src/models/data_models.h)
 
@@ -720,6 +724,52 @@ add_executable(content_cache_paths_smoke
         src/models/data_models.h
         src/models/online_content_identity.h
         src/tests/content_cache_paths_smoke.cpp)
+
+add_executable(managed_content_storage_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
+        src/core/local_sqlite.cpp
+        src/core/local_sqlite.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_file_storage.cpp
+        src/gameplay/chart_file_storage.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
+        src/gameplay/chart_level_cache.cpp
+        src/gameplay/chart_level_cache.h
+        src/gameplay/chart_parser.cpp
+        src/gameplay/chart_parser.h
+        src/gameplay/chart_serializer.cpp
+        src/gameplay/chart_serializer.h
+        src/gameplay/song_loader.cpp
+        src/gameplay/song_loader.h
+        src/gameplay/song_writer.cpp
+        src/gameplay/song_writer.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/models/data_models.h
+        src/models/online_content_identity.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/scenes/shared/scene_fade.cpp
+        src/scenes/shared/scene_fade.h
+        src/scenes/song_select/local_catalog_database.cpp
+        src/scenes/song_select/local_catalog_database.h
+        src/scenes/song_select/song_catalog_service.cpp
+        src/scenes/song_select/song_catalog_service.h
+        src/scenes/song_select/song_select_state.cpp
+        src/scenes/song_select/song_select_state.h
+        src/scenes/title/local_content_binding.h
+        src/scenes/title/local_content_database.cpp
+        src/scenes/title/local_content_database.h
+        src/scenes/title/local_content_index.cpp
+        src/scenes/title/local_content_index.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
+        src/tests/managed_content_storage_smoke.cpp)
 
 add_executable(settings_io_smoke
         src/core/app_paths.cpp
@@ -1200,6 +1250,7 @@ set(RAYTHM_SMOKE_TARGETS
         online_content_availability_smoke
         create_upload_permissions_smoke
         content_cache_paths_smoke
+        managed_content_storage_smoke
         settings_io_smoke
         localization_smoke
         local_catalog_database_smoke
@@ -1264,6 +1315,7 @@ target_link_libraries(update_version_smoke PRIVATE winhttp)
 target_link_libraries(song_loader_smoke PRIVATE sqlite3)
 target_link_libraries(local_catalog_database_smoke PRIVATE sqlite3 raylib)
 target_link_libraries(local_content_index_smoke PRIVATE sqlite3)
+target_link_libraries(managed_content_storage_smoke PRIVATE sqlite3 raylib)
 target_link_libraries(online_content_availability_smoke PRIVATE raylib)
 target_link_libraries(song_select_state_smoke PRIVATE raylib)
 target_link_libraries(song_select_data_controller_smoke PRIVATE raylib)
