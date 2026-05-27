@@ -16,6 +16,8 @@ struct song_identity {
     std::string server_url;
     std::string remote_song_id;
     source content_source = source::community;
+    std::optional<bool> can_edit;
+    std::string lifecycle_status;
 };
 
 struct chart_identity {
@@ -24,6 +26,8 @@ struct chart_identity {
     std::string remote_chart_id;
     source content_source = source::community;
     int remote_chart_version = 0;
+    std::optional<bool> can_edit;
+    std::string lifecycle_status;
 };
 
 inline std::optional<source> source_from_status(content_status status) {
@@ -70,6 +74,18 @@ inline bool is_queueable(const chart_identity& identity) {
     return !identity.server_url.empty() &&
            !identity.remote_song_id.empty() &&
            !identity.remote_chart_id.empty();
+}
+
+inline std::optional<bool> explicit_edit_permission(const song_identity& identity) {
+    return identity.can_edit;
+}
+
+inline std::optional<bool> explicit_edit_permission(const chart_identity& identity) {
+    return identity.can_edit;
+}
+
+inline bool can_edit_with_owned_fallback(const std::optional<bool>& can_edit, bool owned_upload) {
+    return can_edit.value_or(owned_upload);
 }
 
 }  // namespace online_content

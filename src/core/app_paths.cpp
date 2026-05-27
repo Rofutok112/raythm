@@ -66,6 +66,18 @@ std::filesystem::path songs_root() {
     return app_data_root() / "songs";
 }
 
+std::filesystem::path content_cache_root() {
+    return app_data_root() / "content-cache";
+}
+
+std::filesystem::path community_content_cache_root() {
+    return content_cache_root() / "community";
+}
+
+std::filesystem::path official_content_cache_root() {
+    return content_cache_root() / "official";
+}
+
 std::filesystem::path rankings_root() {
     return app_data_root() / "rankings";
 }
@@ -118,6 +130,8 @@ void ensure_directories() {
     std::error_code ec;
     std::filesystem::create_directories(app_data_root(), ec);
     std::filesystem::create_directories(songs_root(), ec);
+    std::filesystem::create_directories(community_content_cache_root(), ec);
+    std::filesystem::create_directories(official_content_cache_root(), ec);
     std::filesystem::create_directories(rankings_root(), ec);
     std::filesystem::create_directories(mvs_root(), ec);
 }

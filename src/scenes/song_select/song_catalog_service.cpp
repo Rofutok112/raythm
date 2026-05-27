@@ -75,6 +75,8 @@ std::vector<online_content::chart_identity> remote_links_for_chart(
             .remote_chart_id = binding.remote_chart_id,
             .content_source = online_content::source::community,
             .remote_chart_version = binding.remote_chart_version,
+            .can_edit = binding.can_edit,
+            .lifecycle_status = binding.lifecycle_status,
         });
     }
     return links;

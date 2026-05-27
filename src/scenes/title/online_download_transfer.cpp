@@ -95,6 +95,8 @@ song_entry_state make_download_song_state(const remote_song_payload& remote_song
         .server_url = server_url,
         .remote_song_id = remote_song.id,
         .content_source = online_source_from_remote_download(remote_song.content_source),
+        .can_edit = remote_song.has_can_edit ? std::optional<bool>(remote_song.can_edit) : std::nullopt,
+        .lifecycle_status = remote_song.lifecycle_status,
     };
     std::string local_song_id;
     const song_select::song_entry* local_song =
@@ -137,6 +139,8 @@ chart_entry_state make_download_chart_state(const remote_chart_payload& remote_c
         .remote_chart_id = remote_chart.id,
         .content_source = online_source_from_remote_download(remote_chart.content_source),
         .remote_chart_version = remote_chart.chart_version,
+        .can_edit = remote_chart.has_can_edit ? std::optional<bool>(remote_chart.can_edit) : std::nullopt,
+        .lifecycle_status = remote_chart.lifecycle_status,
     };
     chart.chart.note_count = remote_chart.note_count;
     chart.chart.min_bpm = remote_chart.min_bpm > 0.0f ? remote_chart.min_bpm : remote_song.base_bpm;
@@ -507,6 +511,8 @@ download_song_result download_song_package(const song_entry_state song,
         .local_song_id = local_song_id,
         .remote_song_id = result.song_id,
         .origin = origin,
+        .can_edit = song.song.online_identity.has_value() ? song.song.online_identity->can_edit : std::nullopt,
+        .lifecycle_status = song.song.online_identity.has_value() ? song.song.online_identity->lifecycle_status : "",
     });
 
     result.success = true;
@@ -583,6 +589,8 @@ download_song_result download_chart_file(const song_entry_state song,
             .local_song_id = local_song_id,
             .remote_song_id = result.song_id,
             .origin = local_content_index::online_origin::downloaded,
+            .can_edit = song.song.online_identity.has_value() ? song.song.online_identity->can_edit : std::nullopt,
+            .lifecycle_status = song.song.online_identity.has_value() ? song.song.online_identity->lifecycle_status : "",
         });
     }
     local_content_index::put_chart_binding({
@@ -592,6 +600,8 @@ download_song_result download_chart_file(const song_entry_state song,
         .remote_song_id = result.song_id,
         .remote_chart_version = chart.chart.meta.chart_version,
         .origin = local_content_index::online_origin::downloaded,
+        .can_edit = chart.chart.online_identity.has_value() ? chart.chart.online_identity->can_edit : std::nullopt,
+        .lifecycle_status = chart.chart.online_identity.has_value() ? chart.chart.online_identity->lifecycle_status : "",
     });
 
     result.success = true;

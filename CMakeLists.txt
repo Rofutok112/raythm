@@ -238,6 +238,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/updater/update_verify.h
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/core/file_dialog.cpp
@@ -306,6 +308,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_local_song_select_controller.h
         src/scenes/title/create_tools_view.cpp
         src/scenes/title/create_tools_view.h
+        src/scenes/title/create_upload_permissions.cpp
+        src/scenes/title/create_upload_permissions.h
         src/scenes/title/create_upload_client.cpp
         src/scenes/title/create_upload_client.h
         src/scenes/title/online_catalog_data_controller.cpp
@@ -700,6 +704,22 @@ add_executable(online_content_availability_smoke
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
         src/tests/online_content_availability_smoke.cpp)
+
+add_executable(create_upload_permissions_smoke
+        src/scenes/title/create_upload_permissions.cpp
+        src/scenes/title/create_upload_permissions.h
+        src/scenes/title/local_content_binding.h
+        src/scenes/title/local_content_index.h
+        src/tests/create_upload_permissions_smoke.cpp)
+
+add_executable(content_cache_paths_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
+        src/models/data_models.h
+        src/models/online_content_identity.h
+        src/tests/content_cache_paths_smoke.cpp)
 
 add_executable(settings_io_smoke
         src/core/app_paths.cpp
@@ -1178,6 +1198,8 @@ set(RAYTHM_SMOKE_TARGETS
         song_export_identity_smoke
         online_content_identity_smoke
         online_content_availability_smoke
+        create_upload_permissions_smoke
+        content_cache_paths_smoke
         settings_io_smoke
         localization_smoke
         local_catalog_database_smoke
@@ -1220,7 +1242,14 @@ endforeach()
 
 if(BUILD_TESTING)
     foreach(raythm_target IN LISTS RAYTHM_SMOKE_TARGETS)
-        add_test(NAME ${raythm_target} COMMAND ${raythm_target})
+        if(WIN32 AND raythm_target STREQUAL "update_version_smoke")
+            # CTest's direct spawn can hit Windows access-denied behavior for updater-named executables.
+            add_test(NAME ${raythm_target}
+                    COMMAND "${RAYTHM_POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
+                    -Command "& '$<SHELL_PATH:$<TARGET_FILE:${raythm_target}>>'")
+        else()
+            add_test(NAME ${raythm_target} COMMAND ${raythm_target})
+        endif()
     endforeach()
     set_tests_properties(audio_manager_smoke PROPERTIES SKIP_RETURN_CODE 77)
 endif()
