@@ -10,6 +10,7 @@
 #include <thread>
 #include <utility>
 
+#include "managed_content_storage.h"
 #include "path_utils.h"
 #include "song_select/song_select_layout.h"
 #include "tween.h"
@@ -52,6 +53,16 @@ std::string normalize_server_url(std::string value) {
 
 song_select::jacket_cache::pending_texture load_local_jacket_bytes(const std::filesystem::path& path) {
     song_select::jacket_cache::pending_texture result;
+    const managed_content_storage::managed_file_read_result managed =
+        managed_content_storage::read_managed_file(path);
+    if (managed.managed) {
+        if (managed.success) {
+            result.bytes = managed.bytes;
+            result.file_type = path.extension().string();
+        }
+        return result;
+    }
+
     std::ifstream input(path, std::ios::binary);
     if (!input.is_open()) {
         return result;
@@ -196,7 +207,11 @@ const Texture2D* jacket_cache::get(const song_data& song) {
 
             const std::filesystem::path jacket_path =
                 path_utils::join_utf8(song_copy.directory, song_copy.meta.jacket_file);
-            if (!std::filesystem::exists(jacket_path) || !std::filesystem::is_regular_file(jacket_path)) {
+            std::error_code ec;
+            const bool regular_file =
+                std::filesystem::exists(jacket_path, ec) && std::filesystem::is_regular_file(jacket_path, ec);
+            if (!regular_file &&
+                !managed_content_storage::read_managed_file(jacket_path).managed) {
                 promise.set_value({});
                 return;
             }

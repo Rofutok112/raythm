@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -17,6 +18,8 @@
 
 #include "app_paths.h"
 #include "chart_file_storage.h"
+#include "chart_parser.h"
+#include "chart_serializer.h"
 #include "chart_fingerprint.h"
 #include "managed_content_storage.h"
 #include "network/json_helpers.h"
@@ -318,6 +321,36 @@ bool write_binary_file(const std::filesystem::path& path,
     return true;
 }
 
+std::vector<unsigned char> read_binary_file(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input.is_open()) {
+        return {};
+    }
+    return std::vector<unsigned char>(std::istreambuf_iterator<char>(input),
+                                      std::istreambuf_iterator<char>());
+}
+
+std::string bytes_sha256_hex(const std::vector<unsigned char>& bytes) {
+    return updater::compute_sha256_hex(std::string_view(
+        reinterpret_cast<const char*>(bytes.data()),
+        bytes.size()));
+}
+
+std::string text_sha256_hex(std::string_view value) {
+    return updater::compute_sha256_hex(value);
+}
+
+managed_content_storage::chart_manifest_entry* find_manifest_chart(
+    managed_content_storage::package_manifest& manifest,
+    const std::string& local_chart_id) {
+    for (managed_content_storage::chart_manifest_entry& chart : manifest.charts) {
+        if (chart.local_chart_id == local_chart_id) {
+            return &chart;
+        }
+    }
+    return nullptr;
+}
+
 bool restore_staged_charts(const std::filesystem::path& staged_charts_dir,
                            const std::filesystem::path& charts_dir) {
     std::error_code ec;
@@ -330,6 +363,80 @@ bool restore_staged_charts(const std::filesystem::path& staged_charts_dir,
     }
     std::filesystem::rename(staged_charts_dir, charts_dir, ec);
     return !ec;
+}
+
+struct scoped_directory_cleanup {
+    std::filesystem::path directory;
+    bool enabled = false;
+
+    ~scoped_directory_cleanup() {
+        if (!enabled || directory.empty()) {
+            return;
+        }
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    void dismiss() {
+        enabled = false;
+    }
+};
+
+bool encrypted_chart_asset_available(const std::filesystem::path& song_dir,
+                                     const managed_content_storage::encrypted_asset_metadata& asset) {
+    if (asset.encrypted_path.empty()) {
+        return false;
+    }
+    std::error_code ec;
+    return std::filesystem::exists(managed_content_storage::encrypted_asset_path(song_dir, asset), ec) && !ec;
+}
+
+bool migrate_staged_plaintext_charts_to_encrypted(
+    managed_content_storage::package_manifest& manifest,
+    const std::filesystem::path& song_dir,
+    const std::filesystem::path& staged_charts_dir,
+    std::string& error_message) {
+    std::error_code ec;
+    if (!std::filesystem::exists(staged_charts_dir, ec)) {
+        return true;
+    }
+
+    for (managed_content_storage::chart_manifest_entry& chart : manifest.charts) {
+        if (chart.local_chart_id.empty()) {
+            continue;
+        }
+
+        const std::filesystem::path staged_chart_path =
+            staged_charts_dir / (chart.local_chart_id + ".rchart");
+        if (!std::filesystem::exists(staged_chart_path, ec)) {
+            continue;
+        }
+        if (encrypted_chart_asset_available(song_dir, chart.encrypted_chart)) {
+            continue;
+        }
+
+        const std::vector<unsigned char> plaintext = read_binary_file(staged_chart_path);
+        if (plaintext.empty()) {
+            error_message = "Failed to read existing managed chart for encrypted migration.";
+            return false;
+        }
+        if (!managed_content_storage::write_encrypted_asset(
+                manifest,
+                song_dir,
+                path_utils::to_utf8(std::filesystem::path("charts") / (chart.local_chart_id + ".rchart")),
+                std::string_view(reinterpret_cast<const char*>(plaintext.data()), plaintext.size()),
+                chart.encrypted_chart,
+                error_message)) {
+            return false;
+        }
+    }
+
+    std::filesystem::remove_all(staged_charts_dir, ec);
+    if (ec) {
+        error_message = "Failed to remove plaintext managed chart staging files.";
+        return false;
+    }
+    return true;
 }
 
 std::vector<timing_event> parse_timing_events(const std::string& metadata_json) {
@@ -592,12 +699,19 @@ download_song_result download_song_package(const song_entry_state song,
         ? app_paths::song_dir(local_song_id)
         : managed_content_storage::song_directory(managed_identity);
     const std::filesystem::path charts_dir = song_dir / "charts";
+    const std::filesystem::path encrypted_charts_dir = song_dir / ".encrypted" / "charts";
     const std::filesystem::path audio_path = song_dir / path_utils::from_utf8(local_meta->audio_file);
     const std::filesystem::path jacket_path = song_dir / path_utils::from_utf8(local_meta->jacket_file);
 
     std::error_code ec;
     const std::filesystem::path staged_charts_dir =
         app_paths::app_data_root() / "download-staging" / (local_song_id + "-charts");
+    const std::filesystem::path staged_encrypted_charts_dir =
+        app_paths::app_data_root() / "download-staging" / (local_song_id + "-encrypted-charts");
+    scoped_directory_cleanup managed_plaintext_chart_cleanup{
+        .directory = staged_charts_dir,
+        .enabled = !use_legacy_workspace,
+    };
     const bool preserve_existing_charts =
         use_legacy_workspace ||
         (installed_target.found && installed_target.storage == storage_policy::managed_package &&
@@ -607,6 +721,8 @@ download_song_result download_song_package(const song_entry_state song,
         preserved_manifest = managed_content_storage::read_manifest(song_dir);
     }
     std::filesystem::remove_all(staged_charts_dir, ec);
+    ec.clear();
+    std::filesystem::remove_all(staged_encrypted_charts_dir, ec);
     ec.clear();
     if (preserve_existing_charts && std::filesystem::exists(charts_dir, ec)) {
         std::filesystem::create_directories(staged_charts_dir.parent_path(), ec);
@@ -620,32 +736,53 @@ download_song_result download_song_package(const song_entry_state song,
             return result;
         }
     }
+    if (!use_legacy_workspace && preserve_existing_charts && std::filesystem::exists(encrypted_charts_dir, ec)) {
+        std::filesystem::create_directories(staged_encrypted_charts_dir.parent_path(), ec);
+        if (ec) {
+            result.message = "Failed to prepare existing encrypted chart files for song update.";
+            return result;
+        }
+        std::filesystem::rename(encrypted_charts_dir, staged_encrypted_charts_dir, ec);
+        if (ec) {
+            result.message = "Failed to preserve existing encrypted chart files for song update.";
+            return result;
+        }
+    }
     std::filesystem::remove_all(song_dir, ec);
     if (ec) {
-        restore_staged_charts(staged_charts_dir, charts_dir);
+        if (use_legacy_workspace) {
+            restore_staged_charts(staged_charts_dir, charts_dir);
+        }
+        restore_staged_charts(staged_encrypted_charts_dir, encrypted_charts_dir);
         result.message = "Failed to replace the local song files.";
         return result;
     }
 
-    if (!song_writer::write_song_json(*local_meta, path_utils::to_utf8(song_dir))) {
-        restore_staged_charts(staged_charts_dir, charts_dir);
-        result.message = "Failed to write downloaded song metadata to disk.";
-        return result;
-    }
+    if (use_legacy_workspace) {
+        if (!song_writer::write_song_json(*local_meta, path_utils::to_utf8(song_dir))) {
+            restore_staged_charts(staged_charts_dir, charts_dir);
+            result.message = "Failed to write downloaded song metadata to disk.";
+            return result;
+        }
 
-    if (!write_binary_file(audio_path, audio_fetch.bytes, error_message)) {
-        restore_staged_charts(staged_charts_dir, charts_dir);
-        result.message = error_message;
-        return result;
-    }
+        if (!write_binary_file(audio_path, audio_fetch.bytes, error_message)) {
+            restore_staged_charts(staged_charts_dir, charts_dir);
+            result.message = error_message;
+            return result;
+        }
 
-    if (!local_meta->jacket_file.empty() && !write_binary_file(jacket_path, jacket_bytes, error_message)) {
-        restore_staged_charts(staged_charts_dir, charts_dir);
-        result.message = error_message;
-        return result;
+        if (!local_meta->jacket_file.empty() && !write_binary_file(jacket_path, jacket_bytes, error_message)) {
+            restore_staged_charts(staged_charts_dir, charts_dir);
+            result.message = error_message;
+            return result;
+        }
     }
-    if (!restore_staged_charts(staged_charts_dir, charts_dir)) {
+    if (use_legacy_workspace && !restore_staged_charts(staged_charts_dir, charts_dir)) {
         result.message = "Song updated, but existing chart files could not be restored.";
+        return result;
+    }
+    if (!use_legacy_workspace && !restore_staged_charts(staged_encrypted_charts_dir, encrypted_charts_dir)) {
+        result.message = "Song updated, but existing encrypted chart files could not be restored.";
         return result;
     }
 
@@ -662,12 +799,46 @@ download_song_result download_song_package(const song_entry_state song,
         manifest.remote_song_json_fingerprint = song.remote_song_json_fingerprint;
         manifest.remote_audio_hash = song.remote_audio_hash;
         manifest.remote_jacket_hash = song.remote_jacket_hash;
-        manifest.song_json_hash = updater::compute_sha256_hex(song_dir / "song.json").value_or("");
-        manifest.song_json_fingerprint = song_fingerprint::compute_sha256_hex(song_dir / "song.json").value_or("");
-        manifest.audio_hash = updater::compute_sha256_hex(audio_path).value_or("");
-        manifest.jacket_hash = local_meta->jacket_file.empty()
-            ? ""
-            : updater::compute_sha256_hex(jacket_path).value_or("");
+        const std::string song_json = song_writer::serialize_song_json(*local_meta);
+        if (song_json.empty()) {
+            result.message = "Failed to prepare downloaded song metadata.";
+            return result;
+        }
+        manifest.song_json_hash = text_sha256_hex(song_json);
+        manifest.song_json_fingerprint = text_sha256_hex(song_fingerprint::build(song_json));
+        manifest.audio_hash = bytes_sha256_hex(audio_fetch.bytes);
+        manifest.jacket_hash = local_meta->jacket_file.empty() ? "" : bytes_sha256_hex(jacket_bytes);
+        if (!managed_content_storage::write_encrypted_asset(
+                manifest, song_dir, "song.json", song_json, manifest.song_json_asset, error_message)) {
+            result.message = error_message;
+            return result;
+        }
+        if (!managed_content_storage::write_encrypted_asset(
+                manifest,
+                song_dir,
+                local_meta->audio_file,
+                std::string_view(reinterpret_cast<const char*>(audio_fetch.bytes.data()), audio_fetch.bytes.size()),
+                manifest.audio_asset,
+                error_message)) {
+            result.message = error_message;
+            return result;
+        }
+        if (!local_meta->jacket_file.empty() &&
+            !managed_content_storage::write_encrypted_asset(
+                manifest,
+                song_dir,
+                local_meta->jacket_file,
+                std::string_view(reinterpret_cast<const char*>(jacket_bytes.data()), jacket_bytes.size()),
+                manifest.jacket_asset,
+                error_message)) {
+            result.message = error_message;
+            return result;
+        }
+        if (!migrate_staged_plaintext_charts_to_encrypted(
+                manifest, song_dir, staged_charts_dir, error_message)) {
+            result.message = error_message;
+            return result;
+        }
         if (!managed_content_storage::write_manifest(manifest, error_message)) {
             result.message = error_message;
             return result;
@@ -792,30 +963,66 @@ download_song_result download_chart_file(const song_entry_state song,
 
     std::string error_message;
     app_paths::ensure_directories();
-    const bool chart_written = use_legacy_workspace
-        ? chart_file_storage::write_validated_raw_chart_file(
-              target_chart_path,
-              chart_fetch.bytes,
-              error_message)
-        : chart_file_storage::write_validated_chart_file_with_local_id(
-              target_chart_path,
-              chart_fetch.bytes,
-              local_chart_id,
-              error_message);
-    if (!chart_written) {
-        result.message = error_message;
-        return result;
-    }
-    if (!use_legacy_workspace) {
+    if (use_legacy_workspace) {
+        const bool chart_written = chart_file_storage::write_validated_raw_chart_file(
+            target_chart_path,
+            chart_fetch.bytes,
+            error_message);
+        if (!chart_written) {
+            result.message = error_message;
+            return result;
+        }
+    } else {
+        const std::string downloaded_chart_text(chart_fetch.bytes.begin(), chart_fetch.bytes.end());
+        const chart_parse_result parsed_chart =
+            chart_parser::parse_text(downloaded_chart_text, result.chart_id);
+        if (!parsed_chart.success || !parsed_chart.data.has_value()) {
+            result.message = parsed_chart.errors.empty()
+                ? "Downloaded chart file was invalid."
+                : parsed_chart.errors.front();
+            return result;
+        }
+
+        chart_data chart_data_for_save = *parsed_chart.data;
+        chart_data_for_save.meta.chart_id = local_chart_id;
+        const std::string rewritten_chart_text = chart_serializer::serialize_to_string(chart_data_for_save);
+        if (rewritten_chart_text.empty()) {
+            result.message = "Failed to prepare downloaded chart data for local storage.";
+            return result;
+        }
+
+        const chart_parse_result rewritten =
+            chart_parser::parse_text(rewritten_chart_text, path_utils::to_utf8(target_chart_path));
+        if (!rewritten.success || !rewritten.data.has_value() ||
+            rewritten.data->meta.chart_id != local_chart_id) {
+            result.message = "Failed to validate downloaded chart data for local storage.";
+            return result;
+        }
+
         managed_content_storage::chart_identity chart_manifest_identity = managed_chart_identity;
-        chart_manifest_identity.chart_hash = updater::compute_sha256_hex(target_chart_path).value_or("");
-        chart_manifest_identity.chart_fingerprint =
-            chart_fingerprint::compute_sha256_hex(target_chart_path).value_or("");
+        chart_manifest_identity.chart_hash = text_sha256_hex(rewritten_chart_text);
+        chart_manifest_identity.chart_fingerprint = text_sha256_hex(chart_fingerprint::build(rewritten_chart_text));
         chart_manifest_identity.remote_chart_hash = chart.remote_chart_hash;
         chart_manifest_identity.remote_chart_fingerprint = chart.remote_chart_fingerprint;
         managed_content_storage::package_manifest manifest =
             manifest_for_song(managed_song_identity_for(song, server_url), song_dir);
         managed_content_storage::upsert_chart(manifest, chart_manifest_identity);
+        managed_content_storage::chart_manifest_entry* chart_entry =
+            find_manifest_chart(manifest, local_chart_id);
+        if (chart_entry == nullptr) {
+            result.message = "Failed to update managed chart manifest.";
+            return result;
+        }
+        if (!managed_content_storage::write_encrypted_asset(
+                manifest,
+                song_dir,
+                path_utils::to_utf8(std::filesystem::path("charts") / (local_chart_id + ".rchart")),
+                rewritten_chart_text,
+                chart_entry->encrypted_chart,
+                error_message)) {
+            result.message = error_message;
+            return result;
+        }
         if (!managed_content_storage::write_manifest(manifest, error_message)) {
             result.message = error_message;
             return result;
@@ -827,6 +1034,12 @@ download_song_result download_chart_file(const song_entry_state song,
             if (managed_content_storage::is_within_content_cache(old_chart_path)) {
                 std::error_code ec;
                 std::filesystem::remove(old_chart_path, ec);
+                std::filesystem::remove(
+                    managed_content_storage::encrypted_asset_path(
+                        song_dir,
+                        path_utils::to_utf8(std::filesystem::path("charts") /
+                                            (chart.installed_local_chart_id + ".rchart"))),
+                    ec);
             }
             local_content_index::remove_chart_binding(server_url, chart.installed_local_chart_id);
         }

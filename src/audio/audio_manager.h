@@ -37,6 +37,7 @@ public:
     bool is_initialized() const;
 
     bool load_bgm(const std::string& file_path);
+    bool load_bgm_from_memory(std::vector<unsigned char> bytes);
     void play_bgm(bool restart = true);
     void pause_bgm();
     void fade_out_bgm(unsigned int duration_ms);
@@ -62,7 +63,9 @@ public:
     double get_output_buffer_seconds() const;
 
     bool load_preview(const std::string& file_path);
+    bool load_preview_from_memory(std::vector<unsigned char> bytes);
     bool request_preview_load(const std::string& file_path);
+    bool request_preview_load_from_memory(std::vector<unsigned char> bytes);
     async_preview_load_result poll_preview_load();
     bool is_preview_loading() const;
     void play_preview(bool restart = true);
@@ -100,6 +103,7 @@ private:
     struct preview_load_payload {
         unsigned int generation = 0;
         unsigned long handle = 0;
+        std::vector<unsigned char> memory;
     };
     struct volume_fade_state {
         float gain = 1.0f;
@@ -127,6 +131,7 @@ private:
 
     bool ensure_initialized();
     unsigned long create_stream(const std::string& file_path) const;
+    unsigned long create_stream_from_memory(const std::vector<unsigned char>& bytes) const;
     void replace_voice(unsigned long& handle, const std::string& file_path) const;
     audio_loudness_analysis analyze_or_get_cached_loudness(const std::string& file_path) const;
     void reset_bgm_fade();
@@ -144,6 +149,8 @@ private:
     volume_fade_state preview_fade_;
     bool loudness_normalization_enabled_ = false;
     std::string preview_path_;
+    std::vector<unsigned char> bgm_memory_;
+    std::vector<unsigned char> preview_memory_;
     audio_loudness_analysis bgm_loudness_;
     audio_loudness_analysis preview_loudness_;
     unsigned long bgm_handle_ = 0;

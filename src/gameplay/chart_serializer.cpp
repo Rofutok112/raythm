@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <ostream>
 #include <sstream>
 
 #include "path_utils.h"
@@ -71,13 +72,8 @@ bool scroll_guides_are_default(const scroll_automation_guides& guides) {
 }
 }
 
-bool chart_serializer::serialize(const chart_data& data, const std::string& file_path) {
+bool write_chart(std::ostream& output, const chart_data& data) {
     if (data.meta.chart_id.empty()) {
-        return false;
-    }
-
-    std::ofstream output(path_utils::from_utf8(file_path), std::ios::trunc);
-    if (!output.is_open()) {
         return false;
     }
 
@@ -169,4 +165,20 @@ bool chart_serializer::serialize(const chart_data& data, const std::string& file
     }
 
     return output.good();
+}
+
+std::string chart_serializer::serialize_to_string(const chart_data& data) {
+    std::ostringstream output;
+    if (!write_chart(output, data)) {
+        return {};
+    }
+    return output.str();
+}
+
+bool chart_serializer::serialize(const chart_data& data, const std::string& file_path) {
+    std::ofstream output(path_utils::from_utf8(file_path), std::ios::trunc);
+    if (!output.is_open()) {
+        return false;
+    }
+    return write_chart(output, data);
 }

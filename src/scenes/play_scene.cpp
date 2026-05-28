@@ -12,6 +12,7 @@
 #include "audio_manager.h"
 #include "core/app_paths.h"
 #include "editor_scene.h"
+#include "managed_content_storage.h"
 #include "path_utils.h"
 #include "play/play_flow_controller.h"
 #include "play/play_renderer.h"
@@ -378,12 +379,27 @@ void play_scene::load_jacket_texture() {
 
     const std::filesystem::path jacket_path =
         path_utils::join_utf8(state_.song_data->directory, state_.song_data->meta.jacket_file);
-    if (!std::filesystem::exists(jacket_path) || !std::filesystem::is_regular_file(jacket_path)) {
-        return;
+    const managed_content_storage::managed_file_read_result managed =
+        managed_content_storage::read_managed_file(jacket_path);
+    if (managed.managed) {
+        if (!managed.success || managed.bytes.empty()) {
+            return;
+        }
+        Image image = LoadImageFromMemory(jacket_path.extension().string().c_str(),
+                                          managed.bytes.data(),
+                                          static_cast<int>(managed.bytes.size()));
+        if (image.data == nullptr) {
+            return;
+        }
+        jacket_texture_ = LoadTextureFromImage(image);
+        UnloadImage(image);
+    } else {
+        if (!std::filesystem::exists(jacket_path) || !std::filesystem::is_regular_file(jacket_path)) {
+            return;
+        }
+        const std::string jacket_path_utf8 = path_utils::to_utf8(jacket_path);
+        jacket_texture_ = LoadTexture(jacket_path_utf8.c_str());
     }
-
-    const std::string jacket_path_utf8 = path_utils::to_utf8(jacket_path);
-    jacket_texture_ = LoadTexture(jacket_path_utf8.c_str());
     jacket_texture_loaded_ = jacket_texture_.id != 0;
     if (jacket_texture_loaded_) {
         SetTextureFilter(jacket_texture_, TEXTURE_FILTER_BILINEAR);

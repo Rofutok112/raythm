@@ -325,7 +325,17 @@ catalog_data load_catalog(bool calculate_missing_levels) {
         if (!cached_catalog.songs.empty()) {
             const player_chart_offset_map chart_offsets = load_player_chart_offsets();
             const local_content_index::snapshot local_index = local_content_index::load_snapshot();
-            for (song_entry& song : cached_catalog.songs) {
+            for (auto song_it = cached_catalog.songs.begin(); song_it != cached_catalog.songs.end();) {
+                song_entry& song = *song_it;
+                if (song.storage == storage_policy::managed_package) {
+                    const managed_content_storage::managed_file_read_result metadata =
+                        managed_content_storage::read_managed_file(
+                            path_utils::join_utf8(song.song.directory, "song.json"));
+                    if (metadata.managed && !metadata.success) {
+                        song_it = cached_catalog.songs.erase(song_it);
+                        continue;
+                    }
+                }
                 for (chart_option& chart : song.charts) {
                     if (chart.online_identity.has_value()) {
                         chart.remote_links = {*chart.online_identity};
@@ -341,6 +351,7 @@ catalog_data load_catalog(bool calculate_missing_levels) {
                     }
                 }
                 std::sort(song.charts.begin(), song.charts.end(), chart_source_less);
+                ++song_it;
             }
             std::sort(cached_catalog.songs.begin(), cached_catalog.songs.end(), song_source_less);
             return cached_catalog;
@@ -458,8 +469,11 @@ delete_result delete_chart(const state& state, int song_index, int chart_index) 
     const chart_option& chart = charts[static_cast<size_t>(chart_index)];
     const std::filesystem::path chart_path = path_utils::from_utf8(chart.path);
     const bool managed = chart.storage == storage_policy::managed_package;
+    const std::filesystem::path song_dir =
+        path_utils::from_utf8(state.songs[static_cast<size_t>(song_index)].song.directory);
+    const std::filesystem::path containment_path = managed ? song_dir : chart_path;
     const std::filesystem::path allowed_root = managed ? app_paths::content_cache_root() : app_paths::songs_root();
-    if (!is_within_root(chart_path, allowed_root)) {
+    if (!is_within_root(containment_path, allowed_root)) {
         result.message = managed
             ? "Refused to delete a managed chart outside the content cache."
             : "Refused to delete a chart outside the user songs directory.";
@@ -467,11 +481,54 @@ delete_result delete_chart(const state& state, int song_index, int chart_index) 
     }
 
     std::error_code ec;
-    const bool removed = std::filesystem::remove(chart_path, ec);
-    if (ec || !removed) {
-        result.message = "Failed to delete the chart file.";
-        return result;
+    if (managed) {
+        std::optional<managed_content_storage::package_manifest> manifest =
+            managed_content_storage::read_manifest(song_dir);
+        if (!manifest.has_value()) {
+            result.message = "Failed to read managed chart manifest.";
+            return result;
+        }
+
+        const auto chart_it = std::find_if(
+            manifest->charts.begin(),
+            manifest->charts.end(),
+            [&](const managed_content_storage::chart_manifest_entry& entry) {
+                return entry.local_chart_id == chart.meta.chart_id;
+            });
+        if (chart_it == manifest->charts.end()) {
+            result.message = "Managed chart was not found in the package manifest.";
+            return result;
+        }
+
+        const std::filesystem::path encrypted_chart_path =
+            managed_content_storage::encrypted_asset_path(song_dir, chart_it->encrypted_chart);
+        if (!managed_content_storage::is_within_content_cache(encrypted_chart_path)) {
+            result.message = "Refused to delete a managed chart asset outside the content cache.";
+            return result;
+        }
+
+        std::filesystem::remove(encrypted_chart_path, ec);
+        if (ec) {
+            result.message = "Failed to delete the managed chart asset.";
+            return result;
+        }
+
+        manifest->charts.erase(chart_it);
+        std::string error_message;
+        if (!managed_content_storage::write_manifest(*manifest, error_message)) {
+            result.message = error_message.empty()
+                ? "Failed to update managed chart manifest."
+                : error_message;
+            return result;
+        }
+    } else {
+        const bool removed = std::filesystem::remove(chart_path, ec);
+        if (ec || !removed) {
+            result.message = "Failed to delete the chart file.";
+            return result;
+        }
     }
+
     const std::string deleted_chart_id = chart.meta.chart_id;
     local_content_index::remove_chart_bindings(deleted_chart_id);
     local_catalog_database::remove_chart(deleted_chart_id);
