@@ -15,6 +15,7 @@
 #include "mv/mv_storage.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
+#include "song_select/local_catalog_database.h"
 #include "ranking_service.h"
 #include "song_select/song_catalog_service.h"
 #include "song_writer.h"
@@ -288,6 +289,40 @@ int main() {
     assert(managed->charts.front().managed_manifest->chart_hash == "local-chart-sha");
     assert(managed->charts.front().managed_manifest->remote_chart_fingerprint == "remote-chart-fingerprint");
     assert(managed->charts.front().path.find("content-cache") != std::string::npos);
+    assert(managed->charts.front().meta.level > 0.0f);
+
+    song_select::catalog_data stale_cached_catalog = catalog;
+    for (song_select::song_entry& song : stale_cached_catalog.songs) {
+        if (song.song.meta.song_id == managed_song_id && !song.charts.empty()) {
+            song.charts.front().meta.level = 0.0f;
+        }
+    }
+    song_select::local_catalog_database::replace_catalog(stale_cached_catalog.songs);
+
+    const song_select::catalog_data repaired_cached_catalog = song_select::load_catalog(false);
+    const song_select::song_entry* repaired_managed = nullptr;
+    for (const song_select::song_entry& song : repaired_cached_catalog.songs) {
+        if (song.song.meta.song_id == managed_song_id) {
+            repaired_managed = &song;
+            break;
+        }
+    }
+    assert(repaired_managed != nullptr);
+    assert(!repaired_managed->charts.empty());
+    assert(repaired_managed->charts.front().meta.level > 0.0f);
+
+    const song_select::catalog_data persisted_cached_catalog =
+        song_select::local_catalog_database::load_cached_catalog();
+    const song_select::song_entry* persisted_managed = nullptr;
+    for (const song_select::song_entry& song : persisted_cached_catalog.songs) {
+        if (song.song.meta.song_id == managed_song_id) {
+            persisted_managed = &song;
+            break;
+        }
+    }
+    assert(persisted_managed != nullptr);
+    assert(!persisted_managed->charts.empty());
+    assert(persisted_managed->charts.front().meta.level > 0.0f);
 
     fs::remove_all(temp_root, ec);
     std::cout << "managed_content_storage smoke test passed\n";
