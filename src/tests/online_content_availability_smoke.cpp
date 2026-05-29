@@ -53,6 +53,9 @@ int main() {
         .remote_song_id = "remote-song",
         .content_source = online_content::source::community,
     };
+    local_songs.front().storage = storage_policy::managed_package;
+    local_songs.front().status = content_status::community;
+    local_songs.front().source_status = content_status::community;
     local_songs.front().charts.front().online_identity = online_content::chart_identity{
         .server_url = kServer,
         .remote_song_id = "remote-song",
@@ -60,6 +63,9 @@ int main() {
         .content_source = online_content::source::community,
         .remote_chart_version = 1,
     };
+    local_songs.front().charts.front().storage = storage_policy::managed_package;
+    local_songs.front().charts.front().status = content_status::community;
+    local_songs.front().charts.front().source_status = content_status::community;
     local_songs.front().managed_manifest = song_select::managed_song_manifest_metadata{
         .song_json_hash = "local-rewritten-song-json-sha",
         .song_json_fingerprint = "song-fp-a",

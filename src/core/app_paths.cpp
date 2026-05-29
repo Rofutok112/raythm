@@ -114,6 +114,10 @@ std::filesystem::path local_content_db_path() {
     return app_data_root() / "local_content.db";
 }
 
+std::filesystem::path local_catalog_cache_db_path() {
+    return app_data_root() / "local_catalog_cache.db";
+}
+
 std::filesystem::path scoring_ruleset_cache_path() {
     return app_data_root() / "scoring_ruleset_cache.txt";
 }

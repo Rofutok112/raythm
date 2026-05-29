@@ -35,7 +35,7 @@ bool set_local_app_data(const fs::path& path) {
 }
 
 void assert_database_stored_managed_content() {
-    local_sqlite::database database = local_sqlite::open_local_content_database();
+    local_sqlite::database database = local_sqlite::open_local_catalog_cache_database();
     assert(database.valid());
 
     local_sqlite::statement song(database.get(),
@@ -179,6 +179,9 @@ int main() {
     }
 
     song_select::local_catalog_database::replace_catalog({make_song(song_dir, chart_path)});
+    assert(app_paths::local_catalog_cache_db_path() != app_paths::local_content_db_path());
+    assert(fs::exists(app_paths::local_catalog_cache_db_path()));
+    assert(!fs::exists(app_paths::local_content_db_path()));
     assert_database_stored_managed_content();
 
     song_select::catalog_data cached = song_select::local_catalog_database::load_cached_catalog();
@@ -224,7 +227,7 @@ int main() {
     assert(cached.songs[0].song.chart_paths.size() == 1);
 
     {
-        local_sqlite::database database = local_sqlite::open_local_content_database();
+        local_sqlite::database database = local_sqlite::open_local_catalog_cache_database();
         assert(database.valid());
         local_sqlite::put_metadata(database.get(), "local_catalog.status_schema", "online-identity-v1");
     }
