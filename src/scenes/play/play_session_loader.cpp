@@ -216,7 +216,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.scroll_map.init(*state.chart_data, state.timing_engine);
     state.start_ms = state.timing_engine.tick_to_ms(state.start_tick);
     state.judge_system.init(state.chart_data->notes, state.timing_engine);
-    if (!state.editor_resume_state.has_value()) {
+    if (!state.editor_resume_state.has_value() && request.online_ranking_enabled) {
         ranking_service::refresh_scoring_ruleset_cache_for_chart_start(state.chart_data->meta, false);
     }
     state.score_system.init(chart_judge_events::count(*state.chart_data, state.timing_engine));
@@ -263,7 +263,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.paused_chart_time_ms = state.start_ms;
     state.paused = false;
     state.local_ranking_enabled = !state.editor_resume_state.has_value() && !state.mods.any_enabled();
-    state.ranking_enabled = state.local_ranking_enabled;
+    state.ranking_enabled = state.local_ranking_enabled && request.online_ranking_enabled;
     state.auto_paused_by_focus = false;
     state.initialized = true;
     state.status_text.clear();

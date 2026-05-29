@@ -172,6 +172,9 @@ const song_select::song_entry* find_local_song_by_remote(const std::vector<song_
                                                          const std::string& remote_song_id,
                                                          std::string& local_song_id) {
     for (const song_select::song_entry& song : local_songs) {
+        if (!song_select::can_match_online_song(song)) {
+            continue;
+        }
         const std::string& candidate_id = song.song.meta.song_id;
         if (song.online_identity.has_value() &&
             song.online_identity->server_url == server_url &&

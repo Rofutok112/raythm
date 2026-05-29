@@ -21,6 +21,7 @@ void check(bool condition, const char* expression, const char* file, int line) {
 #define assert(expr) check((expr), #expr, __FILE__, __LINE__)
 
 bool logged_in = true;
+ranking_service::source last_loaded_source = ranking_service::source::local;
 
 song_select::chart_option make_chart(const char* chart_id) {
     song_select::chart_option chart;
@@ -29,6 +30,7 @@ song_select::chart_option make_chart(const char* chart_id) {
     chart.meta.level = 5;
     chart.meta.key_count = 4;
     if (std::string(chart_id) == "chart-level") {
+        chart.storage = storage_policy::managed_package;
         chart.remote_links.push_back(online_content::chart_identity{
             .server_url = "https://api.example",
             .remote_song_id = "remote-song",
@@ -118,6 +120,7 @@ int main() {
         },
         [&](std::string chart_id, ranking_service::source source, int) {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            last_loaded_source = source;
             ranking_service::listing listing;
             listing.available = true;
             listing.ranking_source = source;
@@ -171,7 +174,29 @@ int main() {
     });
     assert(state.ranking_panel.listing.available);
     assert(state.ranking_panel.listing.message == "chart-level");
+    assert(last_loaded_source == ranking_service::source::online);
     assert(ranking_service::last_personal_best_source == ranking_service::source::online);
+
+    song_select::catalog_data legacy_catalog;
+    legacy_catalog.songs.push_back(make_song("legacy-song", "legacy-chart"));
+    legacy_catalog.songs.back().charts.back().remote_links.push_back(online_content::chart_identity{
+        .server_url = "https://api.example",
+        .remote_song_id = "legacy-remote-song",
+        .remote_chart_id = "legacy-remote-chart",
+        .content_source = online_content::source::community,
+        .remote_chart_version = 1,
+    });
+    song_select::state legacy_state;
+    song_select::apply_catalog(legacy_state, std::move(legacy_catalog), "legacy-song", "legacy-chart");
+    legacy_state.ranking_panel.selected_source = ranking_service::source::online;
+    controller.request_ranking_reload(legacy_state);
+    spin_until([&] {
+        return controller.poll_ranking_reload(legacy_state).completed;
+    });
+    assert(legacy_state.ranking_panel.selected_source == ranking_service::source::local);
+    assert(legacy_state.ranking_panel.listing.ranking_source == ranking_service::source::local);
+    assert(last_loaded_source == ranking_service::source::local);
+    assert(ranking_service::last_personal_best_source == ranking_service::source::local);
 
     return 0;
 }

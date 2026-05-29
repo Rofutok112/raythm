@@ -5,6 +5,18 @@
 #include "ranking_service.h"
 #include "title/play_session_controller.h"
 
+namespace {
+
+ranking_service::source ranking_source_for_current_selection(const song_select::state& state) {
+    const auto filtered = song_select::filtered_charts_for_selected_song(state);
+    const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
+    return chart != nullptr && song_select::can_use_online_chart_routes(*chart)
+        ? ranking_service::source::online
+        : ranking_service::source::local;
+}
+
+}  // namespace
+
 song_select::state& title_play_create_feature::state() {
     return state_;
 }
@@ -33,7 +45,7 @@ void title_play_create_feature::on_exit() {
 void title_play_create_feature::on_enter_play(bool multiplayer_chart_pick_active,
                                              const std::string& multiplayer_server_url,
                                              song_select::preview_controller& preview_controller) {
-    state_.ranking_panel.selected_source = ranking_service::source::online;
+    state_.ranking_panel.selected_source = ranking_source_for_current_selection(state_);
     state_.filter.multiplayer_queueable_only = multiplayer_chart_pick_active;
     state_.filter.multiplayer_queue_server_url = multiplayer_chart_pick_active ? multiplayer_server_url : "";
     sync_play_media(preview_controller);

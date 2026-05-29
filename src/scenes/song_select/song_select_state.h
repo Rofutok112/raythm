@@ -321,6 +321,9 @@ struct state {
 };
 
 const song_entry* selected_song(const state& state);
+bool can_match_online_song(const song_entry& song);
+bool can_match_online_chart(const chart_option& chart);
+bool can_use_online_chart_routes(const chart_option& chart);
 std::vector<int> filtered_song_indices(const state& state);
 std::vector<const chart_option*> filtered_charts_for_selected_song(const state& state);
 const chart_option* selected_chart_for(const state& state, const std::vector<const chart_option*>& filtered);
