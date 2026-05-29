@@ -133,7 +133,8 @@ bool copy_directory_contents(const std::filesystem::path& source_root,
 
 bool apply_staged_update(const std::filesystem::path& install_root,
                          const std::filesystem::path& staged_root,
-                         const std::filesystem::path& backup_root) {
+                         const std::filesystem::path& backup_root,
+                         bool skip_updater_executable) {
     if (!std::filesystem::exists(staged_root) || !std::filesystem::is_directory(staged_root)) {
         return false;
     }
@@ -150,7 +151,7 @@ bool apply_staged_update(const std::filesystem::path& install_root,
         return false;
     }
 
-    if (copy_directory_contents(staged_root, install_root, true)) {
+    if (copy_directory_contents(staged_root, install_root, skip_updater_executable)) {
         return true;
     }
 
@@ -158,7 +159,7 @@ bool apply_staged_update(const std::filesystem::path& install_root,
         return false;
     }
 
-    return copy_directory_contents(backup_root, install_root);
+    return copy_directory_contents(backup_root, install_root, skip_updater_executable);
 }
 
 }  // namespace updater
