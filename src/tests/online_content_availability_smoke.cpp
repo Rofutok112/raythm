@@ -185,12 +185,31 @@ int main() {
 
     const auto binding_song = online_content_availability::resolve_song(
         local_songs, binding_index, remote_song, content_status::community);
-    assert(binding_song.installed);
-    assert(binding_song.binding_matched);
+    assert(!binding_song.installed);
     const auto binding_chart = online_content_availability::resolve_chart(
         local_songs, binding_index, binding_song, remote_chart, content_status::community);
-    assert(binding_chart.installed);
-    assert(binding_chart.binding_matched);
+    assert(!binding_chart.installed);
+
+    local_songs.back().storage = storage_policy::managed_package;
+    local_songs.back().status = content_status::community;
+    local_songs.back().source_status = content_status::community;
+    local_songs.back().charts.back().storage = storage_policy::managed_package;
+    local_songs.back().charts.back().status = content_status::community;
+    local_songs.back().charts.back().source_status = content_status::community;
+
+    const auto managed_binding_song = online_content_availability::resolve_song(
+        local_songs, binding_index, remote_song, content_status::community);
+    assert(managed_binding_song.installed);
+    assert(managed_binding_song.binding_matched);
+    const auto managed_binding_chart = online_content_availability::resolve_chart(
+        local_songs, binding_index, managed_binding_song, remote_chart, content_status::community);
+    assert(managed_binding_chart.installed);
+    assert(managed_binding_chart.binding_matched);
+
+    local_songs.clear();
+    const auto stale_only_song = online_content_availability::resolve_song(
+        local_songs, binding_index, remote_song, content_status::community);
+    assert(!stale_only_song.installed);
 
     return 0;
 }

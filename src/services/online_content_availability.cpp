@@ -157,6 +157,9 @@ resolved_song resolve_song(const std::vector<song_select::song_entry>& local_son
         find_song_binding_by_remote(index, remote.server_url, remote.remote_song_id);
 
     for (const song_select::song_entry& local_song : local_songs) {
+        if (!song_select::can_match_online_song(local_song)) {
+            continue;
+        }
         const bool identity_match = local_song.online_identity.has_value() &&
                                     remote_song_matches(*local_song.online_identity, remote);
         const std::optional<local_content_index::online_song_binding> local_binding =
@@ -207,6 +210,9 @@ resolved_chart resolve_chart(const std::vector<song_select::song_entry>& local_s
         find_chart_binding_by_remote(index, remote.server_url, remote.remote_chart_id);
 
     for (const song_select::chart_option& local_chart : local_song->charts) {
+        if (!song_select::can_match_online_chart(local_chart)) {
+            continue;
+        }
         const bool identity_match = local_chart.online_identity.has_value() &&
                                     remote_chart_matches(*local_chart.online_identity, remote);
         const std::optional<local_content_index::online_chart_binding> local_binding =

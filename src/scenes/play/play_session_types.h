@@ -58,6 +58,7 @@ struct play_start_request {
     std::string multiplayer_room_id;
     std::string multiplayer_match_id;
     play_mods mods;
+    bool online_ranking_enabled = true;
 };
 
 struct play_multiplayer_score_row {

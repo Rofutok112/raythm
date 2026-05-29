@@ -37,6 +37,8 @@ song_select::chart_option make_online_chart(const char* chart_id,
                                             float level,
                                             const char* server_url) {
     song_select::chart_option chart = make_chart(chart_id, difficulty, level);
+    chart.storage = storage_policy::managed_package;
+    chart.status = content_status::community;
     chart.source_status = content_status::community;
     chart.online_identity = online_content::chart_identity{
         .server_url = server_url,
@@ -53,9 +55,27 @@ song_select::chart_option make_remote_linked_chart(const char* chart_id,
                                                    float level,
                                                    const char* server_url) {
     song_select::chart_option chart = make_chart(chart_id, difficulty, level);
+    chart.storage = storage_policy::managed_package;
+    chart.status = content_status::community;
+    chart.source_status = content_status::community;
     chart.remote_links.push_back(online_content::chart_identity{
         .server_url = server_url,
         .remote_song_id = "remote-song",
+        .remote_chart_id = chart_id,
+        .content_source = online_content::source::community,
+        .remote_chart_version = 1,
+    });
+    return chart;
+}
+
+song_select::chart_option make_legacy_local_remote_linked_chart(const char* chart_id,
+                                                                const char* difficulty,
+                                                                float level,
+                                                                const char* server_url) {
+    song_select::chart_option chart = make_chart(chart_id, difficulty, level);
+    chart.remote_links.push_back(online_content::chart_identity{
+        .server_url = server_url,
+        .remote_song_id = "legacy-remote-song",
         .remote_chart_id = chart_id,
         .content_source = online_content::source::community,
         .remote_chart_version = 1,
@@ -137,8 +157,16 @@ int main() {
     assert(std::fabs(scrolled_state.scroll_y - scrolled_state.scroll_y_target) < 0.01f);
 
     song_select::catalog_data multiplayer_catalog;
+    assert(!song_select::can_use_online_chart_routes(
+        make_legacy_local_remote_linked_chart("legacy-route-check", "Normal", 4, "https://api.example")));
+    assert(song_select::can_use_online_chart_routes(
+        make_remote_linked_chart("managed-route-check", "Normal", 4, "https://api.example")));
     multiplayer_catalog.songs.push_back(make_song("local-song", "Local",
                                                   {make_chart("local-chart", "Normal", 4)}));
+    multiplayer_catalog.songs.push_back(make_song("legacy-local-song", "Legacy Local",
+                                                  {make_legacy_local_remote_linked_chart(
+                                                      "legacy-local-chart", "Normal", 4,
+                                                      "https://api.example/")}));
     multiplayer_catalog.songs.push_back(make_song("linked-song", "Linked",
                                                   {make_remote_linked_chart("linked-chart", "Normal", 4,
                                                                             "https://api.example/")}));

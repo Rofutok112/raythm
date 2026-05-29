@@ -19,9 +19,9 @@ class play_scene final : public scene {
 public:
     explicit play_scene(scene_manager& manager, int key_count);
     play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
-               float chart_level = 0.0f);
+               float chart_level = 0.0f, bool online_ranking_enabled = true);
     play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
-               float chart_level, play_mods mods);
+               float chart_level, play_mods mods, bool online_ranking_enabled = true);
     play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
                float chart_level, std::string multiplayer_room_id, std::string multiplayer_match_id);
     play_scene(scene_manager& manager, song_data song, chart_data chart, int start_tick,

@@ -642,6 +642,9 @@ std::vector<song_entry_state> load_owned_songs(const std::vector<song_select::so
     const local_content_index::snapshot index = local_content_index::load_snapshot();
     owned.reserve(local_songs.size());
     for (const song_select::song_entry& local_song : local_songs) {
+        if (!song_select::can_match_online_song(local_song)) {
+            continue;
+        }
         const std::optional<local_content_index::online_song_binding> binding =
             local_content_index::find_song_by_local(index, server_url, local_song.song.meta.song_id);
         if (!binding.has_value() || binding->remote_song_id.empty()) {

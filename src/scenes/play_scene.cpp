@@ -155,7 +155,7 @@ play_scene::play_scene(scene_manager& manager, int key_count) : scene(manager) {
 }
 
 play_scene::play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
-                       float chart_level)
+                       float chart_level, bool online_ranking_enabled)
     : scene(manager) {
     request_.key_count = key_count;
     request_.song_data = std::move(song);
@@ -163,17 +163,18 @@ play_scene::play_scene(scene_manager& manager, song_data song, std::string chart
     if (chart_level > 0.0f) {
         request_.selected_chart_level = chart_level;
     }
+    request_.online_ranking_enabled = online_ranking_enabled;
 }
 
 play_scene::play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
-                       float chart_level, play_mods mods)
-    : play_scene(manager, std::move(song), std::move(chart_path), key_count, chart_level) {
+                       float chart_level, play_mods mods, bool online_ranking_enabled)
+    : play_scene(manager, std::move(song), std::move(chart_path), key_count, chart_level, online_ranking_enabled) {
     request_.mods = mods;
 }
 
 play_scene::play_scene(scene_manager& manager, song_data song, std::string chart_path, int key_count,
                        float chart_level, std::string multiplayer_room_id, std::string multiplayer_match_id)
-    : play_scene(manager, std::move(song), std::move(chart_path), key_count, chart_level) {
+    : play_scene(manager, std::move(song), std::move(chart_path), key_count, chart_level, true) {
     request_.multiplayer_room_id = std::move(multiplayer_room_id);
     request_.multiplayer_match_id = std::move(multiplayer_match_id);
 }
@@ -186,6 +187,7 @@ play_scene::play_scene(scene_manager& manager, song_data song, chart_data chart,
     request_.chart_data = std::move(chart);
     request_.editor_resume_state = std::move(editor_resume);
     request_.start_tick = std::max(0, start_tick);
+    request_.online_ranking_enabled = false;
 }
 
 play_scene::~play_scene() {

@@ -268,7 +268,31 @@ const song_entry* selected_song(const state& state) {
     return &state.songs[static_cast<size_t>(state.selected_song_index)];
 }
 
+bool can_match_online_song(const song_entry& song) {
+    return song.storage == storage_policy::managed_package;
+}
+
+bool can_match_online_chart(const chart_option& chart) {
+    return chart.storage == storage_policy::managed_package;
+}
+
+bool can_use_online_chart_routes(const chart_option& chart) {
+    if (!can_match_online_chart(chart)) {
+        return false;
+    }
+    if (online_content::is_queueable(chart.online_identity)) {
+        return true;
+    }
+    return std::any_of(chart.remote_links.begin(), chart.remote_links.end(),
+                       [](const online_content::chart_identity& link) {
+                           return online_content::is_queueable(link);
+                       });
+}
+
 bool has_queueable_remote_link(const chart_option& chart, const std::string& server_url) {
+    if (!can_use_online_chart_routes(chart)) {
+        return false;
+    }
     const std::string normalized_server_url = normalize_server_url(server_url);
     if (online_content::is_queueable(chart.online_identity)) {
         if (normalized_server_url.empty() ||
