@@ -2,7 +2,10 @@
 #include <filesystem>
 #include <iostream>
 #include <optional>
+#include <string>
 
+#include "local_catalog_signature.h"
+#include "local_sqlite.h"
 #include "title/local_content_index.h"
 
 namespace {
@@ -13,6 +16,28 @@ bool set_local_app_data(const std::filesystem::path& path) {
     return setenv("LOCALAPPDATA", path.string().c_str(), 1) == 0;
 #endif
 }
+
+bool seed_catalog_cache(const std::string& signature) {
+    local_sqlite::database database = local_sqlite::open_local_content_database();
+    if (!database.valid()) {
+        return false;
+    }
+    const bool ready =
+        local_sqlite::exec(database.get(), "CREATE TABLE IF NOT EXISTS local_songs (song_id TEXT PRIMARY KEY);") &&
+        local_sqlite::exec(database.get(), "CREATE TABLE IF NOT EXISTS local_charts (chart_id TEXT PRIMARY KEY);") &&
+        local_sqlite::exec(database.get(), "DELETE FROM local_songs;") &&
+        local_sqlite::exec(database.get(), "DELETE FROM local_charts;") &&
+        local_sqlite::exec(database.get(), "INSERT INTO local_songs(song_id) VALUES('local-song');") &&
+        local_sqlite::exec(database.get(), "INSERT INTO local_charts(chart_id) VALUES('local-chart');") &&
+        local_sqlite::exec(database.get(), "INSERT INTO local_charts(chart_id) VALUES('chart-without-song');");
+    if (!ready) {
+        return false;
+    }
+    local_sqlite::put_metadata(database.get(), "local_catalog.signature", signature);
+    local_sqlite::put_metadata(database.get(), "local_catalog.status_schema", local_catalog_signature::kStatusSchema);
+    return true;
+}
+
 }
 
 int main() {
@@ -81,6 +106,66 @@ int main() {
     local_content_index::remove_chart_bindings_for_remote_song("https://server.example", "remote-song");
     ok = !local_content_index::find_chart_by_local("https://server.example", "local-chart").has_value() && ok;
     ok = local_content_index::find_chart_by_local("https://server.example", "other-local-chart").has_value() && ok;
+
+    local_content_index::put_chart_binding({
+        .server_url = "https://server.example",
+        .local_chart_id = "local-chart",
+        .remote_chart_id = "remote-chart",
+        .remote_song_id = "remote-song",
+        .remote_chart_version = 8,
+        .origin = local_content_index::online_origin::downloaded,
+    });
+    local_content_index::put_song_binding({
+        .server_url = "https://server.example",
+        .local_song_id = "orphan-song",
+        .remote_song_id = "orphan-remote-song",
+        .origin = local_content_index::online_origin::downloaded,
+    });
+    local_content_index::put_chart_binding({
+        .server_url = "https://server.example",
+        .local_chart_id = "orphan-chart",
+        .remote_chart_id = "orphan-remote-chart",
+        .remote_song_id = "remote-song",
+        .origin = local_content_index::online_origin::downloaded,
+    });
+    local_content_index::put_chart_binding({
+        .server_url = "https://server.example",
+        .local_chart_id = "chart-without-song",
+        .remote_chart_id = "chart-without-song-remote",
+        .remote_song_id = "missing-remote-song",
+        .origin = local_content_index::online_origin::downloaded,
+    });
+    local_content_index::put_song_binding({
+        .server_url = "https://server.example",
+        .local_song_id = "new-local-song",
+        .remote_song_id = "new-remote-song",
+        .origin = local_content_index::online_origin::downloaded,
+    });
+    local_content_index::put_chart_binding({
+        .server_url = "https://server.example",
+        .local_chart_id = "new-local-chart",
+        .remote_chart_id = "new-remote-chart",
+        .remote_song_id = "new-remote-song",
+        .origin = local_content_index::online_origin::downloaded,
+    });
+
+    ok = seed_catalog_cache("stale-test-cache") && ok;
+    const local_content_index::snapshot stale_cache = local_content_index::load_snapshot();
+    ok = stale_cache.songs.size() == 3 && stale_cache.charts.size() == 5 && ok;
+    ok = local_content_index::find_song_by_local("https://server.example", "new-local-song").has_value() && ok;
+    ok = local_content_index::find_chart_by_local("https://server.example", "new-local-chart").has_value() && ok;
+
+    ok = seed_catalog_cache(local_catalog_signature::current()) && ok;
+    const local_content_index::snapshot pruned = local_content_index::load_snapshot();
+    ok = pruned.songs.size() == 1 && pruned.charts.size() == 1 && ok;
+    ok = local_content_index::find_song_by_local("https://server.example", "local-song").has_value() && ok;
+    ok = local_content_index::find_chart_by_local("https://server.example", "local-chart").has_value() && ok;
+    ok = !local_content_index::find_song_by_local("https://server.example", "orphan-song").has_value() && ok;
+    ok = !local_content_index::find_chart_by_local("https://server.example", "orphan-chart").has_value() && ok;
+    ok = !local_content_index::find_chart_by_local("https://server.example", "chart-without-song").has_value() && ok;
+    ok = !local_content_index::find_chart_by_local("https://server.example", "other-local-chart").has_value() && ok;
+    ok = !local_content_index::find_song_by_local("https://server.example", "new-local-song").has_value() && ok;
+    ok = !local_content_index::find_chart_by_local("https://server.example", "new-local-chart").has_value() && ok;
 
     std::filesystem::remove_all(appdata_root, ec);
     if (!ok) {

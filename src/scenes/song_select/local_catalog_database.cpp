@@ -1,6 +1,5 @@
 #include "song_select/local_catalog_database.h"
 
-#include <filesystem>
 #include <algorithm>
 #include <map>
 #include <optional>
@@ -8,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "app_paths.h"
+#include "local_catalog_signature.h"
 #include "local_sqlite.h"
 #include "network/json_helpers.h"
 #include "sqlite3.h"
@@ -20,8 +19,6 @@ using local_sqlite::bind_text;
 using local_sqlite::column_text;
 using local_sqlite::exec;
 using local_sqlite::statement;
-
-constexpr const char* kCatalogStatusSchema = "managed-content-v2";
 
 void ensure_optional_schema(sqlite3* database) {
     exec(database, "ALTER TABLE local_songs ADD COLUMN genre TEXT NOT NULL DEFAULT '';");
@@ -111,52 +108,6 @@ bool ensure_schema(sqlite3* database) {
         ensure_optional_schema(database);
     }
     return ready;
-}
-
-std::string path_key(const std::filesystem::path& root, const std::filesystem::path& path) {
-    std::error_code ec;
-    const std::filesystem::path relative = std::filesystem::relative(path, root, ec);
-    return ec ? path.string() : relative.generic_string();
-}
-
-void append_tree_signature(std::ostringstream& output, const std::filesystem::path& root, const char* label) {
-    std::error_code ec;
-    if (!std::filesystem::exists(root, ec)) {
-        output << label << ":missing\n";
-        return;
-    }
-
-    std::vector<std::filesystem::path> files;
-    for (const std::filesystem::directory_entry& entry : std::filesystem::recursive_directory_iterator(root, ec)) {
-        if (ec) {
-            break;
-        }
-        if (entry.is_regular_file(ec)) {
-            files.push_back(entry.path());
-        }
-    }
-    std::sort(files.begin(), files.end());
-
-    output << label << ":";
-    for (const std::filesystem::path& file : files) {
-        const auto size = std::filesystem::file_size(file, ec);
-        if (ec) {
-            continue;
-        }
-        const auto write_time = std::filesystem::last_write_time(file, ec);
-        if (ec) {
-            continue;
-        }
-        output << path_key(root, file) << "," << size << "," << write_time.time_since_epoch().count() << ";";
-    }
-    output << "\n";
-}
-
-std::string current_catalog_signature() {
-    std::ostringstream output;
-    append_tree_signature(output, app_paths::songs_root(), "songs");
-    append_tree_signature(output, app_paths::content_cache_root(), "content-cache");
-    return output.str();
 }
 
 local_sqlite::database open_ready_database() {
@@ -569,10 +520,11 @@ catalog_data load_cached_catalog() {
         return catalog;
     }
     if (local_sqlite::metadata_value(database.get(), "local_catalog.signature").value_or("") !=
-        current_catalog_signature()) {
+        local_catalog_signature::current()) {
         return catalog;
     }
-    if (local_sqlite::metadata_value(database.get(), "local_catalog.status_schema").value_or("") != kCatalogStatusSchema) {
+    if (local_sqlite::metadata_value(database.get(), "local_catalog.status_schema").value_or("") !=
+        local_catalog_signature::kStatusSchema) {
         return catalog;
     }
 
@@ -703,8 +655,8 @@ void replace_catalog(const std::vector<song_entry>& songs) {
             put_chart(database.get(), chart);
         }
     }
-    local_sqlite::put_metadata(database.get(), "local_catalog.signature", current_catalog_signature());
-    local_sqlite::put_metadata(database.get(), "local_catalog.status_schema", kCatalogStatusSchema);
+    local_sqlite::put_metadata(database.get(), "local_catalog.signature", local_catalog_signature::current());
+    local_sqlite::put_metadata(database.get(), "local_catalog.status_schema", local_catalog_signature::kStatusSchema);
     tx.commit();
 }
 
@@ -725,7 +677,7 @@ void remove_song(const std::string& song_id) {
         bind_text(songs.get(), 1, song_id);
         sqlite3_step(songs.get());
     }
-    local_sqlite::put_metadata(database.get(), "local_catalog.signature", current_catalog_signature());
+    local_sqlite::put_metadata(database.get(), "local_catalog.signature", local_catalog_signature::current());
 }
 
 void remove_chart(const std::string& chart_id) {
@@ -739,7 +691,7 @@ void remove_chart(const std::string& chart_id) {
         bind_text(charts.get(), 1, chart_id);
         sqlite3_step(charts.get());
     }
-    local_sqlite::put_metadata(database.get(), "local_catalog.signature", current_catalog_signature());
+    local_sqlite::put_metadata(database.get(), "local_catalog.signature", local_catalog_signature::current());
 }
 
 }  // namespace song_select::local_catalog_database

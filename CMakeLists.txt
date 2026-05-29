@@ -243,6 +243,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/core/app_paths.h
         src/core/content_cache_paths.cpp
         src/core/content_cache_paths.h
+        src/core/local_catalog_signature.cpp
+        src/core/local_catalog_signature.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/core/file_dialog.cpp
@@ -771,6 +773,8 @@ add_executable(managed_content_storage_smoke
         src/core/app_paths.h
         src/core/content_cache_paths.cpp
         src/core/content_cache_paths.h
+        src/core/local_catalog_signature.cpp
+        src/core/local_catalog_signature.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/gameplay/chart_difficulty.cpp
@@ -835,6 +839,8 @@ add_executable(local_catalog_database_smoke
         src/core/app_paths.h
         src/core/content_cache_paths.cpp
         src/core/content_cache_paths.h
+        src/core/local_catalog_signature.cpp
+        src/core/local_catalog_signature.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/network/json_helpers.cpp
@@ -856,6 +862,8 @@ add_executable(local_catalog_database_smoke
 add_executable(local_content_index_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/local_catalog_signature.cpp
+        src/core/local_catalog_signature.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/scenes/title/local_content_binding.h
@@ -950,6 +958,8 @@ add_executable(ranking_service_smoke
         src/core/app_paths.h
         src/core/content_cache_paths.cpp
         src/core/content_cache_paths.h
+        src/core/local_catalog_signature.cpp
+        src/core/local_catalog_signature.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/scenes/title/local_content_database.cpp
