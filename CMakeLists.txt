@@ -191,6 +191,7 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/chart_level_cache.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
+        src/models/content_lifecycle.h
         src/models/data_models.h
         src/models/online_content_identity.h
         src/gameplay/lane_input_tracker.cpp
@@ -208,6 +209,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/services/ranking_service.h
         src/services/online_content_availability.cpp
         src/services/online_content_availability.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
         src/gameplay/scoring_ruleset_runtime.cpp
         src/gameplay/scoring_ruleset_runtime.h
         src/gameplay/score_system.cpp
@@ -238,6 +241,10 @@ add_executable(raythm WIN32 src/main.cpp
         src/updater/update_verify.h
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
+        src/core/local_catalog_signature.cpp
+        src/core/local_catalog_signature.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/core/file_dialog.cpp
@@ -306,6 +313,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_local_song_select_controller.h
         src/scenes/title/create_tools_view.cpp
         src/scenes/title/create_tools_view.h
+        src/scenes/title/create_upload_permissions.cpp
+        src/scenes/title/create_upload_permissions.h
         src/scenes/title/create_upload_client.cpp
         src/scenes/title/create_upload_client.h
         src/scenes/title/online_catalog_data_controller.cpp
@@ -589,6 +598,8 @@ add_executable(chart_file_storage_smoke
         src/gameplay/chart_file_storage.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
+        src/gameplay/chart_serializer.cpp
+        src/gameplay/chart_serializer.h
         src/tests/chart_file_storage_smoke.cpp
         src/models/data_models.h)
 
@@ -638,14 +649,21 @@ add_executable(editor_meter_map_smoke
         src/tests/editor_meter_map_smoke.cpp)
 
 add_executable(song_loader_smoke
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
         src/models/data_models.h
+        src/models/online_content_identity.h
         src/core/app_paths.cpp
         src/core/app_paths.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/core/path_utils.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
         src/gameplay/song_fingerprint.cpp
         src/gameplay/song_fingerprint.h
         src/gameplay/song_loader.cpp
@@ -657,7 +675,18 @@ add_executable(song_loader_smoke
         src/tests/song_loader_smoke.cpp)
 
 add_executable(song_select_state_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
         src/models/data_models.h
+        src/models/online_content_identity.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
         src/scenes/song_select/song_select_layout.h
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
@@ -666,7 +695,18 @@ add_executable(song_select_state_smoke
         src/tests/song_select_state_smoke.cpp)
 
 add_executable(song_select_data_controller_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
         src/models/data_models.h
+        src/models/online_content_identity.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
         src/scenes/song_select/song_select_data_controller.cpp
@@ -684,13 +724,24 @@ add_executable(song_export_identity_smoke
         src/tests/song_export_identity_smoke.cpp)
 
 add_executable(online_content_identity_smoke
+        src/models/content_lifecycle.h
         src/models/data_models.h
         src/models/online_content_identity.h
         src/tests/online_content_identity_smoke.cpp)
 
 add_executable(online_content_availability_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
         src/models/data_models.h
         src/models/online_content_identity.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
         src/services/online_content_availability.cpp
         src/services/online_content_availability.h
         src/scenes/title/local_content_binding.h
@@ -700,6 +751,72 @@ add_executable(online_content_availability_smoke
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
         src/tests/online_content_availability_smoke.cpp)
+
+add_executable(create_upload_permissions_smoke
+        src/scenes/title/create_upload_permissions.cpp
+        src/scenes/title/create_upload_permissions.h
+        src/scenes/title/local_content_binding.h
+        src/scenes/title/local_content_index.h
+        src/tests/create_upload_permissions_smoke.cpp)
+
+add_executable(content_cache_paths_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
+        src/models/data_models.h
+        src/models/online_content_identity.h
+        src/tests/content_cache_paths_smoke.cpp)
+
+add_executable(managed_content_storage_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
+        src/core/local_catalog_signature.cpp
+        src/core/local_catalog_signature.h
+        src/core/local_sqlite.cpp
+        src/core/local_sqlite.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_file_storage.cpp
+        src/gameplay/chart_file_storage.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
+        src/gameplay/chart_level_cache.cpp
+        src/gameplay/chart_level_cache.h
+        src/gameplay/chart_parser.cpp
+        src/gameplay/chart_parser.h
+        src/gameplay/chart_serializer.cpp
+        src/gameplay/chart_serializer.h
+        src/gameplay/song_loader.cpp
+        src/gameplay/song_loader.h
+        src/gameplay/song_writer.cpp
+        src/gameplay/song_writer.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/models/data_models.h
+        src/models/online_content_identity.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/scenes/shared/scene_fade.cpp
+        src/scenes/shared/scene_fade.h
+        src/scenes/song_select/local_catalog_database.cpp
+        src/scenes/song_select/local_catalog_database.h
+        src/scenes/song_select/song_catalog_service.cpp
+        src/scenes/song_select/song_catalog_service.h
+        src/scenes/song_select/song_select_state.cpp
+        src/scenes/song_select/song_select_state.h
+        src/scenes/title/local_content_binding.h
+        src/scenes/title/local_content_database.cpp
+        src/scenes/title/local_content_database.h
+        src/scenes/title/local_content_index.cpp
+        src/scenes/title/local_content_index.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
+        src/tests/managed_content_storage_smoke.cpp)
 
 add_executable(settings_io_smoke
         src/core/app_paths.cpp
@@ -720,10 +837,19 @@ add_executable(localization_smoke
 add_executable(local_catalog_database_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
+        src/core/local_catalog_signature.cpp
+        src/core/local_catalog_signature.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/network/json_helpers.cpp
         src/network/json_helpers.h
+        src/models/online_content_identity.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
         src/scenes/song_select/local_catalog_database.cpp
         src/scenes/song_select/local_catalog_database.h
         src/scenes/song_select/song_select_state.cpp
@@ -736,6 +862,8 @@ add_executable(local_catalog_database_smoke
 add_executable(local_content_index_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/local_catalog_signature.cpp
+        src/core/local_catalog_signature.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/scenes/title/local_content_binding.h
@@ -828,6 +956,10 @@ add_executable(performance_system_smoke
 add_executable(ranking_service_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
+        src/core/local_catalog_signature.cpp
+        src/core/local_catalog_signature.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/scenes/title/local_content_database.cpp
@@ -837,6 +969,8 @@ add_executable(ranking_service_smoke
         src/models/data_models.h
         src/gameplay/chart_fingerprint.cpp
         src/gameplay/chart_fingerprint.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
         src/services/ranking_service.cpp
         src/services/ranking_service.h
         src/gameplay/scoring_ruleset_runtime.cpp
@@ -1178,6 +1312,9 @@ set(RAYTHM_SMOKE_TARGETS
         song_export_identity_smoke
         online_content_identity_smoke
         online_content_availability_smoke
+        create_upload_permissions_smoke
+        content_cache_paths_smoke
+        managed_content_storage_smoke
         settings_io_smoke
         localization_smoke
         local_catalog_database_smoke
@@ -1220,7 +1357,14 @@ endforeach()
 
 if(BUILD_TESTING)
     foreach(raythm_target IN LISTS RAYTHM_SMOKE_TARGETS)
-        add_test(NAME ${raythm_target} COMMAND ${raythm_target})
+        if(WIN32 AND raythm_target STREQUAL "update_version_smoke")
+            # CTest's direct spawn can hit Windows access-denied behavior for updater-named executables.
+            add_test(NAME ${raythm_target}
+                    COMMAND "${RAYTHM_POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
+                    -Command "& '$<SHELL_PATH:$<TARGET_FILE:${raythm_target}>>'")
+        else()
+            add_test(NAME ${raythm_target} COMMAND ${raythm_target})
+        endif()
     endforeach()
     set_tests_properties(audio_manager_smoke PROPERTIES SKIP_RETURN_CODE 77)
 endif()
@@ -1235,6 +1379,7 @@ target_link_libraries(update_version_smoke PRIVATE winhttp)
 target_link_libraries(song_loader_smoke PRIVATE sqlite3)
 target_link_libraries(local_catalog_database_smoke PRIVATE sqlite3 raylib)
 target_link_libraries(local_content_index_smoke PRIVATE sqlite3)
+target_link_libraries(managed_content_storage_smoke PRIVATE sqlite3 raylib)
 target_link_libraries(online_content_availability_smoke PRIVATE raylib)
 target_link_libraries(song_select_state_smoke PRIVATE raylib)
 target_link_libraries(song_select_data_controller_smoke PRIVATE raylib)

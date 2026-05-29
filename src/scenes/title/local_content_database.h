@@ -24,5 +24,7 @@ void remove_song(const std::string& server_url, const std::string& local_song_id
 void remove_chart(const std::string& server_url, const std::string& local_chart_id);
 void remove_song_bindings(const std::string& local_song_id);
 void remove_chart_bindings(const std::string& local_chart_id);
+void remove_chart_bindings_for_remote_song(const std::string& server_url, const std::string& remote_song_id);
+void prune_orphaned_bindings();
 
 }  // namespace local_content_database

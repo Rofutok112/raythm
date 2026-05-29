@@ -10,6 +10,7 @@
 #include "chart_judge_events.h"
 #include "chart_level_cache.h"
 #include "game_settings.h"
+#include "managed_content_storage.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
 #include "play_chart_filter.h"
@@ -65,12 +66,38 @@ std::vector<float> build_mv_waveform(const std::filesystem::path& audio_path) {
     return waveform;
 }
 
+std::vector<float> build_mv_waveform_from_memory(const std::vector<unsigned char>& bytes) {
+    constexpr std::size_t kMvWaveformSegmentCount = 512;
+
+    const audio_waveform_summary summary = audio_waveform::build_from_memory(bytes, kMvWaveformSegmentCount);
+    std::vector<float> waveform;
+    waveform.reserve(summary.peaks.size());
+    for (const audio_waveform_peak& peak : summary.peaks) {
+        waveform.push_back(peak.amplitude);
+    }
+    return waveform;
+}
+
 std::optional<double> detect_first_audible_ms(const std::filesystem::path& audio_path) {
     constexpr std::size_t kAnalysisSegmentCount = 4096;
     constexpr float kAudibleThreshold = 0.02f;
 
     const audio_waveform_summary summary =
         audio_waveform::build(path_utils::to_utf8(audio_path), kAnalysisSegmentCount);
+    for (const audio_waveform_peak& peak : summary.peaks) {
+        if (peak.amplitude >= kAudibleThreshold) {
+            return peak.seconds * 1000.0;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<double> detect_first_audible_ms_from_memory(const std::vector<unsigned char>& bytes) {
+    constexpr std::size_t kAnalysisSegmentCount = 4096;
+    constexpr float kAudibleThreshold = 0.02f;
+
+    const audio_waveform_summary summary =
+        audio_waveform::build_from_memory(bytes, kAnalysisSegmentCount);
     for (const audio_waveform_peak& peak : summary.peaks) {
         if (peak.amplitude >= kAudibleThreshold) {
             return peak.seconds * 1000.0;
@@ -189,7 +216,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.scroll_map.init(*state.chart_data, state.timing_engine);
     state.start_ms = state.timing_engine.tick_to_ms(state.start_tick);
     state.judge_system.init(state.chart_data->notes, state.timing_engine);
-    if (!state.editor_resume_state.has_value()) {
+    if (!state.editor_resume_state.has_value() && request.online_ranking_enabled) {
         ranking_service::refresh_scoring_ruleset_cache_for_chart_start(state.chart_data->meta, false);
     }
     state.score_system.init(chart_judge_events::count(*state.chart_data, state.timing_engine));
@@ -199,13 +226,27 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     audio_manager& audio = audio_manager::instance();
     const std::filesystem::path audio_path =
         path_utils::join_utf8(state.song_data->directory, state.song_data->meta.audio_file);
-    audio.load_bgm(path_utils::to_utf8(audio_path));
+    const managed_content_storage::managed_file_read_result managed_audio =
+        managed_content_storage::read_managed_file(audio_path);
+    if (managed_audio.managed) {
+        if (!managed_audio.success || !audio.load_bgm_from_memory(managed_audio.bytes)) {
+            state.status_text = "Failed to decrypt managed audio";
+            draw_queue.clear();
+            return state;
+        }
+    } else {
+        audio.load_bgm(path_utils::to_utf8(audio_path));
+    }
     audio.set_bgm_volume(g_settings.bgm_volume);
     preload_hitsounds(audio, state.hitsounds);
-    state.mv_waveform = build_mv_waveform(audio_path);
+    state.mv_waveform = managed_audio.managed
+        ? build_mv_waveform_from_memory(managed_audio.bytes)
+        : build_mv_waveform(audio_path);
     if (!state.editor_resume_state.has_value() && state.start_tick == 0) {
-        if (const std::optional<double> first_audible_ms = detect_first_audible_ms(audio_path);
-            first_audible_ms.has_value()) {
+        const std::optional<double> first_audible_ms = managed_audio.managed
+            ? detect_first_audible_ms_from_memory(managed_audio.bytes)
+            : detect_first_audible_ms(audio_path);
+        if (first_audible_ms.has_value()) {
             state.start_ms = *first_audible_ms - play_session_constants::kAudioLeadInBeforeFirstSoundMs;
         }
     }
@@ -222,7 +263,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.paused_chart_time_ms = state.start_ms;
     state.paused = false;
     state.local_ranking_enabled = !state.editor_resume_state.has_value() && !state.mods.any_enabled();
-    state.ranking_enabled = state.local_ranking_enabled;
+    state.ranking_enabled = state.local_ranking_enabled && request.online_ranking_enabled;
     state.auto_paused_by_focus = false;
     state.initialized = true;
     state.status_text.clear();

@@ -241,6 +241,10 @@ int main() {
             output << "old";
         }
         {
+            std::ofstream output(install_dir / "Updater.exe");
+            output << "old";
+        }
+        {
             std::ofstream output(install_dir / "assets" / "charts" / "legacy-only.rchart");
             output << "legacy";
         }
@@ -250,7 +254,7 @@ int main() {
         }
         {
             std::ofstream output(staged_dir / "Updater.exe");
-            output << "skip";
+            output << "new-updater";
         }
         {
             std::ofstream output(staged_dir / "assets" / "charts" / "new-only.rchart");
@@ -265,14 +269,34 @@ int main() {
         expect(fs::file_size(install_dir / "raythm.exe") == 3,
                "Expected staged update helper to replace install files with staged files.",
                ok);
-        expect(!fs::exists(install_dir / "Updater.exe"),
-               "Expected staged update helper to avoid overwriting the running updater executable.",
+        expect(fs::file_size(install_dir / "Updater.exe") == 11,
+               "Expected staged update helper to replace the installed updater when running from a temp copy.",
                ok);
         expect(!fs::exists(install_dir / "assets" / "charts" / "legacy-only.rchart"),
                "Expected staged update helper to fully replace bundled assets contents.",
                ok);
         expect(fs::is_regular_file(install_dir / "assets" / "charts" / "new-only.rchart"),
                "Expected staged update helper to copy new bundled assets files.",
+               ok);
+
+        const fs::path skip_install_dir = temp_local_app_data / "skip-install";
+        const fs::path skip_staged_dir = temp_local_app_data / "skip-staged";
+        const fs::path skip_backup_dir = temp_local_app_data / "skip-backup";
+        fs::create_directories(skip_install_dir, ec);
+        fs::create_directories(skip_staged_dir, ec);
+        {
+            std::ofstream output(skip_install_dir / "Updater.exe");
+            output << "old";
+        }
+        {
+            std::ofstream output(skip_staged_dir / "Updater.exe");
+            output << "new-updater";
+        }
+        expect(updater::apply_staged_update(skip_install_dir, skip_staged_dir, skip_backup_dir, true),
+               "Expected staged update helper to support skipping the updater executable when necessary.",
+               ok);
+        expect(fs::file_size(skip_install_dir / "Updater.exe") == 3,
+               "Expected staged update helper to leave the updater untouched when skip is requested.",
                ok);
         expect(updater::ensure_process_stopped("definitely-not-running.exe", std::chrono::milliseconds(1)),
                "Expected process stop helper to succeed immediately when the target process is absent.",

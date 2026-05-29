@@ -34,6 +34,10 @@ online_content::source online_source_from_remote(const std::string& content_sour
     return content_source == "official" ? online_content::source::official : online_content::source::community;
 }
 
+content_kind content_kind_from_remote(const std::string& content_source) {
+    return content_source == "official" ? content_kind::official : content_kind::community;
+}
+
 song_select::song_entry make_remote_song_entry(const remote_song_payload& song, const std::string& server_url) {
     song_select::song_entry entry;
     entry.song.meta.song_id = song.id;
@@ -55,11 +59,17 @@ song_select::song_entry make_remote_song_entry(const remote_song_payload& song, 
     entry.song.meta.chart_count = song.chart_count;
     entry.song.meta.play_count = song.play_count;
     entry.song.meta.has_play_count = song.has_play_count;
+    entry.kind = content_kind_from_remote(song.content_source);
+    entry.storage = storage_policy::managed_package;
+    entry.verification = verification_state::unchecked;
     entry.source_status = source_status_from_remote(song.content_source);
     entry.online_identity = online_content::song_identity{
         .server_url = server_url,
         .remote_song_id = song.id,
         .content_source = online_source_from_remote(song.content_source),
+        .can_edit = song.has_can_edit ? std::optional<bool>(song.can_edit) : std::nullopt,
+        .lifecycle_status = song.lifecycle_status,
+        .review_status = song.review_status,
     };
     entry.song.directory.clear();
     return entry;
@@ -71,6 +81,11 @@ song_entry_state build_song_state(const remote_song_payload& remote_song,
                                   const local_content_index::snapshot& index) {
     song_entry_state state_entry;
     state_entry.song = make_remote_song_entry(remote_song, server_url);
+    state_entry.remote_revision_id = remote_song.revision_id;
+    state_entry.remote_song_json_hash = remote_song.song_json_hash;
+    state_entry.remote_song_json_fingerprint = remote_song.song_json_fingerprint;
+    state_entry.remote_audio_hash = remote_song.audio_hash;
+    state_entry.remote_jacket_hash = remote_song.jacket_hash;
 
     const online_content_availability::resolved_song availability =
         online_content_availability::resolve_song(
@@ -80,6 +95,10 @@ song_entry_state build_song_state(const remote_song_payload& remote_song,
                 .server_url = server_url,
                 .remote_song_id = remote_song.id,
                 .remote_song_version = remote_song.song_version,
+                .song_json_hash = remote_song.song_json_hash,
+                .song_json_fingerprint = remote_song.song_json_fingerprint,
+                .audio_hash = remote_song.audio_hash,
+                .jacket_hash = remote_song.jacket_hash,
             },
             state_entry.song.source_status);
     state_entry.installed = availability.installed;
@@ -100,6 +119,9 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
                                         const local_content_index::snapshot& index) {
     song_entry_state state_entry;
     state_entry.song = local_song;
+    state_entry.song.kind = content_kind_from_remote(remote_song.content_source);
+    state_entry.song.storage = storage_policy::managed_package;
+    state_entry.song.verification = verification_state::unchecked;
     state_entry.song.song.meta.song_id = remote_song.id;
     state_entry.song.song.meta.audio_url = make_absolute_remote_url(server_url, remote_song.audio_url);
     state_entry.song.song.meta.jacket_url = make_absolute_remote_url(server_url, remote_song.jacket_url);
@@ -113,9 +135,44 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
     state_entry.song.song.meta.play_count = remote_song.play_count;
     state_entry.song.song.meta.has_play_count = remote_song.has_play_count;
     state_entry.song.source_status = source_status_from_remote(remote_song.content_source);
+    const std::optional<local_content_index::online_song_binding> song_binding =
+        local_content_index::find_song_by_local(index, server_url, local_song.song.meta.song_id);
+    state_entry.song.online_identity = online_content::song_identity{
+        .server_url = server_url,
+        .remote_song_id = remote_song.id,
+        .content_source = online_source_from_remote(remote_song.content_source),
+        .can_edit = remote_song.has_can_edit
+            ? std::optional<bool>(remote_song.can_edit)
+            : (song_binding.has_value() ? song_binding->can_edit : std::nullopt),
+        .lifecycle_status = !remote_song.lifecycle_status.empty()
+            ? remote_song.lifecycle_status
+            : (song_binding.has_value() ? song_binding->lifecycle_status : ""),
+        .review_status = !remote_song.review_status.empty()
+            ? remote_song.review_status
+            : (song_binding.has_value() ? song_binding->review_status : ""),
+    };
+    state_entry.remote_revision_id = remote_song.revision_id;
+    state_entry.remote_song_json_hash = remote_song.song_json_hash;
+    state_entry.remote_song_json_fingerprint = remote_song.song_json_fingerprint;
+    state_entry.remote_audio_hash = remote_song.audio_hash;
+    state_entry.remote_jacket_hash = remote_song.jacket_hash;
+    const online_content_availability::resolved_song availability =
+        online_content_availability::resolve_song(
+            {local_song},
+            index,
+            {
+                .server_url = server_url,
+                .remote_song_id = remote_song.id,
+                .remote_song_version = remote_song.song_version,
+                .song_json_hash = remote_song.song_json_hash,
+                .song_json_fingerprint = remote_song.song_json_fingerprint,
+                .audio_hash = remote_song.audio_hash,
+                .jacket_hash = remote_song.jacket_hash,
+            },
+            state_entry.song.source_status);
     state_entry.installed = true;
     state_entry.installed_local_song_id = local_song.song.meta.song_id;
-    state_entry.update_available = local_song.song.meta.song_version < remote_song.song_version;
+    state_entry.update_available = availability.update_available;
     state_entry.charts_loaded = true;
     state_entry.charts_loading = false;
     state_entry.charts_has_more = false;
@@ -124,6 +181,9 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
     state_entry.charts.reserve(local_song.charts.size());
     for (const song_select::chart_option& chart : local_song.charts) {
         song_select::chart_option remote_chart = chart;
+        remote_chart.kind = content_kind_from_remote(remote_song.content_source);
+        remote_chart.storage = storage_policy::managed_package;
+        remote_chart.verification = verification_state::unchecked;
         remote_chart.meta.song_id = remote_song.id;
         const std::optional<local_content_index::online_chart_binding> binding =
             local_content_index::find_chart_by_local(index, server_url, chart.meta.chart_id);
@@ -136,13 +196,19 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
             .remote_chart_id = remote_chart.meta.chart_id,
             .content_source = online_source_from_remote(remote_song.content_source),
             .remote_chart_version = binding.has_value() ? binding->remote_chart_version : chart.meta.chart_version,
+            .can_edit = binding.has_value() ? binding->can_edit : std::nullopt,
+            .lifecycle_status = binding.has_value() ? binding->lifecycle_status : remote_song.lifecycle_status,
+            .review_status = binding.has_value() ? binding->review_status : remote_song.review_status,
         };
         state_entry.charts.push_back({
-            remote_chart,
-            chart.meta.chart_id,
-            {},
-            true,
-            false,
+            .chart = remote_chart,
+            .installed_local_chart_id = chart.meta.chart_id,
+            .remote_revision_id = "",
+            .remote_chart_hash = "",
+            .remote_chart_fingerprint = "",
+            .uploader_id = "",
+            .installed = true,
+            .update_available = false,
         });
     }
     return state_entry;
@@ -236,45 +302,52 @@ void append_chart_page(song_entry_state& song_state,
                     .remote_song_id = chart.song_id,
                     .remote_chart_id = chart.id,
                     .remote_chart_version = chart.chart_version,
+                    .chart_hash = chart.chart_sha256,
+                    .chart_fingerprint = chart.chart_fingerprint,
                 },
                 chart_source_status);
         const content_status chart_status =
             availability.installed ? availability.display_status : chart_source_status;
+        song_select::chart_option remote_chart;
+        remote_chart.meta = chart_meta{
+            .chart_id = chart.id,
+            .song_id = chart.song_id,
+            .chart_version = chart.chart_version,
+            .key_count = chart.key_count,
+            .difficulty = chart.difficulty_name,
+            .level = chart.level,
+            .chart_author = chart.chart_author,
+            .format_version = chart.format_version,
+            .resolution = chart.resolution,
+            .offset = chart.offset,
+        };
+        remote_chart.kind = content_kind_from_remote(chart.content_source);
+        remote_chart.storage = storage_policy::managed_package;
+        remote_chart.verification = verification_state::unchecked;
+        remote_chart.status = chart_status;
+        remote_chart.source_status = chart_source_status;
+        remote_chart.online_identity = online_content::chart_identity{
+            .server_url = page_result.server_url,
+            .remote_song_id = chart.song_id,
+            .remote_chart_id = chart.id,
+            .content_source = online_source_from_remote(chart.content_source),
+            .remote_chart_version = chart.chart_version,
+            .can_edit = chart.has_can_edit ? std::optional<bool>(chart.can_edit) : std::nullopt,
+            .lifecycle_status = chart.lifecycle_status,
+            .review_status = chart.review_status,
+        };
+        remote_chart.note_count = chart.note_count;
+        remote_chart.min_bpm = chart.min_bpm > 0.0f ? chart.min_bpm : song_state.song.song.meta.base_bpm;
+        remote_chart.max_bpm = chart.max_bpm > 0.0f ? chart.max_bpm : song_state.song.song.meta.base_bpm;
         song_state.charts.push_back({
-            {
-                {},
-                chart_meta{
-                    .chart_id = chart.id,
-                    .song_id = chart.song_id,
-                    .chart_version = chart.chart_version,
-                    .key_count = chart.key_count,
-                    .difficulty = chart.difficulty_name,
-                    .level = chart.level,
-                    .chart_author = chart.chart_author,
-                    .format_version = chart.format_version,
-                    .resolution = chart.resolution,
-                    .offset = chart.offset,
-                },
-                chart_status,
-                chart_source_status,
-                online_content::chart_identity{
-                    .server_url = page_result.server_url,
-                    .remote_song_id = chart.song_id,
-                    .remote_chart_id = chart.id,
-                    .content_source = online_source_from_remote(chart.content_source),
-                    .remote_chart_version = chart.chart_version,
-                },
-                0,
-                std::nullopt,
-                std::nullopt,
-                chart.note_count,
-                chart.min_bpm > 0.0f ? chart.min_bpm : song_state.song.song.meta.base_bpm,
-                chart.max_bpm > 0.0f ? chart.max_bpm : song_state.song.song.meta.base_bpm,
-            },
-            availability.local_chart_id,
-            chart.uploader_id,
-            availability.installed,
-            availability.update_available,
+            .chart = remote_chart,
+            .installed_local_chart_id = availability.local_chart_id,
+            .remote_revision_id = chart.revision_id,
+            .remote_chart_hash = chart.chart_sha256,
+            .remote_chart_fingerprint = chart.chart_fingerprint,
+            .uploader_id = chart.uploader_id,
+            .installed = availability.installed,
+            .update_available = availability.update_available,
         });
     }
 
@@ -569,10 +642,12 @@ std::vector<song_entry_state> load_owned_songs(const std::vector<song_select::so
     const local_content_index::snapshot index = local_content_index::load_snapshot();
     owned.reserve(local_songs.size());
     for (const song_select::song_entry& local_song : local_songs) {
+        if (!song_select::can_match_online_song(local_song)) {
+            continue;
+        }
         const std::optional<local_content_index::online_song_binding> binding =
             local_content_index::find_song_by_local(index, server_url, local_song.song.meta.song_id);
-        if (!binding.has_value() || binding->origin != local_content_index::online_origin::owned_upload ||
-            binding->remote_song_id.empty()) {
+        if (!binding.has_value() || binding->remote_song_id.empty()) {
             continue;
         }
 
@@ -580,6 +655,31 @@ std::vector<song_entry_state> load_owned_songs(const std::vector<song_select::so
             fetch_remote_song_by_id(binding->remote_song_id, server_url);
         if (!remote_song.success) {
             continue;
+        }
+        const bool can_edit = remote_song.song.has_can_edit
+            ? remote_song.song.can_edit
+            : binding->origin == local_content_index::online_origin::owned_upload;
+        if (!can_edit) {
+            continue;
+        }
+        if (remote_song.song.has_can_edit ||
+            !remote_song.song.lifecycle_status.empty() ||
+            !remote_song.song.review_status.empty()) {
+            local_content_index::put_song_binding({
+                .server_url = binding->server_url,
+                .local_song_id = binding->local_song_id,
+                .remote_song_id = binding->remote_song_id,
+                .origin = binding->origin,
+                .can_edit = remote_song.song.has_can_edit
+                    ? std::optional<bool>(remote_song.song.can_edit)
+                    : binding->can_edit,
+                .lifecycle_status = !remote_song.song.lifecycle_status.empty()
+                    ? remote_song.song.lifecycle_status
+                    : binding->lifecycle_status,
+                .review_status = !remote_song.song.review_status.empty()
+                    ? remote_song.song.review_status
+                    : binding->review_status,
+            });
         }
         owned.push_back(build_owned_song_state(local_song, remote_song.song, remote_song.server_url, index));
     }

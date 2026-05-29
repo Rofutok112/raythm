@@ -14,6 +14,10 @@ struct song_ref {
     std::string server_url;
     std::string remote_song_id;
     int remote_song_version = 0;
+    std::string song_json_hash;
+    std::string song_json_fingerprint;
+    std::string audio_hash;
+    std::string jacket_hash;
 };
 
 struct chart_ref {
@@ -21,6 +25,8 @@ struct chart_ref {
     std::string remote_song_id;
     std::string remote_chart_id;
     int remote_chart_version = 0;
+    std::string chart_hash;
+    std::string chart_fingerprint;
 };
 
 struct resolved_song {

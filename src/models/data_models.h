@@ -166,6 +166,25 @@ enum class content_status {
     checking,
 };
 
+enum class content_kind {
+    local,
+    community,
+    official,
+};
+
+enum class storage_policy {
+    plain_workspace,
+    managed_package,
+};
+
+enum class verification_state {
+    unchecked,
+    matched,
+    modified,
+    unavailable,
+    checking,
+};
+
 // 譜面パーサーの結果。
 struct chart_parse_result {
     bool success = false;

@@ -18,12 +18,39 @@
 
 namespace song_select {
 
+struct managed_song_manifest_metadata {
+    std::string package_id;
+    std::string song_json_hash;
+    std::string song_json_fingerprint;
+    std::string audio_hash;
+    std::string jacket_hash;
+    std::string remote_song_json_hash;
+    std::string remote_song_json_fingerprint;
+    std::string remote_audio_hash;
+    std::string remote_jacket_hash;
+    std::string created_at;
+    std::string updated_at;
+};
+
+struct managed_chart_manifest_metadata {
+    std::string chart_hash;
+    std::string chart_fingerprint;
+    std::string remote_chart_hash;
+    std::string remote_chart_fingerprint;
+    std::string revision_id;
+};
+
 struct chart_option {
     std::string path;
     chart_meta meta;
+    content_kind kind = content_kind::local;
+    storage_policy storage = storage_policy::plain_workspace;
+    verification_state verification = verification_state::unchecked;
     content_status status = content_status::local;
     content_status source_status = content_status::local;
     std::optional<online_content::chart_identity> online_identity;
+    std::optional<managed_chart_manifest_metadata> managed_manifest;
+    std::vector<online_content::chart_identity> remote_links;
     int local_note_offset_ms = 0;
     std::optional<rank> best_local_rank;
     std::optional<int> best_local_score;
@@ -34,9 +61,13 @@ struct chart_option {
 
 struct song_entry {
     song_data song;
+    content_kind kind = content_kind::local;
+    storage_policy storage = storage_policy::plain_workspace;
+    verification_state verification = verification_state::unchecked;
     content_status status = content_status::local;
     content_status source_status = content_status::local;
     std::optional<online_content::song_identity> online_identity;
+    std::optional<managed_song_manifest_metadata> managed_manifest;
     std::vector<chart_option> charts;
 };
 
@@ -290,6 +321,9 @@ struct state {
 };
 
 const song_entry* selected_song(const state& state);
+bool can_match_online_song(const song_entry& song);
+bool can_match_online_chart(const chart_option& chart);
+bool can_use_online_chart_routes(const chart_option& chart);
 std::vector<int> filtered_song_indices(const state& state);
 std::vector<const chart_option*> filtered_charts_for_selected_song(const state& state);
 const chart_option* selected_chart_for(const state& state, const std::vector<const chart_option*>& filtered);

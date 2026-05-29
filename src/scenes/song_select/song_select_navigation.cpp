@@ -109,7 +109,13 @@ std::unique_ptr<scene> make_play_scene(scene_manager& manager,
                                        play_mods mods) {
     save_last_played_selection(song.song.meta.song_id, chart.meta.chart_id);
     return std::make_unique<play_scene>(
-        manager, song.song, chart.path, chart.meta.key_count, chart.meta.level, mods);
+        manager,
+        song.song,
+        chart.path,
+        chart.meta.key_count,
+        chart.meta.level,
+        mods,
+        can_use_online_chart_routes(chart));
 }
 
 std::unique_ptr<scene> make_multiplayer_play_scene(scene_manager& manager,

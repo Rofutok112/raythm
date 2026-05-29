@@ -11,6 +11,9 @@ online_song_binding to_index_binding(const local_content_binding::song_binding& 
         .local_song_id = entry.local_song_id,
         .remote_song_id = entry.remote_song_id,
         .origin = entry.origin,
+        .can_edit = entry.can_edit,
+        .lifecycle_status = entry.lifecycle_status,
+        .review_status = entry.review_status,
     };
 }
 
@@ -22,12 +25,16 @@ online_chart_binding to_index_binding(const local_content_binding::chart_binding
         .remote_song_id = entry.remote_song_id,
         .remote_chart_version = entry.remote_chart_version,
         .origin = entry.origin,
+        .can_edit = entry.can_edit,
+        .lifecycle_status = entry.lifecycle_status,
+        .review_status = entry.review_status,
     };
 }
 
 }  // namespace
 
 snapshot load_snapshot() {
+    local_content_database::prune_orphaned_bindings();
     const local_content_binding::store mappings = local_content_database::load_mappings();
     snapshot index;
     index.songs.reserve(mappings.songs.size());
@@ -87,6 +94,7 @@ std::optional<online_chart_binding> find_chart_by_remote(const snapshot& index,
 
 std::optional<online_song_binding> find_song_by_local(const std::string& server_url,
                                                       const std::string& local_song_id) {
+    local_content_database::prune_orphaned_bindings();
     const std::optional<local_content_binding::song_binding> binding =
         local_content_database::find_song_by_local(server_url, local_song_id);
     return binding.has_value() ? std::optional<online_song_binding>(to_index_binding(*binding)) : std::nullopt;
@@ -94,6 +102,7 @@ std::optional<online_song_binding> find_song_by_local(const std::string& server_
 
 std::optional<online_song_binding> find_song_by_remote(const std::string& server_url,
                                                        const std::string& remote_song_id) {
+    local_content_database::prune_orphaned_bindings();
     const std::optional<local_content_binding::song_binding> binding =
         local_content_database::find_song_by_remote(server_url, remote_song_id);
     return binding.has_value() ? std::optional<online_song_binding>(to_index_binding(*binding)) : std::nullopt;
@@ -101,6 +110,7 @@ std::optional<online_song_binding> find_song_by_remote(const std::string& server
 
 std::optional<online_chart_binding> find_chart_by_local(const std::string& server_url,
                                                         const std::string& local_chart_id) {
+    local_content_database::prune_orphaned_bindings();
     const std::optional<local_content_binding::chart_binding> binding =
         local_content_database::find_chart_by_local(server_url, local_chart_id);
     return binding.has_value() ? std::optional<online_chart_binding>(to_index_binding(*binding)) : std::nullopt;
@@ -108,6 +118,7 @@ std::optional<online_chart_binding> find_chart_by_local(const std::string& serve
 
 std::optional<online_chart_binding> find_chart_by_remote(const std::string& server_url,
                                                          const std::string& remote_chart_id) {
+    local_content_database::prune_orphaned_bindings();
     const std::optional<local_content_binding::chart_binding> binding =
         local_content_database::find_chart_by_remote(server_url, remote_chart_id);
     return binding.has_value() ? std::optional<online_chart_binding>(to_index_binding(*binding)) : std::nullopt;
@@ -119,6 +130,9 @@ void put_song_binding(const online_song_binding& binding) {
         .local_song_id = binding.local_song_id,
         .remote_song_id = binding.remote_song_id,
         .origin = binding.origin,
+        .can_edit = binding.can_edit,
+        .lifecycle_status = binding.lifecycle_status,
+        .review_status = binding.review_status,
     });
 }
 
@@ -130,6 +144,9 @@ void put_chart_binding(const online_chart_binding& binding) {
         .remote_song_id = binding.remote_song_id,
         .remote_chart_version = binding.remote_chart_version,
         .origin = binding.origin,
+        .can_edit = binding.can_edit,
+        .lifecycle_status = binding.lifecycle_status,
+        .review_status = binding.review_status,
     });
 }
 
@@ -147,6 +164,14 @@ void remove_song_bindings(const std::string& local_song_id) {
 
 void remove_chart_bindings(const std::string& local_chart_id) {
     local_content_database::remove_chart_bindings(local_chart_id);
+}
+
+void remove_chart_bindings_for_remote_song(const std::string& server_url, const std::string& remote_song_id) {
+    local_content_database::remove_chart_bindings_for_remote_song(server_url, remote_song_id);
+}
+
+void prune_orphaned_bindings() {
+    local_content_database::prune_orphaned_bindings();
 }
 
 }  // namespace local_content_index

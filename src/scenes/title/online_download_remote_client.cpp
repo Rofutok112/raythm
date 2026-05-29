@@ -511,6 +511,7 @@ std::optional<remote_song_payload> parse_remote_song(const std::string& object) 
         }
     }
     const std::optional<int> offset = json::extract_int(object, "offset");
+    const std::optional<bool> can_edit = json::extract_bool(object, "canEdit");
 
     return remote_song_payload{
         .id = *id,
@@ -529,9 +530,19 @@ std::optional<remote_song_payload> parse_remote_song(const std::string& object) 
         .chart_count = json::extract_int(object, "chartCount").value_or(0),
         .play_count = play_count.has_value() ? std::max(0, *play_count) : 0,
         .has_play_count = play_count.has_value(),
+        .revision_id = json::extract_string(object, "revisionId").value_or(
+            json::extract_string(object, "revision").value_or("")),
         .content_source = json::extract_string(object, "contentSource").value_or("community"),
+        .lifecycle_status = json::extract_string(object, "lifecycleStatus").value_or("active"),
+        .review_status = json::extract_string(object, "reviewStatus").value_or(""),
+        .can_edit = can_edit.value_or(false),
+        .has_can_edit = can_edit.has_value(),
         .audio_url = json::extract_string(object, "audioUrl").value_or(""),
         .jacket_url = json::extract_string(object, "jacketUrl").value_or(""),
+        .song_json_hash = json::extract_string(object, "songJsonSha256").value_or(""),
+        .song_json_fingerprint = json::extract_string(object, "songJsonFingerprint").value_or(""),
+        .audio_hash = json::extract_string(object, "audioSha256").value_or(""),
+        .jacket_hash = json::extract_string(object, "jacketSha256").value_or(""),
     };
 }
 
@@ -578,6 +589,7 @@ std::optional<remote_chart_payload> parse_remote_chart(const std::string& object
     if (const std::optional<std::string> uploader_object = json::extract_object(object, "uploader")) {
         uploader_id = json::extract_string(*uploader_object, "id").value_or("");
     }
+    const std::optional<bool> can_edit = json::extract_bool(object, "canEdit");
 
     return remote_chart_payload{
         .id = *id,
@@ -597,7 +609,13 @@ std::optional<remote_chart_payload> parse_remote_chart(const std::string& object
         .difficulty_ruleset_version = json::extract_int(object, "difficultyRulesetVersion").value_or(0),
         .chart_fingerprint = json::extract_string(object, "chartFingerprint").value_or(""),
         .chart_sha256 = json::extract_string(object, "chartSha256").value_or(""),
+        .revision_id = json::extract_string(object, "revisionId").value_or(
+            json::extract_string(object, "revision").value_or("")),
         .content_source = json::extract_string(object, "contentSource").value_or("community"),
+        .lifecycle_status = json::extract_string(object, "lifecycleStatus").value_or("active"),
+        .review_status = json::extract_string(object, "reviewStatus").value_or(""),
+        .can_edit = can_edit.value_or(false),
+        .has_can_edit = can_edit.has_value(),
         .uploader_id = std::move(uploader_id),
     };
 }

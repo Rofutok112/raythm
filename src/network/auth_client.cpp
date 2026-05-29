@@ -134,7 +134,10 @@ std::optional<auth::public_user> parse_me_response(const std::string& body) {
 std::optional<auth::community_song_upload> parse_community_song_upload(const std::string& object,
                                                                         const std::string& user_id) {
     const std::optional<std::string> uploader_object = json::extract_object(object, "uploader");
-    if (!uploader_object.has_value() || json::extract_string(*uploader_object, "id").value_or("") != user_id) {
+    const std::optional<bool> can_edit = json::extract_bool(object, "canEdit");
+    const bool uploaded_by_user =
+        uploader_object.has_value() && json::extract_string(*uploader_object, "id").value_or("") == user_id;
+    if (!can_edit.value_or(uploaded_by_user)) {
         return std::nullopt;
     }
 
@@ -152,6 +155,10 @@ std::optional<auth::community_song_upload> parse_community_song_upload(const std
         .genre = json::extract_string(object, "genre").value_or(""),
         .content_source = json::extract_string(object, "contentSource").value_or("community"),
         .visibility = json::extract_string(object, "visibility").value_or("public"),
+        .lifecycle_status = json::extract_string(object, "lifecycleStatus").value_or("active"),
+        .review_status = json::extract_string(object, "reviewStatus").value_or(""),
+        .can_edit = can_edit.value_or(uploaded_by_user),
+        .has_can_edit = can_edit.has_value(),
         .base_bpm = json::extract_float(object, "baseBpm").value_or(0.0f),
         .duration_seconds = json::extract_float(object, "durationSec").value_or(0.0f),
         .preview_start_ms = json::extract_int(object, "previewStartMs").value_or(0),
@@ -162,7 +169,10 @@ std::optional<auth::community_song_upload> parse_community_song_upload(const std
 std::optional<auth::community_chart_upload> parse_community_chart_upload(const std::string& object,
                                                                           const std::string& user_id) {
     const std::optional<std::string> uploader_object = json::extract_object(object, "uploader");
-    if (!uploader_object.has_value() || json::extract_string(*uploader_object, "id").value_or("") != user_id) {
+    const std::optional<bool> can_edit = json::extract_bool(object, "canEdit");
+    const bool uploaded_by_user =
+        uploader_object.has_value() && json::extract_string(*uploader_object, "id").value_or("") == user_id;
+    if (!can_edit.value_or(uploaded_by_user)) {
         return std::nullopt;
     }
 
@@ -183,6 +193,10 @@ std::optional<auth::community_chart_upload> parse_community_chart_upload(const s
         .chart_author = json::extract_string(object, "chartAuthor").value_or(""),
         .content_source = json::extract_string(object, "contentSource").value_or("community"),
         .visibility = json::extract_string(object, "visibility").value_or("public"),
+        .lifecycle_status = json::extract_string(object, "lifecycleStatus").value_or("active"),
+        .review_status = json::extract_string(object, "reviewStatus").value_or(""),
+        .can_edit = can_edit.value_or(uploaded_by_user),
+        .has_can_edit = can_edit.has_value(),
         .key_count = json::extract_int(object, "keyCount").value_or(0),
         .level = json::extract_float(object, "calculatedLevel").value_or(0.0f),
         .note_count = json::extract_int(object, "noteCount").value_or(0),

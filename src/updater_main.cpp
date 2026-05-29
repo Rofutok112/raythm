@@ -147,6 +147,12 @@ bool copy_runtime_file_if_present(const std::filesystem::path& install_root,
     return !ec;
 }
 
+bool same_directory(const std::filesystem::path& left, const std::filesystem::path& right) {
+    std::error_code ec;
+    const bool equivalent = std::filesystem::equivalent(left, right, ec);
+    return !ec ? equivalent : left == right;
+}
+
 int relaunch_from_temp_copy(int argc, char* argv[], const std::filesystem::path& install_root) {
     const std::filesystem::path temp_root = updater::update_root() / "temp-updater";
     std::error_code ec;
@@ -336,7 +342,7 @@ int main(int argc, char* argv[]) {
                 return relaunch_self_elevated(argc, argv);
             }
 
-            if (!request->run_from_temp_copy && current_executable_path().parent_path() == install_root) {
+            if (!request->run_from_temp_copy && same_directory(current_executable_path().parent_path(), install_root)) {
                 progress.set_status("Restarting updater in a safe location...");
                 progress.set_progress(0.80f);
                 updater::append_update_log("updater", "relaunching updater from temp copy");
@@ -359,9 +365,11 @@ int main(int argc, char* argv[]) {
             progress.set_progress(0.88f);
             std::cout << "Applying staged update to " << install_root.string() << '\n';
             updater::append_update_log("updater", "applying staged update");
+            const bool skip_updater_executable = same_directory(current_executable_path().parent_path(), install_root);
             if (!updater::apply_staged_update(install_root,
                                               updater::staging_root(),
-                                              updater::backup_root() / "current")) {
+                                              updater::backup_root() / "current",
+                                              skip_updater_executable)) {
                 updater::append_update_log("updater", "failed to apply staged update");
                 progress.show_error("Failed to apply the staged update.");
                 std::cerr << "Failed to apply staged update.\n";

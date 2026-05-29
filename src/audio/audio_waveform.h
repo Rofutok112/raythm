@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+#include <vector>
 
 struct audio_waveform_peak {
     double seconds = 0.0;
@@ -17,4 +18,6 @@ struct audio_waveform_summary {
 class audio_waveform final {
 public:
     static audio_waveform_summary build(const std::string& file_path, std::size_t segment_count = 14336);
+    static audio_waveform_summary build_from_memory(const std::vector<unsigned char>& bytes,
+                                                    std::size_t segment_count = 14336);
 };

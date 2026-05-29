@@ -209,7 +209,15 @@ chart_parse_result chart_parser::parse(const std::string& file_path) {
         result.errors.push_back("Failed to open chart file: " + file_path);
         return result;
     }
+    return parse_stream(input, file_path);
+}
 
+chart_parse_result chart_parser::parse_text(const std::string& content, const std::string& source_name) {
+    std::istringstream input(content);
+    return parse_stream(input, source_name.empty() ? "<memory>" : source_name);
+}
+
+chart_parse_result chart_parser::parse_stream(std::istream& input, const std::string&) {
     std::map<std::string, std::vector<numbered_line>> sections;
     std::string current_section;
     std::string line;

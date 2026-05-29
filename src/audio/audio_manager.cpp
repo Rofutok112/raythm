@@ -103,6 +103,13 @@ unsigned long create_stream_from_path(const std::string& file_path) {
     return BASS_StreamCreateFile(FALSE, file_path.c_str(), 0, 0, 0);
 }
 
+unsigned long create_stream_from_memory_bytes(const std::vector<unsigned char>& bytes, DWORD flags = 0) {
+    if (bytes.empty()) {
+        return 0;
+    }
+    return BASS_StreamCreateFile(TRUE, bytes.data(), 0, static_cast<QWORD>(bytes.size()), flags);
+}
+
 bool is_pinned_se_sample_path(const std::string& file_path) {
     return lowercase_ascii(std::filesystem::path(file_path).filename().string()) == "hitsound.mp3";
 }
@@ -236,8 +243,22 @@ bool audio_manager::load_bgm(const std::string& file_path) {
         return false;
     }
     reset_bgm_fade();
+    bgm_memory_.clear();
     replace_voice(bgm_handle_, file_path);
     bgm_loudness_ = analyze_or_get_cached_loudness(file_path);
+    apply_bgm_volume();
+    return is_voice_loaded(bgm_handle_);
+}
+
+bool audio_manager::load_bgm_from_memory(std::vector<unsigned char> bytes) {
+    if (!ensure_initialized()) {
+        return false;
+    }
+    reset_bgm_fade();
+    free_voice(bgm_handle_);
+    bgm_memory_ = std::move(bytes);
+    bgm_handle_ = create_stream_from_memory(bgm_memory_);
+    bgm_loudness_ = {};
     apply_bgm_volume();
     return is_voice_loaded(bgm_handle_);
 }
@@ -424,9 +445,30 @@ bool audio_manager::load_preview(const std::string& file_path) {
     }
     preview_loading_ = false;
     reset_preview_fade();
+    preview_memory_.clear();
     replace_voice(preview_handle_, file_path);
     preview_path_ = file_path;
     preview_loudness_ = analyze_or_get_cached_loudness(file_path);
+    apply_preview_volume();
+    return is_voice_loaded(preview_handle_);
+}
+
+bool audio_manager::load_preview_from_memory(std::vector<unsigned char> bytes) {
+    if (!ensure_initialized()) {
+        return false;
+    }
+    ++preview_load_generation_;
+    active_preview_load_generation_ = preview_load_generation_;
+    if (preview_load_future_.valid()) {
+        stale_preview_load_futures_.push_back(std::move(preview_load_future_));
+    }
+    preview_loading_ = false;
+    reset_preview_fade();
+    free_voice(preview_handle_);
+    preview_memory_ = std::move(bytes);
+    preview_handle_ = create_stream_from_memory(preview_memory_);
+    preview_path_.clear();
+    preview_loudness_ = {};
     apply_preview_volume();
     return is_voice_loaded(preview_handle_);
 }
@@ -444,6 +486,7 @@ bool audio_manager::request_preview_load(const std::string& file_path) {
 
     stop_voice(preview_handle_);
     free_voice(preview_handle_);
+    preview_memory_.clear();
     reset_preview_fade();
     preview_loading_ = true;
     const std::string source = file_path;
@@ -460,6 +503,38 @@ bool audio_manager::request_preview_load(const std::string& file_path) {
             });
         } catch (...) {
             promise.set_value({generation, 0});
+        }
+    }).detach();
+    return true;
+}
+
+bool audio_manager::request_preview_load_from_memory(std::vector<unsigned char> bytes) {
+    if (!ensure_initialized() || bytes.empty()) {
+        return false;
+    }
+
+    ++preview_load_generation_;
+    active_preview_load_generation_ = preview_load_generation_;
+    if (preview_load_future_.valid()) {
+        stale_preview_load_futures_.push_back(std::move(preview_load_future_));
+    }
+
+    stop_voice(preview_handle_);
+    free_voice(preview_handle_);
+    preview_memory_.clear();
+    reset_preview_fade();
+    preview_loading_ = true;
+    preview_path_.clear();
+    preview_loudness_ = {};
+    const unsigned int generation = active_preview_load_generation_;
+    std::promise<preview_load_payload> promise;
+    preview_load_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), memory = std::move(bytes), generation]() mutable {
+        try {
+            const unsigned long handle = create_stream_from_memory_bytes(memory);
+            promise.set_value({generation, handle, std::move(memory)});
+        } catch (...) {
+            promise.set_value({generation, 0, {}});
         }
     }).detach();
     return true;
@@ -506,7 +581,8 @@ audio_manager::async_preview_load_result audio_manager::poll_preview_load() {
 
     free_voice(preview_handle_);
     preview_handle_ = loaded.handle;
-    preview_loudness_ = analyze_or_get_cached_loudness(preview_path_);
+    preview_memory_ = std::move(loaded.memory);
+    preview_loudness_ = preview_path_.empty() ? audio_loudness_analysis{} : analyze_or_get_cached_loudness(preview_path_);
     reset_preview_fade();
     apply_preview_volume();
     result.loaded = is_voice_loaded(preview_handle_);
@@ -540,6 +616,7 @@ void audio_manager::unload_preview() {
     preview_loading_ = false;
     stop_voice(preview_handle_);
     free_voice(preview_handle_);
+    preview_memory_.clear();
     reset_preview_fade();
     preview_path_.clear();
     preview_loudness_ = {};
@@ -829,6 +906,10 @@ bool audio_manager::ensure_initialized() {
 
 unsigned long audio_manager::create_stream(const std::string& file_path) const {
     return create_stream_from_path(file_path);
+}
+
+unsigned long audio_manager::create_stream_from_memory(const std::vector<unsigned char>& bytes) const {
+    return create_stream_from_memory_bytes(bytes);
 }
 
 void audio_manager::replace_voice(unsigned long& handle, const std::string& file_path) const {

@@ -68,6 +68,10 @@ struct community_song_upload {
     std::string genre;
     std::string content_source;
     std::string visibility;
+    std::string lifecycle_status;
+    std::string review_status;
+    bool can_edit = false;
+    bool has_can_edit = false;
     float base_bpm = 0.0f;
     float duration_seconds = 0.0f;
     int preview_start_ms = 0;
@@ -84,6 +88,10 @@ struct community_chart_upload {
     std::string chart_author;
     std::string content_source;
     std::string visibility;
+    std::string lifecycle_status;
+    std::string review_status;
+    bool can_edit = false;
+    bool has_can_edit = false;
     int key_count = 0;
     float level = 0.0f;
     int note_count = 0;

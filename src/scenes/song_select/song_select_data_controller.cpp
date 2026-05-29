@@ -5,15 +5,48 @@
 #include <thread>
 #include <utility>
 
+#include "network/auth_client.h"
+
 namespace song_select {
 namespace {
 
+bool has_queueable_link_for_server(const chart_option& chart, const std::string& server_url) {
+    if (!can_use_online_chart_routes(chart)) {
+        return false;
+    }
+    const std::string normalized_server_url = auth::normalize_server_url(server_url);
+    if (normalized_server_url.empty()) {
+        return false;
+    }
+    if (online_content::is_queueable(chart.online_identity) &&
+        auth::normalize_server_url(chart.online_identity->server_url) == normalized_server_url) {
+        return true;
+    }
+    for (const online_content::chart_identity& link : chart.remote_links) {
+        if (online_content::is_queueable(link) &&
+            auth::normalize_server_url(link.server_url) == normalized_server_url) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool uses_submitted_ranking_best(const chart_option* chart) {
-    return chart != nullptr &&
-           (chart->source_status == content_status::official ||
+    if (chart == nullptr) {
+        return false;
+    }
+    if (!can_use_online_chart_routes(*chart)) {
+        return false;
+    }
+    if (chart->source_status == content_status::official ||
             chart->source_status == content_status::community ||
             chart->status == content_status::official ||
-            chart->status == content_status::community);
+            chart->status == content_status::community) {
+        return true;
+    }
+
+    const auth::session_summary summary = auth::load_session_summary();
+    return summary.logged_in && has_queueable_link_for_server(*chart, summary.server_url);
 }
 
 }  // namespace
@@ -107,6 +140,13 @@ catalog_reload_result data_controller::poll_catalog_reload(state& state) {
 }
 
 void data_controller::request_ranking_reload(state& state) {
+    const auto filtered = filtered_charts_for_selected_song(state);
+    const chart_option* chart = selected_chart_for(state, filtered);
+    if (state.ranking_panel.selected_source == ranking_service::source::online &&
+        (chart == nullptr || !can_use_online_chart_routes(*chart))) {
+        state.ranking_panel.selected_source = ranking_service::source::local;
+    }
+
     if (ranking_loading_) {
         ++ranking_generation_;
         ranking_reload_pending_ = true;
@@ -114,8 +154,6 @@ void data_controller::request_ranking_reload(state& state) {
         return;
     }
 
-    const auto filtered = filtered_charts_for_selected_song(state);
-    const chart_option* chart = selected_chart_for(state, filtered);
     const std::string chart_id = chart != nullptr ? chart->meta.chart_id : "";
     const ranking_service::source source = state.ranking_panel.selected_source;
     const ranking_service::source best_source = uses_submitted_ranking_best(chart)

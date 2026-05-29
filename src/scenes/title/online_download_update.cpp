@@ -4,10 +4,12 @@
 #include <cmath>
 #include <vector>
 
+#include "content_lifecycle.h"
 #include "title/online_catalog_data_controller.h"
 #include "title/online_download_preview_controller.h"
 #include "tween.h"
 #include "ui_draw.h"
+#include "ui_notice.h"
 #include "virtual_screen.h"
 
 namespace title_online_view {
@@ -586,7 +588,14 @@ bool handle_detail_actions(state& state,
 
     if (song != nullptr && !state.download_in_progress && ui::is_clicked(current.primary_action_rect)) {
         const chart_entry_state* chart = selected_chart(state);
-        if (needs_download(*song)) {
+        if (song->song.online_identity.has_value() &&
+            !content_lifecycle::lifecycle_is_active(song->song.online_identity->lifecycle_status)) {
+            const std::string label = content_lifecycle::display_label(
+                song->song.online_identity->review_status,
+                song->song.online_identity->lifecycle_status);
+            ui::notify(label.empty() ? "This song is not available." : label,
+                       ui::notice_tone::error, 2.4f);
+        } else if (needs_download(*song)) {
             result.action = requested_action::primary;
         } else if (chart != nullptr &&
                    chart->installed &&

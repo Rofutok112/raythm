@@ -1,6 +1,7 @@
 #include "services/online_content_availability.h"
 
 #include <algorithm>
+#include <cctype>
 
 namespace online_content_availability {
 namespace {
@@ -16,6 +17,51 @@ bool remote_chart_matches(const online_content::chart_identity& identity,
     return identity.server_url == remote.server_url &&
            identity.remote_song_id == remote.remote_song_id &&
            identity.remote_chart_id == remote.remote_chart_id;
+}
+
+std::string lowercase(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return value;
+}
+
+bool hash_changed(const std::string& local_hash, const std::string& remote_hash) {
+    return !local_hash.empty() &&
+           !remote_hash.empty() &&
+           lowercase(local_hash) != lowercase(remote_hash);
+}
+
+bool song_hash_update_available(const song_select::song_entry& local_song,
+                                const song_ref& remote) {
+    if (!local_song.managed_manifest.has_value()) {
+        return false;
+    }
+    const song_select::managed_song_manifest_metadata& manifest = *local_song.managed_manifest;
+    const bool song_json_changed =
+        !remote.song_json_fingerprint.empty()
+            ? hash_changed(manifest.remote_song_json_fingerprint, remote.song_json_fingerprint) ||
+              (manifest.remote_song_json_fingerprint.empty() &&
+               hash_changed(manifest.song_json_fingerprint, remote.song_json_fingerprint))
+            : hash_changed(manifest.remote_song_json_hash, remote.song_json_hash);
+    return song_json_changed ||
+           hash_changed(manifest.remote_audio_hash, remote.audio_hash) ||
+           (manifest.remote_audio_hash.empty() && hash_changed(manifest.audio_hash, remote.audio_hash)) ||
+           hash_changed(manifest.remote_jacket_hash, remote.jacket_hash) ||
+           (manifest.remote_jacket_hash.empty() && hash_changed(manifest.jacket_hash, remote.jacket_hash));
+}
+
+bool chart_hash_update_available(const song_select::chart_option& local_chart,
+                                 const chart_ref& remote) {
+    if (!local_chart.managed_manifest.has_value()) {
+        return false;
+    }
+    const song_select::managed_chart_manifest_metadata& manifest = *local_chart.managed_manifest;
+    if (!remote.chart_fingerprint.empty()) {
+        return hash_changed(manifest.remote_chart_fingerprint, remote.chart_fingerprint) ||
+               (manifest.remote_chart_fingerprint.empty() &&
+                hash_changed(manifest.chart_fingerprint, remote.chart_fingerprint));
+    }
+    return hash_changed(manifest.remote_chart_hash, remote.chart_hash);
 }
 
 content_status display_status_for_local(content_status local_status,
@@ -111,6 +157,9 @@ resolved_song resolve_song(const std::vector<song_select::song_entry>& local_son
         find_song_binding_by_remote(index, remote.server_url, remote.remote_song_id);
 
     for (const song_select::song_entry& local_song : local_songs) {
+        if (!song_select::can_match_online_song(local_song)) {
+            continue;
+        }
         const bool identity_match = local_song.online_identity.has_value() &&
                                     remote_song_matches(*local_song.online_identity, remote);
         const std::optional<local_content_index::online_song_binding> local_binding =
@@ -131,6 +180,8 @@ resolved_song resolve_song(const std::vector<song_select::song_entry>& local_son
         result.update_available =
             remote.remote_song_version > 0 &&
             local_song.song.meta.song_version < remote.remote_song_version;
+        result.update_available = result.update_available ||
+                                  song_hash_update_available(local_song, remote);
         result.display_status = display_status_for_local(local_song.status, remote_source_status);
         return result;
     }
@@ -159,6 +210,9 @@ resolved_chart resolve_chart(const std::vector<song_select::song_entry>& local_s
         find_chart_binding_by_remote(index, remote.server_url, remote.remote_chart_id);
 
     for (const song_select::chart_option& local_chart : local_song->charts) {
+        if (!song_select::can_match_online_chart(local_chart)) {
+            continue;
+        }
         const bool identity_match = local_chart.online_identity.has_value() &&
                                     remote_chart_matches(*local_chart.online_identity, remote);
         const std::optional<local_content_index::online_chart_binding> local_binding =
@@ -185,6 +239,8 @@ resolved_chart resolve_chart(const std::vector<song_select::song_entry>& local_s
             remote.remote_chart_version > 0 &&
             installed_version > 0 &&
             remote.remote_chart_version > installed_version;
+        result.update_available = result.update_available ||
+                                  chart_hash_update_available(local_chart, remote);
         result.display_status = display_status_for_local(local_chart.status, remote_source_status);
         return result;
     }

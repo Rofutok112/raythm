@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <mutex>
 #include <sstream>
 #include <ctime>
@@ -16,6 +17,7 @@
 
 #include "app_paths.h"
 #include "chart_fingerprint.h"
+#include "managed_content_storage.h"
 #include "network/auth_client.h"
 #include "network/ranking_client.h"
 #include "network/server_environment.h"
@@ -648,6 +650,48 @@ verification_result compare_hash(const std::string& label,
     };
 }
 
+std::optional<std::string> compute_sha256_hex_for_content_path(const std::filesystem::path& path) {
+    const managed_content_storage::managed_file_read_result managed =
+        managed_content_storage::read_managed_file(path);
+    if (!managed.managed) {
+        return updater::compute_sha256_hex(path);
+    }
+    if (!managed.success) {
+        return std::nullopt;
+    }
+    return updater::compute_sha256_hex(std::string_view(
+        reinterpret_cast<const char*>(managed.bytes.data()),
+        managed.bytes.size()));
+}
+
+std::optional<std::string> compute_song_fingerprint_hex_for_content_path(const std::filesystem::path& path) {
+    const managed_content_storage::managed_file_read_result managed =
+        managed_content_storage::read_managed_file(path);
+    if (!managed.managed) {
+        return song_fingerprint::compute_sha256_hex(path);
+    }
+    if (!managed.success) {
+        return std::nullopt;
+    }
+    const std::string content(managed.bytes.begin(), managed.bytes.end());
+    const std::string fingerprint = song_fingerprint::build(content);
+    return updater::compute_sha256_hex(std::string_view(fingerprint));
+}
+
+std::optional<std::string> compute_chart_fingerprint_hex_for_content_path(const std::filesystem::path& path) {
+    const managed_content_storage::managed_file_read_result managed =
+        managed_content_storage::read_managed_file(path);
+    if (!managed.managed) {
+        return chart_fingerprint::compute_sha256_hex(path);
+    }
+    if (!managed.success) {
+        return std::nullopt;
+    }
+    const std::string content(managed.bytes.begin(), managed.bytes.end());
+    const std::string fingerprint = chart_fingerprint::build(content);
+    return updater::compute_sha256_hex(std::string_view(fingerprint));
+}
+
 std::optional<local_manifest_hashes> compute_local_manifest_hashes(const song_data& song,
                                                                    const std::string& chart_path,
                                                                    std::string& error_message) {
@@ -657,38 +701,38 @@ std::optional<local_manifest_hashes> compute_local_manifest_hashes(const song_da
     const std::filesystem::path jacket_path = song_dir / path_utils::from_utf8(song.meta.jacket_file);
     const std::filesystem::path local_chart_path = path_utils::from_utf8(chart_path);
 
-    const std::optional<std::string> song_json_sha256 = updater::compute_sha256_hex(song_json_path);
+    const std::optional<std::string> song_json_sha256 = compute_sha256_hex_for_content_path(song_json_path);
     if (!song_json_sha256.has_value()) {
         error_message = "Failed to hash local song.json for online verification.";
         return std::nullopt;
     }
     const std::optional<std::string> song_json_fingerprint_sha256 =
-        song_fingerprint::compute_sha256_hex(song_json_path);
+        compute_song_fingerprint_hex_for_content_path(song_json_path);
     if (!song_json_fingerprint_sha256.has_value()) {
         error_message = "Failed to fingerprint local song.json for online verification.";
         return std::nullopt;
     }
 
-    const std::optional<std::string> audio_sha256 = updater::compute_sha256_hex(audio_path);
+    const std::optional<std::string> audio_sha256 = compute_sha256_hex_for_content_path(audio_path);
     if (!audio_sha256.has_value()) {
         error_message = "Failed to hash local audio for online verification.";
         return std::nullopt;
     }
 
-    const std::optional<std::string> jacket_sha256 = updater::compute_sha256_hex(jacket_path);
+    const std::optional<std::string> jacket_sha256 = compute_sha256_hex_for_content_path(jacket_path);
     if (!jacket_sha256.has_value()) {
         error_message = "Failed to hash local jacket for online verification.";
         return std::nullopt;
     }
 
-    const std::optional<std::string> chart_sha256 = updater::compute_sha256_hex(local_chart_path);
+    const std::optional<std::string> chart_sha256 = compute_sha256_hex_for_content_path(local_chart_path);
     if (!chart_sha256.has_value()) {
         error_message = "Failed to hash local chart for online verification.";
         return std::nullopt;
     }
 
     const std::optional<std::string> chart_fingerprint_sha256 =
-        chart_fingerprint::compute_sha256_hex(local_chart_path);
+        compute_chart_fingerprint_hex_for_content_path(local_chart_path);
     if (!chart_fingerprint_sha256.has_value()) {
         error_message = "Failed to fingerprint local chart for online verification.";
         return std::nullopt;

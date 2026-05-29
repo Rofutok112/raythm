@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,9 @@ struct song_binding {
     std::string local_song_id;
     std::string remote_song_id;
     origin origin = origin::owned_upload;
+    std::optional<bool> can_edit;
+    std::string lifecycle_status;
+    std::string review_status;
 };
 
 struct chart_binding {
@@ -25,6 +29,9 @@ struct chart_binding {
     std::string remote_song_id;
     int remote_chart_version = 0;
     origin origin = origin::owned_upload;
+    std::optional<bool> can_edit;
+    std::string lifecycle_status;
+    std::string review_status;
 };
 
 struct store {
@@ -32,5 +39,8 @@ struct store {
     std::vector<chart_binding> charts;
 };
 
-}  // namespace local_content_binding
+inline bool can_edit_remote(const std::optional<bool>& can_edit, origin binding_origin) {
+    return can_edit.value_or(binding_origin == origin::owned_upload);
+}
 
+}  // namespace local_content_binding

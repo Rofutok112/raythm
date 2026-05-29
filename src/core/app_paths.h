@@ -20,6 +20,15 @@ std::filesystem::path app_data_root();
 // AppData/Local/raythm/songs/
 std::filesystem::path songs_root();
 
+// AppData/Local/raythm/content-cache/
+std::filesystem::path content_cache_root();
+
+// AppData/Local/raythm/content-cache/community/
+std::filesystem::path community_content_cache_root();
+
+// AppData/Local/raythm/content-cache/official/
+std::filesystem::path official_content_cache_root();
+
 // AppData/Local/raythm/rankings/
 std::filesystem::path rankings_root();
 
