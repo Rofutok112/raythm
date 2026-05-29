@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "audio_manager.h"
+#include "content_lifecycle.h"
 #include "localization/localization.h"
 #include "platform/windows_input_source.h"
 #include "scene_common.h"
@@ -858,6 +859,11 @@ Color action_tone_for_state(bool update_available, bool installed, bool download
     return t.fast;
 }
 
+bool lifecycle_blocks_song_download(const song_entry_state& song) {
+    return song.song.online_identity.has_value() &&
+           !content_lifecycle::lifecycle_is_active(song.song.online_identity->lifecycle_status);
+}
+
 void draw_toned_button(Rectangle rect,
                        const char* label,
                        int font_size,
@@ -1134,7 +1140,9 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
 
             const std::string badge_label = detail::song_status_label(song);
             if (!badge_label.empty()) {
-                const Rectangle badge_rect = {card.x + card.width - 90.0f, card.y + 12.0f, 72.0f, 18.0f};
+                const float badge_width = badge_label.size() > 8 ? 132.0f : 72.0f;
+                const Rectangle badge_rect = {card.x + card.width - badge_width - 18.0f,
+                                              card.y + 12.0f, badge_width, 18.0f};
                 draw_browse_body_text_in_rect(badge_label.c_str(), 12, badge_rect,
                                       with_alpha(detail::song_status_color(song), grid_alpha), ui::text_align::right);
             }
@@ -1481,10 +1489,16 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         chart != nullptr && chart->installed && chart->update_available;
     const bool selected_chart_repair =
         chart != nullptr && chart->installed && chart->chart.status == content_status::modified;
+    const bool song_lifecycle_blocked = lifecycle_blocks_song_download(*song);
+    const std::string song_lifecycle_label = song->song.online_identity.has_value()
+        ? content_lifecycle::display_label(song->song.online_identity->review_status,
+                                           song->song.online_identity->lifecycle_status)
+        : "";
     const char* primary_label = state.download_in_progress ? "DOWNLOADING..."
-        : (needs_download(*song) ? (song->song.status == content_status::modified ? "REPAIR SONG"
-                                    : song->update_available ? "UPDATE SONG"
-                                                             : "DOWNLOAD SONG")
+        : (song_lifecycle_blocked ? (song_lifecycle_label.empty() ? "UNAVAILABLE" : song_lifecycle_label.c_str())
+           : needs_download(*song) ? (song->song.status == content_status::modified ? "REPAIR SONG"
+                                      : song->update_available ? "UPDATE SONG"
+                                                               : "DOWNLOAD SONG")
            : (selected_chart_repair ? "REPAIR CHART"
                                     : selected_chart_update ? "UPDATE CHART"
                                                             : "OPEN LOCAL"));
@@ -1671,18 +1685,34 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                               ui::text_align::left);
         const std::string chart_badge = detail::chart_status_label(item);
         const bool can_download_chart = !state.download_in_progress && detail::can_download_chart(*song, item);
-        if (!chart_badge.empty() && !can_download_chart) {
+        const Rectangle download_icon_rect = detail::chart_download_icon_rect(card);
+        const bool has_review_badge =
+            item.chart.online_identity.has_value() &&
+            !content_lifecycle::display_label(item.chart.online_identity->review_status,
+                                              item.chart.online_identity->lifecycle_status).empty();
+        const bool show_chart_badge = !chart_badge.empty() && (!can_download_chart || has_review_badge);
+        if (show_chart_badge) {
+            const float badge_width = chart_badge.size() > 8 ? 122.0f : 62.0f;
+            const float badge_right = can_download_chart ? download_icon_rect.x - 12.0f
+                                                         : card.x + card.width - 16.0f;
+            Color badge_color = item.chart.status == content_status::modified ? t.slow
+                : item.update_available ? t.accent
+                                        : t.text_muted;
+            if (has_review_badge) {
+                badge_color = content_lifecycle::is_pending_review(item.chart.online_identity->review_status,
+                                                                    item.chart.online_identity->lifecycle_status)
+                    ? t.accent
+                    : t.slow;
+            }
             draw_browse_body_text_in_rect(chart_badge.c_str(), 12,
-                                  {card.x + card.width - 78.0f, card.y + 14.0f, 62.0f, 14.0f},
-                                  with_alpha(item.chart.status == content_status::modified ? t.slow
-                                             : item.update_available ? t.accent
-                                                                     : t.text_muted,
-                                             detail_alpha),
+                                  {badge_right - badge_width, card.y + 8.0f, badge_width, 14.0f},
+                                  with_alpha(badge_color, detail_alpha),
                                   ui::text_align::right);
         }
         if (can_download_chart) {
-            draw_download_icon_button(detail::chart_download_icon_rect(card),
-                                      item.update_available || item.chart.status == content_status::modified,
+            draw_download_icon_button(download_icon_rect,
+                                      item.update_available ||
+                                          item.chart.status == content_status::modified,
                                       detail_alpha);
         }
         draw_difficulty_level_badge(item.chart.meta.level,
@@ -1697,16 +1727,17 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                               13,
                               {card.x + 456.0f, row_mid_y + 1.0f, 118.0f, 16.0f},
                               with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
-        const Rectangle download_icon_rect = detail::chart_download_icon_rect(card);
         const char* source_label = chart_source_label(item.chart.source_status);
         const float source_badge_width = item.chart.source_status == content_status::community ? 104.0f
             : item.chart.source_status == content_status::official ? 84.0f
-                                                                   : 58.0f;
+                                                                    : 58.0f;
         const float source_badge_right = can_download_chart ? download_icon_rect.x - 12.0f
                                                             : card.x + card.width - 20.0f;
+        const float source_badge_y = show_chart_badge ? card.y + card.height - 30.0f
+                                                      : row_mid_y - 4.0f;
         const Rectangle source_badge = {
             source_badge_right - source_badge_width,
-            row_mid_y - 4.0f,
+            source_badge_y,
             source_badge_width,
             24.0f,
         };

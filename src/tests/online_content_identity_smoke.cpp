@@ -1,4 +1,5 @@
 #include "online_content_identity.h"
+#include "content_lifecycle.h"
 
 #include <cassert>
 #include <optional>
@@ -15,10 +16,15 @@ int main() {
         .remote_chart_version = 3,
         .can_edit = true,
         .lifecycle_status = "active",
+        .review_status = "pending_review",
     };
     assert(online_content::is_queueable(identity));
     assert(identity->can_edit == std::optional<bool>(true));
     assert(identity->lifecycle_status == "active");
+    assert(identity->review_status == "pending_review");
+    assert(content_lifecycle::display_label(identity->review_status, identity->lifecycle_status) == "PENDING REVIEW");
+    assert(content_lifecycle::lifecycle_is_active(identity->lifecycle_status));
+    assert(content_lifecycle::display_label("pending_review", "archived") == "ARCHIVED");
     assert(online_content::explicit_edit_permission(*identity) == std::optional<bool>(true));
     assert(online_content::can_edit_with_owned_fallback(identity->can_edit, false));
 

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "content_lifecycle.h"
 #include "network/server_environment.h"
 #include "scene_common.h"
 #include "title/local_content_index.h"
@@ -181,9 +182,12 @@ bool has_chart_remote_link(const std::optional<local_content_index::online_chart
     return false;
 }
 
-std::string edit_allowed_detail(const std::string& lifecycle_status, const std::string& fallback) {
-    if (!lifecycle_status.empty() && lifecycle_status != "active") {
-        return "Edit allowed: " + lifecycle_status;
+std::string edit_allowed_detail(const std::string& review_status,
+                                const std::string& lifecycle_status,
+                                const std::string& fallback) {
+    const std::string label = content_lifecycle::display_label(review_status, lifecycle_status);
+    if (!label.empty()) {
+        return label;
     }
     return fallback;
 }
@@ -216,11 +220,21 @@ std::vector<create_tool_section> build_create_tool_sections(const song_select::s
             same_server(song->online_identity->server_url, server_url)
         ? song->online_identity->lifecycle_status
         : (song_binding.has_value() ? song_binding->lifecycle_status : "");
+    const std::string song_review =
+        song != nullptr && song->online_identity.has_value() &&
+            same_server(song->online_identity->server_url, server_url)
+        ? song->online_identity->review_status
+        : (song_binding.has_value() ? song_binding->review_status : "");
     const std::string chart_lifecycle =
         chart != nullptr && chart->online_identity.has_value() &&
             same_server(chart->online_identity->server_url, server_url)
         ? chart->online_identity->lifecycle_status
         : (chart_binding.has_value() ? chart_binding->lifecycle_status : "");
+    const std::string chart_review =
+        chart != nullptr && chart->online_identity.has_value() &&
+            same_server(chart->online_identity->server_url, server_url)
+        ? chart->online_identity->review_status
+        : (chart_binding.has_value() ? chart_binding->review_status : "");
     const bool song_can_upload =
         !online_status_checking &&
         song_selected &&
@@ -232,6 +246,8 @@ std::vector<create_tool_section> build_create_tool_sections(const song_select::s
         (linked_remote_chart
             ? !has_explicit_edit_denial(chart_can_edit)
             : !has_explicit_edit_denial(song_can_edit));
+    const std::string song_state_detail = edit_allowed_detail(song_review, song_lifecycle, "");
+    const std::string chart_state_detail = edit_allowed_detail(chart_review, chart_lifecycle, "");
 
     std::string song_publish_title = "UPLOAD SONG";
     std::string song_publish_detail = "Publish selected song";
@@ -243,9 +259,9 @@ std::vector<create_tool_section> build_create_tool_sections(const song_select::s
         song_publish_detail = "Verifying online status";
     } else if (linked_remote_song && editable_song_binding) {
         song_publish_title = "UPDATE SONG";
-        song_publish_detail = song_can_edit.has_value() && *song_can_edit
-            ? edit_allowed_detail(song_lifecycle, "Server edit allowed")
-            : "Replace your upload";
+        song_publish_detail = !song_state_detail.empty()
+            ? song_state_detail
+            : (song_can_edit.has_value() && *song_can_edit ? "Server edit allowed" : "Replace your upload");
     } else if (linked_remote_song) {
         song_publish_title = has_explicit_edit_denial(song_can_edit) ? "LINKED SONG" : "UPDATE SONG";
         song_publish_detail = has_explicit_edit_denial(song_can_edit)
@@ -269,9 +285,9 @@ std::vector<create_tool_section> build_create_tool_sections(const song_select::s
         chart_publish_detail = "Verifying online status";
     } else if (linked_remote_chart && editable_chart_binding) {
         chart_publish_title = "UPDATE CHART";
-        chart_publish_detail = chart_can_edit.has_value() && *chart_can_edit
-            ? edit_allowed_detail(chart_lifecycle, "Server edit allowed")
-            : "Replace your upload";
+        chart_publish_detail = !chart_state_detail.empty()
+            ? chart_state_detail
+            : (chart_can_edit.has_value() && *chart_can_edit ? "Server edit allowed" : "Replace your upload");
     } else if (linked_remote_chart) {
         chart_publish_title = has_explicit_edit_denial(chart_can_edit) ? "LINKED CHART" : "UPDATE CHART";
         chart_publish_detail = has_explicit_edit_denial(chart_can_edit)

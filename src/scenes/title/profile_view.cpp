@@ -4,6 +4,7 @@
 #include <cctype>
 #include <string>
 
+#include "content_lifecycle.h"
 #include "scene_common.h"
 #include "shared/avatar_texture_cache.h"
 #include "theme.h"
@@ -182,6 +183,16 @@ std::string song_subtitle(const auth::community_song_upload& song) {
         return song.genre;
     }
     return song.artist;
+}
+
+std::string append_upload_status(std::string value,
+                                 const std::string& review_status,
+                                 const std::string& lifecycle_status) {
+    const std::string label = content_lifecycle::display_label(review_status, lifecycle_status);
+    if (label.empty()) {
+        return value;
+    }
+    return value.empty() ? label : value + " | " + label;
 }
 
 std::string ranking_subtitle(const activity_item& item) {
@@ -748,7 +759,8 @@ void draw(state& profile,
                     ui::draw_text_in_rect(song_label(song).c_str(), 15,
                                           {row.x + 18.0f, row.y + 9.0f, row.width - 160.0f, 24.0f},
                                           t.text, ui::text_align::left);
-                    const std::string subtitle = song_subtitle(song);
+                    const std::string subtitle =
+                        append_upload_status(song_subtitle(song), song.review_status, song.lifecycle_status);
                     ui::draw_text_in_rect(subtitle.c_str(), 11,
                                           {row.x + 18.0f, row.y + 38.0f, row.width - 160.0f, 18.0f},
                                           t.text_muted, ui::text_align::left);
@@ -770,7 +782,9 @@ void draw(state& profile,
                     ui::draw_text_in_rect(chart_label(chart).c_str(), 15,
                                           {row.x + 18.0f, row.y + 9.0f, row.width - 160.0f, 24.0f},
                                           t.text, ui::text_align::left);
-                    ui::draw_text_in_rect(chart.chart_author.c_str(), 11,
+                    const std::string subtitle =
+                        append_upload_status(chart.chart_author, chart.review_status, chart.lifecycle_status);
+                    ui::draw_text_in_rect(subtitle.c_str(), 11,
                                           {row.x + 18.0f, row.y + 38.0f, row.width - 160.0f, 18.0f},
                                           t.text_muted, ui::text_align::left);
                     draw_profile_button(row_action_rect(row), "DELETE", !busy, t.error);

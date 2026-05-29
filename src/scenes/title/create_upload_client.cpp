@@ -16,6 +16,7 @@
 #include "network/auth_client.h"
 #include "network/json_helpers.h"
 #include "network/network_error.h"
+#include "content_lifecycle.h"
 #include "path_utils.h"
 #include "chart_fingerprint.h"
 #include "song_fingerprint.h"
@@ -76,6 +77,7 @@ struct upload_request_result {
     int remote_chart_version = 0;
     std::optional<bool> can_edit;
     std::string lifecycle_status;
+    std::string review_status;
 };
 
 struct permission_check_result {
@@ -83,6 +85,7 @@ struct permission_check_result {
     bool unauthorized = false;
     bool can_edit = false;
     std::string lifecycle_status;
+    std::string review_status;
 };
 
 #ifdef _WIN32
@@ -584,7 +587,13 @@ upload_request_result parse_song_upload_response(const http_response& response,
     result.remote_song_id = *song_id;
     result.can_edit = json::extract_bool(*song_object, "canEdit");
     result.lifecycle_status = json::extract_string(*song_object, "lifecycleStatus").value_or("");
-    result.message = updated_existing ? "Song upload updated." : "Song uploaded.";
+    result.review_status = json::extract_string(response.body, "reviewStatus").value_or(
+        json::extract_string(*song_object, "reviewStatus").value_or(""));
+    if (content_lifecycle::is_pending_review(result.review_status, result.lifecycle_status)) {
+        result.message = updated_existing ? "Song update submitted for review." : "Song upload submitted for review.";
+    } else {
+        result.message = updated_existing ? "Song upload updated." : "Song uploaded.";
+    }
     return result;
 }
 
@@ -622,6 +631,7 @@ permission_check_result parse_permission_response(const http_response& response,
     result.success = true;
     result.can_edit = can_edit.value_or(uploaded_by_user);
     result.lifecycle_status = json::extract_string(*object, "lifecycleStatus").value_or("");
+    result.review_status = json::extract_string(*object, "reviewStatus").value_or("");
     return result;
 }
 
@@ -757,7 +767,13 @@ upload_request_result parse_chart_upload_response(const http_response& response,
     result.remote_chart_version = json::extract_int(*chart_object, "chartVersion").value_or(0);
     result.can_edit = json::extract_bool(*chart_object, "canEdit");
     result.lifecycle_status = json::extract_string(*chart_object, "lifecycleStatus").value_or("");
-    result.message = updated_existing ? "Chart upload updated." : "Chart uploaded.";
+    result.review_status = json::extract_string(response.body, "reviewStatus").value_or(
+        json::extract_string(*chart_object, "reviewStatus").value_or(""));
+    if (content_lifecycle::is_pending_review(result.review_status, result.lifecycle_status)) {
+        result.message = updated_existing ? "Chart update submitted for review." : "Chart upload submitted for review.";
+    } else {
+        result.message = updated_existing ? "Chart upload updated." : "Chart uploaded.";
+    }
     return result;
 }
 
@@ -1055,6 +1071,10 @@ upload_result upload_song(const song_select::song_entry& song) {
         song_identity.has_value() && !song_identity->lifecycle_status.empty()
             ? song_identity->lifecycle_status
             : (existing_song_binding.has_value() ? existing_song_binding->lifecycle_status : "");
+    std::string known_song_review =
+        song_identity.has_value() && !song_identity->review_status.empty()
+            ? song_identity->review_status
+            : (existing_song_binding.has_value() ? existing_song_binding->review_status : "");
     const bool owned_song_fallback =
         existing_song_binding.has_value() &&
         existing_song_binding->origin == local_content_index::online_origin::owned_upload;
@@ -1079,6 +1099,9 @@ upload_result upload_song(const song_select::song_entry& song) {
                 known_song_can_edit = permission.can_edit;
                 if (!permission.lifecycle_status.empty()) {
                     known_song_lifecycle = permission.lifecycle_status;
+                }
+                if (!permission.review_status.empty()) {
+                    known_song_review = permission.review_status;
                 }
             }
         }
@@ -1134,6 +1157,7 @@ upload_result upload_song(const song_select::song_entry& song) {
             : local_content_index::online_origin::owned_upload,
         .can_edit = request_result.can_edit.has_value() ? request_result.can_edit : known_song_can_edit,
         .lifecycle_status = !request_result.lifecycle_status.empty() ? request_result.lifecycle_status : known_song_lifecycle,
+        .review_status = !request_result.review_status.empty() ? request_result.review_status : known_song_review,
     });
     if (!request_result.updated_existing) {
         result.message += " Charts for this song can now be uploaded.";
@@ -1173,6 +1197,10 @@ upload_result upload_chart(const song_select::song_entry& song,
         song_identity.has_value() && !song_identity->lifecycle_status.empty()
             ? song_identity->lifecycle_status
             : (existing_song_binding.has_value() ? existing_song_binding->lifecycle_status : "");
+    std::string known_song_review =
+        song_identity.has_value() && !song_identity->review_status.empty()
+            ? song_identity->review_status
+            : (existing_song_binding.has_value() ? existing_song_binding->review_status : "");
     const bool owned_song_fallback =
         existing_song_binding.has_value() &&
         existing_song_binding->origin == local_content_index::online_origin::owned_upload;
@@ -1190,6 +1218,10 @@ upload_result upload_chart(const song_select::song_entry& song,
         chart_identity.has_value() && !chart_identity->lifecycle_status.empty()
             ? chart_identity->lifecycle_status
             : (existing_chart_binding.has_value() ? existing_chart_binding->lifecycle_status : "");
+    std::string known_chart_review =
+        chart_identity.has_value() && !chart_identity->review_status.empty()
+            ? chart_identity->review_status
+            : (existing_chart_binding.has_value() ? existing_chart_binding->review_status : "");
     const bool owned_chart_fallback =
         existing_chart_binding.has_value() &&
         existing_chart_binding->origin == local_content_index::online_origin::owned_upload;
@@ -1214,6 +1246,9 @@ upload_result upload_chart(const song_select::song_entry& song,
                 known_song_can_edit = permission.can_edit;
                 if (!permission.lifecycle_status.empty()) {
                     known_song_lifecycle = permission.lifecycle_status;
+                }
+                if (!permission.review_status.empty()) {
+                    known_song_review = permission.review_status;
                 }
             }
         }
@@ -1243,6 +1278,9 @@ upload_result upload_chart(const song_select::song_entry& song,
                 known_chart_can_edit = permission.can_edit;
                 if (!permission.lifecycle_status.empty()) {
                     known_chart_lifecycle = permission.lifecycle_status;
+                }
+                if (!permission.review_status.empty()) {
+                    known_chart_review = permission.review_status;
                 }
             }
         }
@@ -1299,6 +1337,7 @@ upload_result upload_chart(const song_select::song_entry& song,
             .origin = local_content_index::online_origin::linked,
             .can_edit = known_song_can_edit,
             .lifecycle_status = known_song_lifecycle,
+            .review_status = known_song_review,
         });
     }
     local_content_index::put_chart_binding({
@@ -1314,6 +1353,7 @@ upload_result upload_chart(const song_select::song_entry& song,
             : local_content_index::online_origin::owned_upload,
         .can_edit = request_result.can_edit.has_value() ? request_result.can_edit : known_chart_can_edit,
         .lifecycle_status = !request_result.lifecycle_status.empty() ? request_result.lifecycle_status : known_chart_lifecycle,
+        .review_status = !request_result.review_status.empty() ? request_result.review_status : known_chart_review,
     });
 
     return result;

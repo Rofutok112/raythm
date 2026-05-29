@@ -19,6 +19,7 @@ struct song_binding {
     origin origin = origin::owned_upload;
     std::optional<bool> can_edit;
     std::string lifecycle_status;
+    std::string review_status;
 };
 
 struct chart_binding {
@@ -30,6 +31,7 @@ struct chart_binding {
     origin origin = origin::owned_upload;
     std::optional<bool> can_edit;
     std::string lifecycle_status;
+    std::string review_status;
 };
 
 struct store {

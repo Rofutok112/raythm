@@ -31,6 +31,7 @@ struct remote_song_payload {
     std::string revision_id;
     std::string content_source;
     std::string lifecycle_status;
+    std::string review_status;
     bool can_edit = false;
     bool has_can_edit = false;
     std::string audio_url;
@@ -62,6 +63,7 @@ struct remote_chart_payload {
     std::string revision_id;
     std::string content_source;
     std::string lifecycle_status;
+    std::string review_status;
     bool can_edit = false;
     bool has_can_edit = false;
     std::string uploader_id;
