@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string_view>
 
+#include "managed_content_storage.h"
 #include "path_utils.h"
 
 namespace {
@@ -67,6 +68,15 @@ std::vector<fs::path> collect_chart_files_in_directory(const fs::path& directory
 }
 
 std::string read_file(const fs::path& path) {
+    const managed_content_storage::managed_file_read_result managed =
+        managed_content_storage::read_managed_file(path);
+    if (managed.managed) {
+        if (!managed.success || managed.bytes.empty()) {
+            return {};
+        }
+        return std::string(managed.bytes.begin(), managed.bytes.end());
+    }
+
     std::ifstream input(path);
     if (!input.is_open()) {
         return {};
@@ -75,6 +85,16 @@ std::string read_file(const fs::path& path) {
     std::ostringstream buffer;
     buffer << input.rdbuf();
     return buffer.str();
+}
+
+bool can_read_file(const fs::path& path) {
+    std::error_code ec;
+    if (fs::exists(path, ec) && fs::is_regular_file(path, ec)) {
+        return true;
+    }
+    const managed_content_storage::managed_file_read_result managed =
+        managed_content_storage::read_managed_file(path);
+    return managed.managed && managed.success;
 }
 
 std::optional<size_t> find_json_key(const std::string& content, const std::string& key) {
@@ -554,7 +574,7 @@ song_load_result song_loader::load_all(const std::string& songs_dir) {
 
         const fs::path song_dir = entry.path();
         const fs::path song_json_path = song_dir / "song.json";
-        if (!fs::exists(song_json_path)) {
+        if (!can_read_file(song_json_path)) {
             result.errors.push_back("Skipping " + path_utils::to_utf8(song_dir) + ": missing song.json");
             continue;
         }
@@ -598,7 +618,7 @@ song_load_result song_loader::load_directory(const std::string& song_dir_utf8) {
     }
 
     const fs::path song_json_path = song_dir / "song.json";
-    if (!fs::exists(song_json_path)) {
+    if (!can_read_file(song_json_path)) {
         result.errors.push_back("Skipping " + path_utils::to_utf8(song_dir) + ": missing song.json");
         return result;
     }
@@ -622,11 +642,36 @@ song_load_result song_loader::load_directory(const std::string& song_dir_utf8) {
         }
         std::sort(song.chart_paths.begin(), song.chart_paths.end());
     }
+    if (std::optional<managed_content_storage::package_manifest> manifest =
+            managed_content_storage::read_manifest(song_dir);
+        manifest.has_value() && managed_content_storage::has_encrypted_assets(*manifest)) {
+        for (const managed_content_storage::chart_manifest_entry& chart : manifest->charts) {
+            if (!chart.local_chart_id.empty()) {
+                song.chart_paths.push_back(path_utils::to_utf8(
+                    managed_content_storage::chart_file_path(song_dir, chart.local_chart_id)));
+            }
+        }
+        std::sort(song.chart_paths.begin(), song.chart_paths.end());
+        song.chart_paths.erase(std::unique(song.chart_paths.begin(), song.chart_paths.end()), song.chart_paths.end());
+    }
 
     result.songs.push_back(std::move(song));
     return result;
 }
 
 chart_parse_result song_loader::load_chart(const std::string& path) {
+    const managed_content_storage::managed_file_read_result managed =
+        managed_content_storage::read_managed_file(path_utils::from_utf8(path));
+    if (managed.managed) {
+        if (!managed.success) {
+            chart_parse_result result;
+            result.success = false;
+            result.errors.push_back(managed.error_message.empty()
+                ? "Failed to decrypt managed chart file: " + path
+                : managed.error_message);
+            return result;
+        }
+        return chart_parser::parse_text(std::string(managed.bytes.begin(), managed.bytes.end()), path);
+    }
     return chart_parser::parse(path);
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iosfwd>
 #include <string>
 #include <utility>
 #include <vector>
@@ -9,8 +10,10 @@
 class chart_parser {
 public:
     static chart_parse_result parse(const std::string& file_path);
+    static chart_parse_result parse_text(const std::string& content, const std::string& source_name = {});
 
 private:
+    static chart_parse_result parse_stream(std::istream& input, const std::string& source_name);
     static chart_meta parse_metadata(const std::vector<std::pair<int, std::string>>& lines, std::vector<std::string>& errors);
     static std::vector<timing_event> parse_timing(const std::vector<std::pair<int, std::string>>& lines,
                                                   std::vector<std::string>& errors);

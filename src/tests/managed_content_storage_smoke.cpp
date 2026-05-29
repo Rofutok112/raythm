@@ -7,12 +7,15 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "app_paths.h"
 #include "chart_serializer.h"
 #include "mv/mv_storage.h"
+#include "path_utils.h"
 #include "player_note_offsets.h"
+#include "song_select/local_catalog_database.h"
 #include "ranking_service.h"
 #include "song_select/song_catalog_service.h"
 #include "song_writer.h"
@@ -141,12 +144,10 @@ int main() {
     assert(managed_chart_id != "remote-chart");
 
     const fs::path managed_song_dir = managed_content_storage::song_directory(song_identity);
-    assert(song_writer::write_song_json(make_song_meta(managed_song_id, "Managed Remote"), managed_song_dir.string()));
-    touch_assets(managed_song_dir);
-    fs::create_directories(managed_song_dir / "charts", ec);
-    assert(chart_serializer::serialize(
-        make_chart(managed_chart_id, managed_song_id),
-        (managed_song_dir / "charts" / (managed_chart_id + ".rchart")).string()));
+    const song_meta managed_meta = make_song_meta(managed_song_id, "Managed Remote");
+    const chart_data managed_chart = make_chart(managed_chart_id, managed_song_id);
+    const std::string managed_song_json = song_writer::serialize_song_json(managed_meta);
+    const std::string managed_chart_text = chart_serializer::serialize_to_string(managed_chart);
 
     managed_content_storage::package_manifest manifest{
         .song = song_identity,
@@ -162,7 +163,34 @@ int main() {
     };
     managed_content_storage::upsert_chart(manifest, chart_identity);
     std::string error_message;
+    assert(managed_content_storage::write_encrypted_asset(
+        manifest, managed_song_dir, "song.json", managed_song_json, manifest.song_json_asset, error_message));
+    assert(managed_content_storage::write_encrypted_asset(
+        manifest, managed_song_dir, managed_meta.audio_file, std::string_view("audio", 5), manifest.audio_asset,
+        error_message));
+    assert(managed_content_storage::write_encrypted_asset(
+        manifest, managed_song_dir, managed_meta.jacket_file, std::string_view("jacket", 6), manifest.jacket_asset,
+        error_message));
+    managed_content_storage::chart_manifest_entry* encrypted_chart = nullptr;
+    for (managed_content_storage::chart_manifest_entry& chart : manifest.charts) {
+        if (chart.local_chart_id == managed_chart_id) {
+            encrypted_chart = &chart;
+            break;
+        }
+    }
+    assert(encrypted_chart != nullptr);
+    assert(managed_content_storage::write_encrypted_asset(
+        manifest,
+        managed_song_dir,
+        path_utils::to_utf8(fs::path("charts") / (managed_chart_id + ".rchart")),
+        managed_chart_text,
+        encrypted_chart->encrypted_chart,
+        error_message));
     assert(managed_content_storage::write_manifest(manifest, error_message));
+    assert(!fs::exists(managed_song_dir / "song.json"));
+    assert(!fs::exists(managed_song_dir / "audio.ogg"));
+    assert(!fs::exists(managed_song_dir / "jacket.png"));
+    assert(!fs::exists(managed_song_dir / "charts" / (managed_chart_id + ".rchart")));
     const std::optional<managed_content_storage::package_manifest> stored_manifest =
         managed_content_storage::read_manifest(managed_song_dir);
     assert(stored_manifest.has_value());
@@ -176,6 +204,13 @@ int main() {
     assert(stored_manifest->remote_song_json_fingerprint == "remote-song-json-fingerprint");
     assert(stored_manifest->remote_audio_hash == "remote-audio-sha");
     assert(stored_manifest->remote_jacket_hash == "remote-jacket-sha");
+    assert(!stored_manifest->key_id.empty());
+    assert(stored_manifest->content_key_version == 1);
+    assert(std::string(stored_manifest->encryption_scheme) == managed_content_storage::default_encryption_scheme());
+    assert(!stored_manifest->song_json_asset.ciphertext_hash.empty());
+    assert(!stored_manifest->audio_asset.ciphertext_hash.empty());
+    assert(!stored_manifest->jacket_asset.ciphertext_hash.empty());
+    assert(!stored_manifest->song_json_asset.content_hash.empty());
     assert(!stored_manifest->created_at.empty());
     assert(!stored_manifest->updated_at.empty());
     assert(stored_manifest->charts.size() == 1);
@@ -183,6 +218,24 @@ int main() {
     assert(stored_manifest->charts.front().chart_fingerprint == "local-chart-fingerprint");
     assert(stored_manifest->charts.front().remote_chart_hash == "remote-chart-sha");
     assert(stored_manifest->charts.front().remote_chart_fingerprint == "remote-chart-fingerprint");
+    assert(!stored_manifest->charts.front().encrypted_chart.ciphertext_hash.empty());
+
+    const managed_content_storage::managed_file_read_result decrypted_song_json =
+        managed_content_storage::read_managed_file(managed_song_dir / "song.json");
+    assert(decrypted_song_json.managed);
+    assert(decrypted_song_json.success);
+    assert(std::string(decrypted_song_json.bytes.begin(), decrypted_song_json.bytes.end()).find("Managed Remote") !=
+           std::string::npos);
+
+    managed_content_storage::package_manifest revoked_manifest = *stored_manifest;
+    revoked_manifest.license_revoked = true;
+    assert(managed_content_storage::write_manifest(revoked_manifest, error_message));
+    const managed_content_storage::managed_file_read_result revoked_read =
+        managed_content_storage::read_managed_file(managed_song_dir / "song.json");
+    assert(revoked_read.managed);
+    assert(!revoked_read.success);
+    revoked_manifest.license_revoked = false;
+    assert(managed_content_storage::write_manifest(revoked_manifest, error_message));
 
     local_content_index::put_song_binding({
         .server_url = song_identity.server_url,
@@ -236,6 +289,40 @@ int main() {
     assert(managed->charts.front().managed_manifest->chart_hash == "local-chart-sha");
     assert(managed->charts.front().managed_manifest->remote_chart_fingerprint == "remote-chart-fingerprint");
     assert(managed->charts.front().path.find("content-cache") != std::string::npos);
+    assert(managed->charts.front().meta.level > 0.0f);
+
+    song_select::catalog_data stale_cached_catalog = catalog;
+    for (song_select::song_entry& song : stale_cached_catalog.songs) {
+        if (song.song.meta.song_id == managed_song_id && !song.charts.empty()) {
+            song.charts.front().meta.level = 0.0f;
+        }
+    }
+    song_select::local_catalog_database::replace_catalog(stale_cached_catalog.songs);
+
+    const song_select::catalog_data repaired_cached_catalog = song_select::load_catalog(false);
+    const song_select::song_entry* repaired_managed = nullptr;
+    for (const song_select::song_entry& song : repaired_cached_catalog.songs) {
+        if (song.song.meta.song_id == managed_song_id) {
+            repaired_managed = &song;
+            break;
+        }
+    }
+    assert(repaired_managed != nullptr);
+    assert(!repaired_managed->charts.empty());
+    assert(repaired_managed->charts.front().meta.level > 0.0f);
+
+    const song_select::catalog_data persisted_cached_catalog =
+        song_select::local_catalog_database::load_cached_catalog();
+    const song_select::song_entry* persisted_managed = nullptr;
+    for (const song_select::song_entry& song : persisted_cached_catalog.songs) {
+        if (song.song.meta.song_id == managed_song_id) {
+            persisted_managed = &song;
+            break;
+        }
+    }
+    assert(persisted_managed != nullptr);
+    assert(!persisted_managed->charts.empty());
+    assert(persisted_managed->charts.front().meta.level > 0.0f);
 
     fs::remove_all(temp_root, ec);
     std::cout << "managed_content_storage smoke test passed\n";

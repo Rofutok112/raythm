@@ -5,6 +5,7 @@
 
 #include "audio_manager.h"
 #include "game_settings.h"
+#include "managed_content_storage.h"
 #include "path_utils.h"
 
 namespace {
@@ -204,12 +205,27 @@ void preview_controller::load_jacket(const song_entry* song) {
     }
 
     const std::filesystem::path jacket_path = path_utils::join_utf8(song->song.directory, song->song.meta.jacket_file);
-    if (!std::filesystem::exists(jacket_path) || !std::filesystem::is_regular_file(jacket_path)) {
-        return;
+    const managed_content_storage::managed_file_read_result managed =
+        managed_content_storage::read_managed_file(jacket_path);
+    if (managed.managed) {
+        if (!managed.success || managed.bytes.empty()) {
+            return;
+        }
+        Image image = LoadImageFromMemory(jacket_path.extension().string().c_str(),
+                                          managed.bytes.data(),
+                                          static_cast<int>(managed.bytes.size()));
+        if (image.data == nullptr) {
+            return;
+        }
+        jacket_texture_ = LoadTextureFromImage(image);
+        UnloadImage(image);
+    } else {
+        if (!std::filesystem::exists(jacket_path) || !std::filesystem::is_regular_file(jacket_path)) {
+            return;
+        }
+        const std::string jacket_path_utf8 = path_utils::to_utf8(jacket_path);
+        jacket_texture_ = LoadTexture(jacket_path_utf8.c_str());
     }
-
-    const std::string jacket_path_utf8 = path_utils::to_utf8(jacket_path);
-    jacket_texture_ = LoadTexture(jacket_path_utf8.c_str());
     jacket_loaded_ = jacket_texture_.id != 0;
     if (jacket_loaded_) {
         SetTextureFilter(jacket_texture_, TEXTURE_FILTER_BILINEAR);
@@ -246,6 +262,25 @@ void preview_controller::start_preview(const song_entry& song) {
         }
 
         const std::filesystem::path audio_path = path_utils::join_utf8(song.song.directory, song.song.meta.audio_file);
+        const managed_content_storage::managed_file_read_result managed_audio =
+            managed_content_storage::read_managed_file(audio_path);
+        if (managed_audio.managed) {
+            if (!managed_audio.success || !audio.request_preview_load_from_memory(managed_audio.bytes)) {
+                preview_song_id_.clear();
+                preview_volume_ = 0.0f;
+                preview_fade_direction_ = 0;
+                return;
+            }
+
+            preview_volume_ = 0.0f;
+            preview_song_id_ = song.song.meta.song_id;
+            active_preview_song_.reset();
+            preview_fade_direction_ = 0;
+            preview_load_pending_ = true;
+            preview_load_song_ = song.song;
+            pending_preview_song_.reset();
+            return;
+        }
         audio_source = path_utils::to_utf8(audio_path);
     }
 

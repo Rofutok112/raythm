@@ -33,7 +33,7 @@ std::string format_float(float value) {
     return stream.str();
 }
 
-void write_string_array(std::ofstream& out,
+void write_string_array(std::ostream& out,
                         const char* key,
                         const std::vector<std::string>& values,
                         bool trailing_comma) {
@@ -51,7 +51,7 @@ void write_string_array(std::ofstream& out,
     out << "\n";
 }
 
-void write_timing_events(std::ofstream& out,
+void write_timing_events(std::ostream& out,
                          const std::vector<timing_event>& events,
                          bool trailing_comma) {
     out << "  \"timingEvents\": [\n";
@@ -79,18 +79,12 @@ void write_timing_events(std::ofstream& out,
 
 }
 
-bool song_writer::write_song_json(const song_meta& meta, const std::string& directory) {
+std::string song_writer::serialize_song_json(const song_meta& meta) {
     if (meta.song_id.empty()) {
-        return false;
+        return {};
     }
 
-    std::filesystem::create_directories(path_utils::from_utf8(directory));
-
-    const std::filesystem::path json_path = path_utils::from_utf8(directory) / "song.json";
-    std::ofstream out(json_path, std::ios::trunc);
-    if (!out.is_open()) {
-        return false;
-    }
+    std::ostringstream out;
 
     out << "{\n";
     out << "  \"songId\": \"" << escape_json_string(meta.song_id) << "\",\n";
@@ -125,6 +119,23 @@ bool song_writer::write_song_json(const song_meta& meta, const std::string& dire
     out << "  \"songVersion\": " << meta.song_version;
 
     out << "\n}\n";
+    return out.str();
+}
 
+bool song_writer::write_song_json(const song_meta& meta, const std::string& directory) {
+    const std::string content = serialize_song_json(meta);
+    if (content.empty()) {
+        return false;
+    }
+
+    std::filesystem::create_directories(path_utils::from_utf8(directory));
+
+    const std::filesystem::path json_path = path_utils::from_utf8(directory) / "song.json";
+    std::ofstream out(json_path, std::ios::trunc);
+    if (!out.is_open()) {
+        return false;
+    }
+
+    out << content;
     return out.good();
 }

@@ -646,14 +646,21 @@ add_executable(editor_meter_map_smoke
         src/tests/editor_meter_map_smoke.cpp)
 
 add_executable(song_loader_smoke
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
         src/models/data_models.h
+        src/models/online_content_identity.h
         src/core/app_paths.cpp
         src/core/app_paths.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/core/path_utils.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
         src/gameplay/song_fingerprint.cpp
         src/gameplay/song_fingerprint.h
         src/gameplay/song_loader.cpp
@@ -665,7 +672,18 @@ add_executable(song_loader_smoke
         src/tests/song_loader_smoke.cpp)
 
 add_executable(song_select_state_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
         src/models/data_models.h
+        src/models/online_content_identity.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
         src/scenes/song_select/song_select_layout.h
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
@@ -674,7 +692,18 @@ add_executable(song_select_state_smoke
         src/tests/song_select_state_smoke.cpp)
 
 add_executable(song_select_data_controller_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
         src/models/data_models.h
+        src/models/online_content_identity.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
         src/scenes/song_select/song_select_data_controller.cpp
@@ -697,8 +726,18 @@ add_executable(online_content_identity_smoke
         src/tests/online_content_identity_smoke.cpp)
 
 add_executable(online_content_availability_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
         src/models/data_models.h
         src/models/online_content_identity.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
         src/services/online_content_availability.cpp
         src/services/online_content_availability.h
         src/scenes/title/local_content_binding.h
@@ -769,6 +808,8 @@ add_executable(managed_content_storage_smoke
         src/scenes/title/local_content_index.h
         src/services/managed_content_storage.cpp
         src/services/managed_content_storage.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
         src/tests/managed_content_storage_smoke.cpp)
 
 add_executable(settings_io_smoke
@@ -790,10 +831,17 @@ add_executable(localization_smoke
 add_executable(local_catalog_database_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/network/json_helpers.cpp
         src/network/json_helpers.h
+        src/models/online_content_identity.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
         src/scenes/song_select/local_catalog_database.cpp
         src/scenes/song_select/local_catalog_database.h
         src/scenes/song_select/song_select_state.cpp
@@ -898,6 +946,8 @@ add_executable(performance_system_smoke
 add_executable(ranking_service_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/scenes/title/local_content_database.cpp
@@ -907,6 +957,8 @@ add_executable(ranking_service_smoke
         src/models/data_models.h
         src/gameplay/chart_fingerprint.cpp
         src/gameplay/chart_fingerprint.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
         src/services/ranking_service.cpp
         src/services/ranking_service.h
         src/gameplay/scoring_ruleset_runtime.cpp

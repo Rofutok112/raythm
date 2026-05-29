@@ -6,19 +6,15 @@
 
 #include "bass.h"
 
-audio_waveform_summary audio_waveform::build(const std::string& file_path, std::size_t segment_count) {
-    audio_waveform_summary summary;
-    if (file_path.empty()) {
-        return summary;
-    }
+namespace {
 
-    const std::size_t clamped_segment_count = std::clamp<std::size_t>(segment_count, 1024, 24576);
-    const unsigned long stream = BASS_StreamCreateFile(
-        FALSE, file_path.c_str(), 0, 0, BASS_STREAM_DECODE | BASS_SAMPLE_FLOAT);
+audio_waveform_summary build_from_stream(unsigned long stream, std::size_t segment_count) {
+    audio_waveform_summary summary;
     if (stream == 0) {
         return summary;
     }
 
+    const std::size_t clamped_segment_count = std::clamp<std::size_t>(segment_count, 1024, 24576);
     const QWORD length_bytes = BASS_ChannelGetLength(stream, BASS_POS_BYTE);
     if (length_bytes == static_cast<QWORD>(-1)) {
         BASS_StreamFree(stream);
@@ -78,4 +74,26 @@ audio_waveform_summary audio_waveform::build(const std::string& file_path, std::
     }
 
     return summary;
+}
+
+}  // namespace
+
+audio_waveform_summary audio_waveform::build(const std::string& file_path, std::size_t segment_count) {
+    if (file_path.empty()) {
+        return {};
+    }
+    return build_from_stream(BASS_StreamCreateFile(
+                                 FALSE, file_path.c_str(), 0, 0, BASS_STREAM_DECODE | BASS_SAMPLE_FLOAT),
+                             segment_count);
+}
+
+audio_waveform_summary audio_waveform::build_from_memory(const std::vector<unsigned char>& bytes,
+                                                         std::size_t segment_count) {
+    if (bytes.empty()) {
+        return {};
+    }
+    return build_from_stream(BASS_StreamCreateFile(
+                                 TRUE, bytes.data(), 0, static_cast<QWORD>(bytes.size()),
+                                 BASS_STREAM_DECODE | BASS_SAMPLE_FLOAT),
+                             segment_count);
 }
