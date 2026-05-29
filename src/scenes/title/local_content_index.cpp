@@ -34,6 +34,7 @@ online_chart_binding to_index_binding(const local_content_binding::chart_binding
 }  // namespace
 
 snapshot load_snapshot() {
+    local_content_database::prune_orphaned_bindings();
     const local_content_binding::store mappings = local_content_database::load_mappings();
     snapshot index;
     index.songs.reserve(mappings.songs.size());
@@ -93,6 +94,7 @@ std::optional<online_chart_binding> find_chart_by_remote(const snapshot& index,
 
 std::optional<online_song_binding> find_song_by_local(const std::string& server_url,
                                                       const std::string& local_song_id) {
+    local_content_database::prune_orphaned_bindings();
     const std::optional<local_content_binding::song_binding> binding =
         local_content_database::find_song_by_local(server_url, local_song_id);
     return binding.has_value() ? std::optional<online_song_binding>(to_index_binding(*binding)) : std::nullopt;
@@ -100,6 +102,7 @@ std::optional<online_song_binding> find_song_by_local(const std::string& server_
 
 std::optional<online_song_binding> find_song_by_remote(const std::string& server_url,
                                                        const std::string& remote_song_id) {
+    local_content_database::prune_orphaned_bindings();
     const std::optional<local_content_binding::song_binding> binding =
         local_content_database::find_song_by_remote(server_url, remote_song_id);
     return binding.has_value() ? std::optional<online_song_binding>(to_index_binding(*binding)) : std::nullopt;
@@ -107,6 +110,7 @@ std::optional<online_song_binding> find_song_by_remote(const std::string& server
 
 std::optional<online_chart_binding> find_chart_by_local(const std::string& server_url,
                                                         const std::string& local_chart_id) {
+    local_content_database::prune_orphaned_bindings();
     const std::optional<local_content_binding::chart_binding> binding =
         local_content_database::find_chart_by_local(server_url, local_chart_id);
     return binding.has_value() ? std::optional<online_chart_binding>(to_index_binding(*binding)) : std::nullopt;
@@ -114,6 +118,7 @@ std::optional<online_chart_binding> find_chart_by_local(const std::string& serve
 
 std::optional<online_chart_binding> find_chart_by_remote(const std::string& server_url,
                                                          const std::string& remote_chart_id) {
+    local_content_database::prune_orphaned_bindings();
     const std::optional<local_content_binding::chart_binding> binding =
         local_content_database::find_chart_by_remote(server_url, remote_chart_id);
     return binding.has_value() ? std::optional<online_chart_binding>(to_index_binding(*binding)) : std::nullopt;
@@ -163,6 +168,10 @@ void remove_chart_bindings(const std::string& local_chart_id) {
 
 void remove_chart_bindings_for_remote_song(const std::string& server_url, const std::string& remote_song_id) {
     local_content_database::remove_chart_bindings_for_remote_song(server_url, remote_song_id);
+}
+
+void prune_orphaned_bindings() {
+    local_content_database::prune_orphaned_bindings();
 }
 
 }  // namespace local_content_index

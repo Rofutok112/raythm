@@ -1,10 +1,12 @@
 #include "title/local_content_database.h"
 
-#include <ctime>
 #include <cstdint>
+#include <ctime>
+#include <mutex>
 #include <optional>
 #include <string>
 
+#include "local_catalog_signature.h"
 #include "local_sqlite.h"
 #include "sqlite3.h"
 
@@ -57,6 +59,14 @@ using local_sqlite::exec;
 using local_sqlite::statement;
 using local_sqlite::step_done;
 
+std::mutex g_prune_cache_mutex;
+std::optional<std::string> g_last_pruned_catalog_signature;
+
+void invalidate_prune_cache() {
+    std::lock_guard<std::mutex> lock(g_prune_cache_mutex);
+    g_last_pruned_catalog_signature.reset();
+}
+
 bool chart_bindings_has_local_song_id(sqlite3* database) {
     statement columns(database, "PRAGMA table_info(chart_bindings);");
     if (!columns.valid()) {
@@ -82,6 +92,30 @@ bool table_has_column(sqlite3* database, const char* table_name, const char* col
         }
     }
     return false;
+}
+
+bool table_exists(sqlite3* database, const char* table_name) {
+    statement query(database,
+                    "SELECT 1 FROM sqlite_master "
+                    "WHERE type = 'table' AND name = ?;");
+    if (!query.valid()) {
+        return false;
+    }
+    bind_text(query.get(), 1, table_name);
+    return sqlite3_step(query.get()) == SQLITE_ROW;
+}
+
+std::optional<std::string> ready_catalog_signature(sqlite3* database) {
+    const std::optional<std::string> signature =
+        local_sqlite::metadata_value(database, "local_catalog.signature");
+    if (!signature.has_value() ||
+        local_sqlite::metadata_value(database, "local_catalog.status_schema").value_or("") !=
+            local_catalog_signature::kStatusSchema ||
+        !table_exists(database, "local_songs") ||
+        !table_exists(database, "local_charts")) {
+        return std::nullopt;
+    }
+    return signature;
 }
 
 bool chart_bindings_has_remote_chart_version(sqlite3* database) {
@@ -315,6 +349,49 @@ void put_chart(sqlite3* database, const local_content_binding::chart_binding& bi
     step_done(query.get());
 }
 
+bool prune_orphaned_bindings(sqlite3* database) {
+    const std::optional<std::string> signature = ready_catalog_signature(database);
+    if (!signature.has_value()) {
+        return true;
+    }
+
+    std::lock_guard<std::mutex> lock(g_prune_cache_mutex);
+    if (g_last_pruned_catalog_signature == signature) {
+        return true;
+    }
+    if (*signature != local_catalog_signature::current()) {
+        return true;
+    }
+
+    local_sqlite::transaction tx(database);
+    const bool pruned =
+        tx.active() &&
+        exec(database,
+             "DELETE FROM chart_bindings "
+             "WHERE NOT EXISTS ("
+             "SELECT 1 FROM local_charts "
+             "WHERE local_charts.chart_id = chart_bindings.local_chart_id"
+             ");") &&
+        exec(database,
+             "DELETE FROM song_bindings "
+             "WHERE NOT EXISTS ("
+             "SELECT 1 FROM local_songs "
+             "WHERE local_songs.song_id = song_bindings.local_song_id"
+             ");") &&
+        exec(database,
+             "DELETE FROM chart_bindings "
+             "WHERE NOT EXISTS ("
+             "SELECT 1 FROM song_bindings "
+             "WHERE song_bindings.server_url = chart_bindings.server_url "
+             "AND song_bindings.remote_song_id = chart_bindings.remote_song_id"
+             ");") &&
+        tx.commit();
+    if (pruned) {
+        g_last_pruned_catalog_signature = *signature;
+    }
+    return pruned;
+}
+
 local_sqlite::database open_ready_database() {
     local_sqlite::database database = local_sqlite::open_local_content_database();
     if (!database.valid()) {
@@ -479,6 +556,7 @@ void put_song(const local_content_binding::song_binding& binding) {
     local_sqlite::database database = open_ready_database();
     if (database.valid()) {
         put_song(database.get(), binding);
+        invalidate_prune_cache();
     }
 }
 
@@ -486,6 +564,7 @@ void put_chart(const local_content_binding::chart_binding& binding) {
     local_sqlite::database database = open_ready_database();
     if (database.valid()) {
         put_chart(database.get(), binding);
+        invalidate_prune_cache();
     }
 }
 
@@ -500,7 +579,9 @@ void remove_song(const std::string& server_url, const std::string& local_song_id
     }
     bind_text(query.get(), 1, server_url);
     bind_text(query.get(), 2, local_song_id);
-    step_done(query.get());
+    if (step_done(query.get())) {
+        invalidate_prune_cache();
+    }
 }
 
 void remove_chart(const std::string& server_url, const std::string& local_chart_id) {
@@ -514,7 +595,9 @@ void remove_chart(const std::string& server_url, const std::string& local_chart_
     }
     bind_text(query.get(), 1, server_url);
     bind_text(query.get(), 2, local_chart_id);
-    step_done(query.get());
+    if (step_done(query.get())) {
+        invalidate_prune_cache();
+    }
 }
 
 void remove_song_bindings(const std::string& local_song_id) {
@@ -527,7 +610,9 @@ void remove_song_bindings(const std::string& local_song_id) {
         return;
     }
     bind_text(query.get(), 1, local_song_id);
-    step_done(query.get());
+    if (step_done(query.get())) {
+        invalidate_prune_cache();
+    }
 }
 
 void remove_chart_bindings(const std::string& local_chart_id) {
@@ -540,7 +625,9 @@ void remove_chart_bindings(const std::string& local_chart_id) {
         return;
     }
     bind_text(query.get(), 1, local_chart_id);
-    step_done(query.get());
+    if (step_done(query.get())) {
+        invalidate_prune_cache();
+    }
 }
 
 void remove_chart_bindings_for_remote_song(const std::string& server_url, const std::string& remote_song_id) {
@@ -554,7 +641,16 @@ void remove_chart_bindings_for_remote_song(const std::string& server_url, const 
     }
     bind_text(query.get(), 1, server_url);
     bind_text(query.get(), 2, remote_song_id);
-    step_done(query.get());
+    if (step_done(query.get())) {
+        invalidate_prune_cache();
+    }
+}
+
+void prune_orphaned_bindings() {
+    local_sqlite::database database = open_ready_database();
+    if (database.valid()) {
+        prune_orphaned_bindings(database.get());
+    }
 }
 
 }  // namespace local_content_database
