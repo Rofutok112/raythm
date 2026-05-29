@@ -239,18 +239,43 @@ int main() {
 
     local_content_index::put_song_binding({
         .server_url = song_identity.server_url,
-        .local_song_id = managed_song_id,
+        .local_song_id = song_identity.remote_song_id,
         .remote_song_id = song_identity.remote_song_id,
         .origin = local_content_index::online_origin::downloaded,
     });
     local_content_index::put_chart_binding({
         .server_url = song_identity.server_url,
-        .local_chart_id = managed_chart_id,
+        .local_chart_id = chart_identity.remote_chart_id,
         .remote_chart_id = chart_identity.remote_chart_id,
         .remote_song_id = chart_identity.remote_song_id,
         .remote_chart_version = chart_identity.chart_version,
         .origin = local_content_index::online_origin::downloaded,
     });
+
+    const song_select::catalog_data catalog_rebuilt_from_manifest = song_select::load_catalog(true);
+    const song_select::song_entry* manifest_managed = nullptr;
+    for (const song_select::song_entry& song : catalog_rebuilt_from_manifest.songs) {
+        if (song.song.meta.song_id == managed_song_id) {
+            manifest_managed = &song;
+            break;
+        }
+    }
+    assert(manifest_managed != nullptr);
+    assert(manifest_managed->online_identity.has_value());
+    assert(!manifest_managed->charts.empty());
+    assert(manifest_managed->charts.front().online_identity.has_value());
+    assert(manifest_managed->charts.front().online_identity->remote_chart_id == "remote-chart");
+
+    const std::optional<local_content_index::online_song_binding> manifest_song_binding =
+        local_content_index::find_song_by_local(song_identity.server_url, managed_song_id);
+    assert(manifest_song_binding.has_value());
+    assert(manifest_song_binding->remote_song_id == song_identity.remote_song_id);
+    const std::optional<local_content_index::online_chart_binding> manifest_chart_binding =
+        local_content_index::find_chart_by_local(song_identity.server_url, managed_chart_id);
+    assert(manifest_chart_binding.has_value());
+    assert(manifest_chart_binding->remote_chart_id == chart_identity.remote_chart_id);
+    assert(manifest_chart_binding->remote_song_id == chart_identity.remote_song_id);
+    assert(manifest_chart_binding->remote_chart_version == chart_identity.chart_version);
 
     const song_select::catalog_data catalog = song_select::load_catalog(true);
     assert(catalog.songs.size() == 2);

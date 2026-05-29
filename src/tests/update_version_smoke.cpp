@@ -298,6 +298,60 @@ int main() {
         expect(fs::file_size(skip_install_dir / "Updater.exe") == 3,
                "Expected staged update helper to leave the updater untouched when skip is requested.",
                ok);
+
+        const fs::path repair_install_dir = temp_local_app_data / "repair-install";
+        const fs::path repair_staged_dir = temp_local_app_data / "repair-staged";
+        fs::create_directories(repair_install_dir, ec);
+        fs::create_directories(repair_staged_dir, ec);
+        {
+            std::ofstream output(repair_install_dir / "Launcher.exe");
+            output << "launcher-current";
+        }
+        {
+            std::ofstream output(repair_install_dir / "Updater.exe");
+            output << "old";
+        }
+        {
+            std::ofstream output(repair_staged_dir / "Launcher.exe");
+            output << "launcher-current";
+        }
+        {
+            std::ofstream output(repair_staged_dir / "Updater.exe");
+            output << "new-updater";
+        }
+        expect(updater::repair_installed_updater_from_staged_package(repair_install_dir, repair_staged_dir),
+               "Expected launcher repair helper to copy a staged updater that matches the installed package.",
+               ok);
+        expect(fs::file_size(repair_install_dir / "Updater.exe") == 11,
+               "Expected launcher repair helper to replace the old installed updater.",
+               ok);
+
+        const fs::path mismatch_install_dir = temp_local_app_data / "repair-mismatch-install";
+        const fs::path mismatch_staged_dir = temp_local_app_data / "repair-mismatch-staged";
+        fs::create_directories(mismatch_install_dir, ec);
+        fs::create_directories(mismatch_staged_dir, ec);
+        {
+            std::ofstream output(mismatch_install_dir / "Launcher.exe");
+            output << "current";
+        }
+        {
+            std::ofstream output(mismatch_install_dir / "Updater.exe");
+            output << "old";
+        }
+        {
+            std::ofstream output(mismatch_staged_dir / "Launcher.exe");
+            output << "different-package";
+        }
+        {
+            std::ofstream output(mismatch_staged_dir / "Updater.exe");
+            output << "new-updater";
+        }
+        expect(updater::repair_installed_updater_from_staged_package(mismatch_install_dir, mismatch_staged_dir),
+               "Expected launcher repair helper to ignore an unrelated staged package without failing.",
+               ok);
+        expect(fs::file_size(mismatch_install_dir / "Updater.exe") == 3,
+               "Expected launcher repair helper not to copy an updater from an unrelated staged package.",
+               ok);
         expect(updater::ensure_process_stopped("definitely-not-running.exe", std::chrono::milliseconds(1)),
                "Expected process stop helper to succeed immediately when the target process is absent.",
                ok);

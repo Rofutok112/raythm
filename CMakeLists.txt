@@ -527,6 +527,8 @@ add_executable(raythm_launcher
         src/core/app_paths.h
         src/updater/update_log.cpp
         src/updater/update_log.h
+        src/updater/update_apply.cpp
+        src/updater/update_apply.h
         src/updater/update_release.cpp
         src/updater/update_release.h
         src/updater/update_paths.cpp

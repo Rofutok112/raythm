@@ -137,6 +137,59 @@ const managed_content_storage::chart_manifest_entry* find_manifest_chart(
     return nullptr;
 }
 
+void sync_managed_manifest_identity(const managed_content_storage::package_manifest& manifest) {
+    if (manifest.song.server_url.empty() ||
+        manifest.local_song_id.empty() ||
+        manifest.song.remote_song_id.empty()) {
+        return;
+    }
+
+    local_content_index::online_song_binding song_binding{
+        .server_url = manifest.song.server_url,
+        .local_song_id = manifest.local_song_id,
+        .remote_song_id = manifest.song.remote_song_id,
+        .origin = local_content_index::online_origin::downloaded,
+    };
+    const std::optional<local_content_index::online_song_binding> existing_song =
+        local_content_index::find_song_by_local(song_binding.server_url, song_binding.local_song_id);
+    if (existing_song.has_value()) {
+        song_binding.can_edit = existing_song->can_edit;
+        song_binding.lifecycle_status = existing_song->lifecycle_status;
+        song_binding.review_status = existing_song->review_status;
+    }
+    if (!existing_song.has_value() ||
+        existing_song->remote_song_id != song_binding.remote_song_id) {
+        local_content_index::put_song_binding(song_binding);
+    }
+
+    for (const managed_content_storage::chart_manifest_entry& chart : manifest.charts) {
+        if (chart.local_chart_id.empty() || chart.remote_chart_id.empty()) {
+            continue;
+        }
+        local_content_index::online_chart_binding chart_binding{
+            .server_url = manifest.song.server_url,
+            .local_chart_id = chart.local_chart_id,
+            .remote_chart_id = chart.remote_chart_id,
+            .remote_song_id = manifest.song.remote_song_id,
+            .remote_chart_version = chart.chart_version,
+            .origin = local_content_index::online_origin::downloaded,
+        };
+        const std::optional<local_content_index::online_chart_binding> existing_chart =
+            local_content_index::find_chart_by_local(chart_binding.server_url, chart_binding.local_chart_id);
+        if (existing_chart.has_value()) {
+            chart_binding.can_edit = existing_chart->can_edit;
+            chart_binding.lifecycle_status = existing_chart->lifecycle_status;
+            chart_binding.review_status = existing_chart->review_status;
+        }
+        if (!existing_chart.has_value() ||
+            existing_chart->remote_chart_id != chart_binding.remote_chart_id ||
+            existing_chart->remote_song_id != chart_binding.remote_song_id ||
+            existing_chart->remote_chart_version != chart_binding.remote_chart_version) {
+            local_content_index::put_chart_binding(chart_binding);
+        }
+    }
+}
+
 std::optional<online_content::song_identity> managed_song_identity(
     const managed_content_storage::package_manifest& manifest,
     const local_content_index::snapshot& index) {
@@ -391,6 +444,11 @@ catalog_data load_catalog(bool calculate_missing_levels) {
             for (auto song_it = cached_catalog.songs.begin(); song_it != cached_catalog.songs.end();) {
                 song_entry& song = *song_it;
                 if (song.storage == storage_policy::managed_package) {
+                    if (const std::optional<managed_content_storage::package_manifest> manifest =
+                            managed_content_storage::read_manifest(path_utils::from_utf8(song.song.directory));
+                        manifest.has_value()) {
+                        sync_managed_manifest_identity(*manifest);
+                    }
                     const managed_content_storage::managed_file_read_result metadata =
                         managed_content_storage::read_managed_file(
                             path_utils::join_utf8(song.song.directory, "song.json"));
@@ -448,6 +506,7 @@ catalog_data load_catalog(bool calculate_missing_levels) {
             if (!manifest.has_value() || manifest->song.source != source) {
                 continue;
             }
+            sync_managed_manifest_identity(*manifest);
 
             const song_load_result managed_load =
                 song_loader::load_directory(path_utils::to_utf8(package_dir));

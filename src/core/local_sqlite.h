@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <optional>
 #include <string>
 
@@ -26,6 +27,7 @@ private:
 class database {
 public:
     database();
+    explicit database(const std::filesystem::path& db_path);
     ~database();
 
     database(const database&) = delete;
@@ -59,6 +61,7 @@ private:
 };
 
 database open_local_content_database();
+database open_local_catalog_cache_database();
 bool exec(sqlite3* database, const char* sql);
 bool ensure_common_schema(sqlite3* database);
 void bind_text(sqlite3_stmt* statement, int index, const std::string& value);

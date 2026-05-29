@@ -2,10 +2,13 @@
 
 #include <cstdint>
 #include <ctime>
+#include <filesystem>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
+#include "app_paths.h"
 #include "local_catalog_signature.h"
 #include "local_sqlite.h"
 #include "sqlite3.h"
@@ -118,6 +121,95 @@ std::optional<std::string> ready_catalog_signature(sqlite3* database) {
     return signature;
 }
 
+struct catalog_cache_ids {
+    std::vector<std::pair<std::string, std::string>> songs;
+    std::vector<std::pair<std::string, std::string>> charts;
+};
+
+std::optional<catalog_cache_ids> load_ready_catalog_cache() {
+    if (!std::filesystem::exists(app_paths::local_catalog_cache_db_path())) {
+        return std::nullopt;
+    }
+
+    local_sqlite::database catalog_database = local_sqlite::open_local_catalog_cache_database();
+    if (!catalog_database.valid()) {
+        return std::nullopt;
+    }
+    const std::optional<std::string> signature = ready_catalog_signature(catalog_database.get());
+    if (!signature.has_value() || *signature != local_catalog_signature::current()) {
+        return std::nullopt;
+    }
+
+    catalog_cache_ids ids;
+    statement songs(catalog_database.get(), "SELECT song_id, storage_policy FROM local_songs;");
+    if (!songs.valid()) {
+        return std::nullopt;
+    }
+    while (sqlite3_step(songs.get()) == SQLITE_ROW) {
+        ids.songs.emplace_back(column_text(songs.get(), 0), column_text(songs.get(), 1));
+    }
+
+    statement charts(catalog_database.get(), "SELECT chart_id, storage_policy FROM local_charts;");
+    if (!charts.valid()) {
+        return std::nullopt;
+    }
+    while (sqlite3_step(charts.get()) == SQLITE_ROW) {
+        ids.charts.emplace_back(column_text(charts.get(), 0), column_text(charts.get(), 1));
+    }
+    return ids;
+}
+
+bool seed_live_catalog_tables(sqlite3* database, const catalog_cache_ids& ids) {
+    if (!exec(database, "DROP TABLE IF EXISTS temp.live_local_songs;") ||
+        !exec(database, "DROP TABLE IF EXISTS temp.live_local_charts;") ||
+        !exec(database,
+              "CREATE TEMP TABLE live_local_songs("
+              "song_id TEXT PRIMARY KEY,"
+              "storage_policy TEXT NOT NULL"
+              ");") ||
+        !exec(database,
+              "CREATE TEMP TABLE live_local_charts("
+              "chart_id TEXT PRIMARY KEY,"
+              "storage_policy TEXT NOT NULL"
+              ");")) {
+        return false;
+    }
+
+    statement insert_song(database,
+                          "INSERT OR REPLACE INTO live_local_songs(song_id, storage_policy) "
+                          "VALUES(?, ?);");
+    if (!insert_song.valid()) {
+        return false;
+    }
+    for (const auto& [song_id, storage_policy] : ids.songs) {
+        sqlite3_reset(insert_song.get());
+        sqlite3_clear_bindings(insert_song.get());
+        bind_text(insert_song.get(), 1, song_id);
+        bind_text(insert_song.get(), 2, storage_policy);
+        if (!step_done(insert_song.get())) {
+            return false;
+        }
+    }
+
+    statement insert_chart(database,
+                           "INSERT OR REPLACE INTO live_local_charts(chart_id, storage_policy) "
+                           "VALUES(?, ?);");
+    if (!insert_chart.valid()) {
+        return false;
+    }
+    for (const auto& [chart_id, storage_policy] : ids.charts) {
+        sqlite3_reset(insert_chart.get());
+        sqlite3_clear_bindings(insert_chart.get());
+        bind_text(insert_chart.get(), 1, chart_id);
+        bind_text(insert_chart.get(), 2, storage_policy);
+        if (!step_done(insert_chart.get())) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool chart_bindings_has_remote_chart_version(sqlite3* database) {
     return table_has_column(database, "chart_bindings", "remote_chart_version");
 }
@@ -169,7 +261,7 @@ bool migrate_chart_bindings_without_local_song_id(sqlite3* database) {
            exec(database, "DROP TABLE chart_bindings;") &&
            exec(database, "ALTER TABLE chart_bindings_new RENAME TO chart_bindings;") &&
            exec(database,
-                "CREATE UNIQUE INDEX idx_chart_bindings_remote "
+                "CREATE INDEX idx_chart_bindings_remote "
                 "ON chart_bindings(server_url, remote_chart_id);") &&
            tx.commit();
 }
@@ -197,6 +289,45 @@ bool ensure_binding_permission_columns(sqlite3* database, const char* table_name
     return true;
 }
 
+bool index_is_unique(sqlite3* database, const char* table_name, const char* index_name) {
+    const std::string sql = std::string("PRAGMA index_list(") + table_name + ");";
+    statement indexes(database, sql.c_str());
+    if (!indexes.valid()) {
+        return false;
+    }
+    while (sqlite3_step(indexes.get()) == SQLITE_ROW) {
+        if (column_text(indexes.get(), 1) == index_name) {
+            return sqlite3_column_int(indexes.get(), 2) != 0;
+        }
+    }
+    return false;
+}
+
+bool ensure_non_unique_remote_binding_indexes(sqlite3* database) {
+    if (index_is_unique(database, "song_bindings", "idx_song_bindings_remote") &&
+        !exec(database, "DROP INDEX idx_song_bindings_remote;")) {
+        return false;
+    }
+    if (index_is_unique(database, "chart_bindings", "idx_chart_bindings_remote") &&
+        !exec(database, "DROP INDEX idx_chart_bindings_remote;")) {
+        return false;
+    }
+    return exec(database,
+                "CREATE INDEX IF NOT EXISTS idx_song_bindings_remote "
+                "ON song_bindings(server_url, remote_song_id);") &&
+           exec(database,
+                "CREATE INDEX IF NOT EXISTS idx_chart_bindings_remote "
+                "ON chart_bindings(server_url, remote_chart_id);");
+}
+
+bool remove_legacy_catalog_cache(sqlite3* database) {
+    return exec(database, "DROP TABLE IF EXISTS local_charts;") &&
+           exec(database, "DROP TABLE IF EXISTS local_songs;") &&
+           exec(database,
+                "DELETE FROM metadata "
+                "WHERE key IN ('local_catalog.signature', 'local_catalog.status_schema');");
+}
+
 bool ensure_schema(sqlite3* database) {
     return local_sqlite::ensure_common_schema(database) &&
            exec(database,
@@ -212,7 +343,7 @@ bool ensure_schema(sqlite3* database) {
                 "PRIMARY KEY (server_url, local_song_id)"
                 ");") &&
            exec(database,
-                "CREATE UNIQUE INDEX IF NOT EXISTS idx_song_bindings_remote "
+                "CREATE INDEX IF NOT EXISTS idx_song_bindings_remote "
                 "ON song_bindings(server_url, remote_song_id);") &&
            exec(database,
                 "CREATE TABLE IF NOT EXISTS chart_bindings ("
@@ -229,14 +360,16 @@ bool ensure_schema(sqlite3* database) {
                 "PRIMARY KEY (server_url, local_chart_id)"
                 ");") &&
            exec(database,
-                "CREATE UNIQUE INDEX IF NOT EXISTS idx_chart_bindings_remote "
+                "CREATE INDEX IF NOT EXISTS idx_chart_bindings_remote "
                 "ON chart_bindings(server_url, remote_chart_id);") &&
            migrate_chart_bindings_without_local_song_id(database) &&
            ensure_chart_binding_version_column(database) &&
            ensure_binding_permission_columns(database, "song_bindings") &&
            ensure_binding_permission_columns(database, "chart_bindings") &&
+           ensure_non_unique_remote_binding_indexes(database) &&
+           remove_legacy_catalog_cache(database) &&
            exec(database,
-                "INSERT INTO metadata(key, value) VALUES('schema_version', '4') "
+                "INSERT INTO metadata(key, value) VALUES('schema_version', '5') "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value;");
 }
 
@@ -350,33 +483,48 @@ void put_chart(sqlite3* database, const local_content_binding::chart_binding& bi
 }
 
 bool prune_orphaned_bindings(sqlite3* database) {
-    const std::optional<std::string> signature = ready_catalog_signature(database);
-    if (!signature.has_value()) {
+    const std::optional<catalog_cache_ids> catalog_ids = load_ready_catalog_cache();
+    if (!catalog_ids.has_value()) {
         return true;
     }
+    const std::string signature = local_catalog_signature::current();
 
     std::lock_guard<std::mutex> lock(g_prune_cache_mutex);
     if (g_last_pruned_catalog_signature == signature) {
-        return true;
-    }
-    if (*signature != local_catalog_signature::current()) {
         return true;
     }
 
     local_sqlite::transaction tx(database);
     const bool pruned =
         tx.active() &&
+        seed_live_catalog_tables(database, *catalog_ids) &&
+        exec(database,
+             "DELETE FROM chart_bindings "
+             "WHERE origin = 1 "
+             "AND EXISTS ("
+             "SELECT 1 FROM live_local_charts "
+             "WHERE live_local_charts.chart_id = chart_bindings.local_chart_id "
+             "AND live_local_charts.storage_policy = 'plain_workspace'"
+             ");") &&
+        exec(database,
+             "DELETE FROM song_bindings "
+             "WHERE origin = 1 "
+             "AND EXISTS ("
+             "SELECT 1 FROM live_local_songs "
+             "WHERE live_local_songs.song_id = song_bindings.local_song_id "
+             "AND live_local_songs.storage_policy = 'plain_workspace'"
+             ");") &&
         exec(database,
              "DELETE FROM chart_bindings "
              "WHERE NOT EXISTS ("
-             "SELECT 1 FROM local_charts "
-             "WHERE local_charts.chart_id = chart_bindings.local_chart_id"
+             "SELECT 1 FROM live_local_charts "
+             "WHERE live_local_charts.chart_id = chart_bindings.local_chart_id"
              ");") &&
         exec(database,
              "DELETE FROM song_bindings "
              "WHERE NOT EXISTS ("
-             "SELECT 1 FROM local_songs "
-             "WHERE local_songs.song_id = song_bindings.local_song_id"
+             "SELECT 1 FROM live_local_songs "
+             "WHERE live_local_songs.song_id = song_bindings.local_song_id"
              ");") &&
         exec(database,
              "DELETE FROM chart_bindings "
@@ -387,7 +535,7 @@ bool prune_orphaned_bindings(sqlite3* database) {
              ");") &&
         tx.commit();
     if (pruned) {
-        g_last_pruned_catalog_signature = *signature;
+        g_last_pruned_catalog_signature = signature;
     }
     return pruned;
 }

@@ -56,6 +56,9 @@ std::filesystem::path auth_device_path();
 // AppData/Local/raythm/local_content.db
 std::filesystem::path local_content_db_path();
 
+// AppData/Local/raythm/local_catalog_cache.db
+std::filesystem::path local_catalog_cache_db_path();
+
 // AppData/Local/raythm/scoring_ruleset_cache.txt
 std::filesystem::path scoring_ruleset_cache_path();
 

@@ -596,8 +596,70 @@ std::string lowercase(std::string value) {
     return value;
 }
 
+bool same_server_url(const std::string& lhs, const std::string& rhs) {
+    return auth::normalize_server_url(lhs) == auth::normalize_server_url(rhs);
+}
+
+std::optional<std::string> managed_manifest_remote_song_id(const std::string& server_url,
+                                                           const std::string& local_song_id) {
+    if (server_url.empty() || local_song_id.empty()) {
+        return std::nullopt;
+    }
+
+    for (const online_content::source source : {online_content::source::community,
+                                                online_content::source::official}) {
+        for (const std::filesystem::path& package_dir :
+             managed_content_storage::list_package_directories(source)) {
+            const std::optional<managed_content_storage::package_manifest> manifest =
+                managed_content_storage::read_manifest(package_dir);
+            if (!manifest.has_value() ||
+                manifest->local_song_id != local_song_id ||
+                manifest->song.remote_song_id.empty() ||
+                !same_server_url(manifest->song.server_url, server_url)) {
+                continue;
+            }
+            return manifest->song.remote_song_id;
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::string> managed_manifest_remote_chart_id(const std::string& server_url,
+                                                            const std::string& local_chart_id) {
+    if (server_url.empty() || local_chart_id.empty()) {
+        return std::nullopt;
+    }
+
+    for (const online_content::source source : {online_content::source::community,
+                                                online_content::source::official}) {
+        for (const std::filesystem::path& package_dir :
+             managed_content_storage::list_package_directories(source)) {
+            const std::optional<managed_content_storage::package_manifest> manifest =
+                managed_content_storage::read_manifest(package_dir);
+            if (!manifest.has_value() ||
+                !same_server_url(manifest->song.server_url, server_url)) {
+                continue;
+            }
+            for (const managed_content_storage::chart_manifest_entry& chart : manifest->charts) {
+                if (chart.local_chart_id == local_chart_id && !chart.remote_chart_id.empty()) {
+                    return chart.remote_chart_id;
+                }
+            }
+        }
+    }
+
+    return std::nullopt;
+}
+
 std::string expected_remote_song_id(const std::string& server_url,
                                     const std::string& local_song_id) {
+    if (const std::optional<std::string> manifest_song_id =
+            managed_manifest_remote_song_id(server_url, local_song_id);
+        manifest_song_id.has_value()) {
+        return *manifest_song_id;
+    }
+
     const std::optional<local_content_index::online_song_binding> binding =
         local_content_index::find_song_by_local(server_url, local_song_id);
     return binding.has_value() ? binding->remote_song_id : local_song_id;
@@ -605,6 +667,12 @@ std::string expected_remote_song_id(const std::string& server_url,
 
 std::string expected_remote_chart_id(const std::string& server_url,
                                      const std::string& local_chart_id) {
+    if (const std::optional<std::string> manifest_chart_id =
+            managed_manifest_remote_chart_id(server_url, local_chart_id);
+        manifest_chart_id.has_value()) {
+        return *manifest_chart_id;
+    }
+
     const std::optional<local_content_index::online_chart_binding> binding =
         local_content_index::find_chart_by_local(server_url, local_chart_id);
     return binding.has_value() ? binding->remote_chart_id : local_chart_id;

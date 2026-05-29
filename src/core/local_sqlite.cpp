@@ -24,9 +24,11 @@ sqlite3_stmt* statement::get() const {
     return statement_;
 }
 
-database::database() {
+database::database() : database(app_paths::local_content_db_path()) {
+}
+
+database::database(const std::filesystem::path& db_path) {
     app_paths::ensure_directories();
-    const std::filesystem::path db_path = app_paths::local_content_db_path();
     if (sqlite3_open(db_path.string().c_str(), &database_) != SQLITE_OK) {
         close();
     }
@@ -90,7 +92,15 @@ bool transaction::commit() {
 }
 
 database open_local_content_database() {
-    database db;
+    database db(app_paths::local_content_db_path());
+    if (db.valid()) {
+        ensure_common_schema(db.get());
+    }
+    return db;
+}
+
+database open_local_catalog_cache_database() {
+    database db(app_paths::local_catalog_cache_db_path());
     if (db.valid()) {
         ensure_common_schema(db.get());
     }

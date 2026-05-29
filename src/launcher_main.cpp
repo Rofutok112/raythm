@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "app_paths.h"
+#include "updater/update_apply.h"
 #include "updater/update_log.h"
 #include "updater/update_release.h"
 #include "updater/update_paths.h"
@@ -92,6 +93,9 @@ int main() {
 
     updater::ensure_update_directories();
     updater::ensure_installed_version_file(*package_version);
+    if (!updater::repair_installed_updater_from_staged_package(app_paths::executable_dir(), updater::staging_root())) {
+        updater::append_update_log("launcher", "failed to refresh updater executable from staged package");
+    }
 
     const auto installed_version = updater::load_installed_version();
     if (!installed_version.has_value()) {

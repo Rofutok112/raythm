@@ -111,7 +111,7 @@ bool ensure_schema(sqlite3* database) {
 }
 
 local_sqlite::database open_ready_database() {
-    local_sqlite::database database = local_sqlite::open_local_content_database();
+    local_sqlite::database database = local_sqlite::open_local_catalog_cache_database();
     if (database.valid()) {
         ensure_schema(database.get());
     }
