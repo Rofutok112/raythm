@@ -18,6 +18,7 @@ struct song_identity {
     source content_source = source::community;
     std::optional<bool> can_edit;
     std::string lifecycle_status;
+    std::string review_status;
 };
 
 struct chart_identity {
@@ -28,6 +29,7 @@ struct chart_identity {
     int remote_chart_version = 0;
     std::optional<bool> can_edit;
     std::string lifecycle_status;
+    std::string review_status;
 };
 
 inline std::optional<source> source_from_status(content_status status) {

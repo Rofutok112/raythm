@@ -191,6 +191,7 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/chart_level_cache.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
+        src/models/content_lifecycle.h
         src/models/data_models.h
         src/models/online_content_identity.h
         src/gameplay/lane_input_tracker.cpp
@@ -721,6 +722,7 @@ add_executable(song_export_identity_smoke
         src/tests/song_export_identity_smoke.cpp)
 
 add_executable(online_content_identity_smoke
+        src/models/content_lifecycle.h
         src/models/data_models.h
         src/models/online_content_identity.h
         src/tests/online_content_identity_smoke.cpp)

@@ -13,6 +13,7 @@ online_song_binding to_index_binding(const local_content_binding::song_binding& 
         .origin = entry.origin,
         .can_edit = entry.can_edit,
         .lifecycle_status = entry.lifecycle_status,
+        .review_status = entry.review_status,
     };
 }
 
@@ -26,6 +27,7 @@ online_chart_binding to_index_binding(const local_content_binding::chart_binding
         .origin = entry.origin,
         .can_edit = entry.can_edit,
         .lifecycle_status = entry.lifecycle_status,
+        .review_status = entry.review_status,
     };
 }
 
@@ -125,6 +127,7 @@ void put_song_binding(const online_song_binding& binding) {
         .origin = binding.origin,
         .can_edit = binding.can_edit,
         .lifecycle_status = binding.lifecycle_status,
+        .review_status = binding.review_status,
     });
 }
 
@@ -138,6 +141,7 @@ void put_chart_binding(const online_chart_binding& binding) {
         .origin = binding.origin,
         .can_edit = binding.can_edit,
         .lifecycle_status = binding.lifecycle_status,
+        .review_status = binding.review_status,
     });
 }
 

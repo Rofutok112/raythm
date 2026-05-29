@@ -21,6 +21,7 @@
 #include "chart_parser.h"
 #include "chart_serializer.h"
 #include "chart_fingerprint.h"
+#include "content_lifecycle.h"
 #include "managed_content_storage.h"
 #include "network/json_helpers.h"
 #include "path_utils.h"
@@ -42,6 +43,16 @@ content_status source_status_from_remote_download(const std::string& content_sou
 
 online_content::source online_source_from_remote_download(const std::string& content_source) {
     return content_source == "official" ? online_content::source::official : online_content::source::community;
+}
+
+std::string unavailable_message(const char* content_label,
+                                const std::string& review_status,
+                                const std::string& lifecycle_status) {
+    const std::string sentence = content_lifecycle::sentence_label(review_status, lifecycle_status);
+    if (sentence.empty()) {
+        return std::string(content_label) + " is not available.";
+    }
+    return std::string(content_label) + " is " + sentence + ".";
 }
 
 content_kind content_kind_from_remote_download(const std::string& content_source) {
@@ -213,6 +224,7 @@ song_entry_state make_download_song_state(const remote_song_payload& remote_song
         .content_source = online_source_from_remote_download(remote_song.content_source),
         .can_edit = remote_song.has_can_edit ? std::optional<bool>(remote_song.can_edit) : std::nullopt,
         .lifecycle_status = remote_song.lifecycle_status,
+        .review_status = remote_song.review_status,
     };
     song.remote_revision_id = remote_song.revision_id;
     song.remote_song_json_hash = remote_song.song_json_hash;
@@ -262,6 +274,7 @@ chart_entry_state make_download_chart_state(const remote_chart_payload& remote_c
         .remote_chart_version = remote_chart.chart_version,
         .can_edit = remote_chart.has_can_edit ? std::optional<bool>(remote_chart.can_edit) : std::nullopt,
         .lifecycle_status = remote_chart.lifecycle_status,
+        .review_status = remote_chart.review_status,
     };
     chart.remote_revision_id = remote_chart.revision_id;
     chart.remote_chart_hash = remote_chart.chart_sha256;
@@ -621,6 +634,13 @@ download_song_result download_song_package(const song_entry_state song,
         result.message = "Missing song download information.";
         return result;
     }
+    if (song.song.online_identity.has_value() &&
+        !content_lifecycle::lifecycle_is_active(song.song.online_identity->lifecycle_status)) {
+        result.message = unavailable_message("Song",
+                                             song.song.online_identity->review_status,
+                                             song.song.online_identity->lifecycle_status);
+        return result;
+    }
 
     auto begin_step = [&](const std::string& url) {
         return fetch_remote_binary(url, [progress](size_t bytes_received, size_t total_bytes) {
@@ -872,6 +892,7 @@ download_song_result download_song_package(const song_entry_state song,
         .origin = origin,
         .can_edit = song.song.online_identity.has_value() ? song.song.online_identity->can_edit : std::nullopt,
         .lifecycle_status = song.song.online_identity.has_value() ? song.song.online_identity->lifecycle_status : "",
+        .review_status = song.song.online_identity.has_value() ? song.song.online_identity->review_status : "",
     });
     if (!use_legacy_workspace &&
         installed_target.found &&
@@ -902,6 +923,20 @@ download_song_result download_chart_file(const song_entry_state song,
 
     if (server_url.empty() || result.song_id.empty() || result.chart_id.empty() || local_song_id.empty()) {
         result.message = "Missing chart download information.";
+        return result;
+    }
+    if (song.song.online_identity.has_value() &&
+        !content_lifecycle::lifecycle_is_active(song.song.online_identity->lifecycle_status)) {
+        result.message = unavailable_message("Song",
+                                             song.song.online_identity->review_status,
+                                             song.song.online_identity->lifecycle_status);
+        return result;
+    }
+    if (chart.chart.online_identity.has_value() &&
+        !content_lifecycle::lifecycle_is_active(chart.chart.online_identity->lifecycle_status)) {
+        result.message = unavailable_message("Chart",
+                                             chart.chart.online_identity->review_status,
+                                             chart.chart.online_identity->lifecycle_status);
         return result;
     }
     if (!song.installed) {
@@ -1052,6 +1087,7 @@ download_song_result download_chart_file(const song_entry_state song,
             .origin = local_content_index::online_origin::downloaded,
             .can_edit = song.song.online_identity.has_value() ? song.song.online_identity->can_edit : std::nullopt,
             .lifecycle_status = song.song.online_identity.has_value() ? song.song.online_identity->lifecycle_status : "",
+            .review_status = song.song.online_identity.has_value() ? song.song.online_identity->review_status : "",
         });
     }
     local_content_index::put_chart_binding({
@@ -1063,6 +1099,7 @@ download_song_result download_chart_file(const song_entry_state song,
         .origin = local_content_index::online_origin::downloaded,
         .can_edit = chart.chart.online_identity.has_value() ? chart.chart.online_identity->can_edit : std::nullopt,
         .lifecycle_status = chart.chart.online_identity.has_value() ? chart.chart.online_identity->lifecycle_status : "",
+        .review_status = chart.chart.online_identity.has_value() ? chart.chart.online_identity->review_status : "",
     });
 
     result.success = true;
@@ -1073,6 +1110,10 @@ download_song_result download_chart_file(const song_entry_state song,
 }  // namespace
 
 bool needs_download(const song_entry_state& song) {
+    if (song.song.online_identity.has_value() &&
+        !content_lifecycle::lifecycle_is_active(song.song.online_identity->lifecycle_status)) {
+        return false;
+    }
     return !song.installed ||
            song.update_available ||
            song.song.status == content_status::modified;
@@ -1114,6 +1155,16 @@ void start_chart_download(state& state, online_catalog::data_controller& data_co
     const song_entry_state* song = selected_song(state);
     const chart_entry_state* chart = selected_chart(state);
     if (song == nullptr || chart == nullptr) {
+        return;
+    }
+    if (song->song.online_identity.has_value() &&
+        !content_lifecycle::lifecycle_is_active(song->song.online_identity->lifecycle_status)) {
+        ui::notify("This song is not available for download.", ui::notice_tone::error, 2.6f);
+        return;
+    }
+    if (chart->chart.online_identity.has_value() &&
+        !content_lifecycle::lifecycle_is_active(chart->chart.online_identity->lifecycle_status)) {
+        ui::notify("This chart is not available for download.", ui::notice_tone::error, 2.6f);
         return;
     }
     if (!song->installed) {

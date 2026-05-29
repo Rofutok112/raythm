@@ -17,6 +17,7 @@ struct online_song_binding {
     online_origin origin = online_origin::owned_upload;
     std::optional<bool> can_edit;
     std::string lifecycle_status;
+    std::string review_status;
 };
 
 struct online_chart_binding {
@@ -28,6 +29,7 @@ struct online_chart_binding {
     online_origin origin = online_origin::owned_upload;
     std::optional<bool> can_edit;
     std::string lifecycle_status;
+    std::string review_status;
 };
 
 struct snapshot {

@@ -78,6 +78,7 @@ std::vector<online_content::chart_identity> remote_links_for_chart(
             .remote_chart_version = binding.remote_chart_version,
             .can_edit = binding.can_edit,
             .lifecycle_status = binding.lifecycle_status,
+            .review_status = binding.review_status,
         });
     }
     return links;
@@ -179,6 +180,7 @@ std::optional<online_content::song_identity> managed_song_identity(
         .content_source = manifest.song.source,
         .can_edit = binding.has_value() ? binding->can_edit : std::nullopt,
         .lifecycle_status = binding.has_value() ? binding->lifecycle_status : "",
+        .review_status = binding.has_value() ? binding->review_status : "",
     };
 }
 
@@ -201,6 +203,7 @@ std::optional<online_content::chart_identity> managed_chart_identity(
         .remote_chart_version = chart.chart_version,
         .can_edit = binding.has_value() ? binding->can_edit : std::nullopt,
         .lifecycle_status = binding.has_value() ? binding->lifecycle_status : "",
+        .review_status = binding.has_value() ? binding->review_status : "",
     };
 }
 

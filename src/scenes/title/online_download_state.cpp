@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "audio_manager.h"
+#include "content_lifecycle.h"
 #include "network/auth_client.h"
 #include "theme.h"
 
@@ -516,6 +517,14 @@ Color key_mode_color(int key_count) {
 }
 
 std::string song_status_label(const song_entry_state& song) {
+    if (song.song.online_identity.has_value()) {
+        const std::string label = content_lifecycle::display_label(
+            song.song.online_identity->review_status,
+            song.song.online_identity->lifecycle_status);
+        if (!label.empty()) {
+            return label;
+        }
+    }
     if (song.song.status == content_status::modified) {
         return "REPAIR";
     }
@@ -527,6 +536,18 @@ std::string song_status_label(const song_entry_state& song) {
 
 Color song_status_color(const song_entry_state& song) {
     const auto& t = *g_theme;
+    if (song.song.online_identity.has_value()) {
+        const std::string label = content_lifecycle::display_label(
+            song.song.online_identity->review_status,
+            song.song.online_identity->lifecycle_status);
+        if (!label.empty()) {
+            return content_lifecycle::is_pending_review(
+                       song.song.online_identity->review_status,
+                       song.song.online_identity->lifecycle_status)
+                ? t.accent
+                : t.slow;
+        }
+    }
     if (song.song.status == content_status::modified) {
         return t.slow;
     }
@@ -540,6 +561,14 @@ Color song_status_color(const song_entry_state& song) {
 }
 
 std::string chart_status_label(const chart_entry_state& chart) {
+    if (chart.chart.online_identity.has_value()) {
+        const std::string label = content_lifecycle::display_label(
+            chart.chart.online_identity->review_status,
+            chart.chart.online_identity->lifecycle_status);
+        if (!label.empty()) {
+            return label;
+        }
+    }
     if (chart.chart.status == content_status::modified) {
         return "REPAIR";
     }
@@ -553,6 +582,14 @@ std::string chart_status_label(const chart_entry_state& chart) {
 }
 
 bool can_download_chart(const song_entry_state& song, const chart_entry_state& chart) {
+    if (song.song.online_identity.has_value() &&
+        !content_lifecycle::lifecycle_is_active(song.song.online_identity->lifecycle_status)) {
+        return false;
+    }
+    if (chart.chart.online_identity.has_value() &&
+        !content_lifecycle::lifecycle_is_active(chart.chart.online_identity->lifecycle_status)) {
+        return false;
+    }
     return song.installed &&
            !title_online_view::needs_download(song) &&
            (!chart.installed ||

@@ -121,15 +121,16 @@ bool migrate_chart_bindings_without_local_song_id(sqlite3* database) {
                 "origin INTEGER NOT NULL,"
                 "can_edit INTEGER,"
                 "lifecycle_status TEXT NOT NULL DEFAULT '',"
+                "review_status TEXT NOT NULL DEFAULT '',"
                 "updated_at INTEGER NOT NULL,"
                 "PRIMARY KEY (server_url, local_chart_id)"
                 ");") &&
            exec(database,
                 "INSERT OR REPLACE INTO chart_bindings_new("
                 "server_url, local_chart_id, remote_chart_id, remote_song_id, remote_chart_version, "
-                "origin, can_edit, lifecycle_status, updated_at) "
+                "origin, can_edit, lifecycle_status, review_status, updated_at) "
                 "SELECT server_url, local_chart_id, remote_chart_id, remote_song_id, 0, "
-                "origin, NULL, '', updated_at "
+                "origin, NULL, '', '', updated_at "
                 "FROM chart_bindings;") &&
            exec(database, "DROP TABLE chart_bindings;") &&
            exec(database, "ALTER TABLE chart_bindings_new RENAME TO chart_bindings;") &&
@@ -154,6 +155,11 @@ bool ensure_binding_permission_columns(sqlite3* database, const char* table_name
                         " ADD COLUMN lifecycle_status TEXT NOT NULL DEFAULT '';").c_str())) {
         return false;
     }
+    if (!table_has_column(database, table_name, "review_status") &&
+        !exec(database, (std::string("ALTER TABLE ") + table_name +
+                        " ADD COLUMN review_status TEXT NOT NULL DEFAULT '';").c_str())) {
+        return false;
+    }
     return true;
 }
 
@@ -167,6 +173,7 @@ bool ensure_schema(sqlite3* database) {
                 "origin INTEGER NOT NULL,"
                 "can_edit INTEGER,"
                 "lifecycle_status TEXT NOT NULL DEFAULT '',"
+                "review_status TEXT NOT NULL DEFAULT '',"
                 "updated_at INTEGER NOT NULL,"
                 "PRIMARY KEY (server_url, local_song_id)"
                 ");") &&
@@ -183,6 +190,7 @@ bool ensure_schema(sqlite3* database) {
                 "origin INTEGER NOT NULL,"
                 "can_edit INTEGER,"
                 "lifecycle_status TEXT NOT NULL DEFAULT '',"
+                "review_status TEXT NOT NULL DEFAULT '',"
                 "updated_at INTEGER NOT NULL,"
                 "PRIMARY KEY (server_url, local_chart_id)"
                 ");") &&
@@ -194,7 +202,7 @@ bool ensure_schema(sqlite3* database) {
            ensure_binding_permission_columns(database, "song_bindings") &&
            ensure_binding_permission_columns(database, "chart_bindings") &&
            exec(database,
-                "INSERT INTO metadata(key, value) VALUES('schema_version', '3') "
+                "INSERT INTO metadata(key, value) VALUES('schema_version', '4') "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value;");
 }
 
@@ -243,13 +251,14 @@ void put_song(sqlite3* database, const local_content_binding::song_binding& bind
 
     statement query(database,
                     "INSERT INTO song_bindings(server_url, local_song_id, remote_song_id, origin, "
-                    "can_edit, lifecycle_status, updated_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?) "
+                    "can_edit, lifecycle_status, review_status, updated_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT(server_url, local_song_id) DO UPDATE SET "
                     "remote_song_id = excluded.remote_song_id,"
                     "origin = excluded.origin,"
                     "can_edit = excluded.can_edit,"
                     "lifecycle_status = excluded.lifecycle_status,"
+                    "review_status = excluded.review_status,"
                     "updated_at = excluded.updated_at;");
     if (!query.valid()) {
         return;
@@ -260,7 +269,8 @@ void put_song(sqlite3* database, const local_content_binding::song_binding& bind
     sqlite3_bind_int(query.get(), 4, origin_to_int(origin));
     bind_optional_bool(query.get(), 5, binding.can_edit);
     bind_text(query.get(), 6, binding.lifecycle_status);
-    sqlite3_bind_int64(query.get(), 7, now_unix_seconds());
+    bind_text(query.get(), 7, binding.review_status);
+    sqlite3_bind_int64(query.get(), 8, now_unix_seconds());
     step_done(query.get());
 }
 
@@ -278,8 +288,8 @@ void put_chart(sqlite3* database, const local_content_binding::chart_binding& bi
 
     statement query(database,
                     "INSERT INTO chart_bindings(server_url, local_chart_id, remote_chart_id, "
-                    "remote_song_id, remote_chart_version, origin, can_edit, lifecycle_status, updated_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                    "remote_song_id, remote_chart_version, origin, can_edit, lifecycle_status, review_status, updated_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT(server_url, local_chart_id) DO UPDATE SET "
                     "remote_chart_id = excluded.remote_chart_id,"
                     "remote_song_id = excluded.remote_song_id,"
@@ -287,6 +297,7 @@ void put_chart(sqlite3* database, const local_content_binding::chart_binding& bi
                     "origin = excluded.origin,"
                     "can_edit = excluded.can_edit,"
                     "lifecycle_status = excluded.lifecycle_status,"
+                    "review_status = excluded.review_status,"
                     "updated_at = excluded.updated_at;");
     if (!query.valid()) {
         return;
@@ -299,7 +310,8 @@ void put_chart(sqlite3* database, const local_content_binding::chart_binding& bi
     sqlite3_bind_int(query.get(), 6, origin_to_int(origin));
     bind_optional_bool(query.get(), 7, binding.can_edit);
     bind_text(query.get(), 8, binding.lifecycle_status);
-    sqlite3_bind_int64(query.get(), 9, now_unix_seconds());
+    bind_text(query.get(), 9, binding.review_status);
+    sqlite3_bind_int64(query.get(), 10, now_unix_seconds());
     step_done(query.get());
 }
 
@@ -322,6 +334,7 @@ std::optional<local_content_binding::song_binding> read_song(sqlite3_stmt* state
         .origin = origin_from_int(sqlite3_column_int(statement, 3)),
         .can_edit = column_optional_bool(statement, 4),
         .lifecycle_status = column_text(statement, 5),
+        .review_status = column_text(statement, 6),
     };
 }
 
@@ -335,6 +348,7 @@ std::optional<local_content_binding::chart_binding> read_chart(sqlite3_stmt* sta
         .origin = origin_from_int(sqlite3_column_int(statement, 5)),
         .can_edit = column_optional_bool(statement, 6),
         .lifecycle_status = column_text(statement, 7),
+        .review_status = column_text(statement, 8),
     };
 }
 
@@ -380,7 +394,8 @@ local_content_binding::store load_mappings() {
     }
 
     statement songs(database.get(),
-                    "SELECT server_url, local_song_id, remote_song_id, origin, can_edit, lifecycle_status "
+                    "SELECT server_url, local_song_id, remote_song_id, origin, can_edit, "
+                    "lifecycle_status, review_status "
                     "FROM song_bindings "
                     "ORDER BY server_url, local_song_id;");
     if (songs.valid()) {
@@ -391,7 +406,7 @@ local_content_binding::store load_mappings() {
 
     statement charts(database.get(),
                      "SELECT server_url, local_chart_id, remote_chart_id, remote_song_id, "
-                     "remote_chart_version, origin, can_edit, lifecycle_status "
+                     "remote_chart_version, origin, can_edit, lifecycle_status, review_status "
                      "FROM chart_bindings ORDER BY server_url, local_chart_id;");
     if (charts.valid()) {
         while (sqlite3_step(charts.get()) == SQLITE_ROW) {
@@ -407,7 +422,8 @@ std::optional<local_content_binding::song_binding> find_song_by_local(const std:
     local_sqlite::database database = open_ready_database();
     if (database.valid()) {
         return find_song(database.get(),
-                         "SELECT server_url, local_song_id, remote_song_id, origin, can_edit, lifecycle_status "
+                         "SELECT server_url, local_song_id, remote_song_id, origin, can_edit, "
+                         "lifecycle_status, review_status "
                          "FROM song_bindings "
                          "WHERE server_url = ? AND local_song_id = ?;",
                          server_url,
@@ -421,7 +437,8 @@ std::optional<local_content_binding::song_binding> find_song_by_remote(const std
     local_sqlite::database database = open_ready_database();
     if (database.valid()) {
         return find_song(database.get(),
-                         "SELECT server_url, local_song_id, remote_song_id, origin, can_edit, lifecycle_status "
+                         "SELECT server_url, local_song_id, remote_song_id, origin, can_edit, "
+                         "lifecycle_status, review_status "
                          "FROM song_bindings "
                          "WHERE server_url = ? AND remote_song_id = ?;",
                          server_url,
@@ -436,7 +453,7 @@ std::optional<local_content_binding::chart_binding> find_chart_by_local(const st
     if (database.valid()) {
         return find_chart(database.get(),
                           "SELECT server_url, local_chart_id, remote_chart_id, remote_song_id, "
-                          "remote_chart_version, origin, can_edit, lifecycle_status "
+                          "remote_chart_version, origin, can_edit, lifecycle_status, review_status "
                           "FROM chart_bindings WHERE server_url = ? AND local_chart_id = ?;",
                           server_url,
                           local_chart_id);
@@ -450,7 +467,7 @@ std::optional<local_content_binding::chart_binding> find_chart_by_remote(const s
     if (database.valid()) {
         return find_chart(database.get(),
                           "SELECT server_url, local_chart_id, remote_chart_id, remote_song_id, "
-                          "remote_chart_version, origin, can_edit, lifecycle_status "
+                          "remote_chart_version, origin, can_edit, lifecycle_status, review_status "
                           "FROM chart_bindings WHERE server_url = ? AND remote_chart_id = ?;",
                           server_url,
                           remote_chart_id);
