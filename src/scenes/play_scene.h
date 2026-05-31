@@ -37,8 +37,11 @@ public:
 private:
     Camera3D make_play_camera() const;
     bool get_lane_view_bounds(const Camera3D& camera, float& lane_start_z, float& judgement_z, float& lane_end_z) const;
+    float lane_width_for_bottom_edge(const Camera3D& camera, float lane_start_z) const;
     void load_jacket_texture();
     void unload_jacket_texture();
+    void load_lane_layer_texture();
+    void unload_lane_layer_texture();
     void rebuild_hit_regions() const;
     double get_visual_ms() const;
     void apply_navigation(play_navigation_request navigation);
@@ -51,6 +54,8 @@ private:
     play_mv_controller mv_controller_;
     Texture2D jacket_texture_{};
     bool jacket_texture_loaded_ = false;
+    RenderTexture2D lane_layer_texture_{};
+    bool lane_layer_texture_loaded_ = false;
     bool start_gate_active_ = false;
     bool multiplayer_loaded_sent_ = false;
     bool multiplayer_countdown_started_ = false;

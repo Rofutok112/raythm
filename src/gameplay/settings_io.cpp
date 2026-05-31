@@ -132,6 +132,9 @@ void load_settings(game_settings& settings) {
         settings.camera_angle_degrees = std::clamp(std::stof(*v), 5.0f, 90.0f);
     if (auto v = extract_number_token(content, "laneWidth"))
         settings.lane_width = std::clamp(std::stof(*v), kMinLaneWidth, kMaxLaneWidth);
+    if (auto v = extract_number_token(content, "laneFogHiddenPercent"))
+        settings.lane_fog_hidden_percent =
+            std::clamp(std::stof(*v), kMinLaneFogHiddenPercent, kMaxLaneFogHiddenPercent);
     if (auto v = extract_number_token(content, "noteSpeed"))
         settings.note_speed = std::clamp(std::stof(*v), kMinNoteSpeed, kMaxNoteSpeed);
     if (auto v = extract_number_token(content, "noteHeight"))
@@ -188,6 +191,7 @@ void save_settings(const game_settings& settings) {
     out << "{\n";
     out << "  \"cameraAngle\": " << settings.camera_angle_degrees << ",\n";
     out << "  \"laneWidth\": " << settings.lane_width << ",\n";
+    out << "  \"laneFogHiddenPercent\": " << settings.lane_fog_hidden_percent << ",\n";
     out << "  \"noteSpeed\": " << settings.note_speed << ",\n";
     out << "  \"noteHeight\": " << settings.note_height << ",\n";
     out << "  \"globalNoteOffsetMs\": " << settings.global_note_offset_ms << ",\n";

@@ -80,6 +80,7 @@ int main() {
         game_settings defaults;
         defaults.camera_angle_degrees = 30.0f;
         defaults.lane_width = 8.4f;
+        defaults.lane_fog_hidden_percent = 37.0f;
         defaults.note_height = 1.4f;
         defaults.target_fps = 240;
         defaults.loudness_normalization_enabled = true;
@@ -101,6 +102,9 @@ int main() {
                ok);
         expect(std::fabs(loaded.lane_width - defaults.lane_width) < 0.001f,
                "Expected lane width above 5.0 to round-trip through settings.json.",
+               ok);
+        expect(std::fabs(loaded.lane_fog_hidden_percent - defaults.lane_fog_hidden_percent) < 0.001f,
+               "Expected lane fog hidden percent to round-trip through settings.json.",
                ok);
         expect(std::fabs(loaded.note_height - defaults.note_height) < 0.001f,
                "Expected default note height to be written to settings.json.",
@@ -153,6 +157,9 @@ int main() {
                ok);
         expect(content.find("\"loudnessNormalizationEnabled\": true") != std::string::npos,
                "Expected loudnessNormalizationEnabled key to be present in settings.json.",
+               ok);
+        expect(content.find("\"laneFogHiddenPercent\": 37") != std::string::npos,
+               "Expected laneFogHiddenPercent key to be present in settings.json.",
                ok);
         const size_t language_pos = content.find(language_token);
         expect(language_pos != std::string::npos,

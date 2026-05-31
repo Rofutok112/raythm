@@ -154,6 +154,9 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.multiplayer_match_id = request.multiplayer_match_id;
     state.mods = request.mods;
     state.camera_angle_degrees = g_settings.camera_angle_degrees;
+    state.lane_width = std::clamp(g_settings.lane_width, kMinLaneWidth, kMaxLaneWidth);
+    state.lane_fog_hidden_percent =
+        std::clamp(g_settings.lane_fog_hidden_percent, kMinLaneFogHiddenPercent, kMaxLaneFogHiddenPercent);
     state.lane_speed =
         play_speed_compensation::compensated_lane_speed(g_settings.note_speed, state.camera_angle_degrees);
 

@@ -2,6 +2,7 @@
 
 #include <utility>
 
+#include "network/server_environment.h"
 #include "ranking_service.h"
 #include "title/play_session_controller.h"
 
@@ -33,9 +34,19 @@ const title_play_transfer_controller& title_play_create_feature::transfer_contro
     return transfer_controller_;
 }
 
+const title_create_tools_model::view_model& title_play_create_feature::create_tools_model() const {
+    return create_tools_model_;
+}
+
 void title_play_create_feature::reset() {
     song_select::reset_for_enter(state_);
     data_controller_.reset(state_);
+    create_tools_model_ = {};
+    create_tools_bindings_ = {};
+    create_tools_binding_cache_valid_ = false;
+    create_tools_binding_server_url_.clear();
+    create_tools_binding_song_id_.clear();
+    create_tools_binding_chart_id_.clear();
 }
 
 void title_play_create_feature::on_exit() {
@@ -53,7 +64,7 @@ void title_play_create_feature::on_enter_play(bool multiplayer_chart_pick_active
 
 void title_play_create_feature::on_enter_create(song_select::preview_controller& preview_controller) {
     capture_current_selection();
-    request_catalog_reload(preferred_song_id_, preferred_chart_id_, false, true);
+    refresh_create_tools_model(true);
     sync_create_preview(preview_controller);
 }
 
@@ -71,6 +82,9 @@ void title_play_create_feature::poll_catalog_reload(song_select::preview_control
                                                    bool create_mode_active) {
     const title_play_data_controller::catalog_poll_result result =
         data_controller_.poll_catalog_reload(state_, play_mode_active, create_mode_active);
+    if (result.completed && create_mode_active) {
+        refresh_create_tools_model(true);
+    }
     if (result.sync_play_media) {
         sync_play_media(preview_controller);
     } else if (result.sync_create_preview) {
@@ -176,6 +190,7 @@ void title_play_create_feature::update_create(scene_manager& manager,
                                               float dt,
                                               const cross_callbacks& cross,
                                               const create_update_callbacks& callbacks) {
+    refresh_create_tools_model();
     title_create_mode_controller::update(
         manager,
         state_,
@@ -183,6 +198,7 @@ void title_play_create_feature::update_create(scene_manager& manager,
         anim_t,
         origin_rect,
         dt,
+        create_tools_model_,
         {
             .enter_home = callbacks.enter_home,
             .sync_preview = [this, &preview_controller]() { sync_create_preview(preview_controller); },
@@ -248,6 +264,41 @@ title_play_transfer_controller::catalog_callbacks title_play_create_feature::mak
                 request_catalog_reload(song_id, chart_id, sync_media_on_apply);
             },
     };
+}
+
+void title_play_create_feature::refresh_create_tools_model(bool force_bindings) {
+    const song_select::song_entry* song = song_select::selected_song(state_);
+    const auto filtered = song_select::filtered_charts_for_selected_song(state_);
+    const song_select::chart_option* chart = song_select::selected_chart_for(state_, filtered);
+    const std::string server_url = server_environment::normalize_url(state_.auth.server_url);
+    const std::string song_id = song != nullptr ? song->song.meta.song_id : "";
+    const std::string chart_id = chart != nullptr ? chart->meta.chart_id : "";
+    const bool binding_target_changed =
+        force_bindings ||
+        !create_tools_binding_cache_valid_ ||
+        create_tools_binding_server_url_ != server_url ||
+        create_tools_binding_song_id_ != song_id ||
+        create_tools_binding_chart_id_ != chart_id;
+
+    if (binding_target_changed) {
+        create_tools_bindings_ = {};
+        if (!server_url.empty() && (song != nullptr || chart != nullptr)) {
+            const local_content_index::snapshot index = local_content_index::load_snapshot();
+            create_tools_bindings_ = title_create_tools_model::resolve_bindings(index, song, chart, server_url);
+        }
+        create_tools_binding_cache_valid_ = true;
+        create_tools_binding_server_url_ = server_url;
+        create_tools_binding_song_id_ = song_id;
+        create_tools_binding_chart_id_ = chart_id;
+    }
+
+    create_tools_model_ = title_create_tools_model::build({
+        .song = song,
+        .chart = chart,
+        .server_url = server_url,
+        .online_status_checking = state_.catalog_loading,
+        .upload_bindings = create_tools_bindings_,
+    });
 }
 
 void title_play_create_feature::sync_play_media(song_select::preview_controller& preview_controller) {

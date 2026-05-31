@@ -181,7 +181,12 @@ double selected_preview_length_seconds(const song_select::song_entry* song) {
 }
 
 }  // namespace
-title_play_view::update_result update(song_select::state& state, title_play_view::mode view_mode, float anim_t, Rectangle origin_rect, float dt) {
+title_play_view::update_result update(song_select::state& state,
+                                      title_play_view::mode view_mode,
+                                      float anim_t,
+                                      Rectangle origin_rect,
+                                      float dt,
+                                      const title_create_tools_model::view_model* create_tools_model) {
     update_result result;
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
@@ -497,8 +502,10 @@ title_play_view::update_result update(song_select::state& state, title_play_view
             }
         }
     } else {
+        const title_create_tools_model::view_model empty_create_tools;
         const update_result create_result =
-            title_create_tools_view::update(state, current, left_pressed, mouse);
+            title_create_tools_view::update(create_tools_model != nullptr ? *create_tools_model : empty_create_tools,
+                                            current, left_pressed, mouse);
         if (create_result.create_song_requested ||
             create_result.edit_song_requested ||
             create_result.import_song_requested ||

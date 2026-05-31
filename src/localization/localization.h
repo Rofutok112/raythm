@@ -33,6 +33,7 @@ enum class text_key {
     note_speed,
     camera_angle,
     lane_width,
+    lane_cover,
     note_height,
     global_offset,
     bgm_volume,

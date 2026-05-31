@@ -94,12 +94,13 @@ inline const std::array<Rectangle, 8> kGeneralRows = {{
     ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 834.0f}),
     ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 924.0f}),
 }};
-inline const std::array<Rectangle, 5> kGameplayRows = {{
+inline const std::array<Rectangle, 6> kGameplayRows = {{
     kGeneralRows[0],
     kGeneralRows[1],
     kGeneralRows[2],
     ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 444.0f}),
-    kGeneralRows[4],
+    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 534.0f}),
+    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 624.0f}),
 }};
 inline const Rectangle kKeyModeRect = ui::place(kContentRect, kRowWidth, kKeyModeHeight,
                                                 ui::anchor::top_left, ui::anchor::top_left,

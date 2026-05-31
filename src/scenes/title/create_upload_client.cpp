@@ -82,6 +82,7 @@ struct upload_request_result {
 
 struct permission_check_result {
     bool success = false;
+    bool not_found = false;
     bool unauthorized = false;
     bool can_edit = false;
     std::string lifecycle_status;
@@ -608,6 +609,10 @@ permission_check_result parse_permission_response(const http_response& response,
         result.unauthorized = true;
         return result;
     }
+    if (response.status_code == 404) {
+        result.not_found = true;
+        return result;
+    }
     if (response.status_code < 200 || response.status_code >= 300) {
         return result;
     }
@@ -1059,7 +1064,7 @@ upload_result upload_song(const song_select::song_entry& song) {
         local_content_index::find_song_by_local(session.server_url, song.song.meta.song_id);
     const std::optional<online_content::song_identity> song_identity =
         matching_song_identity(session, song);
-    const std::optional<std::string> existing_remote_song_id =
+    std::optional<std::string> existing_remote_song_id =
         existing_song_binding.has_value() && !existing_song_binding->remote_song_id.empty()
             ? std::optional<std::string>(existing_song_binding->remote_song_id)
             : (song_identity.has_value() ? std::optional<std::string>(song_identity->remote_song_id) : std::nullopt);
@@ -1080,21 +1085,25 @@ upload_result upload_song(const song_select::song_entry& song) {
         existing_song_binding->origin == local_content_index::online_origin::owned_upload;
     if (existing_remote_song_id.has_value() &&
         !online_content::can_edit_with_owned_fallback(known_song_can_edit, owned_song_fallback)) {
-        bool can_edit_after_check = false;
-        if (!known_song_can_edit.has_value()) {
-            permission_check_result permission =
-                fetch_song_permission(session, *existing_remote_song_id);
-            if (permission.unauthorized) {
-                std::string restore_error;
-                const std::optional<auth::session> restored = restore_upload_session(restore_error);
-                if (!restored.has_value()) {
-                    result.message = std::move(restore_error);
-                    return result;
-                }
-                session = *restored;
-                permission = fetch_song_permission(session, *existing_remote_song_id);
+        permission_check_result permission =
+            fetch_song_permission(session, *existing_remote_song_id);
+        if (permission.unauthorized) {
+            std::string restore_error;
+            const std::optional<auth::session> restored = restore_upload_session(restore_error);
+            if (!restored.has_value()) {
+                result.message = std::move(restore_error);
+                return result;
             }
-            can_edit_after_check = permission.success && permission.can_edit;
+            session = *restored;
+            permission = fetch_song_permission(session, *existing_remote_song_id);
+        }
+        if (permission.not_found) {
+            local_content_index::remove_song_binding(session.server_url, song.song.meta.song_id);
+            existing_remote_song_id = std::nullopt;
+            known_song_can_edit = std::nullopt;
+            known_song_lifecycle.clear();
+            known_song_review.clear();
+        } else {
             if (permission.success) {
                 known_song_can_edit = permission.can_edit;
                 if (!permission.lifecycle_status.empty()) {
@@ -1104,10 +1113,10 @@ upload_result upload_song(const song_select::song_entry& song) {
                     known_song_review = permission.review_status;
                 }
             }
-        }
-        if (!can_edit_after_check) {
-            result.message = "This song is linked to online content that your account cannot edit.";
-            return result;
+            if (!permission.success || !permission.can_edit) {
+                result.message = "This song is linked to online content that your account cannot edit.";
+                return result;
+            }
         }
     }
     upload_request_result request_result =
@@ -1178,7 +1187,7 @@ upload_result upload_chart(const song_select::song_entry& song,
     }
     auth::session session = *session_opt;
 
-    const std::optional<std::string> remote_song_id = resolve_remote_song_id_for_chart_upload(session, song, chart);
+    std::optional<std::string> remote_song_id = resolve_remote_song_id_for_chart_upload(session, song, chart);
     if (!remote_song_id.has_value()) {
         result.message = "Upload the song first so the server can assign a song ID.";
         return result;
@@ -1206,7 +1215,7 @@ upload_result upload_chart(const song_select::song_entry& song,
         existing_song_binding->origin == local_content_index::online_origin::owned_upload;
     const std::optional<local_content_index::online_chart_binding> existing_chart_binding =
         local_content_index::find_chart_by_local(session.server_url, chart.meta.chart_id);
-    const std::optional<std::string> existing_remote_chart_id =
+    std::optional<std::string> existing_remote_chart_id =
         existing_chart_binding.has_value() && !existing_chart_binding->remote_chart_id.empty()
             ? std::optional<std::string>(existing_chart_binding->remote_chart_id)
             : (chart_identity.has_value() ? std::optional<std::string>(chart_identity->remote_chart_id) : std::nullopt);
@@ -1227,53 +1236,59 @@ upload_result upload_chart(const song_select::song_entry& song,
         existing_chart_binding->origin == local_content_index::online_origin::owned_upload;
     if (!existing_remote_chart_id.has_value() &&
         !online_content::can_edit_with_owned_fallback(known_song_can_edit, owned_song_fallback)) {
-        bool can_edit_after_check = false;
-        if (!known_song_can_edit.has_value()) {
-            permission_check_result permission =
-                fetch_song_permission(session, *remote_song_id);
-            if (permission.unauthorized) {
-                std::string restore_error;
-                const std::optional<auth::session> restored = restore_upload_session(restore_error);
-                if (!restored.has_value()) {
-                    result.message = std::move(restore_error);
-                    return result;
-                }
-                session = *restored;
-                permission = fetch_song_permission(session, *remote_song_id);
+        permission_check_result permission =
+            fetch_song_permission(session, *remote_song_id);
+        if (permission.unauthorized) {
+            std::string restore_error;
+            const std::optional<auth::session> restored = restore_upload_session(restore_error);
+            if (!restored.has_value()) {
+                result.message = std::move(restore_error);
+                return result;
             }
-            can_edit_after_check = permission.success && permission.can_edit;
-            if (permission.success) {
-                known_song_can_edit = permission.can_edit;
-                if (!permission.lifecycle_status.empty()) {
-                    known_song_lifecycle = permission.lifecycle_status;
-                }
-                if (!permission.review_status.empty()) {
-                    known_song_review = permission.review_status;
-                }
+            session = *restored;
+            permission = fetch_song_permission(session, *remote_song_id);
+        }
+        if (permission.not_found) {
+            local_content_index::remove_song_binding(session.server_url, song.song.meta.song_id);
+            local_content_index::remove_chart_bindings_for_remote_song(session.server_url, *remote_song_id);
+            result.message = "Upload the song first so the server can assign a song ID.";
+            return result;
+        }
+        if (permission.success) {
+            known_song_can_edit = permission.can_edit;
+            if (!permission.lifecycle_status.empty()) {
+                known_song_lifecycle = permission.lifecycle_status;
+            }
+            if (!permission.review_status.empty()) {
+                known_song_review = permission.review_status;
             }
         }
-        if (!can_edit_after_check) {
+        if (!permission.success || !permission.can_edit) {
             result.message = "This song is linked to online content that your account cannot edit.";
             return result;
         }
     }
     if (existing_remote_chart_id.has_value() &&
         !online_content::can_edit_with_owned_fallback(known_chart_can_edit, owned_chart_fallback)) {
-        bool can_edit_after_check = false;
-        if (!known_chart_can_edit.has_value()) {
-            permission_check_result permission =
-                fetch_chart_permission(session, *existing_remote_chart_id);
-            if (permission.unauthorized) {
-                std::string restore_error;
-                const std::optional<auth::session> restored = restore_upload_session(restore_error);
-                if (!restored.has_value()) {
-                    result.message = std::move(restore_error);
-                    return result;
-                }
-                session = *restored;
-                permission = fetch_chart_permission(session, *existing_remote_chart_id);
+        permission_check_result permission =
+            fetch_chart_permission(session, *existing_remote_chart_id);
+        if (permission.unauthorized) {
+            std::string restore_error;
+            const std::optional<auth::session> restored = restore_upload_session(restore_error);
+            if (!restored.has_value()) {
+                result.message = std::move(restore_error);
+                return result;
             }
-            can_edit_after_check = permission.success && permission.can_edit;
+            session = *restored;
+            permission = fetch_chart_permission(session, *existing_remote_chart_id);
+        }
+        if (permission.not_found) {
+            local_content_index::remove_chart_binding(session.server_url, chart.meta.chart_id);
+            existing_remote_chart_id = std::nullopt;
+            known_chart_can_edit = std::nullopt;
+            known_chart_lifecycle.clear();
+            known_chart_review.clear();
+        } else {
             if (permission.success) {
                 known_chart_can_edit = permission.can_edit;
                 if (!permission.lifecycle_status.empty()) {
@@ -1283,10 +1298,10 @@ upload_result upload_chart(const song_select::song_entry& song,
                     known_chart_review = permission.review_status;
                 }
             }
-        }
-        if (!can_edit_after_check) {
-            result.message = "This chart is linked to online content that your account cannot edit.";
-            return result;
+            if (!permission.success || !permission.can_edit) {
+                result.message = "This chart is linked to online content that your account cannot edit.";
+                return result;
+            }
         }
     }
     const std::optional<std::string> effective_remote_chart_id = existing_remote_chart_id;
@@ -1318,6 +1333,12 @@ upload_result upload_chart(const song_select::song_entry& song,
             request_result =
                 send_chart_upload_request(session, song, chart, *remote_song_id, std::nullopt);
         }
+    }
+    if (request_result.not_found && remote_song_id.has_value()) {
+        local_content_index::remove_song_binding(session.server_url, song.song.meta.song_id);
+        local_content_index::remove_chart_bindings_for_remote_song(session.server_url, *remote_song_id);
+        result.message = "Upload the song first so the server can assign a song ID.";
+        return result;
     }
 
     result.success = request_result.success;
