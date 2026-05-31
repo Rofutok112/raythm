@@ -384,6 +384,8 @@ add_executable(raythm WIN32 src/main.cpp
          src/scenes/song_create/song_create_timing_service.h
          src/scenes/song_select/song_catalog_service.cpp
         src/scenes/song_select/song_catalog_service.h
+        src/scenes/song_select/local_catalog_cache_service.cpp
+        src/scenes/song_select/local_catalog_cache_service.h
         src/scenes/song_select/local_catalog_database.cpp
         src/scenes/song_select/local_catalog_database.h
         src/scenes/song_select/song_select_confirmation_dialog.cpp
@@ -817,6 +819,8 @@ add_executable(managed_content_storage_smoke
         src/network/json_helpers.h
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
+        src/scenes/song_select/local_catalog_cache_service.cpp
+        src/scenes/song_select/local_catalog_cache_service.h
         src/scenes/song_select/local_catalog_database.cpp
         src/scenes/song_select/local_catalog_database.h
         src/scenes/song_select/song_catalog_service.cpp

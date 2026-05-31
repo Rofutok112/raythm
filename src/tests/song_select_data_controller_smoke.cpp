@@ -132,6 +132,7 @@ int main() {
     controller.request_catalog_reload(state, {"song-a", "chart-normal", false});
     assert(state.catalog_loading);
     controller.request_catalog_reload(state, {"song-b", "chart-level", true});
+    controller.request_catalog_reload(state, {"song-b", "chart-level", false});
 
     spin_until([&] {
         const song_select::catalog_reload_result result = controller.poll_catalog_reload(state);

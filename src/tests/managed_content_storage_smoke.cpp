@@ -12,6 +12,7 @@
 
 #include "app_paths.h"
 #include "chart_serializer.h"
+#include "local_catalog_signature.h"
 #include "mv/mv_storage.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
@@ -324,7 +325,19 @@ int main() {
     }
     song_select::local_catalog_database::replace_catalog(stale_cached_catalog.songs);
 
-    const song_select::catalog_data repaired_cached_catalog = song_select::load_catalog(false);
+    const song_select::catalog_data fast_cached_catalog = song_select::load_catalog(false);
+    const song_select::song_entry* fast_cached_managed = nullptr;
+    for (const song_select::song_entry& song : fast_cached_catalog.songs) {
+        if (song.song.meta.song_id == managed_song_id) {
+            fast_cached_managed = &song;
+            break;
+        }
+    }
+    assert(fast_cached_managed != nullptr);
+    assert(!fast_cached_managed->charts.empty());
+    assert(fast_cached_managed->charts.front().meta.level == 0.0f);
+
+    const song_select::catalog_data repaired_cached_catalog = song_select::load_catalog(true);
     const song_select::song_entry* repaired_managed = nullptr;
     for (const song_select::song_entry& song : repaired_cached_catalog.songs) {
         if (song.song.meta.song_id == managed_song_id) {
@@ -348,6 +361,18 @@ int main() {
     assert(persisted_managed != nullptr);
     assert(!persisted_managed->charts.empty());
     assert(persisted_managed->charts.front().meta.level > 0.0f);
+
+    const fs::path encrypted_chart_path =
+        managed_content_storage::encrypted_asset_path(managed_song_dir, stored_manifest->charts.front().encrypted_chart);
+    const fs::path encrypted_chart_backup = temp_root / "managed-chart.renc.backup";
+    const std::string complete_signature = local_catalog_signature::current();
+    fs::rename(encrypted_chart_path, encrypted_chart_backup, ec);
+    assert(!ec);
+    assert(local_catalog_signature::current() != complete_signature);
+    assert(song_select::local_catalog_database::load_cached_catalog().songs.empty());
+    fs::rename(encrypted_chart_backup, encrypted_chart_path, ec);
+    assert(!ec);
+    assert(!song_select::local_catalog_database::load_cached_catalog().songs.empty());
 
     fs::remove_all(temp_root, ec);
     std::cout << "managed_content_storage smoke test passed\n";

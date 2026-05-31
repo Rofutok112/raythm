@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "app_paths.h"
 #include "local_catalog_signature.h"
 #include "local_sqlite.h"
 #include "network/json_helpers.h"
@@ -637,9 +638,9 @@ catalog_data load_cached_catalog() {
     return catalog;
 }
 
-void replace_catalog(const std::vector<song_entry>& songs) {
+void replace_catalog(const std::vector<song_entry>& songs, const std::string& catalog_signature) {
     local_sqlite::database database = open_ready_database();
-    if (!database.valid()) {
+    if (!database.valid() || catalog_signature.empty()) {
         return;
     }
 
@@ -655,9 +656,14 @@ void replace_catalog(const std::vector<song_entry>& songs) {
             put_chart(database.get(), chart);
         }
     }
-    local_sqlite::put_metadata(database.get(), "local_catalog.signature", local_catalog_signature::current());
+    local_sqlite::put_metadata(database.get(), "local_catalog.signature", catalog_signature);
     local_sqlite::put_metadata(database.get(), "local_catalog.status_schema", local_catalog_signature::kStatusSchema);
     tx.commit();
+}
+
+void replace_catalog(const std::vector<song_entry>& songs) {
+    app_paths::ensure_directories();
+    replace_catalog(songs, local_catalog_signature::current());
 }
 
 void remove_song(const std::string& song_id) {

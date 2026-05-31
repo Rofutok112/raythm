@@ -226,15 +226,23 @@ int main() {
     assert(cached.songs[0].charts[0].remote_links.empty());
     assert(cached.songs[0].song.chart_paths.size() == 1);
 
+    std::ofstream(song_dir / "notes.txt") << "not catalog metadata";
+    cached = song_select::local_catalog_database::load_cached_catalog();
+    assert(cached.songs.size() == 1);
+
+    std::ofstream(chart_dir / "chart-b.rchart") << "new chart";
+    cached = song_select::local_catalog_database::load_cached_catalog();
+    assert(cached.songs.empty());
+    fs::remove(chart_dir / "chart-b.rchart", ec);
+    song_select::local_catalog_database::replace_catalog({make_song(song_dir, chart_path)});
+    cached = song_select::local_catalog_database::load_cached_catalog();
+    assert(cached.songs.size() == 1);
+
     {
         local_sqlite::database database = local_sqlite::open_local_catalog_cache_database();
         assert(database.valid());
         local_sqlite::put_metadata(database.get(), "local_catalog.status_schema", "online-identity-v1");
     }
-    cached = song_select::local_catalog_database::load_cached_catalog();
-    assert(cached.songs.empty());
-
-    std::ofstream(chart_dir / "chart-b.rchart") << "new chart";
     cached = song_select::local_catalog_database::load_cached_catalog();
     assert(cached.songs.empty());
 
