@@ -94,8 +94,11 @@ bool data_controller::ranking_loading() const {
 
 void data_controller::request_catalog_reload(state& state, catalog_reload_request request) {
     if (catalog_loading_) {
+        const bool calculate_missing_levels =
+            queued_catalog_request_.calculate_missing_levels || request.calculate_missing_levels;
         catalog_reload_pending_ = true;
         queued_catalog_request_ = std::move(request);
+        queued_catalog_request_.calculate_missing_levels = calculate_missing_levels;
         state.catalog_loading = true;
         return;
     }

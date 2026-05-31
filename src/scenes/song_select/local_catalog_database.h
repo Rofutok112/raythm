@@ -9,6 +9,7 @@ namespace song_select::local_catalog_database {
 
 catalog_data load_cached_catalog();
 void replace_catalog(const std::vector<song_entry>& songs);
+void replace_catalog(const std::vector<song_entry>& songs, const std::string& catalog_signature);
 void remove_song(const std::string& song_id);
 void remove_chart(const std::string& chart_id);
 

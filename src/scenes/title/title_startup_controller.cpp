@@ -16,15 +16,6 @@ constexpr float kStartupProgressCatalog = 0.68f;
 constexpr float kStartupProgressFonts = 0.78f;
 constexpr float kStartupProgressScoring = 0.88f;
 
-bool consume_startup_level_calculation() {
-    static bool consumed = false;
-    if (consumed) {
-        return false;
-    }
-    consumed = true;
-    return true;
-}
-
 void append_literal_with_translation(std::vector<std::string>& texts, const char* literal) {
     texts.emplace_back(literal);
     const char* translated = localization::tr_literal(literal);
@@ -135,7 +126,7 @@ void update(state& startup, const update_context& context) {
             context.preferred_song_id,
             context.preferred_chart_id,
             context.sync_media_on_catalog_apply,
-            consume_startup_level_calculation());
+            false);
         return;
     }
 
@@ -164,27 +155,20 @@ void update(state& startup, const update_context& context) {
     if (!startup.scoring_requested) {
         startup.scoring_requested = true;
         startup.load_failed = !context.play_state.load_errors.empty();
-        startup.loading_message = "Preparing scoring cache...";
         context.reload_online_catalog();
         if (context.play_state.auth.logged_in) {
             context.restore_auth();
         }
-        context.request_scoring_ruleset_warm(true);
+        context.request_scoring_ruleset_warm(false);
+        startup.loading = false;
+        startup.load_complete = true;
+        startup.loading_message = startup.load_failed ? "Catalog loaded with warnings." : "Ready.";
+        if (startup.load_failed) {
+            context.home_status_message = context.play_state.load_errors.empty()
+                ? "Catalog loaded with warnings."
+                : context.play_state.load_errors.front();
+        }
         return;
-    }
-
-    if (context.scoring_ruleset_loading()) {
-        startup.loading_message = "Preparing scoring cache...";
-        return;
-    }
-
-    startup.loading = false;
-    startup.load_complete = true;
-    startup.loading_message = startup.load_failed ? "Catalog loaded with warnings." : "Ready.";
-    if (startup.load_failed) {
-        context.home_status_message = context.play_state.load_errors.empty()
-            ? "Catalog loaded with warnings."
-            : context.play_state.load_errors.front();
     }
 }
 

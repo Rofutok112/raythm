@@ -15,6 +15,7 @@
 #include "player_note_offsets.h"
 #include "ranking_service.h"
 #include "song_loader.h"
+#include "song_select/local_catalog_cache_service.h"
 #include "song_select/local_catalog_database.h"
 #include "title/local_content_index.h"
 
@@ -137,59 +138,6 @@ const managed_content_storage::chart_manifest_entry* find_manifest_chart(
     return nullptr;
 }
 
-void sync_managed_manifest_identity(const managed_content_storage::package_manifest& manifest) {
-    if (manifest.song.server_url.empty() ||
-        manifest.local_song_id.empty() ||
-        manifest.song.remote_song_id.empty()) {
-        return;
-    }
-
-    local_content_index::online_song_binding song_binding{
-        .server_url = manifest.song.server_url,
-        .local_song_id = manifest.local_song_id,
-        .remote_song_id = manifest.song.remote_song_id,
-        .origin = local_content_index::online_origin::downloaded,
-    };
-    const std::optional<local_content_index::online_song_binding> existing_song =
-        local_content_index::find_song_by_local(song_binding.server_url, song_binding.local_song_id);
-    if (existing_song.has_value()) {
-        song_binding.can_edit = existing_song->can_edit;
-        song_binding.lifecycle_status = existing_song->lifecycle_status;
-        song_binding.review_status = existing_song->review_status;
-    }
-    if (!existing_song.has_value() ||
-        existing_song->remote_song_id != song_binding.remote_song_id) {
-        local_content_index::put_song_binding(song_binding);
-    }
-
-    for (const managed_content_storage::chart_manifest_entry& chart : manifest.charts) {
-        if (chart.local_chart_id.empty() || chart.remote_chart_id.empty()) {
-            continue;
-        }
-        local_content_index::online_chart_binding chart_binding{
-            .server_url = manifest.song.server_url,
-            .local_chart_id = chart.local_chart_id,
-            .remote_chart_id = chart.remote_chart_id,
-            .remote_song_id = manifest.song.remote_song_id,
-            .remote_chart_version = chart.chart_version,
-            .origin = local_content_index::online_origin::downloaded,
-        };
-        const std::optional<local_content_index::online_chart_binding> existing_chart =
-            local_content_index::find_chart_by_local(chart_binding.server_url, chart_binding.local_chart_id);
-        if (existing_chart.has_value()) {
-            chart_binding.can_edit = existing_chart->can_edit;
-            chart_binding.lifecycle_status = existing_chart->lifecycle_status;
-            chart_binding.review_status = existing_chart->review_status;
-        }
-        if (!existing_chart.has_value() ||
-            existing_chart->remote_chart_id != chart_binding.remote_chart_id ||
-            existing_chart->remote_song_id != chart_binding.remote_song_id ||
-            existing_chart->remote_chart_version != chart_binding.remote_chart_version) {
-            local_content_index::put_chart_binding(chart_binding);
-        }
-    }
-}
-
 std::optional<online_content::song_identity> managed_song_identity(
     const managed_content_storage::package_manifest& manifest,
     const local_content_index::snapshot& index) {
@@ -291,61 +239,6 @@ std::optional<float> cached_level_for_chart(const std::string& chart_path,
         : chart_level_cache::find_level(chart_path, content_signature);
 }
 
-bool refresh_missing_cached_level(song_select::chart_option& chart) {
-    if (chart.meta.level > 0.0f) {
-        return false;
-    }
-
-    const chart_parse_result parse_result = song_loader::load_chart(chart.path);
-    if (!parse_result.success || !parse_result.data.has_value()) {
-        return false;
-    }
-
-    chart.meta.level = calculate_level_for_chart(
-        chart.path,
-        *parse_result.data,
-        managed_level_signature(chart));
-    return chart.meta.level > 0.0f;
-}
-
-bool sanitize_plain_workspace_song(song_select::song_entry& song) {
-    if (song.storage != storage_policy::plain_workspace) {
-        return false;
-    }
-
-    bool changed = song.kind != content_kind::local ||
-                   song.status != content_status::local ||
-                   song.source_status != content_status::local ||
-                   song.online_identity.has_value() ||
-                   song.managed_manifest.has_value();
-    song.kind = content_kind::local;
-    song.status = content_status::local;
-    song.source_status = content_status::local;
-    song.online_identity.reset();
-    song.managed_manifest.reset();
-    return changed;
-}
-
-bool sanitize_plain_workspace_chart(song_select::chart_option& chart) {
-    if (chart.storage != storage_policy::plain_workspace) {
-        return false;
-    }
-
-    bool changed = chart.kind != content_kind::local ||
-                   chart.status != content_status::local ||
-                   chart.source_status != content_status::local ||
-                   chart.online_identity.has_value() ||
-                   chart.managed_manifest.has_value() ||
-                   !chart.remote_links.empty();
-    chart.kind = content_kind::local;
-    chart.status = content_status::local;
-    chart.source_status = content_status::local;
-    chart.online_identity.reset();
-    chart.managed_manifest.reset();
-    chart.remote_links.clear();
-    return changed;
-}
-
 void append_loaded_song(song_select::catalog_data& catalog,
                         const song_data& song,
                         const player_chart_offset_map& chart_offsets,
@@ -436,55 +329,14 @@ namespace song_select {
 
 catalog_data load_catalog(bool calculate_missing_levels) {
     if (!calculate_missing_levels) {
-        catalog_data cached_catalog = local_catalog_database::load_cached_catalog();
-        if (!cached_catalog.songs.empty()) {
-            const player_chart_offset_map chart_offsets = load_player_chart_offsets();
-            bool refreshed_missing_levels = false;
-            bool sanitized_plain_workspace = false;
-            for (auto song_it = cached_catalog.songs.begin(); song_it != cached_catalog.songs.end();) {
-                song_entry& song = *song_it;
-                if (song.storage == storage_policy::managed_package) {
-                    if (const std::optional<managed_content_storage::package_manifest> manifest =
-                            managed_content_storage::read_manifest(path_utils::from_utf8(song.song.directory));
-                        manifest.has_value()) {
-                        sync_managed_manifest_identity(*manifest);
-                    }
-                    const managed_content_storage::managed_file_read_result metadata =
-                        managed_content_storage::read_managed_file(
-                            path_utils::join_utf8(song.song.directory, "song.json"));
-                    if (metadata.managed && !metadata.success) {
-                        song_it = cached_catalog.songs.erase(song_it);
-                        continue;
-                    }
-                }
-                sanitized_plain_workspace = sanitize_plain_workspace_song(song) || sanitized_plain_workspace;
-                for (chart_option& chart : song.charts) {
-                    sanitized_plain_workspace = sanitize_plain_workspace_chart(chart) || sanitized_plain_workspace;
-                    if (chart.online_identity.has_value()) {
-                        chart.remote_links = {*chart.online_identity};
-                    } else {
-                        chart.remote_links.clear();
-                    }
-                    chart.local_note_offset_ms = chart_offsets.contains(chart.meta.chart_id)
-                        ? chart_offsets.at(chart.meta.chart_id)
-                        : 0;
-                    if (const auto best = load_best_local_entry(chart.meta.chart_id)) {
-                        chart.best_local_rank = best->clear_rank();
-                        chart.best_local_score = best->score;
-                    }
-                    refreshed_missing_levels = refresh_missing_cached_level(chart) || refreshed_missing_levels;
-                }
-                std::sort(song.charts.begin(), song.charts.end(), chart_source_less);
-                ++song_it;
-            }
-            std::sort(cached_catalog.songs.begin(), cached_catalog.songs.end(), song_source_less);
-            if (refreshed_missing_levels || sanitized_plain_workspace) {
-                local_catalog_database::replace_catalog(cached_catalog.songs);
-            }
-            return cached_catalog;
+        if (std::optional<catalog_data> cached_catalog =
+                local_catalog_cache_service::load_ready_catalog()) {
+            return *cached_catalog;
         }
     }
 
+    const local_catalog_cache_service::refresh_guard cache_guard =
+        local_catalog_cache_service::capture_refresh_guard();
     catalog_data catalog;
     const player_chart_offset_map chart_offsets = load_player_chart_offsets();
     const local_content_index::snapshot local_index = local_content_index::load_snapshot();
@@ -506,7 +358,7 @@ catalog_data load_catalog(bool calculate_missing_levels) {
             if (!manifest.has_value() || manifest->song.source != source) {
                 continue;
             }
-            sync_managed_manifest_identity(*manifest);
+            local_catalog_cache_service::sync_managed_manifest_identity(*manifest);
 
             const song_load_result managed_load =
                 song_loader::load_directory(path_utils::to_utf8(package_dir));
@@ -527,7 +379,7 @@ catalog_data load_catalog(bool calculate_missing_levels) {
 
     std::sort(catalog.songs.begin(), catalog.songs.end(), song_source_less);
 
-    local_catalog_database::replace_catalog(catalog.songs);
+    local_catalog_cache_service::replace_if_unchanged(cache_guard, catalog.songs);
     return catalog;
 }
 

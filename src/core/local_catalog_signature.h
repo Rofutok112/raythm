@@ -4,7 +4,7 @@
 
 namespace local_catalog_signature {
 
-constexpr const char* kStatusSchema = "managed-content-v3";
+constexpr const char* kStatusSchema = "managed-content-v4-catalog-files";
 
 std::string current();
 
