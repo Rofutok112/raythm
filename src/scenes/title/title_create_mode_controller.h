@@ -5,6 +5,7 @@
 #include "raylib.h"
 #include "scene_manager.h"
 #include "song_select/song_select_state.h"
+#include "title/create_tools_model.h"
 #include "title/title_play_transfer_controller.h"
 
 class title_create_mode_controller {
@@ -25,5 +26,6 @@ public:
                        float play_view_anim,
                        Rectangle play_entry_origin_rect,
                        float dt,
+                       const title_create_tools_model::view_model& create_tools_model,
                        const callbacks& callbacks);
 };

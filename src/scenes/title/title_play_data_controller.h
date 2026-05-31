@@ -13,6 +13,7 @@
 class title_play_data_controller {
 public:
     struct catalog_poll_result {
+        bool completed = false;
         bool sync_play_media = false;
         bool sync_create_preview = false;
     };

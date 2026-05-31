@@ -1307,7 +1307,8 @@ void draw(song_select::state& state,
           const song_select::preview_controller& preview_controller,
           mode view_mode,
           float anim_t,
-          Rectangle origin_rect) {
+          Rectangle origin_rect,
+          const title_create_tools_model::view_model* create_tools_model) {
     const auto& t = *g_theme;
     const float play_t = tween::ease_out_cubic(anim_t);
     if (play_t <= 0.01f) {
@@ -1432,7 +1433,8 @@ void draw(song_select::state& state,
             .avatar_base_url = state.auth.server_url,
         });
     } else {
-        title_create_tools_view::draw(state, {
+        const title_create_tools_model::view_model empty_create_tools;
+        title_create_tools_view::draw(create_tools_model != nullptr ? *create_tools_model : empty_create_tools, {
             .current = current,
             .alpha = alpha,
             .button_base = button_base,

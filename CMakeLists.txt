@@ -311,6 +311,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_header_view.h
         src/scenes/title/title_local_song_select_controller.cpp
         src/scenes/title/title_local_song_select_controller.h
+        src/scenes/title/create_tools_model.cpp
+        src/scenes/title/create_tools_model.h
         src/scenes/title/create_tools_view.cpp
         src/scenes/title/create_tools_view.h
         src/scenes/title/create_upload_permissions.cpp
@@ -760,6 +762,18 @@ add_executable(create_upload_permissions_smoke
         src/scenes/title/local_content_binding.h
         src/scenes/title/local_content_index.h
         src/tests/create_upload_permissions_smoke.cpp)
+
+add_executable(create_tools_model_smoke
+        src/network/server_environment.cpp
+        src/network/server_environment.h
+        src/scenes/title/create_tools_model.cpp
+        src/scenes/title/create_tools_model.h
+        src/scenes/title/create_upload_permissions.cpp
+        src/scenes/title/create_upload_permissions.h
+        src/scenes/title/local_content_binding.h
+        src/scenes/title/local_content_index.h
+        src/scenes/song_select/song_select_state.h
+        src/tests/create_tools_model_smoke.cpp)
 
 add_executable(content_cache_paths_smoke
         src/core/app_paths.cpp
@@ -1315,6 +1329,7 @@ set(RAYTHM_SMOKE_TARGETS
         online_content_identity_smoke
         online_content_availability_smoke
         create_upload_permissions_smoke
+        create_tools_model_smoke
         content_cache_paths_smoke
         managed_content_storage_smoke
         settings_io_smoke
@@ -1385,6 +1400,7 @@ target_link_libraries(managed_content_storage_smoke PRIVATE sqlite3 raylib)
 target_link_libraries(online_content_availability_smoke PRIVATE raylib)
 target_link_libraries(song_select_state_smoke PRIVATE raylib)
 target_link_libraries(song_select_data_controller_smoke PRIVATE raylib)
+target_link_libraries(create_tools_model_smoke PRIVATE raylib)
 target_link_libraries(settings_io_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)

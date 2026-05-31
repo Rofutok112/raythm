@@ -13,7 +13,7 @@ public:
     void draw() const;
 
 private:
-    enum class slider { none, note_speed, camera_angle, lane_width, note_height };
+    enum class slider { none, note_speed, camera_angle, lane_width, note_height, lane_fog };
 
     game_settings& settings_;
     slider active_slider_ = slider::none;

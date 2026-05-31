@@ -41,6 +41,7 @@ constexpr std::array<translation_entry, static_cast<int>(text_key::editor_settin
     {"Note Speed", "ノーツ速度"},
     {"Camera Angle", "カメラ角度"},
     {"Lane Width", "レーン幅"},
+    {"Lane Cover", "レーンカバー"},
     {"Note Height", "ノーツ高さ"},
     {"Global Offset", "全体オフセット"},
     {"BGM Volume", "BGM 音量"},

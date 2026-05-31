@@ -12,6 +12,7 @@
 #include "audio_manager.h"
 #include "core/app_paths.h"
 #include "editor_scene.h"
+#include "game_settings.h"
 #include "managed_content_storage.h"
 #include "path_utils.h"
 #include "play/play_flow_controller.h"
@@ -36,6 +37,7 @@ constexpr float kCameraHeight = 42.0f;
 constexpr float kCameraFovY = 42.0f;
 constexpr float kJudgeLineWorldZ = 12.0f;
 constexpr float kMaxGroundDistance = 1000.0f;
+constexpr float kMinResolvedLaneWidth = 0.05f;
 constexpr float kSoloStartGateSeconds = 0.75f;
 constexpr float kMatchLoadedPollSeconds = 1.0f;
 constexpr float kFallbackMatchCountdownSeconds = 3.0f;
@@ -192,12 +194,14 @@ play_scene::play_scene(scene_manager& manager, song_data song, chart_data chart,
 
 play_scene::~play_scene() {
     unload_jacket_texture();
+    unload_lane_layer_texture();
 }
 
 void play_scene::on_enter() {
     state_.status_text = "Loading...";
     state_ = play_session_loader::load(request_, draw_queue_);
     load_jacket_texture();
+    load_lane_layer_texture();
     mv_controller_.load_for_song(state_.song_data);
     if (!state_.multiplayer_room_id.empty()) {
         multiplayer_realtime_ = std::make_unique<multiplayer::client::realtime_client>();
@@ -230,6 +234,7 @@ void play_scene::on_exit() {
     audio_manager::instance().stop_all_se();
     mv_controller_.reset();
     unload_jacket_texture();
+    unload_lane_layer_texture();
 }
 
 void play_scene::on_app_exit() {
@@ -373,6 +378,24 @@ bool play_scene::get_lane_view_bounds(const Camera3D& camera, float& lane_start_
     return true;
 }
 
+float play_scene::lane_width_for_bottom_edge(const Camera3D& camera, float lane_start_z) const {
+    const int key_count = std::max(1, state_.key_count);
+    const float setting_width = std::clamp(state_.lane_width, kMinLaneWidth, kMaxLaneWidth);
+    const Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+    const Vector3 bottom_center = {0.0f, 0.0f, lane_start_z};
+    const float depth = Vector3DotProduct(Vector3Subtract(bottom_center, camera.position), forward);
+    if (depth <= 0.001f || camera.fovy <= 0.0f) {
+        return setting_width;
+    }
+
+    const float half_fov_y = camera.fovy * DEG2RAD * 0.5f;
+    const float aspect = static_cast<float>(kScreenWidth) / static_cast<float>(kScreenHeight);
+    const float half_fov_x = std::atan(std::tan(half_fov_y) * aspect);
+    const float bottom_world_width = depth * std::tan(half_fov_x) * 2.0f;
+    const float desired_total_width = bottom_world_width * (setting_width / kMaxLaneWidth);
+    return std::max(kMinResolvedLaneWidth, desired_total_width / static_cast<float>(key_count));
+}
+
 void play_scene::load_jacket_texture() {
     unload_jacket_texture();
     if (!state_.song_data.has_value() || state_.song_data->meta.jacket_file.empty()) {
@@ -418,6 +441,28 @@ void play_scene::unload_jacket_texture() {
     jacket_texture_loaded_ = false;
 }
 
+void play_scene::load_lane_layer_texture() {
+    if (lane_layer_texture_loaded_) {
+        return;
+    }
+
+    lane_layer_texture_ = LoadRenderTexture(kScreenWidth, kScreenHeight);
+    lane_layer_texture_loaded_ = lane_layer_texture_.id != 0;
+    if (lane_layer_texture_loaded_) {
+        SetTextureFilter(lane_layer_texture_.texture, TEXTURE_FILTER_POINT);
+    }
+}
+
+void play_scene::unload_lane_layer_texture() {
+    if (!lane_layer_texture_loaded_) {
+        return;
+    }
+
+    UnloadRenderTexture(lane_layer_texture_);
+    lane_layer_texture_ = {};
+    lane_layer_texture_loaded_ = false;
+}
+
 void play_scene::draw() {
     if (!state_.initialized || start_gate_active_) {
         virtual_screen::begin_ui();
@@ -428,22 +473,42 @@ void play_scene::draw() {
         return;
     }
 
-    virtual_screen::begin();
-    play_renderer::draw_world_background();
     const double visual_time_ms = get_visual_ms();
-    mv_controller_.draw(state_, visual_time_ms);
-
     const Camera3D camera = make_play_camera();
     float lane_start_z = 0.0f;
     float judgement_z = 0.0f;
     float lane_end_z = 0.0f;
     const bool has_bounds = get_lane_view_bounds(camera, lane_start_z, judgement_z, lane_end_z);
+    const float lane_world_width =
+        has_bounds ? lane_width_for_bottom_edge(camera, lane_start_z) : state_.lane_width;
 
-    BeginMode3D(camera);
-    if (has_bounds) {
-        play_renderer::draw_world(state_, draw_queue_, camera, lane_start_z, judgement_z, lane_end_z, visual_time_ms);
+    if (!lane_layer_texture_loaded_) {
+        load_lane_layer_texture();
     }
-    EndMode3D();
+    if (lane_layer_texture_loaded_) {
+        BeginTextureMode(lane_layer_texture_);
+        ClearBackground(BLANK);
+        BeginMode3D(camera);
+        if (has_bounds) {
+            play_renderer::draw_world(state_, draw_queue_, camera, lane_start_z, judgement_z, lane_end_z,
+                                      visual_time_ms, lane_world_width);
+        }
+        EndMode3D();
+        EndTextureMode();
+    }
+
+    virtual_screen::begin();
+    play_renderer::draw_world_background();
+    mv_controller_.draw(state_, visual_time_ms);
+
+    if (lane_layer_texture_loaded_) {
+        play_renderer::draw_lane_layer(lane_layer_texture_.texture, state_.lane_fog_hidden_percent);
+    } else if (has_bounds) {
+        BeginMode3D(camera);
+        play_renderer::draw_world(state_, draw_queue_, camera, lane_start_z, judgement_z, lane_end_z,
+                                  visual_time_ms, lane_world_width);
+        EndMode3D();
+    }
 
     virtual_screen::end();
 

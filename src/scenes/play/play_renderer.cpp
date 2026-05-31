@@ -98,34 +98,42 @@ constexpr float kStayDotY = 0.24f;
 constexpr float kLowHealthVignetteThreshold = 35.0f;
 constexpr float kDamageVignetteEdgeWidth = 220.0f;
 constexpr float kDamageVignetteMaxAlpha = 86.0f;
+constexpr float kLaneCoverEdgeFadeRatio = 0.085f;
+constexpr float kLaneCoverMinEdgeFadeHeight = 36.0f;
+constexpr float kLaneCoverMaxEdgeFadeHeight = 126.0f;
+constexpr int kLaneCoverFadeSteps = 18;
 
-float lane_center_x(int lane, int key_count) {
-    const float total_width = key_count * g_settings.lane_width + (key_count - 1) * kLaneGap;
-    const float left = -total_width * 0.5f + g_settings.lane_width * 0.5f;
-    const int visual_lane = key_count - 1 - lane;
-    return left + visual_lane * (g_settings.lane_width + kLaneGap);
+float lane_total_width(int key_count, float lane_width) {
+    return key_count * lane_width + (key_count - 1) * kLaneGap;
 }
 
-float note_center_x(const note_data& note, int key_count) {
-    const float first = lane_center_x(note.lane, key_count);
-    const float last = lane_center_x(note_last_lane(note), key_count);
+float lane_center_x(int lane, int key_count, float lane_width) {
+    const float total_width = lane_total_width(key_count, lane_width);
+    const float left = -total_width * 0.5f + lane_width * 0.5f;
+    const int visual_lane = key_count - 1 - lane;
+    return left + visual_lane * (lane_width + kLaneGap);
+}
+
+float note_center_x(const note_data& note, int key_count, float lane_width) {
+    const float first = lane_center_x(note.lane, key_count, lane_width);
+    const float last = lane_center_x(note_last_lane(note), key_count, lane_width);
     return (first + last) * 0.5f;
 }
 
-float note_visual_width(const note_data& note) {
+float note_visual_width(const note_data& note, float lane_width) {
     const int width = note_lane_width(note);
-    return static_cast<float>(width) * g_settings.lane_width +
+    return static_cast<float>(width) * lane_width +
            static_cast<float>(width - 1) * kLaneGap;
 }
 
-float note_body_width(const note_data& note) {
-    const float single_lane_inset = g_settings.lane_width * 0.08f;
-    return std::max(g_settings.lane_width * 0.2f, note_visual_width(note) - single_lane_inset);
+float note_body_width(const note_data& note, float lane_width) {
+    const float single_lane_inset = lane_width * 0.08f;
+    return std::max(lane_width * 0.2f, note_visual_width(note, lane_width) - single_lane_inset);
 }
 
-float note_hold_body_width(const note_data& note) {
-    const float hold_inset = g_settings.lane_width * 0.20f;
-    return std::max(g_settings.lane_width * 0.18f, note_visual_width(note) - hold_inset);
+float note_hold_body_width(const note_data& note, float lane_width) {
+    const float hold_inset = lane_width * 0.20f;
+    return std::max(lane_width * 0.18f, note_visual_width(note, lane_width) - hold_inset);
 }
 
 float measure_play_text_width(const char* text, int font_size) {
@@ -335,13 +343,14 @@ void draw_tap_slab(float center_x, float center_z, float width, float length,
                               side_width, length, frame_near, frame_far);
 }
 
-void draw_hold_body(float center_x, float center_z, float width, float length, Color fill, bool ray_style = false) {
+void draw_hold_body(float center_x, float center_z, float width, float length, float lane_width,
+                    Color fill, bool ray_style = false) {
     const Color hold_base = ray_style
                                 ? lerp_color(fill, g_theme->accent, 0.68f)
                                 : lerp_color(fill, WHITE, 0.94f);
     const Color edge = lerp_color(hold_base, WHITE, 0.24f);
     const float cap_length = std::min(0.32f, std::max(0.08f, length * 0.16f));
-    const float cap_overhang = std::min(g_settings.lane_width * 0.035f, width * 0.015f);
+    const float cap_overhang = std::min(lane_width * 0.035f, width * 0.015f);
     const float cap_width = width + cap_overhang * 2.0f;
 
     draw_hold_gradient_plane(center_x, center_z, width, length, hold_base);
@@ -388,15 +397,16 @@ void draw_stay_gradient_bar(float center_x, float center_z, float width, float l
     rlEnd();
 }
 
-void draw_stay_dot(float center_x, float center_z, float width, Color fill, bool ray_style = false) {
+void draw_stay_dot(float center_x, float center_z, float width, float lane_width,
+                   Color fill, bool ray_style = false) {
     const Color stay_base = ray_style
                                 ? lerp_color(WHITE, {224, 214, 255, 255}, 0.14f)
                                 : lerp_color({70, 236, 224, 255}, fill, 0.14f);
     const Color end_edge = with_alpha(lerp_color(stay_base, WHITE, 0.34f), 226);
     const Color end_inner = with_alpha(lerp_color(stay_base, WHITE, 0.12f), 178);
-    const float bar_width = std::max(g_settings.lane_width * 0.54f, width * 1.04f);
+    const float bar_width = std::max(lane_width * 0.54f, width * 1.04f);
     const float bar_length = 0.28f;
-    const float cap_width = std::min(g_settings.lane_width * 0.070f, bar_width * 0.055f);
+    const float cap_width = std::min(lane_width * 0.070f, bar_width * 0.055f);
     const float cap_length = bar_length * 1.55f;
 
     draw_stay_gradient_bar(center_x, center_z, bar_width, bar_length, stay_base);
@@ -472,7 +482,7 @@ void draw_release_chevron_polygon(Vector3 origin, Vector3 axis_x, Vector3 axis_y
 }
 
 void draw_release_marker(float center_x, float center_z, float width, Color fill,
-                         const Camera3D& camera, bool ray_style = false) {
+                         const Camera3D& camera, float lane_width, bool ray_style = false) {
     const Color release_seed = ray_style ? Color{190, 112, 255, 255} : Color{255, 90, 132, 255};
     const Color release_base = lerp_color(release_seed, fill, ray_style ? 0.24f : 0.16f);
     const Color marker_color = with_alpha(lerp_color(release_base, WHITE, 0.28f), 255);
@@ -491,8 +501,8 @@ void draw_release_marker(float center_x, float center_z, float width, Color fill
     origin = Vector3Add(origin, Vector3Scale(axis_y, kReleaseMarkerLift));
     origin = Vector3Add(origin, Vector3Scale(forward, -0.14f));
 
-    const float marker_width = std::max(g_settings.lane_width * 0.76f, width * 0.78f);
-    const float marker_height = g_settings.lane_width * 0.40f;
+    const float marker_width = std::max(lane_width * 0.76f, width * 0.78f);
+    const float marker_height = lane_width * 0.40f;
 
     const float marker_bottom_offset = marker_height * 0.50f;
     const Vector3 marker_origin = Vector3Add(origin, Vector3Scale(axis_y, marker_bottom_offset));
@@ -526,6 +536,28 @@ float ease_out(float t) {
 Color fade_to_alpha(Color color, float alpha) {
     color.a = static_cast<unsigned char>(std::clamp(alpha, 0.0f, 255.0f));
     return color;
+}
+
+float lane_cover_hidden_end_y(float hidden_percent) {
+    hidden_percent = std::clamp(hidden_percent, kMinLaneFogHiddenPercent, kMaxLaneFogHiddenPercent);
+    if (hidden_percent <= 0.01f) {
+        return 0.0f;
+    }
+    return std::clamp(static_cast<float>(kScreenHeight) * hidden_percent / 100.0f,
+                      0.0f,
+                      static_cast<float>(kScreenHeight));
+}
+
+float lane_cover_fade_height() {
+    return std::clamp(static_cast<float>(kScreenHeight) * kLaneCoverEdgeFadeRatio,
+                      kLaneCoverMinEdgeFadeHeight,
+                      kLaneCoverMaxEdgeFadeHeight);
+}
+
+void draw_lane_layer_texture(const Texture2D& texture, Color tint) {
+    const Rectangle source = {0.0f, 0.0f, static_cast<float>(texture.width), -static_cast<float>(texture.height)};
+    const Rectangle dest = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
+    DrawTexturePro(texture, source, dest, {0.0f, 0.0f}, 0.0f, tint);
 }
 
 const char* judge_text(const judge_event& event) {
@@ -623,7 +655,7 @@ void draw_lane_judge_effect_segment(float center_x, float start_z, float end_z,
     }
 }
 
-void draw_lane_judge_effect(const play_session_state& state, int lane,
+void draw_lane_judge_effect(const play_session_state& state, int lane, float lane_width,
                             float lane_start_z, float judgement_z, float lane_end_z) {
     const lane_judge_effect& effect = state.lane_judge_effects[static_cast<std::size_t>(lane)];
     if (effect.timer <= 0.0f) {
@@ -636,11 +668,11 @@ void draw_lane_judge_effect(const play_session_state& state, int lane,
     const float pop = ease_out(age);
     const Color color = effect_judge_color(effect.result);
     const int lane_width_count = std::max(1, std::min(effect.lane_width, state.key_count - lane));
-    const float first_x = lane_center_x(lane, state.key_count);
-    const float last_x = lane_center_x(lane + lane_width_count - 1, state.key_count);
+    const float first_x = lane_center_x(lane, state.key_count, lane_width);
+    const float last_x = lane_center_x(lane + lane_width_count - 1, state.key_count, lane_width);
     const float center_x = (first_x + last_x) * 0.5f;
     const float effect_width =
-        static_cast<float>(lane_width_count) * g_settings.lane_width +
+        static_cast<float>(lane_width_count) * lane_width +
         static_cast<float>(lane_width_count - 1) * kLaneGap;
     const Color bright_color = effect.result == judge_result::perfect
                                    ? color
@@ -853,18 +885,20 @@ void draw_world_background() {
 }
 
 void draw_world(const play_session_state& state, const play_note_draw_queue& draw_queue,
-                const Camera3D& camera, float lane_start_z, float judgement_z, float lane_end_z, double visual_time_ms) {
+                const Camera3D& camera, float lane_start_z, float judgement_z, float lane_end_z,
+                double visual_time_ms, float lane_width) {
+    lane_width = std::max(0.05f, lane_width);
     for (int lane = 0; lane < state.key_count; ++lane) {
-        const float center_x = lane_center_x(lane, state.key_count);
+        const float center_x = lane_center_x(lane, state.key_count, lane_width);
         const float lane_dim = std::clamp(state.lane_hold_dim_amounts[static_cast<std::size_t>(lane)], 0.0f, 1.0f);
         const Color lane_fill = lerp_color(g_theme->lane, g_theme->lane_pressed, lane_dim);
-        DrawCube({center_x, -0.08f, (lane_start_z + lane_end_z) * 0.5f}, g_settings.lane_width, 0.05f,
+        DrawCube({center_x, -0.08f, (lane_start_z + lane_end_z) * 0.5f}, lane_width, 0.05f,
                  lane_end_z - lane_start_z, lane_fill);
-        DrawCubeWires({center_x, -0.08f, (lane_start_z + lane_end_z) * 0.5f}, g_settings.lane_width, 0.05f,
+        DrawCubeWires({center_x, -0.08f, (lane_start_z + lane_end_z) * 0.5f}, lane_width, 0.05f,
                       lane_end_z - lane_start_z, g_theme->lane_wire);
     }
 
-    const float total_width = state.key_count * g_settings.lane_width + (state.key_count - 1) * kLaneGap;
+    const float total_width = lane_total_width(state.key_count, lane_width);
 
     if (draw_queue.has_active_notes()) {
         const std::vector<note_state>& note_states = state.judge_system.note_states();
@@ -881,10 +915,9 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
                     const Color note_color_for_type = note_draw_color(note_state, note_color);
                     const double head_visual_ms = draw_queue.visual_target_ms(idx);
                     const float head_z = static_cast<float>(judgement_z + state.lane_speed * (head_visual_ms - visual_time_ms));
-                    const float center_x = note_center_x(note_state.note_ref, state.key_count);
-                    const float visual_width = note_visual_width(note_state.note_ref);
-                    const float body_width = note_body_width(note_state.note_ref);
-                    const float hold_body_width = note_hold_body_width(note_state.note_ref);
+                    const float center_x = note_center_x(note_state.note_ref, state.key_count, lane_width);
+                    const float body_width = note_body_width(note_state.note_ref, lane_width);
+                    const float hold_body_width = note_hold_body_width(note_state.note_ref, lane_width);
 
                     if (note_state.note_ref.type == note_type::hold) {
                         const double tail_target_ms = draw_queue.visual_end_target_ms(idx);
@@ -894,11 +927,11 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
                         const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);
                         if (segment_end > segment_start) {
                             draw_hold_body(center_x, (segment_start + segment_end) * 0.5f,
-                                           hold_body_width, segment_end - segment_start, note_color_for_type,
+                                           hold_body_width, segment_end - segment_start, lane_width, note_color_for_type,
                                            note_state.note_ref.is_ray);
                         }
                     } else if (note_state.note_ref.type == note_type::stay) {
-                        draw_stay_dot(center_x, head_z, body_width, note_color_for_type,
+                        draw_stay_dot(center_x, head_z, body_width, lane_width, note_color_for_type,
                                       note_state.note_ref.is_ray);
                     } else {
                         draw_tap_slab(center_x, head_z, body_width,
@@ -907,7 +940,7 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
                                       note_state.note_ref.type == note_type::release,
                                       note_state.note_ref.is_ray);
                         if (note_state.note_ref.type == note_type::release) {
-                            draw_release_marker(center_x, head_z, body_width, note_color_for_type, camera,
+                            draw_release_marker(center_x, head_z, body_width, note_color_for_type, camera, lane_width,
                                                 note_state.note_ref.is_ray);
                         }
                     }
@@ -917,11 +950,47 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
     }
 
     for (int lane = 0; lane < state.key_count; ++lane) {
-        draw_lane_judge_effect(state, lane, lane_start_z, judgement_z, lane_end_z);
+        draw_lane_judge_effect(state, lane, lane_width, lane_start_z, judgement_z, lane_end_z);
     }
 
     DrawCube({0.0f, kJudgeLineY, judgement_z}, total_width + 0.9f, 0.01f, 0.62f, g_theme->judge_line);
     DrawCube({0.0f, kJudgeLineGlowY, judgement_z}, total_width + 0.5f, kJudgeLineGlowHeight, 0.38f, g_theme->judge_line_glow);
+}
+
+void draw_lane_layer(const Texture2D& lane_layer_texture, float hidden_percent) {
+    const float hidden_end_y = lane_cover_hidden_end_y(hidden_percent);
+    if (hidden_end_y <= 0.5f) {
+        draw_lane_layer_texture(lane_layer_texture, WHITE);
+        return;
+    }
+
+    const float fade_height = lane_cover_fade_height();
+    const float fade_end_y = std::min(static_cast<float>(kScreenHeight), hidden_end_y + fade_height);
+    const int full_y = static_cast<int>(std::ceil(fade_end_y));
+    if (full_y < kScreenHeight) {
+        BeginScissorMode(0, full_y, kScreenWidth, kScreenHeight - full_y);
+        draw_lane_layer_texture(lane_layer_texture, WHITE);
+        EndScissorMode();
+    }
+
+    if (hidden_end_y >= static_cast<float>(kScreenHeight) || fade_end_y <= hidden_end_y) {
+        return;
+    }
+
+    for (int step = 0; step < kLaneCoverFadeSteps; ++step) {
+        const float t0 = static_cast<float>(step) / static_cast<float>(kLaneCoverFadeSteps);
+        const float t1 = static_cast<float>(step + 1) / static_cast<float>(kLaneCoverFadeSteps);
+        const float y0 = hidden_end_y + (fade_end_y - hidden_end_y) * t0;
+        const float y1 = hidden_end_y + (fade_end_y - hidden_end_y) * t1;
+        const int scissor_y = static_cast<int>(std::floor(y0));
+        const int scissor_bottom = static_cast<int>(std::ceil(y1));
+        const int scissor_height = std::max(1, scissor_bottom - scissor_y);
+        const float alpha_t = std::clamp((t0 + t1) * 0.5f, 0.0f, 1.0f);
+        const unsigned char alpha = static_cast<unsigned char>(255.0f * alpha_t * alpha_t);
+        BeginScissorMode(0, scissor_y, kScreenWidth, scissor_height);
+        draw_lane_layer_texture(lane_layer_texture, with_alpha(WHITE, alpha));
+        EndScissorMode();
+    }
 }
 
 void draw_overlay(const play_session_state& state, const Texture2D* jacket_texture) {

@@ -4,6 +4,10 @@
 #include "song_select/song_preview_controller.h"
 #include "song_select/song_select_state.h"
 
+namespace title_create_tools_model {
+struct view_model;
+}
+
 namespace title_play_view {
 
 enum class mode {
@@ -83,6 +87,7 @@ void draw(song_select::state& state,
           const song_select::preview_controller& preview_controller,
           mode view_mode,
           float anim_t,
-          Rectangle origin_rect);
+          Rectangle origin_rect,
+          const title_create_tools_model::view_model* create_tools_model = nullptr);
 
 }  // namespace title_play_view

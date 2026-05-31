@@ -7,6 +7,7 @@
 #include "scene_manager.h"
 #include "song_select/song_preview_controller.h"
 #include "song_select/song_select_state.h"
+#include "title/create_tools_model.h"
 #include "title/title_create_mode_controller.h"
 #include "title/title_play_data_controller.h"
 #include "title/title_play_mode_controller.h"
@@ -34,6 +35,7 @@ public:
     [[nodiscard]] const song_select::state& state() const;
     [[nodiscard]] title_play_transfer_controller& transfer_controller();
     [[nodiscard]] const title_play_transfer_controller& transfer_controller() const;
+    [[nodiscard]] const title_create_tools_model::view_model& create_tools_model() const;
 
     void reset();
     void on_exit();
@@ -89,12 +91,19 @@ public:
 private:
     [[nodiscard]] title_play_transfer_controller::catalog_callbacks make_transfer_callbacks(
         const cross_callbacks& callbacks);
+    void refresh_create_tools_model(bool force_bindings = false);
     void sync_play_media(song_select::preview_controller& preview_controller);
     void sync_create_preview(song_select::preview_controller& preview_controller);
 
     song_select::state state_;
     title_play_data_controller data_controller_;
     title_play_transfer_controller transfer_controller_;
+    title_create_tools_model::view_model create_tools_model_;
+    title_create_tools_model::bindings create_tools_bindings_;
+    bool create_tools_binding_cache_valid_ = false;
+    std::string create_tools_binding_server_url_;
+    std::string create_tools_binding_song_id_;
+    std::string create_tools_binding_chart_id_;
     std::string preferred_song_id_;
     std::string preferred_chart_id_;
 };
