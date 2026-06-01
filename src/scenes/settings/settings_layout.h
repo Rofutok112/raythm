@@ -58,8 +58,8 @@ inline constexpr float kKeySlotWidth = 840.0f;
 inline constexpr float kKeySlotHeight = 72.0f;
 inline constexpr float kKeySlotStartY = 321.0f;
 inline constexpr float kKeySlotStepY = 93.0f;
-inline constexpr float kGameplayPreviewWidth = 540.0f;
-inline constexpr float kGameplayPreviewHeight = 304.0f;
+inline constexpr float kGameplayPreviewWidth = 400.0f;
+inline constexpr float kGameplayPreviewHeight = 225.0f;
 
 inline constexpr std::array<page_descriptor, kPageCount> kPageDescriptors = {{
     {localization::text_key::gameplay, localization::text_key::gameplay, localization::text_key::gameplay_subtitle},
