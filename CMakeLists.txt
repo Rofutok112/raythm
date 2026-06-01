@@ -512,8 +512,6 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/settings/settings_runtime_applier.cpp
         src/scenes/settings/settings_runtime_applier.h
         src/scenes/settings/settings_shell_view.h
-        src/scenes/settings_scene.cpp
-        src/scenes/settings_scene.h
         src/scenes/theme.h
         src/scenes/virtual_screen.cpp
         src/scenes/virtual_screen.h

@@ -6,7 +6,6 @@
 #include "editor_scene.h"
 #include "mv_editor_scene.h"
 #include "play_scene.h"
-#include "settings_scene.h"
 #include "song_create_scene.h"
 #include "song_select_scene.h"
 #include "song_select/song_select_last_played.h"
@@ -77,7 +76,18 @@ std::unique_ptr<scene> make_legacy_song_select_scene(scene_manager& manager,
 }
 
 std::unique_ptr<scene> make_settings_scene(scene_manager& manager) {
-    return std::make_unique<settings_scene>(manager, settings_scene::return_target::song_select);
+    return std::make_unique<title_scene>(
+        manager,
+        true,
+        false,
+        "",
+        "",
+        std::nullopt,
+        true,
+        false,
+        "",
+        false,
+        true);
 }
 
 std::unique_ptr<scene> make_song_create_scene(scene_manager& manager) {

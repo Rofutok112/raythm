@@ -45,7 +45,8 @@ public:
                           bool start_in_play_view = false,
                           bool start_in_create_view = false,
                           std::string preferred_multiplayer_room_id = "",
-                          bool start_in_multiplayer_view = false);
+                          bool start_in_multiplayer_view = false,
+                          bool start_in_settings_view = false);
 
     void on_enter() override;
     void on_exit() override;
@@ -103,6 +104,7 @@ private:
     bool start_in_create_view_ = false;
     std::string preferred_multiplayer_room_id_;
     bool start_in_multiplayer_view_ = false;
+    bool start_in_settings_view_ = false;
     bool multiplayer_chart_pick_active_ = false;
     bool queue_selected_chart_on_multiplayer_return_ = false;
     title_startup_controller::state startup_;

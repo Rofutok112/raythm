@@ -22,7 +22,6 @@
 #include "platform/window_chrome.h"
 #include "scene_common.h"
 #include "scene_manager.h"
-#include "settings_scene.h"
 #include "song_select/song_select_navigation.h"
 #include "theme.h"
 #include "ui_draw.h"
@@ -39,26 +38,30 @@ Rectangle snap_dropdown_menu_rect() {
 }
 
 editor_scene::editor_scene(scene_manager& manager, song_data song, std::string chart_path)
-    : scene(manager), song_(std::move(song)), chart_path_(std::move(chart_path)), state_(std::make_shared<editor_state>()) {
+    : scene(manager), song_(std::move(song)), chart_path_(std::move(chart_path)), state_(std::make_shared<editor_state>()),
+      settings_overlay_(g_settings) {
 }
 
 editor_scene::editor_scene(scene_manager& manager, song_data song, int key_count)
     : scene(manager), song_(std::move(song)), chart_path_(std::nullopt),
-      new_chart_key_count_(key_count), state_(std::make_shared<editor_state>()) {
+      new_chart_key_count_(key_count), state_(std::make_shared<editor_state>()),
+      settings_overlay_(g_settings) {
 }
 
 editor_scene::editor_scene(scene_manager& manager, song_data song, chart_meta initial_meta)
     : scene(manager), song_(std::move(song)), chart_path_(std::nullopt),
       initial_meta_(std::move(initial_meta)),
       new_chart_key_count_(initial_meta_.has_value() ? initial_meta_->key_count : 4),
-      state_(std::make_shared<editor_state>()) {
+      state_(std::make_shared<editor_state>()),
+      settings_overlay_(g_settings) {
 }
 
 editor_scene::editor_scene(scene_manager& manager, song_data song, editor_resume_state resume)
     : scene(manager), song_(std::move(song)), chart_path_(std::nullopt),
       new_chart_key_count_(resume.state ? resume.state->data().meta.key_count : 4),
       state_(resume.state ? resume.state : std::make_shared<editor_state>()),
-      resume_state_(std::move(resume)) {
+      resume_state_(std::move(resume)),
+      settings_overlay_(g_settings) {
 }
 
 void editor_scene::on_enter() {
@@ -105,6 +108,9 @@ void editor_scene::on_enter() {
 }
 
 void editor_scene::on_exit() {
+    if (settings_overlay_active_) {
+        settings_overlay_.save();
+    }
     window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
     audio_manager::instance().stop_bgm();
     audio_manager::instance().stop_all_se();
@@ -113,6 +119,20 @@ void editor_scene::on_exit() {
 void editor_scene::update(float dt) {
     rebuild_hit_regions();
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, false, dt);
+
+    if (settings_overlay_active_) {
+        settings_overlay_.update_animation(true, dt);
+        if (settings_overlay_.closing()) {
+            if (settings_overlay_.closed()) {
+                settings_overlay_active_ = false;
+            }
+            window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
+            return;
+        }
+        settings_overlay_.update(dt);
+        window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
+        return;
+    }
 
     if ((metadata_modal_open_ || timing_modal_open_) &&
         !metadata_panel_.key_count_confirm_open &&
@@ -166,7 +186,9 @@ void editor_scene::update(float dt) {
 
     if (!has_blocking_modal() && ui::is_clicked(layout::kSettingsButtonRect)) {
         window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
-        manager_.change_scene(std::make_unique<settings_scene>(manager_, song_, build_resume_state()));
+        editor_transport_service::pause_for_seek(transport_, state_.get(), space_playback_start_tick_, hitsound_path_, &hitsounds_);
+        settings_overlay_.open();
+        settings_overlay_active_ = true;
         return;
     }
 
@@ -279,6 +301,17 @@ void editor_scene::rebuild_hit_regions() const {
 }
 
 void editor_scene::draw() {
+    if (settings_overlay_active_) {
+        settings_overlay_.prepare_current_page();
+        virtual_screen::begin_ui();
+        draw_scene_background(*g_theme);
+        settings_overlay_.draw();
+        virtual_screen::end();
+        ClearBackground(BLACK);
+        virtual_screen::draw_to_screen();
+        return;
+    }
+
     editor_screen_controller::draw_and_update({
         song_,
         *state_,
