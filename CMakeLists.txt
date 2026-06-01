@@ -501,10 +501,13 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/settings/settings_key_config_state.cpp
         src/scenes/settings/settings_key_config_state.h
         src/scenes/settings/settings_layout.h
+        src/scenes/settings/settings_page_stack.cpp
+        src/scenes/settings/settings_page_stack.h
         src/scenes/settings/settings_pages.cpp
         src/scenes/settings/settings_pages.h
         src/scenes/settings/settings_runtime_applier.cpp
         src/scenes/settings/settings_runtime_applier.h
+        src/scenes/settings/settings_shell_view.h
         src/scenes/settings_scene.cpp
         src/scenes/settings_scene.h
         src/scenes/theme.h

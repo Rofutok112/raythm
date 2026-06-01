@@ -1,6 +1,7 @@
 #include "settings_scene.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "editor_scene.h"
@@ -9,6 +10,7 @@
 #include "scene_manager.h"
 #include "settings_io.h"
 #include "settings/settings_layout.h"
+#include "settings/settings_shell_view.h"
 #include "song_select/song_select_navigation.h"
 #include "localization/localization.h"
 #include "theme.h"
@@ -18,11 +20,7 @@
 settings_scene::settings_scene(scene_manager& manager, return_target target)
     : scene(manager),
       return_target_(target),
-      gameplay_page_(g_settings),
-      audio_page_(g_settings, runtime_applier_),
-      video_page_(g_settings, runtime_applier_),
-      system_page_(g_settings, runtime_applier_),
-      key_config_page_(g_settings) {
+      pages_(g_settings) {
 }
 
 settings_scene::settings_scene(scene_manager& manager, song_data editor_song, editor_resume_state editor_resume)
@@ -32,20 +30,15 @@ settings_scene::settings_scene(scene_manager& manager, song_data editor_song, ed
 }
 
 void settings_scene::on_enter() {
-    current_page_ = settings::page_id::gameplay;
-    gameplay_page_.reset_interaction();
-    audio_page_.reset_interaction();
-    video_page_.reset_interaction();
-    system_page_.reset_interaction();
-    key_config_page_.reset();
+    pages_.reset();
 }
 
 void settings_scene::update(float dt) {
     ui::begin_hit_regions();
-    key_config_page_.tick(dt);
+    pages_.tick(dt);
 
-    if (current_page_blocks_navigation()) {
-        update_current_page();
+    if (pages_.current_page_blocks_navigation()) {
+        pages_.update_current_page();
         return;
     }
 
@@ -62,16 +55,11 @@ void settings_scene::update(float dt) {
         return;
     }
 
-    Rectangle tabs[settings::kPageCount];
-    settings::build_tab_rects(tabs);
-    for (int i = 0; i < settings::kPageCount; ++i) {
-        if (ui::is_clicked(tabs[i], settings::kLayer)) {
-            change_page(static_cast<settings::page_id>(i));
-            break;
-        }
+    if (const std::optional<settings::page_id> next_page = settings::clicked_tab_page()) {
+        pages_.change_page(*next_page);
     }
 
-    update_current_page();
+    pages_.update_current_page();
 }
 
 void settings_scene::draw() {
@@ -84,85 +72,16 @@ void settings_scene::draw() {
     ui::draw_header_block(settings::kSidebarHeaderRect, localization::tr(localization::text_key::settings),
                           localization::tr(localization::text_key::saved_on_exit));
 
-    Rectangle tabs[settings::kPageCount];
-    settings::build_tab_rects(tabs);
-    for (int i = 0; i < settings::kPageCount; ++i) {
-        const settings::page_descriptor& descriptor = settings::page_descriptor_for(static_cast<settings::page_id>(i));
-        if (static_cast<int>(current_page_) == i) {
-            ui::draw_button_colored(tabs[i], localization::tr(descriptor.navigation_label), 22,
-                                    t.row_selected, t.row_active, t.text);
-        } else {
-            ui::draw_button_colored(tabs[i], localization::tr(descriptor.navigation_label), 22,
-                                    t.row, t.row_hover, t.text_secondary);
-        }
-    }
+    settings::draw_tab_buttons(pages_.current_page());
 
     draw_marquee_text(localization::tr(localization::text_key::settings_hint_tabs), settings::kSidebarHintRect.x, settings::kSidebarHintRect.y,
                       20, t.text_muted, settings::kSidebarHintRect.width, GetTime());
     ui::draw_button(settings::kBackRect, localization::tr(localization::text_key::back), 22);
 
-    const settings::page_descriptor& descriptor = settings::page_descriptor_for(current_page_);
-    ui::draw_header_block(settings::kContentHeaderRect, localization::tr(descriptor.title),
-                          localization::tr(descriptor.subtitle));
-
-    draw_current_page();
+    settings::draw_content_header(pages_.current_page());
+    pages_.draw_current_page();
 
     virtual_screen::end();
     ClearBackground(BLACK);
     virtual_screen::draw_to_screen();
-}
-
-void settings_scene::update_current_page() {
-    switch (current_page_) {
-        case settings::page_id::gameplay:
-            gameplay_page_.update();
-            break;
-        case settings::page_id::audio:
-            audio_page_.update();
-            break;
-        case settings::page_id::video:
-            video_page_.update();
-            break;
-        case settings::page_id::system:
-            system_page_.update();
-            break;
-        case settings::page_id::key_config:
-            key_config_page_.update();
-            break;
-    }
-}
-
-void settings_scene::draw_current_page() const {
-    switch (current_page_) {
-        case settings::page_id::gameplay:
-            gameplay_page_.draw();
-            break;
-        case settings::page_id::audio:
-            audio_page_.draw();
-            break;
-        case settings::page_id::video:
-            video_page_.draw();
-            break;
-        case settings::page_id::system:
-            system_page_.draw();
-            break;
-        case settings::page_id::key_config:
-            key_config_page_.draw();
-            break;
-    }
-}
-
-void settings_scene::change_page(settings::page_id next_page) {
-    gameplay_page_.reset_interaction();
-    audio_page_.reset_interaction();
-    video_page_.reset_interaction();
-    system_page_.reset_interaction();
-    if (current_page_ == settings::page_id::key_config && next_page != settings::page_id::key_config) {
-        key_config_page_.clear_selection();
-    }
-    current_page_ = next_page;
-}
-
-bool settings_scene::current_page_blocks_navigation() const {
-    return current_page_ == settings::page_id::key_config && key_config_page_.blocks_navigation();
 }

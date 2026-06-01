@@ -4,8 +4,7 @@
 #include <optional>
 
 #include "scene.h"
-#include "settings/settings_layout.h"
-#include "settings/settings_pages.h"
+#include "settings/settings_page_stack.h"
 #include "song_loader.h"
 
 struct editor_resume_state;
@@ -23,19 +22,8 @@ public:
     void draw() override;
 
 private:
-    void update_current_page();
-    void draw_current_page() const;
-    void change_page(settings::page_id next_page);
-    [[nodiscard]] bool current_page_blocks_navigation() const;
-
-    settings::page_id current_page_ = settings::page_id::gameplay;
     return_target return_target_ = return_target::title;
     std::optional<song_data> editor_song_;
     std::shared_ptr<editor_resume_state> editor_resume_;
-    settings_runtime_applier runtime_applier_;
-    settings_gameplay_page gameplay_page_;
-    settings_audio_page audio_page_;
-    settings_video_page video_page_;
-    settings_system_page system_page_;
-    settings_key_config_page key_config_page_;
+    settings_page_stack pages_;
 };
