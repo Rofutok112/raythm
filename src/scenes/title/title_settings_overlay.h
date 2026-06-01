@@ -10,6 +10,7 @@ public:
     void open();
     void save();
     void request_close();
+    void prepare_current_page();
     void update_animation(bool active, float dt);
     void update(float dt);
     void draw() const;

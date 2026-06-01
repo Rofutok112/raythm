@@ -935,7 +935,7 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
                                       note_state.note_ref.is_ray);
                     } else {
                         draw_tap_slab(center_x, head_z, body_width,
-                                      kTapNoteBaseLength * g_settings.note_height,
+                                      kTapNoteBaseLength * state.note_height,
                                       note_color_for_type,
                                       note_state.note_ref.type == note_type::release,
                                       note_state.note_ref.is_ray);

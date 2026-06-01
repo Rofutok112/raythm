@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game_settings.h"
+#include "settings/settings_gameplay_preview.h"
 #include "settings/settings_key_config_state.h"
 #include "settings/settings_runtime_applier.h"
 
@@ -9,6 +10,7 @@ public:
     explicit settings_gameplay_page(game_settings& settings);
 
     void reset_interaction();
+    void prepare_frame();
     void update();
     void draw() const;
 
@@ -16,6 +18,7 @@ private:
     enum class slider { none, note_speed, camera_angle, lane_width, note_height, lane_fog };
 
     game_settings& settings_;
+    settings_gameplay_preview preview_;
     slider active_slider_ = slider::none;
 };
 

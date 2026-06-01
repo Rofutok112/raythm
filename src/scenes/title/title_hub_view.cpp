@@ -108,6 +108,10 @@ draw_result draw(draw_context context) {
         .now = GetTime(),
     };
 
+    if (context.view.current_mode == mode::settings) {
+        context.settings_overlay.prepare_current_page();
+    }
+
     virtual_screen::begin_ui();
     draw_scene_background(t);
     ui::begin_draw_queue();

@@ -64,6 +64,8 @@ void settings_scene::update(float dt) {
 
 void settings_scene::draw() {
     const auto& t = *g_theme;
+    pages_.prepare_current_page();
+
     virtual_screen::begin_ui();
     draw_scene_background(t);
     ui::draw_panel(settings::kSidebarRect);

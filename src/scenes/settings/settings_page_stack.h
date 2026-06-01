@@ -10,6 +10,7 @@ public:
 
     void reset();
     void tick(float dt);
+    void prepare_current_page();
     void update_current_page();
     void draw_current_page() const;
     void change_page(settings::page_id next_page);

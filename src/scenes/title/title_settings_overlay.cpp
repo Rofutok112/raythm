@@ -90,6 +90,14 @@ void title_settings_overlay::request_close() {
     closing_ = true;
 }
 
+void title_settings_overlay::prepare_current_page() {
+    const ui_theme* previous_theme = g_theme;
+    ui_theme overlay_theme = make_overlay_theme(*previous_theme, tween::ease_out_cubic(animation_));
+    g_theme = &overlay_theme;
+    pages_.prepare_current_page();
+    g_theme = previous_theme;
+}
+
 void title_settings_overlay::update_animation(bool active, float dt) {
     if (!active) {
         animation_ = 0.0f;

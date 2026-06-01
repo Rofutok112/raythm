@@ -18,6 +18,12 @@ void settings_page_stack::tick(float dt) {
     key_config_page_.tick(dt);
 }
 
+void settings_page_stack::prepare_current_page() {
+    if (current_page_ == settings::page_id::gameplay) {
+        gameplay_page_.prepare_frame();
+    }
+}
+
 void settings_page_stack::update_current_page() {
     switch (current_page_) {
         case settings::page_id::gameplay:
