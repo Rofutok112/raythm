@@ -974,7 +974,10 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
                     if (note_has_duration(note_state.note_ref)) {
                         const double tail_target_ms = draw_queue.visual_end_target_ms(idx);
                         const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_time_ms));
-                        const float visual_head_z = note_state.is_holding() ? judgement_z : head_z;
+                        const bool clips_at_judge_line =
+                            note_state.is_holding() ||
+                            (note_is_visual_only(note_state.note_ref) && head_z < judgement_z);
+                        const float visual_head_z = clips_at_judge_line ? judgement_z : head_z;
                         const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);
                         const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);
                         if (segment_end > segment_start) {

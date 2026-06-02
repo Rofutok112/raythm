@@ -11,6 +11,7 @@
 #include "editor_scene_sync.h"
 #include "editor_transport_controller.h"
 #include "game_settings.h"
+#include "managed_content_storage.h"
 #include "path_utils.h"
 
 namespace {
@@ -169,18 +170,35 @@ editor_session_load_result load(const editor_start_request& request) {
 
     audio_manager& audio = audio_manager::instance();
     const std::filesystem::path audio_path = path_utils::join_utf8(request.song.directory, request.song.meta.audio_file);
-    if (std::filesystem::exists(audio_path) && audio.load_bgm(path_utils::to_utf8(audio_path))) {
-        audio.set_bgm_volume(g_settings.bgm_volume);
-        result.audio_loaded = true;
+    const managed_content_storage::managed_file_read_result managed_audio =
+        managed_content_storage::read_managed_file(audio_path);
+    if (managed_audio.managed) {
+        if (managed_audio.success) {
+            result.waveform_summary = audio_waveform::build_from_memory(managed_audio.bytes);
+            if (audio.load_bgm_from_memory(managed_audio.bytes)) {
+                audio.set_bgm_volume(g_settings.bgm_volume);
+                result.audio_loaded = true;
+            } else {
+                result.load_errors.push_back("Failed to load audio preview.");
+            }
+        } else {
+            result.load_errors.push_back(
+                managed_audio.error_message.empty()
+                    ? "Failed to load managed audio."
+                    : managed_audio.error_message);
+        }
+    } else if (std::filesystem::exists(audio_path)) {
+        if (audio.load_bgm(path_utils::to_utf8(audio_path))) {
+            audio.set_bgm_volume(g_settings.bgm_volume);
+            result.audio_loaded = true;
+        }
+        result.waveform_summary = audio_waveform::build(path_utils::to_utf8(audio_path));
     }
 
-    if (std::filesystem::exists(audio_path)) {
-        result.waveform_summary = audio_waveform::build(path_utils::to_utf8(audio_path));
-        if (result.waveform_summary.length_seconds > 0.0) {
-            result.audio_length_tick = std::max(
-                result.audio_length_tick,
-                result.state->engine().ms_to_tick(result.waveform_summary.length_seconds * 1000.0));
-        }
+    if (result.waveform_summary.length_seconds > 0.0) {
+        result.audio_length_tick = std::max(
+            result.audio_length_tick,
+            result.state->engine().ms_to_tick(result.waveform_summary.length_seconds * 1000.0));
     }
 
     result.hitsounds = load_hitsound_paths();
