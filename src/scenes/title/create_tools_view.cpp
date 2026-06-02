@@ -72,7 +72,6 @@ void apply_action(title_play_view::update_result& result, title_create_tools_mod
     case title_create_tools_model::action::export_chart: result.export_chart_requested = true; break;
     case title_create_tools_model::action::upload_chart: result.upload_chart_requested = true; break;
     case title_create_tools_model::action::edit_mv: result.edit_mv_requested = true; break;
-    case title_create_tools_model::action::manage_library: result.manage_library_requested = true; break;
     }
 }
 

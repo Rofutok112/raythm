@@ -516,8 +516,7 @@ title_play_view::update_result update(song_select::state& state,
             create_result.import_chart_requested ||
             create_result.export_chart_requested ||
             create_result.upload_chart_requested ||
-            create_result.edit_mv_requested ||
-            create_result.manage_library_requested) {
+            create_result.edit_mv_requested) {
             return create_result;
         }
     }

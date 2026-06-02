@@ -484,9 +484,6 @@ bool audio_manager::request_preview_load(const std::string& file_path) {
         stale_preview_load_futures_.push_back(std::move(preview_load_future_));
     }
 
-    stop_voice(preview_handle_);
-    free_voice(preview_handle_);
-    preview_memory_.clear();
     reset_preview_fade();
     preview_loading_ = true;
     const std::string source = file_path;
@@ -519,9 +516,6 @@ bool audio_manager::request_preview_load_from_memory(std::vector<unsigned char> 
         stale_preview_load_futures_.push_back(std::move(preview_load_future_));
     }
 
-    stop_voice(preview_handle_);
-    free_voice(preview_handle_);
-    preview_memory_.clear();
     reset_preview_fade();
     preview_loading_ = true;
     preview_path_.clear();
@@ -582,11 +576,20 @@ audio_manager::async_preview_load_result audio_manager::poll_preview_load() {
     free_voice(preview_handle_);
     preview_handle_ = loaded.handle;
     preview_memory_ = std::move(loaded.memory);
-    preview_loudness_ = preview_path_.empty() ? audio_loudness_analysis{} : analyze_or_get_cached_loudness(preview_path_);
+    preview_loudness_ = {};
     reset_preview_fade();
     apply_preview_volume();
     result.loaded = is_voice_loaded(preview_handle_);
     return result;
+}
+
+void audio_manager::cancel_preview_load_request() {
+    ++preview_load_generation_;
+    active_preview_load_generation_ = preview_load_generation_;
+    if (preview_load_future_.valid()) {
+        stale_preview_load_futures_.push_back(std::move(preview_load_future_));
+    }
+    preview_loading_ = false;
 }
 
 bool audio_manager::is_preview_loading() const {

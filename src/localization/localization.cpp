@@ -176,7 +176,6 @@ constexpr literal_translation kLiteralTranslations[] = {
     {"OFFICIAL CHART", "公式譜面"},
     {"COMMUNITY CHART", "コミュニティ譜面"},
     {"MV EDITOR", "MV エディタ"},
-    {"LIBRARY", "ライブラリ"},
     {"Song", "曲"},
     {"Chart", "譜面"},
     {"More", "その他"},

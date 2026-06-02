@@ -7,7 +7,6 @@
 #include "mv_editor_scene.h"
 #include "play_scene.h"
 #include "song_create_scene.h"
-#include "song_select_scene.h"
 #include "song_select/song_select_last_played.h"
 #include "title_scene.h"
 
@@ -60,19 +59,6 @@ std::unique_ptr<scene> make_multiplayer_title_scene(scene_manager& manager,
         false,
         std::move(room_id),
         true);
-}
-
-std::unique_ptr<scene> make_legacy_song_select_scene(scene_manager& manager,
-                                                     std::string preferred_song_id,
-                                                     std::string preferred_chart_id,
-                                                     std::optional<recent_result_offset> recent_result_offset,
-                                                     bool open_login_dialog_on_enter) {
-    return std::make_unique<song_select_scene>(
-        manager,
-        std::move(preferred_song_id),
-        std::move(preferred_chart_id),
-        std::move(recent_result_offset),
-        open_login_dialog_on_enter);
 }
 
 std::unique_ptr<scene> make_settings_scene(scene_manager& manager) {

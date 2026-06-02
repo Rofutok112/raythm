@@ -27,8 +27,7 @@ void title_create_mode_controller::update(scene_manager& manager,
         result.upload_chart_requested ||
         result.import_chart_requested ||
         result.export_chart_requested ||
-        result.edit_mv_requested ||
-        result.manage_library_requested;
+        result.edit_mv_requested;
 
     if (result.back_requested) {
         callbacks.enter_home();
@@ -122,15 +121,6 @@ void title_create_mode_controller::update(scene_manager& manager,
     }
     if (result.edit_mv_requested && song != nullptr) {
         manager.change_scene(song_select::make_mv_editor_scene(manager, *song));
-        return;
-    }
-    if (result.manage_library_requested) {
-        manager.change_scene(song_select::make_legacy_song_select_scene(
-            manager,
-            song != nullptr ? song->song.meta.song_id : "",
-            chart != nullptr ? chart->meta.chart_id : "",
-            std::nullopt,
-            false));
         return;
     }
 }

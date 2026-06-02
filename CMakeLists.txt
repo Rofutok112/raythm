@@ -402,25 +402,19 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_transfer_controller.h
         src/scenes/song_select/song_select_last_played.cpp
         src/scenes/song_select/song_select_last_played.h
+        src/scenes/song_select/song_preview_audio_loader.cpp
+        src/scenes/song_select/song_preview_audio_loader.h
         src/scenes/song_select/song_preview_controller.cpp
         src/scenes/song_select/song_preview_controller.h
-        src/scenes/song_select/song_select_detail_view.cpp
-        src/scenes/song_select/song_select_detail_view.h
         src/scenes/song_select/song_select_layout.h
         src/scenes/song_select/song_select_login_dialog.cpp
         src/scenes/song_select/song_select_login_dialog.h
-        src/scenes/song_select/song_select_list_view.cpp
-        src/scenes/song_select/song_select_list_view.h
         src/scenes/song_select/song_select_navigation.cpp
         src/scenes/song_select/song_select_navigation.h
         src/scenes/song_select/song_select_overlay_view.cpp
         src/scenes/song_select/song_select_overlay_view.h
-        src/scenes/song_select/song_select_ranking_view.cpp
-        src/scenes/song_select/song_select_ranking_view.h
         src/scenes/song_select/song_select_state.cpp
         src/scenes/song_select/song_select_state.h
-        src/scenes/song_select_scene.cpp
-        src/scenes/song_select_scene.h
         src/scenes/editor/controller/editor_runtime_controller.cpp
         src/scenes/editor/controller/editor_runtime_controller.h
         src/scenes/editor/controller/editor_screen_controller.cpp

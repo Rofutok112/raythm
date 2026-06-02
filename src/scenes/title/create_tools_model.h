@@ -21,7 +21,6 @@ enum class action {
     export_chart,
     upload_chart,
     edit_mv,
-    manage_library,
 };
 
 struct entry {
@@ -65,4 +64,3 @@ view_model build(const build_context& context);
 bool action_enabled(const view_model& model, action command);
 
 }  // namespace title_create_tools_model
-

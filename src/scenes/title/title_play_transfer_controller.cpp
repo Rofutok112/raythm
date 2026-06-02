@@ -8,7 +8,24 @@
 #include "song_select/song_import_export_service.h"
 #include "song_select/song_select_command_controller.h"
 #include "song_select/song_select_confirmation_dialog.h"
-#include "song_select/song_select_detail_view.h"
+#include "song_select/song_select_layout.h"
+#include "theme.h"
+#include "ui_draw.h"
+
+namespace {
+
+void draw_busy_overlay(const std::string& message) {
+    const auto& theme = *g_theme;
+    ui::draw_fullscreen_overlay(Color{0, 0, 0, 120});
+    const Rectangle panel = ui::place(song_select::layout::kScreenRect, 420.0f, 96.0f,
+                                      ui::anchor::center, ui::anchor::center);
+    ui::draw_panel(panel);
+    ui::draw_text_in_rect(message.c_str(), 22,
+                          {panel.x + 24.0f, panel.y + 18.0f, panel.width - 48.0f, panel.height - 36.0f},
+                          theme.text, ui::text_align::center);
+}
+
+}  // namespace
 
 void title_play_transfer_controller::on_exit() {
     transfer_controller_.on_exit();
@@ -95,7 +112,7 @@ void title_play_transfer_controller::draw_or_apply_confirmation(
     const catalog_callbacks& callbacks,
     bool sync_media_on_reload) {
     if (transfer_controller_.busy()) {
-        song_select::draw_busy_overlay(transfer_controller_.busy_label());
+        draw_busy_overlay(transfer_controller_.busy_label());
         return;
     }
 

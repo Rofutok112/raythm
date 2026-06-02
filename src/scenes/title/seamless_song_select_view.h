@@ -76,7 +76,6 @@ struct update_result {
     bool import_chart_requested = false;
     bool export_chart_requested = false;
     bool edit_mv_requested = false;
-    bool manage_library_requested = false;
     bool update_song_requested = false;
     bool update_chart_requested = false;
 };

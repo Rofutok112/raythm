@@ -307,7 +307,6 @@ view_model build(const build_context& context) {
             "More",
             {
                 {"MV EDITOR", "Visuals", action::edit_mv, song_selected, false},
-                {"LIBRARY", "Classic tools", action::manage_library, true, false},
             },
         },
     };
