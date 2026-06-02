@@ -26,6 +26,10 @@ constexpr int kSongPageSize = 12;
 constexpr int kChartPageSize = 8;
 constexpr int kDiscoveryShelfSize = 12;
 
+}  // namespace
+
+namespace detail {
+
 content_status source_status_from_remote(const std::string& content_source) {
     return content_source == "official" ? content_status::official : content_status::community;
 }
@@ -74,6 +78,15 @@ song_select::song_entry make_remote_song_entry(const remote_song_payload& song, 
     entry.song.directory.clear();
     return entry;
 }
+
+}  // namespace detail
+
+namespace {
+
+using detail::content_kind_from_remote;
+using detail::make_remote_song_entry;
+using detail::online_source_from_remote;
+using detail::source_status_from_remote;
 
 song_entry_state build_song_state(const remote_song_payload& remote_song,
                                   const std::string& server_url,

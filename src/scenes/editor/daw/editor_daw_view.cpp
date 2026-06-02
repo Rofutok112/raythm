@@ -452,7 +452,7 @@ struct timeline_note_cache {
 
 const std::vector<editor_timeline_note>* cached_minimap_notes(const editor_state& state) {
     static timeline_note_cache cache;
-    const size_t generation = state.level_refresh_generation();
+    const size_t generation = state.revision_generation();
     if (cache.state != &state || cache.generation != generation) {
         cache.state = &state;
         cache.generation = generation;
@@ -500,7 +500,7 @@ editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_m
         std::move(scroll_automation),
         std::move(notes),
         cached_minimap_notes(model.state),
-        model.state.level_refresh_generation(),
+        model.state.revision_generation(),
         model.selected_note_indices,
         model.selected_scroll_event_index,
         model.audio_loaded ? std::optional<int>(model.playback_tick) : std::nullopt,

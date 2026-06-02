@@ -442,6 +442,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/editor_scene_types.h
         src/scenes/editor/editor_session_loader.cpp
         src/scenes/editor/editor_session_loader.h
+        src/scenes/editor/service/editor_chart_load_service.cpp
+        src/scenes/editor/service/editor_chart_load_service.h
         src/scenes/editor/service/editor_chart_identity_service.cpp
         src/scenes/editor/service/editor_chart_identity_service.h
         src/scenes/editor/service/editor_metadata_service.cpp
@@ -811,6 +813,8 @@ add_executable(managed_content_storage_smoke
         src/network/json_helpers.h
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
+        src/scenes/editor/service/editor_chart_load_service.cpp
+        src/scenes/editor/service/editor_chart_load_service.h
         src/scenes/song_select/local_catalog_cache_service.cpp
         src/scenes/song_select/local_catalog_cache_service.h
         src/scenes/song_select/local_catalog_database.cpp

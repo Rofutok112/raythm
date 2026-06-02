@@ -56,6 +56,7 @@ void title_play_create_feature::on_exit() {
 void title_play_create_feature::on_enter_play(bool multiplayer_chart_pick_active,
                                              const std::string& multiplayer_server_url,
                                              song_select::preview_controller& preview_controller) {
+    state_.filter.include_chartless_songs = false;
     state_.ranking_panel.selected_source = ranking_source_for_current_selection(state_);
     state_.filter.multiplayer_queueable_only = multiplayer_chart_pick_active;
     state_.filter.multiplayer_queue_server_url = multiplayer_chart_pick_active ? multiplayer_server_url : "";
@@ -63,6 +64,7 @@ void title_play_create_feature::on_enter_play(bool multiplayer_chart_pick_active
 }
 
 void title_play_create_feature::on_enter_create(song_select::preview_controller& preview_controller) {
+    state_.filter.include_chartless_songs = true;
     capture_current_selection();
     refresh_create_tools_model(true);
     sync_create_preview(preview_controller);
@@ -154,6 +156,7 @@ void title_play_create_feature::update_play(scene_manager& manager,
                                             Rectangle origin_rect,
                                             float dt,
                                             const play_update_callbacks& callbacks) {
+    state_.filter.include_chartless_songs = false;
     title_play_mode_controller::update(
         manager,
         state_,
@@ -190,6 +193,7 @@ void title_play_create_feature::update_create(scene_manager& manager,
                                               float dt,
                                               const cross_callbacks& cross,
                                               const create_update_callbacks& callbacks) {
+    state_.filter.include_chartless_songs = true;
     refresh_create_tools_model();
     title_create_mode_controller::update(
         manager,

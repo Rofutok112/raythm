@@ -15,6 +15,7 @@ public:
     void on_exit();
     void update();
     void suspend();
+    void suspend_immediate();
     void resume();
     void restart();
 

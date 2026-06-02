@@ -6,12 +6,14 @@
 #include "shared/auth_overlay_controller.h"
 #include "shared/scene_fade.h"
 #include "song_select/song_select_state.h"
+#include "title/local_content_index.h"
 #include "title/title_audio_controller.h"
 #include "title/title_browse_feature.h"
 #include "title/title_play_create_feature.h"
 #include "title/title_profile_controller.h"
 #include "title/title_settings_overlay.h"
 #include "title/title_startup_controller.h"
+#include <future>
 #include <optional>
 #include <string>
 #include <vector>
@@ -67,9 +69,13 @@ private:
     void update_play_mode(float dt);
     bool return_to_multiplayer_room(bool queue_selected_chart);
     bool add_selected_chart_to_multiplayer_room();
+    const multiplayer::room_queue_item* multiplayer_queue_preview_item() const;
     const song_select::song_entry* multiplayer_queue_preview_song() const;
+    const song_select::song_entry* multiplayer_remote_queue_preview_song(const multiplayer::room_queue_item& item);
+    void reset_multiplayer_remote_preview();
     void update_multiplayer_audio(float dt);
     void update_multiplayer_mode(float dt);
+    void refresh_multiplayer_local_index();
     void update_online_mode(float dt);
     void update_create_mode(float dt);
     void update_settings_mode(float dt);
@@ -107,6 +113,11 @@ private:
     bool start_in_settings_view_ = false;
     bool multiplayer_chart_pick_active_ = false;
     bool queue_selected_chart_on_multiplayer_return_ = false;
+    std::string multiplayer_preview_song_id_;
+    local_content_index::snapshot multiplayer_local_index_;
+    std::string multiplayer_remote_preview_key_;
+    std::optional<song_select::song_entry> multiplayer_remote_preview_song_;
+    std::future<std::optional<song_select::song_entry>> multiplayer_remote_preview_future_;
     title_startup_controller::state startup_;
     bool suppress_home_pointer_until_release_ = false;
     hub_mode mode_ = hub_mode::title;

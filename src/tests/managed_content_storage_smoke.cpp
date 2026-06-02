@@ -12,6 +12,7 @@
 
 #include "app_paths.h"
 #include "chart_serializer.h"
+#include "editor/service/editor_chart_load_service.h"
 #include "local_catalog_signature.h"
 #include "mv/mv_storage.h"
 #include "path_utils.h"
@@ -220,6 +221,12 @@ int main() {
     assert(stored_manifest->charts.front().remote_chart_hash == "remote-chart-sha");
     assert(stored_manifest->charts.front().remote_chart_fingerprint == "remote-chart-fingerprint");
     assert(!stored_manifest->charts.front().encrypted_chart.ciphertext_hash.empty());
+
+    const chart_parse_result editor_loaded_chart = editor_chart_load_service::load_chart(
+        path_utils::to_utf8(managed_content_storage::chart_file_path(managed_song_dir, managed_chart_id)));
+    assert(editor_loaded_chart.success);
+    assert(editor_loaded_chart.data.has_value());
+    assert(editor_loaded_chart.data->meta.chart_id == managed_chart_id);
 
     const managed_content_storage::managed_file_read_result decrypted_song_json =
         managed_content_storage::read_managed_file(managed_song_dir / "song.json");

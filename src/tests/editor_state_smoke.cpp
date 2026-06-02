@@ -38,6 +38,7 @@ chart_data make_chart() {
 
 int main() {
     editor_state state(make_chart(), "assets/charts/editor_state.rchart");
+    const size_t loaded_revision = state.revision_generation();
 
     if (state.is_dirty()) {
         std::cerr << "freshly loaded state should not be dirty\n";
@@ -52,6 +53,21 @@ int main() {
         std::cerr << "initial timing engine state is invalid\n";
         return EXIT_FAILURE;
     }
+
+    chart_data reloaded_chart = make_chart();
+    reloaded_chart.meta.chart_id = "editor-state-reloaded";
+    reloaded_chart.notes = {
+        {note_type::tap, 720, 3, 720},
+    };
+    state.load(reloaded_chart, "assets/charts/editor_state_reloaded.rchart");
+    if (state.revision_generation() == loaded_revision ||
+        state.data().meta.chart_id != "editor-state-reloaded" ||
+        state.note_indices_in_tick_range(0, 100).size() != 0 ||
+        state.note_indices_in_tick_range(700, 740).size() != 1) {
+        std::cerr << "load should advance editor revision and invalidate cached note views\n";
+        return EXIT_FAILURE;
+    }
+    state.load(make_chart(), "assets/charts/editor_state.rchart");
 
     if (state.snap_tick(119, 16) != 120 || state.snap_tick(421, 8) != 480) {
         std::cerr << "snap_tick did not round to the expected grid\n";

@@ -223,6 +223,7 @@ struct selection_state {
 struct filter_state {
     ui::text_input_state play_search_input;
     chart_source_filter chart_source = chart_source_filter::all;
+    bool include_chartless_songs = false;
     bool play_filter_modal_open = false;
     bool play_mod_modal_open = false;
     play_mods mods;

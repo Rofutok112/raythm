@@ -377,6 +377,12 @@ bool chart_matches_search(const chart_option& chart, const std::string& query) {
            contains_case_insensitive(chart.meta.chart_author, query);
 }
 
+bool song_has_visible_chart(const state& state, const song_entry& song) {
+    return std::any_of(song.charts.begin(), song.charts.end(), [&](const chart_option& chart) {
+        return chart_matches_filters(state, chart);
+    });
+}
+
 std::vector<int> filtered_song_indices(const state& state) {
     std::vector<int> indices;
     indices.reserve(state.songs.size());
@@ -385,9 +391,8 @@ std::vector<int> filtered_song_indices(const state& state) {
         if (!song_matches_search(song, state.play_search_input.value)) {
             continue;
         }
-        if (std::any_of(song.charts.begin(), song.charts.end(), [&](const chart_option& chart) {
-                return chart_matches_filters(state, chart);
-            })) {
+        if (song_has_visible_chart(state, song) ||
+            (state.filter.include_chartless_songs && song.charts.empty())) {
             indices.push_back(song_index);
         }
     }
@@ -441,6 +446,7 @@ void reset_for_enter(state& state) {
     state.selected_song_expand_t = 1.0f;
     state.play_search_input = {};
     state.chart_source = chart_source_filter::all;
+    state.filter.include_chartless_songs = false;
     state.play_filter_modal_open = false;
     state.play_mod_modal_open = false;
     state.mods = {};

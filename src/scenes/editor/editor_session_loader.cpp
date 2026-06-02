@@ -6,8 +6,8 @@
 #include "app_paths.h"
 #include "audio_manager.h"
 #include "audio_waveform.h"
-#include "chart_parser.h"
 #include "editor/service/editor_chart_identity_service.h"
+#include "editor/service/editor_chart_load_service.h"
 #include "editor_scene_sync.h"
 #include "editor_transport_controller.h"
 #include "game_settings.h"
@@ -128,7 +128,7 @@ editor_session_load_result load(const editor_start_request& request) {
             ? std::nullopt
             : std::optional<std::string>(result.state->file_path());
     } else if (request.chart_path.has_value()) {
-        const chart_parse_result parse_result = chart_parser::parse(*request.chart_path);
+        const chart_parse_result parse_result = editor_chart_load_service::load_chart(*request.chart_path);
         if (parse_result.success && parse_result.data.has_value()) {
             chart_data loaded_chart = *parse_result.data;
             loaded_chart.meta.song_id = request.song.meta.song_id;

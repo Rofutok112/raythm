@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "raylib.h"
+#include "title/online_download_remote_client.h"
 #include "title/online_download_view.h"
 
 namespace title_online_view::detail {
@@ -57,5 +58,6 @@ bool can_download_chart(const song_entry_state& song, const chart_entry_state& c
 const char* catalog_caption(const state& state, const std::vector<song_entry_state>& songs);
 std::string format_time_label(double seconds);
 double preview_display_length_seconds(const song_entry_state& song);
+song_select::song_entry make_remote_song_entry(const remote_song_payload& song, const std::string& server_url);
 
 }  // namespace title_online_view::detail

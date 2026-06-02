@@ -55,6 +55,28 @@ void title_audio_controller::update_preview_only(const song_select::song_entry* 
     spectrum_visualizer_.update(current_state_.spectrum, dt);
 }
 
+void title_audio_controller::update_multiplayer_preview(const song_select::song_entry* selected_song, float dt) {
+    if (selected_song != nullptr) {
+        preview_controller_.update(dt, selected_song);
+    } else if (preview_controller_.is_audio_active()) {
+        preview_controller_.stop();
+    }
+
+    const bool preview_active = preview_controller_.is_audio_active();
+    current_state_ = {
+        .music = preview_active
+            ? title_audio_policy::music_source::preview_song
+            : title_audio_policy::music_source::theme_song,
+        .spectrum = preview_active
+            ? title_spectrum_visualizer::source::preview
+            : title_spectrum_visualizer::source::bgm,
+        .update_preview = selected_song != nullptr,
+    };
+    bgm_controller_.suspend_immediate();
+    bgm_controller_.update();
+    spectrum_visualizer_.update(current_state_.spectrum, dt);
+}
+
 void title_audio_controller::draw_spectrum(const Rectangle& rect, float alpha_scale) const {
     spectrum_visualizer_.draw(rect, alpha_scale);
 }

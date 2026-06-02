@@ -101,7 +101,33 @@ constexpr float kDamageVignetteMaxAlpha = 86.0f;
 constexpr float kLaneCoverEdgeFadeRatio = 0.085f;
 constexpr float kLaneCoverMinEdgeFadeHeight = 36.0f;
 constexpr float kLaneCoverMaxEdgeFadeHeight = 126.0f;
-constexpr int kLaneCoverFadeSteps = 18;
+constexpr int kLaneCoverFallbackFadeSteps = 18;
+
+constexpr const char* kLaneLayerFadeFragmentShader = R"(
+#version 330
+
+in vec2 fragTexCoord;
+in vec4 fragColor;
+
+uniform sampler2D texture0;
+uniform vec4 colDiffuse;
+uniform float hiddenEndY;
+uniform float fadeEndY;
+uniform float screenHeight;
+
+out vec4 finalColor;
+
+void main()
+{
+    vec4 texel = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
+    float screenY = (1.0 - fragTexCoord.y) * screenHeight;
+    float alpha = smoothstep(hiddenEndY, fadeEndY, screenY);
+    finalColor = vec4(texel.rgb, texel.a * alpha);
+}
+)";
+
+Shader g_lane_layer_fade_shader = {};
+bool g_lane_layer_fade_shader_loaded = false;
 
 float lane_total_width(int key_count, float lane_width) {
     return key_count * lane_width + (key_count - 1) * kLaneGap;
@@ -608,6 +634,34 @@ void draw_lane_layer_texture(const Texture2D& texture, Color tint) {
     DrawTexturePro(texture, source, dest, {0.0f, 0.0f}, 0.0f, tint);
 }
 
+void draw_lane_layer_texture_scissor_fade(const Texture2D& texture, float hidden_end_y, float fade_end_y) {
+    const int full_y = static_cast<int>(std::ceil(fade_end_y));
+    if (full_y < kScreenHeight) {
+        BeginScissorMode(0, full_y, kScreenWidth, kScreenHeight - full_y);
+        draw_lane_layer_texture(texture, WHITE);
+        EndScissorMode();
+    }
+
+    if (fade_end_y <= hidden_end_y) {
+        return;
+    }
+
+    for (int step = 0; step < kLaneCoverFallbackFadeSteps; ++step) {
+        const float t0 = static_cast<float>(step) / static_cast<float>(kLaneCoverFallbackFadeSteps);
+        const float t1 = static_cast<float>(step + 1) / static_cast<float>(kLaneCoverFallbackFadeSteps);
+        const float y0 = hidden_end_y + (fade_end_y - hidden_end_y) * t0;
+        const float y1 = hidden_end_y + (fade_end_y - hidden_end_y) * t1;
+        const int scissor_y = static_cast<int>(std::floor(y0));
+        const int scissor_bottom = static_cast<int>(std::ceil(y1));
+        const int scissor_height = std::max(1, scissor_bottom - scissor_y);
+        const float alpha_t = std::clamp((t0 + t1) * 0.5f, 0.0f, 1.0f);
+        const unsigned char alpha = static_cast<unsigned char>(255.0f * alpha_t * alpha_t);
+        BeginScissorMode(0, scissor_y, kScreenWidth, scissor_height);
+        draw_lane_layer_texture(texture, with_alpha(WHITE, alpha));
+        EndScissorMode();
+    }
+}
+
 const char* judge_text(const judge_event& event) {
     if (event.feedback_label == judge_feedback_label::auto_play) {
         return "AUTO";
@@ -1024,34 +1078,41 @@ void draw_lane_layer(const Texture2D& lane_layer_texture, float hidden_percent) 
         draw_lane_layer_texture(lane_layer_texture, WHITE);
         return;
     }
-
-    const float fade_height = lane_cover_fade_height();
-    const float fade_end_y = std::min(static_cast<float>(kScreenHeight), hidden_end_y + fade_height);
-    const int full_y = static_cast<int>(std::ceil(fade_end_y));
-    if (full_y < kScreenHeight) {
-        BeginScissorMode(0, full_y, kScreenWidth, kScreenHeight - full_y);
-        draw_lane_layer_texture(lane_layer_texture, WHITE);
-        EndScissorMode();
-    }
-
-    if (hidden_end_y >= static_cast<float>(kScreenHeight) || fade_end_y <= hidden_end_y) {
+    if (hidden_end_y >= static_cast<float>(kScreenHeight)) {
         return;
     }
 
-    for (int step = 0; step < kLaneCoverFadeSteps; ++step) {
-        const float t0 = static_cast<float>(step) / static_cast<float>(kLaneCoverFadeSteps);
-        const float t1 = static_cast<float>(step + 1) / static_cast<float>(kLaneCoverFadeSteps);
-        const float y0 = hidden_end_y + (fade_end_y - hidden_end_y) * t0;
-        const float y1 = hidden_end_y + (fade_end_y - hidden_end_y) * t1;
-        const int scissor_y = static_cast<int>(std::floor(y0));
-        const int scissor_bottom = static_cast<int>(std::ceil(y1));
-        const int scissor_height = std::max(1, scissor_bottom - scissor_y);
-        const float alpha_t = std::clamp((t0 + t1) * 0.5f, 0.0f, 1.0f);
-        const unsigned char alpha = static_cast<unsigned char>(255.0f * alpha_t * alpha_t);
-        BeginScissorMode(0, scissor_y, kScreenWidth, scissor_height);
-        draw_lane_layer_texture(lane_layer_texture, with_alpha(WHITE, alpha));
-        EndScissorMode();
+    const float fade_height = lane_cover_fade_height();
+    const float fade_end_y = std::min(static_cast<float>(kScreenHeight), hidden_end_y + fade_height);
+
+    if (!g_lane_layer_fade_shader_loaded) {
+        g_lane_layer_fade_shader = LoadShaderFromMemory(nullptr, kLaneLayerFadeFragmentShader);
+        g_lane_layer_fade_shader_loaded = g_lane_layer_fade_shader.id > 0;
     }
+    if (!g_lane_layer_fade_shader_loaded) {
+        draw_lane_layer_texture_scissor_fade(lane_layer_texture, hidden_end_y, fade_end_y);
+        return;
+    }
+
+    float hidden_uniform = hidden_end_y;
+    float fade_uniform = fade_end_y;
+    float screen_height_uniform = static_cast<float>(kScreenHeight);
+    SetShaderValue(g_lane_layer_fade_shader,
+                   GetShaderLocation(g_lane_layer_fade_shader, "hiddenEndY"),
+                   &hidden_uniform,
+                   SHADER_UNIFORM_FLOAT);
+    SetShaderValue(g_lane_layer_fade_shader,
+                   GetShaderLocation(g_lane_layer_fade_shader, "fadeEndY"),
+                   &fade_uniform,
+                   SHADER_UNIFORM_FLOAT);
+    SetShaderValue(g_lane_layer_fade_shader,
+                   GetShaderLocation(g_lane_layer_fade_shader, "screenHeight"),
+                   &screen_height_uniform,
+                   SHADER_UNIFORM_FLOAT);
+
+    BeginShaderMode(g_lane_layer_fade_shader);
+    draw_lane_layer_texture(lane_layer_texture, WHITE);
+    EndShaderMode();
 }
 
 void draw_overlay(const play_session_state& state, const Texture2D* jacket_texture) {

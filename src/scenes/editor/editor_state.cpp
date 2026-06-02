@@ -458,6 +458,7 @@ void editor_state::load(chart_data data, std::string file_path) {
     dirty_ = false;
     invalidate_note_index();
     rebuild_timing_engine();
+    mark_revision_dirty();
     refresh_auto_level();
 }
 
@@ -475,6 +476,7 @@ bool editor_state::undo() {
     if (changed) {
         invalidate_note_index();
         mark_level_dirty();
+        mark_revision_dirty();
         sync_dirty_flag();
     }
     return changed;
@@ -485,6 +487,7 @@ bool editor_state::redo() {
     if (changed) {
         invalidate_note_index();
         mark_level_dirty();
+        mark_revision_dirty();
         sync_dirty_flag();
     }
     return changed;
@@ -502,6 +505,7 @@ void editor_state::add_note(note_data note) {
     history_.push(std::make_unique<add_note_command>(chart_, std::move(note)));
     invalidate_note_index();
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
 }
 
@@ -513,6 +517,7 @@ void editor_state::add_notes(std::vector<note_data> notes) {
     history_.push(std::make_unique<add_notes_command>(chart_, std::move(notes)));
     invalidate_note_index();
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
 }
 
@@ -524,6 +529,7 @@ bool editor_state::remove_note(size_t index) {
     history_.push(std::make_unique<remove_note_command>(chart_, index));
     invalidate_note_index();
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -544,6 +550,7 @@ bool editor_state::remove_notes(std::vector<size_t> indices) {
     history_.push(std::make_unique<remove_notes_command>(chart_, std::move(indices)));
     invalidate_note_index();
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -560,6 +567,7 @@ bool editor_state::modify_note(size_t index, note_data note) {
     history_.push(std::make_unique<modify_note_command>(chart_, index, std::move(note)));
     invalidate_note_index();
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -588,6 +596,7 @@ bool editor_state::modify_notes(std::vector<std::pair<size_t, note_data>> update
     history_.push(std::make_unique<modify_notes_command>(chart_, std::move(updates)));
     invalidate_note_index();
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -595,6 +604,7 @@ bool editor_state::modify_notes(std::vector<std::pair<size_t, note_data>> update
 void editor_state::add_timing_event(timing_event event) {
     history_.push(std::make_unique<add_timing_event_command>(chart_, timing_engine_, std::move(event)));
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
 }
 
@@ -605,6 +615,7 @@ bool editor_state::remove_timing_event(size_t index) {
 
     history_.push(std::make_unique<remove_timing_event_command>(chart_, timing_engine_, index));
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -620,6 +631,7 @@ bool editor_state::modify_timing_event(size_t index, timing_event event) {
 
     history_.push(std::make_unique<modify_timing_event_command>(chart_, timing_engine_, index, std::move(event)));
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -630,6 +642,7 @@ bool editor_state::add_scroll_automation_point(scroll_automation_point point) {
     }
     history_.push(std::make_unique<add_scroll_automation_point_command>(chart_, std::move(point)));
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -641,6 +654,7 @@ bool editor_state::remove_scroll_automation_point(size_t index) {
 
     history_.push(std::make_unique<remove_scroll_automation_point_command>(chart_, index));
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -656,6 +670,7 @@ bool editor_state::modify_scroll_automation_point(size_t index, scroll_automatio
 
     history_.push(std::make_unique<modify_scroll_automation_point_command>(chart_, index, std::move(point)));
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -667,6 +682,7 @@ bool editor_state::modify_scroll_automation_guides(scroll_automation_guides guid
 
     history_.push(std::make_unique<modify_scroll_automation_guides_command>(chart_, std::move(guides)));
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -685,6 +701,7 @@ bool editor_state::modify_metadata(chart_meta meta, bool clear_notes) {
         invalidate_note_index();
     }
     mark_level_dirty();
+    mark_revision_dirty();
     sync_dirty_flag();
     return true;
 }
@@ -700,6 +717,10 @@ bool editor_state::level_needs_refresh() const {
 
 size_t editor_state::level_refresh_generation() const {
     return level_refresh_generation_;
+}
+
+size_t editor_state::revision_generation() const {
+    return revision_generation_;
 }
 
 const chart_data& editor_state::data() const {
@@ -889,6 +910,10 @@ void editor_state::rebuild_note_index() const {
 void editor_state::mark_level_dirty() {
     level_dirty_ = true;
     ++level_refresh_generation_;
+}
+
+void editor_state::mark_revision_dirty() {
+    ++revision_generation_;
 }
 
 void editor_state::sync_dirty_flag() {

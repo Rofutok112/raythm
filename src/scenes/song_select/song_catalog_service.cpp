@@ -269,6 +269,13 @@ void append_loaded_song(song_select::catalog_data& catalog,
     for (const std::string& chart_path : song.chart_paths) {
         const chart_parse_result parse_result = song_loader::load_chart(chart_path);
         if (!parse_result.success || !parse_result.data.has_value()) {
+            if (parse_result.errors.empty()) {
+                catalog.load_errors.push_back("Failed to load chart: " + chart_path);
+            } else {
+                for (const std::string& error : parse_result.errors) {
+                    catalog.load_errors.push_back(chart_path + ": " + error);
+                }
+            }
             continue;
         }
 
