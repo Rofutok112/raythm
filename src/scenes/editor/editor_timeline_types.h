@@ -5,14 +5,15 @@
 
 #include "audio_waveform.h"
 #include "editor_meter_map.h"
-#include "timing_engine.h"
 #include "raylib.h"
+#include "timing_engine.h"
 
 enum class editor_timeline_note_type {
     tap,
     hold,
     release,
-    stay
+    stay,
+    decorative_hold
 };
 
 struct editor_timeline_note {
@@ -87,9 +88,4 @@ struct editor_timeline_view_model {
     int snap_interval = 1;
     float content_height_pixels = 0.0f;
     float scroll_offset_pixels = 0.0f;
-};
-
-class editor_timeline_view {
-public:
-    static void draw(const editor_timeline_view_model& model);
 };

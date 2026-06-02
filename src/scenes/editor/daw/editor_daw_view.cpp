@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "editor/editor_timeline_view.h"
+#include "editor/editor_timeline_types.h"
 #include "editor/view/editor_layout.h"
 #include "editor/viewport/editor_timeline_viewport.h"
 #include "scene_common.h"
@@ -57,6 +57,8 @@ const char* palette_label(note_type type) {
             return "RELEASE";
         case note_type::stay:
             return "STAY";
+        case note_type::decorative_hold:
+            return "DECO";
     }
     return "TAP";
 }
@@ -72,6 +74,8 @@ Color palette_tone(note_type type) {
             return t.slow;
         case note_type::stay:
             return t.fast;
+        case note_type::decorative_hold:
+            return t.accent;
     }
     return t.accent;
 }
@@ -357,6 +361,9 @@ void draw_palette_icon(Rectangle rect, note_type type, Color color) {
         case note_type::stay:
             raythm_icons::draw_note_stay(rect, color, 3.0f);
             break;
+        case note_type::decorative_hold:
+            raythm_icons::draw_note_long(rect, color, 2.6f);
+            break;
     }
 }
 
@@ -424,13 +431,16 @@ editor_timeline_note make_timeline_note(const note_data& note, size_t source_ind
         case note_type::stay:
             type = editor_timeline_note_type::stay;
             break;
+        case note_type::decorative_hold:
+            type = editor_timeline_note_type::decorative_hold;
+            break;
     }
     return {type, note.tick, note.lane, note.end_tick, note.is_ray, note_lane_width(note), source_index};
 }
 
 bool note_intersects_tick_range(const note_data& note, int min_tick, int max_tick) {
     const int start_tick = note.tick;
-    const int end_tick = note.type == note_type::hold ? std::max(note.tick, note.end_tick) : note.tick;
+    const int end_tick = note_has_duration(note) ? std::max(note.tick, note.end_tick) : note.tick;
     return end_tick >= min_tick && start_tick <= max_tick;
 }
 
@@ -578,6 +588,8 @@ Color editor_play_note_color(editor_timeline_note_type type, bool is_ray, Color 
         switch (type) {
             case editor_timeline_note_type::hold:
                 return lerp_color(base, {142, 92, 236, 255}, 0.72f);
+            case editor_timeline_note_type::decorative_hold:
+                return lerp_color(base, {172, 132, 255, 255}, 0.58f);
             case editor_timeline_note_type::release:
                 return lerp_color(base, {198, 116, 255, 255}, 0.76f);
             case editor_timeline_note_type::stay:
@@ -595,6 +607,8 @@ Color editor_play_note_color(editor_timeline_note_type type, bool is_ray, Color 
             return lerp_color(base, WHITE, 0.42f);
         case editor_timeline_note_type::hold:
             return lerp_color(base, WHITE, 0.96f);
+        case editor_timeline_note_type::decorative_hold:
+            return lerp_color(base, {86, 220, 232, 255}, 0.55f);
     }
     return base;
 }
@@ -610,6 +624,12 @@ Color editor_hold_gradient_color(Color base, float t) {
     const float edge_factor = std::pow(std::fabs(t - 0.5f) * 2.0f, 1.55f);
     const unsigned char alpha = static_cast<unsigned char>(84.0f + edge_factor * 110.0f);
     return with_alpha(lerp_color(base, WHITE, edge_factor * 0.10f), alpha);
+}
+
+Color editor_decorative_hold_gradient_color(Color base, float t) {
+    const float center_factor = 1.0f - std::pow(std::fabs(t - 0.5f) * 2.0f, 1.35f);
+    const unsigned char alpha = static_cast<unsigned char>(48.0f + center_factor * 86.0f);
+    return with_alpha(lerp_color(base, WHITE, 0.14f + center_factor * 0.20f), alpha);
 }
 
 Color editor_stay_gradient_color(Color base, float t) {
@@ -690,6 +710,32 @@ void draw_editor_hold_body(Rectangle rect, Color fill, bool ray_style, bool sele
                            cap_left, cap_right);
     if (selected) {
         ui::draw_rect_lines(ui::inset(rect, -2.0f), 2.0f, g_theme->accent);
+    }
+}
+
+void draw_editor_decorative_hold_body(Rectangle rect, Color fill, bool ray_style, bool selected) {
+    const Color decor_base = ray_style
+                                 ? lerp_color(fill, {194, 156, 255, 255}, 0.62f)
+                                 : lerp_color(fill, {86, 220, 232, 255}, 0.64f);
+    const float inset_x = std::max(3.0f, rect.width * 0.18f);
+    const Rectangle body = {
+        rect.x + inset_x,
+        rect.y,
+        std::max(2.0f, rect.width - inset_x * 2.0f),
+        rect.height
+    };
+    draw_horizontal_strip_gradient(body, 18, editor_decorative_hold_gradient_color, decor_base);
+
+    const Color rail = with_alpha(lerp_color(decor_base, WHITE, 0.30f), 150);
+    const float rail_width = std::clamp(body.width * 0.035f, 1.5f, 4.0f);
+    DrawRectangleGradientV(static_cast<int>(body.x), static_cast<int>(body.y),
+                           static_cast<int>(rail_width), static_cast<int>(body.height),
+                           rail, with_alpha(rail, 72));
+    DrawRectangleGradientV(static_cast<int>(body.x + body.width - rail_width), static_cast<int>(body.y),
+                           static_cast<int>(rail_width), static_cast<int>(body.height),
+                           rail, with_alpha(rail, 72));
+    if (selected) {
+        ui::draw_rect_lines(ui::inset(body, -2.0f), 2.0f, g_theme->accent);
     }
 }
 
@@ -778,6 +824,10 @@ void draw_note_block(const editor_timeline_note& note,
     const Color draw_fill = preview ? with_alpha(fill, 170) : fill;
 
     if (info.has_body) {
+        if (note.type == editor_timeline_note_type::decorative_hold) {
+            draw_editor_decorative_hold_body(info.body_rect, draw_fill, note.is_ray, selected);
+            return;
+        }
         draw_editor_hold_body(info.body_rect, draw_fill, note.is_ray, selected);
         return;
     }
@@ -889,12 +939,16 @@ minimap_shape_cache& cached_minimap_shapes(const editor_timeline_view_model& mod
         const float x = inner.x + lane_width * static_cast<float>(note.lane);
         const float note_width = lane_width * static_cast<float>(std::max(1, note.lane_width));
         const Color color = editor_play_note_color(note.type, note.is_ray, t.note_color);
-        if (note.type == editor_timeline_note_type::hold && note.end_tick > note.tick) {
+        if ((note.type == editor_timeline_note_type::hold ||
+             note.type == editor_timeline_note_type::decorative_hold) &&
+            note.end_tick > note.tick) {
             const float end_y = minimap_y_for_cached_tick(cache, static_cast<float>(note.end_tick));
             cache.bodies.push_back({
                 {x + note_width * 0.35f, std::min(y, end_y), std::max(2.0f, note_width * 0.3f),
                  std::max(2.0f, std::fabs(end_y - y))},
-                with_alpha(color, note.is_ray ? 170 : 125)
+                note.type == editor_timeline_note_type::decorative_hold
+                    ? with_alpha(color, note.is_ray ? 120 : 82)
+                    : with_alpha(color, note.is_ray ? 170 : 125)
             });
         }
 
@@ -992,9 +1046,11 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
                      note_type::release, model.note_palette, result);
     draw_palette_pad({palette.x + 12.0f, note_row_y + (pad_height + gap) * 3.0f, pad_width, pad_height},
                      note_type::stay, model.note_palette, result);
+    draw_palette_pad({palette.x + 12.0f, note_row_y + (pad_height + gap) * 4.0f, pad_width, pad_height},
+                     note_type::decorative_hold, model.note_palette, result);
 
     result.ray_toggled = draw_ray_toggle(
-        {palette.x + 12.0f, note_row_y + (pad_height + gap) * 4.0f + 8.0f,
+        {palette.x + 12.0f, note_row_y + (pad_height + gap) * 5.0f + 8.0f,
          palette.width - 24.0f, pad_height},
         model.note_palette.is_ray);
 

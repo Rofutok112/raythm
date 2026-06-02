@@ -10,7 +10,7 @@
 #include "audio_waveform.h"
 #include "editor_meter_map.h"
 #include "editor_state.h"
-#include "editor_timeline_view.h"
+#include "editor_timeline_types.h"
 #include "editor_timing_panel.h"
 #include "song_loader.h"
 #include "ui_text_input.h"

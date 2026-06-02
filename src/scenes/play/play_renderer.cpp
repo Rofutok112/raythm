@@ -364,6 +364,54 @@ void draw_hold_body(float center_x, float center_z, float width, float length, f
                                    cap_width, cap_length, cap_left, cap_right);
 }
 
+Color decorative_hold_gradient_color(Color base, float t) {
+    const float center_factor = 1.0f - std::pow(std::fabs(t - 0.5f) * 2.0f, 1.35f);
+    const unsigned char alpha = static_cast<unsigned char>(54.0f + center_factor * 74.0f);
+    return with_alpha(lerp_color(base, WHITE, 0.14f + center_factor * 0.20f), alpha);
+}
+
+void draw_decorative_hold_gradient_plane(float center_x, float center_z, float width, float length, Color base) {
+    constexpr int kGradientSteps = 18;
+    const float left = center_x - width * 0.5f;
+    const float near_z = center_z - length * 0.5f;
+    const float far_z = center_z + length * 0.5f;
+    const float y = kHoldNoteY + 0.004f;
+
+    rlBegin(RL_QUADS);
+    for (int i = 0; i < kGradientSteps; ++i) {
+        const float t0 = static_cast<float>(i) / static_cast<float>(kGradientSteps);
+        const float t1 = static_cast<float>(i + 1) / static_cast<float>(kGradientSteps);
+        const float x0 = left + width * t0;
+        const float x1 = left + width * t1;
+        const Color c0 = decorative_hold_gradient_color(base, t0);
+        const Color c1 = decorative_hold_gradient_color(base, t1);
+
+        rlColor4ub(c0.r, c0.g, c0.b, c0.a);
+        rlVertex3f(x0, y, near_z);
+        rlVertex3f(x0, y, far_z);
+        rlColor4ub(c1.r, c1.g, c1.b, c1.a);
+        rlVertex3f(x1, y, far_z);
+        rlVertex3f(x1, y, near_z);
+    }
+    rlEnd();
+}
+
+void draw_decorative_hold_body(float center_x, float center_z, float width, float length, float lane_width,
+                               Color fill, bool ray_style = false) {
+    const Color decor_base = ray_style
+                                 ? lerp_color(fill, {194, 156, 255, 255}, 0.62f)
+                                 : lerp_color(fill, {86, 220, 232, 255}, 0.64f);
+    const float inner_width = std::max(lane_width * 0.12f, width * 0.64f);
+    draw_decorative_hold_gradient_plane(center_x, center_z, inner_width, length, decor_base);
+
+    const Color edge = with_alpha(lerp_color(decor_base, WHITE, 0.30f), 150);
+    const float rail_width = std::max(0.018f, std::min(lane_width * 0.018f, inner_width * 0.035f));
+    draw_depth_gradient_plane(center_x - inner_width * 0.5f + rail_width * 0.5f, kHoldNoteY + 0.040f,
+                              center_z, rail_width, length, edge, with_alpha(edge, 72));
+    draw_depth_gradient_plane(center_x + inner_width * 0.5f - rail_width * 0.5f, kHoldNoteY + 0.040f,
+                              center_z, rail_width, length, edge, with_alpha(edge, 72));
+}
+
 Color stay_gradient_color(Color base, float t) {
     const float center_factor = 1.0f - std::pow(std::fabs(t - 0.5f) * 2.0f, 1.35f);
     const float highlight = 0.16f + center_factor * 0.52f;
@@ -690,6 +738,8 @@ Color note_draw_color(const note_state& note_state, Color base) {
         switch (note_state.note_ref.type) {
             case note_type::hold:
                 return lerp_color(base, {142, 92, 236, 255}, 0.72f);
+            case note_type::decorative_hold:
+                return lerp_color(base, {172, 132, 255, 255}, 0.58f);
             case note_type::release:
                 return lerp_color(base, {198, 116, 255, 255}, 0.76f);
             case note_type::stay:
@@ -707,6 +757,8 @@ Color note_draw_color(const note_state& note_state, Color base) {
             return lerp_color(base, WHITE, 0.42f);
         case note_type::hold:
             return lerp_color(base, WHITE, 0.96f);
+        case note_type::decorative_hold:
+            return lerp_color(base, {86, 220, 232, 255}, 0.55f);
     }
     return base;
 }
@@ -714,7 +766,7 @@ Color note_draw_color(const note_state& note_state, Color base) {
 bool should_draw_note_in_pass(note_type type, int pass) {
     switch (pass) {
         case 0:
-            return type == note_type::hold;
+            return type == note_type::hold || type == note_type::decorative_hold;
         case 1:
             return type == note_type::tap;
         case 2:
@@ -919,16 +971,22 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
                     const float body_width = note_body_width(note_state.note_ref, lane_width);
                     const float hold_body_width = note_hold_body_width(note_state.note_ref, lane_width);
 
-                    if (note_state.note_ref.type == note_type::hold) {
+                    if (note_has_duration(note_state.note_ref)) {
                         const double tail_target_ms = draw_queue.visual_end_target_ms(idx);
                         const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_time_ms));
                         const float visual_head_z = note_state.is_holding() ? judgement_z : head_z;
                         const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);
                         const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);
                         if (segment_end > segment_start) {
-                            draw_hold_body(center_x, (segment_start + segment_end) * 0.5f,
-                                           hold_body_width, segment_end - segment_start, lane_width, note_color_for_type,
-                                           note_state.note_ref.is_ray);
+                            if (note_state.note_ref.type == note_type::decorative_hold) {
+                                draw_decorative_hold_body(center_x, (segment_start + segment_end) * 0.5f,
+                                                          hold_body_width, segment_end - segment_start, lane_width,
+                                                          note_color_for_type, note_state.note_ref.is_ray);
+                            } else {
+                                draw_hold_body(center_x, (segment_start + segment_end) * 0.5f,
+                                               hold_body_width, segment_end - segment_start, lane_width,
+                                               note_color_for_type, note_state.note_ref.is_ray);
+                            }
                         }
                     } else if (note_state.note_ref.type == note_type::stay) {
                         draw_stay_dot(center_x, head_z, body_width, lane_width, note_color_for_type,

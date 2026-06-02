@@ -101,7 +101,8 @@ enum class note_type {
     tap,
     hold,
     release,
-    stay
+    stay,
+    decorative_hold
 };
 
 // 入力イベントの種別。
@@ -126,6 +127,22 @@ struct note_data {
     bool is_ray = false;
     int lane_width = 1;
 };
+
+inline bool note_type_has_duration(note_type type) {
+    return type == note_type::hold || type == note_type::decorative_hold;
+}
+
+inline bool note_is_visual_only(note_type type) {
+    return type == note_type::decorative_hold;
+}
+
+inline bool note_has_duration(const note_data& note) {
+    return note_type_has_duration(note.type);
+}
+
+inline bool note_is_visual_only(const note_data& note) {
+    return note_is_visual_only(note.type);
+}
 
 inline int note_lane_width(const note_data& note) {
     return note.lane_width > 0 ? note.lane_width : 1;

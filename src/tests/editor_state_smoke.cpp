@@ -83,6 +83,12 @@ int main() {
         std::cerr << "has_note_overlap should account for wide lane ranges\n";
         return EXIT_FAILURE;
     }
+    note_data decorative_overlap{note_type::decorative_hold, 480, 2, 960};
+    decorative_overlap.lane_width = 2;
+    if (state.has_note_overlap(decorative_overlap)) {
+        std::cerr << "Decorative hold notes should not block gameplay note placement\n";
+        return EXIT_FAILURE;
+    }
     if (state.max_note_tick() != 960) {
         std::cerr << "max_note_tick should report the current note extent\n";
         return EXIT_FAILURE;

@@ -197,6 +197,23 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    judge_system decorative_hold_judge;
+    decorative_hold_judge.init({note_data{note_type::decorative_hold, 480, 0, 960}}, engine);
+    input = input_handler();
+    input.set_key_count(4);
+    decorative_hold_judge.update(700.0, input);
+    if (!decorative_hold_judge.get_judge_events().empty() ||
+        decorative_hold_judge.note_states().front().is_completed()) {
+        std::cerr << "Decorative hold should stay visual-only before its end timing\n";
+        return EXIT_FAILURE;
+    }
+    decorative_hold_judge.update(1010.0, input);
+    if (!decorative_hold_judge.get_judge_events().empty() ||
+        !decorative_hold_judge.note_states().front().is_completed()) {
+        std::cerr << "Decorative hold should complete without emitting judge events\n";
+        return EXIT_FAILURE;
+    }
+
     judge_system timestamp_judge;
     timestamp_judge.init({note_data{note_type::tap, 480, 0, 480}}, engine);
     input.update_from_lane_states(std::array<bool, 4>{true, false, false, false}, 515.0);

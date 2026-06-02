@@ -167,8 +167,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/editor_meter_map.h
         src/scenes/editor/editor_state.cpp
         src/scenes/editor/editor_state.h
-        src/scenes/editor/editor_timeline_view.cpp
-        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timeline_types.cpp
+        src/scenes/editor/editor_timeline_types.h
         src/scenes/editor/editor_timing_panel.cpp
         src/scenes/editor/editor_timing_panel.h
         src/platform/windows_input_source.cpp
@@ -431,21 +431,16 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/controller/editor_timing_action_controller.h
         src/scenes/editor/daw/editor_daw_view.cpp
         src/scenes/editor/daw/editor_daw_view.h
+        src/scenes/editor/daw/editor_daw_types.h
         src/scenes/editor/editor_flow_controller.cpp
         src/scenes/editor/editor_flow_controller.h
         src/scenes/editor/view/editor_cursor_hud_view.cpp
         src/scenes/editor/view/editor_cursor_hud_view.h
-        src/scenes/editor/view/editor_header_view.cpp
-        src/scenes/editor/view/editor_header_view.h
         src/scenes/editor/view/editor_layout.h
-        src/scenes/editor/view/editor_left_panel_view.cpp
-        src/scenes/editor/view/editor_left_panel_view.h
         src/scenes/editor/view/editor_modal_view.cpp
         src/scenes/editor/view/editor_modal_view.h
         src/scenes/editor/editor_panel_controller.cpp
         src/scenes/editor/editor_panel_controller.h
-        src/scenes/editor/view/editor_right_panel_view.cpp
-        src/scenes/editor/view/editor_right_panel_view.h
         src/scenes/editor/view/editor_screen_view.cpp
         src/scenes/editor/view/editor_screen_view.h
         src/scenes/editor/editor_scene_sync.cpp
@@ -471,8 +466,6 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/editor_timeline_controller.h
         src/scenes/editor/editor_transport_controller.cpp
         src/scenes/editor/editor_transport_controller.h
-        src/scenes/editor/view/editor_timeline_presenter.cpp
-        src/scenes/editor/view/editor_timeline_presenter.h
         src/scenes/editor/viewport/editor_timeline_viewport.cpp
         src/scenes/editor/viewport/editor_timeline_viewport.h
         src/scenes/editor_scene.cpp
@@ -1078,7 +1071,7 @@ add_executable(editor_transport_controller_smoke
         src/scenes/editor/editor_meter_map.h
         src/scenes/editor/editor_state.cpp
         src/scenes/editor/editor_state.h
-        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timeline_types.h
         src/scenes/editor/editor_timing_panel.h
         src/gameplay/chart_difficulty.cpp
         src/gameplay/chart_difficulty.h
@@ -1103,7 +1096,7 @@ add_executable(editor_flow_controller_smoke
         src/scenes/editor/editor_meter_map.h
         src/scenes/editor/editor_state.cpp
         src/scenes/editor/editor_state.h
-        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timeline_types.h
         src/scenes/editor/editor_timing_panel.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
@@ -1127,8 +1120,8 @@ add_executable(editor_timeline_controller_smoke
         src/scenes/editor/editor_meter_map.h
         src/scenes/editor/editor_state.cpp
         src/scenes/editor/editor_state.h
-        src/scenes/editor/editor_timeline_view.cpp
-        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timeline_types.cpp
+        src/scenes/editor/editor_timeline_types.h
         src/scenes/editor/editor_timing_panel.h
         src/gameplay/chart_difficulty.cpp
         src/gameplay/chart_difficulty.h
@@ -1158,7 +1151,7 @@ add_executable(editor_note_edit_service_smoke
         src/scenes/editor/editor_meter_map.h
         src/scenes/editor/editor_state.cpp
         src/scenes/editor/editor_state.h
-        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timeline_types.h
         src/scenes/editor/editor_timing_panel.h
         src/scenes/editor/service/editor_note_edit_service.cpp
         src/scenes/editor/service/editor_note_edit_service.h
@@ -1180,7 +1173,7 @@ add_executable(editor_timing_edit_service_smoke
         src/scenes/editor/editor_meter_map.h
         src/scenes/editor/editor_state.cpp
         src/scenes/editor/editor_state.h
-        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timeline_types.h
         src/scenes/editor/editor_timing_panel.h
         src/scenes/editor/service/editor_note_placement_rules.cpp
         src/scenes/editor/service/editor_note_placement_rules.h
@@ -1200,7 +1193,7 @@ add_executable(editor_panel_controller_smoke
         src/audio/audio_waveform.h
         src/scenes/editor/editor_meter_map.h
         src/scenes/editor/editor_state.h
-        src/scenes/editor/editor_timeline_view.h
+        src/scenes/editor/editor_timeline_types.h
         src/scenes/editor/editor_timing_panel.h
         src/models/data_models.h
         src/scenes/editor/editor_panel_controller.cpp

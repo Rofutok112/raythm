@@ -124,6 +124,9 @@ editor_transport_result editor_transport_controller::sync(const editor_transport
         context.state->note_indices_in_tick_range(context.previous_playback_tick + 1, hitsound_until_tick);
     for (const size_t index : note_indices) {
         const note_data& note = context.state->data().notes[index];
+        if (note_is_visual_only(note)) {
+            continue;
+        }
         if (note.tick > context.previous_playback_tick && note.tick <= hitsound_until_tick) {
             ++result.hitsound_count;
             result.hitsound_requests.push_back(hitsound_request_for_note(note));

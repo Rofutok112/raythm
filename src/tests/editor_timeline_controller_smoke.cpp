@@ -301,6 +301,30 @@ int main() {
     }
 
     {
+        editor_timing_panel_state timing_panel;
+        const editor_timeline_metrics metrics = make_metrics();
+        const Rectangle lane1_rect = metrics.lane_rect(1);
+        const float start_y = metrics.tick_to_y(240);
+        editor_timeline_result start = editor_timeline_controller::update(
+            timing_panel,
+            {state.get(), &meter_map, metrics, {lane1_rect.x + lane1_rect.width * 0.5f, start_y}, true,
+             false, false, false, true, false, false, 8, {},
+             {note_type::decorative_hold, false}});
+        editor_timeline_result finish = editor_timeline_controller::update(
+            timing_panel,
+            {state.get(), &meter_map, metrics, {lane1_rect.x + lane1_rect.width * 0.5f, metrics.tick_to_y(720)}, true,
+             false, false, false, false, false, false, 8, start.drag_state,
+             {note_type::decorative_hold, false}, {}, false, true, true});
+        if (!finish.note_to_add.has_value() ||
+            finish.note_to_add->type != note_type::decorative_hold ||
+            finish.note_to_add->tick != 240 ||
+            finish.note_to_add->end_tick != 720) {
+            std::cerr << "decorative palette should create a long visual-only note\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
         chart_data selection_chart = make_chart();
         selection_chart.notes = {
             {note_type::tap, 480, 1, 480},

@@ -54,6 +54,9 @@ void append_note_events(std::vector<chart_judge_event>& events,
             append_event(events, engine, note_index, note, chart_judge_event_kind::stay,
                          chart_judge_event_role::stay, note.tick);
             break;
+
+        case note_type::decorative_hold:
+            break;
     }
 }
 

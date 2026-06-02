@@ -47,6 +47,7 @@ int lane_at_x_clamped(const editor_timeline_context& context, float x) {
 editor_timeline_note make_timeline_note(const note_data& note) {
     return {
         note.type == note_type::hold ? editor_timeline_note_type::hold :
+        note.type == note_type::decorative_hold ? editor_timeline_note_type::decorative_hold :
         note.type == note_type::release ? editor_timeline_note_type::release :
         note.type == note_type::stay ? editor_timeline_note_type::stay :
         editor_timeline_note_type::tap,
@@ -60,7 +61,7 @@ editor_timeline_note make_timeline_note(const note_data& note) {
 
 bool note_intersects_tick_range(const note_data& note, int min_tick, int max_tick) {
     const int start_tick = note.tick;
-    const int end_tick = note.type == note_type::hold ? std::max(note.tick, note.end_tick) : note.tick;
+    const int end_tick = note_has_duration(note) ? std::max(note.tick, note.end_tick) : note.tick;
     return end_tick >= min_tick && start_tick <= max_tick;
 }
 
@@ -157,7 +158,7 @@ std::optional<editor_timeline_drag_mode> resize_handle_at_position(const editor_
 
     const note_data& note = context.state->data().notes[note_index];
     const editor_timeline_note_draw_info info = context.metrics.note_rects(make_timeline_note(note));
-    if (note.type == note_type::hold) {
+    if (note_has_duration(note)) {
         if (CheckCollisionPointRec(point, info.start_resize_rect)) {
             return editor_timeline_drag_mode::resize_start;
         }
@@ -198,7 +199,9 @@ std::optional<note_data> dragged_note(const editor_timeline_context& context,
     if (note.type == note_type::tap) {
         note.end_tick = note.tick;
     }
-    if (context.palette.type != note_type::hold) {
+    if (note_type_has_duration(context.palette.type)) {
+        note.type = context.palette.type;
+    } else {
         note.type = context.palette.type;
         note.end_tick = note.tick;
     }
@@ -224,12 +227,12 @@ std::optional<note_data> resized_note(const editor_timeline_context& context,
         const int last_lane = std::clamp(drag_state.current_lane, note.lane, key_count - 1);
         note.lane_width = last_lane - note.lane + 1;
     } else if (drag_state.mode == editor_timeline_drag_mode::resize_start) {
-        if (note.type != note_type::hold) {
+        if (!note_has_duration(note)) {
             return std::nullopt;
         }
         note.tick = std::clamp(drag_state.current_tick, 0, note.end_tick - minimum_hold_tick_gap(context));
     } else if (drag_state.mode == editor_timeline_drag_mode::resize_end) {
-        if (note.type != note_type::hold) {
+        if (!note_has_duration(note)) {
             return std::nullopt;
         }
         note.end_tick = std::max(note.tick + minimum_hold_tick_gap(context), drag_state.current_tick);
@@ -435,7 +438,7 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
         for (size_t i = 0; i < result.drag_state.note_indices.size(); ++i) {
             note_data moved = result.drag_state.original_notes[i];
             moved.tick = std::max(0, moved.tick + tick_delta);
-            if (moved.type == note_type::hold) {
+            if (note_has_duration(moved)) {
                 moved.end_tick = std::max(moved.tick + 1, moved.end_tick + tick_delta);
             } else {
                 moved.end_tick = moved.tick;
@@ -466,6 +469,10 @@ editor_timeline_result editor_timeline_controller::update(editor_timing_panel_st
         (note->end_tick - note->tick) < minimum_hold_tick_gap(context)) {
         note->type = note_type::tap;
         note->end_tick = note->tick;
+    }
+    if (note.has_value() && note->type == note_type::decorative_hold &&
+        (note->end_tick - note->tick) < minimum_hold_tick_gap(context)) {
+        note.reset();
     }
     result.drag_state.active = false;
 

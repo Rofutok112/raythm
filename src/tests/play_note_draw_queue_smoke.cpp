@@ -72,6 +72,7 @@ int main() {
         {.note_ref = note_data{note_type::tap, 0, 0, 0}, .target_ms = 1200.0, .end_target_ms = 1200.0},
         {.note_ref = note_data{note_type::hold, 0, 1, 480}, .target_ms = 1300.0, .end_target_ms = 1500.0},
         {.note_ref = note_data{note_type::tap, 0, 1, 0}, .target_ms = 900.0, .end_target_ms = 900.0},
+        {.note_ref = note_data{note_type::decorative_hold, 0, 2, 480}, .target_ms = 1000.0, .end_target_ms = 1500.0},
     };
 
     draw_queue.init_from_note_states(4, note_states);
@@ -86,6 +87,12 @@ int main() {
     const std::vector<size_t>& lane1_active = draw_queue.active_indices_for_lane(1);
     if (lane1_active.size() != 1 || lane1_active[0] != 2) {
         std::cerr << "Lane 1 active filtering failed\n";
+        return EXIT_FAILURE;
+    }
+
+    if (draw_queue.active_indices_for_lane(2).size() != 1 ||
+        draw_queue.active_indices_for_lane(2)[0] != 4) {
+        std::cerr << "Decorative hold should enter the draw queue\n";
         return EXIT_FAILURE;
     }
 
@@ -119,6 +126,13 @@ int main() {
     draw_queue.update_visible_window(note_states, 0.1f, 10.0f, 15.0f, 40.0f, 2000.0);
     if (!draw_queue.active_indices_for_lane(1).empty()) {
         std::cerr << "Finished hold note should be removed\n";
+        return EXIT_FAILURE;
+    }
+
+    note_states[4].progress = note_progress_state::completed;
+    draw_queue.update_visible_window(note_states, 0.1f, 10.0f, 15.0f, 40.0f, 2000.0);
+    if (!draw_queue.active_indices_for_lane(2).empty()) {
+        std::cerr << "Finished decorative hold note should be removed\n";
         return EXIT_FAILURE;
     }
 

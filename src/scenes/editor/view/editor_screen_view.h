@@ -6,7 +6,6 @@
 
 #include "editor/daw/editor_daw_view.h"
 #include "editor/editor_scene_types.h"
-#include "editor/view/editor_right_panel_view.h"
 
 namespace editor_screen_view {
 

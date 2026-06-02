@@ -46,7 +46,7 @@ std::optional<chart_data> load_chart_for_key_count(const song_data& song, int ke
 double calculate_song_end_ms(const chart_data& chart, const timing_engine& engine, const audio_manager& audio) {
     int last_tick = 0;
     for (const note_data& note : chart.notes) {
-        last_tick = std::max(last_tick, note.type == note_type::hold ? note.end_tick : note.tick);
+        last_tick = std::max(last_tick, note_has_duration(note) ? note.end_tick : note.tick);
     }
 
     const double chart_tail_ms = engine.tick_to_ms(last_tick) + play_session_constants::kChartEndTailMs;

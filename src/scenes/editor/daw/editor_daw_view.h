@@ -1,9 +1,6 @@
 #pragma once
 
-#include "editor/view/editor_header_view.h"
-#include "editor/view/editor_left_panel_view.h"
-#include "editor/view/editor_right_panel_view.h"
-#include "editor/view/editor_timeline_presenter.h"
+#include "editor/daw/editor_daw_types.h"
 
 namespace editor::daw {
 

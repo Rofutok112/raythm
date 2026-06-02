@@ -13,7 +13,7 @@
 #include "editor/editor_panel_controller.h"
 #include "editor/editor_scene_sync.h"
 #include "editor/editor_scene_types.h"
-#include "editor/view/editor_right_panel_view.h"
+#include "editor/daw/editor_daw_types.h"
 #include "editor/viewport/editor_timeline_viewport.h"
 #include "raylib.h"
 #include "scene.h"

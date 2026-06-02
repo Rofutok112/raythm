@@ -15,7 +15,7 @@ struct note_span {
 };
 
 note_span make_note_span(const note_data& note) {
-    if (note.type == note_type::hold) {
+    if (note_has_duration(note)) {
         return {std::min(note.tick, note.end_tick), std::max(note.tick, note.end_tick), note.type};
     }
 
@@ -27,6 +27,10 @@ bool spans_overlap(const note_span& left, const note_span& right) {
 }
 
 bool overlap_allowed(const note_data& left, const note_data& right) {
+    if (note_is_visual_only(left) || note_is_visual_only(right)) {
+        return true;
+    }
+
     if (left.type == note_type::stay || right.type == note_type::stay) {
         return true;
     }
