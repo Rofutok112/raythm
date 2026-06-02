@@ -47,6 +47,38 @@ inline constexpr Rectangle kPlaybackRect = ui::place(kTimelineRect, 348.0f, 51.0
                                                      ui::anchor::bottom_left, ui::anchor::bottom_left,
                                                      Vector2{18.0f, -81.0f});
 
+inline constexpr float kHeaderTransportPadding = 10.0f;
+inline constexpr float kHeaderTransportButtonSize = 42.0f;
+inline constexpr float kHeaderTransportButtonGap = 8.0f;
+inline constexpr float kHeaderTransportWidth =
+    kHeaderTransportPadding * 2.0f +
+    kHeaderTransportButtonSize * 3.0f +
+    kHeaderTransportButtonGap * 2.0f;
+inline constexpr Rectangle kHeaderTransportRect = {
+    kHeaderRect.x + kHeaderRect.width * 0.5f - kHeaderTransportWidth * 0.5f,
+    kHeaderRect.y + 11.0f,
+    kHeaderTransportWidth,
+    50.0f
+};
+inline constexpr Rectangle kHeaderRestartButtonRect = {
+    kHeaderTransportRect.x + kHeaderTransportPadding,
+    kHeaderTransportRect.y + 4.0f,
+    kHeaderTransportButtonSize,
+    kHeaderTransportButtonSize
+};
+inline constexpr Rectangle kHeaderPlayButtonRect = {
+    kHeaderRestartButtonRect.x + kHeaderRestartButtonRect.width + kHeaderTransportButtonGap,
+    kHeaderRestartButtonRect.y,
+    kHeaderTransportButtonSize,
+    kHeaderTransportButtonSize
+};
+inline constexpr Rectangle kHeaderPlaytestButtonRect = {
+    kHeaderPlayButtonRect.x + kHeaderPlayButtonRect.width + kHeaderTransportButtonGap,
+    kHeaderPlayButtonRect.y,
+    kHeaderTransportButtonSize,
+    kHeaderTransportButtonSize
+};
+
 inline constexpr float kDropdownItemHeight = 45.0f;
 inline constexpr float kDropdownItemSpacing = 6.0f;
 inline constexpr Rectangle kSnapDropdownRect = kHeaderToolsRect;

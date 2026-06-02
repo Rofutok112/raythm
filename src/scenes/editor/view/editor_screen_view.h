@@ -24,11 +24,8 @@ struct left_panel_context {
 
 struct header_context {
     const editor_transport_state& transport;
-    const editor_meter_map& meter_map;
-    bool waveform_visible = false;
     const editor_timeline_viewport_state& viewport;
     bool snap_dropdown_open = false;
-    const char* offset_label = "";
 };
 
 struct metadata_modal_context {

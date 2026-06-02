@@ -150,7 +150,9 @@ void editor_scene::update(float dt) {
     const bool save_dialog_submit = save_dialog_.submit_requested ||
         (save_dialog_.open && ui::is_clicked(layout::save_submit_button_rect(), ui::draw_layer::modal));
     save_dialog_.submit_requested = false;
-    const bool playtest_requested = IsKeyPressed(KEY_F5) || playtest_button_requested_;
+    const bool playtest_requested = IsKeyPressed(KEY_F5) ||
+        playtest_button_requested_ ||
+        (!has_blocking_modal() && ui::is_clicked(layout::kHeaderPlaytestButtonRect));
     playtest_button_requested_ = false;
 
     const editor_flow_result flow_result = editor_flow_controller::update({
@@ -182,6 +184,20 @@ void editor_scene::update(float dt) {
     if (flow_result.consume_update) {
         window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
         return;
+    }
+
+    if (!has_blocking_modal() && ui::is_clicked(layout::kHeaderRestartButtonRect)) {
+        editor_transport_service::seek_to_tick(
+            transport_, state_.get(), 0, hitsound_path_, &hitsounds_);
+        scroll_to_tick(0);
+    }
+
+    if (!has_blocking_modal() && ui::is_clicked(layout::kHeaderPlayButtonRect)) {
+        const std::optional<int> restore_scroll_tick = editor_transport_service::toggle_playback(
+            transport_, state_.get(), space_playback_start_tick_, hitsound_path_, &hitsounds_);
+        if (restore_scroll_tick.has_value()) {
+            scroll_to_tick(*restore_scroll_tick);
+        }
     }
 
     if (!has_blocking_modal() && ui::is_clicked(layout::kSettingsButtonRect)) {

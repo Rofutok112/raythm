@@ -1283,28 +1283,18 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
     result.timing_modal_requested = ui::draw_button_colored(
         timing_button, "TIMING", 13, t.row, t.row_hover, t.text_secondary, 1.2f).clicked;
 
-    const float transport_padding = 10.0f;
-    const float transport_button_size = 42.0f;
-    const float transport_button_gap = 8.0f;
-    const float transport_width = transport_padding * 2.0f + transport_button_size * 3.0f + transport_button_gap * 2.0f;
-    const Rectangle transport = {bar.x + bar.width * 0.5f - transport_width * 0.5f, content.y + 1.0f,
-                                 transport_width, 50.0f};
+    const Rectangle transport = layout::kHeaderTransportRect;
     ui::draw_section(transport);
-    const Rectangle restart_rect = {transport.x + transport_padding, transport.y + 4.0f,
-                                    transport_button_size, transport_button_size};
-    const ui::button_state restart_button =
-        draw_icon_button(restart_rect, raythm_icons::draw_skip_back, false, t.text);
-    result.restart_requested = restart_button.clicked;
-    const Rectangle play_rect = {restart_rect.x + restart_rect.width + transport_button_gap, restart_rect.y,
-                                 transport_button_size, transport_button_size};
-    const ui::button_state play_button = model.audio_playing
-        ? draw_icon_button(play_rect, raythm_icons::draw_pause, true, t.accent)
-        : draw_icon_button(play_rect, raythm_icons::draw_play, false, t.text);
-    result.playback_toggled = play_button.clicked;
-    const Rectangle playtest_rect = {play_rect.x + play_rect.width + transport_button_gap, play_rect.y,
-                                     transport_button_size, transport_button_size};
-    result.playtest_requested =
-        draw_icon_button(playtest_rect, raythm_icons::draw_flask_conical, false, t.text).clicked;
+    const Rectangle restart_rect = layout::kHeaderRestartButtonRect;
+    draw_icon_button(restart_rect, raythm_icons::draw_skip_back, false, t.text);
+    const Rectangle play_rect = layout::kHeaderPlayButtonRect;
+    if (model.audio_playing) {
+        draw_icon_button(play_rect, raythm_icons::draw_pause, true, t.accent);
+    } else {
+        draw_icon_button(play_rect, raythm_icons::draw_play, false, t.text);
+    }
+    const Rectangle playtest_rect = layout::kHeaderPlaytestButtonRect;
+    draw_icon_button(playtest_rect, raythm_icons::draw_flask_conical, false, t.text);
     ui::enqueue_hover_tooltip(playtest_rect, "プレイテスト");
     const ui::dropdown_state dropdown = ui::enqueue_dropdown(
         layout::kSnapDropdownRect, snap_menu_rect,
