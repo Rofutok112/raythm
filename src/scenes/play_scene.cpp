@@ -18,8 +18,8 @@
 #include "play/play_flow_controller.h"
 #include "play/play_renderer.h"
 #include "play/play_session_loader.h"
+#include "play/play_view_geometry.h"
 #include "raylib.h"
-#include "raymath.h"
 #include "result_scene.h"
 #include "scene_common.h"
 #include "scene_manager.h"
@@ -32,12 +32,6 @@
 
 namespace {
 
-constexpr float kJudgementLineScreenRatioFromBottom = 0.10f;
-constexpr float kCameraHeight = 42.0f;
-constexpr float kCameraFovY = 42.0f;
-constexpr float kJudgeLineWorldZ = 12.0f;
-constexpr float kMaxGroundDistance = 1000.0f;
-constexpr float kMinResolvedLaneWidth = 0.05f;
 constexpr float kSoloStartGateSeconds = 0.75f;
 constexpr float kMatchLoadedPollSeconds = 1.0f;
 constexpr float kFallbackMatchCountdownSeconds = 3.0f;
@@ -117,28 +111,6 @@ float countdown_seconds_from_start_at(const std::string& start_at, const std::st
         return std::max(0.0f, server_relative_seconds);
     }
     return seconds_until_iso_utc(start_at).value_or(kFallbackMatchCountdownSeconds);
-}
-
-Vector3 build_camera_forward(float camera_angle_degrees) {
-    const float angle_rad = std::clamp(camera_angle_degrees, 5.0f, 90.0f) * DEG2RAD;
-    return Vector3{0.0f, -std::sin(angle_rad), std::cos(angle_rad)};
-}
-
-Vector3 choose_camera_up(Vector3 forward) {
-    return std::fabs(Vector3DotProduct(forward, Vector3{0.0f, 1.0f, 0.0f})) > 0.98f
-               ? Vector3{0.0f, 0.0f, 1.0f}
-               : Vector3{0.0f, 1.0f, 0.0f};
-}
-
-std::optional<float> ground_z_offset(float height, float angle_rad, float half_fov_rad, float screen_ndc_y) {
-    const float k = screen_ndc_y * std::tan(half_fov_rad);
-    const float sin_a = std::sin(angle_rad);
-    const float cos_a = std::cos(angle_rad);
-    const float denominator = sin_a - k * cos_a;
-    if (denominator <= 0.0001f) {
-        return std::nullopt;
-    }
-    return height * (cos_a + k * sin_a) / denominator;
 }
 
 void present_virtual_screen() {
@@ -330,70 +302,24 @@ void play_scene::rebuild_hit_regions() const {
 }
 
 Camera3D play_scene::make_play_camera() const {
-    const float angle_rad = std::clamp(state_.camera_angle_degrees, 5.0f, 90.0f) * DEG2RAD;
-    constexpr float half_fov_rad = kCameraFovY * DEG2RAD * 0.5f;
-
-    constexpr float judge_ndc_y = (kJudgementLineScreenRatioFromBottom - 0.5f) * 2.0f;
-    const std::optional<float> judge_offset = ground_z_offset(kCameraHeight, angle_rad, half_fov_rad, judge_ndc_y);
-    const float camera_z = judge_offset.has_value() ? (kJudgeLineWorldZ - *judge_offset) : 0.0f;
-
-    const Vector3 forward = build_camera_forward(state_.camera_angle_degrees);
-    const Vector3 up = choose_camera_up(forward);
-
-    Camera3D camera = {};
-    camera.position = {0.0f, kCameraHeight, camera_z};
-    camera.target = Vector3Add(camera.position, forward);
-    camera.up = up;
-    camera.fovy = kCameraFovY;
-    camera.projection = CAMERA_PERSPECTIVE;
-    return camera;
+    return play_view_geometry::make_camera(state_.camera_angle_degrees);
 }
 
 bool play_scene::get_lane_view_bounds(const Camera3D& camera, float& lane_start_z, float& judgement_z,
                                       float& lane_end_z) const {
-    const float angle_rad = std::clamp(state_.camera_angle_degrees, 5.0f, 90.0f) * DEG2RAD;
-    constexpr float half_fov_rad = kCameraFovY * DEG2RAD * 0.5f;
-
-    const std::optional<float> near_offset = ground_z_offset(kCameraHeight, angle_rad, half_fov_rad, -1.0f);
-    if (!near_offset.has_value()) {
+    const std::optional<play_view_geometry::lane_view> lane_view =
+        play_view_geometry::resolve_lane_view(camera, state_.key_count, state_.camera_angle_degrees, state_.lane_width);
+    if (!lane_view.has_value()) {
         return false;
     }
-
-    judgement_z = kJudgeLineWorldZ;
-    lane_start_z = camera.position.z + *near_offset;
-
-    const std::optional<float> far_offset = ground_z_offset(kCameraHeight, angle_rad, half_fov_rad, 1.0f);
-    if (far_offset.has_value()) {
-        lane_end_z = std::min(camera.position.z + *far_offset, camera.position.z + kMaxGroundDistance);
-    } else {
-        lane_end_z = camera.position.z + kMaxGroundDistance;
-    }
-
-    if (lane_end_z <= lane_start_z) {
-        return false;
-    }
-
-    lane_start_z = std::min(lane_start_z, judgement_z - 0.5f);
-    lane_end_z = std::max(lane_end_z, judgement_z + 8.0f);
+    lane_start_z = lane_view->lane_start_z;
+    judgement_z = lane_view->judgement_z;
+    lane_end_z = lane_view->lane_end_z;
     return true;
 }
 
 float play_scene::lane_width_for_bottom_edge(const Camera3D& camera, float lane_start_z) const {
-    const int key_count = std::max(1, state_.key_count);
-    const float setting_width = std::clamp(state_.lane_width, kMinLaneWidth, kMaxLaneWidth);
-    const Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
-    const Vector3 bottom_center = {0.0f, 0.0f, lane_start_z};
-    const float depth = Vector3DotProduct(Vector3Subtract(bottom_center, camera.position), forward);
-    if (depth <= 0.001f || camera.fovy <= 0.0f) {
-        return setting_width;
-    }
-
-    const float half_fov_y = camera.fovy * DEG2RAD * 0.5f;
-    const float aspect = static_cast<float>(kScreenWidth) / static_cast<float>(kScreenHeight);
-    const float half_fov_x = std::atan(std::tan(half_fov_y) * aspect);
-    const float bottom_world_width = depth * std::tan(half_fov_x) * 2.0f;
-    const float desired_total_width = bottom_world_width * (setting_width / kMaxLaneWidth);
-    return std::max(kMinResolvedLaneWidth, desired_total_width / static_cast<float>(key_count));
+    return play_view_geometry::lane_width_for_bottom_edge(camera, lane_start_z, state_.key_count, state_.lane_width);
 }
 
 void play_scene::load_jacket_texture() {

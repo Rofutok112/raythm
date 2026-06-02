@@ -31,11 +31,15 @@ std::string format_offset_label(int offset_ms) {
 
 }  // namespace
 
-settings_gameplay_page::settings_gameplay_page(game_settings& settings) : settings_(settings) {
+settings_gameplay_page::settings_gameplay_page(game_settings& settings) : settings_(settings), preview_(settings) {
 }
 
 void settings_gameplay_page::reset_interaction() {
     active_slider_ = slider::none;
+}
+
+void settings_gameplay_page::prepare_frame() {
+    preview_.prepare_frame();
 }
 
 void settings_gameplay_page::update() {
@@ -138,6 +142,7 @@ void settings_gameplay_page::draw() const {
     ui::draw_button(settings::single_arrow_left_rect(settings::kGameplayRows[5]), "<", 22);
     ui::draw_button(settings::single_arrow_right_rect(settings::kGameplayRows[5]), ">", 22);
     ui::draw_button(settings::double_arrow_right_rect(settings::kGameplayRows[5]), ">>", 22);
+    preview_.draw(settings::kGameplayPreviewRect);
 }
 
 settings_audio_page::settings_audio_page(game_settings& settings, const settings_runtime_applier& runtime_applier)

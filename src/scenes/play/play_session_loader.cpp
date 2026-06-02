@@ -157,6 +157,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.lane_width = std::clamp(g_settings.lane_width, kMinLaneWidth, kMaxLaneWidth);
     state.lane_fog_hidden_percent =
         std::clamp(g_settings.lane_fog_hidden_percent, kMinLaneFogHiddenPercent, kMaxLaneFogHiddenPercent);
+    state.note_height = g_settings.note_height;
     state.lane_speed =
         play_speed_compensation::compensated_lane_speed(g_settings.note_speed, state.camera_angle_degrees);
 

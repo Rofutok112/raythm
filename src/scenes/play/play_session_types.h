@@ -137,6 +137,7 @@ struct play_session_state {
     float camera_angle_degrees = 45.0f;
     float lane_width = 3.5f;
     float lane_fog_hidden_percent = 0.0f;
+    float note_height = 1.0f;
     double chart_time_ms = 0.0;
     double paused_chart_time_ms = 0.0;
     double song_end_chart_time_ms = 0.0;

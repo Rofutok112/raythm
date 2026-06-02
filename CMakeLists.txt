@@ -487,6 +487,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/play/play_mv_controller.h
         src/scenes/play/play_renderer.cpp
         src/scenes/play/play_renderer.h
+        src/scenes/play/play_view_geometry.cpp
+        src/scenes/play/play_view_geometry.h
         src/scenes/play_scene.cpp
         src/scenes/play_scene.h
         src/scenes/play/play_session_loader.cpp
@@ -500,13 +502,16 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/shared/scene_fade.h
         src/scenes/settings/settings_key_config_state.cpp
         src/scenes/settings/settings_key_config_state.h
+        src/scenes/settings/settings_gameplay_preview.cpp
+        src/scenes/settings/settings_gameplay_preview.h
         src/scenes/settings/settings_layout.h
+        src/scenes/settings/settings_page_stack.cpp
+        src/scenes/settings/settings_page_stack.h
         src/scenes/settings/settings_pages.cpp
         src/scenes/settings/settings_pages.h
         src/scenes/settings/settings_runtime_applier.cpp
         src/scenes/settings/settings_runtime_applier.h
-        src/scenes/settings_scene.cpp
-        src/scenes/settings_scene.h
+        src/scenes/settings/settings_shell_view.h
         src/scenes/theme.h
         src/scenes/virtual_screen.cpp
         src/scenes/virtual_screen.h

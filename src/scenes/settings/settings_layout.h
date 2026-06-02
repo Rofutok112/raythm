@@ -58,6 +58,8 @@ inline constexpr float kKeySlotWidth = 840.0f;
 inline constexpr float kKeySlotHeight = 72.0f;
 inline constexpr float kKeySlotStartY = 321.0f;
 inline constexpr float kKeySlotStepY = 93.0f;
+inline constexpr float kGameplayPreviewWidth = 400.0f;
+inline constexpr float kGameplayPreviewHeight = 225.0f;
 
 inline constexpr std::array<page_descriptor, kPageCount> kPageDescriptors = {{
     {localization::text_key::gameplay, localization::text_key::gameplay, localization::text_key::gameplay_subtitle},
@@ -102,6 +104,9 @@ inline const std::array<Rectangle, 6> kGameplayRows = {{
     ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 534.0f}),
     ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 624.0f}),
 }};
+inline const Rectangle kGameplayPreviewRect = ui::place(kContentRect, kGameplayPreviewWidth, kGameplayPreviewHeight,
+                                                        ui::anchor::top_left, ui::anchor::top_left,
+                                                        Vector2{kRowOffsetX, 744.0f});
 inline const Rectangle kKeyModeRect = ui::place(kContentRect, kRowWidth, kKeyModeHeight,
                                                 ui::anchor::top_left, ui::anchor::top_left,
                                                 Vector2{kRowOffsetX, 189.0f});

@@ -92,7 +92,8 @@ title_scene::title_scene(scene_manager& manager,
                           bool start_in_play_view,
                           bool start_in_create_view,
                           std::string preferred_multiplayer_room_id,
-                          bool start_in_multiplayer_view) :
+                          bool start_in_multiplayer_view,
+                          bool start_in_settings_view) :
     scene(manager),
     start_with_home_open_(start_with_home_open),
     play_intro_fade_(play_intro_fade),
@@ -103,6 +104,7 @@ title_scene::title_scene(scene_manager& manager,
     start_in_create_view_(start_in_create_view),
     preferred_multiplayer_room_id_(std::move(preferred_multiplayer_room_id)),
     start_in_multiplayer_view_(start_in_multiplayer_view),
+    start_in_settings_view_(start_in_settings_view),
     settings_overlay_(g_settings) {
 }
 
@@ -811,30 +813,31 @@ void title_scene::on_enter() {
         intro_fade_.restart(scene_fade::direction::in, 0.0f, 0.0f);
         intro_hold_t_ = 0.0f;
     }
-    mode_ = start_in_multiplayer_view_ ? hub_mode::multiplayer
+    const hub_mode requested_mode = start_in_multiplayer_view_ ? hub_mode::multiplayer
         : (start_in_create_view_ ? hub_mode::create
         : (start_in_play_view_ ? hub_mode::play : (start_with_home_open_ ? hub_mode::home : hub_mode::title)));
-    if (mode_ == hub_mode::play) {
+    mode_ = start_in_settings_view_ ? hub_mode::settings : requested_mode;
+    if (requested_mode == hub_mode::play) {
         play_create_feature_.on_enter_play(
             multiplayer_chart_pick_active_,
             server_environment::normalize_url(multiplayer_state_.auth.server_url),
             audio_controller_.preview());
-    } else if (mode_ == hub_mode::create) {
+    } else if (requested_mode == hub_mode::create) {
         play_create_feature_.on_enter_create(audio_controller_.preview());
-    } else if (mode_ == hub_mode::online) {
+    } else if (requested_mode == hub_mode::online) {
         browse_feature_.on_enter(audio_controller_.preview());
     }
-    if (mode_ == hub_mode::multiplayer) {
+    if (requested_mode == hub_mode::multiplayer) {
         multiplayer::on_enter(multiplayer_state_, preferred_multiplayer_room_id_);
         preferred_multiplayer_room_id_.clear();
     }
     suppress_home_pointer_until_release_ = false;
-    settings_return_mode_ = hub_mode::home;
-    home_menu_anim_ = mode_ == hub_mode::title ? 0.0f : 1.0f;
+    settings_return_mode_ = start_in_settings_view_ ? requested_mode : hub_mode::home;
+    home_menu_anim_ = requested_mode == hub_mode::title ? 0.0f : 1.0f;
     home_menu_selected_index_ = 0;
     home_status_message_.clear();
-    play_view_anim_ = (mode_ == hub_mode::play || mode_ == hub_mode::multiplayer ||
-                       mode_ == hub_mode::online || mode_ == hub_mode::create) ? 1.0f : 0.0f;
+    play_view_anim_ = (requested_mode == hub_mode::play || requested_mode == hub_mode::multiplayer ||
+                       requested_mode == hub_mode::online || requested_mode == hub_mode::create) ? 1.0f : 0.0f;
     play_entry_origin_rect_ = {};
     settings_overlay_.open();
     play_create_feature_.state().login_dialog.open = false;

@@ -18,6 +18,7 @@
 #include "raylib.h"
 #include "scene.h"
 #include "song_loader.h"
+#include "title/title_settings_overlay.h"
 
 class editor_scene final : public scene {
 public:
@@ -80,6 +81,8 @@ private:
     bool metadata_modal_open_ = false;
     bool timing_modal_open_ = false;
     bool playtest_button_requested_ = false;
+    bool settings_overlay_active_ = false;
+    title_settings_overlay settings_overlay_;
     size_t pending_level_refresh_generation_ = 0;
     double level_refresh_after_time_ = 0.0;
 };

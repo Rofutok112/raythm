@@ -26,7 +26,7 @@ inline constexpr float kMinLaneFogHiddenPercent = 0.0f;
 inline constexpr float kMaxLaneFogHiddenPercent = 100.0f;
 
 // シーン間で共有されるゲーム設定。
-// settings_scene で変更され、play_scene / song_select_scene で参照される。
+// Settings UI で変更され、play_scene / song_select_scene で参照される。
 struct game_settings {
     int selected_key_count = 4;
     float camera_angle_degrees = 45.0f;
