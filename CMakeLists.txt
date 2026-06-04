@@ -167,6 +167,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/editor_meter_map.h
         src/scenes/editor/editor_state.cpp
         src/scenes/editor/editor_state.h
+        src/scenes/editor/editor_timeline_note_geometry.cpp
+        src/scenes/editor/editor_timeline_note_geometry.h
         src/scenes/editor/editor_timeline_types.cpp
         src/scenes/editor/editor_timeline_types.h
         src/scenes/editor/editor_timing_panel.cpp
@@ -1118,6 +1120,8 @@ add_executable(editor_timeline_controller_smoke
         src/scenes/editor/editor_meter_map.h
         src/scenes/editor/editor_state.cpp
         src/scenes/editor/editor_state.h
+        src/scenes/editor/editor_timeline_note_geometry.cpp
+        src/scenes/editor/editor_timeline_note_geometry.h
         src/scenes/editor/editor_timeline_types.cpp
         src/scenes/editor/editor_timeline_types.h
         src/scenes/editor/editor_timing_panel.h

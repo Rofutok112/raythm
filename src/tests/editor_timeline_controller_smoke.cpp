@@ -121,14 +121,14 @@ int main() {
         editor_timing_panel_state timing_panel;
         const editor_timeline_metrics metrics = make_metrics();
         const editor_timeline_note selected_note{editor_timeline_note_type::tap, 480, 1, 480, false, 1};
-        const editor_timeline_note_draw_info info = metrics.note_rects(selected_note);
+        const editor_timeline_note_geometry geometry = metrics.note_rects(selected_note);
         const Rectangle lane2_rect = metrics.lane_rect(2);
         editor_timeline_note_drag_state drag_state;
         editor_timeline_result start = editor_timeline_controller::update(
             timing_panel,
             {state.get(), &meter_map, metrics,
-            {info.right_resize_rect.x + info.right_resize_rect.width * 0.5f,
-             info.right_resize_rect.y + info.right_resize_rect.height * 0.5f},
+            {geometry.resize.right_lane_rect.x + geometry.resize.right_lane_rect.width * 0.5f,
+             geometry.resize.right_lane_rect.y + geometry.resize.right_lane_rect.height * 0.5f},
              true, true, false, false, false, false, false, 4, drag_state, {}, {0}});
         editor_timeline_result finish = editor_timeline_controller::update(
             timing_panel,
@@ -154,18 +154,19 @@ int main() {
         editor_timing_panel_state timing_panel;
         const editor_timeline_metrics metrics = make_metrics();
         const editor_timeline_note selected_note{editor_timeline_note_type::hold, 480, 1, 720, false, 1};
-        const editor_timeline_note_draw_info info = metrics.note_rects(selected_note);
+        const editor_timeline_note_geometry geometry = metrics.note_rects(selected_note);
+        const Rectangle end_resize_rect = *geometry.resize.end_tick_rect;
         editor_timeline_note_drag_state drag_state;
         editor_timeline_result start = editor_timeline_controller::update(
             timing_panel,
             {hold_state.get(), &hold_meter_map, metrics,
-            {info.end_resize_rect.x + info.end_resize_rect.width * 0.5f,
-             info.end_resize_rect.y + info.end_resize_rect.height * 0.5f},
+            {end_resize_rect.x + end_resize_rect.width * 0.5f,
+             end_resize_rect.y + end_resize_rect.height * 0.5f},
              true, true, false, false, false, false, false, 8, drag_state, {}, {0}});
         editor_timeline_result finish = editor_timeline_controller::update(
             timing_panel,
             {hold_state.get(), &hold_meter_map, metrics,
-             {info.end_resize_rect.x + info.end_resize_rect.width * 0.5f, metrics.tick_to_y(960)},
+             {end_resize_rect.x + end_resize_rect.width * 0.5f, metrics.tick_to_y(960)},
              true, false, true, true, false, false, false, 8, start.drag_state});
         if (!finish.note_to_modify_index.has_value() || *finish.note_to_modify_index != 0 ||
             !finish.note_to_modify.has_value() || finish.note_to_modify->tick != 480 ||
@@ -187,17 +188,18 @@ int main() {
         editor_timeline_metrics metrics = make_metrics();
         metrics.ticks_per_pixel = 10.0f;
         const editor_timeline_note selected_note{editor_timeline_note_type::hold, 480, 1, 720, false, 1};
-        const editor_timeline_note_draw_info info = metrics.note_rects(selected_note);
+        const editor_timeline_note_geometry geometry = metrics.note_rects(selected_note);
+        const Rectangle start_resize_rect = *geometry.resize.start_tick_rect;
         editor_timeline_result start = editor_timeline_controller::update(
             timing_panel,
             {hold_state.get(), &hold_meter_map, metrics,
-            {info.start_resize_rect.x + info.start_resize_rect.width * 0.5f,
-             info.start_resize_rect.y + info.start_resize_rect.height * 0.5f},
+            {start_resize_rect.x + start_resize_rect.width * 0.5f,
+             start_resize_rect.y + start_resize_rect.height * 0.5f},
              true, true, false, false, false, false, false, 16, {}, {}, {0}});
         editor_timeline_result finish = editor_timeline_controller::update(
             timing_panel,
             {hold_state.get(), &hold_meter_map, metrics,
-             {info.start_resize_rect.x + info.start_resize_rect.width * 0.5f, metrics.tick_to_y(360)},
+             {start_resize_rect.x + start_resize_rect.width * 0.5f, metrics.tick_to_y(360)},
              true, false, true, true, false, false, false, 16, start.drag_state});
         if (!finish.note_to_modify_index.has_value() || *finish.note_to_modify_index != 0 ||
             !finish.note_to_modify.has_value() || finish.note_to_modify->tick != 360 ||
@@ -219,10 +221,10 @@ int main() {
         editor_timeline_metrics metrics = make_metrics();
         metrics.ticks_per_pixel = 10.0f;
         const editor_timeline_note selected_note{editor_timeline_note_type::hold, 480, 1, 720, false, 1};
-        const editor_timeline_note_draw_info info = metrics.note_rects(selected_note);
+        const editor_timeline_note_geometry geometry = metrics.note_rects(selected_note);
         const Vector2 body_center = {
-            info.body_rect.x + info.body_rect.width * 0.5f,
-            info.body_rect.y + info.body_rect.height * 0.5f,
+            geometry.visual.body_rect.x + geometry.visual.body_rect.width * 0.5f,
+            geometry.visual.body_rect.y + geometry.visual.body_rect.height * 0.5f,
         };
         editor_timeline_result start = editor_timeline_controller::update(
             timing_panel,
@@ -320,6 +322,46 @@ int main() {
             finish.note_to_add->tick != 240 ||
             finish.note_to_add->end_tick != 720) {
             std::cerr << "decorative palette should create a long visual-only note\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    {
+        chart_data decorative_chart = make_chart();
+        decorative_chart.notes = {
+            {note_type::decorative_hold, 480, 1, 960},
+        };
+        const auto decorative_state = std::make_shared<editor_state>(decorative_chart, "");
+        editor_meter_map decorative_meter_map;
+        decorative_meter_map.rebuild(decorative_state->data());
+        editor_timing_panel_state timing_panel;
+        const editor_timeline_metrics metrics = make_metrics();
+        const editor_timeline_note decorative_note{editor_timeline_note_type::decorative_hold, 480, 1, 960, false, 1};
+        const editor_timeline_note_geometry geometry = metrics.note_rects(decorative_note);
+
+        const Vector2 outside_visible_body = {
+            geometry.visual.body_rect.x + 1.0f,
+            geometry.visual.body_rect.y + geometry.visual.body_rect.height * 0.5f,
+        };
+        const editor_timeline_result outside_result = editor_timeline_controller::update(
+            timing_panel,
+            {decorative_state.get(), &decorative_meter_map, metrics, outside_visible_body,
+             true, true, false, false, false, false, false, 8, {}});
+        if (!outside_result.selected_note_indices.empty()) {
+            std::cerr << "decorative hold should not select outside its visible body\n";
+            return EXIT_FAILURE;
+        }
+
+        const Vector2 visible_body_center = {
+            geometry.visual.visual_body_rect.x + geometry.visual.visual_body_rect.width * 0.5f,
+            geometry.visual.visual_body_rect.y + geometry.visual.visual_body_rect.height * 0.5f,
+        };
+        const editor_timeline_result inside_result = editor_timeline_controller::update(
+            timing_panel,
+            {decorative_state.get(), &decorative_meter_map, metrics, visible_body_center,
+             true, true, false, false, false, false, false, 8, {}});
+        if (inside_result.selected_note_indices != std::vector<size_t>{0}) {
+            std::cerr << "decorative hold should select on its visible body\n";
             return EXIT_FAILURE;
         }
     }

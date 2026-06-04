@@ -717,25 +717,18 @@ void draw_editor_decorative_hold_body(Rectangle rect, Color fill, bool ray_style
     const Color decor_base = ray_style
                                  ? lerp_color(fill, {194, 156, 255, 255}, 0.62f)
                                  : lerp_color(fill, {86, 220, 232, 255}, 0.64f);
-    const float inset_x = std::max(3.0f, rect.width * 0.18f);
-    const Rectangle body = {
-        rect.x + inset_x,
-        rect.y,
-        std::max(2.0f, rect.width - inset_x * 2.0f),
-        rect.height
-    };
-    draw_horizontal_strip_gradient(body, 18, editor_decorative_hold_gradient_color, decor_base);
+    draw_horizontal_strip_gradient(rect, 18, editor_decorative_hold_gradient_color, decor_base);
 
     const Color rail = with_alpha(lerp_color(decor_base, WHITE, 0.30f), 150);
-    const float rail_width = std::clamp(body.width * 0.035f, 1.5f, 4.0f);
-    DrawRectangleGradientV(static_cast<int>(body.x), static_cast<int>(body.y),
-                           static_cast<int>(rail_width), static_cast<int>(body.height),
+    const float rail_width = std::clamp(rect.width * 0.035f, 1.5f, 4.0f);
+    DrawRectangleGradientV(static_cast<int>(rect.x), static_cast<int>(rect.y),
+                           static_cast<int>(rail_width), static_cast<int>(rect.height),
                            rail, with_alpha(rail, 72));
-    DrawRectangleGradientV(static_cast<int>(body.x + body.width - rail_width), static_cast<int>(body.y),
-                           static_cast<int>(rail_width), static_cast<int>(body.height),
+    DrawRectangleGradientV(static_cast<int>(rect.x + rect.width - rail_width), static_cast<int>(rect.y),
+                           static_cast<int>(rail_width), static_cast<int>(rect.height),
                            rail, with_alpha(rail, 72));
     if (selected) {
-        ui::draw_rect_lines(ui::inset(body, -2.0f), 2.0f, g_theme->accent);
+        ui::draw_rect_lines(ui::inset(rect, -2.0f), 2.0f, g_theme->accent);
     }
 }
 
@@ -793,14 +786,14 @@ void draw_editor_release_chevron(Rectangle note_rect, Color marker, Color contou
 }
 
 void draw_simple_note_block(const editor_timeline_note& note,
-                            const editor_timeline_note_draw_info& info,
+                            const editor_timeline_note_geometry& geometry,
                             bool selected,
                             bool preview,
                             bool overlap) {
     const auto& t = *g_theme;
     const Color fill = overlap ? t.error : editor_play_note_color(note.type, note.is_ray, t.note_color);
     const Color color = preview ? with_alpha(fill, 160) : with_alpha(fill, note.is_ray ? 235 : 205);
-    const Rectangle rect = info.has_body ? info.body_rect : info.head_rect;
+    const Rectangle rect = geometry.visual.has_body ? geometry.visual.body_rect : geometry.visual.head_rect;
     ui::draw_rect_f(rect, color);
     if (selected || preview) {
         ui::draw_rect_lines(ui::inset(rect, selected ? -1.5f : 0.0f), selected ? 2.0f : 1.0f,
@@ -809,13 +802,13 @@ void draw_simple_note_block(const editor_timeline_note& note,
 }
 
 void draw_note_block(const editor_timeline_note& note,
-                     const editor_timeline_note_draw_info& info,
+                     const editor_timeline_note_geometry& geometry,
                      bool selected,
                      bool preview,
                      bool overlap,
                      bool simplified = false) {
     if (simplified && !selected) {
-        draw_simple_note_block(note, info, selected, preview, overlap);
+        draw_simple_note_block(note, geometry, selected, preview, overlap);
         return;
     }
 
@@ -823,28 +816,28 @@ void draw_note_block(const editor_timeline_note& note,
     const Color fill = overlap ? t.error : editor_play_note_color(note.type, note.is_ray, t.note_color);
     const Color draw_fill = preview ? with_alpha(fill, 170) : fill;
 
-    if (info.has_body) {
+    if (geometry.visual.has_body) {
         if (note.type == editor_timeline_note_type::decorative_hold) {
-            draw_editor_decorative_hold_body(info.body_rect, draw_fill, note.is_ray, selected);
+            draw_editor_decorative_hold_body(geometry.visual.visual_body_rect, draw_fill, note.is_ray, selected);
             return;
         }
-        draw_editor_hold_body(info.body_rect, draw_fill, note.is_ray, selected);
+        draw_editor_hold_body(geometry.visual.body_rect, draw_fill, note.is_ray, selected);
         return;
     }
 
     if (note.type == editor_timeline_note_type::stay) {
-        draw_editor_stay_dot(info.head_rect, draw_fill, note.is_ray, selected);
+        draw_editor_stay_dot(geometry.visual.head_rect, draw_fill, note.is_ray, selected);
         return;
     }
 
-    draw_editor_tap_slab(info.head_rect, draw_fill, note.type == editor_timeline_note_type::release,
+    draw_editor_tap_slab(geometry.visual.head_rect, draw_fill, note.type == editor_timeline_note_type::release,
                          note.is_ray, selected);
     if (note.type == editor_timeline_note_type::release) {
         const Color release_seed = note.is_ray ? Color{190, 112, 255, 255} : Color{255, 90, 132, 255};
         const Color release_base = lerp_color(release_seed, draw_fill, note.is_ray ? 0.24f : 0.16f);
         const Color marker = with_alpha(lerp_color(release_base, WHITE, 0.28f), 255);
         const Color contour = with_alpha(lerp_color(release_base, BLACK, 0.16f), 255);
-        draw_editor_release_chevron(info.head_rect, marker, contour);
+        draw_editor_release_chevron(geometry.visual.head_rect, marker, contour);
     }
 }
 
@@ -1379,14 +1372,14 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
             if (note.lane < 0 || note.lane >= model.metrics.key_count) {
                 continue;
             }
-            const editor_timeline_note_draw_info info = model.metrics.note_rects(note);
+            const editor_timeline_note_geometry geometry = model.metrics.note_rects(note);
             const bool selected = contains_sorted_index(model.selected_note_indices, note.source_index);
-            draw_note_block(note, info, selected, false, false, simplified_notes);
+            draw_note_block(note, geometry, selected, false, false, simplified_notes);
         }
 
         for (const editor_timeline_note& preview_note : model.preview_notes) {
-            const editor_timeline_note_draw_info info = model.metrics.note_rects(preview_note);
-            draw_note_block(preview_note, info, true, true, model.preview_has_overlap, simplified_notes);
+            const editor_timeline_note_geometry geometry = model.metrics.note_rects(preview_note);
+            draw_note_block(preview_note, geometry, true, true, model.preview_has_overlap, simplified_notes);
         }
 
         if (model.selection_rect.has_value()) {

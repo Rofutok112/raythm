@@ -69,6 +69,12 @@ int main() {
     }
     state.load(make_chart(), "assets/charts/editor_state.rchart");
 
+    editor_state next_state(make_chart(), "assets/charts/editor_state_next.rchart");
+    if (next_state.revision_generation() == state.revision_generation()) {
+        std::cerr << "separate editor states should not reuse cache revision keys\n";
+        return EXIT_FAILURE;
+    }
+
     if (state.snap_tick(119, 16) != 120 || state.snap_tick(421, 8) != 480) {
         std::cerr << "snap_tick did not round to the expected grid\n";
         return EXIT_FAILURE;

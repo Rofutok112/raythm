@@ -119,6 +119,11 @@ bool same_chart_meta(const chart_meta& left, const chart_meta& right) {
         left.offset == right.offset;
 }
 
+size_t next_editor_revision_generation() {
+    static size_t next_generation = 0;
+    return ++next_generation;
+}
+
 class add_note_command final : public editor_command {
 public:
     add_note_command(chart_data& chart, note_data note) : chart_(chart), note_(std::move(note)) {}
@@ -913,7 +918,7 @@ void editor_state::mark_level_dirty() {
 }
 
 void editor_state::mark_revision_dirty() {
-    ++revision_generation_;
+    revision_generation_ = next_editor_revision_generation();
 }
 
 void editor_state::sync_dirty_flag() {

@@ -199,15 +199,16 @@ int mouse_cursor(const cursor_context& context) {
     }
 
     const note_data& note = context.state.data().notes[*active_index];
-    const editor_timeline_note_draw_info info = context.metrics.note_rects(make_timeline_note(note));
-    if (note_has_duration(note) &&
-        (CheckCollisionPointRec(context.mouse, info.start_resize_rect) ||
-         CheckCollisionPointRec(context.mouse, info.end_resize_rect))) {
-        return MOUSE_CURSOR_RESIZE_NS;
-    }
-    if (CheckCollisionPointRec(context.mouse, info.left_resize_rect) ||
-        CheckCollisionPointRec(context.mouse, info.right_resize_rect)) {
-        return MOUSE_CURSOR_RESIZE_EW;
+    const editor_timeline_note_geometry geometry = context.metrics.note_rects(make_timeline_note(note));
+    switch (editor_timeline_note_resize_handle_at(geometry, context.mouse)) {
+        case editor_timeline_note_resize_handle::start_tick:
+        case editor_timeline_note_resize_handle::end_tick:
+            return MOUSE_CURSOR_RESIZE_NS;
+        case editor_timeline_note_resize_handle::lane_left:
+        case editor_timeline_note_resize_handle::lane_right:
+            return MOUSE_CURSOR_RESIZE_EW;
+        case editor_timeline_note_resize_handle::none:
+            break;
     }
     return MOUSE_CURSOR_DEFAULT;
 }

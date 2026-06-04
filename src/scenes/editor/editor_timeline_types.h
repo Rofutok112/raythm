@@ -5,6 +5,7 @@
 
 #include "audio_waveform.h"
 #include "editor_meter_map.h"
+#include "editor_timeline_note_geometry.h"
 #include "raylib.h"
 #include "timing_engine.h"
 
@@ -32,17 +33,6 @@ struct editor_timeline_scroll_automation_point {
     scroll_automation_curve curve_to_next = scroll_automation_curve::hold;
 };
 
-struct editor_timeline_note_draw_info {
-    Rectangle head_rect = {};
-    Rectangle body_rect = {};
-    Rectangle tail_rect = {};
-    Rectangle left_resize_rect = {};
-    Rectangle right_resize_rect = {};
-    Rectangle start_resize_rect = {};
-    Rectangle end_resize_rect = {};
-    bool has_body = false;
-};
-
 struct editor_timeline_metrics {
     Rectangle panel_rect = {};
     float padding = 18.0f;
@@ -62,7 +52,7 @@ struct editor_timeline_metrics {
     int y_to_tick(float y) const;
     float lane_width() const;
     Rectangle lane_rect(int lane) const;
-    editor_timeline_note_draw_info note_rects(const editor_timeline_note& note) const;
+    editor_timeline_note_geometry note_rects(const editor_timeline_note& note) const;
 };
 
 struct editor_timeline_view_model {
