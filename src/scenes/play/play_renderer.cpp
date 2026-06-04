@@ -211,8 +211,15 @@ void draw_play_marquee_text(const char* text, Rectangle clip_rect, int font_size
     draw_play_text_clipped(text, clip_rect.x - offset, draw_y, font_size, color, clip_rect);
 }
 
+bool is_status_loading(const play_session_state& state) {
+    return !state.initialized && state.status_progress > 0.0f && state.status_progress < 1.0f;
+}
+
 bool is_status_error(const play_session_state& state) {
     if (state.initialized || state.status_text.empty() || state.status_text == "Loading...") {
+        return false;
+    }
+    if (is_status_loading(state)) {
         return false;
     }
     return true;
@@ -229,8 +236,14 @@ std::string localized_status_text(const std::string& status_text) {
 }
 
 float loading_progress_value(const play_session_state& state) {
+    if (is_status_loading(state)) {
+        return std::clamp(state.status_progress, 0.0f, 1.0f);
+    }
     if (is_status_error(state)) {
         return 1.0f;
+    }
+    if (state.status_progress > 0.0f) {
+        return std::clamp(state.status_progress, 0.0f, 1.0f);
     }
     if (state.status_text == "Ready") {
         return 0.92f;
