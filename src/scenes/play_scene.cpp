@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdio>
 #include <ctime>
+#include <exception>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -165,35 +166,40 @@ play_scene::play_scene(scene_manager& manager, song_data song, chart_data chart,
 }
 
 play_scene::~play_scene() {
+    wait_for_pending_load();
     unload_jacket_texture();
     unload_lane_layer_texture();
 }
 
 void play_scene::on_enter() {
+    wait_for_pending_load();
+    unload_jacket_texture();
+    unload_lane_layer_texture();
+    mv_controller_.reset();
+    draw_queue_.clear();
+    state_ = play_session_state();
+    state_.key_count = request_.key_count;
+    state_.song_data = request_.song_data;
+    state_.selected_chart_path = request_.selected_chart_path;
+    state_.chart_data = request_.chart_data;
+    state_.editor_resume_state = request_.editor_resume_state;
+    state_.start_tick = std::max(0, request_.start_tick);
+    state_.multiplayer_room_id = request_.multiplayer_room_id;
+    state_.multiplayer_match_id = request_.multiplayer_match_id;
+    state_.mods = request_.mods;
     state_.status_text = "Loading...";
-    state_ = play_session_loader::load(request_, draw_queue_);
-    load_jacket_texture();
-    load_lane_layer_texture();
-    mv_controller_.load_for_song(state_.song_data);
-    if (!state_.multiplayer_room_id.empty()) {
-        multiplayer_realtime_ = std::make_unique<multiplayer::client::realtime_client>();
-        if (!multiplayer_realtime_->connect(auth::load_session_summary(), state_.multiplayer_room_id)) {
-            multiplayer_realtime_.reset();
-        }
-    }
-    start_gate_active_ = state_.initialized;
+    state_.status_progress = 0.0f;
+    start_gate_active_ = false;
     multiplayer_loaded_sent_ = false;
     multiplayer_countdown_started_ = false;
-    start_gate_timer_ = state_.multiplayer_room_id.empty() ? kSoloStartGateSeconds : 0.0f;
+    start_gate_timer_ = 0.0f;
     match_loaded_poll_t_ = 0.0f;
-    if (start_gate_active_) {
-        state_.status_text = state_.multiplayer_room_id.empty()
-            ? "Ready"
-            : "Loaded. Waiting for players...";
-    }
+    multiplayer_score_sync_t_ = 0.0f;
+    start_async_load();
 }
 
 void play_scene::on_exit() {
+    wait_for_pending_load();
     if (multiplayer_realtime_ != nullptr) {
         multiplayer_realtime_->close();
         multiplayer_realtime_.reset();
@@ -231,6 +237,10 @@ void play_scene::update(float dt) {
     context.left_click_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     context.backspace_pressed = IsKeyPressed(KEY_BACKSPACE);
     context.window_focused = IsWindowFocused();
+
+    if (poll_async_load()) {
+        return;
+    }
 
     if (start_gate_active_) {
         update_start_gate(dt);
@@ -290,6 +300,144 @@ void play_scene::update(float dt) {
     if (result.navigation.has_value()) {
         apply_navigation(result.navigation);
     }
+}
+
+void play_scene::start_async_load() {
+    const play_start_request request = request_;
+    load_progress_ = std::make_shared<async_load_progress>();
+    const std::shared_ptr<async_load_progress> progress = load_progress_;
+    load_future_ = std::async(std::launch::async, [request, progress]() mutable {
+        async_load_result result;
+        result.state.key_count = request.key_count;
+        result.state.song_data = request.song_data;
+        result.state.selected_chart_path = request.selected_chart_path;
+        result.state.chart_data = request.chart_data;
+        result.state.editor_resume_state = request.editor_resume_state;
+        result.state.start_tick = std::max(0, request.start_tick);
+        result.state.multiplayer_room_id = request.multiplayer_room_id;
+        result.state.multiplayer_match_id = request.multiplayer_match_id;
+        result.state.mods = request.mods;
+        result.state.status_text = "Loading...";
+        result.state.status_progress = 0.0f;
+        try {
+            result.state = play_session_loader::load(
+                request,
+                result.draw_queue,
+                [progress](float value, const std::string& message) {
+                    if (progress == nullptr) {
+                        return;
+                    }
+                    std::lock_guard<std::mutex> lock(progress->mutex);
+                    progress->progress = value;
+                    progress->message = message;
+                });
+        } catch (const std::exception& ex) {
+            result.draw_queue.clear();
+            result.state.status_text =
+                ex.what() != nullptr && ex.what()[0] != '\0' ? ex.what() : "Failed to load play session";
+            result.state.status_progress = 1.0f;
+        } catch (...) {
+            result.draw_queue.clear();
+            result.state.status_text = "Failed to load play session";
+            result.state.status_progress = 1.0f;
+        }
+        return result;
+    });
+}
+
+void play_scene::sync_async_load_progress() {
+    if (load_progress_ == nullptr) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(load_progress_->mutex);
+    state_.status_progress = load_progress_->progress;
+    if (!load_progress_->message.empty()) {
+        state_.status_text = load_progress_->message;
+    }
+}
+
+bool play_scene::poll_async_load() {
+    if (!load_future_.has_value()) {
+        return false;
+    }
+    if (load_future_->wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        sync_async_load_progress();
+        return true;
+    }
+
+    async_load_result result;
+    try {
+        result = load_future_->get();
+    } catch (const std::exception& ex) {
+        result.state.key_count = request_.key_count;
+        result.state.song_data = request_.song_data;
+        result.state.selected_chart_path = request_.selected_chart_path;
+        result.state.chart_data = request_.chart_data;
+        result.state.editor_resume_state = request_.editor_resume_state;
+        result.state.start_tick = std::max(0, request_.start_tick);
+        result.state.multiplayer_room_id = request_.multiplayer_room_id;
+        result.state.multiplayer_match_id = request_.multiplayer_match_id;
+        result.state.mods = request_.mods;
+        result.state.status_text =
+            ex.what() != nullptr && ex.what()[0] != '\0' ? ex.what() : "Failed to load play session";
+        result.state.status_progress = 1.0f;
+    } catch (...) {
+        result.state.key_count = request_.key_count;
+        result.state.song_data = request_.song_data;
+        result.state.selected_chart_path = request_.selected_chart_path;
+        result.state.chart_data = request_.chart_data;
+        result.state.editor_resume_state = request_.editor_resume_state;
+        result.state.start_tick = std::max(0, request_.start_tick);
+        result.state.multiplayer_room_id = request_.multiplayer_room_id;
+        result.state.multiplayer_match_id = request_.multiplayer_match_id;
+        result.state.mods = request_.mods;
+        result.state.status_text = "Failed to load play session";
+        result.state.status_progress = 1.0f;
+    }
+    load_future_.reset();
+    load_progress_.reset();
+    apply_loaded_session(std::move(result));
+    return false;
+}
+
+void play_scene::apply_loaded_session(async_load_result result) {
+    state_ = std::move(result.state);
+    draw_queue_ = std::move(result.draw_queue);
+    if (!state_.initialized) {
+        start_gate_active_ = false;
+        return;
+    }
+
+    load_jacket_texture();
+    load_lane_layer_texture();
+    mv_controller_.load_for_song(state_.song_data);
+    if (!state_.multiplayer_room_id.empty()) {
+        multiplayer_realtime_ = std::make_unique<multiplayer::client::realtime_client>();
+        if (!multiplayer_realtime_->connect(auth::load_session_summary(), state_.multiplayer_room_id)) {
+            multiplayer_realtime_.reset();
+        }
+    }
+    start_gate_active_ = true;
+    multiplayer_loaded_sent_ = false;
+    multiplayer_countdown_started_ = false;
+    start_gate_timer_ = state_.multiplayer_room_id.empty() ? kSoloStartGateSeconds : 0.0f;
+    match_loaded_poll_t_ = 0.0f;
+    multiplayer_score_sync_t_ = 0.0f;
+    state_.status_text = state_.multiplayer_room_id.empty()
+        ? "Ready"
+        : "Loaded. Waiting for players...";
+    state_.status_progress = state_.multiplayer_room_id.empty() ? 0.92f : 0.96f;
+}
+
+void play_scene::wait_for_pending_load() {
+    if (!load_future_.has_value()) {
+        return;
+    }
+    if (load_future_->valid()) {
+        load_future_->wait();
+    }
+    load_future_.reset();
+    load_progress_.reset();
 }
 
 void play_scene::rebuild_hit_regions() const {

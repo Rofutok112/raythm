@@ -170,6 +170,7 @@ struct play_session_state {
     bool chart_end_fade_started = false;
     float chart_end_hold_timer = 0.0f;
     std::string hitsound_path;
+    float status_progress = 0.0f;
     play_hitsound_paths hitsounds;
     std::vector<float> mv_waveform;
     int start_tick = 0;
