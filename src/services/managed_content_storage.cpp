@@ -20,6 +20,7 @@
 #include "app_paths.h"
 #include "content_cache_paths.h"
 #include "network/json_helpers.h"
+#include "path_utils.h"
 #include "updater/update_verify.h"
 
 namespace managed_content_storage {
@@ -576,7 +577,9 @@ std::optional<package_manifest> read_manifest(const fs::path& song_directory) {
     return manifest;
 }
 
-bool write_manifest(package_manifest manifest, std::string& error_message) {
+bool write_manifest_at_path(package_manifest manifest,
+                            const fs::path& path,
+                            std::string& error_message) {
     if (manifest.song.server_url.empty() || manifest.song.remote_song_id.empty()) {
         error_message = "Managed content manifest is missing remote song identity.";
         return false;
@@ -592,9 +595,9 @@ bool write_manifest(package_manifest manifest, std::string& error_message) {
     }
     manifest.updated_at = utc_timestamp_now();
 
-    const fs::path path = manifest_path(manifest.song);
     fs::create_directories(path.parent_path());
-    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    const fs::path temp_path = path.parent_path() / (path.filename().string() + ".tmp");
+    std::ofstream output(temp_path, std::ios::binary | std::ios::trunc);
     if (!output.is_open()) {
         error_message = "Failed to open managed content manifest for writing.";
         return false;
@@ -666,7 +669,26 @@ bool write_manifest(package_manifest manifest, std::string& error_message) {
         error_message = "Failed to write managed content manifest.";
         return false;
     }
+    output.close();
+
+    std::error_code ec;
+    fs::rename(temp_path, path, ec);
+    if (ec) {
+        ec.clear();
+        fs::remove(path, ec);
+        ec.clear();
+        fs::rename(temp_path, path, ec);
+        if (ec) {
+            error_message = "Failed to replace managed content manifest.";
+            return false;
+        }
+    }
     return true;
+}
+
+bool write_manifest(package_manifest manifest, std::string& error_message) {
+    const fs::path path = manifest_path(manifest.song);
+    return write_manifest_at_path(std::move(manifest), path, error_message);
 }
 
 void upsert_chart(package_manifest& manifest, const chart_identity& identity) {
@@ -848,6 +870,74 @@ managed_file_read_result read_managed_file(const fs::path& file_path) {
         return result;
     }
     return read_encrypted_asset(manifest, package_dir, *asset);
+}
+
+managed_chart_file_info describe_managed_chart_file(const fs::path& file_path) {
+    managed_chart_file_info result;
+    const std::optional<std::pair<fs::path, package_manifest>> found = manifest_for_file(file_path);
+    if (!found.has_value()) {
+        return result;
+    }
+
+    const fs::path& package_dir = found->first;
+    const package_manifest& manifest = found->second;
+    for (const chart_manifest_entry& chart : manifest.charts) {
+        if (path_matches_asset(package_dir, chart.encrypted_chart, file_path)) {
+            result.managed = true;
+            result.local_chart_id = chart.local_chart_id;
+            return result;
+        }
+    }
+    return result;
+}
+
+managed_file_write_result write_managed_chart_file(const fs::path& file_path,
+                                                   std::string_view plaintext,
+                                                   std::string_view chart_fingerprint_hash) {
+    managed_file_write_result result;
+    const std::optional<std::pair<fs::path, package_manifest>> found = manifest_for_file(file_path);
+    if (!found.has_value()) {
+        return result;
+    }
+
+    const fs::path& package_dir = found->first;
+    package_manifest manifest = found->second;
+    chart_manifest_entry* target_chart = nullptr;
+    for (chart_manifest_entry& chart : manifest.charts) {
+        if (path_matches_asset(package_dir, chart.encrypted_chart, file_path)) {
+            target_chart = &chart;
+            break;
+        }
+    }
+    if (target_chart == nullptr) {
+        return result;
+    }
+
+    result.managed = true;
+    const std::string logical_path = target_chart->encrypted_chart.logical_path.empty()
+        ? path_utils::to_utf8(chart_file_path(package_dir, target_chart->local_chart_id).lexically_relative(package_dir))
+        : target_chart->encrypted_chart.logical_path;
+    std::string error_message;
+    if (!write_encrypted_asset(manifest,
+                               package_dir,
+                               logical_path,
+                               plaintext,
+                               target_chart->encrypted_chart,
+                               error_message)) {
+        result.error_message = error_message;
+        return result;
+    }
+    target_chart->chart_hash = target_chart->encrypted_chart.content_hash;
+    if (!chart_fingerprint_hash.empty()) {
+        target_chart->chart_fingerprint = std::string(chart_fingerprint_hash);
+    }
+    if (!write_manifest_at_path(manifest, manifest_path(package_dir), error_message)) {
+        result.error_message = error_message;
+        return result;
+    }
+
+    result.success = true;
+    return result;
 }
 
 std::vector<fs::path> list_package_directories(online_content::source source) {

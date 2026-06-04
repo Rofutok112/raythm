@@ -1,6 +1,7 @@
 #include "song_select/song_catalog_service.h"
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <optional>
 #include <system_error>
@@ -125,6 +126,33 @@ content_kind kind_for_source(online_content::source source) {
 
 content_status status_for_source(online_content::source source) {
     return source == online_content::source::official ? content_status::official : content_status::community;
+}
+
+std::string lowercase(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return value;
+}
+
+bool hash_changed(const std::string& local_hash, const std::string& remote_hash) {
+    return !local_hash.empty() &&
+           !remote_hash.empty() &&
+           lowercase(local_hash) != lowercase(remote_hash);
+}
+
+bool managed_chart_modified(const managed_content_storage::chart_manifest_entry& chart) {
+    if (!chart.remote_chart_fingerprint.empty()) {
+        return hash_changed(chart.chart_fingerprint, chart.remote_chart_fingerprint);
+    }
+    return hash_changed(chart.chart_hash, chart.remote_chart_hash);
+}
+
+content_status status_for_managed_chart(online_content::source source,
+                                        const managed_content_storage::chart_manifest_entry* chart) {
+    if (chart != nullptr && managed_chart_modified(*chart)) {
+        return content_status::modified;
+    }
+    return status_for_source(source);
 }
 
 const managed_content_storage::chart_manifest_entry* find_manifest_chart(
@@ -301,7 +329,8 @@ void append_loaded_song(song_select::catalog_data& catalog,
         option.kind = managed ? kind_for_source(managed_manifest->song.source) : content_kind::local;
         option.storage = managed ? storage_policy::managed_package : storage_policy::plain_workspace;
         option.verification = verification_state::unchecked;
-        option.status = managed ? status_for_source(managed_manifest->song.source) : content_status::local;
+        option.status = managed ? status_for_managed_chart(managed_manifest->song.source, managed_chart)
+                                : content_status::local;
         option.source_status = option.status;
         if (managed) {
             if (managed_chart != nullptr) {

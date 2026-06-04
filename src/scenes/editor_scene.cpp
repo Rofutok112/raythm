@@ -147,8 +147,11 @@ void editor_scene::update(float dt) {
         return;
     }
 
+    const bool ctrl_down = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    const bool ctrl_s_pressed = ctrl_down && IsKeyPressed(KEY_S);
     const bool save_dialog_submit = save_dialog_.submit_requested ||
-        (save_dialog_.open && ui::is_clicked(layout::save_submit_button_rect(), ui::draw_layer::modal));
+        (save_dialog_.open && (ctrl_s_pressed ||
+                               ui::is_clicked(layout::save_submit_button_rect(), ui::draw_layer::modal)));
     save_dialog_.submit_requested = false;
     const bool playtest_requested = IsKeyPressed(KEY_F5) ||
         playtest_button_requested_ ||
@@ -164,7 +167,7 @@ void editor_scene::update(float dt) {
         &unsaved_changes_dialog_,
         IsKeyPressed(KEY_ESCAPE),
         ui::is_clicked(layout::kBackButtonRect),
-        (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_S),
+        ctrl_s_pressed,
         playtest_requested,
         IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
         has_active_metadata_input(),
@@ -173,7 +176,8 @@ void editor_scene::update(float dt) {
         timeline_drag_.active,
         save_dialog_submit,
         save_dialog_.open && ui::is_clicked(layout::save_cancel_button_rect(), ui::draw_layer::modal),
-        unsaved_changes_dialog_.open && ui::is_clicked(layout::unsaved_save_button_rect(), ui::draw_layer::modal),
+        unsaved_changes_dialog_.open && (ctrl_s_pressed ||
+                                         ui::is_clicked(layout::unsaved_save_button_rect(), ui::draw_layer::modal)),
         unsaved_changes_dialog_.open && ui::is_clicked(layout::unsaved_discard_button_rect(), ui::draw_layer::modal),
         unsaved_changes_dialog_.open && ui::is_clicked(layout::unsaved_cancel_button_rect(), ui::draw_layer::modal),
         metadata_panel_.key_count_confirm_open && ui::is_clicked(layout::key_count_confirm_button_rect(), ui::draw_layer::modal),
@@ -382,8 +386,16 @@ chart_data editor_scene::make_chart_data_for_save() {
     pending_level_refresh_generation_ = state_->level_refresh_generation();
     level_refresh_after_time_ = 0.0;
     chart_data data = state_->data();
-    if (state_->file_path().empty()) {
-        data.meta.chart_id = generated_chart_id(data.meta.difficulty);
+    if (data.meta.chart_id.empty()) {
+        chart_meta updated_meta = data.meta;
+        updated_meta.chart_id = generated_chart_id(data.meta.difficulty);
+        if (state_->modify_metadata(updated_meta)) {
+            state_->refresh_auto_level();
+            pending_level_refresh_generation_ = state_->level_refresh_generation();
+            data = state_->data();
+        } else {
+            data.meta.chart_id = updated_meta.chart_id;
+        }
     }
     data.meta.song_id = song_.meta.song_id;
     return data;

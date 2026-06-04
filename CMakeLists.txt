@@ -1088,9 +1088,15 @@ add_executable(editor_transport_controller_smoke
 add_executable(editor_flow_controller_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
         src/core/path_utils.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
         src/scenes/editor/editor_command.h
         src/scenes/editor/editor_meter_map.cpp
         src/scenes/editor/editor_meter_map.h
@@ -1100,6 +1106,8 @@ add_executable(editor_flow_controller_smoke
         src/scenes/editor/editor_timing_panel.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
+        src/gameplay/chart_fingerprint.cpp
+        src/gameplay/chart_fingerprint.h
         src/gameplay/chart_difficulty.cpp
         src/gameplay/chart_difficulty.h
         src/gameplay/chart_judge_events.cpp
@@ -1110,6 +1118,8 @@ add_executable(editor_flow_controller_smoke
         src/scenes/editor/editor_flow_controller.cpp
         src/scenes/editor/editor_flow_controller.h
         src/scenes/editor/editor_scene_types.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
         src/tests/editor_flow_controller_smoke.cpp)
 
 add_executable(editor_timeline_controller_smoke

@@ -87,6 +87,17 @@ struct managed_file_read_result {
     std::string error_message;
 };
 
+struct managed_file_write_result {
+    bool managed = false;
+    bool success = false;
+    std::string error_message;
+};
+
+struct managed_chart_file_info {
+    bool managed = false;
+    std::string local_chart_id;
+};
+
 std::string local_song_id(const song_identity& identity);
 std::string local_chart_id(const chart_identity& identity);
 
@@ -117,6 +128,10 @@ managed_file_read_result read_encrypted_asset(const package_manifest& manifest,
                                               const std::filesystem::path& song_directory,
                                               const encrypted_asset_metadata& asset);
 managed_file_read_result read_managed_file(const std::filesystem::path& file_path);
+managed_chart_file_info describe_managed_chart_file(const std::filesystem::path& file_path);
+managed_file_write_result write_managed_chart_file(const std::filesystem::path& file_path,
+                                                   std::string_view plaintext,
+                                                   std::string_view chart_fingerprint_hash = {});
 
 std::vector<std::filesystem::path> list_package_directories(online_content::source source);
 bool is_within_content_cache(const std::filesystem::path& path);

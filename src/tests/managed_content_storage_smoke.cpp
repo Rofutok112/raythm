@@ -316,6 +316,7 @@ int main() {
     assert(managed->song.directory.find("community") != std::string::npos);
     assert(managed->charts.size() == 1);
     assert(managed->charts.front().storage == storage_policy::managed_package);
+    assert(managed->charts.front().status == content_status::modified);
     assert(managed->charts.front().online_identity.has_value());
     assert(managed->charts.front().online_identity->remote_chart_id == "remote-chart");
     assert(managed->charts.front().managed_manifest.has_value());
