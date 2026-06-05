@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "content_lifecycle.h"
+#include "services/content_sync_service.h"
 #include "title/online_catalog_data_controller.h"
 #include "title/online_download_preview_controller.h"
 #include "tween.h"
@@ -599,7 +600,7 @@ bool handle_detail_actions(state& state,
             result.action = requested_action::primary;
         } else if (chart != nullptr &&
                    chart->installed &&
-                   (chart->update_available || chart->chart.status == content_status::modified)) {
+                   (chart->update_available || content_sync_service::is_modified(chart->chart.sync_state))) {
             result.action = requested_action::download_chart;
         } else {
             result.action = requested_action::open_local;

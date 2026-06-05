@@ -211,6 +211,10 @@ add_executable(raythm WIN32 src/main.cpp
         src/services/ranking_service.h
         src/services/online_content_availability.cpp
         src/services/online_content_availability.h
+        src/services/content_authorization_service.cpp
+        src/services/content_authorization_service.h
+        src/services/content_sync_service.cpp
+        src/services/content_sync_service.h
         src/services/managed_content_storage.cpp
         src/services/managed_content_storage.h
         src/gameplay/scoring_ruleset_runtime.cpp
@@ -746,10 +750,14 @@ add_executable(online_content_availability_smoke
         src/updater/update_verify.h
         src/services/online_content_availability.cpp
         src/services/online_content_availability.h
+        src/services/content_sync_service.cpp
+        src/services/content_sync_service.h
         src/scenes/title/local_content_binding.h
         src/scenes/title/local_content_index.h
         src/scenes/song_select/song_select_state.cpp
         src/scenes/song_select/song_select_state.h
+        src/services/content_sync_service.cpp
+        src/services/content_sync_service.h
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
         src/tests/online_content_availability_smoke.cpp)
@@ -772,6 +780,17 @@ add_executable(create_tools_model_smoke
         src/scenes/title/local_content_index.h
         src/scenes/song_select/song_select_state.h
         src/tests/create_tools_model_smoke.cpp)
+
+add_executable(content_authorization_service_smoke
+        src/services/content_authorization_service.cpp
+        src/services/content_authorization_service.h
+        src/tests/content_authorization_service_smoke.cpp)
+
+add_executable(content_sync_service_smoke
+        src/models/data_models.h
+        src/services/content_sync_service.cpp
+        src/services/content_sync_service.h
+        src/tests/content_sync_service_smoke.cpp)
 
 add_executable(content_cache_paths_smoke
         src/core/app_paths.cpp
@@ -825,6 +844,8 @@ add_executable(managed_content_storage_smoke
         src/scenes/song_select/song_catalog_service.h
         src/scenes/song_select/song_select_state.cpp
         src/scenes/song_select/song_select_state.h
+        src/services/content_sync_service.cpp
+        src/services/content_sync_service.h
         src/scenes/title/local_content_binding.h
         src/scenes/title/local_content_database.cpp
         src/scenes/title/local_content_database.h
@@ -872,6 +893,8 @@ add_executable(local_catalog_database_smoke
         src/scenes/song_select/local_catalog_database.h
         src/scenes/song_select/song_select_state.cpp
         src/scenes/song_select/song_select_state.h
+        src/services/content_sync_service.cpp
+        src/services/content_sync_service.h
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
         src/models/data_models.h
@@ -1344,6 +1367,8 @@ set(RAYTHM_SMOKE_TARGETS
         online_content_availability_smoke
         create_upload_permissions_smoke
         create_tools_model_smoke
+        content_authorization_service_smoke
+        content_sync_service_smoke
         content_cache_paths_smoke
         managed_content_storage_smoke
         settings_io_smoke

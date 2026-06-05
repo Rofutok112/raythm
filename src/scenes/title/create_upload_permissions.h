@@ -6,9 +6,6 @@
 
 namespace title_create_upload_permissions {
 
-bool can_edit_remote(const local_content_index::online_song_binding& binding);
-bool can_edit_remote(const local_content_index::online_chart_binding& binding);
-
 bool can_start_song_upload(bool song_selected,
                            bool online_status_checking,
                            const std::optional<local_content_index::online_song_binding>& song_binding);

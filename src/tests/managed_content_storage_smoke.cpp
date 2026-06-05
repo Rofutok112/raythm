@@ -21,6 +21,7 @@
 #include "ranking_service.h"
 #include "song_select/song_catalog_service.h"
 #include "song_writer.h"
+#include "title/local_content_database.h"
 #include "title/local_content_index.h"
 
 namespace fs = std::filesystem;
@@ -285,6 +286,14 @@ int main() {
     assert(manifest_chart_binding->remote_song_id == chart_identity.remote_song_id);
     assert(manifest_chart_binding->remote_chart_version == chart_identity.chart_version);
 
+    const std::string extra_chart_id = "local-extra-chart";
+    const chart_data extra_chart = make_chart(extra_chart_id, managed_song_id);
+    std::error_code extra_chart_ec;
+    fs::create_directories(managed_song_dir / "charts", extra_chart_ec);
+    assert(!extra_chart_ec);
+    assert(chart_serializer::serialize(
+        extra_chart, path_utils::to_utf8(managed_content_storage::chart_file_path(managed_song_dir, extra_chart_id))));
+
     const song_select::catalog_data catalog = song_select::load_catalog(true);
     assert(catalog.songs.size() == 2);
 
@@ -305,7 +314,9 @@ int main() {
 
     assert(managed != nullptr);
     assert(managed->storage == storage_policy::managed_package);
+    assert(managed->status == content_status::modified);
     assert(managed->source_status == content_status::community);
+    assert(managed->sync_state == content_sync_state::modified);
     assert(managed->online_identity.has_value());
     assert(managed->online_identity->remote_song_id == "remote-song");
     assert(managed->managed_manifest.has_value());
@@ -314,21 +325,47 @@ int main() {
     assert(managed->managed_manifest->audio_hash == "local-audio-sha");
     assert(managed->song.directory.find("content-cache") != std::string::npos);
     assert(managed->song.directory.find("community") != std::string::npos);
-    assert(managed->charts.size() == 1);
-    assert(managed->charts.front().storage == storage_policy::managed_package);
-    assert(managed->charts.front().status == content_status::modified);
-    assert(managed->charts.front().online_identity.has_value());
-    assert(managed->charts.front().online_identity->remote_chart_id == "remote-chart");
-    assert(managed->charts.front().managed_manifest.has_value());
-    assert(managed->charts.front().managed_manifest->chart_hash == "local-chart-sha");
-    assert(managed->charts.front().managed_manifest->remote_chart_fingerprint == "remote-chart-fingerprint");
-    assert(managed->charts.front().path.find("content-cache") != std::string::npos);
-    assert(managed->charts.front().meta.level > 0.0f);
+    assert(managed->charts.size() == 2);
+    const song_select::chart_option* managed_remote_chart = nullptr;
+    const song_select::chart_option* local_extra_chart = nullptr;
+    for (const song_select::chart_option& chart : managed->charts) {
+        if (chart.meta.chart_id == managed_chart_id) {
+            managed_remote_chart = &chart;
+        }
+        if (chart.meta.chart_id == extra_chart_id) {
+            local_extra_chart = &chart;
+        }
+    }
+    assert(managed_remote_chart != nullptr);
+    assert(managed_remote_chart->storage == storage_policy::managed_package);
+    assert(managed_remote_chart->status == content_status::modified);
+    assert(managed_remote_chart->online_identity.has_value());
+    assert(managed_remote_chart->online_identity->remote_chart_id == "remote-chart");
+    assert(managed_remote_chart->managed_manifest.has_value());
+    assert(managed_remote_chart->managed_manifest->chart_hash == "local-chart-sha");
+    assert(managed_remote_chart->managed_manifest->remote_chart_fingerprint == "remote-chart-fingerprint");
+    assert(managed_remote_chart->path.find("content-cache") != std::string::npos);
+    assert(managed_remote_chart->meta.level > 0.0f);
+    assert(local_extra_chart != nullptr);
+    assert(local_extra_chart->storage == storage_policy::plain_workspace);
+    assert(local_extra_chart->kind == content_kind::local);
+    assert(local_extra_chart->status == content_status::local);
+    assert(local_extra_chart->source_status == content_status::local);
+    assert(local_extra_chart->source == content_source::local);
+    assert(local_extra_chart->sync_state == content_sync_state::clean);
+    assert(!local_extra_chart->online_identity.has_value());
+    assert(!local_extra_chart->managed_manifest.has_value());
+    assert(local_extra_chart->remote_links.empty());
+    assert(local_extra_chart->path.find("content-cache") != std::string::npos);
 
     song_select::catalog_data stale_cached_catalog = catalog;
     for (song_select::song_entry& song : stale_cached_catalog.songs) {
-        if (song.song.meta.song_id == managed_song_id && !song.charts.empty()) {
-            song.charts.front().meta.level = 0.0f;
+        if (song.song.meta.song_id == managed_song_id) {
+            for (song_select::chart_option& chart : song.charts) {
+                if (chart.meta.chart_id == managed_chart_id) {
+                    chart.meta.level = 0.0f;
+                }
+            }
         }
     }
     song_select::local_catalog_database::replace_catalog(stale_cached_catalog.songs);
@@ -343,7 +380,20 @@ int main() {
     }
     assert(fast_cached_managed != nullptr);
     assert(!fast_cached_managed->charts.empty());
-    assert(fast_cached_managed->charts.front().meta.level == 0.0f);
+    const song_select::chart_option* fast_cached_remote = nullptr;
+    const song_select::chart_option* fast_cached_extra = nullptr;
+    for (const song_select::chart_option& chart : fast_cached_managed->charts) {
+        if (chart.meta.chart_id == managed_chart_id) {
+            fast_cached_remote = &chart;
+        }
+        if (chart.meta.chart_id == extra_chart_id) {
+            fast_cached_extra = &chart;
+        }
+    }
+    assert(fast_cached_remote != nullptr);
+    assert(fast_cached_remote->meta.level == 0.0f);
+    assert(fast_cached_extra != nullptr);
+    assert(fast_cached_extra->storage == storage_policy::plain_workspace);
 
     const song_select::catalog_data repaired_cached_catalog = song_select::load_catalog(true);
     const song_select::song_entry* repaired_managed = nullptr;
@@ -355,7 +405,20 @@ int main() {
     }
     assert(repaired_managed != nullptr);
     assert(!repaired_managed->charts.empty());
-    assert(repaired_managed->charts.front().meta.level > 0.0f);
+    const song_select::chart_option* repaired_remote = nullptr;
+    const song_select::chart_option* repaired_extra = nullptr;
+    for (const song_select::chart_option& chart : repaired_managed->charts) {
+        if (chart.meta.chart_id == managed_chart_id) {
+            repaired_remote = &chart;
+        }
+        if (chart.meta.chart_id == extra_chart_id) {
+            repaired_extra = &chart;
+        }
+    }
+    assert(repaired_remote != nullptr);
+    assert(repaired_remote->meta.level > 0.0f);
+    assert(repaired_extra != nullptr);
+    assert(repaired_extra->storage == storage_policy::plain_workspace);
 
     const song_select::catalog_data persisted_cached_catalog =
         song_select::local_catalog_database::load_cached_catalog();
@@ -368,10 +431,129 @@ int main() {
     }
     assert(persisted_managed != nullptr);
     assert(!persisted_managed->charts.empty());
-    assert(persisted_managed->charts.front().meta.level > 0.0f);
+    const song_select::chart_option* persisted_remote = nullptr;
+    const song_select::chart_option* persisted_extra = nullptr;
+    for (const song_select::chart_option& chart : persisted_managed->charts) {
+        if (chart.meta.chart_id == managed_chart_id) {
+            persisted_remote = &chart;
+        }
+        if (chart.meta.chart_id == extra_chart_id) {
+            persisted_extra = &chart;
+        }
+    }
+    assert(persisted_remote != nullptr);
+    assert(persisted_remote->meta.level > 0.0f);
+    assert(persisted_extra != nullptr);
+    assert(persisted_extra->storage == storage_policy::plain_workspace);
+
+    const managed_content_storage::chart_identity uploaded_extra_identity{
+        .source = online_content::source::community,
+        .server_url = song_identity.server_url,
+        .remote_song_id = song_identity.remote_song_id,
+        .remote_chart_id = "uploaded-extra-chart",
+        .song_version = song_identity.song_version,
+        .chart_version = 7,
+        .revision_id = "uploaded-extra-rev-7",
+        .chart_hash = "uploaded-extra-local-sha",
+        .chart_fingerprint = "uploaded-extra-local-fingerprint",
+        .remote_chart_hash = "uploaded-extra-remote-sha",
+        .remote_chart_fingerprint = "uploaded-extra-local-fingerprint",
+    };
+    const fs::path local_extra_path =
+        managed_content_storage::chart_file_path(managed_song_dir, extra_chart_id);
+    const managed_content_storage::chart_promotion_result promoted_extra =
+        managed_content_storage::promote_plain_chart_to_managed(
+            managed_song_dir, uploaded_extra_identity, local_extra_path, true, error_message);
+    assert(promoted_extra.success);
+    assert(!promoted_extra.local_chart_id.empty());
+    assert(promoted_extra.local_chart_id != extra_chart_id);
+    assert(!fs::exists(local_extra_path));
+    assert(fs::exists(managed_content_storage::encrypted_asset_path(
+        promoted_extra.song_directory, "charts/" + promoted_extra.local_chart_id + ".rchart")));
+
+    local_content_index::put_chart_binding({
+        .server_url = song_identity.server_url,
+        .local_chart_id = promoted_extra.local_chart_id,
+        .remote_chart_id = uploaded_extra_identity.remote_chart_id,
+        .remote_song_id = uploaded_extra_identity.remote_song_id,
+        .remote_chart_version = uploaded_extra_identity.chart_version,
+        .origin = local_content_index::online_origin::owned_upload,
+    });
+
+    const song_select::catalog_data promoted_catalog = song_select::load_catalog(true);
+    const song_select::song_entry* promoted_song = nullptr;
+    for (const song_select::song_entry& song : promoted_catalog.songs) {
+        if (song.song.meta.song_id == managed_song_id) {
+            promoted_song = &song;
+            break;
+        }
+    }
+    assert(promoted_song != nullptr);
+    const song_select::chart_option* promoted_chart = nullptr;
+    for (const song_select::chart_option& chart : promoted_song->charts) {
+        if (chart.meta.chart_id == promoted_extra.local_chart_id) {
+            promoted_chart = &chart;
+            break;
+        }
+    }
+    assert(promoted_chart != nullptr);
+    assert(promoted_chart->storage == storage_policy::managed_package);
+    assert(promoted_chart->source_status == content_status::community);
+    assert(promoted_chart->source == content_source::community);
+    assert(promoted_chart->sync_state == content_sync_state::clean);
+    assert(promoted_chart->online_identity.has_value());
+    assert(promoted_chart->online_identity->remote_chart_id == uploaded_extra_identity.remote_chart_id);
+    assert(promoted_chart->managed_manifest.has_value());
+
+    local_content_database::put_remote_metadata({
+        .server_url = song_identity.server_url,
+        .type = local_content_database::remote_content_type::song,
+        .remote_id = song_identity.remote_song_id,
+        .content_source = "official",
+        .lifecycle_status = "published",
+        .review_status = "approved",
+        .remote_version = song_identity.song_version,
+        .revision_id = song_identity.revision_id,
+        .content_hash = "official-song-fingerprint",
+    });
+    const managed_content_storage::song_identity official_song_identity{
+        .source = online_content::source::official,
+        .server_url = song_identity.server_url,
+        .remote_song_id = song_identity.remote_song_id,
+        .song_version = song_identity.song_version,
+        .revision_id = song_identity.revision_id,
+        .package_id = song_identity.package_id,
+    };
+    const fs::path official_song_dir = managed_content_storage::song_directory(official_song_identity);
+    const song_select::catalog_data official_catalog = song_select::load_catalog(true);
+    assert(!fs::exists(managed_content_storage::manifest_path(managed_song_dir)));
+    assert(fs::exists(managed_content_storage::manifest_path(official_song_dir)));
+    const song_select::song_entry* official_song = nullptr;
+    for (const song_select::song_entry& song : official_catalog.songs) {
+        if (song.song.meta.song_id == managed_song_id) {
+            official_song = &song;
+            break;
+        }
+    }
+    assert(official_song != nullptr);
+    assert(official_song->storage == storage_policy::managed_package);
+    assert(official_song->source_status == content_status::official);
+    assert(official_song->source == content_source::official);
+    assert(official_song->song.directory.find("official") != std::string::npos);
+    const song_select::chart_option* official_promoted_chart = nullptr;
+    for (const song_select::chart_option& chart : official_song->charts) {
+        if (chart.meta.chart_id == promoted_extra.local_chart_id) {
+            official_promoted_chart = &chart;
+            break;
+        }
+    }
+    assert(official_promoted_chart != nullptr);
+    assert(official_promoted_chart->storage == storage_policy::managed_package);
+    assert(official_promoted_chart->source_status == content_status::official);
+    assert(official_promoted_chart->source == content_source::official);
 
     const fs::path encrypted_chart_path =
-        managed_content_storage::encrypted_asset_path(managed_song_dir, stored_manifest->charts.front().encrypted_chart);
+        managed_content_storage::encrypted_asset_path(official_song_dir, stored_manifest->charts.front().encrypted_chart);
     const fs::path encrypted_chart_backup = temp_root / "managed-chart.renc.backup";
     const std::string complete_signature = local_catalog_signature::current();
     fs::rename(encrypted_chart_path, encrypted_chart_backup, ec);
@@ -380,6 +562,7 @@ int main() {
     assert(song_select::local_catalog_database::load_cached_catalog().songs.empty());
     fs::rename(encrypted_chart_backup, encrypted_chart_path, ec);
     assert(!ec);
+    (void)song_select::load_catalog(true);
     assert(!song_select::local_catalog_database::load_cached_catalog().songs.empty());
 
     fs::remove_all(temp_root, ec);

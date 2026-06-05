@@ -48,6 +48,8 @@ struct chart_option {
     verification_state verification = verification_state::unchecked;
     content_status status = content_status::local;
     content_status source_status = content_status::local;
+    content_source source = content_source::local;
+    content_sync_state sync_state = content_sync_state::clean;
     std::optional<online_content::chart_identity> online_identity;
     std::optional<managed_chart_manifest_metadata> managed_manifest;
     std::vector<online_content::chart_identity> remote_links;
@@ -66,6 +68,8 @@ struct song_entry {
     verification_state verification = verification_state::unchecked;
     content_status status = content_status::local;
     content_status source_status = content_status::local;
+    content_source source = content_source::local;
+    content_sync_state sync_state = content_sync_state::clean;
     std::optional<online_content::song_identity> online_identity;
     std::optional<managed_song_manifest_metadata> managed_manifest;
     std::vector<chart_option> charts;

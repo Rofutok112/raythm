@@ -98,6 +98,19 @@ struct managed_chart_file_info {
     std::string local_chart_id;
 };
 
+struct package_relocation_result {
+    bool success = false;
+    bool relocated = false;
+    std::filesystem::path song_directory;
+};
+
+struct chart_promotion_result {
+    bool success = false;
+    std::filesystem::path song_directory;
+    std::filesystem::path chart_path;
+    std::string local_chart_id;
+};
+
 std::string local_song_id(const song_identity& identity);
 std::string local_chart_id(const chart_identity& identity);
 
@@ -111,6 +124,14 @@ std::filesystem::path manifest_path(const std::filesystem::path& song_directory)
 std::optional<package_manifest> read_manifest(const std::filesystem::path& song_directory);
 bool write_manifest(package_manifest manifest, std::string& error_message);
 void upsert_chart(package_manifest& manifest, const chart_identity& identity);
+package_relocation_result relocate_package_source(const std::filesystem::path& song_directory,
+                                                  online_content::source target_source,
+                                                  std::string& error_message);
+chart_promotion_result promote_plain_chart_to_managed(const std::filesystem::path& song_directory,
+                                                      const chart_identity& identity,
+                                                      const std::filesystem::path& plain_chart_path,
+                                                      bool remove_plain_file,
+                                                      std::string& error_message);
 
 const char* default_encryption_scheme();
 bool has_encrypted_assets(const package_manifest& manifest);

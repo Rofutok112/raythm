@@ -240,11 +240,6 @@ void sync_managed_manifest_identity(const managed_content_storage::package_manif
     };
     const std::optional<local_content_index::online_song_binding> existing_song =
         local_content_index::find_song_by_local(song_binding.server_url, song_binding.local_song_id);
-    if (existing_song.has_value()) {
-        song_binding.can_edit = existing_song->can_edit;
-        song_binding.lifecycle_status = existing_song->lifecycle_status;
-        song_binding.review_status = existing_song->review_status;
-    }
     if (!existing_song.has_value() ||
         existing_song->remote_song_id != song_binding.remote_song_id) {
         local_content_index::put_song_binding(song_binding);
@@ -264,11 +259,6 @@ void sync_managed_manifest_identity(const managed_content_storage::package_manif
         };
         const std::optional<local_content_index::online_chart_binding> existing_chart =
             local_content_index::find_chart_by_local(chart_binding.server_url, chart_binding.local_chart_id);
-        if (existing_chart.has_value()) {
-            chart_binding.can_edit = existing_chart->can_edit;
-            chart_binding.lifecycle_status = existing_chart->lifecycle_status;
-            chart_binding.review_status = existing_chart->review_status;
-        }
         if (!existing_chart.has_value() ||
             existing_chart->remote_chart_id != chart_binding.remote_chart_id ||
             existing_chart->remote_song_id != chart_binding.remote_song_id ||

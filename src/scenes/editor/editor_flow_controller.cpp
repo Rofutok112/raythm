@@ -166,8 +166,11 @@ bool save_appdata_chart(const editor_flow_context& context, const chart_data& ch
         return false;
     }
 
+    const std::filesystem::path current_song_dir = path_utils::from_utf8(context.song->directory);
     const std::filesystem::path dest =
-        app_paths::song_chart_path(context.song->meta.song_id, chart_for_save.meta.chart_id);
+        managed_content_storage::read_manifest(current_song_dir).has_value()
+            ? managed_content_storage::chart_file_path(current_song_dir, chart_for_save.meta.chart_id)
+            : app_paths::song_chart_path(context.song->meta.song_id, chart_for_save.meta.chart_id);
     app_paths::ensure_directories();
     return save_to_path(context, chart_for_save, path_utils::to_utf8(dest), result);
 }

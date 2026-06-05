@@ -1,9 +1,16 @@
 #include "title/title_play_create_feature.h"
 
+#include <chrono>
+#include <ctime>
+#include <optional>
+#include <thread>
 #include <utility>
 
+#include "network/auth_client.h"
 #include "network/server_environment.h"
 #include "ranking_service.h"
+#include "services/content_authorization_service.h"
+#include "title/local_content_database.h"
 #include "title/play_session_controller.h"
 
 namespace {
@@ -14,6 +21,104 @@ ranking_service::source ranking_source_for_current_selection(const song_select::
     return chart != nullptr && song_select::can_use_online_chart_routes(*chart)
         ? ranking_service::source::online
         : ranking_service::source::local;
+}
+
+std::optional<std::string> current_user_id_for_server(const std::string& server_url) {
+    const std::optional<auth::session> session = auth::load_saved_session();
+    if (!session.has_value() ||
+        auth::normalize_server_url(session->server_url) != server_url ||
+        session->user.id.empty()) {
+        return std::nullopt;
+    }
+    return session->user.id;
+}
+
+long long now_unix_seconds() {
+    return static_cast<long long>(std::time(nullptr));
+}
+
+content_authorization_service::content_type permission_type_for(
+    local_content_database::remote_content_type type) {
+    return type == local_content_database::remote_content_type::chart
+        ? content_authorization_service::content_type::chart
+        : content_authorization_service::content_type::song;
+}
+
+std::optional<bool> usable_cached_permission_hint(
+    const local_content_database::account_permission& permission,
+    local_content_database::remote_content_type type,
+    const std::string& server_url,
+    const std::string& remote_id,
+    const std::string& user_id) {
+    const content_authorization_service::permission_entry entry{
+        .key = {
+            .server_url = permission.server_url,
+            .type = permission_type_for(permission.type),
+            .remote_id = permission.remote_id,
+            .user_id = permission.user_id,
+        },
+        .can_edit = permission.can_edit,
+        .fetched_at_unix_seconds = permission.fetched_at_unix_seconds,
+    };
+    const content_authorization_service::permission_key current{
+        .server_url = server_url,
+        .type = permission_type_for(type),
+        .remote_id = remote_id,
+        .user_id = user_id,
+    };
+    return content_authorization_service::can_use_cached_permission(entry, current, now_unix_seconds())
+        ? permission.can_edit
+        : std::nullopt;
+}
+
+std::optional<bool> song_permission_hint_for(const std::string& server_url,
+                                             const std::optional<std::string>& user_id,
+                                             const title_create_tools_model::bindings& bindings) {
+    if (!user_id.has_value() || !bindings.song.has_value() || bindings.song->remote_song_id.empty()) {
+        return std::nullopt;
+    }
+    const auto permission = local_content_database::find_account_permission(
+        local_content_database::remote_content_type::song,
+        server_url,
+        bindings.song->remote_song_id,
+        *user_id);
+    return permission.has_value()
+        ? usable_cached_permission_hint(*permission,
+                                        local_content_database::remote_content_type::song,
+                                        server_url,
+                                        bindings.song->remote_song_id,
+                                        *user_id)
+        : std::nullopt;
+}
+
+std::optional<bool> chart_permission_hint_for(const std::string& server_url,
+                                              const std::optional<std::string>& user_id,
+                                              const title_create_tools_model::bindings& bindings) {
+    if (!user_id.has_value() || !bindings.chart.has_value() || bindings.chart->remote_chart_id.empty()) {
+        return std::nullopt;
+    }
+    const auto permission = local_content_database::find_account_permission(
+        local_content_database::remote_content_type::chart,
+        server_url,
+        bindings.chart->remote_chart_id,
+        *user_id);
+    return permission.has_value()
+        ? usable_cached_permission_hint(*permission,
+                                        local_content_database::remote_content_type::chart,
+                                        server_url,
+                                        bindings.chart->remote_chart_id,
+                                        *user_id)
+        : std::nullopt;
+}
+
+std::string create_permission_refresh_key(const std::string& server_url,
+                                          const std::string& user_id,
+                                          const title_create_tools_model::bindings& bindings) {
+    const std::string remote_song_id =
+        bindings.song.has_value() ? bindings.song->remote_song_id : "";
+    const std::string remote_chart_id =
+        bindings.chart.has_value() ? bindings.chart->remote_chart_id : "";
+    return server_url + "\n" + user_id + "\n" + remote_song_id + "\n" + remote_chart_id;
 }
 
 }  // namespace
@@ -44,6 +149,8 @@ void title_play_create_feature::reset() {
     create_tools_model_ = {};
     create_tools_bindings_ = {};
     create_tools_binding_cache_valid_ = false;
+    create_permission_refresh_in_progress_ = false;
+    create_permission_refresh_key_.clear();
     create_tools_binding_server_url_.clear();
     create_tools_binding_song_id_.clear();
     create_tools_binding_chart_id_.clear();
@@ -194,6 +301,7 @@ void title_play_create_feature::update_create(scene_manager& manager,
                                               const cross_callbacks& cross,
                                               const create_update_callbacks& callbacks) {
     state_.filter.include_chartless_songs = true;
+    poll_create_permission_refresh();
     refresh_create_tools_model();
     title_create_mode_controller::update(
         manager,
@@ -296,13 +404,85 @@ void title_play_create_feature::refresh_create_tools_model(bool force_bindings) 
         create_tools_binding_chart_id_ = chart_id;
     }
 
+    const std::optional<std::string> current_user_id = current_user_id_for_server(server_url);
+    const std::optional<bool> song_permission_hint =
+        song_permission_hint_for(server_url, current_user_id, create_tools_bindings_);
+    const std::optional<bool> chart_permission_hint =
+        chart_permission_hint_for(server_url, current_user_id, create_tools_bindings_);
     create_tools_model_ = title_create_tools_model::build({
         .song = song,
         .chart = chart,
         .server_url = server_url,
         .online_status_checking = state_.catalog_loading,
         .upload_bindings = create_tools_bindings_,
+        .song_permission_hint = song_permission_hint,
+        .chart_permission_hint = chart_permission_hint,
     });
+    request_create_permission_refresh(server_url,
+                                      current_user_id,
+                                      create_tools_bindings_,
+                                      song_permission_hint,
+                                      chart_permission_hint);
+}
+
+void title_play_create_feature::request_create_permission_refresh(
+    const std::string& server_url,
+    const std::optional<std::string>& current_user_id,
+    const title_create_tools_model::bindings& bindings,
+    const std::optional<bool>& song_permission_hint,
+    const std::optional<bool>& chart_permission_hint) {
+    if (server_url.empty() || !current_user_id.has_value() || create_permission_refresh_in_progress_) {
+        return;
+    }
+    const bool refresh_song =
+        bindings.song.has_value() &&
+        !bindings.song->remote_song_id.empty() &&
+        !song_permission_hint.has_value();
+    const bool refresh_chart =
+        bindings.chart.has_value() &&
+        !bindings.chart->remote_chart_id.empty() &&
+        !chart_permission_hint.has_value();
+    if (!refresh_song && !refresh_chart) {
+        return;
+    }
+
+    const std::string key = create_permission_refresh_key(server_url, *current_user_id, bindings);
+    if (key.empty() || key == create_permission_refresh_key_) {
+        return;
+    }
+    create_permission_refresh_key_ = key;
+    create_permission_refresh_in_progress_ = true;
+
+    const std::string remote_song_id = refresh_song ? bindings.song->remote_song_id : "";
+    const std::string remote_chart_id = refresh_chart ? bindings.chart->remote_chart_id : "";
+    create_permission_refresh_future_ = std::async(std::launch::async, [remote_song_id, remote_chart_id]() {
+        bool refreshed = false;
+        if (!remote_song_id.empty()) {
+            refreshed = title_create_upload::refresh_song_edit_permission(remote_song_id) || refreshed;
+        }
+        if (!remote_chart_id.empty()) {
+            refreshed = title_create_upload::refresh_chart_edit_permission(remote_chart_id) || refreshed;
+        }
+        return refreshed;
+    });
+}
+
+void title_play_create_feature::poll_create_permission_refresh() {
+    if (!create_permission_refresh_in_progress_) {
+        return;
+    }
+    if (create_permission_refresh_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        return;
+    }
+    bool refreshed = false;
+    try {
+        refreshed = create_permission_refresh_future_.get();
+    } catch (...) {
+    }
+    create_permission_refresh_in_progress_ = false;
+    if (refreshed) {
+        refresh_create_tools_model(true);
+    }
 }
 
 void title_play_create_feature::sync_play_media(song_select::preview_controller& preview_controller) {

@@ -11,6 +11,7 @@
 #include "local_catalog_signature.h"
 #include "local_sqlite.h"
 #include "network/json_helpers.h"
+#include "services/content_sync_service.h"
 #include "sqlite3.h"
 
 namespace song_select::local_catalog_database {
@@ -558,6 +559,10 @@ catalog_data load_cached_catalog() {
         entry.song.meta.timing_events = parse_timing_events(column_text(songs.get(), 13));
         entry.status = parse_status_label(column_text(songs.get(), 14));
         entry.source_status = parse_status_label(column_text(songs.get(), 15));
+        const content_sync_service::state entry_state =
+            content_sync_service::state_from_legacy_status(entry.source_status, entry.status);
+        entry.source = entry_state.source;
+        entry.sync_state = entry_state.sync;
         entry.kind = parse_content_kind_label(column_text(songs.get(), 16));
         entry.storage = parse_storage_policy_label(column_text(songs.get(), 17));
         entry.verification = parse_verification_state_label(column_text(songs.get(), 18));
@@ -606,6 +611,10 @@ catalog_data load_cached_catalog() {
         chart.max_bpm = static_cast<float>(sqlite3_column_double(charts.get(), 10));
         chart.status = parse_status_label(column_text(charts.get(), 11));
         chart.source_status = parse_status_label(column_text(charts.get(), 12));
+        const content_sync_service::state chart_state =
+            content_sync_service::state_from_legacy_status(chart.source_status, chart.status);
+        chart.source = chart_state.source;
+        chart.sync_state = chart_state.sync;
         chart.kind = parse_content_kind_label(column_text(charts.get(), 13));
         chart.storage = parse_storage_policy_label(column_text(charts.get(), 14));
         chart.verification = parse_verification_state_label(column_text(charts.get(), 15));

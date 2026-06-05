@@ -38,10 +38,8 @@ bool uses_submitted_ranking_best(const chart_option* chart) {
     if (!can_use_online_chart_routes(*chart)) {
         return false;
     }
-    if (chart->source_status == content_status::official ||
-            chart->source_status == content_status::community ||
-            chart->status == content_status::official ||
-            chart->status == content_status::community) {
+    if (chart->source == content_source::official ||
+            chart->source == content_source::community) {
         return true;
     }
 

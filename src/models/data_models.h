@@ -183,6 +183,22 @@ enum class content_status {
     checking,
 };
 
+enum class content_source {
+    local,
+    official,
+    community,
+    unknown,
+};
+
+enum class content_sync_state {
+    unknown,
+    clean,
+    modified,
+    update_available,
+    checking,
+    missing_remote,
+};
+
 enum class content_kind {
     local,
     community,

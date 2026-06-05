@@ -53,6 +53,8 @@ struct build_context {
     std::string server_url;
     bool online_status_checking = false;
     bindings upload_bindings;
+    std::optional<bool> song_permission_hint;
+    std::optional<bool> chart_permission_hint;
 };
 
 bindings resolve_bindings(const local_content_index::snapshot& index,

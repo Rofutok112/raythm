@@ -1,6 +1,8 @@
 #pragma once
 
 #include <functional>
+#include <future>
+#include <optional>
 #include <string>
 
 #include "raylib.h"
@@ -92,6 +94,12 @@ private:
     [[nodiscard]] title_play_transfer_controller::catalog_callbacks make_transfer_callbacks(
         const cross_callbacks& callbacks);
     void refresh_create_tools_model(bool force_bindings = false);
+    void request_create_permission_refresh(const std::string& server_url,
+                                           const std::optional<std::string>& current_user_id,
+                                           const title_create_tools_model::bindings& bindings,
+                                           const std::optional<bool>& song_permission_hint,
+                                           const std::optional<bool>& chart_permission_hint);
+    void poll_create_permission_refresh();
     void sync_play_media(song_select::preview_controller& preview_controller);
     void sync_create_preview(song_select::preview_controller& preview_controller);
 
@@ -101,6 +109,9 @@ private:
     title_create_tools_model::view_model create_tools_model_;
     title_create_tools_model::bindings create_tools_bindings_;
     bool create_tools_binding_cache_valid_ = false;
+    bool create_permission_refresh_in_progress_ = false;
+    std::future<bool> create_permission_refresh_future_;
+    std::string create_permission_refresh_key_;
     std::string create_tools_binding_server_url_;
     std::string create_tools_binding_song_id_;
     std::string create_tools_binding_chart_id_;
