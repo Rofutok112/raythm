@@ -8,6 +8,7 @@
 #include "audio_manager.h"
 #include "content_lifecycle.h"
 #include "network/auth_client.h"
+#include "services/content_sync_service.h"
 #include "theme.h"
 
 namespace title_online_view {
@@ -525,7 +526,7 @@ std::string song_status_label(const song_entry_state& song) {
             return label;
         }
     }
-    if (song.song.status == content_status::modified) {
+    if (content_sync_service::is_modified(song.song.sync_state)) {
         return "REPAIR";
     }
     if (song.update_available) {
@@ -548,7 +549,7 @@ Color song_status_color(const song_entry_state& song) {
                 : t.slow;
         }
     }
-    if (song.song.status == content_status::modified) {
+    if (content_sync_service::is_modified(song.song.sync_state)) {
         return t.slow;
     }
     if (song.update_available) {
@@ -569,7 +570,7 @@ std::string chart_status_label(const chart_entry_state& chart) {
             return label;
         }
     }
-    if (chart.chart.status == content_status::modified) {
+    if (content_sync_service::is_modified(chart.chart.sync_state)) {
         return "REPAIR";
     }
     if (chart.update_available) {
@@ -594,7 +595,7 @@ bool can_download_chart(const song_entry_state& song, const chart_entry_state& c
            !title_online_view::needs_download(song) &&
            (!chart.installed ||
             chart.update_available ||
-            chart.chart.status == content_status::modified);
+            content_sync_service::is_modified(chart.chart.sync_state));
 }
 
 const char* catalog_caption(const state& state, const std::vector<song_entry_state>& songs) {

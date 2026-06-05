@@ -4,12 +4,14 @@
 #include <cctype>
 #include <filesystem>
 #include <optional>
+#include <set>
 #include <system_error>
 #include <utility>
 #include <vector>
 
 #include "app_paths.h"
 #include "chart_level_cache.h"
+#include "services/content_sync_service.h"
 #include "managed_content_storage.h"
 #include "mv/mv_storage.h"
 #include "path_utils.h"
@@ -18,6 +20,7 @@
 #include "song_loader.h"
 #include "song_select/local_catalog_cache_service.h"
 #include "song_select/local_catalog_database.h"
+#include "title/local_content_database.h"
 #include "title/local_content_index.h"
 
 namespace {
@@ -128,6 +131,10 @@ content_status status_for_source(online_content::source source) {
     return source == online_content::source::official ? content_status::official : content_status::community;
 }
 
+content_source content_source_for_online_source(online_content::source source) {
+    return source == online_content::source::official ? content_source::official : content_source::community;
+}
+
 std::string lowercase(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(),
                    [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
@@ -145,6 +152,27 @@ bool managed_chart_modified(const managed_content_storage::chart_manifest_entry&
         return hash_changed(chart.chart_fingerprint, chart.remote_chart_fingerprint);
     }
     return hash_changed(chart.chart_hash, chart.remote_chart_hash);
+}
+
+bool managed_song_modified(const managed_content_storage::package_manifest& manifest) {
+    if (!manifest.remote_song_json_fingerprint.empty() &&
+        hash_changed(manifest.song_json_fingerprint, manifest.remote_song_json_fingerprint)) {
+        return true;
+    }
+    if (manifest.remote_song_json_fingerprint.empty() &&
+        hash_changed(manifest.song_json_hash, manifest.remote_song_json_hash)) {
+        return true;
+    }
+    return hash_changed(manifest.audio_hash, manifest.remote_audio_hash) ||
+           hash_changed(manifest.jacket_hash, manifest.remote_jacket_hash);
+}
+
+content_status status_for_managed_song(online_content::source source,
+                                       const managed_content_storage::package_manifest& manifest) {
+    if (managed_song_modified(manifest)) {
+        return content_status::modified;
+    }
+    return status_for_source(source);
 }
 
 content_status status_for_managed_chart(online_content::source source,
@@ -173,16 +201,30 @@ std::optional<online_content::song_identity> managed_song_identity(
         return std::nullopt;
     }
 
-    std::optional<local_content_index::online_song_binding> binding =
-        local_content_index::find_song_by_local(index, manifest.song.server_url, manifest.local_song_id);
+    (void)index;
+    const std::optional<local_content_database::remote_metadata> metadata =
+        local_content_database::find_remote_metadata(local_content_database::remote_content_type::song,
+                                                     manifest.song.server_url,
+                                                     manifest.song.remote_song_id);
     return online_content::song_identity{
         .server_url = manifest.song.server_url,
         .remote_song_id = manifest.song.remote_song_id,
         .content_source = manifest.song.source,
-        .can_edit = binding.has_value() ? binding->can_edit : std::nullopt,
-        .lifecycle_status = binding.has_value() ? binding->lifecycle_status : "",
-        .review_status = binding.has_value() ? binding->review_status : "",
+        .lifecycle_status = metadata.has_value() ? metadata->lifecycle_status : "",
+        .review_status = metadata.has_value() ? metadata->review_status : "",
     };
+}
+
+std::optional<online_content::source> remote_song_source_override(
+    const managed_content_storage::package_manifest& manifest) {
+    const std::optional<local_content_database::remote_metadata> metadata =
+        local_content_database::find_remote_metadata(local_content_database::remote_content_type::song,
+                                                     manifest.song.server_url,
+                                                     manifest.song.remote_song_id);
+    if (!metadata.has_value() || metadata->content_source.empty()) {
+        return std::nullopt;
+    }
+    return online_content::source_from_string(metadata->content_source);
 }
 
 std::optional<online_content::chart_identity> managed_chart_identity(
@@ -194,17 +236,19 @@ std::optional<online_content::chart_identity> managed_chart_identity(
         return std::nullopt;
     }
 
-    std::optional<local_content_index::online_chart_binding> binding =
-        local_content_index::find_chart_by_local(index, manifest.song.server_url, chart.local_chart_id);
+    (void)index;
+    const std::optional<local_content_database::remote_metadata> metadata =
+        local_content_database::find_remote_metadata(local_content_database::remote_content_type::chart,
+                                                     manifest.song.server_url,
+                                                     chart.remote_chart_id);
     return online_content::chart_identity{
         .server_url = manifest.song.server_url,
         .remote_song_id = manifest.song.remote_song_id,
         .remote_chart_id = chart.remote_chart_id,
         .content_source = manifest.song.source,
         .remote_chart_version = chart.chart_version,
-        .can_edit = binding.has_value() ? binding->can_edit : std::nullopt,
-        .lifecycle_status = binding.has_value() ? binding->lifecycle_status : "",
-        .review_status = binding.has_value() ? binding->review_status : "",
+        .lifecycle_status = metadata.has_value() ? metadata->lifecycle_status : "",
+        .review_status = metadata.has_value() ? metadata->review_status : "",
     };
 }
 
@@ -280,8 +324,10 @@ void append_loaded_song(song_select::catalog_data& catalog,
         entry.kind = kind_for_source(managed_manifest->song.source);
         entry.storage = storage_policy::managed_package;
         entry.verification = verification_state::unchecked;
-        entry.status = status_for_source(managed_manifest->song.source);
-        entry.source_status = entry.status;
+        entry.status = status_for_managed_song(managed_manifest->song.source, *managed_manifest);
+        entry.source_status = status_for_source(managed_manifest->song.source);
+        entry.source = content_source_for_online_source(managed_manifest->song.source);
+        entry.sync_state = content_sync_service::sync_from_status(entry.status);
         entry.online_identity = managed_song_identity(*managed_manifest, local_index);
         entry.managed_manifest = managed_song_metadata(*managed_manifest);
     } else {
@@ -290,6 +336,8 @@ void append_loaded_song(song_select::catalog_data& catalog,
         entry.verification = verification_state::unchecked;
         entry.status = content_status::local;
         entry.source_status = content_status::local;
+        entry.source = content_source::local;
+        entry.sync_state = content_sync_state::clean;
         entry.online_identity.reset();
         entry.managed_manifest.reset();
     }
@@ -313,6 +361,7 @@ void append_loaded_song(song_select::catalog_data& catalog,
         const managed_content_storage::chart_manifest_entry* managed_chart = managed
             ? find_manifest_chart(*managed_manifest, meta.chart_id)
             : nullptr;
+        const bool managed_remote_chart = managed && managed_chart != nullptr;
         const std::string level_signature = managed_level_signature(managed_chart);
         if (calculate_missing_levels) {
             meta.level = calculate_level_for_chart(chart_path, effective_chart, level_signature);
@@ -326,21 +375,23 @@ void append_loaded_song(song_select::catalog_data& catalog,
         song_select::chart_option option;
         option.path = chart_path;
         option.meta = meta;
-        option.kind = managed ? kind_for_source(managed_manifest->song.source) : content_kind::local;
-        option.storage = managed ? storage_policy::managed_package : storage_policy::plain_workspace;
+        option.kind = managed_remote_chart ? kind_for_source(managed_manifest->song.source) : content_kind::local;
+        option.storage = managed_remote_chart ? storage_policy::managed_package : storage_policy::plain_workspace;
         option.verification = verification_state::unchecked;
-        option.status = managed ? status_for_managed_chart(managed_manifest->song.source, managed_chart)
-                                : content_status::local;
-        option.source_status = option.status;
-        if (managed) {
-            if (managed_chart != nullptr) {
-                option.online_identity = managed_chart_identity(*managed_manifest, *managed_chart, local_index);
-                option.managed_manifest = managed_chart_metadata(*managed_chart);
-                if (option.online_identity.has_value()) {
-                    option.remote_links.push_back(*option.online_identity);
-                }
-                option.meta.chart_version = managed_chart->chart_version;
+        option.status = managed_remote_chart ? status_for_managed_chart(managed_manifest->song.source, managed_chart)
+                                             : content_status::local;
+        option.source_status = managed_remote_chart ? status_for_source(managed_manifest->song.source) : content_status::local;
+        const content_sync_service::state option_state =
+            content_sync_service::state_from_legacy_status(option.source_status, option.status);
+        option.source = option_state.source;
+        option.sync_state = option_state.sync;
+        if (managed_remote_chart) {
+            option.online_identity = managed_chart_identity(*managed_manifest, *managed_chart, local_index);
+            option.managed_manifest = managed_chart_metadata(*managed_chart);
+            if (option.online_identity.has_value()) {
+                option.remote_links.push_back(*option.online_identity);
             }
+            option.meta.chart_version = managed_chart->chart_version;
         }
         option.local_note_offset_ms = chart_offsets.contains(meta.chart_id) ? chart_offsets.at(meta.chart_id) : 0;
         option.best_local_rank = best_local.has_value()
@@ -385,19 +436,46 @@ catalog_data load_catalog(bool calculate_missing_levels) {
         append_loaded_song(catalog, song, chart_offsets, local_index, calculate_missing_levels, std::nullopt);
     }
 
+    std::set<std::string> processed_package_dirs;
     for (const online_content::source source : {online_content::source::community,
                                                 online_content::source::official}) {
         for (const std::filesystem::path& package_dir :
              managed_content_storage::list_package_directories(source)) {
-            const std::optional<managed_content_storage::package_manifest> manifest =
+            std::filesystem::path effective_package_dir = package_dir;
+            std::optional<managed_content_storage::package_manifest> manifest =
                 managed_content_storage::read_manifest(package_dir);
-            if (!manifest.has_value() || manifest->song.source != source) {
+            if (!manifest.has_value()) {
+                continue;
+            }
+            if (const std::optional<online_content::source> remote_source = remote_song_source_override(*manifest);
+                remote_source.has_value() && *remote_source != manifest->song.source) {
+                std::string relocate_error;
+                const managed_content_storage::package_relocation_result relocation =
+                    managed_content_storage::relocate_package_source(package_dir, *remote_source, relocate_error);
+                if (!relocation.success) {
+                    continue;
+                }
+                effective_package_dir = relocation.song_directory;
+                manifest = managed_content_storage::read_manifest(effective_package_dir);
+                if (!manifest.has_value()) {
+                    continue;
+                }
+            }
+            if (manifest->song.source != source && effective_package_dir == package_dir) {
+                continue;
+            }
+            std::error_code canonical_ec;
+            const std::filesystem::path canonical_dir =
+                std::filesystem::weakly_canonical(effective_package_dir, canonical_ec);
+            const std::string processed_key =
+                canonical_ec ? path_utils::to_utf8(effective_package_dir) : path_utils::to_utf8(canonical_dir);
+            if (!processed_package_dirs.insert(processed_key).second) {
                 continue;
             }
             local_catalog_cache_service::sync_managed_manifest_identity(*manifest);
 
             const song_load_result managed_load =
-                song_loader::load_directory(path_utils::to_utf8(package_dir));
+                song_loader::load_directory(path_utils::to_utf8(effective_package_dir));
             catalog.load_errors.insert(catalog.load_errors.end(),
                                        managed_load.errors.begin(),
                                        managed_load.errors.end());

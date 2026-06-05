@@ -17,5 +17,7 @@ struct upload_result {
 upload_result upload_song(const song_select::song_entry& song);
 upload_result upload_chart(const song_select::song_entry& song,
                            const song_select::chart_option& chart);
+bool refresh_song_edit_permission(const std::string& remote_song_id);
+bool refresh_chart_edit_permission(const std::string& remote_chart_id);
 
 }  // namespace title_create_upload

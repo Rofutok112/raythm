@@ -19,7 +19,10 @@
 #include "content_lifecycle.h"
 #include "path_utils.h"
 #include "chart_fingerprint.h"
+#include "managed_content_storage.h"
+#include "services/content_authorization_service.h"
 #include "song_fingerprint.h"
+#include "title/local_content_database.h"
 #include "title/local_content_index.h"
 #include "updater/update_verify.h"
 
@@ -78,12 +81,15 @@ struct upload_request_result {
     std::optional<bool> can_edit;
     std::string lifecycle_status;
     std::string review_status;
+    std::string revision_id;
+    std::string content_hash;
 };
 
 struct permission_check_result {
     bool success = false;
     bool not_found = false;
     bool unauthorized = false;
+    bool server_denied = false;
     bool can_edit = false;
     std::string lifecycle_status;
     std::string review_status;
@@ -168,6 +174,12 @@ bool read_binary_file(const fs::path& path,
 
     return true;
 }
+
+bool read_upload_file(const fs::path& path,
+                      std::vector<unsigned char>& bytes,
+                      std::string& error_message);
+std::string bytes_sha256_hex(const std::vector<unsigned char>& bytes);
+std::string bytes_text(const std::vector<unsigned char>& bytes);
 
 std::string lower_ascii(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
@@ -590,6 +602,11 @@ upload_request_result parse_song_upload_response(const http_response& response,
     result.lifecycle_status = json::extract_string(*song_object, "lifecycleStatus").value_or("");
     result.review_status = json::extract_string(response.body, "reviewStatus").value_or(
         json::extract_string(*song_object, "reviewStatus").value_or(""));
+    result.revision_id = json::extract_string(*song_object, "revisionId").value_or(
+        json::extract_string(*song_object, "revision").value_or(""));
+    result.content_hash = json::extract_string(*song_object, "songJsonFingerprint").value_or(
+        json::extract_string(*song_object, "songJsonHash").value_or(
+            json::extract_string(*song_object, "contentHash").value_or("")));
     if (content_lifecycle::is_pending_review(result.review_status, result.lifecycle_status)) {
         result.message = updated_existing ? "Song update submitted for review." : "Song upload submitted for review.";
     } else {
@@ -611,6 +628,10 @@ permission_check_result parse_permission_response(const http_response& response,
     }
     if (response.status_code == 404) {
         result.not_found = true;
+        return result;
+    }
+    if (response.status_code == 403) {
+        result.server_denied = true;
         return result;
     }
     if (response.status_code < 200 || response.status_code >= 300) {
@@ -698,7 +719,7 @@ std::string upload_content_source(const song_select::song_entry& song) {
     if (song.online_identity.has_value()) {
         return online_content::source_label(song.online_identity->content_source);
     }
-    return song.source_status == content_status::official ? "official" : "community";
+    return song.source == content_source::official ? "official" : "community";
 }
 
 std::string upload_content_source(const song_select::song_entry& song,
@@ -709,8 +730,8 @@ std::string upload_content_source(const song_select::song_entry& song,
     if (song.online_identity.has_value()) {
         return online_content::source_label(song.online_identity->content_source);
     }
-    if (chart.source_status == content_status::official ||
-        song.source_status == content_status::official) {
+    if (chart.source == content_source::official ||
+        song.source == content_source::official) {
         return "official";
     }
     return "community";
@@ -774,12 +795,49 @@ upload_request_result parse_chart_upload_response(const http_response& response,
     result.lifecycle_status = json::extract_string(*chart_object, "lifecycleStatus").value_or("");
     result.review_status = json::extract_string(response.body, "reviewStatus").value_or(
         json::extract_string(*chart_object, "reviewStatus").value_or(""));
+    result.revision_id = json::extract_string(*chart_object, "revisionId").value_or(
+        json::extract_string(*chart_object, "revision").value_or(""));
+    result.content_hash = json::extract_string(*chart_object, "chartFingerprint").value_or(
+        json::extract_string(*chart_object, "chartSha256").value_or(
+            json::extract_string(*chart_object, "contentHash").value_or("")));
     if (content_lifecycle::is_pending_review(result.review_status, result.lifecycle_status)) {
         result.message = updated_existing ? "Chart update submitted for review." : "Chart upload submitted for review.";
     } else {
         result.message = updated_existing ? "Chart upload updated." : "Chart uploaded.";
     }
     return result;
+}
+
+void cache_song_permission(const auth::session& session,
+                           const std::string& remote_song_id,
+                           const std::optional<bool>& can_edit) {
+    local_content_database::put_account_permission({
+        .server_url = session.server_url,
+        .type = local_content_database::remote_content_type::song,
+        .remote_id = remote_song_id,
+        .user_id = session.user.id,
+        .can_edit = can_edit,
+    });
+}
+
+void cache_chart_permission(const auth::session& session,
+                            const std::string& remote_chart_id,
+                            const std::optional<bool>& can_edit) {
+    local_content_database::put_account_permission({
+        .server_url = session.server_url,
+        .type = local_content_database::remote_content_type::chart,
+        .remote_id = remote_chart_id,
+        .user_id = session.user.id,
+        .can_edit = can_edit,
+    });
+}
+
+content_authorization_service::fresh_permission_result classify_permission(
+    const permission_check_result& permission) {
+    return content_authorization_service::classify_fresh_permission(
+        permission.success,
+        permission.can_edit,
+        permission.server_denied);
 }
 
 std::optional<auth::session> require_saved_session(std::string& error_message) {
@@ -816,14 +874,14 @@ std::optional<auth::session> restore_upload_session(std::string& error_message) 
 
 void append_song_contract_fields(std::vector<multipart_field>& fields,
                                  const song_select::song_entry& song,
-                                 const fs::path& song_dir,
-                                 const fs::path& audio_path,
-                                 const fs::path& jacket_path);
+                                 const std::vector<unsigned char>& song_json_bytes,
+                                 const std::vector<unsigned char>& audio_bytes,
+                                 const std::vector<unsigned char>& jacket_bytes);
 
 void append_chart_contract_fields(std::vector<multipart_field>& fields,
                                   const song_select::song_entry& song,
                                   const song_select::chart_option& chart,
-                                  const fs::path& chart_path);
+                                  const std::vector<unsigned char>& chart_bytes);
 
 upload_request_result send_song_upload_request(const auth::session& session,
                                                const song_select::song_entry& song,
@@ -841,21 +899,23 @@ upload_request_result send_song_upload_request(const auth::session& session,
     }
 
     const fs::path song_dir = path_utils::from_utf8(song.song.directory);
+    const fs::path song_json_path = song_dir / "song.json";
     const fs::path audio_path = song_dir / path_utils::from_utf8(meta.audio_file);
     const fs::path jacket_path = song_dir / path_utils::from_utf8(meta.jacket_file);
-    if (!fs::exists(audio_path) || !fs::is_regular_file(audio_path)) {
+
+    std::vector<unsigned char> song_json_bytes;
+    std::vector<unsigned char> audio_bytes;
+    std::vector<unsigned char> jacket_bytes;
+    if (!read_upload_file(song_json_path, song_json_bytes, result.message)) {
+        result.message = "Selected song metadata file was not found.";
+        return result;
+    }
+    if (!read_upload_file(audio_path, audio_bytes, result.message)) {
         result.message = "Selected song audio file was not found.";
         return result;
     }
-    if (!fs::exists(jacket_path) || !fs::is_regular_file(jacket_path)) {
+    if (!read_upload_file(jacket_path, jacket_bytes, result.message)) {
         result.message = "Selected song jacket file was not found.";
-        return result;
-    }
-
-    std::vector<unsigned char> audio_bytes;
-    std::vector<unsigned char> jacket_bytes;
-    if (!read_binary_file(audio_path, audio_bytes, result.message) ||
-        !read_binary_file(jacket_path, jacket_bytes, result.message)) {
         return result;
     }
 
@@ -884,7 +944,7 @@ upload_request_result send_song_upload_request(const auth::session& session,
     }
     fields.push_back({"previewStartMs", std::to_string(std::max(0, meta.preview_start_ms))});
     fields.push_back({"visibility", "public"});
-    append_song_contract_fields(fields, song, song_dir, audio_path, jacket_path);
+    append_song_contract_fields(fields, song, song_json_bytes, audio_bytes, jacket_bytes);
 
     std::vector<multipart_file> files;
     files.push_back({
@@ -940,40 +1000,27 @@ std::optional<std::string> resolve_remote_song_id_for_chart_upload(const auth::s
 
 void append_song_contract_fields(std::vector<multipart_field>& fields,
                                  const song_select::song_entry& song,
-                                 const fs::path& song_dir,
-                                 const fs::path& audio_path,
-                                 const fs::path& jacket_path) {
+                                 const std::vector<unsigned char>& song_json_bytes,
+                                 const std::vector<unsigned char>& audio_bytes,
+                                 const std::vector<unsigned char>& jacket_bytes) {
     const song_meta& meta = song.song.meta;
     fields.push_back({"metadataSchemaVersion", "2"});
     fields.push_back({"contentSource", upload_content_source(song)});
     push_string_field(fields, "clientSongId", meta.song_id);
     push_positive_int_field(fields, "songVersion", meta.song_version);
 
-    const fs::path song_json_path = song_dir / "song.json";
-    if (const std::optional<std::string> song_json_sha256 =
-            updater::compute_sha256_hex(song_json_path);
-        song_json_sha256.has_value()) {
-        fields.push_back({"songJsonSha256", *song_json_sha256});
-    }
-    if (const std::optional<std::string> song_json_fingerprint =
-            song_fingerprint::compute_sha256_hex(song_json_path);
-        song_json_fingerprint.has_value()) {
-        fields.push_back({"songJsonFingerprint", *song_json_fingerprint});
-    }
-    if (const std::optional<std::string> audio_sha256 = updater::compute_sha256_hex(audio_path);
-        audio_sha256.has_value()) {
-        fields.push_back({"audioSha256", *audio_sha256});
-    }
-    if (const std::optional<std::string> jacket_sha256 = updater::compute_sha256_hex(jacket_path);
-        jacket_sha256.has_value()) {
-        fields.push_back({"jacketSha256", *jacket_sha256});
-    }
+    const std::string song_json_text = bytes_text(song_json_bytes);
+    fields.push_back({"songJsonSha256", bytes_sha256_hex(song_json_bytes)});
+    fields.push_back({"songJsonFingerprint",
+                      updater::compute_sha256_hex(std::string_view(song_fingerprint::build(song_json_text)))});
+    fields.push_back({"audioSha256", bytes_sha256_hex(audio_bytes)});
+    fields.push_back({"jacketSha256", bytes_sha256_hex(jacket_bytes)});
 }
 
 void append_chart_contract_fields(std::vector<multipart_field>& fields,
                                   const song_select::song_entry& song,
                                   const song_select::chart_option& chart,
-                                  const fs::path& chart_path) {
+                                  const std::vector<unsigned char>& chart_bytes) {
     fields.push_back({"metadataSchemaVersion", "2"});
     fields.push_back({"contentSource", upload_content_source(song, chart)});
     push_string_field(fields, "clientChartId", chart.meta.chart_id);
@@ -991,15 +1038,10 @@ void append_chart_contract_fields(std::vector<multipart_field>& fields,
     fields.push_back({"difficultyRulesetId", "raythm-local"});
     fields.push_back({"difficultyRulesetVersion", "13"});
 
-    if (const std::optional<std::string> chart_sha256 = updater::compute_sha256_hex(chart_path);
-        chart_sha256.has_value()) {
-        fields.push_back({"chartSha256", *chart_sha256});
-    }
-    if (const std::optional<std::string> chart_fingerprint =
-            chart_fingerprint::compute_sha256_hex(chart_path);
-        chart_fingerprint.has_value()) {
-        fields.push_back({"chartFingerprint", *chart_fingerprint});
-    }
+    const std::string chart_text = bytes_text(chart_bytes);
+    fields.push_back({"chartSha256", bytes_sha256_hex(chart_bytes)});
+    fields.push_back({"chartFingerprint",
+                      updater::compute_sha256_hex(std::string_view(chart_fingerprint::build(chart_text)))});
 }
 
 upload_request_result send_chart_upload_request(const auth::session& session,
@@ -1010,20 +1052,17 @@ upload_request_result send_chart_upload_request(const auth::session& session,
     upload_request_result result;
 
     const fs::path chart_path = path_utils::from_utf8(chart.path);
-    if (!fs::exists(chart_path) || !fs::is_regular_file(chart_path)) {
-        result.message = "Selected chart file was not found.";
-        return result;
-    }
 
     std::vector<unsigned char> chart_bytes;
-    if (!read_binary_file(chart_path, chart_bytes, result.message)) {
+    if (!read_upload_file(chart_path, chart_bytes, result.message)) {
+        result.message = "Selected chart file was not found.";
         return result;
     }
 
     std::vector<multipart_field> fields;
     fields.push_back({"songId", remote_song_id});
     fields.push_back({"visibility", "public"});
-    append_chart_contract_fields(fields, song, chart, chart_path);
+    append_chart_contract_fields(fields, song, chart, chart_bytes);
 
     std::vector<multipart_file> files;
     files.push_back({
@@ -1045,6 +1084,167 @@ upload_request_result send_chart_upload_request(const auth::session& session,
         {"Content-Type", "multipart/form-data; boundary=" + boundary},
     });
     return parse_chart_upload_response(response, remote_chart_id.has_value());
+}
+
+std::optional<online_content::source> online_source_for_upload(const song_select::song_entry& song,
+                                                               const song_select::chart_option& chart) {
+    return online_content::source_from_string(upload_content_source(song, chart));
+}
+
+managed_content_storage::chart_promotion_result promote_uploaded_chart_if_possible(
+    const auth::session& session,
+    const song_select::song_entry& song,
+    const song_select::chart_option& chart,
+    const upload_request_result& request_result,
+    const std::string& remote_song_id,
+    std::string& error_message) {
+    managed_content_storage::chart_promotion_result result;
+    if (!request_result.success || request_result.remote_chart_id.empty()) {
+        return result;
+    }
+    if (chart.storage == storage_policy::managed_package) {
+        return result;
+    }
+
+    const fs::path song_dir = path_utils::from_utf8(song.song.directory);
+    if (!managed_content_storage::read_manifest(song_dir).has_value()) {
+        return result;
+    }
+
+    const fs::path chart_path = path_utils::from_utf8(chart.path);
+    const std::optional<std::string> chart_hash = updater::compute_sha256_hex(chart_path);
+    const std::optional<std::string> chart_fingerprint_hash = chart_fingerprint::compute_sha256_hex(chart_path);
+    const online_content::source source =
+        online_source_for_upload(song, chart).value_or(online_content::source::community);
+    managed_content_storage::chart_identity identity{
+        .source = source,
+        .server_url = session.server_url,
+        .remote_song_id = remote_song_id,
+        .remote_chart_id = request_result.remote_chart_id,
+        .song_version = song.song.meta.song_version,
+        .chart_version = request_result.remote_chart_version,
+        .revision_id = request_result.revision_id,
+        .chart_hash = chart_hash.value_or(""),
+        .chart_fingerprint = chart_fingerprint_hash.value_or(""),
+        .remote_chart_hash = "",
+        .remote_chart_fingerprint = !request_result.content_hash.empty()
+            ? request_result.content_hash
+            : chart_fingerprint_hash.value_or(""),
+    };
+    return managed_content_storage::promote_plain_chart_to_managed(
+        song_dir, identity, chart_path, true, error_message);
+}
+
+bool sync_managed_song_manifest_after_upload(const song_select::song_entry& song,
+                                             const upload_request_result& request_result) {
+    const fs::path song_dir = path_utils::from_utf8(song.song.directory);
+    std::optional<managed_content_storage::package_manifest> manifest =
+        managed_content_storage::read_manifest(song_dir);
+    if (!manifest.has_value()) {
+        return false;
+    }
+
+    const song_meta& meta = song.song.meta;
+    std::vector<unsigned char> song_json_bytes;
+    std::vector<unsigned char> audio_bytes;
+    std::vector<unsigned char> jacket_bytes;
+    std::string error_message;
+    if (!read_upload_file(song_dir / "song.json", song_json_bytes, error_message) ||
+        !read_upload_file(song_dir / path_utils::from_utf8(meta.audio_file), audio_bytes, error_message) ||
+        !read_upload_file(song_dir / path_utils::from_utf8(meta.jacket_file), jacket_bytes, error_message)) {
+        return false;
+    }
+
+    const std::string song_json_text = bytes_text(song_json_bytes);
+    manifest->song.remote_song_id = request_result.remote_song_id;
+    manifest->song.song_version = song.song.meta.song_version;
+    manifest->song.revision_id = request_result.revision_id;
+    manifest->song_json_hash = bytes_sha256_hex(song_json_bytes);
+    manifest->song_json_fingerprint =
+        updater::compute_sha256_hex(std::string_view(song_fingerprint::build(song_json_text)));
+    manifest->audio_hash = bytes_sha256_hex(audio_bytes);
+    manifest->jacket_hash = bytes_sha256_hex(jacket_bytes);
+    manifest->remote_song_json_hash = manifest->song_json_hash;
+    manifest->remote_song_json_fingerprint = !request_result.content_hash.empty()
+        ? request_result.content_hash
+        : manifest->song_json_fingerprint;
+    manifest->remote_audio_hash = manifest->audio_hash;
+    manifest->remote_jacket_hash = manifest->jacket_hash;
+    return managed_content_storage::write_manifest(*manifest, error_message);
+}
+
+bool sync_managed_chart_manifest_after_upload(const song_select::song_entry& song,
+                                              const song_select::chart_option& chart,
+                                              const upload_request_result& request_result) {
+    const fs::path song_dir = path_utils::from_utf8(song.song.directory);
+    std::optional<managed_content_storage::package_manifest> manifest =
+        managed_content_storage::read_manifest(song_dir);
+    if (!manifest.has_value()) {
+        return false;
+    }
+
+    std::vector<unsigned char> chart_bytes;
+    std::string error_message;
+    if (!read_upload_file(path_utils::from_utf8(chart.path), chart_bytes, error_message)) {
+        return false;
+    }
+
+    managed_content_storage::chart_manifest_entry* manifest_chart = nullptr;
+    for (managed_content_storage::chart_manifest_entry& candidate : manifest->charts) {
+        if (candidate.local_chart_id == chart.meta.chart_id ||
+            candidate.remote_chart_id == request_result.remote_chart_id) {
+            manifest_chart = &candidate;
+            break;
+        }
+    }
+    if (manifest_chart == nullptr) {
+        return false;
+    }
+
+    const std::string chart_text = bytes_text(chart_bytes);
+    manifest_chart->remote_chart_id = request_result.remote_chart_id;
+    manifest_chart->chart_version = request_result.remote_chart_version;
+    manifest_chart->revision_id = request_result.revision_id;
+    manifest_chart->chart_hash = bytes_sha256_hex(chart_bytes);
+    manifest_chart->chart_fingerprint =
+        updater::compute_sha256_hex(std::string_view(chart_fingerprint::build(chart_text)));
+    manifest_chart->remote_chart_hash = manifest_chart->chart_hash;
+    manifest_chart->remote_chart_fingerprint = !request_result.content_hash.empty()
+        ? request_result.content_hash
+        : manifest_chart->chart_fingerprint;
+    return managed_content_storage::write_manifest(*manifest, error_message);
+}
+
+bool read_upload_file(const fs::path& path,
+                      std::vector<unsigned char>& bytes,
+                      std::string& error_message) {
+    const managed_content_storage::managed_file_read_result managed =
+        managed_content_storage::read_managed_file(path);
+    if (managed.managed) {
+        if (!managed.success) {
+            error_message = managed.error_message.empty()
+                ? "Failed to read a managed file for upload."
+                : managed.error_message;
+            return false;
+        }
+        bytes = managed.bytes;
+        return true;
+    }
+
+    if (!fs::exists(path) || !fs::is_regular_file(path)) {
+        error_message = "Selected local file was not found.";
+        return false;
+    }
+    return read_binary_file(path, bytes, error_message);
+}
+
+std::string bytes_sha256_hex(const std::vector<unsigned char>& bytes) {
+    return updater::compute_sha256_hex(std::string_view(
+        reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+}
+
+std::string bytes_text(const std::vector<unsigned char>& bytes) {
+    return std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size());
 }
 
 }  // namespace
@@ -1071,20 +1271,22 @@ upload_result upload_song(const song_select::song_entry& song) {
     std::optional<bool> known_song_can_edit =
         song_identity.has_value() && song_identity->can_edit.has_value()
             ? song_identity->can_edit
-            : (existing_song_binding.has_value() ? existing_song_binding->can_edit : std::nullopt);
+            : std::nullopt;
+    const std::optional<local_content_database::remote_metadata> existing_song_metadata =
+        existing_remote_song_id.has_value()
+            ? local_content_database::find_remote_metadata(local_content_database::remote_content_type::song,
+                                                           session.server_url,
+                                                           *existing_remote_song_id)
+            : std::nullopt;
     std::string known_song_lifecycle =
         song_identity.has_value() && !song_identity->lifecycle_status.empty()
             ? song_identity->lifecycle_status
-            : (existing_song_binding.has_value() ? existing_song_binding->lifecycle_status : "");
+            : (existing_song_metadata.has_value() ? existing_song_metadata->lifecycle_status : "");
     std::string known_song_review =
         song_identity.has_value() && !song_identity->review_status.empty()
             ? song_identity->review_status
-            : (existing_song_binding.has_value() ? existing_song_binding->review_status : "");
-    const bool owned_song_fallback =
-        existing_song_binding.has_value() &&
-        existing_song_binding->origin == local_content_index::online_origin::owned_upload;
-    if (existing_remote_song_id.has_value() &&
-        !online_content::can_edit_with_owned_fallback(known_song_can_edit, owned_song_fallback)) {
+            : (existing_song_metadata.has_value() ? existing_song_metadata->review_status : "");
+    if (existing_remote_song_id.has_value()) {
         permission_check_result permission =
             fetch_song_permission(session, *existing_remote_song_id);
         if (permission.unauthorized) {
@@ -1106,6 +1308,7 @@ upload_result upload_song(const song_select::song_entry& song) {
         } else {
             if (permission.success) {
                 known_song_can_edit = permission.can_edit;
+                cache_song_permission(session, *existing_remote_song_id, permission.can_edit);
                 if (!permission.lifecycle_status.empty()) {
                     known_song_lifecycle = permission.lifecycle_status;
                 }
@@ -1113,8 +1316,13 @@ upload_result upload_song(const song_select::song_entry& song) {
                     known_song_review = permission.review_status;
                 }
             }
-            if (!permission.success || !permission.can_edit) {
-                result.message = "This song is linked to online content that your account cannot edit.";
+            const auto permission_result = classify_permission(permission);
+            if (permission_result == content_authorization_service::fresh_permission_result::denied) {
+                result.message = "The server says this account cannot edit the linked song.";
+                return result;
+            }
+            if (permission_result != content_authorization_service::fresh_permission_result::allowed) {
+                result.message = "Could not verify song edit permission.";
                 return result;
             }
         }
@@ -1154,6 +1362,8 @@ upload_result upload_song(const song_select::song_entry& song) {
     if (!request_result.success) {
         return result;
     }
+    cache_song_permission(session, request_result.remote_song_id, request_result.can_edit);
+    (void)sync_managed_song_manifest_after_upload(song, request_result);
 
     local_content_index::put_song_binding({
         .server_url = session.server_url,
@@ -1164,9 +1374,17 @@ upload_result upload_song(const song_select::song_entry& song) {
                 ? existing_song_binding->origin
                 : local_content_index::online_origin::linked)
             : local_content_index::online_origin::owned_upload,
-        .can_edit = request_result.can_edit.has_value() ? request_result.can_edit : known_song_can_edit,
+    });
+    local_content_database::put_remote_metadata({
+        .server_url = session.server_url,
+        .type = local_content_database::remote_content_type::song,
+        .remote_id = request_result.remote_song_id,
+        .content_source = upload_content_source(song),
         .lifecycle_status = !request_result.lifecycle_status.empty() ? request_result.lifecycle_status : known_song_lifecycle,
         .review_status = !request_result.review_status.empty() ? request_result.review_status : known_song_review,
+        .remote_version = song.song.meta.song_version,
+        .revision_id = request_result.revision_id,
+        .content_hash = request_result.content_hash,
     });
     if (!request_result.updated_existing) {
         result.message += " Charts for this song can now be uploaded.";
@@ -1201,18 +1419,21 @@ upload_result upload_chart(const song_select::song_entry& song,
     std::optional<bool> known_song_can_edit =
         song_identity.has_value() && song_identity->can_edit.has_value()
             ? song_identity->can_edit
-            : (existing_song_binding.has_value() ? existing_song_binding->can_edit : std::nullopt);
+            : std::nullopt;
+    const std::optional<local_content_database::remote_metadata> existing_song_metadata =
+        remote_song_id.has_value()
+            ? local_content_database::find_remote_metadata(local_content_database::remote_content_type::song,
+                                                           session.server_url,
+                                                           *remote_song_id)
+            : std::nullopt;
     std::string known_song_lifecycle =
         song_identity.has_value() && !song_identity->lifecycle_status.empty()
             ? song_identity->lifecycle_status
-            : (existing_song_binding.has_value() ? existing_song_binding->lifecycle_status : "");
+            : (existing_song_metadata.has_value() ? existing_song_metadata->lifecycle_status : "");
     std::string known_song_review =
         song_identity.has_value() && !song_identity->review_status.empty()
             ? song_identity->review_status
-            : (existing_song_binding.has_value() ? existing_song_binding->review_status : "");
-    const bool owned_song_fallback =
-        existing_song_binding.has_value() &&
-        existing_song_binding->origin == local_content_index::online_origin::owned_upload;
+            : (existing_song_metadata.has_value() ? existing_song_metadata->review_status : "");
     const std::optional<local_content_index::online_chart_binding> existing_chart_binding =
         local_content_index::find_chart_by_local(session.server_url, chart.meta.chart_id);
     std::optional<std::string> existing_remote_chart_id =
@@ -1222,20 +1443,22 @@ upload_result upload_chart(const song_select::song_entry& song,
     std::optional<bool> known_chart_can_edit =
         chart_identity.has_value() && chart_identity->can_edit.has_value()
             ? chart_identity->can_edit
-            : (existing_chart_binding.has_value() ? existing_chart_binding->can_edit : std::nullopt);
+            : std::nullopt;
+    const std::optional<local_content_database::remote_metadata> existing_chart_metadata =
+        existing_remote_chart_id.has_value()
+            ? local_content_database::find_remote_metadata(local_content_database::remote_content_type::chart,
+                                                           session.server_url,
+                                                           *existing_remote_chart_id)
+            : std::nullopt;
     std::string known_chart_lifecycle =
         chart_identity.has_value() && !chart_identity->lifecycle_status.empty()
             ? chart_identity->lifecycle_status
-            : (existing_chart_binding.has_value() ? existing_chart_binding->lifecycle_status : "");
+            : (existing_chart_metadata.has_value() ? existing_chart_metadata->lifecycle_status : "");
     std::string known_chart_review =
         chart_identity.has_value() && !chart_identity->review_status.empty()
             ? chart_identity->review_status
-            : (existing_chart_binding.has_value() ? existing_chart_binding->review_status : "");
-    const bool owned_chart_fallback =
-        existing_chart_binding.has_value() &&
-        existing_chart_binding->origin == local_content_index::online_origin::owned_upload;
-    if (!existing_remote_chart_id.has_value() &&
-        !online_content::can_edit_with_owned_fallback(known_song_can_edit, owned_song_fallback)) {
+            : (existing_chart_metadata.has_value() ? existing_chart_metadata->review_status : "");
+    if (!existing_remote_chart_id.has_value()) {
         permission_check_result permission =
             fetch_song_permission(session, *remote_song_id);
         if (permission.unauthorized) {
@@ -1256,6 +1479,7 @@ upload_result upload_chart(const song_select::song_entry& song,
         }
         if (permission.success) {
             known_song_can_edit = permission.can_edit;
+            cache_song_permission(session, *remote_song_id, permission.can_edit);
             if (!permission.lifecycle_status.empty()) {
                 known_song_lifecycle = permission.lifecycle_status;
             }
@@ -1263,13 +1487,17 @@ upload_result upload_chart(const song_select::song_entry& song,
                 known_song_review = permission.review_status;
             }
         }
-        if (!permission.success || !permission.can_edit) {
-            result.message = "This song is linked to online content that your account cannot edit.";
+        const auto permission_result = classify_permission(permission);
+        if (permission_result == content_authorization_service::fresh_permission_result::denied) {
+            result.message = "The server says this account cannot edit the linked song.";
+            return result;
+        }
+        if (permission_result != content_authorization_service::fresh_permission_result::allowed) {
+            result.message = "Could not verify song edit permission.";
             return result;
         }
     }
-    if (existing_remote_chart_id.has_value() &&
-        !online_content::can_edit_with_owned_fallback(known_chart_can_edit, owned_chart_fallback)) {
+    if (existing_remote_chart_id.has_value()) {
         permission_check_result permission =
             fetch_chart_permission(session, *existing_remote_chart_id);
         if (permission.unauthorized) {
@@ -1291,6 +1519,7 @@ upload_result upload_chart(const song_select::song_entry& song,
         } else {
             if (permission.success) {
                 known_chart_can_edit = permission.can_edit;
+                cache_chart_permission(session, *existing_remote_chart_id, permission.can_edit);
                 if (!permission.lifecycle_status.empty()) {
                     known_chart_lifecycle = permission.lifecycle_status;
                 }
@@ -1298,8 +1527,13 @@ upload_result upload_chart(const song_select::song_entry& song,
                     known_chart_review = permission.review_status;
                 }
             }
-            if (!permission.success || !permission.can_edit) {
-                result.message = "This chart is linked to online content that your account cannot edit.";
+            const auto permission_result = classify_permission(permission);
+            if (permission_result == content_authorization_service::fresh_permission_result::denied) {
+                result.message = "The server says this account cannot edit the linked chart.";
+                return result;
+            }
+            if (permission_result != content_authorization_service::fresh_permission_result::allowed) {
+                result.message = "Could not verify chart edit permission.";
                 return result;
             }
         }
@@ -1349,6 +1583,19 @@ upload_result upload_chart(const song_select::song_entry& song,
     if (!request_result.success) {
         return result;
     }
+    cache_chart_permission(session, request_result.remote_chart_id, request_result.can_edit);
+    const bool managed_chart_synced =
+        sync_managed_chart_manifest_after_upload(song, chart, request_result);
+    std::string local_chart_id = chart.meta.chart_id;
+    std::string promotion_error;
+    const managed_content_storage::chart_promotion_result promotion =
+        promote_uploaded_chart_if_possible(session, song, chart, request_result, *remote_song_id, promotion_error);
+    if (promotion.success && !promotion.local_chart_id.empty()) {
+        local_content_index::remove_chart_binding(session.server_url, chart.meta.chart_id);
+        local_chart_id = promotion.local_chart_id;
+    } else if (!managed_chart_synced && !promotion_error.empty()) {
+        result.message += " Local managed storage update failed: " + promotion_error;
+    }
 
     if (!local_content_index::find_song_by_local(session.server_url, song.song.meta.song_id).has_value()) {
         local_content_index::put_song_binding({
@@ -1356,14 +1603,22 @@ upload_result upload_chart(const song_select::song_entry& song,
             .local_song_id = song.song.meta.song_id,
             .remote_song_id = *remote_song_id,
             .origin = local_content_index::online_origin::linked,
-            .can_edit = known_song_can_edit,
+        });
+        local_content_database::put_remote_metadata({
+            .server_url = session.server_url,
+            .type = local_content_database::remote_content_type::song,
+            .remote_id = *remote_song_id,
+            .content_source = upload_content_source(song),
             .lifecycle_status = known_song_lifecycle,
             .review_status = known_song_review,
+            .remote_version = song.song.meta.song_version,
+            .revision_id = existing_song_metadata.has_value() ? existing_song_metadata->revision_id : "",
+            .content_hash = existing_song_metadata.has_value() ? existing_song_metadata->content_hash : "",
         });
     }
     local_content_index::put_chart_binding({
         .server_url = session.server_url,
-        .local_chart_id = chart.meta.chart_id,
+        .local_chart_id = local_chart_id,
         .remote_chart_id = request_result.remote_chart_id,
         .remote_song_id = *remote_song_id,
         .remote_chart_version = request_result.remote_chart_version,
@@ -1372,12 +1627,72 @@ upload_result upload_chart(const song_select::song_entry& song,
                 ? existing_chart_binding->origin
                 : local_content_index::online_origin::linked)
             : local_content_index::online_origin::owned_upload,
-        .can_edit = request_result.can_edit.has_value() ? request_result.can_edit : known_chart_can_edit,
+    });
+    local_content_database::put_remote_metadata({
+        .server_url = session.server_url,
+        .type = local_content_database::remote_content_type::chart,
+        .remote_id = request_result.remote_chart_id,
+        .content_source = upload_content_source(song, chart),
         .lifecycle_status = !request_result.lifecycle_status.empty() ? request_result.lifecycle_status : known_chart_lifecycle,
         .review_status = !request_result.review_status.empty() ? request_result.review_status : known_chart_review,
+        .remote_version = request_result.remote_chart_version,
+        .revision_id = request_result.revision_id,
+        .content_hash = request_result.content_hash,
     });
 
     return result;
+}
+
+bool refresh_song_edit_permission(const std::string& remote_song_id) {
+    if (remote_song_id.empty()) {
+        return false;
+    }
+    std::string error_message;
+    std::optional<auth::session> session = require_saved_session(error_message);
+    if (!session.has_value()) {
+        return false;
+    }
+    permission_check_result permission = fetch_song_permission(*session, remote_song_id);
+    if (permission.unauthorized) {
+        session = restore_upload_session(error_message);
+        if (!session.has_value()) {
+            return false;
+        }
+        permission = fetch_song_permission(*session, remote_song_id);
+    }
+    if (!permission.success && !permission.server_denied) {
+        return false;
+    }
+    cache_song_permission(*session, remote_song_id, permission.server_denied
+        ? std::optional<bool>(false)
+        : std::optional<bool>(permission.can_edit));
+    return true;
+}
+
+bool refresh_chart_edit_permission(const std::string& remote_chart_id) {
+    if (remote_chart_id.empty()) {
+        return false;
+    }
+    std::string error_message;
+    std::optional<auth::session> session = require_saved_session(error_message);
+    if (!session.has_value()) {
+        return false;
+    }
+    permission_check_result permission = fetch_chart_permission(*session, remote_chart_id);
+    if (permission.unauthorized) {
+        session = restore_upload_session(error_message);
+        if (!session.has_value()) {
+            return false;
+        }
+        permission = fetch_chart_permission(*session, remote_chart_id);
+    }
+    if (!permission.success && !permission.server_denied) {
+        return false;
+    }
+    cache_chart_permission(*session, remote_chart_id, permission.server_denied
+        ? std::optional<bool>(false)
+        : std::optional<bool>(permission.can_edit));
+    return true;
 }
 
 }  // namespace title_create_upload

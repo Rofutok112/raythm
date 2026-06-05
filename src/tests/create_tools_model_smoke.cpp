@@ -77,7 +77,6 @@ int main() {
         .local_song_id = "local-song",
         .remote_song_id = "remote-song",
         .origin = local_content_index::online_origin::owned_upload,
-        .can_edit = std::nullopt,
     });
     song.online_identity = online_content::song_identity{
         .server_url = "https://server.example/",
@@ -98,12 +97,74 @@ int main() {
         });
     const title_create_tools_model::entry* denied_song_upload =
         find_entry(denied_model, title_create_tools_model::action::upload_song);
-    expect(denied_bindings.song.has_value() && denied_bindings.song->can_edit == false,
-           "Expected live song identity to override stale owned-upload edit fallback.", ok);
+    expect(denied_bindings.song.has_value() && denied_bindings.song->remote_song_id == "remote-song",
+           "Expected live song identity to preserve the remote song mapping.", ok);
     expect(denied_song_upload != nullptr && !denied_song_upload->enabled,
-           "Expected canEdit=false songs to be disabled.", ok);
-    expect(denied_song_upload != nullptr && denied_song_upload->title == "LINKED SONG",
-           "Expected denied linked songs to show the linked-song state.", ok);
+           "Expected cached canEdit=false songs to disable the update action.", ok);
+    expect(denied_song_upload != nullptr && denied_song_upload->title == "UPDATE SONG",
+           "Expected denied linked songs to still expose the update action.", ok);
+    expect(denied_song_upload != nullptr && denied_song_upload->detail == "Recheck edit permission",
+           "Expected cached denial to be shown as a recheck hint, not a final authorization result.", ok);
+
+    song.online_identity = std::nullopt;
+    title_create_tools_model::view_model cached_denial_model =
+        title_create_tools_model::build({
+            .song = &song,
+            .chart = &chart,
+            .server_url = "https://server.example",
+            .online_status_checking = false,
+            .upload_bindings = denied_bindings,
+            .song_permission_hint = false,
+        });
+    const title_create_tools_model::entry* cached_denial_upload =
+        find_entry(cached_denial_model, title_create_tools_model::action::upload_song);
+    expect(cached_denial_upload != nullptr && !cached_denial_upload->enabled,
+           "Expected user-scoped cached denial hints to disable song updates.",
+           ok);
+    expect(cached_denial_upload != nullptr && cached_denial_upload->detail == "Recheck edit permission",
+           "Expected user-scoped cached denial hints to be displayed as recheck guidance.",
+           ok);
+
+    title_create_tools_model::view_model cached_allow_model =
+        title_create_tools_model::build({
+            .song = &song,
+            .chart = &chart,
+            .server_url = "https://server.example",
+            .online_status_checking = false,
+            .upload_bindings = denied_bindings,
+            .song_permission_hint = true,
+        });
+    const title_create_tools_model::entry* cached_allow_upload =
+        find_entry(cached_allow_model, title_create_tools_model::action::upload_song);
+    expect(cached_allow_upload != nullptr && cached_allow_upload->enabled,
+           "Expected user-scoped cached allow hints to keep song updates enabled.",
+           ok);
+    expect(cached_allow_upload != nullptr && cached_allow_upload->detail == "Server edit allowed",
+           "Expected user-scoped cached allow hints to be displayed as last-known server guidance.",
+           ok);
+
+    song.source = content_source::community;
+    song.source_status = content_status::community;
+    song.status = content_status::community;
+    song.sync_state = content_sync_state::modified;
+    title_create_tools_model::view_model modified_song_model =
+        title_create_tools_model::build({
+            .song = &song,
+            .chart = &chart,
+            .server_url = "https://server.example",
+            .online_status_checking = false,
+            .upload_bindings = denied_bindings,
+            .song_permission_hint = true,
+        });
+    const title_create_tools_model::entry* modified_song_update =
+        find_entry(modified_song_model, title_create_tools_model::action::upload_song);
+    expect(modified_song_update != nullptr && modified_song_update->title == "UPDATE SONG",
+           "Expected sync-modified linked songs to show the update action.",
+           ok);
+    expect(modified_song_update != nullptr && modified_song_update->detail == "Local changes ready",
+           "Expected sync-modified linked songs to explain that local changes are ready.",
+           ok);
+    song.sync_state = content_sync_state::clean;
 
     chart.remote_links.push_back({
         .server_url = "https://server.example",
@@ -135,6 +196,27 @@ int main() {
     expect(chart_update != nullptr && chart_update->detail == "PENDING REVIEW",
            "Expected chart lifecycle state to be surfaced in the create tools model.", ok);
 
+    chart.source = content_source::community;
+    chart.source_status = content_status::community;
+    chart.status = content_status::community;
+    chart.sync_state = content_sync_state::modified;
+    title_create_tools_model::view_model modified_chart_model =
+        title_create_tools_model::build({
+            .song = &song,
+            .chart = &chart,
+            .server_url = "https://server.example",
+            .online_status_checking = false,
+            .upload_bindings = chart_bindings,
+        });
+    const title_create_tools_model::entry* modified_chart_update =
+        find_entry(modified_chart_model, title_create_tools_model::action::upload_chart);
+    expect(modified_chart_update != nullptr && modified_chart_update->title == "UPDATE CHART",
+           "Expected sync-modified linked charts to show the update action.",
+           ok);
+    expect(modified_chart_update != nullptr && modified_chart_update->detail == "Local changes ready",
+           "Expected sync-modified linked charts to explain that local changes are ready.",
+           ok);
+
     if (!ok) {
         return EXIT_FAILURE;
     }
@@ -142,4 +224,3 @@ int main() {
     std::cout << "create_tools_model smoke test passed\n";
     return EXIT_SUCCESS;
 }
-

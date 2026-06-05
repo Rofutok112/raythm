@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cctype>
 
+#include "services/content_sync_service.h"
+
 namespace online_content_availability {
 namespace {
 
@@ -64,12 +66,21 @@ bool chart_hash_update_available(const song_select::chart_option& local_chart,
     return hash_changed(manifest.remote_chart_hash, remote.chart_hash);
 }
 
-content_status display_status_for_local(content_status local_status,
-                                        content_status remote_source_status) {
-    if (local_status == content_status::modified || local_status == content_status::update) {
-        return local_status;
+content_sync_service::state resolved_content_state(content_sync_state local_sync,
+                                                   content_status legacy_local_status,
+                                                   content_status remote_source_status,
+                                                   bool update_available) {
+    content_sync_service::state result;
+    result.source = content_sync_service::source_from_status(remote_source_status);
+    content_sync_state sync = local_sync;
+    if (sync == content_sync_state::unknown) {
+        sync = content_sync_service::sync_from_status(legacy_local_status);
     }
-    return remote_source_status;
+    if (sync != content_sync_state::modified && sync != content_sync_state::checking) {
+        sync = update_available ? content_sync_state::update_available : content_sync_state::clean;
+    }
+    result.sync = sync;
+    return result;
 }
 
 int installed_remote_chart_version(const song_select::chart_option& chart,
@@ -182,7 +193,11 @@ resolved_song resolve_song(const std::vector<song_select::song_entry>& local_son
             local_song.song.meta.song_version < remote.remote_song_version;
         result.update_available = result.update_available ||
                                   song_hash_update_available(local_song, remote);
-        result.display_status = display_status_for_local(local_song.status, remote_source_status);
+        const content_sync_service::state state =
+            resolved_content_state(local_song.sync_state, local_song.status, remote_source_status, result.update_available);
+        result.source = state.source;
+        result.sync = state.sync;
+        result.display_status = content_sync_service::legacy_status_for_display(state);
         return result;
     }
 
@@ -241,7 +256,11 @@ resolved_chart resolve_chart(const std::vector<song_select::song_entry>& local_s
             remote.remote_chart_version > installed_version;
         result.update_available = result.update_available ||
                                   chart_hash_update_available(local_chart, remote);
-        result.display_status = display_status_for_local(local_chart.status, remote_source_status);
+        const content_sync_service::state state =
+            resolved_content_state(local_chart.sync_state, local_chart.status, remote_source_status, result.update_available);
+        result.source = state.source;
+        result.sync = state.sync;
+        result.display_status = content_sync_service::legacy_status_for_display(state);
         return result;
     }
 

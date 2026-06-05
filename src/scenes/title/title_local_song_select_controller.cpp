@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "audio_manager.h"
+#include "services/content_sync_service.h"
 #include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_layout.h"
 #include "title/center_panel_view.h"
@@ -466,10 +467,12 @@ title_play_view::update_result update(song_select::state& state,
         }
         const bool song_reinstall_available =
             song != nullptr &&
-            (song->status == content_status::update || song->status == content_status::modified);
+            (content_sync_service::is_update_available(song->sync_state) ||
+             content_sync_service::is_modified(song->sync_state));
         const bool chart_reinstall_available =
             chart != nullptr &&
-            (chart->status == content_status::update || chart->status == content_status::modified);
+            (content_sync_service::is_update_available(chart->sync_state) ||
+             content_sync_service::is_modified(chart->sync_state));
         if (left_pressed && (song_reinstall_available || chart_reinstall_available)) {
             const bool song_update_clicked =
                 song_reinstall_available &&

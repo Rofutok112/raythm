@@ -88,12 +88,18 @@ int main() {
     assert(identity_song.installed);
     assert(identity_song.identity_matched);
     assert(identity_song.update_available);
+    assert(identity_song.source == content_source::community);
+    assert(identity_song.sync == content_sync_state::update_available);
+    assert(identity_song.display_status == content_status::update);
 
     const auto identity_chart = online_content_availability::resolve_chart(
         local_songs, empty_index, identity_song, remote_chart, content_status::community);
     assert(identity_chart.installed);
     assert(identity_chart.identity_matched);
     assert(identity_chart.update_available);
+    assert(identity_chart.source == content_source::community);
+    assert(identity_chart.sync == content_sync_state::update_available);
+    assert(identity_chart.display_status == content_status::update);
 
     const auto same_hash_song = online_content_availability::resolve_song(
         local_songs,
@@ -109,6 +115,9 @@ int main() {
         content_status::community);
     assert(same_hash_song.installed);
     assert(!same_hash_song.update_available);
+    assert(same_hash_song.source == content_source::community);
+    assert(same_hash_song.sync == content_sync_state::clean);
+    assert(same_hash_song.display_status == content_status::community);
 
     const auto same_raw_song = online_content_availability::resolve_song(
         local_songs,
@@ -169,6 +178,49 @@ int main() {
         content_status::community);
     assert(changed_hash_chart.installed);
     assert(changed_hash_chart.update_available);
+
+    local_songs.front().charts.front().status = content_status::community;
+    local_songs.front().charts.front().sync_state = content_sync_state::modified;
+    const auto modified_official_chart = online_content_availability::resolve_chart(
+        local_songs,
+        empty_index,
+        same_hash_song,
+        {
+            .server_url = kServer,
+            .remote_song_id = "remote-song",
+            .remote_chart_id = "remote-chart",
+            .remote_chart_version = 1,
+            .chart_fingerprint = "chart-fp-a",
+        },
+        content_status::official);
+    assert(modified_official_chart.installed);
+    assert(!modified_official_chart.update_available);
+    assert(modified_official_chart.source == content_source::official);
+    assert(modified_official_chart.sync == content_sync_state::modified);
+    assert(modified_official_chart.display_status == content_status::modified);
+    local_songs.front().charts.front().sync_state = content_sync_state::clean;
+
+    local_songs.front().status = content_status::community;
+    local_songs.front().sync_state = content_sync_state::modified;
+    const auto modified_official_song = online_content_availability::resolve_song(
+        local_songs,
+        empty_index,
+        {
+            .server_url = kServer,
+            .remote_song_id = "remote-song",
+            .remote_song_version = 1,
+            .song_json_fingerprint = "song-fp-a",
+            .audio_hash = "audio-a",
+            .jacket_hash = "jacket-a",
+        },
+        content_status::official);
+    assert(modified_official_song.installed);
+    assert(!modified_official_song.update_available);
+    assert(modified_official_song.source == content_source::official);
+    assert(modified_official_song.sync == content_sync_state::modified);
+    assert(modified_official_song.display_status == content_status::modified);
+    local_songs.front().status = content_status::community;
+    local_songs.front().sync_state = content_sync_state::clean;
 
     local_songs.clear();
     local_songs.push_back(make_song("local-song"));

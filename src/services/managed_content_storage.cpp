@@ -461,6 +461,31 @@ std::optional<std::pair<fs::path, package_manifest>> manifest_for_file(const fs:
     return std::nullopt;
 }
 
+std::optional<std::string> replace_chart_id_line(std::string content, const std::string& chart_id) {
+    size_t line_start = 0;
+    while (line_start <= content.size()) {
+        const size_t line_end = content.find('\n', line_start);
+        const size_t raw_end = line_end == std::string::npos ? content.size() : line_end;
+        size_t value_end = raw_end;
+        if (value_end > line_start && content[value_end - 1] == '\r') {
+            --value_end;
+        }
+
+        constexpr std::string_view kPrefix = "chartId=";
+        if (value_end - line_start >= kPrefix.size() &&
+            std::string_view(content.data() + line_start, kPrefix.size()) == kPrefix) {
+            content.replace(line_start, value_end - line_start, std::string(kPrefix) + chart_id);
+            return content;
+        }
+
+        if (line_end == std::string::npos) {
+            break;
+        }
+        line_start = line_end + 1;
+    }
+    return std::nullopt;
+}
+
 }  // namespace
 
 std::string local_song_id(const song_identity& identity) {
@@ -716,6 +741,177 @@ void upsert_chart(package_manifest& manifest, const chart_identity& identity) {
         }
         *existing = std::move(next);
     }
+}
+
+package_relocation_result relocate_package_source(const fs::path& song_directory,
+                                                  online_content::source target_source,
+                                                  std::string& error_message) {
+    package_relocation_result result;
+    std::optional<package_manifest> manifest = read_manifest(song_directory);
+    if (!manifest.has_value()) {
+        error_message = "Managed content manifest was not found.";
+        return result;
+    }
+
+    const fs::path current_dir = song_directory.lexically_normal();
+    if (manifest->song.source == target_source) {
+        result.success = true;
+        result.song_directory = current_dir;
+        return result;
+    }
+
+    manifest->song.source = target_source;
+    const fs::path target_dir = managed_content_storage::song_directory(manifest->song);
+    std::error_code ec;
+    if (fs::equivalent(current_dir, target_dir, ec)) {
+        if (!write_manifest_at_path(*manifest, manifest_path(current_dir), error_message)) {
+            return result;
+        }
+        result.success = true;
+        result.song_directory = current_dir;
+        return result;
+    }
+
+    ec.clear();
+    if (fs::exists(target_dir, ec)) {
+        error_message = "Managed content target package already exists.";
+        return result;
+    }
+
+    fs::create_directories(target_dir.parent_path(), ec);
+    if (ec) {
+        error_message = "Failed to prepare managed content target directory.";
+        return result;
+    }
+
+    ec.clear();
+    fs::rename(current_dir, target_dir, ec);
+    if (ec) {
+        error_message = "Failed to relocate managed content package.";
+        return result;
+    }
+
+    if (!write_manifest_at_path(*manifest, manifest_path(target_dir), error_message)) {
+        return result;
+    }
+
+    result.success = true;
+    result.relocated = true;
+    result.song_directory = target_dir;
+    return result;
+}
+
+chart_promotion_result promote_plain_chart_to_managed(const fs::path& song_directory,
+                                                      const chart_identity& identity,
+                                                      const fs::path& plain_chart_path,
+                                                      bool remove_plain_file,
+                                                      std::string& error_message) {
+    chart_promotion_result result;
+    const std::string chart_text = read_file(plain_chart_path);
+    if (chart_text.empty()) {
+        error_message = "Plain chart file was not found.";
+        return result;
+    }
+
+    std::optional<package_manifest> manifest = read_manifest(song_directory);
+    if (!manifest.has_value()) {
+        error_message = "Managed content manifest was not found.";
+        return result;
+    }
+
+    const fs::path original_song_dir = song_directory.lexically_normal();
+    fs::path target_song_dir = original_song_dir;
+    fs::path relocated_plain_path = plain_chart_path;
+    if (manifest->song.source != identity.source) {
+        package_relocation_result relocation =
+            relocate_package_source(original_song_dir, identity.source, error_message);
+        if (!relocation.success) {
+            return result;
+        }
+        target_song_dir = relocation.song_directory;
+        manifest = read_manifest(target_song_dir);
+        if (!manifest.has_value()) {
+            error_message = "Managed content manifest was not found after relocation.";
+            return result;
+        }
+
+        std::error_code rel_ec;
+        const fs::path relative_chart_path = fs::relative(plain_chart_path, original_song_dir, rel_ec);
+        const bool relative_inside = !rel_ec &&
+            !relative_chart_path.empty() &&
+            std::none_of(relative_chart_path.begin(), relative_chart_path.end(), [](const fs::path& part) {
+                return part == "..";
+            });
+        if (relative_inside) {
+            relocated_plain_path = target_song_dir / relative_chart_path;
+        }
+    }
+
+    chart_identity normalized_identity = identity;
+    normalized_identity.source = manifest->song.source;
+    if (normalized_identity.server_url.empty()) {
+        normalized_identity.server_url = manifest->song.server_url;
+    }
+    if (normalized_identity.remote_song_id.empty()) {
+        normalized_identity.remote_song_id = manifest->song.remote_song_id;
+    }
+    if (normalized_identity.song_version <= 0) {
+        normalized_identity.song_version = manifest->song.song_version;
+    }
+    const std::string local_id = local_chart_id(normalized_identity);
+    const std::optional<std::string> normalized_chart_text = replace_chart_id_line(chart_text, local_id);
+    if (!normalized_chart_text.has_value()) {
+        error_message = "Failed to prepare promoted chart data.";
+        return result;
+    }
+
+    upsert_chart(*manifest, normalized_identity);
+
+    chart_manifest_entry* target_chart = nullptr;
+    for (chart_manifest_entry& chart : manifest->charts) {
+        if (chart.local_chart_id == local_id) {
+            target_chart = &chart;
+            break;
+        }
+    }
+    if (target_chart == nullptr) {
+        error_message = "Failed to register managed chart.";
+        return result;
+    }
+
+    const std::string logical_path =
+        path_utils::to_utf8(fs::path("charts") / (local_id + ".rchart"));
+    if (!write_encrypted_asset(*manifest,
+                               target_song_dir,
+                               logical_path,
+                               *normalized_chart_text,
+                               target_chart->encrypted_chart,
+                               error_message)) {
+        return result;
+    }
+    target_chart->chart_hash = target_chart->encrypted_chart.content_hash;
+    if (!normalized_identity.chart_fingerprint.empty()) {
+        target_chart->chart_fingerprint = normalized_identity.chart_fingerprint;
+    }
+
+    if (!write_manifest_at_path(*manifest, manifest_path(target_song_dir), error_message)) {
+        return result;
+    }
+
+    if (remove_plain_file) {
+        std::error_code ec;
+        fs::remove(relocated_plain_path, ec);
+        if (ec) {
+            error_message = "Failed to remove the promoted plain chart file.";
+            return result;
+        }
+    }
+
+    result.success = true;
+    result.song_directory = target_song_dir;
+    result.chart_path = chart_file_path(target_song_dir, local_id);
+    result.local_chart_id = local_id;
+    return result;
 }
 
 const char* default_encryption_scheme() {

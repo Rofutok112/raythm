@@ -11,6 +11,7 @@
 #include "localization/localization.h"
 #include "platform/windows_input_source.h"
 #include "scene_common.h"
+#include "services/content_sync_service.h"
 #include "tween.h"
 #include "title/title_layout.h"
 #include "theme.h"
@@ -442,7 +443,7 @@ const char* chart_source_label(content_status status) {
 }
 
 Color chart_source_status_color(const chart_entry_state& chart) {
-    if (chart.chart.status == content_status::modified) {
+    if (content_sync_service::is_modified(chart.chart.sync_state)) {
         return g_theme->slow;
     }
     if (chart.installed || chart.update_available) {
@@ -1488,7 +1489,8 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     const bool selected_chart_update =
         chart != nullptr && chart->installed && chart->update_available;
     const bool selected_chart_repair =
-        chart != nullptr && chart->installed && chart->chart.status == content_status::modified;
+        chart != nullptr && chart->installed && content_sync_service::is_modified(chart->chart.sync_state);
+    const bool selected_song_repair = content_sync_service::is_modified(song->song.sync_state);
     const bool song_lifecycle_blocked = lifecycle_blocks_song_download(*song);
     const std::string song_lifecycle_label = song->song.online_identity.has_value()
         ? content_lifecycle::display_label(song->song.online_identity->review_status,
@@ -1496,7 +1498,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         : "";
     const char* primary_label = state.download_in_progress ? "DOWNLOADING..."
         : (song_lifecycle_blocked ? (song_lifecycle_label.empty() ? "UNAVAILABLE" : song_lifecycle_label.c_str())
-           : needs_download(*song) ? (song->song.status == content_status::modified ? "REPAIR SONG"
+           : needs_download(*song) ? (selected_song_repair ? "REPAIR SONG"
                                       : song->update_available ? "UPDATE SONG"
                                                                : "DOWNLOAD SONG")
            : (selected_chart_repair ? "REPAIR CHART"
@@ -1695,7 +1697,8 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             const float badge_width = chart_badge.size() > 8 ? 122.0f : 62.0f;
             const float badge_right = can_download_chart ? download_icon_rect.x - 12.0f
                                                          : card.x + card.width - 16.0f;
-            Color badge_color = item.chart.status == content_status::modified ? t.slow
+            const bool chart_modified = content_sync_service::is_modified(item.chart.sync_state);
+            Color badge_color = chart_modified ? t.slow
                 : item.update_available ? t.accent
                                         : t.text_muted;
             if (has_review_badge) {
@@ -1712,7 +1715,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         if (can_download_chart) {
             draw_download_icon_button(download_icon_rect,
                                       item.update_available ||
-                                          item.chart.status == content_status::modified,
+                                          content_sync_service::is_modified(item.chart.sync_state),
                                       detail_alpha);
         }
         draw_difficulty_level_badge(item.chart.meta.level,
