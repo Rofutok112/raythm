@@ -23,10 +23,98 @@ constexpr float kMaxNoteSpeed = 0.200f;
 constexpr float kMinNoteHeight = 0.5f;
 constexpr float kMaxNoteHeight = 2.0f;
 constexpr float kNoteSpeedDisplayScale = 10.0f;
-constexpr int kGameplaySliderCount = 5;
+constexpr int kNoActiveSlider = -1;
+
+enum class slider_display_format { integer_percent, one_decimal, two_decimal, degrees, note_speed };
+
+struct slider_row_definition {
+    localization::text_key label;
+    float game_settings::* value;
+    float min_value;
+    float max_value;
+    slider_display_format display_format;
+};
+
+constexpr std::array<slider_row_definition, 5> kGameplaySliders = {{
+    {text_key::note_speed, &game_settings::note_speed, kMinNoteSpeed, kMaxNoteSpeed, slider_display_format::note_speed},
+    {text_key::camera_angle, &game_settings::camera_angle_degrees, 5.0f, 90.0f, slider_display_format::degrees},
+    {text_key::lane_width, &game_settings::lane_width, kMinLaneWidth, kMaxLaneWidth, slider_display_format::one_decimal},
+    {text_key::note_height, &game_settings::note_height, kMinNoteHeight, kMaxNoteHeight, slider_display_format::two_decimal},
+    {text_key::lane_cover,
+     &game_settings::lane_fog_hidden_percent,
+     kMinLaneFogHiddenPercent,
+     kMaxLaneFogHiddenPercent,
+     slider_display_format::integer_percent},
+}};
+
+constexpr std::array<slider_row_definition, 3> kAudioSliders = {{
+    {text_key::bgm_volume, &game_settings::bgm_volume, 0.0f, 1.0f, slider_display_format::integer_percent},
+    {text_key::se_volume, &game_settings::se_volume, 0.0f, 1.0f, slider_display_format::integer_percent},
+    {text_key::hitsound_pan, &game_settings::hitsound_pan_strength, 0.0f, 1.0f, slider_display_format::integer_percent},
+}};
 
 std::string format_offset_label(int offset_ms) {
     return (offset_ms > 0 ? "+" : "") + std::to_string(offset_ms) + " ms";
+}
+
+std::string format_slider_value(float value, const slider_row_definition& slider) {
+    switch (slider.display_format) {
+        case slider_display_format::integer_percent:
+            return TextFormat("%d%%", static_cast<int>(std::round(value * 100.0f / slider.max_value)));
+        case slider_display_format::one_decimal:
+            return TextFormat("%.1f", value);
+        case slider_display_format::two_decimal:
+            return TextFormat("%.2f", value);
+        case slider_display_format::degrees:
+            return TextFormat("%.0f deg", value);
+        case slider_display_format::note_speed:
+            return TextFormat("%.1f", value * kNoteSpeedDisplayScale);
+    }
+    return {};
+}
+
+float slider_ratio(float value, const slider_row_definition& slider) {
+    return settings::clamp01((value - slider.min_value) / (slider.max_value - slider.min_value));
+}
+
+void apply_slider_value(game_settings& settings, const slider_row_definition& slider, const Rectangle& row) {
+    const float ratio = settings::slider_ratio_from_mouse(row);
+    settings.*(slider.value) = slider.min_value + ratio * (slider.max_value - slider.min_value);
+}
+
+template <std::size_t SliderCount, std::size_t RowCount>
+int pressed_slider_index(const std::array<slider_row_definition, SliderCount>& sliders,
+                         const std::array<Rectangle, RowCount>& rows) {
+    static_assert(RowCount >= SliderCount);
+    if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        return kNoActiveSlider;
+    }
+    for (std::size_t i = 0; i < sliders.size(); ++i) {
+        if (ui::is_hovered(rows[i], settings::kLayer)) {
+            return static_cast<int>(i);
+        }
+    }
+    return kNoActiveSlider;
+}
+
+template <std::size_t SliderCount, std::size_t RowCount>
+void draw_slider_rows(const game_settings& settings,
+                      const std::array<slider_row_definition, SliderCount>& sliders,
+                      const std::array<Rectangle, RowCount>& rows) {
+    static_assert(RowCount >= SliderCount);
+    for (std::size_t i = 0; i < sliders.size(); ++i) {
+        const slider_row_definition& slider = sliders[i];
+        const float value = settings.*(slider.value);
+        const std::string display_value = format_slider_value(value, slider);
+        ui::draw_slider_relative(rows[i], ltr(slider.label), display_value.c_str(),
+                                 slider_ratio(value, slider), settings::kSliderLeftInset, settings::kSliderRightInset,
+                                 settings::kLayer, 22, settings::kSliderTopOffset);
+    }
+}
+
+bool selector_clicked(const Rectangle& row) {
+    return ui::is_clicked(settings::arrow_left_rect(row), settings::kLayer) ||
+           ui::is_clicked(settings::arrow_right_rect(row), settings::kLayer);
 }
 
 }  // namespace
@@ -35,7 +123,7 @@ settings_gameplay_page::settings_gameplay_page(game_settings& settings) : settin
 }
 
 void settings_gameplay_page::reset_interaction() {
-    active_slider_ = slider::none;
+    active_slider_index_ = kNoActiveSlider;
 }
 
 void settings_gameplay_page::prepare_frame() {
@@ -44,41 +132,17 @@ void settings_gameplay_page::prepare_frame() {
 
 void settings_gameplay_page::update() {
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        active_slider_ = slider::none;
+        active_slider_index_ = kNoActiveSlider;
     }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (ui::is_hovered(settings::kGameplayRows[0], settings::kLayer)) {
-            active_slider_ = slider::note_speed;
-        } else if (ui::is_hovered(settings::kGameplayRows[1], settings::kLayer)) {
-            active_slider_ = slider::camera_angle;
-        } else if (ui::is_hovered(settings::kGameplayRows[2], settings::kLayer)) {
-            active_slider_ = slider::lane_width;
-        } else if (ui::is_hovered(settings::kGameplayRows[3], settings::kLayer)) {
-            active_slider_ = slider::note_height;
-        } else if (ui::is_hovered(settings::kGameplayRows[4], settings::kLayer)) {
-            active_slider_ = slider::lane_fog;
-        }
+    const int pressed_index = pressed_slider_index(kGameplaySliders, settings::kGameplayRows);
+    if (pressed_index != kNoActiveSlider) {
+        active_slider_index_ = pressed_index;
     }
 
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        if (active_slider_ == slider::note_speed) {
-            const float ratio = settings::slider_ratio_from_mouse(settings::kGameplayRows[0]);
-            settings_.note_speed = kMinNoteSpeed + ratio * (kMaxNoteSpeed - kMinNoteSpeed);
-        } else if (active_slider_ == slider::camera_angle) {
-            const float ratio = settings::slider_ratio_from_mouse(settings::kGameplayRows[1]);
-            settings_.camera_angle_degrees = 5.0f + ratio * (90.0f - 5.0f);
-        } else if (active_slider_ == slider::lane_width) {
-            const float ratio = settings::slider_ratio_from_mouse(settings::kGameplayRows[2]);
-            settings_.lane_width = kMinLaneWidth + ratio * (kMaxLaneWidth - kMinLaneWidth);
-        } else if (active_slider_ == slider::note_height) {
-            const float ratio = settings::slider_ratio_from_mouse(settings::kGameplayRows[3]);
-            settings_.note_height = kMinNoteHeight + ratio * (kMaxNoteHeight - kMinNoteHeight);
-        } else if (active_slider_ == slider::lane_fog) {
-            const float ratio = settings::slider_ratio_from_mouse(settings::kGameplayRows[4]);
-            settings_.lane_fog_hidden_percent =
-                kMinLaneFogHiddenPercent + ratio * (kMaxLaneFogHiddenPercent - kMinLaneFogHiddenPercent);
-        }
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && active_slider_index_ != kNoActiveSlider) {
+        const std::size_t index = static_cast<std::size_t>(active_slider_index_);
+        apply_slider_value(settings_, kGameplaySliders[index], settings::kGameplayRows[index]);
     }
 
     if (ui::is_clicked(settings::double_arrow_left_rect(settings::kGameplayRows[5]), settings::kLayer)) {
@@ -93,34 +157,7 @@ void settings_gameplay_page::update() {
 }
 
 void settings_gameplay_page::draw() const {
-    const char* labels[] = {ltr(text_key::note_speed), ltr(text_key::camera_angle), ltr(text_key::lane_width),
-                            ltr(text_key::note_height), ltr(text_key::lane_cover)};
-    const std::string values[] = {
-        TextFormat("%.1f", settings_.note_speed * kNoteSpeedDisplayScale),
-        TextFormat("%.0f deg", settings_.camera_angle_degrees),
-        TextFormat("%.1f", settings_.lane_width),
-        TextFormat("%.2f", settings_.note_height),
-        TextFormat("%d%%", static_cast<int>(std::round(settings_.lane_fog_hidden_percent))),
-    };
-
-    for (int i = 0; i < kGameplaySliderCount; ++i) {
-        float ratio = 0.0f;
-        if (i == 0) {
-            ratio = (settings_.note_speed - kMinNoteSpeed) / (kMaxNoteSpeed - kMinNoteSpeed);
-        } else if (i == 1) {
-            ratio = (settings_.camera_angle_degrees - 5.0f) / (90.0f - 5.0f);
-        } else if (i == 2) {
-            ratio = (settings_.lane_width - kMinLaneWidth) / (kMaxLaneWidth - kMinLaneWidth);
-        } else if (i == 3) {
-            ratio = (settings_.note_height - kMinNoteHeight) / (kMaxNoteHeight - kMinNoteHeight);
-        } else {
-            ratio = (settings_.lane_fog_hidden_percent - kMinLaneFogHiddenPercent) /
-                    (kMaxLaneFogHiddenPercent - kMinLaneFogHiddenPercent);
-        }
-        ui::draw_slider_relative(settings::kGameplayRows[static_cast<std::size_t>(i)], labels[i], values[i].c_str(),
-                                 settings::clamp01(ratio), settings::kSliderLeftInset, settings::kSliderRightInset,
-                                 settings::kLayer, 22, settings::kSliderTopOffset);
-    }
+    draw_slider_rows(settings_, kGameplaySliders, settings::kGameplayRows);
 
     const std::string global_offset_label = format_offset_label(settings_.global_note_offset_ms);
     const ui::row_state offset_row = ui::draw_row(settings::kGameplayRows[5], g_theme->row, g_theme->row_hover, g_theme->border);
@@ -150,59 +187,37 @@ settings_audio_page::settings_audio_page(game_settings& settings, const settings
 }
 
 void settings_audio_page::reset_interaction() {
-    active_slider_ = slider::none;
+    active_slider_index_ = kNoActiveSlider;
 }
 
 void settings_audio_page::update() {
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        active_slider_ = slider::none;
+        active_slider_index_ = kNoActiveSlider;
     }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (ui::is_hovered(settings::kGeneralRows[0], settings::kLayer)) {
-            active_slider_ = slider::bgm_volume;
-        } else if (ui::is_hovered(settings::kGeneralRows[1], settings::kLayer)) {
-            active_slider_ = slider::se_volume;
-        } else if (ui::is_hovered(settings::kGeneralRows[2], settings::kLayer)) {
-            active_slider_ = slider::hitsound_pan_strength;
-        }
+    const int pressed_index = pressed_slider_index(kAudioSliders, settings::kGeneralRows);
+    if (pressed_index != kNoActiveSlider) {
+        active_slider_index_ = pressed_index;
     }
 
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        if (active_slider_ == slider::bgm_volume) {
-            settings_.bgm_volume = settings::slider_ratio_from_mouse(settings::kGeneralRows[0]);
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && active_slider_index_ != kNoActiveSlider) {
+        const std::size_t index = static_cast<std::size_t>(active_slider_index_);
+        apply_slider_value(settings_, kAudioSliders[index], settings::kGeneralRows[index]);
+        if (kAudioSliders[index].value == &game_settings::bgm_volume) {
             runtime_applier_.apply_bgm_volume(settings_.bgm_volume);
-        } else if (active_slider_ == slider::se_volume) {
-            settings_.se_volume = settings::slider_ratio_from_mouse(settings::kGeneralRows[1]);
+        } else if (kAudioSliders[index].value == &game_settings::se_volume) {
             runtime_applier_.apply_se_volume(settings_.se_volume);
-        } else if (active_slider_ == slider::hitsound_pan_strength) {
-            settings_.hitsound_pan_strength = settings::slider_ratio_from_mouse(settings::kGeneralRows[2]);
         }
     }
 
-    if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[3]), settings::kLayer) ||
-        ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[3]), settings::kLayer)) {
+    if (selector_clicked(settings::kGeneralRows[3])) {
         settings_.loudness_normalization_enabled = !settings_.loudness_normalization_enabled;
         runtime_applier_.apply_loudness_normalization(settings_.loudness_normalization_enabled);
     }
 }
 
 void settings_audio_page::draw() const {
-    const char* labels[] = {ltr(text_key::bgm_volume), ltr(text_key::se_volume), ltr(text_key::hitsound_pan)};
-    const std::string values[] = {
-        TextFormat("%d%%", static_cast<int>(std::round(settings_.bgm_volume * 100.0f))),
-        TextFormat("%d%%", static_cast<int>(std::round(settings_.se_volume * 100.0f))),
-        TextFormat("%d%%", static_cast<int>(std::round(settings_.hitsound_pan_strength * 100.0f))),
-    };
-
-    for (int row = 0; row < 3; ++row) {
-        const float ratio = row == 0 ? settings_.bgm_volume
-                            : row == 1 ? settings_.se_volume
-                                       : settings_.hitsound_pan_strength;
-        ui::draw_slider_relative(settings::kGeneralRows[static_cast<std::size_t>(row)], labels[row], values[row].c_str(), ratio,
-                                 settings::kSliderLeftInset, settings::kSliderRightInset,
-                                 settings::kLayer, 22, settings::kSliderTopOffset);
-    }
+    draw_slider_rows(settings_, kAudioSliders, settings::kGeneralRows);
 
     ui::draw_value_selector(settings::kGeneralRows[3], ltr(text_key::loudness_normalization),
                             settings_.loudness_normalization_enabled ? ltr(text_key::enabled) : ltr(text_key::disabled),
@@ -251,22 +266,19 @@ void settings_system_page::reset_interaction() {
 }
 
 void settings_system_page::update() {
-    if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[0]), settings::kLayer) ||
-        ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[0]), settings::kLayer)) {
+    if (selector_clicked(settings::kGeneralRows[0])) {
         settings_.ui_locale = settings_.ui_locale == localization::locale::english
                                   ? localization::locale::japanese
                                   : localization::locale::english;
         runtime_applier_.apply_locale(settings_.ui_locale);
     }
 
-    if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[1]), settings::kLayer) ||
-        ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[1]), settings::kLayer)) {
+    if (selector_clicked(settings::kGeneralRows[1])) {
         settings_.fullscreen = !settings_.fullscreen;
         runtime_applier_.apply_fullscreen(settings_.fullscreen);
     }
 
-    if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[2]), settings::kLayer) ||
-        ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[2]), settings::kLayer)) {
+    if (selector_clicked(settings::kGeneralRows[2])) {
         settings_.dark_mode = !settings_.dark_mode;
         runtime_applier_.apply_theme(settings_.dark_mode);
     }

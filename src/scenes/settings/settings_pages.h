@@ -15,11 +15,9 @@ public:
     void draw() const;
 
 private:
-    enum class slider { none, note_speed, camera_angle, lane_width, note_height, lane_fog };
-
     game_settings& settings_;
     settings_gameplay_preview preview_;
-    slider active_slider_ = slider::none;
+    int active_slider_index_ = -1;
 };
 
 class settings_audio_page {
@@ -31,11 +29,9 @@ public:
     void draw() const;
 
 private:
-    enum class slider { none, bgm_volume, se_volume, hitsound_pan_strength };
-
     game_settings& settings_;
     const settings_runtime_applier& runtime_applier_;
-    slider active_slider_ = slider::none;
+    int active_slider_index_ = -1;
 };
 
 class settings_video_page {

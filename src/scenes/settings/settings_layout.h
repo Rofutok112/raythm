@@ -86,24 +86,33 @@ inline const Rectangle kBackRect = ui::place(kSidebarRect, kSidebarItemWidth, kB
                                              ui::anchor::bottom_center, ui::anchor::bottom_center, kBackOffset);
 inline const Rectangle kContentHeaderRect = ui::place(kContentRect, kContentHeaderWidth, kContentHeaderHeight,
                                                       ui::anchor::top_left, ui::anchor::top_left, kContentHeaderOffset);
+
+inline Rectangle setting_row_rect(float y_offset) {
+    return ui::place(kContentRect, kRowWidth, kRowHeight,
+                     ui::anchor::top_left, ui::anchor::top_left,
+                     Vector2{kRowOffsetX, y_offset});
+}
+
+template <std::size_t Count>
+inline std::array<Rectangle, Count> build_setting_row_stack(float start_y, float step_y) {
+    std::array<Rectangle, Count> rows{};
+    for (std::size_t i = 0; i < Count; ++i) {
+        rows[i] = setting_row_rect(start_y + static_cast<float>(i) * step_y);
+    }
+    return rows;
+}
+
 inline const std::array<Rectangle, 8> kGeneralRows = {{
-    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 174.0f}),
-    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 264.0f}),
-    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 354.0f}),
-    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 504.0f}),
-    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 594.0f}),
-    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 744.0f}),
-    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 834.0f}),
-    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 924.0f}),
+    setting_row_rect(174.0f),
+    setting_row_rect(264.0f),
+    setting_row_rect(354.0f),
+    setting_row_rect(504.0f),
+    setting_row_rect(594.0f),
+    setting_row_rect(744.0f),
+    setting_row_rect(834.0f),
+    setting_row_rect(924.0f),
 }};
-inline const std::array<Rectangle, 6> kGameplayRows = {{
-    kGeneralRows[0],
-    kGeneralRows[1],
-    kGeneralRows[2],
-    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 444.0f}),
-    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 534.0f}),
-    ui::place(kContentRect, kRowWidth, kRowHeight, ui::anchor::top_left, ui::anchor::top_left, Vector2{kRowOffsetX, 624.0f}),
-}};
+inline const std::array<Rectangle, 6> kGameplayRows = build_setting_row_stack<6>(174.0f, 90.0f);
 inline const Rectangle kGameplayPreviewRect = ui::place(kContentRect, kGameplayPreviewWidth, kGameplayPreviewHeight,
                                                         ui::anchor::top_left, ui::anchor::top_left,
                                                         Vector2{kRowOffsetX, 744.0f});
