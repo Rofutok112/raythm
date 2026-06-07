@@ -476,6 +476,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor_scene.h
         src/scenes/play/play_flow_controller.cpp
         src/scenes/play/play_flow_controller.h
+        src/scenes/play/play_hitsound_service.cpp
+        src/scenes/play/play_hitsound_service.h
         src/scenes/play/play_chart_filter.cpp
         src/scenes/play/play_chart_filter.h
         src/scenes/play/play_note_draw_queue.cpp
@@ -1104,6 +1106,41 @@ add_executable(play_flow_controller_smoke
         src/scenes/editor/editor_scene_types.h
         src/tests/play_flow_controller_smoke.cpp)
 
+add_executable(play_hitsound_service_smoke
+        src/audio/audio_loudness.cpp
+        src/audio/audio_loudness.h
+        src/audio/audio_manager.cpp
+        src/audio/audio_manager.h
+        src/platform/windows_input_source.cpp
+        src/platform/windows_input_source.h
+        src/models/data_models.h
+        src/scenes/play/play_hitsound_service.cpp
+        src/scenes/play/play_hitsound_service.h
+        src/scenes/play/play_session_types.h
+        src/scenes/play/play_scroll_map.h
+        src/scenes/editor/editor_scene_types.h
+        src/gameplay/input_handler.cpp
+        src/gameplay/input_handler.h
+        src/gameplay/lane_input_tracker.cpp
+        src/gameplay/lane_input_tracker.h
+        src/gameplay/judge_system.cpp
+        src/gameplay/judge_system.h
+        src/gameplay/performance_system.cpp
+        src/gameplay/performance_system.h
+        src/gameplay/score_system.cpp
+        src/gameplay/score_system.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
+        src/gameplay/chart_rc_calculator.cpp
+        src/gameplay/chart_rc_calculator.h
+        src/gameplay/scoring_ruleset_runtime.cpp
+        src/gameplay/scoring_ruleset_runtime.h
+        src/tests/play_hitsound_service_smoke.cpp)
+
 add_executable(editor_transport_controller_smoke
         src/audio/audio_manager.h
         src/audio/audio_waveform.h
@@ -1408,6 +1445,7 @@ set(RAYTHM_SMOKE_TARGETS
         play_note_draw_queue_smoke
         play_chart_filter_smoke
         play_flow_controller_smoke
+        play_hitsound_service_smoke
         editor_transport_controller_smoke
         editor_flow_controller_smoke
         editor_timeline_controller_smoke
@@ -1464,6 +1502,8 @@ target_link_libraries(input_handler_smoke PRIVATE raylib)
 target_link_libraries(judge_system_smoke PRIVATE raylib)
 target_link_libraries(ranking_service_smoke PRIVATE sqlite3 crypt32 winhttp)
 target_link_libraries(play_flow_controller_smoke PRIVATE raylib)
+target_include_directories(play_hitsound_service_smoke PRIVATE ${RAYTHM_BASS_DIR})
+target_link_libraries(play_hitsound_service_smoke PRIVATE raylib ${RAYTHM_BASS_IMPORT_LIB})
 target_link_libraries(editor_transport_controller_smoke PRIVATE raylib)
 target_link_libraries(editor_flow_controller_smoke PRIVATE raylib sqlite3)
 target_link_libraries(editor_timeline_controller_smoke PRIVATE raylib)
@@ -1508,6 +1548,12 @@ add_custom_command(TARGET audio_manager_smoke POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${RAYTHM_BASS_RUNTIME_DLL}
         $<TARGET_FILE_DIR:audio_manager_smoke>/bass.dll
+)
+
+add_custom_command(TARGET play_hitsound_service_smoke POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${RAYTHM_BASS_RUNTIME_DLL}
+        $<TARGET_FILE_DIR:play_hitsound_service_smoke>/bass.dll
 )
 
 install(TARGETS raythm raythm_launcher raythm_updater RUNTIME DESTINATION .)

@@ -31,7 +31,7 @@ public:
     void draw() const;
 
 private:
-    enum class slider { none, bgm_volume, se_volume };
+    enum class slider { none, bgm_volume, se_volume, hitsound_pan_strength };
 
     game_settings& settings_;
     const settings_runtime_applier& runtime_applier_;

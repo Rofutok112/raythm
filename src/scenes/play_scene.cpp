@@ -17,6 +17,7 @@
 #include "managed_content_storage.h"
 #include "path_utils.h"
 #include "play/play_flow_controller.h"
+#include "play/play_hitsound_service.h"
 #include "play/play_renderer.h"
 #include "play/play_session_loader.h"
 #include "play/play_view_geometry.h"
@@ -262,11 +263,10 @@ void play_scene::update(float dt) {
         context.pause_song_select_clicked = ui::is_clicked(pause_buttons[2], ui::draw_layer::modal);
     }
     if (!state_.hitsound_path.empty() || state_.hitsounds.has_any()) {
-        context.play_hitsound_immediately = [hitsounds = state_.hitsounds](const judge_event& event) {
-            const std::string& path = hitsounds.path_for(event);
-            if (!path.empty()) {
-                audio_manager::instance().play_se(path);
-            }
+        context.play_hitsound_immediately = [hitsounds = state_.hitsounds,
+                                             key_count = state_.key_count,
+                                             pan_strength = g_settings.hitsound_pan_strength](const judge_event& event) {
+            play_hitsound_service::play(hitsounds, event, key_count, pan_strength);
         };
     }
 

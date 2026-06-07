@@ -163,6 +163,8 @@ void settings_audio_page::update() {
             active_slider_ = slider::bgm_volume;
         } else if (ui::is_hovered(settings::kGeneralRows[1], settings::kLayer)) {
             active_slider_ = slider::se_volume;
+        } else if (ui::is_hovered(settings::kGeneralRows[2], settings::kLayer)) {
+            active_slider_ = slider::hitsound_pan_strength;
         }
     }
 
@@ -173,31 +175,36 @@ void settings_audio_page::update() {
         } else if (active_slider_ == slider::se_volume) {
             settings_.se_volume = settings::slider_ratio_from_mouse(settings::kGeneralRows[1]);
             runtime_applier_.apply_se_volume(settings_.se_volume);
+        } else if (active_slider_ == slider::hitsound_pan_strength) {
+            settings_.hitsound_pan_strength = settings::slider_ratio_from_mouse(settings::kGeneralRows[2]);
         }
     }
 
-    if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[2]), settings::kLayer) ||
-        ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[2]), settings::kLayer)) {
+    if (ui::is_clicked(settings::arrow_left_rect(settings::kGeneralRows[3]), settings::kLayer) ||
+        ui::is_clicked(settings::arrow_right_rect(settings::kGeneralRows[3]), settings::kLayer)) {
         settings_.loudness_normalization_enabled = !settings_.loudness_normalization_enabled;
         runtime_applier_.apply_loudness_normalization(settings_.loudness_normalization_enabled);
     }
 }
 
 void settings_audio_page::draw() const {
-    const char* labels[] = {ltr(text_key::bgm_volume), ltr(text_key::se_volume)};
+    const char* labels[] = {ltr(text_key::bgm_volume), ltr(text_key::se_volume), ltr(text_key::hitsound_pan)};
     const std::string values[] = {
         TextFormat("%d%%", static_cast<int>(std::round(settings_.bgm_volume * 100.0f))),
         TextFormat("%d%%", static_cast<int>(std::round(settings_.se_volume * 100.0f))),
+        TextFormat("%d%%", static_cast<int>(std::round(settings_.hitsound_pan_strength * 100.0f))),
     };
 
-    for (int row = 0; row < 2; ++row) {
-        const float ratio = row == 0 ? settings_.bgm_volume : settings_.se_volume;
+    for (int row = 0; row < 3; ++row) {
+        const float ratio = row == 0 ? settings_.bgm_volume
+                            : row == 1 ? settings_.se_volume
+                                       : settings_.hitsound_pan_strength;
         ui::draw_slider_relative(settings::kGeneralRows[static_cast<std::size_t>(row)], labels[row], values[row].c_str(), ratio,
                                  settings::kSliderLeftInset, settings::kSliderRightInset,
                                  settings::kLayer, 22, settings::kSliderTopOffset);
     }
 
-    ui::draw_value_selector(settings::kGeneralRows[2], ltr(text_key::loudness_normalization),
+    ui::draw_value_selector(settings::kGeneralRows[3], ltr(text_key::loudness_normalization),
                             settings_.loudness_normalization_enabled ? ltr(text_key::enabled) : ltr(text_key::disabled),
                             settings::kLayer);
 }

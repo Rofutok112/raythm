@@ -46,6 +46,7 @@ constexpr std::array<translation_entry, static_cast<int>(text_key::editor_settin
     {"Global Offset", "全体オフセット"},
     {"BGM Volume", "BGM 音量"},
     {"SE Volume", "効果音 音量"},
+    {"Hit Sound Pan", "ヒット音 パン"},
     {"Loudness Normalization", "ラウドネス正規化"},
     {"Enabled", "有効"},
     {"Disabled", "無効"},

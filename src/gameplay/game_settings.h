@@ -37,6 +37,7 @@ struct game_settings {
     int global_note_offset_ms = 0;
     float bgm_volume = 1.0f;
     float se_volume = 1.0f;
+    float hitsound_pan_strength = 0.6f;
     bool loudness_normalization_enabled = false;
     int target_fps = 144;
     key_config keys;

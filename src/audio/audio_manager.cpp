@@ -30,6 +30,7 @@ struct se_sample_entry {
 struct se_voice_entry {
     unsigned long handle = 0;
     float local_volume = 1.0f;
+    float pan = 0.0f;
     bool stream_fallback = false;
     std::string sample_path;
 };
@@ -692,7 +693,7 @@ double audio_manager::get_preview_sample_rate_hz() const {
     return get_voice_sample_rate_hz(preview_handle_);
 }
 
-int audio_manager::play_se(const std::string& file_path, float volume) {
+int audio_manager::play_se(const std::string& file_path, float volume, float pan) {
     if (!ensure_initialized()) {
         return 0;
     }
@@ -713,9 +714,11 @@ int audio_manager::play_se(const std::string& file_path, float volume) {
     }
 
     const int voice_id = next_se_voice_id_++;
-    se_voices()[voice_id] = {handle, std::clamp(volume, 0.0f, 1.0f), stream_fallback,
+    se_voices()[voice_id] = {handle, std::clamp(volume, 0.0f, 1.0f), std::clamp(pan, -1.0f, 1.0f), stream_fallback,
                              stream_fallback ? std::string{} : file_path};
+    BASS_ChannelSetAttribute(handle, BASS_ATTRIB_NOBUFFER, 1.0f);
     BASS_ChannelSetAttribute(handle, BASS_ATTRIB_VOL, se_voices()[voice_id].local_volume * se_volume_);
+    BASS_ChannelSetAttribute(handle, BASS_ATTRIB_PAN, se_voices()[voice_id].pan);
     play_voice(handle, true);
     trim_se_sample_cache();
     return voice_id;

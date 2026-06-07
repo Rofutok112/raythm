@@ -88,7 +88,7 @@ public:
     double get_preview_sample_rate_hz() const;
 
     bool preload_se(const std::string& file_path);
-    int play_se(const std::string& file_path, float volume = 1.0f);
+    int play_se(const std::string& file_path, float volume = 1.0f, float pan = 0.0f);
     bool is_se_voice_active(int voice_id) const;
     std::size_t get_active_se_voice_count() const;
     void stop_se(int voice_id);
