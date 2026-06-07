@@ -563,7 +563,6 @@ song_load_result song_loader::load_all(const std::string& songs_dir) {
     const fs::path root = path_utils::from_utf8(songs_dir);
 
     if (!fs::exists(root) || !fs::is_directory(root)) {
-        result.errors.push_back("Songs directory does not exist: " + path_utils::to_utf8(root));
         return result;
     }
 

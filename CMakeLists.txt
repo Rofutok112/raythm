@@ -726,6 +726,34 @@ add_executable(song_select_data_controller_smoke
         src/scenes/song_select/song_select_state.h
         src/tests/song_select_data_controller_smoke.cpp)
 
+add_executable(title_startup_controller_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
+        src/localization/localization.cpp
+        src/localization/localization.h
+        src/models/data_models.h
+        src/models/online_content_identity.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/scenes/virtual_screen.cpp
+        src/scenes/virtual_screen.h
+        src/scenes/shared/scene_fade.cpp
+        src/scenes/shared/scene_fade.h
+        src/scenes/song_select/song_select_layout.h
+        src/scenes/song_select/song_select_state.cpp
+        src/scenes/song_select/song_select_state.h
+        src/scenes/title/title_startup_controller.cpp
+        src/scenes/title/title_startup_controller.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
+        src/ui/ui_font.cpp
+        src/ui/ui_font.h
+        src/tests/title_startup_controller_smoke.cpp)
+
 add_executable(song_export_identity_smoke
         src/models/data_models.h
         src/models/online_content_identity.h
@@ -1417,6 +1445,7 @@ set(RAYTHM_SMOKE_TARGETS
         song_loader_smoke
         song_select_state_smoke
         song_select_data_controller_smoke
+        title_startup_controller_smoke
         song_export_identity_smoke
         online_content_identity_smoke
         online_content_availability_smoke
@@ -1496,6 +1525,7 @@ target_link_libraries(managed_content_storage_smoke PRIVATE sqlite3 raylib)
 target_link_libraries(online_content_availability_smoke PRIVATE raylib)
 target_link_libraries(song_select_state_smoke PRIVATE raylib)
 target_link_libraries(song_select_data_controller_smoke PRIVATE raylib)
+target_link_libraries(title_startup_controller_smoke PRIVATE raylib)
 target_link_libraries(create_tools_model_smoke PRIVATE raylib)
 target_link_libraries(settings_io_smoke PRIVATE raylib)
 target_link_libraries(input_handler_smoke PRIVATE raylib)

@@ -83,6 +83,11 @@ void touch_assets(const fs::path& song_dir) {
     std::ofstream(song_dir / "jacket.png", std::ios::binary) << "jacket";
 }
 
+std::string long_total_reflection_jacket_name() {
+    return "jacket-2223fc7e-e76a-4086-b96a-042bf494bb20-jacket-436ed993-5e51-43a5-993c-05000c6f9642-"
+           "ig_073ad18ff0690e160169f2fdad8fcc81918541ce70166c723f-512x512.png";
+}
+
 }  // namespace
 
 namespace mv {
@@ -214,6 +219,12 @@ int main() {
     assert(!stored_manifest->audio_asset.ciphertext_hash.empty());
     assert(!stored_manifest->jacket_asset.ciphertext_hash.empty());
     assert(!stored_manifest->song_json_asset.content_hash.empty());
+    assert(stored_manifest->song_json_asset.encrypted_path.find("song.json") == std::string::npos);
+    assert(stored_manifest->audio_asset.encrypted_path.find("audio.ogg") == std::string::npos);
+    assert(stored_manifest->jacket_asset.encrypted_path.find("jacket.png") == std::string::npos);
+    assert(stored_manifest->song_json_asset.encrypted_path.find(".encrypted/assets/") == 0);
+    assert(stored_manifest->audio_asset.encrypted_path.find(".encrypted/assets/") == 0);
+    assert(stored_manifest->jacket_asset.encrypted_path.find(".encrypted/assets/") == 0);
     assert(!stored_manifest->created_at.empty());
     assert(!stored_manifest->updated_at.empty());
     assert(stored_manifest->charts.size() == 1);
@@ -235,6 +246,81 @@ int main() {
     assert(decrypted_song_json.success);
     assert(std::string(decrypted_song_json.bytes.begin(), decrypted_song_json.bytes.end()).find("Managed Remote") !=
            std::string::npos);
+
+    managed_content_storage::package_manifest long_path_manifest = *stored_manifest;
+    long_path_manifest.song.remote_song_id = "total-reflection-path-regression";
+    long_path_manifest.song.revision_id = "total-reflection-path-regression-rev";
+    long_path_manifest.song.package_id = "total-reflection-path-regression-package";
+    long_path_manifest.local_song_id = managed_content_storage::local_song_id(long_path_manifest.song);
+    const fs::path long_path_song_dir = managed_content_storage::song_directory(long_path_manifest.song);
+    const std::string long_jacket_name = long_total_reflection_jacket_name();
+    assert((long_path_song_dir / ".encrypted" / (long_jacket_name + ".renc")).string().size() > 260);
+    managed_content_storage::encrypted_asset_metadata long_jacket_asset;
+    assert(managed_content_storage::write_encrypted_asset(
+        long_path_manifest,
+        long_path_song_dir,
+        long_jacket_name,
+        std::string_view("long-jacket", 11),
+        long_jacket_asset,
+        error_message));
+    const fs::path short_jacket_path =
+        managed_content_storage::encrypted_asset_path(long_path_song_dir, long_jacket_asset);
+    assert(short_jacket_path.string().size() < 260);
+    assert(long_jacket_asset.logical_path == long_jacket_name);
+    assert(long_jacket_asset.encrypted_path.find(long_jacket_name) == std::string::npos);
+    assert(fs::exists(short_jacket_path));
+    long_path_manifest.jacket_asset = long_jacket_asset;
+    assert(managed_content_storage::write_manifest(long_path_manifest, error_message));
+    const managed_content_storage::managed_file_read_result long_jacket_read =
+        managed_content_storage::read_managed_file(long_path_song_dir / long_jacket_name);
+    assert(long_jacket_read.managed);
+    assert(long_jacket_read.success);
+    assert(std::string(long_jacket_read.bytes.begin(), long_jacket_read.bytes.end()) == "long-jacket");
+
+    managed_content_storage::package_manifest legacy_layout_manifest = *stored_manifest;
+    legacy_layout_manifest.song.remote_song_id = "legacy-encrypted-layout";
+    legacy_layout_manifest.song.revision_id = "legacy-encrypted-layout-rev";
+    legacy_layout_manifest.song.package_id = "legacy-encrypted-layout-package";
+    legacy_layout_manifest.local_song_id = managed_content_storage::local_song_id(legacy_layout_manifest.song);
+    const fs::path legacy_layout_song_dir = managed_content_storage::song_directory(legacy_layout_manifest.song);
+    managed_content_storage::encrypted_asset_metadata legacy_audio_asset;
+    assert(managed_content_storage::write_encrypted_asset(
+        legacy_layout_manifest,
+        legacy_layout_song_dir,
+        "legacy/audio.ogg",
+        std::string_view("legacy-audio", 12),
+        legacy_audio_asset,
+        error_message));
+    const fs::path hashed_legacy_audio_path =
+        managed_content_storage::encrypted_asset_path(legacy_layout_song_dir, legacy_audio_asset);
+    const fs::path old_layout_audio_path = legacy_layout_song_dir / ".encrypted" / "legacy" / "audio.ogg.renc";
+    fs::create_directories(old_layout_audio_path.parent_path(), ec);
+    assert(!ec);
+    fs::rename(hashed_legacy_audio_path, old_layout_audio_path, ec);
+    assert(!ec);
+    legacy_audio_asset.encrypted_path = ".encrypted/legacy/audio.ogg.renc";
+    legacy_layout_manifest.audio_asset = legacy_audio_asset;
+    assert(managed_content_storage::write_manifest(legacy_layout_manifest, error_message));
+    const managed_content_storage::managed_file_read_result legacy_audio_read =
+        managed_content_storage::read_managed_file(legacy_layout_song_dir / "legacy" / "audio.ogg");
+    assert(legacy_audio_read.managed);
+    assert(legacy_audio_read.success);
+    assert(std::string(legacy_audio_read.bytes.begin(), legacy_audio_read.bytes.end()) == "legacy-audio");
+    assert(managed_content_storage::write_encrypted_asset(
+        legacy_layout_manifest,
+        legacy_layout_song_dir,
+        "legacy/audio.ogg",
+        std::string_view("legacy-audio-updated", 20),
+        legacy_layout_manifest.audio_asset,
+        error_message));
+    assert(legacy_layout_manifest.audio_asset.encrypted_path.find(".encrypted/assets/") == 0);
+    assert(!fs::exists(old_layout_audio_path));
+    assert(fs::exists(managed_content_storage::encrypted_asset_path(
+        legacy_layout_song_dir, legacy_layout_manifest.audio_asset)));
+    fs::remove_all(long_path_song_dir, ec);
+    ec.clear();
+    fs::remove_all(legacy_layout_song_dir, ec);
+    ec.clear();
 
     managed_content_storage::package_manifest revoked_manifest = *stored_manifest;
     revoked_manifest.license_revoked = true;
@@ -261,7 +347,17 @@ int main() {
         .origin = local_content_index::online_origin::downloaded,
     });
 
+    const fs::path orphaned_workspace_shadow_dir = app_paths::song_dir(managed_song_id);
+    fs::create_directories(orphaned_workspace_shadow_dir / "charts", ec);
+    assert(!ec);
+    assert(chart_serializer::serialize(
+        make_chart("orphaned-plain-chart", managed_song_id),
+        path_utils::to_utf8(orphaned_workspace_shadow_dir / "charts" / "orphaned-plain-chart.rchart")));
+    assert(!fs::exists(orphaned_workspace_shadow_dir / "song.json"));
+
     const song_select::catalog_data catalog_rebuilt_from_manifest = song_select::load_catalog(true);
+    assert(catalog_rebuilt_from_manifest.load_errors.empty());
+    assert(!fs::exists(orphaned_workspace_shadow_dir));
     const song_select::song_entry* manifest_managed = nullptr;
     for (const song_select::song_entry& song : catalog_rebuilt_from_manifest.songs) {
         if (song.song.meta.song_id == managed_song_id) {

@@ -126,7 +126,7 @@ void update(state& startup, const update_context& context) {
             context.preferred_song_id,
             context.preferred_chart_id,
             context.sync_media_on_catalog_apply,
-            false);
+            true);
         return;
     }
 

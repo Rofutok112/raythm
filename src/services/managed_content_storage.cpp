@@ -30,6 +30,7 @@ namespace json = network::json;
 
 constexpr const char* kDefaultEncryptionScheme = "raythm-dev-sha256-stream-v1";
 constexpr const char* kEncryptedDirectoryName = ".encrypted";
+constexpr const char* kEncryptedAssetsDirectoryName = "assets";
 
 content_cache_paths::song_cache_key_parts song_key_parts(const song_identity& identity) {
     return {
@@ -175,7 +176,12 @@ std::string encrypted_relative_path_for(const std::string& logical_relative_path
     if (!normalized.has_value()) {
         return {};
     }
-    return (fs::path(kEncryptedDirectoryName) / fs::path(*normalized)).generic_string() + ".renc";
+    const std::string digest = updater::compute_sha256_hex(std::string_view(*normalized));
+    if (digest.size() < 32) {
+        return {};
+    }
+    return (fs::path(kEncryptedDirectoryName) / kEncryptedAssetsDirectoryName /
+            (digest.substr(0, 32) + ".renc")).generic_string();
 }
 
 std::string bytes_sha256_hex(const std::vector<unsigned char>& bytes) {
@@ -966,25 +972,38 @@ bool write_encrypted_asset(package_manifest& manifest,
         return false;
     }
 
-    asset.logical_path = *logical_path;
-    asset.encrypted_path = encrypted_relative_path_for(asset.logical_path);
-    if (asset.encrypted_path.empty()) {
+    encrypted_asset_metadata next_asset = asset;
+    next_asset.logical_path = *logical_path;
+    next_asset.encrypted_path = encrypted_relative_path_for(next_asset.logical_path);
+    if (next_asset.encrypted_path.empty()) {
         error_message = "Managed package encrypted asset path is invalid.";
         return false;
     }
-    asset.nonce = random_nonce_hex();
-    asset.content_hash = bytes_sha256_hex(plaintext);
-    asset.size_bytes = plaintext.size();
+    next_asset.nonce = random_nonce_hex();
+    next_asset.content_hash = bytes_sha256_hex(plaintext);
+    next_asset.size_bytes = plaintext.size();
 
     const std::optional<fs::path> target_path =
-        validated_encrypted_asset_path(song_directory, asset, error_message);
+        validated_encrypted_asset_path(song_directory, next_asset, error_message);
     if (!target_path.has_value()) {
         return false;
     }
 
-    std::vector<unsigned char> ciphertext = xor_crypt(plaintext, *key_hex, asset.nonce);
-    asset.ciphertext_hash = bytes_sha256_hex(ciphertext);
-    return write_binary_file(*target_path, ciphertext, error_message);
+    std::vector<unsigned char> ciphertext = xor_crypt(plaintext, *key_hex, next_asset.nonce);
+    next_asset.ciphertext_hash = bytes_sha256_hex(ciphertext);
+    if (!write_binary_file(*target_path, ciphertext, error_message)) {
+        return false;
+    }
+
+    const std::optional<fs::path> previous_path =
+        asset_empty(asset) ? std::nullopt : validated_encrypted_asset_path(song_directory, asset, error_message);
+    error_message.clear();
+    asset = std::move(next_asset);
+    if (previous_path.has_value() && previous_path->lexically_normal() != target_path->lexically_normal()) {
+        std::error_code ec;
+        fs::remove(*previous_path, ec);
+    }
+    return true;
 }
 
 managed_file_read_result read_encrypted_asset(const package_manifest& manifest,

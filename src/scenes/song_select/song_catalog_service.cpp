@@ -11,6 +11,7 @@
 
 #include "app_paths.h"
 #include "chart_level_cache.h"
+#include "content_cache_paths.h"
 #include "services/content_sync_service.h"
 #include "managed_content_storage.h"
 #include "mv/mv_storage.h"
@@ -145,6 +146,48 @@ bool hash_changed(const std::string& local_hash, const std::string& remote_hash)
     return !local_hash.empty() &&
            !remote_hash.empty() &&
            lowercase(local_hash) != lowercase(remote_hash);
+}
+
+bool managed_package_exists_for_local_song_id(const std::string& local_song_id) {
+    for (const online_content::source source : {online_content::source::community,
+                                                online_content::source::official}) {
+        const std::filesystem::path package_dir =
+            content_cache_paths::source_root(source) / "songs" / local_song_id;
+        if (managed_content_storage::read_manifest(package_dir).has_value()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void remove_orphaned_managed_workspace_shadow_dirs() {
+    const std::filesystem::path songs_root = app_paths::songs_root();
+    if (!std::filesystem::exists(songs_root) || !std::filesystem::is_directory(songs_root)) {
+        return;
+    }
+
+    std::error_code ec;
+    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(songs_root, ec)) {
+        if (ec) {
+            break;
+        }
+        if (!entry.is_directory(ec)) {
+            continue;
+        }
+        const std::filesystem::path song_dir = entry.path();
+        if (std::filesystem::exists(song_dir / "song.json", ec)) {
+            continue;
+        }
+        ec.clear();
+
+        const std::string local_song_id = path_utils::to_utf8(song_dir.filename());
+        if (local_song_id.find("song_") != 0 || !managed_package_exists_for_local_song_id(local_song_id)) {
+            continue;
+        }
+
+        std::filesystem::remove_all(song_dir, ec);
+        ec.clear();
+    }
 }
 
 bool managed_chart_modified(const managed_content_storage::chart_manifest_entry& chart) {
@@ -428,6 +471,7 @@ catalog_data load_catalog(bool calculate_missing_levels) {
     const player_chart_offset_map chart_offsets = load_player_chart_offsets();
     const local_content_index::snapshot local_index = local_content_index::load_snapshot();
 
+    remove_orphaned_managed_workspace_shadow_dirs();
     const song_load_result load_result = song_loader::load_all(path_utils::to_utf8(app_paths::songs_root()));
     catalog.load_errors = load_result.errors;
 
