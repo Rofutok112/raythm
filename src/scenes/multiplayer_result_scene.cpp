@@ -595,7 +595,7 @@ void multiplayer_result_scene::draw() {
                           {736.0f, 152.0f, 414.0f, 96.0f},
                           g_theme->text, ui::text_align::right);
     ui::draw_rect_f({736.0f, 270.0f, 414.0f, 3.0f}, selected_rank_color);
-    ui::draw_text_in_rect(selected_has_details ? TextFormat("RC %.1f", selected->rc_value) : "RC --", 28,
+    ui::draw_text_in_rect(selected_has_details ? TextFormat("RC %.0f", selected->rc_value) : "RC --", 28,
                           {736.0f, 284.0f, 190.0f, 42.0f}, g_theme->text_secondary,
                           ui::text_align::left);
     const char* clear_label = selected->failed ? "FAILED" :

@@ -849,7 +849,7 @@ void draw_hud(const play_session_state& state) {
     const float live_accuracy = state.score_system.get_live_accuracy();
     ui::enqueue_body_text_in_rect(TextFormat("SCORE %07d", result.score), 30,
                                   kScoreRect, g_theme->hud_score, ui::text_align::left);
-    ui::enqueue_body_text_in_rect(TextFormat("RC %.2f", state.performance_system.current_rc()), 24,
+    ui::enqueue_body_text_in_rect(TextFormat("RC %.0f", state.performance_system.current_rc()), 24,
                                   kRcRect, g_theme->text_secondary, ui::text_align::left);
 
     ui::enqueue_body_text_in_rect(TextFormat("FPS: %d", GetFPS()), 20,

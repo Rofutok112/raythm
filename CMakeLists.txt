@@ -204,6 +204,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/judge_system.h
         src/gameplay/player_note_offsets.cpp
         src/gameplay/player_note_offsets.h
+        src/gameplay/chart_rc_calculator.cpp
+        src/gameplay/chart_rc_calculator.h
         src/gameplay/performance_system.cpp
         src/gameplay/performance_system.h
         src/gameplay/play_mods.h
@@ -988,11 +990,25 @@ add_executable(performance_system_smoke
         src/gameplay/chart_difficulty.h
         src/gameplay/chart_judge_events.cpp
         src/gameplay/chart_judge_events.h
+        src/gameplay/chart_rc_calculator.cpp
+        src/gameplay/chart_rc_calculator.h
         src/gameplay/performance_system.cpp
         src/gameplay/performance_system.h
         src/gameplay/timing_engine.cpp
         src/gameplay/timing_engine.h
         src/tests/performance_system_smoke.cpp)
+
+add_executable(chart_rc_calculator_smoke
+        src/models/data_models.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
+        src/gameplay/chart_rc_calculator.cpp
+        src/gameplay/chart_rc_calculator.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
+        src/tests/chart_rc_calculator_smoke.cpp)
 
 add_executable(ranking_service_smoke
         src/core/app_paths.cpp
@@ -1070,6 +1086,8 @@ add_executable(play_flow_controller_smoke
         src/gameplay/chart_difficulty.h
         src/gameplay/chart_judge_events.cpp
         src/gameplay/chart_judge_events.h
+        src/gameplay/chart_rc_calculator.cpp
+        src/gameplay/chart_rc_calculator.h
         src/gameplay/performance_system.cpp
         src/gameplay/performance_system.h
         src/gameplay/scoring_ruleset_runtime.cpp
@@ -1383,6 +1401,7 @@ set(RAYTHM_SMOKE_TARGETS
         chart_judge_events_smoke
         judge_system_smoke
         score_system_smoke
+        chart_rc_calculator_smoke
         performance_system_smoke
         ranking_service_smoke
         network_error_smoke
