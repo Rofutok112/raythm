@@ -5,7 +5,6 @@
 #include <iterator>
 #include <vector>
 
-#include "audio_manager.h"
 #include "services/content_sync_service.h"
 #include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_layout.h"
@@ -173,21 +172,15 @@ bool apply_play_filter_change(song_select::state& state,
     return true;
 }
 
-double selected_preview_length_seconds(const song_select::song_entry* song) {
-    const double audio_length = audio_manager::instance().get_preview_length_seconds();
-    if (audio_length > 0.0) {
-        return audio_length;
-    }
-    return song != nullptr ? static_cast<double>(song->song.meta.duration_seconds) : 0.0;
-}
-
 }  // namespace
 title_play_view::update_result update(song_select::state& state,
                                       title_play_view::mode view_mode,
                                       float anim_t,
                                       Rectangle origin_rect,
                                       float dt,
-                                      const title_create_tools_model::view_model* create_tools_model) {
+                                      title_audio_controller* audio_controller,
+                                      const title_create_tools_model::view_model* create_tools_model,
+                                      bool preview_loading) {
     update_result result;
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
@@ -393,18 +386,19 @@ title_play_view::update_result update(song_select::state& state,
         return result;
     }
 
-    if (view_mode == mode::play) {
+    if (view_mode == mode::play && audio_controller != nullptr && !preview_loading) {
         const song_select::song_entry* song = song_select::selected_song(state);
+        const title_preview_snapshot preview = audio_controller->preview_snapshot(song);
         const Rectangle progress = current.meta_rect;
         const Rectangle progress_hit = {progress.x, progress.y - 12.0f, progress.width, progress.height + 24.0f};
         if (song != nullptr && left_pressed && CheckCollisionPointRec(mouse, progress_hit)) {
             state.preview_bar_dragging = true;
-            state.preview_bar_resume_after_drag = audio_manager::instance().is_preview_playing();
-            state.preview_bar_drag_position_seconds = audio_manager::instance().get_preview_position_seconds();
-            audio_manager::instance().pause_preview();
+            state.preview_bar_resume_after_drag = preview.playing;
+            state.preview_bar_drag_position_seconds = preview.position_seconds;
+            audio_controller->pause_preview();
         }
         if (song != nullptr && state.preview_bar_dragging) {
-            const double preview_length = selected_preview_length_seconds(song);
+            const double preview_length = audio_controller->preview_snapshot(song).length_seconds;
             if (preview_length > 0.0) {
                 const float ratio = std::clamp((mouse.x - progress.x) / progress.width, 0.0f, 1.0f);
                 state.preview_bar_drag_position_seconds = preview_length * static_cast<double>(ratio);
@@ -412,9 +406,9 @@ title_play_view::update_result update(song_select::state& state,
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
                 return result;
             }
-            audio_manager::instance().seek_preview(state.preview_bar_drag_position_seconds);
+            audio_controller->seek_preview(state.preview_bar_drag_position_seconds);
             if (state.preview_bar_resume_after_drag) {
-                audio_manager::instance().play_preview(false);
+                audio_controller->play_preview_from_current();
             }
             state.preview_bar_dragging = false;
             state.preview_bar_resume_after_drag = false;
@@ -441,7 +435,7 @@ title_play_view::update_result update(song_select::state& state,
             }
             return result;
         }
-        if (left_pressed && CheckCollisionPointRec(mouse, preview_play_button_rect(current))) {
+        if (!preview_loading && left_pressed && CheckCollisionPointRec(mouse, preview_play_button_rect(current))) {
             result.preview_toggle_requested = true;
             return result;
         }

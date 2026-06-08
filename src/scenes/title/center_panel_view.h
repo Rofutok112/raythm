@@ -3,8 +3,8 @@
 #include <span>
 
 #include "raylib.h"
-#include "song_select/song_preview_controller.h"
 #include "song_select/song_select_state.h"
+#include "title/title_audio_controller.h"
 
 namespace title_center_view {
 
@@ -31,7 +31,7 @@ int hit_test_chart(Rectangle area, float scroll_y, Vector2 point, int count);
 Rectangle song_status_badge_rect(Rectangle main_column_rect);
 Rectangle chart_status_badge_rect(Rectangle chart_detail_rect);
 void draw(const song_select::state& state,
-          const song_select::preview_controller& preview_controller,
+          const title_preview_snapshot& preview,
           const song_select::song_entry* song,
           const song_select::chart_option* chart,
           std::span<const song_select::chart_option* const> filtered,

@@ -2,6 +2,8 @@
 
 #include <utility>
 
+#include "audio_manager.h"
+
 void title_audio_controller::configure(std::string intro_path, std::string loop_path) {
     bgm_controller_.configure(std::move(intro_path), std::move(loop_path));
 }
@@ -81,16 +83,56 @@ void title_audio_controller::draw_spectrum(const Rectangle& rect, float alpha_sc
     spectrum_visualizer_.draw(rect, alpha_scale);
 }
 
+void title_audio_controller::select_preview_song(const song_select::song_entry* song) {
+    preview_controller_.select_song(song);
+}
+
+void title_audio_controller::resume_preview_song(const song_select::song_entry* song) {
+    preview_controller_.resume(song);
+}
+
+void title_audio_controller::pause_preview() {
+    preview_controller_.pause();
+}
+
+void title_audio_controller::stop_preview() {
+    preview_controller_.stop();
+}
+
+void title_audio_controller::toggle_preview_song(const song_select::song_entry* song) {
+    if (preview_controller_.is_playing()) {
+        preview_controller_.pause();
+    } else {
+        preview_controller_.resume(song);
+    }
+}
+
+void title_audio_controller::seek_preview(double seconds) {
+    audio_manager::instance().seek_preview(seconds);
+}
+
+void title_audio_controller::play_preview_from_current() {
+    audio_manager::instance().play_preview(false);
+}
+
 title_audio_policy::resolved_state title_audio_controller::current_state() const {
     return current_state_;
 }
 
-song_select::preview_controller& title_audio_controller::preview() {
-    return preview_controller_;
-}
-
-const song_select::preview_controller& title_audio_controller::preview() const {
-    return preview_controller_;
+title_preview_snapshot title_audio_controller::preview_snapshot(const song_select::song_entry* fallback_song) const {
+    const audio_manager& audio = audio_manager::instance();
+    title_preview_snapshot snapshot;
+    snapshot.loaded = audio.is_preview_loaded();
+    snapshot.loading = preview_controller_.is_loading();
+    snapshot.playing = audio.is_preview_playing();
+    snapshot.position_seconds = snapshot.loaded ? audio.get_preview_position_seconds() : 0.0;
+    snapshot.length_seconds = snapshot.loaded ? audio.get_preview_length_seconds() : 0.0;
+    if (snapshot.length_seconds <= 0.0 && fallback_song != nullptr) {
+        snapshot.length_seconds = static_cast<double>(fallback_song->song.meta.duration_seconds);
+    }
+    snapshot.jacket_loaded = preview_controller_.jacket_loaded();
+    snapshot.jacket_texture = snapshot.jacket_loaded ? &preview_controller_.jacket_texture() : nullptr;
+    return snapshot;
 }
 
 title_audio_policy::resolved_state title_audio_controller::resolve_state(title_audio_policy::hub_mode mode) const {

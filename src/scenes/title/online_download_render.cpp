@@ -6,7 +6,6 @@
 #include <string>
 #include <vector>
 
-#include "audio_manager.h"
 #include "content_lifecycle.h"
 #include "localization/localization.h"
 #include "platform/windows_input_source.h"
@@ -880,7 +879,7 @@ void draw_toned_button(Rectangle rect,
 
 }  // namespace
 
-void draw(state& state, float anim_t, Rectangle origin_rect) {
+void draw(state& state, const title_audio_controller& audio_controller, float anim_t, Rectangle origin_rect) {
     const auto& t = *g_theme;
     const float play_t = std::clamp(anim_t, 0.0f, 1.0f);
     if (play_t <= 0.01f) {
@@ -1242,15 +1241,16 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                            current.preview_panel_rect.width - 52.0f, 26.0f},
                           17, with_alpha(t.text_secondary, alpha), now, ui::text_align::center);
 
+        const title_preview_snapshot preview = audio_controller.preview_snapshot(&song->song);
         draw_transport_skip_button(preview_prev_button_rect(current.preview_panel_rect), false, alpha);
         draw_transport_toggle_button(preview_play_button_rect(current.preview_panel_rect),
-                                     audio_manager::instance().is_preview_playing(), alpha);
+                                     preview.playing, alpha);
         draw_transport_skip_button(preview_next_button_rect(current.preview_panel_rect), true, alpha);
         const Rectangle bar = preview_progress_rect(current.preview_panel_rect);
-        const double preview_length = detail::preview_display_length_seconds(*song);
+        const double preview_length = detail::preview_display_length_seconds(*song, preview);
         const double preview_position = state.preview_bar_dragging
             ? state.preview_bar_drag_position_seconds
-            : audio_manager::instance().get_preview_position_seconds();
+            : preview.position_seconds;
         const float preview_ratio =
             preview_length > 0.0 ? std::clamp(static_cast<float>(preview_position / preview_length), 0.0f, 1.0f) : 0.0f;
         ui::draw_rect_f(bar, with_alpha(t.bg_alt, normal_row_alpha));
@@ -1416,11 +1416,11 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             with_alpha(t.text_muted, detail_alpha), ui::text_align::right);
     }
 
-    const audio_manager& audio = audio_manager::instance();
-    const double preview_length = detail::preview_display_length_seconds(*song);
+    const title_preview_snapshot preview = audio_controller.preview_snapshot(&song->song);
+    const double preview_length = detail::preview_display_length_seconds(*song, preview);
     const double preview_position = state.preview_bar_dragging
         ? state.preview_bar_drag_position_seconds
-        : audio.get_preview_position_seconds();
+        : preview.position_seconds;
     const float preview_ratio =
         preview_length > 0.0 ? std::clamp(static_cast<float>(preview_position / preview_length), 0.0f, 1.0f) : 0.0f;
     ui::draw_rect_f(current.preview_bar_rect, with_alpha(t.bg_alt, static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
@@ -1435,7 +1435,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         12,
         {current.preview_bar_rect.x, current.preview_bar_rect.y + 14.0f, current.preview_bar_rect.width, 16.0f},
         with_alpha(t.text_muted, detail_alpha), ui::text_align::right);
-    draw_transport_toggle_button(current.preview_play_rect, audio.is_preview_playing(), detail_alpha);
+    draw_transport_toggle_button(current.preview_play_rect, preview.playing, detail_alpha);
 
     const Rectangle ranking_header = {preview_panel.x + 28.0f, preview_panel.y + 452.0f, preview_panel.width - 56.0f, 26.0f};
     draw_browse_body_text_in_rect(localization::tr_literal("GLOBAL RANKING"), 14, ranking_header,

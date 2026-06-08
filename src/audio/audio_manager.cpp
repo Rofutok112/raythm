@@ -350,7 +350,7 @@ audio_clock_snapshot audio_manager::get_bgm_clock() const {
 
 bool audio_manager::get_bgm_fft256(std::array<float, 128>& spectrum) const {
     spectrum.fill(0.0f);
-    if (!is_voice_loaded(bgm_handle_)) {
+    if (!is_voice_playing(bgm_handle_)) {
         return false;
     }
 
@@ -360,7 +360,7 @@ bool audio_manager::get_bgm_fft256(std::array<float, 128>& spectrum) const {
 
 bool audio_manager::get_bgm_fft1024(std::array<float, 512>& spectrum) const {
     spectrum.fill(0.0f);
-    if (!is_voice_loaded(bgm_handle_)) {
+    if (!is_voice_playing(bgm_handle_)) {
         return false;
     }
 
@@ -370,7 +370,7 @@ bool audio_manager::get_bgm_fft1024(std::array<float, 512>& spectrum) const {
 
 bool audio_manager::get_bgm_fft4096(std::array<float, 2048>& spectrum) const {
     spectrum.fill(0.0f);
-    if (!is_voice_loaded(bgm_handle_)) {
+    if (!is_voice_playing(bgm_handle_)) {
         return false;
     }
 
@@ -661,7 +661,7 @@ double audio_manager::get_preview_length_seconds() const {
 
 bool audio_manager::get_preview_fft256(std::array<float, 128>& spectrum) const {
     spectrum.fill(0.0f);
-    if (!is_voice_loaded(preview_handle_)) {
+    if (!is_voice_playing(preview_handle_)) {
         return false;
     }
 
@@ -671,7 +671,7 @@ bool audio_manager::get_preview_fft256(std::array<float, 128>& spectrum) const {
 
 bool audio_manager::get_preview_fft1024(std::array<float, 512>& spectrum) const {
     spectrum.fill(0.0f);
-    if (!is_voice_loaded(preview_handle_)) {
+    if (!is_voice_playing(preview_handle_)) {
         return false;
     }
 
@@ -681,7 +681,7 @@ bool audio_manager::get_preview_fft1024(std::array<float, 512>& spectrum) const 
 
 bool audio_manager::get_preview_fft4096(std::array<float, 2048>& spectrum) const {
     spectrum.fill(0.0f);
-    if (!is_voice_loaded(preview_handle_)) {
+    if (!is_voice_playing(preview_handle_)) {
         return false;
     }
 

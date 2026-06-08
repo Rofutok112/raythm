@@ -494,11 +494,12 @@ bool handle_chart_click(state& state,
 }
 
 bool handle_detail_actions(state& state,
-                           online_catalog::data_controller& data_controller,
-                           const layout& current,
-                           Vector2 mouse,
-                           bool left_pressed,
-                           update_result& result) {
+                            online_catalog::data_controller& data_controller,
+                            const layout& current,
+                            title_audio_controller& audio_controller,
+                            Vector2 mouse,
+                            bool left_pressed,
+                            update_result& result) {
     if (!state.detail_open) {
         return false;
     }
@@ -508,12 +509,12 @@ bool handle_detail_actions(state& state,
         request_charts_for_selected_song(state, data_controller);
     }
 
-    if (preview_controller::update_scrub(state, song, current.preview_bar_rect, mouse, left_pressed)) {
+    if (preview_controller::update_scrub(state, song, audio_controller, current.preview_bar_rect, mouse, left_pressed)) {
         return true;
     }
 
     if (ui::is_clicked(current.preview_play_rect)) {
-        result.action = preview_controller::toggle_playback_action();
+        result.action = preview_controller::toggle_playback_action(audio_controller);
         return true;
     }
 
@@ -614,6 +615,7 @@ bool handle_detail_actions(state& state,
 bool handle_preview_panel_actions(state& state,
                                   online_catalog::data_controller& data_controller,
                                   const layout& current,
+                                  title_audio_controller& audio_controller,
                                   Vector2 mouse,
                                   bool left_pressed,
                                   update_result& result) {
@@ -626,12 +628,12 @@ bool handle_preview_panel_actions(state& state,
     }
 
     const Rectangle bar = preview_bar_rect(current.preview_panel_rect);
-    if (preview_controller::update_scrub(state, song, bar, mouse, left_pressed)) {
+    if (preview_controller::update_scrub(state, song, audio_controller, bar, mouse, left_pressed)) {
         return true;
     }
 
     if (ui::is_clicked(preview_play_button_rect(current.preview_panel_rect))) {
-        result.action = preview_controller::toggle_playback_action();
+        result.action = preview_controller::toggle_playback_action(audio_controller);
         return true;
     }
     if (ui::is_clicked(preview_prev_button_rect(current.preview_panel_rect)) ||
@@ -763,6 +765,7 @@ void update_scroll_positions(state& state,
 
 update_result update(state& state,
                      online_catalog::data_controller& data_controller,
+                     title_audio_controller& audio_controller,
                      float anim_t,
                      Rectangle origin_rect,
                      float dt) {
@@ -813,11 +816,11 @@ update_result update(state& state,
         return result;
     }
 
-    if (handle_detail_actions(state, data_controller, current, mouse, left_pressed, result)) {
+    if (handle_detail_actions(state, data_controller, current, audio_controller, mouse, left_pressed, result)) {
         return result;
     }
 
-    if (handle_preview_panel_actions(state, data_controller, current, mouse, left_pressed, result)) {
+    if (handle_preview_panel_actions(state, data_controller, current, audio_controller, mouse, left_pressed, result)) {
         return result;
     }
 

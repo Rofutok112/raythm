@@ -7,9 +7,9 @@
 
 #include "raylib.h"
 #include "scene_manager.h"
-#include "song_select/song_preview_controller.h"
 #include "song_select/song_select_state.h"
 #include "title/create_tools_model.h"
+#include "title/title_audio_controller.h"
 #include "title/title_create_mode_controller.h"
 #include "title/title_play_data_controller.h"
 #include "title/title_play_mode_controller.h"
@@ -44,14 +44,14 @@ public:
 
     void on_enter_play(bool multiplayer_chart_pick_active,
                        const std::string& multiplayer_server_url,
-                       song_select::preview_controller& preview_controller);
-    void on_enter_create(song_select::preview_controller& preview_controller);
+                       title_audio_controller& audio_controller);
+    void on_enter_create(title_audio_controller& audio_controller);
 
     void request_catalog_reload(std::string preferred_song_id = "",
                                 std::string preferred_chart_id = "",
                                 bool sync_media_on_apply = false,
                                 bool calculate_missing_levels = false);
-    void poll_catalog_reload(song_select::preview_controller& preview_controller,
+    void poll_catalog_reload(title_audio_controller& audio_controller,
                              bool play_mode_active,
                              bool create_mode_active);
     void request_ranking_reload();
@@ -67,18 +67,18 @@ public:
     void poll_transfer(const cross_callbacks& callbacks, bool sync_media_on_reload);
     bool poll_create_upload(bool sync_media_on_apply);
     void cancel_confirmation();
-    void draw_or_apply_confirmation(song_select::preview_controller& preview_controller,
+    void draw_or_apply_confirmation(title_audio_controller& audio_controller,
                                     const cross_callbacks& callbacks,
                                     bool sync_media_on_reload);
 
     void update_play(scene_manager& manager,
-                     song_select::preview_controller& preview_controller,
+                     title_audio_controller& audio_controller,
                      float anim_t,
                      Rectangle origin_rect,
                      float dt,
                      const play_update_callbacks& callbacks);
     void update_create(scene_manager& manager,
-                       song_select::preview_controller& preview_controller,
+                       title_audio_controller& audio_controller,
                        float anim_t,
                        Rectangle origin_rect,
                        float dt,
@@ -100,8 +100,8 @@ private:
                                            const std::optional<bool>& song_permission_hint,
                                            const std::optional<bool>& chart_permission_hint);
     void poll_create_permission_refresh();
-    void sync_play_media(song_select::preview_controller& preview_controller);
-    void sync_create_preview(song_select::preview_controller& preview_controller);
+    void sync_play_media(title_audio_controller& audio_controller);
+    void sync_create_preview(title_audio_controller& audio_controller);
 
     song_select::state state_;
     title_play_data_controller data_controller_;

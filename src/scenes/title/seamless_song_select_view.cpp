@@ -8,7 +8,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "audio_manager.h"
 #include "chart_difficulty.h"
 #include "localization/localization.h"
 #include "platform/windows_input_source.h"
@@ -712,14 +711,6 @@ Rectangle play_filter_level_slider_rect(Rectangle panel) {
     return {panel.x + 34.0f, panel.y + 208.0f, panel.width - 68.0f, 18.0f};
 }
 
-double selected_preview_length_seconds(const song_select::song_entry* song) {
-    const double audio_length = audio_manager::instance().get_preview_length_seconds();
-    if (audio_length > 0.0) {
-        return audio_length;
-    }
-    return song != nullptr ? static_cast<double>(song->song.meta.duration_seconds) : 0.0;
-}
-
 const char* difficulty_factor_label(const std::string& name) {
     if (name == "density") {
         return "Density";
@@ -1009,7 +1000,7 @@ void draw_chart_summary(Rectangle rect,
 
 void draw_preview_and_start_panel(const title_play_view::layout& current,
                                   const song_select::state& state,
-                                  const song_select::preview_controller& preview_controller,
+                                  const title_preview_snapshot& preview,
                                   const song_select::song_entry* song,
                                   const song_select::chart_option* chart,
                                   unsigned char alpha,
@@ -1066,27 +1057,34 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
     }
 
     const Rectangle progress = current.meta_rect;
-    const double length = selected_preview_length_seconds(song);
-    const double pos = state.preview_bar_dragging
+    const bool preview_loading = preview.loading;
+    const double length = preview.length_seconds;
+    const double pos = preview_loading ? 0.0 : state.preview_bar_dragging
         ? state.preview_bar_drag_position_seconds
-        : audio_manager::instance().get_preview_position_seconds();
+        : preview.position_seconds;
     const float ratio = length > 0.0 ? std::clamp(static_cast<float>(pos / length), 0.0f, 1.0f) : 0.0f;
-    ui::draw_rect_f(progress, with_alpha(t.bg_alt, normal_row_alpha));
-    ui::draw_rect_f({progress.x, progress.y, progress.width * ratio, progress.height}, with_alpha(t.accent, alpha));
-    ui::draw_rect_lines(progress, 1.0f, with_alpha(t.border_light, alpha));
+    const unsigned char progress_alpha = preview_loading ? scaled_alpha(alpha, 0.38f) : alpha;
+    ui::draw_rect_f(progress, with_alpha(t.bg_alt, preview_loading
+        ? scaled_alpha(normal_row_alpha, 0.58f)
+        : normal_row_alpha));
+    ui::draw_rect_f({progress.x, progress.y, progress.width * ratio, progress.height},
+                    with_alpha(t.accent, progress_alpha));
+    ui::draw_rect_lines(progress, 1.0f, with_alpha(t.border_light, progress_alpha));
     ui::draw_text_in_rect(
-        TextFormat("%s / %s",
-                   format_duration_label(static_cast<float>(pos)).c_str(),
-                   length > 0.0 ? format_duration_label(static_cast<float>(length)).c_str() : "--:--"),
+        preview_loading
+            ? "loading"
+            : TextFormat("%s / %s",
+                         format_duration_label(static_cast<float>(pos)).c_str(),
+                         length > 0.0 ? format_duration_label(static_cast<float>(length)).c_str() : "--:--"),
         12,
         {progress.x, progress.y + 11.0f, progress.width, 16.0f},
-        with_alpha(t.text_muted, alpha), ui::text_align::right);
+        with_alpha(t.text_muted, progress_alpha), ui::text_align::right);
 
     const Rectangle prev_button = preview_prev_button_rect(current);
     const Rectangle play_button = preview_play_button_rect(current);
     const Rectangle next_button = preview_next_button_rect(current);
     draw_transport_skip_button(prev_button, false, alpha);
-    draw_transport_toggle_button(play_button, audio_manager::instance().is_preview_playing(), alpha);
+    draw_transport_toggle_button(play_button, preview.playing, alpha);
     draw_transport_skip_button(next_button, true, alpha);
 
     const Rectangle mods = best_score_rect(panel);
@@ -1304,7 +1302,7 @@ layout make_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode) {
 }
 
 void draw(song_select::state& state,
-          const song_select::preview_controller& preview_controller,
+          const title_audio_controller& audio_controller,
           mode view_mode,
           float anim_t,
           Rectangle origin_rect,
@@ -1374,6 +1372,7 @@ void draw(song_select::state& state,
     const song_select::song_entry* song = song_select::selected_song(state);
     const auto filtered = song_select::filtered_charts_for_selected_song(state);
     const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
+    const title_preview_snapshot preview = audio_controller.preview_snapshot(song);
 
     if (!hide_unloaded_content) {
         const Rectangle center_jacket =
@@ -1387,7 +1386,7 @@ void draw(song_select::state& state,
                                 center_jacket.width - 62.0f,
                             150.0f}
                 : current.chart_detail_rect;
-        title_center_view::draw(state, preview_controller, song, chart, filtered, {
+        title_center_view::draw(state, preview, song, chart, filtered, {
             .main_column_rect = current.main_column,
             .jacket_rect = center_jacket,
             .chart_detail_rect = center_detail,
@@ -1411,7 +1410,7 @@ void draw(song_select::state& state,
         ui::draw_rect_f({current.main_column.x + 24.0f, current.main_column.y + 342.0f,
                          current.main_column.width - 48.0f, 1.0f},
                         with_alpha(t.border_light, alpha));
-        draw_preview_and_start_panel(current, state, preview_controller, song, chart, alpha, button_base,
+        draw_preview_and_start_panel(current, state, preview, song, chart, alpha, button_base,
                                      button_hover, button_selected, normal_row_alpha, hover_row_alpha,
                                      selected_row_alpha);
         title_ranking_view::draw(state.ranking_panel, {

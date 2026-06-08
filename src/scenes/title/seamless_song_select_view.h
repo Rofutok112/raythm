@@ -1,8 +1,8 @@
 #pragma once
 
 #include "raylib.h"
-#include "song_select/song_preview_controller.h"
 #include "song_select/song_select_state.h"
+#include "title/title_audio_controller.h"
 
 namespace title_create_tools_model {
 struct view_model;
@@ -83,7 +83,7 @@ struct update_result {
 layout make_layout(float anim_t, Rectangle origin_rect);
 layout make_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode);
 void draw(song_select::state& state,
-          const song_select::preview_controller& preview_controller,
+          const title_audio_controller& audio_controller,
           mode view_mode,
           float anim_t,
           Rectangle origin_rect,

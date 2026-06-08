@@ -5,7 +5,7 @@
 
 void title_play_mode_controller::update(scene_manager& manager,
                                         song_select::state& state,
-                                        song_select::preview_controller& preview_controller,
+                                        title_audio_controller& audio_controller,
                                         const title_play_transfer_controller& transfer_controller,
                                         float play_view_anim,
                                         Rectangle play_entry_origin_rect,
@@ -17,7 +17,14 @@ void title_play_mode_controller::update(scene_manager& manager,
 
     const title_play_view::update_result result =
         title_local_song_select_controller::update(
-            state, title_play_view::mode::play, play_view_anim, play_entry_origin_rect, dt);
+            state,
+            title_play_view::mode::play,
+            play_view_anim,
+            play_entry_origin_rect,
+            dt,
+            &audio_controller,
+            nullptr,
+            audio_controller.preview_snapshot(song_select::selected_song(state)).loading);
 
     if (result.back_requested) {
         callbacks.enter_home();
@@ -36,15 +43,11 @@ void title_play_mode_controller::update(scene_manager& manager,
         return;
     }
     if (result.play_requested) {
-        title_play_session::start_selected_chart(manager, state, preview_controller);
+        title_play_session::start_selected_chart(manager, state, audio_controller);
         return;
     }
     if (result.preview_toggle_requested) {
-        if (preview_controller.is_playing()) {
-            preview_controller.pause();
-        } else {
-            preview_controller.resume(song_select::selected_song(state));
-        }
+        audio_controller.toggle_preview_song(song_select::selected_song(state));
         return;
     }
     if (result.update_song_requested) {

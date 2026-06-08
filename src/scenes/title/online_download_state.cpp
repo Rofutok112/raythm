@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "audio_manager.h"
 #include "content_lifecycle.h"
 #include "network/auth_client.h"
 #include "services/content_sync_service.h"
@@ -621,13 +620,13 @@ std::string format_time_label(double seconds) {
     return TextFormat("%d:%02d", total / 60, total % 60);
 }
 
-double preview_display_length_seconds(const song_entry_state& song) {
+double preview_display_length_seconds(const song_entry_state& song, const title_preview_snapshot& preview) {
     const double metadata_length = static_cast<double>(song.song.song.meta.duration_seconds);
     if (!song.song.song.meta.audio_url.empty()) {
         return metadata_length;
     }
 
-    const double stream_length = audio_manager::instance().get_preview_length_seconds();
+    const double stream_length = preview.length_seconds;
     if (metadata_length > 0.0) {
         if (stream_length <= 0.0) {
             return metadata_length;

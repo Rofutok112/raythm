@@ -4,20 +4,20 @@
 
 namespace title_play_session {
 
-void sync_preview(song_select::state& state, song_select::preview_controller& preview_controller) {
-    preview_controller.select_song(song_select::selected_song(state));
+void sync_preview(song_select::state& state, title_audio_controller& audio_controller) {
+    audio_controller.select_preview_song(song_select::selected_song(state));
 }
 
 bool start_selected_chart(scene_manager& manager,
                           song_select::state& state,
-                          song_select::preview_controller& preview_controller) {
+                          title_audio_controller& audio_controller) {
     const song_select::song_entry* song = song_select::selected_song(state);
     const auto filtered = song_select::filtered_charts_for_selected_song(state);
     const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
     if (song == nullptr || chart == nullptr) {
         return false;
     }
-    preview_controller.stop();
+    audio_controller.stop_preview();
     manager.change_scene(song_select::make_play_scene(manager, *song, *chart, state.mods));
     return true;
 }

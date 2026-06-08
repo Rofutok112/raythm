@@ -24,6 +24,7 @@ public:
     void stop();
     [[nodiscard]] bool is_audio_active() const;
     [[nodiscard]] bool is_playing() const;
+    [[nodiscard]] bool is_loading() const;
 
     [[nodiscard]] bool jacket_loaded() const {
         return jacket_loaded_;

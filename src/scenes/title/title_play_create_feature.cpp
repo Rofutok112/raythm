@@ -161,20 +161,20 @@ void title_play_create_feature::on_exit() {
 }
 
 void title_play_create_feature::on_enter_play(bool multiplayer_chart_pick_active,
-                                             const std::string& multiplayer_server_url,
-                                             song_select::preview_controller& preview_controller) {
+                                              const std::string& multiplayer_server_url,
+                                              title_audio_controller& audio_controller) {
     state_.filter.include_chartless_songs = false;
     state_.ranking_panel.selected_source = ranking_source_for_current_selection(state_);
     state_.filter.multiplayer_queueable_only = multiplayer_chart_pick_active;
     state_.filter.multiplayer_queue_server_url = multiplayer_chart_pick_active ? multiplayer_server_url : "";
-    sync_play_media(preview_controller);
+    sync_play_media(audio_controller);
 }
 
-void title_play_create_feature::on_enter_create(song_select::preview_controller& preview_controller) {
+void title_play_create_feature::on_enter_create(title_audio_controller& audio_controller) {
     state_.filter.include_chartless_songs = true;
     capture_current_selection();
     refresh_create_tools_model(true);
-    sync_create_preview(preview_controller);
+    sync_create_preview(audio_controller);
 }
 
 void title_play_create_feature::request_catalog_reload(std::string preferred_song_id,
@@ -186,18 +186,18 @@ void title_play_create_feature::request_catalog_reload(std::string preferred_son
                                             sync_media_on_apply, calculate_missing_levels);
 }
 
-void title_play_create_feature::poll_catalog_reload(song_select::preview_controller& preview_controller,
-                                                   bool play_mode_active,
-                                                   bool create_mode_active) {
+void title_play_create_feature::poll_catalog_reload(title_audio_controller& audio_controller,
+                                                    bool play_mode_active,
+                                                    bool create_mode_active) {
     const title_play_data_controller::catalog_poll_result result =
         data_controller_.poll_catalog_reload(state_, play_mode_active, create_mode_active);
     if (result.completed && create_mode_active) {
         refresh_create_tools_model(true);
     }
     if (result.sync_play_media) {
-        sync_play_media(preview_controller);
+        sync_play_media(audio_controller);
     } else if (result.sync_create_preview) {
-        sync_create_preview(preview_controller);
+        sync_create_preview(audio_controller);
     }
 }
 
@@ -250,15 +250,15 @@ void title_play_create_feature::cancel_confirmation() {
     transfer_controller_.cancel_confirmation(state_);
 }
 
-void title_play_create_feature::draw_or_apply_confirmation(song_select::preview_controller& preview_controller,
-                                                          const cross_callbacks& callbacks,
-                                                          bool sync_media_on_reload) {
+void title_play_create_feature::draw_or_apply_confirmation(title_audio_controller& audio_controller,
+                                                           const cross_callbacks& callbacks,
+                                                           bool sync_media_on_reload) {
     transfer_controller_.draw_or_apply_confirmation(
-        state_, preview_controller, make_transfer_callbacks(callbacks), sync_media_on_reload);
+        state_, audio_controller, make_transfer_callbacks(callbacks), sync_media_on_reload);
 }
 
 void title_play_create_feature::update_play(scene_manager& manager,
-                                            song_select::preview_controller& preview_controller,
+                                            title_audio_controller& audio_controller,
                                             float anim_t,
                                             Rectangle origin_rect,
                                             float dt,
@@ -267,14 +267,14 @@ void title_play_create_feature::update_play(scene_manager& manager,
     title_play_mode_controller::update(
         manager,
         state_,
-        preview_controller,
+        audio_controller,
         transfer_controller_,
         anim_t,
         origin_rect,
         dt,
         {
             .enter_home = callbacks.enter_home,
-            .sync_media = [this, &preview_controller]() { sync_play_media(preview_controller); },
+            .sync_media = [this, &audio_controller]() { sync_play_media(audio_controller); },
             .request_ranking_reload = [this]() { request_ranking_reload(); },
             .open_update_catalog = [this, &callbacks](bool include_chart) {
                 const song_select::song_entry* song = song_select::selected_song(state_);
@@ -294,7 +294,7 @@ void title_play_create_feature::update_play(scene_manager& manager,
 }
 
 void title_play_create_feature::update_create(scene_manager& manager,
-                                              song_select::preview_controller& preview_controller,
+                                              title_audio_controller& audio_controller,
                                               float anim_t,
                                               Rectangle origin_rect,
                                               float dt,
@@ -313,7 +313,7 @@ void title_play_create_feature::update_create(scene_manager& manager,
         create_tools_model_,
         {
             .enter_home = callbacks.enter_home,
-            .sync_preview = [this, &preview_controller]() { sync_create_preview(preview_controller); },
+            .sync_preview = [this, &audio_controller]() { sync_create_preview(audio_controller); },
             .start_song_upload = [this](const song_select::song_entry& song) {
                 data_controller_.start_song_upload(song);
             },
@@ -485,11 +485,11 @@ void title_play_create_feature::poll_create_permission_refresh() {
     }
 }
 
-void title_play_create_feature::sync_play_media(song_select::preview_controller& preview_controller) {
-    title_play_session::sync_preview(state_, preview_controller);
+void title_play_create_feature::sync_play_media(title_audio_controller& audio_controller) {
+    title_play_session::sync_preview(state_, audio_controller);
     data_controller_.request_ranking_reload(state_);
 }
 
-void title_play_create_feature::sync_create_preview(song_select::preview_controller& preview_controller) {
-    title_play_session::sync_preview(state_, preview_controller);
+void title_play_create_feature::sync_create_preview(title_audio_controller& audio_controller) {
+    title_play_session::sync_preview(state_, audio_controller);
 }

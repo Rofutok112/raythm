@@ -5,6 +5,7 @@
 #include "raylib.h"
 #include "title/online_catalog_data_controller.h"
 #include "title/online_download_view.h"
+#include "title/title_audio_controller.h"
 
 class title_online_mode_controller {
 public:
@@ -18,6 +19,7 @@ public:
 
     static void update(title_online_view::state& state,
                        online_catalog::data_controller& data_controller,
+                       title_audio_controller& audio_controller,
                        float play_view_anim,
                        Rectangle play_entry_origin_rect,
                        float dt,

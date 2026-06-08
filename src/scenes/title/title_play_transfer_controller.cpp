@@ -108,7 +108,7 @@ void title_play_transfer_controller::start_chart_export(song_select::state& stat
 
 void title_play_transfer_controller::draw_or_apply_confirmation(
     song_select::state& state,
-    song_select::preview_controller& preview_controller,
+    title_audio_controller& audio_controller,
     const catalog_callbacks& callbacks,
     bool sync_media_on_reload) {
     if (transfer_controller_.busy()) {
@@ -119,7 +119,9 @@ void title_play_transfer_controller::draw_or_apply_confirmation(
     const song_select::confirmation_command command = song_select::draw_confirmation_dialog(state);
     song_select::commands::apply_confirmation_command(
         state,
-        preview_controller,
+        [&audio_controller]() {
+            audio_controller.stop_preview();
+        },
         transfer_controller_,
         command,
         [this, &state, &callbacks, sync_media_on_reload](const song_select::delete_result& result) {

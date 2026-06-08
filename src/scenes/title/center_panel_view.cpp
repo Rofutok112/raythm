@@ -173,7 +173,7 @@ Rectangle chart_status_badge_rect(Rectangle chart_detail_rect) {
 }
 
 void draw(const song_select::state& state,
-          const song_select::preview_controller& preview_controller,
+          const title_preview_snapshot& preview,
           const song_select::song_entry* song,
           const song_select::chart_option* chart,
           std::span<const song_select::chart_option* const> filtered,
@@ -206,8 +206,8 @@ void draw(const song_select::state& state,
 
     ui::draw_rect_lines(jacket_frame, kJacketBorderWidth,
                         with_alpha(t.border_image, static_cast<unsigned char>(190.0f * config.play_t)));
-    if (preview_controller.jacket_loaded()) {
-        const Texture2D& jacket = preview_controller.jacket_texture();
+    if (preview.jacket_loaded && preview.jacket_texture != nullptr) {
+        const Texture2D& jacket = *preview.jacket_texture;
         DrawTexturePro(jacket,
                        {0.0f, 0.0f, static_cast<float>(jacket.width), static_cast<float>(jacket.height)},
                        jacket_inner, {0.0f, 0.0f}, 0.0f,

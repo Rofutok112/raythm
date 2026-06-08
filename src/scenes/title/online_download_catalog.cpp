@@ -1139,12 +1139,12 @@ bool poll_owned(state& state, online_catalog::data_controller& data_controller) 
 
 void on_enter(state& state,
               online_catalog::data_controller& data_controller,
-              song_select::preview_controller& preview_controller) {
+              title_audio_controller& audio_controller) {
     if (!state.catalog_loaded_once && !state.catalog_loading) {
         reload_catalog(state, data_controller);
     }
     state.detail_transition = state.detail_open ? 1.0f : 0.0f;
-    preview_controller.select_song(preview_song(state));
+    audio_controller.select_preview_song(preview_song(state));
 }
 
 void on_exit(state& state) {

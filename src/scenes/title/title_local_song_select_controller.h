@@ -2,6 +2,7 @@
 
 #include "title/create_tools_model.h"
 #include "title/seamless_song_select_view.h"
+#include "title/title_audio_controller.h"
 
 namespace title_local_song_select_controller {
 
@@ -10,6 +11,8 @@ title_play_view::update_result update(song_select::state& state,
                                       float anim_t,
                                       Rectangle origin_rect,
                                       float dt,
-                                      const title_create_tools_model::view_model* create_tools_model = nullptr);
+                                      title_audio_controller* audio_controller = nullptr,
+                                      const title_create_tools_model::view_model* create_tools_model = nullptr,
+                                      bool preview_loading = false);
 
 }  // namespace title_local_song_select_controller

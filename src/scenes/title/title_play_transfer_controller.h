@@ -4,10 +4,10 @@
 #include <string>
 #include <vector>
 
-#include "song_select/song_preview_controller.h"
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_select_state.h"
 #include "song_select/song_transfer_controller.h"
+#include "title/title_audio_controller.h"
 
 class title_play_transfer_controller {
 public:
@@ -35,7 +35,7 @@ public:
                             const catalog_callbacks& callbacks,
                             bool sync_media_on_reload);
     void draw_or_apply_confirmation(song_select::state& state,
-                                    song_select::preview_controller& preview_controller,
+                                    title_audio_controller& audio_controller,
                                     const catalog_callbacks& callbacks,
                                     bool sync_media_on_reload);
 
