@@ -17,7 +17,7 @@
 #include "editor/view/editor_layout.h"
 #include "editor/viewport/editor_timeline_viewport.h"
 #include "editor/editor_session_loader.h"
-#include "chart_level_cache.h"
+#include "chart_level_memory_cache.h"
 #include "play_scene.h"
 #include "platform/window_chrome.h"
 #include "scene_common.h"
@@ -579,6 +579,6 @@ bool editor_scene::apply_chart_offset(int offset_ms) {
 
     editor_scene_sync::sync_after_offset_change(make_sync_context());
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
-    chart_level_cache::clear();
+    chart_level_memory_cache::clear();
     return true;
 }

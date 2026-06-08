@@ -58,8 +58,9 @@ data_controller::data_controller(catalog_loader catalog_loader_fn, ranking_loade
       ranking_loader_(std::move(ranking_loader_fn)) {
 }
 
-catalog_data data_controller::load_catalog_from_service(bool calculate_missing_levels) {
-    return load_catalog(calculate_missing_levels);
+catalog_data data_controller::load_catalog_from_service(bool calculate_missing_levels,
+                                                        catalog_progress_callback progress) {
+    return load_catalog(calculate_missing_levels, std::move(progress));
 }
 
 ranking_service::listing data_controller::load_ranking_from_service(std::string chart_id,
@@ -73,6 +74,7 @@ void data_controller::reset(state& state) {
     catalog_reload_pending_ = false;
     active_catalog_request_ = {};
     queued_catalog_request_ = {};
+    catalog_progress_.set("", 0.0f, false);
     state.catalog_loading = false;
 
     ranking_loading_ = false;
@@ -88,6 +90,10 @@ bool data_controller::catalog_loading() const {
 
 bool data_controller::ranking_loading() const {
     return ranking_loading_;
+}
+
+load_progress data_controller::catalog_progress() const {
+    return catalog_progress_.snapshot();
 }
 
 void data_controller::request_catalog_reload(state& state, catalog_reload_request request) {
@@ -118,12 +124,14 @@ catalog_reload_result data_controller::poll_catalog_reload(state& state) {
                       catalog_future_.get(),
                       active_catalog_request_.preferred_song_id,
                       active_catalog_request_.preferred_chart_id);
+        catalog_progress_.set("Local catalog ready.", 1.0f, false);
     } catch (const std::exception& ex) {
         apply_catalog(state,
                       {},
                       active_catalog_request_.preferred_song_id,
                       active_catalog_request_.preferred_chart_id);
         state.load_errors = {ex.what()};
+        catalog_progress_.set(ex.what(), 0.0f, false);
         result.failed = true;
         result.message = ex.what();
     }
@@ -229,10 +237,21 @@ void data_controller::start_catalog_load(state& state, catalog_reload_request re
     std::promise<catalog_data> promise;
     catalog_future_ = promise.get_future();
     auto loader = catalog_loader_;
+    catalog_progress_.set("Preparing local catalog...", 0.0f, true);
+    shared_load_progress* progress = &catalog_progress_;
     const bool calculate_missing_levels = active_catalog_request_.calculate_missing_levels;
-    std::thread([promise = std::move(promise), loader = std::move(loader), calculate_missing_levels]() mutable {
+    std::thread([promise = std::move(promise),
+                 loader = std::move(loader),
+                 progress,
+                 calculate_missing_levels]() mutable {
         try {
-            promise.set_value(loader(calculate_missing_levels));
+            promise.set_value(loader(
+                calculate_missing_levels,
+                [progress](std::string message, float value, bool active) {
+                    if (progress != nullptr) {
+                        progress->set(std::move(message), value, active);
+                    }
+                }));
         } catch (...) {
             promise.set_exception(std::current_exception());
         }

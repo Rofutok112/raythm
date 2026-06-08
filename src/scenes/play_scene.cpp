@@ -304,8 +304,9 @@ void play_scene::update(float dt) {
 
 void play_scene::start_async_load() {
     const play_start_request request = request_;
-    load_progress_ = std::make_shared<async_load_progress>();
-    const std::shared_ptr<async_load_progress> progress = load_progress_;
+    load_progress_ = std::make_shared<shared_load_progress>();
+    const std::shared_ptr<shared_load_progress> progress = load_progress_;
+    progress->set("Loading...", 0.0f);
     load_future_ = std::async(std::launch::async, [request, progress]() mutable {
         async_load_result result;
         result.state.key_count = request.key_count;
@@ -327,9 +328,7 @@ void play_scene::start_async_load() {
                     if (progress == nullptr) {
                         return;
                     }
-                    std::lock_guard<std::mutex> lock(progress->mutex);
-                    progress->progress = value;
-                    progress->message = message;
+                    progress->set(message, value);
                 });
         } catch (const std::exception& ex) {
             result.draw_queue.clear();
@@ -349,10 +348,10 @@ void play_scene::sync_async_load_progress() {
     if (load_progress_ == nullptr) {
         return;
     }
-    std::lock_guard<std::mutex> lock(load_progress_->mutex);
-    state_.status_progress = load_progress_->progress;
-    if (!load_progress_->message.empty()) {
-        state_.status_text = load_progress_->message;
+    const load_progress progress = load_progress_->snapshot();
+    state_.status_progress = progress.progress;
+    if (!progress.message.empty()) {
+        state_.status_text = progress.message;
     }
 }
 

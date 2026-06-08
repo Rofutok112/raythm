@@ -21,6 +21,10 @@ bool title_play_data_controller::catalog_loading() const {
     return data_controller_.catalog_loading();
 }
 
+load_progress title_play_data_controller::catalog_progress() const {
+    return data_controller_.catalog_progress();
+}
+
 bool title_play_data_controller::scoring_ruleset_loading() const {
     return scoring_ruleset_loading_;
 }
@@ -32,20 +36,19 @@ bool title_play_data_controller::upload_in_progress() const {
 void title_play_data_controller::request_catalog_reload(song_select::state& state,
                                                         std::string preferred_song_id,
                                                         std::string preferred_chart_id,
-                                                        bool sync_media_on_apply,
-                                                        bool calculate_missing_levels) {
+                                                        title_catalog::reload_policy policy) {
     if (data_controller_.catalog_loading()) {
         queued_catalog_sync_media_on_apply_ =
-            queued_catalog_sync_media_on_apply_ || sync_media_on_apply;
+            queued_catalog_sync_media_on_apply_ || policy.sync_media_on_apply;
     } else {
-        catalog_sync_media_on_apply_ = sync_media_on_apply;
+        catalog_sync_media_on_apply_ = policy.sync_media_on_apply;
     }
 
     data_controller_.request_catalog_reload(
         state,
         song_select::catalog_reload_request{std::move(preferred_song_id),
                                             std::move(preferred_chart_id),
-                                            calculate_missing_levels});
+                                            policy.calculate_missing_levels});
 }
 
 title_play_data_controller::catalog_poll_result title_play_data_controller::poll_catalog_reload(
@@ -181,11 +184,9 @@ title_play_data_controller::upload_poll_result title_play_data_controller::poll_
 void title_play_data_controller::start_catalog_load(song_select::state& state,
                                                     std::string preferred_song_id,
                                                     std::string preferred_chart_id,
-                                                    bool sync_media_on_apply,
-                                                    bool calculate_missing_levels) {
+                                                    title_catalog::reload_policy policy) {
     request_catalog_reload(state,
                            std::move(preferred_song_id),
                            std::move(preferred_chart_id),
-                           sync_media_on_apply,
-                           calculate_missing_levels);
+                           policy);
 }

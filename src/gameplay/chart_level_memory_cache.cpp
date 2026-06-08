@@ -1,4 +1,4 @@
-#include "chart_level_cache.h"
+#include "chart_level_memory_cache.h"
 
 #include <filesystem>
 #include <mutex>
@@ -41,7 +41,7 @@ std::string cache_key_for(const std::string& chart_path, const std::string& cont
 
 }  // namespace
 
-namespace chart_level_cache {
+namespace chart_level_memory_cache {
 
 std::optional<float> find_level(const std::string& chart_path) {
     const std::optional<std::filesystem::file_time_type> write_time = chart_write_time(chart_path);
@@ -68,6 +68,40 @@ std::optional<float> find_level(const std::string& chart_path, const std::string
         return std::nullopt;
     }
     return it->second.level;
+}
+
+void remember_level(const std::string& chart_path, float level) {
+    if (level <= 0.0f) {
+        return;
+    }
+    const std::optional<std::filesystem::file_time_type> write_time = chart_write_time(chart_path);
+    if (!write_time.has_value()) {
+        return;
+    }
+
+    std::lock_guard lock(cache_mutex());
+    cache()[cache_key_for(chart_path, {})] = cache_entry{
+        .write_time = *write_time,
+        .content_signature = {},
+        .level = level,
+    };
+}
+
+void remember_level(const std::string& chart_path, const std::string& content_signature, float level) {
+    if (content_signature.empty()) {
+        remember_level(chart_path, level);
+        return;
+    }
+    if (level <= 0.0f) {
+        return;
+    }
+
+    std::lock_guard lock(cache_mutex());
+    cache()[cache_key_for(chart_path, content_signature)] = cache_entry{
+        .write_time = std::nullopt,
+        .content_signature = content_signature,
+        .level = level,
+    };
 }
 
 float get_or_calculate(const std::string& chart_path, const chart_data& chart) {
@@ -120,4 +154,4 @@ void clear() {
     cache().clear();
 }
 
-}  // namespace chart_level_cache
+}  // namespace chart_level_memory_cache

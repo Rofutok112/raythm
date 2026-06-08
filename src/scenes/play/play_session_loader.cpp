@@ -8,7 +8,6 @@
 #include "audio_manager.h"
 #include "audio_waveform.h"
 #include "chart_judge_events.h"
-#include "chart_level_cache.h"
 #include "game_settings.h"
 #include "managed_content_storage.h"
 #include "path_utils.h"
@@ -16,6 +15,7 @@
 #include "play_chart_filter.h"
 #include "play_speed_compensation.h"
 #include "ranking_service.h"
+#include "song_select/local_catalog_cache_service.h"
 
 namespace {
 
@@ -44,7 +44,8 @@ std::optional<chart_data> load_chart_for_key_count(const song_data& song, int ke
         if (parse_result.success && parse_result.data.has_value() &&
             parse_result.data->meta.key_count == key_count) {
             chart_data chart = *parse_result.data;
-            if (const std::optional<float> cached_level = chart_level_cache::find_level(chart_path);
+            if (const std::optional<float> cached_level =
+                    song_select::local_catalog_cache_service::find_chart_level(chart_path);
                 cached_level.has_value()) {
                 chart.meta.level = *cached_level;
             }
@@ -205,7 +206,8 @@ play_session_state load(const play_start_request& request,
             if (request.selected_chart_level.has_value()) {
                 state.chart_data->meta.level = *request.selected_chart_level;
             } else if (const std::optional<float> cached_level =
-                           chart_level_cache::find_level(*state.selected_chart_path);
+                           song_select::local_catalog_cache_service::find_chart_level(
+                               *state.selected_chart_path);
                        cached_level.has_value()) {
                 state.chart_data->meta.level = *cached_level;
             }

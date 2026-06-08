@@ -25,8 +25,7 @@ int main() {
     song_select::state play_state;
     std::string home_status;
     bool requested = false;
-    bool requested_calculate_missing_levels = false;
-    bool requested_sync_media = false;
+    title_catalog::reload_policy requested_policy;
     std::string requested_song_id;
     std::string requested_chart_id;
     bool online_reloaded = false;
@@ -38,12 +37,11 @@ int main() {
         "preferred-chart",
         true,
         home_status,
-        [&](std::string song_id, std::string chart_id, bool sync_media, bool calculate_missing_levels) {
+        [&](std::string song_id, std::string chart_id, title_catalog::reload_policy policy) {
             requested = true;
             requested_song_id = std::move(song_id);
             requested_chart_id = std::move(chart_id);
-            requested_sync_media = sync_media;
-            requested_calculate_missing_levels = calculate_missing_levels;
+            requested_policy = policy;
         },
         [] {
             return false;
@@ -63,10 +61,38 @@ int main() {
     assert(requested);
     assert(requested_song_id == "preferred-song");
     assert(requested_chart_id == "preferred-chart");
-    assert(requested_sync_media);
-    assert(requested_calculate_missing_levels);
+    assert(requested_policy.mode == title_catalog::reload_mode::fast_startup);
+    assert(requested_policy.sync_media_on_apply);
+    assert(!requested_policy.calculate_missing_levels);
     assert(startup.catalog_requested);
     assert(startup.loading_message == "Loading local catalog...");
+
+    title_startup_controller::update(startup, {
+        play_state,
+        "",
+        "",
+        false,
+        home_status,
+        [](std::string, std::string, title_catalog::reload_policy) {},
+        [] {
+            return true;
+        },
+        [] {},
+        [] {},
+        [](bool) {},
+        [] {
+            return false;
+        },
+        [] {
+            return load_progress{
+                .message = "Loading local charts 2/8...",
+                .progress = 0.35f,
+                .active = true,
+            };
+        },
+    });
+    assert(startup.loading_message == "Loading local charts 2/8...");
+    assert(startup.catalog_progress == 0.35f);
 
     play_state.catalog_loaded_once = true;
     title_startup_controller::update(startup, {
@@ -75,7 +101,7 @@ int main() {
         "",
         false,
         home_status,
-        [](std::string, std::string, bool, bool) {},
+        [](std::string, std::string, title_catalog::reload_policy) {},
         [] {
             return false;
         },
@@ -99,7 +125,7 @@ int main() {
         "",
         false,
         home_status,
-        [](std::string, std::string, bool, bool) {},
+        [](std::string, std::string, title_catalog::reload_policy) {},
         [] {
             return false;
         },

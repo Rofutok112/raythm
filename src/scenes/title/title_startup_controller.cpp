@@ -111,6 +111,7 @@ void reset(state& startup) {
     startup.load_complete = false;
     startup.load_failed = false;
     startup.progress_visual = kStartupProgressMin;
+    startup.catalog_progress = 0.0f;
     startup.loading_message = "Initializing audio...";
 }
 
@@ -125,19 +126,29 @@ void update(state& startup, const update_context& context) {
         context.request_play_catalog_reload(
             context.preferred_song_id,
             context.preferred_chart_id,
-            context.sync_media_on_catalog_apply,
-            true);
+            title_catalog::policy_for(title_catalog::reload_mode::fast_startup,
+                                      context.sync_media_on_catalog_apply));
         return;
     }
 
     if (context.play_catalog_loading()) {
-        startup.loading_message = "Loading local catalog...";
+        if (context.catalog_progress) {
+            const load_progress catalog_progress = context.catalog_progress();
+            startup.catalog_progress = catalog_progress.progress;
+            startup.loading_message = catalog_progress.message.empty()
+                ? "Loading local catalog..."
+                : catalog_progress.message;
+        } else {
+            startup.loading_message = "Loading local catalog...";
+        }
         return;
     }
 
     if (!context.play_state.catalog_loaded_once) {
         return;
     }
+
+    startup.catalog_progress = 1.0f;
 
     if (!startup.fonts_preload_started) {
         startup.fonts_preload_started = true;
@@ -180,7 +191,9 @@ void draw_loading(state& startup, float dt) {
 
     float base_progress = kStartupProgressMin;
     if (startup.catalog_requested) {
-        base_progress = kStartupProgressCatalog;
+        base_progress = kStartupProgressMin +
+                        (kStartupProgressCatalog - kStartupProgressMin) *
+                            std::clamp(startup.catalog_progress, 0.0f, 1.0f);
     }
     if (startup.fonts_preload_started) {
         base_progress = kStartupProgressFonts;

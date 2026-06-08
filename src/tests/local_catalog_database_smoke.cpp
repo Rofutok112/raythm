@@ -1,5 +1,7 @@
 #include "app_paths.h"
 #include "local_sqlite.h"
+#include "path_utils.h"
+#include "song_select/local_catalog_cache_service.h"
 #include "song_select/local_catalog_database.h"
 
 #include <cassert>
@@ -233,6 +235,14 @@ int main() {
     assert(cached.songs[0].charts[0].managed_manifest->remote_chart_fingerprint == "remote-chart-fingerprint");
     assert(cached.songs[0].charts[0].remote_links.empty());
     assert(cached.songs[0].song.chart_paths.size() == 1);
+    const std::optional<float> cached_level =
+        song_select::local_catalog_database::find_chart_level_by_path(path_utils::to_utf8(chart_path));
+    assert(cached_level.has_value());
+    assert(*cached_level == 7.5f);
+    const std::optional<float> service_cached_level =
+        song_select::local_catalog_cache_service::find_chart_level(path_utils::to_utf8(chart_path));
+    assert(service_cached_level.has_value());
+    assert(*service_cached_level == 7.5f);
 
     std::ofstream(song_dir / "notes.txt") << "not catalog metadata";
     cached = song_select::local_catalog_database::load_cached_catalog();

@@ -49,8 +49,8 @@ public:
 
     void request_catalog_reload(std::string preferred_song_id = "",
                                 std::string preferred_chart_id = "",
-                                bool sync_media_on_apply = false,
-                                bool calculate_missing_levels = false);
+                                title_catalog::reload_policy policy = title_catalog::policy_for(
+                                    title_catalog::reload_mode::quiet_refresh));
     void poll_catalog_reload(title_audio_controller& audio_controller,
                              bool play_mode_active,
                              bool create_mode_active);
@@ -60,6 +60,7 @@ public:
     bool poll_scoring_ruleset_warm();
 
     [[nodiscard]] bool catalog_loading() const;
+    [[nodiscard]] load_progress catalog_progress() const;
     [[nodiscard]] bool scoring_ruleset_loading() const;
     [[nodiscard]] bool upload_in_progress() const;
     [[nodiscard]] bool busy() const;

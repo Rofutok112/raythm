@@ -65,7 +65,7 @@ void spin_until(Fn fn) {
 
 namespace song_select {
 
-catalog_data load_catalog(bool) {
+catalog_data load_catalog(bool, catalog_progress_callback) {
     return {};
 }
 
@@ -110,8 +110,11 @@ session_summary load_session_summary() {
 int main() {
     int catalog_load_count = 0;
     song_select::data_controller controller(
-        [&](bool calculate_missing_levels) {
+        [&](bool calculate_missing_levels, song_select::catalog_progress_callback progress) {
             ++catalog_load_count;
+            if (progress) {
+                progress("Loading test catalog...", 0.5f, true);
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
             song_select::catalog_data catalog;
             catalog.songs.push_back(make_song(catalog_load_count == 1 ? "song-a" : "song-b",
@@ -131,6 +134,10 @@ int main() {
     song_select::state state;
     controller.request_catalog_reload(state, {"song-a", "chart-normal", false});
     assert(state.catalog_loading);
+    spin_until([&] {
+        return controller.catalog_progress().message == "Loading test catalog...";
+    });
+    assert(controller.catalog_progress().active);
     controller.request_catalog_reload(state, {"song-b", "chart-level", true});
     controller.request_catalog_reload(state, {"song-b", "chart-level", false});
 
@@ -146,6 +153,7 @@ int main() {
     });
     assert(catalog_load_count == 2);
     assert(!state.catalog_loading);
+    assert(!controller.catalog_progress().active);
     assert(song_select::selected_song(state)->song.meta.song_id == "song-b");
     assert(song_select::selected_chart_for(state, song_select::filtered_charts_for_selected_song(state))
                ->meta.chart_id == "chart-level");

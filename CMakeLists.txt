@@ -189,8 +189,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/chart_judge_events.h
         src/gameplay/chart_fingerprint.cpp
         src/gameplay/chart_fingerprint.h
-        src/gameplay/chart_level_cache.cpp
-        src/gameplay/chart_level_cache.h
+        src/gameplay/chart_level_memory_cache.cpp
+        src/gameplay/chart_level_memory_cache.h
         src/gameplay/chart_serializer.cpp
         src/gameplay/chart_serializer.h
         src/models/content_lifecycle.h
@@ -263,6 +263,7 @@ add_executable(raythm WIN32 src/main.cpp
         src/core/scene.h
         src/core/scene_manager.cpp
         src/core/scene_manager.h
+        src/core/load_progress.h
         src/core/uuid_util.h
         src/localization/localization.cpp
         src/localization/localization.h
@@ -291,6 +292,9 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_audio_controller.h
         src/scenes/title/title_audio_policy.cpp
         src/scenes/title/title_audio_policy.h
+        src/scenes/title/catalog_reload_policy.h
+        src/scenes/title/catalog_reload_coordinator.cpp
+        src/scenes/title/catalog_reload_coordinator.h
         src/scenes/title/title_layout.cpp
         src/scenes/title/title_layout.h
         src/scenes/title/play_session_controller.cpp
@@ -848,8 +852,8 @@ add_executable(managed_content_storage_smoke
         src/gameplay/chart_file_storage.h
         src/gameplay/chart_judge_events.cpp
         src/gameplay/chart_judge_events.h
-        src/gameplay/chart_level_cache.cpp
-        src/gameplay/chart_level_cache.h
+        src/gameplay/chart_level_memory_cache.cpp
+        src/gameplay/chart_level_memory_cache.h
         src/gameplay/chart_parser.cpp
         src/gameplay/chart_parser.h
         src/gameplay/chart_serializer.cpp
@@ -914,6 +918,14 @@ add_executable(local_catalog_database_smoke
         src/core/local_catalog_signature.h
         src/core/local_sqlite.cpp
         src/core/local_sqlite.h
+        src/gameplay/chart_difficulty.cpp
+        src/gameplay/chart_difficulty.h
+        src/gameplay/chart_judge_events.cpp
+        src/gameplay/chart_judge_events.h
+        src/gameplay/chart_level_memory_cache.cpp
+        src/gameplay/chart_level_memory_cache.h
+        src/gameplay/timing_engine.cpp
+        src/gameplay/timing_engine.h
         src/network/json_helpers.cpp
         src/network/json_helpers.h
         src/models/online_content_identity.h
@@ -923,12 +935,21 @@ add_executable(local_catalog_database_smoke
         src/updater/update_verify.h
         src/scenes/song_select/local_catalog_database.cpp
         src/scenes/song_select/local_catalog_database.h
+        src/scenes/song_select/local_catalog_cache_service.cpp
+        src/scenes/song_select/local_catalog_cache_service.h
         src/scenes/song_select/song_select_state.cpp
         src/scenes/song_select/song_select_state.h
+        src/gameplay/player_note_offsets.cpp
+        src/gameplay/player_note_offsets.h
         src/services/content_sync_service.cpp
         src/services/content_sync_service.h
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
+        src/scenes/title/local_content_binding.h
+        src/scenes/title/local_content_database.cpp
+        src/scenes/title/local_content_database.h
+        src/scenes/title/local_content_index.cpp
+        src/scenes/title/local_content_index.h
         src/models/data_models.h
         src/tests/local_catalog_database_smoke.cpp)
 

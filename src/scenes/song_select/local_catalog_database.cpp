@@ -5,6 +5,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "app_paths.h"
@@ -21,6 +22,21 @@ using local_sqlite::bind_text;
 using local_sqlite::column_text;
 using local_sqlite::exec;
 using local_sqlite::statement;
+
+void report_progress(const progress_callback& progress, std::string message, float value) {
+    if (progress) {
+        progress(std::move(message), std::clamp(value, 0.0f, 1.0f));
+    }
+}
+
+int count_rows(sqlite3* database, const char* table_name) {
+    const std::string sql = std::string("SELECT COUNT(*) FROM ") + table_name + ";";
+    statement query(database, sql.c_str());
+    if (!query.valid() || sqlite3_step(query.get()) != SQLITE_ROW) {
+        return 0;
+    }
+    return sqlite3_column_int(query.get(), 0);
+}
 
 void ensure_optional_schema(sqlite3* database) {
     exec(database, "ALTER TABLE local_songs ADD COLUMN genre TEXT NOT NULL DEFAULT '';");
@@ -515,12 +531,14 @@ void put_chart(sqlite3* database, const chart_option& chart) {
 
 }  // namespace
 
-catalog_data load_cached_catalog() {
+catalog_data load_cached_catalog(progress_callback progress) {
     catalog_data catalog;
+    report_progress(progress, "Opening catalog cache...", 0.02f);
     local_sqlite::database database = open_ready_database();
     if (!database.valid()) {
         return catalog;
     }
+    report_progress(progress, "Checking catalog cache version...", 0.06f);
     if (local_sqlite::metadata_value(database.get(), "local_catalog.signature").value_or("") !=
         local_catalog_signature::current()) {
         return catalog;
@@ -530,7 +548,10 @@ catalog_data load_cached_catalog() {
         return catalog;
     }
 
+    const int song_count = count_rows(database.get(), "local_songs");
+    const int chart_count = count_rows(database.get(), "local_charts");
     std::map<std::string, song_entry> by_song_id;
+    report_progress(progress, "Reading cached songs...", 0.12f);
     statement songs(database.get(),
                     "SELECT song_id, title, artist, genre, directory, audio_file, jacket_file, base_bpm, "
                     "duration_seconds, preview_start_ms, song_version, song_offset, song_has_offset, timing_events, "
@@ -540,6 +561,7 @@ catalog_data load_cached_catalog() {
     if (!songs.valid()) {
         return catalog;
     }
+    int songs_read = 0;
     while (sqlite3_step(songs.get()) == SQLITE_ROW) {
         song_entry entry;
         entry.song.meta.song_id = column_text(songs.get(), 0);
@@ -579,8 +601,19 @@ catalog_data load_cached_catalog() {
         }
         entry.managed_manifest = parse_managed_song_manifest(column_text(songs.get(), 22));
         by_song_id[entry.song.meta.song_id] = std::move(entry);
+        ++songs_read;
+        if (songs_read == song_count || songs_read % 16 == 0) {
+            const float step = song_count > 0
+                ? static_cast<float>(songs_read) / static_cast<float>(song_count)
+                : 1.0f;
+            report_progress(progress,
+                            "Reading cached songs " + std::to_string(songs_read) + "/" +
+                                std::to_string(song_count) + "...",
+                            0.12f + 0.30f * step);
+        }
     }
 
+    report_progress(progress, "Reading cached charts...", 0.44f);
     statement charts(database.get(),
                      "SELECT chart_id, song_id, path, difficulty, level, key_count, chart_author, "
                      "format_version, note_count, min_bpm, max_bpm, status, source_status, "
@@ -590,6 +623,7 @@ catalog_data load_cached_catalog() {
     if (!charts.valid()) {
         return catalog;
     }
+    int charts_read = 0;
     while (sqlite3_step(charts.get()) == SQLITE_ROW) {
         const std::string song_id = column_text(charts.get(), 1);
         auto song_it = by_song_id.find(song_id);
@@ -637,14 +671,55 @@ catalog_data load_cached_catalog() {
         chart.managed_manifest = parse_managed_chart_manifest(column_text(charts.get(), 21));
         song_it->second.song.chart_paths.push_back(chart.path);
         song_it->second.charts.push_back(std::move(chart));
+        ++charts_read;
+        if (charts_read == chart_count || charts_read % 32 == 0) {
+            const float step = chart_count > 0
+                ? static_cast<float>(charts_read) / static_cast<float>(chart_count)
+                : 1.0f;
+            report_progress(progress,
+                            "Reading cached charts " + std::to_string(charts_read) + "/" +
+                                std::to_string(chart_count) + "...",
+                            0.44f + 0.46f * step);
+        }
     }
 
+    report_progress(progress, "Preparing cached catalog...", 0.94f);
     catalog.songs.reserve(by_song_id.size());
     for (auto& [song_id, song] : by_song_id) {
         (void)song_id;
         catalog.songs.push_back(std::move(song));
     }
+    report_progress(progress, "Cached catalog read.", 1.0f);
     return catalog;
+}
+
+std::optional<float> find_chart_level_by_path(const std::string& chart_path) {
+    if (chart_path.empty()) {
+        return std::nullopt;
+    }
+
+    local_sqlite::database database = open_ready_database();
+    if (!database.valid()) {
+        return std::nullopt;
+    }
+    if (local_sqlite::metadata_value(database.get(), "local_catalog.signature").value_or("") !=
+        local_catalog_signature::current()) {
+        return std::nullopt;
+    }
+    if (local_sqlite::metadata_value(database.get(), "local_catalog.status_schema").value_or("") !=
+        local_catalog_signature::kStatusSchema) {
+        return std::nullopt;
+    }
+
+    statement query(database.get(), "SELECT level FROM local_charts WHERE path = ? AND level > 0 LIMIT 1;");
+    if (!query.valid()) {
+        return std::nullopt;
+    }
+    bind_text(query.get(), 1, chart_path);
+    if (sqlite3_step(query.get()) != SQLITE_ROW) {
+        return std::nullopt;
+    }
+    return static_cast<float>(sqlite3_column_double(query.get(), 0));
 }
 
 void replace_catalog(const std::vector<song_entry>& songs, const std::string& catalog_signature) {

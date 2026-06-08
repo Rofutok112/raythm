@@ -179,11 +179,10 @@ void title_play_create_feature::on_enter_create(title_audio_controller& audio_co
 
 void title_play_create_feature::request_catalog_reload(std::string preferred_song_id,
                                                        std::string preferred_chart_id,
-                                                       bool sync_media_on_apply,
-                                                       bool calculate_missing_levels) {
+                                                       title_catalog::reload_policy policy) {
     data_controller_.request_catalog_reload(state_, std::move(preferred_song_id),
                                             std::move(preferred_chart_id),
-                                            sync_media_on_apply, calculate_missing_levels);
+                                            policy);
 }
 
 void title_play_create_feature::poll_catalog_reload(title_audio_controller& audio_controller,
@@ -221,6 +220,10 @@ bool title_play_create_feature::catalog_loading() const {
     return data_controller_.catalog_loading();
 }
 
+load_progress title_play_create_feature::catalog_progress() const {
+    return data_controller_.catalog_progress();
+}
+
 bool title_play_create_feature::scoring_ruleset_loading() const {
     return data_controller_.scoring_ruleset_loading();
 }
@@ -242,7 +245,10 @@ bool title_play_create_feature::poll_create_upload(bool sync_media_on_apply) {
         return false;
     }
     capture_current_selection();
-    request_catalog_reload(preferred_song_id_, preferred_chart_id_, sync_media_on_apply, true);
+    request_catalog_reload(preferred_song_id_,
+                           preferred_chart_id_,
+                           title_catalog::policy_for(title_catalog::reload_mode::import_completed,
+                                                     sync_media_on_apply));
     return true;
 }
 
@@ -373,7 +379,11 @@ title_play_transfer_controller::catalog_callbacks title_play_create_feature::mak
         .reload_online_catalog = callbacks.reload_online_catalog,
         .request_play_catalog_reload =
             [this](const std::string& song_id, const std::string& chart_id, bool sync_media_on_apply) {
-                request_catalog_reload(song_id, chart_id, sync_media_on_apply);
+                request_catalog_reload(
+                    song_id,
+                    chart_id,
+                    title_catalog::policy_for(title_catalog::reload_mode::transfer_completed,
+                                              sync_media_on_apply));
             },
     };
 }
@@ -486,6 +496,7 @@ void title_play_create_feature::poll_create_permission_refresh() {
 }
 
 void title_play_create_feature::sync_play_media(title_audio_controller& audio_controller) {
+    state_.ranking_panel.selected_source = ranking_source_for_current_selection(state_);
     title_play_session::sync_preview(state_, audio_controller);
     data_controller_.request_ranking_reload(state_);
 }

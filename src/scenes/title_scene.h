@@ -6,6 +6,7 @@
 #include "shared/auth_overlay_controller.h"
 #include "shared/scene_fade.h"
 #include "song_select/song_select_state.h"
+#include "title/catalog_reload_coordinator.h"
 #include "title/local_content_index.h"
 #include "title/title_audio_controller.h"
 #include "title/title_browse_feature.h"
@@ -113,6 +114,7 @@ private:
     bool start_in_settings_view_ = false;
     bool multiplayer_chart_pick_active_ = false;
     bool queue_selected_chart_on_multiplayer_return_ = false;
+    title_catalog_reload_coordinator catalog_reload_coordinator_;
     std::string multiplayer_preview_song_id_;
     local_content_index::snapshot multiplayer_local_index_;
     std::string multiplayer_remote_preview_key_;

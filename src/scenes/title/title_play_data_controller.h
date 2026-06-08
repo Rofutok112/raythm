@@ -8,6 +8,7 @@
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_select_data_controller.h"
 #include "song_select/song_select_state.h"
+#include "title/catalog_reload_policy.h"
 #include "title/create_upload_client.h"
 
 class title_play_data_controller {
@@ -25,14 +26,15 @@ public:
     void reset(song_select::state& state);
 
     [[nodiscard]] bool catalog_loading() const;
+    [[nodiscard]] load_progress catalog_progress() const;
     [[nodiscard]] bool scoring_ruleset_loading() const;
     [[nodiscard]] bool upload_in_progress() const;
 
     void request_catalog_reload(song_select::state& state,
                                 std::string preferred_song_id = "",
                                 std::string preferred_chart_id = "",
-                                bool sync_media_on_apply = false,
-                                bool calculate_missing_levels = false);
+                                title_catalog::reload_policy policy = title_catalog::policy_for(
+                                    title_catalog::reload_mode::quiet_refresh));
     catalog_poll_result poll_catalog_reload(song_select::state& state,
                                             bool play_mode_active,
                                             bool create_mode_active);
@@ -52,8 +54,7 @@ private:
     void start_catalog_load(song_select::state& state,
                             std::string preferred_song_id,
                             std::string preferred_chart_id,
-                            bool sync_media_on_apply,
-                            bool calculate_missing_levels);
+                            title_catalog::reload_policy policy);
 
     song_select::data_controller data_controller_;
     bool catalog_sync_media_on_apply_ = false;

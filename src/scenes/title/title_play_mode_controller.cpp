@@ -58,11 +58,11 @@ void title_play_mode_controller::update(scene_manager& manager,
         callbacks.open_update_catalog(true);
         return;
     }
-    if (result.song_selection_changed) {
+    if (result.song_selection_changed || result.chart_selection_changed) {
         callbacks.sync_media();
         return;
     }
-    if (result.chart_selection_changed || result.ranking_source_changed) {
+    if (result.ranking_source_changed) {
         callbacks.request_ranking_reload();
         return;
     }

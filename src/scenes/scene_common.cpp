@@ -44,6 +44,10 @@ void draw_scene_background(const ui_theme& theme) {
 }
 
 Color difficulty_level_color(float level) {
+    if (level <= 0.0f) {
+        return g_theme->text_muted;
+    }
+
     struct level_stop {
         float level;
         Color color;
@@ -86,7 +90,7 @@ void draw_difficulty_level_badge(float level, Rectangle rect, int font_size, uns
     ui::draw_rect_f(rect, fill);
     ui::draw_rect_lines(rect, 1.2f, border);
 
-    const char* label = TextFormat("Lv.%.1f", level);
+    const char* label = level <= 0.0f ? "Lv...." : TextFormat("Lv.%.1f", level);
     const Vector2 text_size = ui::measure_text_size(label, static_cast<float>(font_size), 0.0f);
     ui::draw_text_auto(label,
                        {rect.x + (rect.width - text_size.x) * 0.5f,

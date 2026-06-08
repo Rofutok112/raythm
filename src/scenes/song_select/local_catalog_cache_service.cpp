@@ -3,29 +3,27 @@
 #include <algorithm>
 #include <filesystem>
 #include <system_error>
+#include <utility>
 
 #include "app_paths.h"
+#include "chart_level_memory_cache.h"
 #include "local_catalog_signature.h"
 #include "path_utils.h"
 #include "player_note_offsets.h"
-#include "ranking_service.h"
 #include "song_select/local_catalog_database.h"
 #include "title/local_content_index.h"
 
 namespace song_select::local_catalog_cache_service {
 namespace {
 
-std::optional<ranking_service::entry> load_best_local_entry(const std::string& chart_id) {
-    if (chart_id.empty()) {
-        return std::nullopt;
+void report_progress(const progress_callback& progress, std::string message, float value) {
+    if (progress) {
+        progress(std::move(message), std::clamp(value, 0.0f, 1.0f));
     }
+}
 
-    const ranking_service::listing listing =
-        ranking_service::load_chart_ranking(chart_id, ranking_service::source::local, 1);
-    if (listing.entries.empty()) {
-        return std::nullopt;
-    }
-    return listing.entries.front();
+float scale_progress(float value, float start, float end) {
+    return start + (end - start) * std::clamp(value, 0.0f, 1.0f);
 }
 
 int source_sort_bucket(content_status status) {
@@ -206,13 +204,8 @@ cache_repair_result repair_cached_song(song_entry& song, const player_chart_offs
         chart.local_note_offset_ms = chart_offsets.contains(chart.meta.chart_id)
             ? chart_offsets.at(chart.meta.chart_id)
             : 0;
-        if (const auto best = load_best_local_entry(chart.meta.chart_id)) {
-            chart.best_local_rank = best->clear_rank();
-            chart.best_local_score = best->score;
-        } else {
-            chart.best_local_rank.reset();
-            chart.best_local_score.reset();
-        }
+        chart.best_local_rank.reset();
+        chart.best_local_score.reset();
         ++chart_it;
     }
     std::sort(song.charts.begin(), song.charts.end(), chart_source_less);
@@ -268,33 +261,124 @@ void sync_managed_manifest_identity(const managed_content_storage::package_manif
     }
 }
 
-std::optional<catalog_data> load_ready_catalog() {
+std::optional<float> find_chart_level(const std::string& chart_path) {
+    if (const std::optional<float> memory_level =
+            chart_level_memory_cache::find_level(chart_path);
+        memory_level.has_value()) {
+        return memory_level;
+    }
+
+    const std::optional<float> database_level =
+        local_catalog_database::find_chart_level_by_path(chart_path);
+    if (database_level.has_value()) {
+        chart_level_memory_cache::remember_level(chart_path, *database_level);
+    }
+    return database_level;
+}
+
+std::optional<float> find_chart_level(const std::string& chart_path,
+                                      const std::string& content_signature) {
+    if (content_signature.empty()) {
+        return find_chart_level(chart_path);
+    }
+
+    if (const std::optional<float> memory_level =
+            chart_level_memory_cache::find_level(chart_path, content_signature);
+        memory_level.has_value()) {
+        return memory_level;
+    }
+
+    const std::optional<float> database_level =
+        local_catalog_database::find_chart_level_by_path(chart_path);
+    if (database_level.has_value()) {
+        chart_level_memory_cache::remember_level(chart_path, content_signature, *database_level);
+    }
+    return database_level;
+}
+
+float get_or_calculate_chart_level(const std::string& chart_path, const chart_data& chart) {
+    if (const std::optional<float> cached = find_chart_level(chart_path); cached.has_value()) {
+        return *cached;
+    }
+    return calculate_and_store_chart_level(chart_path, chart);
+}
+
+float get_or_calculate_chart_level(const std::string& chart_path,
+                                   const std::string& content_signature,
+                                   const chart_data& chart) {
+    if (const std::optional<float> cached = find_chart_level(chart_path, content_signature);
+        cached.has_value()) {
+        return *cached;
+    }
+    return calculate_and_store_chart_level(chart_path, content_signature, chart);
+}
+
+float calculate_and_store_chart_level(const std::string& chart_path, const chart_data& chart) {
+    return chart_level_memory_cache::calculate_and_store(chart_path, chart);
+}
+
+float calculate_and_store_chart_level(const std::string& chart_path,
+                                      const std::string& content_signature,
+                                      const chart_data& chart) {
+    return chart_level_memory_cache::calculate_and_store(chart_path, content_signature, chart);
+}
+
+std::optional<catalog_data> load_ready_catalog(progress_callback progress) {
+    report_progress(progress, "Checking catalog cache signature...", 0.02f);
     const refresh_guard guard = capture_refresh_guard();
-    catalog_data catalog = local_catalog_database::load_cached_catalog();
+    catalog_data catalog = local_catalog_database::load_cached_catalog(
+        [&progress](std::string message, float value) {
+            report_progress(progress, std::move(message), scale_progress(value, 0.06f, 0.58f));
+        });
     if (catalog.songs.empty()) {
         return std::nullopt;
     }
 
+    report_progress(progress, "Reading saved chart offsets...", 0.62f);
     const player_chart_offset_map chart_offsets = load_player_chart_offsets();
     bool changed = false;
+    report_progress(progress, "Validating cached catalog...", 0.68f);
+    const size_t total_songs = catalog.songs.size();
+    size_t checked_songs = 0;
     for (auto song_it = catalog.songs.begin(); song_it != catalog.songs.end();) {
         const cache_repair_result repair = repair_cached_song(*song_it, chart_offsets);
         if (repair.remove_song) {
             song_it = catalog.songs.erase(song_it);
             changed = true;
+            ++checked_songs;
+            report_progress(progress,
+                            "Validating cached songs " + std::to_string(checked_songs) + "/" +
+                                std::to_string(total_songs) + "...",
+                            scale_progress(static_cast<float>(checked_songs) /
+                                               static_cast<float>(std::max<size_t>(1, total_songs)),
+                                           0.68f,
+                                           0.88f));
             continue;
         }
         changed = repair.changed || changed;
         ++song_it;
+        ++checked_songs;
+        if (checked_songs == total_songs || checked_songs % 8 == 0) {
+            report_progress(progress,
+                            "Validating cached songs " + std::to_string(checked_songs) + "/" +
+                                std::to_string(total_songs) + "...",
+                            scale_progress(static_cast<float>(checked_songs) /
+                                               static_cast<float>(std::max<size_t>(1, total_songs)),
+                                           0.68f,
+                                           0.88f));
+        }
     }
 
+    report_progress(progress, "Sorting cached catalog...", 0.90f);
     std::sort(catalog.songs.begin(), catalog.songs.end(), song_source_less);
     if (catalog.songs.empty()) {
         return std::nullopt;
     }
     if (changed) {
+        report_progress(progress, "Refreshing repaired catalog cache...", 0.94f);
         replace_if_unchanged(guard, catalog.songs);
     }
+    report_progress(progress, "Catalog cache ready.", 1.0f);
     return catalog;
 }
 
