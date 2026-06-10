@@ -474,26 +474,26 @@ catalog_data load_catalog(bool calculate_missing_levels, catalog_progress_callba
                             std::move(message),
                             0.05f + 0.91f * std::clamp(cache_progress, 0.0f, 1.0f));
                     })) {
-            set_catalog_progress(progress, "Using cached catalog...", 0.96f);
+            set_catalog_progress(progress, "保存済みカタログを使用しています...", 0.96f);
             return *cached_catalog;
         }
     }
 
-    set_catalog_progress(progress, "Reading saved chart settings...", 0.08f);
+    set_catalog_progress(progress, "保存済み譜面設定を読み込んでいます...", 0.08f);
     const local_catalog_cache_service::refresh_guard cache_guard =
         local_catalog_cache_service::capture_refresh_guard();
     catalog_data catalog;
     const player_chart_offset_map chart_offsets = load_player_chart_offsets();
 
-    set_catalog_progress(progress, "Reading online content links...", 0.12f);
+    set_catalog_progress(progress, "オンラインコンテンツ情報を読み込んでいます...", 0.12f);
     const local_content_index::snapshot local_index = local_content_index::load_snapshot();
 
     if (calculate_missing_levels) {
-        set_catalog_progress(progress, "Cleaning old content cache...", 0.16f);
+        set_catalog_progress(progress, "古いコンテンツキャッシュを整理しています...", 0.16f);
         remove_orphaned_managed_workspace_shadow_dirs();
     }
 
-    set_catalog_progress(progress, "Scanning local songs...", 0.22f);
+    set_catalog_progress(progress, "ローカル曲を検索しています...", 0.22f);
     const song_load_result load_result = song_loader::load_all(path_utils::to_utf8(app_paths::songs_root()));
     catalog.load_errors = load_result.errors;
 
@@ -501,13 +501,14 @@ catalog_data load_catalog(bool calculate_missing_levels, catalog_progress_callba
     for (size_t i = 0; i < load_result.songs.size(); ++i) {
         set_catalog_progress(
             progress,
-            "Loading local charts " + std::to_string(i + 1) + "/" + std::to_string(load_result.songs.size()) + "...",
+            "ローカル譜面を読み込んでいます " + std::to_string(i + 1) + "/" +
+                std::to_string(load_result.songs.size()) + "...",
             0.28f + 0.24f * (static_cast<float>(i) / std::max<size_t>(1, load_result.songs.size())));
         const song_data& song = load_result.songs[i];
         append_loaded_song(catalog, song, chart_offsets, local_index, calculate_missing_levels, std::nullopt);
     }
 
-    set_catalog_progress(progress, "Scanning downloaded songs...", 0.54f);
+    set_catalog_progress(progress, "ダウンロード済み曲を検索しています...", 0.54f);
     std::set<std::string> processed_package_dirs;
     std::vector<std::pair<online_content::source, std::filesystem::path>> package_dirs;
     for (const online_content::source source : {online_content::source::community,
@@ -521,7 +522,7 @@ catalog_data load_catalog(bool calculate_missing_levels, catalog_progress_callba
         const std::filesystem::path& package_dir = package_dirs[package_index].second;
         set_catalog_progress(
             progress,
-            "Loading downloaded charts " + std::to_string(package_index + 1) + "/" +
+            "ダウンロード済み譜面を読み込んでいます " + std::to_string(package_index + 1) + "/" +
                 std::to_string(package_dirs.size()) + "...",
             0.58f + 0.30f * (static_cast<float>(package_index) / std::max<size_t>(1, package_dirs.size())));
         std::filesystem::path effective_package_dir = package_dir;
