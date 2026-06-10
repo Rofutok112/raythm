@@ -9,6 +9,8 @@
 #include "title/title_spectrum_visualizer.h"
 
 struct title_preview_snapshot {
+    song_select::preview_audio_loader::load_status audio_status =
+        song_select::preview_audio_loader::load_status::idle;
     bool loaded = false;
     bool loading = false;
     bool playing = false;

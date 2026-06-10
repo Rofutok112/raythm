@@ -115,7 +115,8 @@ void preview_controller::resume(const song_entry* song) {
 
     jacket_loader_.request(song);
     audio_manager& audio = audio_manager::instance();
-    if (audio_loader_.target_song_id() == song->song.meta.song_id && audio_loader_.loading_or_preparing()) {
+    if (audio_loader_.target_song_id() == song->song.meta.song_id &&
+        audio_loader_.status() == preview_audio_loader::load_status::loading) {
         return;
     }
     if (audio_loader_.target_song_id() == song->song.meta.song_id && audio.is_preview_loaded()) {
@@ -173,6 +174,10 @@ bool preview_controller::is_playing() const {
 
 bool preview_controller::is_loading() const {
     return audio_loader_.loading_or_preparing();
+}
+
+preview_audio_loader::load_status preview_controller::audio_status() const {
+    return audio_loader_.status();
 }
 
 void preview_controller::queue_preview(const song_entry* song) {

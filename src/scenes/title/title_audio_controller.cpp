@@ -122,8 +122,9 @@ title_audio_policy::resolved_state title_audio_controller::current_state() const
 title_preview_snapshot title_audio_controller::preview_snapshot(const song_select::song_entry* fallback_song) const {
     const audio_manager& audio = audio_manager::instance();
     title_preview_snapshot snapshot;
+    snapshot.audio_status = preview_controller_.audio_status();
     snapshot.loaded = audio.is_preview_loaded();
-    snapshot.loading = preview_controller_.is_loading();
+    snapshot.loading = snapshot.audio_status == song_select::preview_audio_loader::load_status::loading;
     snapshot.playing = audio.is_preview_playing();
     snapshot.position_seconds = snapshot.loaded ? audio.get_preview_position_seconds() : 0.0;
     snapshot.length_seconds = snapshot.loaded ? audio.get_preview_length_seconds() : 0.0;

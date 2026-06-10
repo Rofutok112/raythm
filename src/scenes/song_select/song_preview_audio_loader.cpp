@@ -19,7 +19,11 @@ const std::string& preview_audio_loader::target_song_id() const {
 }
 
 bool preview_audio_loader::loading_or_preparing() const {
-    return managed_audio_pending_ || audio_manager::instance().is_preview_loading();
+    return status_ == load_status::loading;
+}
+
+preview_audio_loader::load_status preview_audio_loader::status() const {
+    return status_;
 }
 
 bool preview_audio_loader::request(const song_entry& song) {
@@ -30,6 +34,7 @@ bool preview_audio_loader::request(const song_entry& song) {
     if (audio_source.empty()) {
         if (song.song.meta.audio_file.empty()) {
             reset();
+            status_ = load_status::failed;
             return false;
         }
 
@@ -49,6 +54,7 @@ bool preview_audio_loader::request(const song_entry& song) {
             pending_managed_audio_path_ = path_utils::to_utf8(audio_path);
             load_song_ = song.song;
             load_started_at_ = std::chrono::steady_clock::now();
+            status_ = load_status::loading;
             managed_audio_pending_ = true;
             return true;
         }
@@ -58,10 +64,12 @@ bool preview_audio_loader::request(const song_entry& song) {
 
     if (!request_path_audio(audio_source)) {
         reset();
+        status_ = load_status::failed;
         return false;
     }
     load_song_ = song.song;
     load_started_at_ = std::chrono::steady_clock::now();
+    status_ = load_status::loading;
     audio_load_pending_ = true;
     return true;
 }
@@ -71,6 +79,7 @@ preview_audio_loader::load_event preview_audio_loader::update(const song_entry* 
         load_started_at_ != std::chrono::steady_clock::time_point{} &&
         std::chrono::steady_clock::now() - load_started_at_ > kPreviewLoadTimeout) {
         reset();
+        status_ = load_status::failed;
         return {.result = load_event::status::failed};
     }
 
@@ -90,6 +99,7 @@ preview_audio_loader::load_event preview_audio_loader::update(const song_entry* 
         load_song_.has_value() &&
         selected_song != nullptr &&
         selected_song->song.meta.song_id == target_song_id_) {
+        status_ = load_status::ready;
         load_event event;
         event.result = load_event::status::loaded;
         event.song = load_song_;
@@ -97,6 +107,7 @@ preview_audio_loader::load_event preview_audio_loader::update(const song_entry* 
     }
 
     reset();
+    status_ = load_status::failed;
     return {.result = load_event::status::failed};
 }
 
@@ -108,6 +119,7 @@ void preview_audio_loader::reset() {
     load_started_at_ = {};
     managed_audio_pending_ = false;
     audio_load_pending_ = false;
+    status_ = load_status::idle;
 }
 
 bool preview_audio_loader::request_prepared_audio(std::vector<unsigned char> bytes) {
@@ -157,10 +169,12 @@ preview_audio_loader::load_event preview_audio_loader::poll_managed_audio_prepar
 
     if (!requested) {
         reset();
+        status_ = load_status::failed;
         return {.result = load_event::status::failed};
     }
 
     load_started_at_ = std::chrono::steady_clock::now();
+    status_ = load_status::loading;
     audio_load_pending_ = true;
     return {};
 }

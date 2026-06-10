@@ -13,6 +13,13 @@ namespace song_select {
 
 class preview_audio_loader {
 public:
+    enum class load_status {
+        idle,
+        loading,
+        ready,
+        failed,
+    };
+
     struct load_event {
         enum class status {
             none,
@@ -26,6 +33,7 @@ public:
 
     [[nodiscard]] const std::string& target_song_id() const;
     [[nodiscard]] bool loading_or_preparing() const;
+    [[nodiscard]] load_status status() const;
 
     bool request(const song_entry& song);
     load_event update(const song_entry* selected_song);
@@ -42,6 +50,7 @@ private:
     std::future<managed_content_storage::managed_file_read_result> managed_audio_future_;
     std::optional<song_data> load_song_;
     std::chrono::steady_clock::time_point load_started_at_{};
+    load_status status_ = load_status::idle;
     bool managed_audio_pending_ = false;
     bool audio_load_pending_ = false;
 };
