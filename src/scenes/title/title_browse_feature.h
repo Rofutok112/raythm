@@ -4,6 +4,7 @@
 
 #include "raylib.h"
 #include "title/online_catalog_data_controller.h"
+#include "title/online_catalog_ranking_loader.h"
 #include "title/online_download_view.h"
 #include "title/title_online_mode_controller.h"
 
@@ -44,4 +45,5 @@ public:
 private:
     title_online_view::state state_;
     online_catalog::data_controller data_controller_;
+    online_catalog::ranking_load_controller ranking_controller_;
 };

@@ -14,6 +14,7 @@ void title_browse_feature::on_enter(title_audio_controller& audio_controller) {
 
 void title_browse_feature::on_exit() {
     title_online_view::on_exit(state_);
+    ranking_controller_.reset();
 }
 
 void title_browse_feature::request_reload(bool preserve_view) {
@@ -51,7 +52,7 @@ void title_browse_feature::update(float anim_t,
                                   title_audio_controller& audio_controller,
                                   const update_callbacks& callbacks) {
     title_online_mode_controller::update(
-        state_, data_controller_, audio_controller, anim_t, origin_rect, dt, callbacks.online);
+        state_, data_controller_, ranking_controller_, audio_controller, anim_t, origin_rect, dt, callbacks.online);
 }
 
 title_browse_feature::poll_result title_browse_feature::poll(bool active) {

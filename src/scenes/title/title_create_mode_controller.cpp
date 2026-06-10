@@ -15,7 +15,7 @@ void title_create_mode_controller::update(scene_manager& manager,
     const title_play_view::update_result result =
         title_local_song_select_controller::update(
             state, title_play_view::mode::create, play_view_anim, play_entry_origin_rect, dt,
-            nullptr, &create_tools_model);
+            &create_tools_model);
     const bool create_action_requested =
         result.create_song_requested ||
         result.edit_song_requested ||

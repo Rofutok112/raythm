@@ -25,8 +25,7 @@ struct draw_config {
     unsigned char hover_row_alpha = 255;
     unsigned char selected_row_alpha = 255;
     unsigned char selected_hover_row_alpha = 255;
-    song_select::ranking_load_controller::load_status ranking_status =
-        song_select::ranking_load_controller::load_status::idle;
+    song_select::ranking_load_controller::snapshot ranking_snapshot;
     std::string self_player_display_name;
     std::string avatar_base_url;
 };

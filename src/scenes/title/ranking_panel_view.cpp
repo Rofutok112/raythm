@@ -247,7 +247,7 @@ void draw(const song_select::ranking_panel_state& panel, const draw_config& conf
                                          config.list_rect.width,
                                          std::max(0.0f, config.list_rect.height - kHeaderRowHeight)};
     ui::scoped_clip_rect entries_clip(entries_clip_rect);
-    const auto ranking_status = config.ranking_status;
+    const auto ranking_status = config.ranking_snapshot.status;
     if (ranking_status == song_select::ranking_load_controller::load_status::loading) {
         ui::draw_text_in_rect("ランキング読み込み中...", 13,
                               {config.list_rect.x, config.list_rect.y + kEmptyMessageOffsetY,

@@ -178,12 +178,11 @@ title_play_view::update_result update(song_select::state& state,
                                       float anim_t,
                                       Rectangle origin_rect,
                                       float dt,
-                                      title_audio_controller* audio_controller,
                                       const title_create_tools_model::view_model* create_tools_model,
-                                      song_select::preview_audio_loader::load_status preview_audio_status) {
+                                      title_preview_snapshot preview) {
     update_result result;
     const bool preview_loading =
-        preview_audio_status == song_select::preview_audio_loader::load_status::loading;
+        preview.audio.status == song_select::preview_audio_loader::load_status::loading;
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     const bool right_pressed = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
@@ -388,19 +387,18 @@ title_play_view::update_result update(song_select::state& state,
         return result;
     }
 
-    if (view_mode == mode::play && audio_controller != nullptr && !preview_loading) {
+    if (view_mode == mode::play && !preview_loading) {
         const song_select::song_entry* song = song_select::selected_song(state);
-        const title_preview_snapshot preview = audio_controller->preview_snapshot(song);
         const Rectangle progress = current.meta_rect;
         const Rectangle progress_hit = {progress.x, progress.y - 12.0f, progress.width, progress.height + 24.0f};
         if (song != nullptr && left_pressed && CheckCollisionPointRec(mouse, progress_hit)) {
             state.preview_bar_dragging = true;
             state.preview_bar_resume_after_drag = preview.playing;
             state.preview_bar_drag_position_seconds = preview.position_seconds;
-            audio_controller->pause_preview();
+            result.preview_pause_requested = true;
         }
         if (song != nullptr && state.preview_bar_dragging) {
-            const double preview_length = audio_controller->preview_snapshot(song).length_seconds;
+            const double preview_length = preview.length_seconds;
             if (preview_length > 0.0) {
                 const float ratio = std::clamp((mouse.x - progress.x) / progress.width, 0.0f, 1.0f);
                 state.preview_bar_drag_position_seconds = preview_length * static_cast<double>(ratio);
@@ -408,9 +406,10 @@ title_play_view::update_result update(song_select::state& state,
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
                 return result;
             }
-            audio_controller->seek_preview(state.preview_bar_drag_position_seconds);
+            result.preview_seek_requested = true;
+            result.preview_seek_seconds = state.preview_bar_drag_position_seconds;
             if (state.preview_bar_resume_after_drag) {
-                audio_controller->play_preview_from_current();
+                result.preview_resume_requested = true;
             }
             state.preview_bar_dragging = false;
             state.preview_bar_resume_after_drag = false;

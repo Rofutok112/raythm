@@ -3,7 +3,7 @@
 #include "raylib.h"
 #include "song_select/song_select_ranking_loader.h"
 #include "song_select/song_select_state.h"
-#include "title/title_audio_controller.h"
+#include "title/title_selection_media_coordinator.h"
 
 namespace title_create_tools_model {
 struct view_model;
@@ -61,6 +61,10 @@ struct update_result {
     bool play_requested = false;
     bool multiplayer_select_requested = false;
     bool preview_toggle_requested = false;
+    bool preview_pause_requested = false;
+    bool preview_seek_requested = false;
+    bool preview_resume_requested = false;
+    double preview_seek_seconds = 0.0;
     bool song_selection_changed = false;
     bool chart_selection_changed = false;
     bool ranking_source_changed = false;
@@ -84,12 +88,10 @@ struct update_result {
 layout make_layout(float anim_t, Rectangle origin_rect);
 layout make_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode);
 void draw(song_select::state& state,
-          const title_audio_controller& audio_controller,
+          const title_selection_media_snapshot& media,
           mode view_mode,
           float anim_t,
           Rectangle origin_rect,
-          const title_create_tools_model::view_model* create_tools_model = nullptr,
-          song_select::ranking_load_controller::load_status ranking_status =
-              song_select::ranking_load_controller::load_status::idle);
+          const title_create_tools_model::view_model* create_tools_model = nullptr);
 
 }  // namespace title_play_view

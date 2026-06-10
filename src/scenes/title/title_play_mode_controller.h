@@ -7,6 +7,7 @@
 #include "song_select/song_select_state.h"
 #include "title/title_audio_controller.h"
 #include "title/title_play_transfer_controller.h"
+#include "title/title_selection_media_coordinator.h"
 
 class title_play_mode_controller {
 public:
@@ -22,6 +23,7 @@ public:
                        song_select::state& state,
                        title_audio_controller& audio_controller,
                        const title_play_transfer_controller& transfer_controller,
+                       const title_selection_media_snapshot& media,
                        float play_view_anim,
                        Rectangle play_entry_origin_rect,
                        float dt,

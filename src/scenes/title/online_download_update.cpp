@@ -514,7 +514,7 @@ bool handle_detail_actions(state& state,
     }
 
     if (ui::is_clicked(current.preview_play_rect)) {
-        result.action = preview_controller::toggle_playback_action(audio_controller);
+        result.action = preview_controller::toggle_playback_action(song, audio_controller);
         return true;
     }
 
@@ -633,7 +633,7 @@ bool handle_preview_panel_actions(state& state,
     }
 
     if (ui::is_clicked(preview_play_button_rect(current.preview_panel_rect))) {
-        result.action = preview_controller::toggle_playback_action(audio_controller);
+        result.action = preview_controller::toggle_playback_action(song, audio_controller);
         return true;
     }
     if (ui::is_clicked(preview_prev_button_rect(current.preview_panel_rect)) ||

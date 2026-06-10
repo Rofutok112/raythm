@@ -241,8 +241,9 @@ bool title_play_create_feature::busy() const {
     return transfer_controller_.busy();
 }
 
-song_select::ranking_load_controller::load_status title_play_create_feature::ranking_status() const {
-    return media_coordinator_.ranking_status();
+title_selection_media_snapshot title_play_create_feature::media_snapshot(
+    const title_audio_controller& audio_controller) const {
+    return media_coordinator_.media_snapshot(state_, audio_controller);
 }
 
 void title_play_create_feature::poll_transfer(const cross_callbacks& callbacks) {
@@ -277,11 +278,13 @@ void title_play_create_feature::update_play(scene_manager& manager,
                                             float dt,
                                             const play_update_callbacks& callbacks) {
     state_.filter.include_chartless_songs = false;
+    const title_selection_media_snapshot media = media_snapshot(audio_controller);
     title_play_mode_controller::update(
         manager,
         state_,
         audio_controller,
         transfer_controller_,
+        media,
         anim_t,
         origin_rect,
         dt,

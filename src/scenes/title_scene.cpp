@@ -573,7 +573,7 @@ void title_scene::update_multiplayer_audio(float dt) {
     if (multiplayer_state_.queue_preview_seek_requested) {
         multiplayer_state_.queue_preview_seek_requested = false;
         if (preview_song != nullptr &&
-            audio_controller_.preview_snapshot(preview_song).audio_status ==
+            audio_controller_.preview_snapshot(preview_song).audio.status ==
                 song_select::preview_audio_loader::load_status::ready) {
             audio_controller_.seek_preview(multiplayer_state_.queue_preview_seek_seconds);
         }
@@ -638,7 +638,9 @@ void title_scene::update_common_animation(float dt) {
     play_create_feature_.poll_catalog_reload(
         audio_controller_, mode_ == hub_mode::play, mode_ == hub_mode::create);
     play_create_feature_.poll_transfer(play_cross_callbacks());
-    play_create_feature_.poll_ranking_reload();
+    if (content_mode == hub_mode::play) {
+        play_create_feature_.poll_ranking_reload();
+    }
     if (play_create_feature_.poll_scoring_ruleset_warm()) {
         if (!content_mode_is_play_or_create) {
             play_create_feature_.capture_current_selection();

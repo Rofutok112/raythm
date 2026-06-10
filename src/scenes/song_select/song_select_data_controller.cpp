@@ -5,35 +5,9 @@
 #include <thread>
 #include <utility>
 
+#include "song_select/selection_key.h"
+
 namespace song_select {
-namespace {
-
-struct catalog_selection {
-    std::string song_id;
-    std::string chart_id;
-
-    [[nodiscard]] bool operator==(const catalog_selection& other) const {
-        return song_id == other.song_id && chart_id == other.chart_id;
-    }
-
-    [[nodiscard]] bool operator!=(const catalog_selection& other) const {
-        return !(*this == other);
-    }
-};
-
-catalog_selection current_catalog_selection(const state& state) {
-    catalog_selection selection;
-    if (const song_entry* song = selected_song(state)) {
-        selection.song_id = song->song.meta.song_id;
-    }
-    const auto filtered = filtered_charts_for_selected_song(state);
-    if (const chart_option* chart = selected_chart_for(state, filtered)) {
-        selection.chart_id = chart->meta.chart_id;
-    }
-    return selection;
-}
-
-}  // namespace
 
 data_controller::data_controller()
     : data_controller(load_catalog_from_service) {
@@ -88,7 +62,7 @@ catalog_reload_result data_controller::poll_catalog_reload(state& state) {
         return result;
     }
 
-    const catalog_selection previous_selection = current_catalog_selection(state);
+    const selection_key previous_selection = selection_key_for_state(state);
 
     try {
         apply_catalog(state,
@@ -106,7 +80,7 @@ catalog_reload_result data_controller::poll_catalog_reload(state& state) {
         result.failed = true;
         result.message = ex.what();
     }
-    const catalog_selection next_selection = current_catalog_selection(state);
+    const selection_key next_selection = selection_key_for_state(state);
     result.selection_changed = previous_selection != next_selection;
 
     catalog_loading_ = false;

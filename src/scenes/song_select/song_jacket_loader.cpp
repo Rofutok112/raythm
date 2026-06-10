@@ -20,15 +20,23 @@ void jacket_loader::request(const song_entry* song) {
         reset();
         return;
     }
+    request(song_media_key_for_song_id(song->song.meta.song_id), song);
+}
 
-    const std::string song_id = song->song.meta.song_id;
-    if (target_song_id_ == song_id &&
+void jacket_loader::request(const selection_key& key, const song_entry* song) {
+    if (song == nullptr) {
+        reset();
+        return;
+    }
+
+    const selection_key target_key = song_media_key_for(key);
+    if (target_key_ == target_key &&
         (status_ == load_status::loading || status_ == load_status::ready || status_ == load_status::failed)) {
         return;
     }
 
     unload();
-    target_song_id_ = song_id;
+    target_key_ = target_key;
     if (song->song.meta.jacket_file.empty()) {
         status_ = load_status::failed;
         return;
@@ -37,9 +45,9 @@ void jacket_loader::request(const song_entry* song) {
     std::promise<pending_texture> promise;
     future_ = promise.get_future();
     const song_data song_copy = song->song;
-    std::thread([promise = std::move(promise), song_copy]() mutable {
+    std::thread([promise = std::move(promise), target_key, song_copy]() mutable {
         try {
-            promise.set_value(load_bytes(song_copy));
+            promise.set_value(load_bytes(target_key, song_copy));
         } catch (...) {
             promise.set_exception(std::current_exception());
         }
@@ -62,8 +70,8 @@ void jacket_loader::poll() {
         pending = {};
     }
 
-    if (pending.song_id != target_song_id_) {
-        status_ = pending.song_id.empty() ? load_status::failed : load_status::idle;
+    if (pending.key != target_key_) {
+        status_ = pending.key.song_id.empty() ? load_status::failed : load_status::idle;
         return;
     }
 
@@ -78,7 +86,7 @@ void jacket_loader::poll() {
 }
 
 void jacket_loader::reset() {
-    target_song_id_.clear();
+    target_key_ = {};
     future_ = {};
     unload();
     status_ = load_status::idle;
@@ -86,6 +94,15 @@ void jacket_loader::reset() {
 
 jacket_loader::load_status jacket_loader::status() const {
     return status_;
+}
+
+jacket_loader::snapshot jacket_loader::current() const {
+    snapshot result;
+    result.status = status_;
+    if (status_ != load_status::idle && !target_key_.song_id.empty()) {
+        result.key = target_key_;
+    }
+    return result;
 }
 
 bool jacket_loader::loaded() const {
@@ -103,9 +120,9 @@ void jacket_loader::unload() {
     }
 }
 
-jacket_loader::pending_texture jacket_loader::load_bytes(song_data song) {
+jacket_loader::pending_texture jacket_loader::load_bytes(selection_key key, song_data song) {
     pending_texture result;
-    result.song_id = song.meta.song_id;
+    result.key = song_media_key_for(key);
     if (song.meta.jacket_file.empty()) {
         return result;
     }

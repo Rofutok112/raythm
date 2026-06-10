@@ -7,6 +7,7 @@
 
 #include "data_models.h"
 #include "managed_content_storage.h"
+#include "song_select/selection_key.h"
 #include "song_select/song_select_state.h"
 
 namespace song_select {
@@ -20,6 +21,11 @@ public:
         failed,
     };
 
+    struct snapshot {
+        load_status status = load_status::idle;
+        std::optional<selection_key> key;
+    };
+
     struct load_event {
         enum class status {
             none,
@@ -31,22 +37,27 @@ public:
         std::optional<song_data> song;
     };
 
+    [[nodiscard]] const selection_key& target_key() const;
     [[nodiscard]] const std::string& target_song_id() const;
     [[nodiscard]] bool loading_or_preparing() const;
     [[nodiscard]] load_status status() const;
+    [[nodiscard]] snapshot current() const;
 
+    bool request(const selection_key& key, const song_entry& song);
     bool request(const song_entry& song);
+    load_event update(const selection_key& current_key, const song_entry* selected_song);
     load_event update(const song_entry* selected_song);
     void reset();
 
 private:
-    [[nodiscard]] bool selected_song_matches_target(const song_entry* selected_song) const;
+    [[nodiscard]] bool selected_key_matches_target(const selection_key& current_key,
+                                                   const song_entry* selected_song) const;
     bool request_prepared_audio(std::vector<unsigned char> bytes);
     bool request_path_audio(const std::string& audio_source);
     void clear_prepared_audio_state();
     load_event poll_managed_audio_prepare(const song_entry* selected_song);
 
-    std::string target_song_id_;
+    selection_key target_key_;
     std::string pending_managed_audio_path_;
     std::future<managed_content_storage::managed_file_read_result> managed_audio_future_;
     std::optional<song_data> load_song_;

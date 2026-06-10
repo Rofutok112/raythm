@@ -1058,7 +1058,7 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
 
     const Rectangle progress = current.meta_rect;
     const bool preview_loading =
-        preview.audio_status == song_select::preview_audio_loader::load_status::loading;
+        preview.audio.status == song_select::preview_audio_loader::load_status::loading;
     const double length = preview.length_seconds;
     const double pos = preview_loading ? 0.0 : state.preview_bar_dragging
         ? state.preview_bar_drag_position_seconds
@@ -1303,12 +1303,11 @@ layout make_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode) {
 }
 
 void draw(song_select::state& state,
-          const title_audio_controller& audio_controller,
+          const title_selection_media_snapshot& media,
           mode view_mode,
           float anim_t,
           Rectangle origin_rect,
-          const title_create_tools_model::view_model* create_tools_model,
-          song_select::ranking_load_controller::load_status ranking_status) {
+          const title_create_tools_model::view_model* create_tools_model) {
     const auto& t = *g_theme;
     const float play_t = tween::ease_out_cubic(anim_t);
     if (play_t <= 0.01f) {
@@ -1374,7 +1373,7 @@ void draw(song_select::state& state,
     const song_select::song_entry* song = song_select::selected_song(state);
     const auto filtered = song_select::filtered_charts_for_selected_song(state);
     const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
-    const title_preview_snapshot preview = audio_controller.preview_snapshot(song);
+    const title_preview_snapshot& preview = media.preview;
 
     if (!hide_unloaded_content) {
         const Rectangle center_jacket =
@@ -1430,7 +1429,7 @@ void draw(song_select::state& state,
             .hover_row_alpha = hover_row_alpha,
             .selected_row_alpha = selected_row_alpha,
             .selected_hover_row_alpha = selected_hover_row_alpha,
-            .ranking_status = ranking_status,
+            .ranking_snapshot = media.ranking,
             .self_player_display_name = state.auth.display_name,
             .avatar_base_url = state.auth.server_url,
         });

@@ -14,8 +14,12 @@ constexpr std::chrono::seconds kPreviewLoadTimeout{15};
 
 }  // namespace
 
+const selection_key& preview_audio_loader::target_key() const {
+    return target_key_;
+}
+
 const std::string& preview_audio_loader::target_song_id() const {
-    return target_song_id_;
+    return target_key_.song_id;
 }
 
 bool preview_audio_loader::loading_or_preparing() const {
@@ -26,14 +30,32 @@ preview_audio_loader::load_status preview_audio_loader::status() const {
     return status_;
 }
 
+preview_audio_loader::snapshot preview_audio_loader::current() const {
+    snapshot result;
+    result.status = status_;
+    if (status_ != load_status::idle && !target_key_.song_id.empty()) {
+        result.key = target_key_;
+    }
+    return result;
+}
+
 bool preview_audio_loader::request(const song_entry& song) {
+    return request(song_media_key_for_song_id(song.song.meta.song_id), song);
+}
+
+bool preview_audio_loader::request(const selection_key& key, const song_entry& song) {
+    const selection_key requested_key = song_media_key_for(key);
+    if (target_key_ == requested_key &&
+        (status_ == load_status::loading || status_ == load_status::ready || status_ == load_status::failed)) {
+        return true;
+    }
+
     reset();
 
-    target_song_id_ = song.song.meta.song_id;
+    target_key_ = requested_key;
     std::string audio_source = song.song.meta.audio_url;
     if (audio_source.empty()) {
         if (song.song.meta.audio_file.empty()) {
-            reset();
             status_ = load_status::failed;
             return false;
         }
@@ -63,7 +85,11 @@ bool preview_audio_loader::request(const song_entry& song) {
     }
 
     if (!request_path_audio(audio_source)) {
-        reset();
+        pending_managed_audio_path_.clear();
+        load_song_.reset();
+        load_started_at_ = {};
+        managed_audio_pending_ = false;
+        audio_load_pending_ = false;
         status_ = load_status::failed;
         return false;
     }
@@ -75,10 +101,22 @@ bool preview_audio_loader::request(const song_entry& song) {
 }
 
 preview_audio_loader::load_event preview_audio_loader::update(const song_entry* selected_song) {
+    selection_key current_key;
+    if (selected_song != nullptr) {
+        current_key = song_media_key_for_song_id(selected_song->song.meta.song_id);
+    }
+    return update(current_key, selected_song);
+}
+
+preview_audio_loader::load_event preview_audio_loader::update(
+    const selection_key& current_key,
+    const song_entry* selected_song) {
     if ((managed_audio_pending_ || audio_load_pending_) &&
         load_started_at_ != std::chrono::steady_clock::time_point{} &&
         std::chrono::steady_clock::now() - load_started_at_ > kPreviewLoadTimeout) {
+        const selection_key failed_key = target_key_;
         reset();
+        target_key_ = failed_key;
         status_ = load_status::failed;
         return {.result = load_event::status::failed};
     }
@@ -95,7 +133,7 @@ preview_audio_loader::load_event preview_audio_loader::update(const song_entry* 
     }
 
     audio_load_pending_ = false;
-    if (!selected_song_matches_target(selected_song)) {
+    if (!selected_key_matches_target(current_key, selected_song)) {
         reset();
         return {};
     }
@@ -108,14 +146,16 @@ preview_audio_loader::load_event preview_audio_loader::update(const song_entry* 
         return event;
     }
 
+    const selection_key failed_key = target_key_;
     reset();
+    target_key_ = failed_key;
     status_ = load_status::failed;
     return {.result = load_event::status::failed};
 }
 
 void preview_audio_loader::reset() {
     audio_manager::instance().cancel_preview_load_request();
-    target_song_id_.clear();
+    target_key_ = {};
     pending_managed_audio_path_.clear();
     load_song_.reset();
     load_started_at_ = {};
@@ -153,9 +193,10 @@ preview_audio_loader::load_event preview_audio_loader::poll_managed_audio_prepar
         managed_audio = {};
     }
 
-    if (!load_song_.has_value() ||
-        target_song_id_ != load_song_->meta.song_id ||
-        !selected_song_matches_target(selected_song)) {
+    if (selected_song == nullptr ||
+        !load_song_.has_value() ||
+        target_key_.song_id != load_song_->meta.song_id ||
+        !selected_key_matches_target(song_media_key_for_song_id(selected_song->song.meta.song_id), selected_song)) {
         reset();
         return {};
     }
@@ -169,7 +210,9 @@ preview_audio_loader::load_event preview_audio_loader::poll_managed_audio_prepar
     clear_prepared_audio_state();
 
     if (!requested) {
+        const selection_key failed_key = target_key_;
         reset();
+        target_key_ = failed_key;
         status_ = load_status::failed;
         return {.result = load_event::status::failed};
     }
@@ -180,10 +223,12 @@ preview_audio_loader::load_event preview_audio_loader::poll_managed_audio_prepar
     return {};
 }
 
-bool preview_audio_loader::selected_song_matches_target(const song_entry* selected_song) const {
+bool preview_audio_loader::selected_key_matches_target(const selection_key& current_key,
+                                                       const song_entry* selected_song) const {
     return selected_song != nullptr &&
-        !target_song_id_.empty() &&
-        selected_song->song.meta.song_id == target_song_id_;
+        !target_key_.song_id.empty() &&
+        selected_song->song.meta.song_id == target_key_.song_id &&
+        song_media_key_for(current_key) == target_key_;
 }
 
 }  // namespace song_select

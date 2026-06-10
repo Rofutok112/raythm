@@ -13,6 +13,7 @@ bool update_scrub(state& state,
                   Vector2 mouse,
                   bool left_pressed);
 
-requested_action toggle_playback_action(const title_audio_controller& audio_controller);
+requested_action toggle_playback_action(const song_entry_state* song,
+                                        const title_audio_controller& audio_controller);
 
 }  // namespace title_online_view::preview_controller

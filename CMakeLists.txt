@@ -337,6 +337,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/create_upload_client.h
         src/scenes/title/online_catalog_data_controller.cpp
         src/scenes/title/online_catalog_data_controller.h
+        src/scenes/title/online_catalog_ranking_loader.cpp
+        src/scenes/title/online_catalog_ranking_loader.h
         src/scenes/title/local_content_database.cpp
         src/scenes/title/local_content_database.h
         src/scenes/title/local_content_binding.h
@@ -412,6 +414,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_import_export_service.h
         src/scenes/song_select/song_select_command_controller.cpp
         src/scenes/song_select/song_select_command_controller.h
+        src/scenes/song_select/selection_key.cpp
+        src/scenes/song_select/selection_key.h
         src/scenes/song_select/song_select_data_controller.cpp
         src/scenes/song_select/song_select_data_controller.h
         src/scenes/song_select/song_select_ranking_loader.cpp
@@ -731,10 +735,14 @@ add_executable(song_select_data_controller_smoke
         src/updater/update_verify.h
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
+        src/scenes/song_select/selection_key.cpp
+        src/scenes/song_select/selection_key.h
         src/scenes/song_select/song_select_data_controller.cpp
         src/scenes/song_select/song_select_data_controller.h
         src/scenes/song_select/song_select_ranking_loader.cpp
         src/scenes/song_select/song_select_ranking_loader.h
+        src/scenes/title/online_catalog_ranking_loader.cpp
+        src/scenes/title/online_catalog_ranking_loader.h
         src/scenes/song_select/song_select_layout.h
         src/scenes/song_select/song_select_state.cpp
         src/scenes/song_select/song_select_state.h

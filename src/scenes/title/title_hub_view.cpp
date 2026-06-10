@@ -134,14 +134,15 @@ draw_result draw(draw_context context) {
     } else if (context.view.current_mode == mode::settings) {
         context.settings_overlay.draw();
     } else if (is_play_surface(context.view.current_mode)) {
+        const title_selection_media_snapshot media =
+            context.play_create_feature.media_snapshot(context.audio_controller);
         title_play_view::draw(
             play_state,
-            context.audio_controller,
+            media,
             context.view.current_mode == mode::create ? title_play_view::mode::create : title_play_view::mode::play,
             context.view.play_view_anim,
             context.view.play_entry_origin_rect,
-            &context.play_create_feature.create_tools_model(),
-            context.play_create_feature.ranking_status());
+            &context.play_create_feature.create_tools_model());
     } else if (context.view.current_mode == mode::online) {
         context.browse_feature.draw(context.audio_controller, context.view.play_view_anim, context.view.play_entry_origin_rect);
     } else if (context.view.current_mode == mode::multiplayer) {

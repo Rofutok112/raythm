@@ -7,6 +7,7 @@ void title_play_mode_controller::update(scene_manager& manager,
                                         song_select::state& state,
                                         title_audio_controller& audio_controller,
                                         const title_play_transfer_controller& transfer_controller,
+                                        const title_selection_media_snapshot& media,
                                         float play_view_anim,
                                         Rectangle play_entry_origin_rect,
                                         float dt,
@@ -22,9 +23,8 @@ void title_play_mode_controller::update(scene_manager& manager,
             play_view_anim,
             play_entry_origin_rect,
             dt,
-            &audio_controller,
             nullptr,
-            audio_controller.preview_snapshot(song_select::selected_song(state)).audio_status);
+            media.preview);
 
     if (result.back_requested) {
         callbacks.enter_home();
@@ -46,8 +46,17 @@ void title_play_mode_controller::update(scene_manager& manager,
         title_play_session::start_selected_chart(manager, state, audio_controller);
         return;
     }
+    if (result.preview_pause_requested) {
+        audio_controller.pause_preview();
+    }
+    if (result.preview_seek_requested) {
+        audio_controller.seek_preview(result.preview_seek_seconds);
+    }
+    if (result.preview_resume_requested) {
+        audio_controller.play_preview_from_current();
+    }
     if (result.preview_toggle_requested) {
-        audio_controller.toggle_preview_song(song_select::selected_song(state));
+        audio_controller.toggle_preview_song(media.key, song_select::selected_song(state));
         return;
     }
     if (result.update_song_requested) {
