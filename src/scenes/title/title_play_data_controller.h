@@ -9,14 +9,14 @@
 #include "song_select/song_select_data_controller.h"
 #include "song_select/song_select_ranking_loader.h"
 #include "song_select/song_select_state.h"
-#include "title/catalog_reload_policy.h"
 #include "title/create_upload_client.h"
 
 class title_play_data_controller {
 public:
     struct catalog_poll_result {
         bool completed = false;
-        bool sync_selection_media = false;
+        bool queued_reload_started = false;
+        bool selection_changed = false;
     };
 
     struct upload_poll_result {
@@ -35,8 +35,7 @@ public:
     void request_catalog_reload(song_select::state& state,
                                 std::string preferred_song_id = "",
                                 std::string preferred_chart_id = "",
-                                title_catalog::reload_policy policy = title_catalog::policy_for(
-                                    title_catalog::reload_mode::quiet_refresh));
+                                bool calculate_missing_levels = false);
     catalog_poll_result poll_catalog_reload(song_select::state& state);
 
     void request_ranking_reload(song_select::state& state);
@@ -52,18 +51,12 @@ public:
     upload_poll_result poll_create_upload(song_select::state& state);
 
 private:
-    void start_catalog_load(song_select::state& state,
-                            std::string preferred_song_id,
-                            std::string preferred_chart_id,
-                            title_catalog::reload_policy policy);
     static ranking_service::listing load_ranking_from_service(std::string chart_id,
                                                               ranking_service::source source,
                                                               int limit);
 
     song_select::data_controller data_controller_;
     song_select::ranking_load_controller ranking_controller_;
-    bool catalog_sync_media_on_apply_ = false;
-    bool queued_catalog_sync_media_on_apply_ = false;
 
     std::future<bool> scoring_ruleset_future_;
     bool scoring_ruleset_loading_ = false;

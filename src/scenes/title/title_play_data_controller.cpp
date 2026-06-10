@@ -15,8 +15,6 @@ title_play_data_controller::title_play_data_controller()
 void title_play_data_controller::reset(song_select::state& state) {
     data_controller_.reset(state);
     ranking_controller_.reset(state);
-    catalog_sync_media_on_apply_ = false;
-    queued_catalog_sync_media_on_apply_ = false;
 
     scoring_ruleset_loading_ = false;
     upload_in_progress_ = false;
@@ -41,46 +39,25 @@ bool title_play_data_controller::upload_in_progress() const {
 void title_play_data_controller::request_catalog_reload(song_select::state& state,
                                                         std::string preferred_song_id,
                                                         std::string preferred_chart_id,
-                                                        title_catalog::reload_policy policy) {
-    if (data_controller_.catalog_loading()) {
-        queued_catalog_sync_media_on_apply_ =
-            queued_catalog_sync_media_on_apply_ || policy.sync_media_on_apply;
-    } else {
-        catalog_sync_media_on_apply_ = policy.sync_media_on_apply;
-    }
-
+                                                        bool calculate_missing_levels) {
     data_controller_.request_catalog_reload(
         state,
         song_select::catalog_reload_request{std::move(preferred_song_id),
                                             std::move(preferred_chart_id),
-                                            policy.calculate_missing_levels});
+                                            calculate_missing_levels});
 }
 
 title_play_data_controller::catalog_poll_result title_play_data_controller::poll_catalog_reload(
     song_select::state& state) {
     catalog_poll_result result;
-    const song_select::ranking_panel_state previous_ranking_panel = state.ranking_panel;
-    const float previous_song_change_anim_t = state.song_change_anim_t;
-    const float previous_chart_change_anim_t = state.chart_change_anim_t;
     const song_select::catalog_reload_result reload = data_controller_.poll_catalog_reload(state);
     if (!reload.completed) {
         return result;
     }
 
-    if (!reload.selection_changed) {
-        state.ranking_panel = previous_ranking_panel;
-        state.song_change_anim_t = previous_song_change_anim_t;
-        state.chart_change_anim_t = previous_chart_change_anim_t;
-    }
-
     result.completed = true;
-    result.sync_selection_media = catalog_sync_media_on_apply_ && reload.selection_changed;
-    catalog_sync_media_on_apply_ = false;
-
-    if (reload.queued_reload_started) {
-        catalog_sync_media_on_apply_ = queued_catalog_sync_media_on_apply_;
-        queued_catalog_sync_media_on_apply_ = false;
-    }
+    result.queued_reload_started = reload.queued_reload_started;
+    result.selection_changed = reload.selection_changed;
 
     return result;
 }
@@ -201,14 +178,4 @@ title_play_data_controller::upload_poll_result title_play_data_controller::poll_
     song_select::queue_status_message(state, result.message, !result.success);
     poll_result.refresh_catalog = result.success && result.should_refresh_online_catalog;
     return poll_result;
-}
-
-void title_play_data_controller::start_catalog_load(song_select::state& state,
-                                                    std::string preferred_song_id,
-                                                    std::string preferred_chart_id,
-                                                    title_catalog::reload_policy policy) {
-    request_catalog_reload(state,
-                           std::move(preferred_song_id),
-                           std::move(preferred_chart_id),
-                           policy);
 }
