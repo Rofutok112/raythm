@@ -14,6 +14,7 @@
 #include "title/title_play_data_controller.h"
 #include "title/title_play_mode_controller.h"
 #include "title/title_play_transfer_controller.h"
+#include "title/title_selection_media_coordinator.h"
 
 class title_play_create_feature {
 public:
@@ -101,12 +102,14 @@ private:
                                            const std::optional<bool>& song_permission_hint,
                                            const std::optional<bool>& chart_permission_hint);
     void poll_create_permission_refresh();
-    void sync_play_media(title_audio_controller& audio_controller);
-    void sync_create_preview(title_audio_controller& audio_controller);
+    void sync_selection_media(title_audio_controller& audio_controller,
+                              title_selection_media_coordinator::context active_context,
+                              bool force = false);
 
     song_select::state state_;
     title_play_data_controller data_controller_;
     title_play_transfer_controller transfer_controller_;
+    title_selection_media_coordinator media_coordinator_;
     title_create_tools_model::view_model create_tools_model_;
     title_create_tools_model::bindings create_tools_bindings_;
     bool create_tools_binding_cache_valid_ = false;

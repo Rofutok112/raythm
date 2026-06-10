@@ -52,9 +52,7 @@ void title_play_data_controller::request_catalog_reload(song_select::state& stat
 }
 
 title_play_data_controller::catalog_poll_result title_play_data_controller::poll_catalog_reload(
-    song_select::state& state,
-    bool play_mode_active,
-    bool create_mode_active) {
+    song_select::state& state) {
     catalog_poll_result result;
     const song_select::catalog_reload_result reload = data_controller_.poll_catalog_reload(state);
     if (!reload.completed) {
@@ -62,8 +60,7 @@ title_play_data_controller::catalog_poll_result title_play_data_controller::poll
     }
 
     result.completed = true;
-    result.sync_play_media = catalog_sync_media_on_apply_ && play_mode_active;
-    result.sync_create_preview = catalog_sync_media_on_apply_ && !result.sync_play_media && create_mode_active;
+    result.sync_selection_media = catalog_sync_media_on_apply_;
     catalog_sync_media_on_apply_ = false;
 
     if (reload.queued_reload_started) {

@@ -8,19 +8,21 @@
 
 #include "network/auth_client.h"
 #include "network/server_environment.h"
-#include "ranking_service.h"
 #include "services/content_authorization_service.h"
 #include "title/local_content_database.h"
-#include "title/play_session_controller.h"
 
 namespace {
 
-ranking_service::source ranking_source_for_current_selection(const song_select::state& state) {
-    const auto filtered = song_select::filtered_charts_for_selected_song(state);
-    const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
-    return chart != nullptr && song_select::can_use_online_chart_routes(*chart)
-        ? ranking_service::source::online
-        : ranking_service::source::local;
+using media_context = title_selection_media_coordinator::context;
+
+media_context media_context_for(bool play_mode_active, bool create_mode_active) {
+    if (play_mode_active) {
+        return media_context::play;
+    }
+    if (create_mode_active) {
+        return media_context::create;
+    }
+    return media_context::none;
 }
 
 std::optional<std::string> current_user_id_for_server(const std::string& server_url) {
@@ -146,6 +148,7 @@ const title_create_tools_model::view_model& title_play_create_feature::create_to
 void title_play_create_feature::reset() {
     song_select::reset_for_enter(state_);
     data_controller_.reset(state_);
+    media_coordinator_.reset();
     create_tools_model_ = {};
     create_tools_bindings_ = {};
     create_tools_binding_cache_valid_ = false;
@@ -164,17 +167,16 @@ void title_play_create_feature::on_enter_play(bool multiplayer_chart_pick_active
                                               const std::string& multiplayer_server_url,
                                               title_audio_controller& audio_controller) {
     state_.filter.include_chartless_songs = false;
-    state_.ranking_panel.selected_source = ranking_source_for_current_selection(state_);
     state_.filter.multiplayer_queueable_only = multiplayer_chart_pick_active;
     state_.filter.multiplayer_queue_server_url = multiplayer_chart_pick_active ? multiplayer_server_url : "";
-    sync_play_media(audio_controller);
+    sync_selection_media(audio_controller, media_context::play, true);
 }
 
 void title_play_create_feature::on_enter_create(title_audio_controller& audio_controller) {
     state_.filter.include_chartless_songs = true;
     capture_current_selection();
     refresh_create_tools_model(true);
-    sync_create_preview(audio_controller);
+    sync_selection_media(audio_controller, media_context::create, true);
 }
 
 void title_play_create_feature::request_catalog_reload(std::string preferred_song_id,
@@ -189,19 +191,17 @@ void title_play_create_feature::poll_catalog_reload(title_audio_controller& audi
                                                     bool play_mode_active,
                                                     bool create_mode_active) {
     const title_play_data_controller::catalog_poll_result result =
-        data_controller_.poll_catalog_reload(state_, play_mode_active, create_mode_active);
+        data_controller_.poll_catalog_reload(state_);
     if (result.completed && create_mode_active) {
         refresh_create_tools_model(true);
     }
-    if (result.sync_play_media) {
-        sync_play_media(audio_controller);
-    } else if (result.sync_create_preview) {
-        sync_create_preview(audio_controller);
+    if (result.sync_selection_media) {
+        sync_selection_media(audio_controller, media_context_for(play_mode_active, create_mode_active), true);
     }
 }
 
 void title_play_create_feature::request_ranking_reload() {
-    data_controller_.request_ranking_reload(state_);
+    media_coordinator_.request_ranking_reload(state_, data_controller_);
 }
 
 void title_play_create_feature::poll_ranking_reload() {
@@ -280,7 +280,9 @@ void title_play_create_feature::update_play(scene_manager& manager,
         dt,
         {
             .enter_home = callbacks.enter_home,
-            .sync_media = [this, &audio_controller]() { sync_play_media(audio_controller); },
+            .sync_media = [this, &audio_controller]() {
+                sync_selection_media(audio_controller, media_context::play);
+            },
             .request_ranking_reload = [this]() { request_ranking_reload(); },
             .open_update_catalog = [this, &callbacks](bool include_chart) {
                 const song_select::song_entry* song = song_select::selected_song(state_);
@@ -319,7 +321,9 @@ void title_play_create_feature::update_create(scene_manager& manager,
         create_tools_model_,
         {
             .enter_home = callbacks.enter_home,
-            .sync_preview = [this, &audio_controller]() { sync_create_preview(audio_controller); },
+            .sync_preview = [this, &audio_controller]() {
+                sync_selection_media(audio_controller, media_context::create);
+            },
             .start_song_upload = [this](const song_select::song_entry& song) {
                 data_controller_.start_song_upload(song);
             },
@@ -495,12 +499,9 @@ void title_play_create_feature::poll_create_permission_refresh() {
     }
 }
 
-void title_play_create_feature::sync_play_media(title_audio_controller& audio_controller) {
-    state_.ranking_panel.selected_source = ranking_source_for_current_selection(state_);
-    title_play_session::sync_preview(state_, audio_controller);
-    data_controller_.request_ranking_reload(state_);
-}
-
-void title_play_create_feature::sync_create_preview(title_audio_controller& audio_controller) {
-    title_play_session::sync_preview(state_, audio_controller);
+void title_play_create_feature::sync_selection_media(
+    title_audio_controller& audio_controller,
+    title_selection_media_coordinator::context active_context,
+    bool force) {
+    media_coordinator_.sync_current(state_, audio_controller, data_controller_, active_context, force);
 }

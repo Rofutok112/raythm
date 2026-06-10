@@ -313,6 +313,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_play_create_feature.h
         src/scenes/title/title_play_data_controller.cpp
         src/scenes/title/title_play_data_controller.h
+        src/scenes/title/title_selection_media_coordinator.cpp
+        src/scenes/title/title_selection_media_coordinator.h
         src/scenes/title/title_play_mode_controller.cpp
         src/scenes/title/title_play_mode_controller.h
         src/scenes/title/title_startup_controller.cpp

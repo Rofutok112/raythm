@@ -15,8 +15,7 @@ class title_play_data_controller {
 public:
     struct catalog_poll_result {
         bool completed = false;
-        bool sync_play_media = false;
-        bool sync_create_preview = false;
+        bool sync_selection_media = false;
     };
 
     struct upload_poll_result {
@@ -35,9 +34,7 @@ public:
                                 std::string preferred_chart_id = "",
                                 title_catalog::reload_policy policy = title_catalog::policy_for(
                                     title_catalog::reload_mode::quiet_refresh));
-    catalog_poll_result poll_catalog_reload(song_select::state& state,
-                                            bool play_mode_active,
-                                            bool create_mode_active);
+    catalog_poll_result poll_catalog_reload(song_select::state& state);
 
     void request_ranking_reload(song_select::state& state);
     void poll_ranking_reload(song_select::state& state);
