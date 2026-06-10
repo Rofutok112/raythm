@@ -40,28 +40,14 @@ void title_selection_media_coordinator::sync_current(
         return;
     }
 
-    const ranking_key next_ranking = ranking_key_for(key);
-    state.ranking_panel.selected_source = next_ranking.source;
-    const bool ranking_changed =
-        force || !ranking_synced_ || ranking_key_ != next_ranking;
-    if (!ranking_changed) {
-        return;
-    }
-
-    data_controller.request_ranking_reload(state);
-    ranking_key_ = next_ranking;
-    ranking_synced_ = true;
+    sync_ranking(state, data_controller, key, force);
 }
 
 void title_selection_media_coordinator::request_ranking_reload(
     song_select::state& state,
     title_play_data_controller& data_controller) {
     const selection_key key = current_selection_key(state);
-    const ranking_key next_ranking = ranking_key_for(key);
-    state.ranking_panel.selected_source = next_ranking.source;
-    data_controller.request_ranking_reload(state);
-    ranking_key_ = next_ranking;
-    ranking_synced_ = true;
+    sync_ranking(state, data_controller, key, true);
 }
 
 title_selection_media_coordinator::selection_key
@@ -92,4 +78,22 @@ title_selection_media_coordinator::preview_key_for(const selection_key& key) {
 title_selection_media_coordinator::ranking_key
 title_selection_media_coordinator::ranking_key_for(const selection_key& key) {
     return ranking_key{key.chart_id, key.ranking_source};
+}
+
+void title_selection_media_coordinator::sync_ranking(
+    song_select::state& state,
+    title_play_data_controller& data_controller,
+    const selection_key& key,
+    bool force) {
+    const ranking_key next_ranking = ranking_key_for(key);
+    state.ranking_panel.selected_source = next_ranking.source;
+    const bool ranking_changed =
+        force || !ranking_synced_ || ranking_key_ != next_ranking;
+    if (!ranking_changed) {
+        return;
+    }
+
+    data_controller.request_ranking_reload(state);
+    ranking_key_ = next_ranking;
+    ranking_synced_ = true;
 }

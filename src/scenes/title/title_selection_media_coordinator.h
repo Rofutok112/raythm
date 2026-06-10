@@ -73,6 +73,10 @@ private:
     static selection_key current_selection_key(const song_select::state& state);
     static preview_key preview_key_for(const selection_key& key);
     static ranking_key ranking_key_for(const selection_key& key);
+    void sync_ranking(song_select::state& state,
+                      title_play_data_controller& data_controller,
+                      const selection_key& key,
+                      bool force);
 
     preview_key audio_key_;
     preview_key jacket_key_;
