@@ -25,7 +25,7 @@ void title_audio_controller::update(title_audio_policy::hub_mode mode,
                                     const song_select::song_entry* selected_song,
                                     float dt) {
     title_audio_policy::resolved_state next_state = resolve_state(mode);
-    if (next_state.update_preview) {
+    if (next_state.update_preview || preview_controller_.is_loading()) {
         preview_controller_.update(dt, selected_song);
         next_state = resolve_state(mode);
     }
