@@ -13,12 +13,9 @@ struct title_preview_snapshot {
         song_select::preview_audio_loader::load_status::idle;
     song_select::jacket_loader::load_status jacket_status =
         song_select::jacket_loader::load_status::idle;
-    bool loaded = false;
-    bool loading = false;
     bool playing = false;
     double position_seconds = 0.0;
     double length_seconds = 0.0;
-    bool jacket_loaded = false;
     const Texture2D* jacket_texture = nullptr;
 };
 

@@ -1057,7 +1057,8 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
     }
 
     const Rectangle progress = current.meta_rect;
-    const bool preview_loading = preview.loading;
+    const bool preview_loading =
+        preview.audio_status == song_select::preview_audio_loader::load_status::loading;
     const double length = preview.length_seconds;
     const double pos = preview_loading ? 0.0 : state.preview_bar_dragging
         ? state.preview_bar_drag_position_seconds

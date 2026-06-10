@@ -26,7 +26,8 @@ bool update_scrub(state& state,
     }
 
     const double preview_length = detail::preview_display_length_seconds(*song, preview);
-    if (preview_length > 0.0 && preview.loaded) {
+    if (preview_length > 0.0 &&
+        preview.audio_status == song_select::preview_audio_loader::load_status::ready) {
         const float ratio = std::clamp((mouse.x - bar_rect.x) / bar_rect.width, 0.0f, 1.0f);
         state.preview_bar_drag_position_seconds = preview_length * static_cast<double>(ratio);
     }

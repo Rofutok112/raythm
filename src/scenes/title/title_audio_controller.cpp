@@ -132,17 +132,17 @@ title_preview_snapshot title_audio_controller::preview_snapshot(const song_selec
     title_preview_snapshot snapshot;
     snapshot.audio_status = preview_controller_.audio_status();
     snapshot.jacket_status = preview_controller_.jacket_status();
-    snapshot.loaded = audio.is_preview_loaded();
-    snapshot.loading = snapshot.audio_status == song_select::preview_audio_loader::load_status::loading;
+    const bool audio_loaded = audio.is_preview_loaded();
     snapshot.playing = audio.is_preview_playing();
-    snapshot.position_seconds = snapshot.loaded ? audio.get_preview_position_seconds() : 0.0;
-    snapshot.length_seconds = snapshot.loaded ? audio.get_preview_length_seconds() : 0.0;
+    snapshot.position_seconds = audio_loaded ? audio.get_preview_position_seconds() : 0.0;
+    snapshot.length_seconds = audio_loaded ? audio.get_preview_length_seconds() : 0.0;
     if (snapshot.length_seconds <= 0.0 && fallback_song != nullptr) {
         snapshot.length_seconds = static_cast<double>(fallback_song->song.meta.duration_seconds);
     }
-    snapshot.jacket_loaded = snapshot.jacket_status == song_select::jacket_loader::load_status::ready &&
-        preview_controller_.jacket_loaded();
-    snapshot.jacket_texture = snapshot.jacket_loaded ? &preview_controller_.jacket_texture() : nullptr;
+    if (snapshot.jacket_status == song_select::jacket_loader::load_status::ready &&
+        preview_controller_.jacket_loaded()) {
+        snapshot.jacket_texture = &preview_controller_.jacket_texture();
+    }
     return snapshot;
 }
 
