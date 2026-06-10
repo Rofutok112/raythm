@@ -6,6 +6,34 @@
 #include <utility>
 
 namespace song_select {
+namespace {
+
+struct catalog_selection {
+    std::string song_id;
+    std::string chart_id;
+
+    [[nodiscard]] bool operator==(const catalog_selection& other) const {
+        return song_id == other.song_id && chart_id == other.chart_id;
+    }
+
+    [[nodiscard]] bool operator!=(const catalog_selection& other) const {
+        return !(*this == other);
+    }
+};
+
+catalog_selection current_catalog_selection(const state& state) {
+    catalog_selection selection;
+    if (const song_entry* song = selected_song(state)) {
+        selection.song_id = song->song.meta.song_id;
+    }
+    const auto filtered = filtered_charts_for_selected_song(state);
+    if (const chart_option* chart = selected_chart_for(state, filtered)) {
+        selection.chart_id = chart->meta.chart_id;
+    }
+    return selection;
+}
+
+}  // namespace
 
 data_controller::data_controller()
     : data_controller(load_catalog_from_service, load_ranking_from_service) {
@@ -73,6 +101,11 @@ catalog_reload_result data_controller::poll_catalog_reload(state& state) {
         return result;
     }
 
+    const catalog_selection previous_selection = current_catalog_selection(state);
+    const ranking_panel_state previous_ranking_panel = state.ranking_panel;
+    const float previous_song_change_anim_t = state.song_change_anim_t;
+    const float previous_chart_change_anim_t = state.chart_change_anim_t;
+
     try {
         apply_catalog(state,
                       catalog_future_.get(),
@@ -89,6 +122,14 @@ catalog_reload_result data_controller::poll_catalog_reload(state& state) {
         result.failed = true;
         result.message = ex.what();
     }
+    const catalog_selection next_selection = current_catalog_selection(state);
+    result.selection_changed = previous_selection != next_selection;
+    if (!result.selection_changed) {
+        state.ranking_panel = previous_ranking_panel;
+        state.song_change_anim_t = previous_song_change_anim_t;
+        state.chart_change_anim_t = previous_chart_change_anim_t;
+    }
+
     catalog_loading_ = false;
     result.completed = true;
 

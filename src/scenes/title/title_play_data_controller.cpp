@@ -60,7 +60,7 @@ title_play_data_controller::catalog_poll_result title_play_data_controller::poll
     }
 
     result.completed = true;
-    result.sync_selection_media = catalog_sync_media_on_apply_;
+    result.sync_selection_media = catalog_sync_media_on_apply_ && reload.selection_changed;
     catalog_sync_media_on_apply_ = false;
 
     if (reload.queued_reload_started) {

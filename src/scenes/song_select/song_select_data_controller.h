@@ -21,6 +21,7 @@ struct catalog_reload_request {
 struct catalog_reload_result {
     bool completed = false;
     bool queued_reload_started = false;
+    bool selection_changed = false;
     bool failed = false;
     std::string message;
 };

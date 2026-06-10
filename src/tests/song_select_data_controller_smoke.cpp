@@ -208,6 +208,24 @@ int main() {
     assert(state.ranking_panel.listing.message == "chart-level");
     assert(last_loaded_source == ranking_service::source::online);
 
+    state.ranking_panel.reveal_anim = 0.75f;
+    state.song_change_anim_t = 0.25f;
+    state.chart_change_anim_t = 0.5f;
+    controller.request_catalog_reload(state, {"song-b", "chart-level", true});
+    spin_until([&] {
+        const song_select::catalog_reload_result result = controller.poll_catalog_reload(state);
+        if (!result.completed) {
+            return false;
+        }
+        assert(!result.selection_changed);
+        return true;
+    });
+    assert(state.ranking_panel.listing.available);
+    assert(state.ranking_panel.listing.message == "chart-level");
+    assert(state.ranking_panel.reveal_anim == 0.75f);
+    assert(state.song_change_anim_t == 0.25f);
+    assert(state.chart_change_anim_t == 0.5f);
+
     song_select::catalog_data legacy_catalog;
     legacy_catalog.songs.push_back(make_song("legacy-song", "legacy-chart"));
     legacy_catalog.songs.back().charts.back().remote_links.push_back(online_content::chart_identity{
