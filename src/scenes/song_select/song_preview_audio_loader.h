@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <future>
 #include <optional>
 #include <string>
@@ -40,6 +41,7 @@ private:
     std::string pending_managed_audio_path_;
     std::future<managed_content_storage::managed_file_read_result> managed_audio_future_;
     std::optional<song_data> load_song_;
+    std::chrono::steady_clock::time_point load_started_at_{};
     bool managed_audio_pending_ = false;
     bool audio_load_pending_ = false;
 };

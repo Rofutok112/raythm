@@ -8,6 +8,11 @@
 #include "path_utils.h"
 
 namespace song_select {
+namespace {
+
+constexpr std::chrono::seconds kPreviewLoadTimeout{15};
+
+}  // namespace
 
 const std::string& preview_audio_loader::target_song_id() const {
     return target_song_id_;
@@ -43,6 +48,7 @@ bool preview_audio_loader::request(const song_entry& song) {
 
             pending_managed_audio_path_ = path_utils::to_utf8(audio_path);
             load_song_ = song.song;
+            load_started_at_ = std::chrono::steady_clock::now();
             managed_audio_pending_ = true;
             return true;
         }
@@ -55,11 +61,19 @@ bool preview_audio_loader::request(const song_entry& song) {
         return false;
     }
     load_song_ = song.song;
+    load_started_at_ = std::chrono::steady_clock::now();
     audio_load_pending_ = true;
     return true;
 }
 
 preview_audio_loader::load_event preview_audio_loader::update(const song_entry* selected_song) {
+    if ((managed_audio_pending_ || audio_load_pending_) &&
+        load_started_at_ != std::chrono::steady_clock::time_point{} &&
+        std::chrono::steady_clock::now() - load_started_at_ > kPreviewLoadTimeout) {
+        reset();
+        return {.result = load_event::status::failed};
+    }
+
     load_event prepare_event = poll_managed_audio_prepare(selected_song);
     if (prepare_event.result != load_event::status::none) {
         return prepare_event;
@@ -91,6 +105,7 @@ void preview_audio_loader::reset() {
     target_song_id_.clear();
     pending_managed_audio_path_.clear();
     load_song_.reset();
+    load_started_at_ = {};
     managed_audio_pending_ = false;
     audio_load_pending_ = false;
 }
@@ -145,6 +160,7 @@ preview_audio_loader::load_event preview_audio_loader::poll_managed_audio_prepar
         return {.result = load_event::status::failed};
     }
 
+    load_started_at_ = std::chrono::steady_clock::now();
     audio_load_pending_ = true;
     return {};
 }
