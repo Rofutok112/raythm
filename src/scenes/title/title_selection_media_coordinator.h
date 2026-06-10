@@ -3,9 +3,9 @@
 #include <string>
 
 #include "ranking_service.h"
+#include "song_select/song_select_ranking_loader.h"
 
 class title_audio_controller;
-class title_play_data_controller;
 
 namespace song_select {
 struct state;
@@ -19,14 +19,17 @@ public:
         create,
     };
 
+    title_selection_media_coordinator();
+
     void reset();
+    void reset(song_select::state& state);
     void sync_current(song_select::state& state,
                       title_audio_controller& audio_controller,
-                      title_play_data_controller& data_controller,
                       context active_context,
                       bool force = false);
-    void request_ranking_reload(song_select::state& state,
-                                title_play_data_controller& data_controller);
+    void request_ranking_reload(song_select::state& state);
+    void poll_ranking_reload(song_select::state& state);
+    [[nodiscard]] song_select::ranking_load_controller::load_status ranking_status() const;
 
 private:
     struct selection_key {
@@ -73,11 +76,14 @@ private:
     static selection_key current_selection_key(const song_select::state& state);
     static preview_key preview_key_for(const selection_key& key);
     static ranking_key ranking_key_for(const selection_key& key);
+    static ranking_service::listing load_ranking_from_service(std::string chart_id,
+                                                              ranking_service::source source,
+                                                              int limit);
     void sync_ranking(song_select::state& state,
-                      title_play_data_controller& data_controller,
                       const selection_key& key,
                       bool force);
 
+    song_select::ranking_load_controller ranking_controller_;
     preview_key audio_key_;
     preview_key jacket_key_;
     ranking_key ranking_key_;

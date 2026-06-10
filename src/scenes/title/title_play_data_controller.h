@@ -7,7 +7,6 @@
 #include "ranking_service.h"
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_select_data_controller.h"
-#include "song_select/song_select_ranking_loader.h"
 #include "song_select/song_select_state.h"
 #include "title/create_upload_client.h"
 
@@ -38,10 +37,6 @@ public:
                                 bool calculate_missing_levels = false);
     catalog_poll_result poll_catalog_reload(song_select::state& state);
 
-    void request_ranking_reload(song_select::state& state);
-    void poll_ranking_reload(song_select::state& state);
-    [[nodiscard]] song_select::ranking_load_controller::load_status ranking_status() const;
-
     void request_scoring_ruleset_warm(bool force_refresh = false);
     bool poll_scoring_ruleset_warm();
 
@@ -51,12 +46,7 @@ public:
     upload_poll_result poll_create_upload(song_select::state& state);
 
 private:
-    static ranking_service::listing load_ranking_from_service(std::string chart_id,
-                                                              ranking_service::source source,
-                                                              int limit);
-
     song_select::data_controller data_controller_;
-    song_select::ranking_load_controller ranking_controller_;
 
     std::future<bool> scoring_ruleset_future_;
     bool scoring_ruleset_loading_ = false;

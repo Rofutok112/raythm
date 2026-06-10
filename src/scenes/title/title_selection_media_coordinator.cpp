@@ -1,8 +1,13 @@
 #include "title/title_selection_media_coordinator.h"
 
+#include <utility>
+
 #include "song_select/song_select_navigation.h"
 #include "title/title_audio_controller.h"
-#include "title/title_play_data_controller.h"
+
+title_selection_media_coordinator::title_selection_media_coordinator()
+    : ranking_controller_(song_select::ranking_load_controller::listing_loader(load_ranking_from_service)) {
+}
 
 void title_selection_media_coordinator::reset() {
     audio_key_ = {};
@@ -13,10 +18,14 @@ void title_selection_media_coordinator::reset() {
     ranking_synced_ = false;
 }
 
+void title_selection_media_coordinator::reset(song_select::state& state) {
+    reset();
+    ranking_controller_.reset(state);
+}
+
 void title_selection_media_coordinator::sync_current(
     song_select::state& state,
     title_audio_controller& audio_controller,
-    title_play_data_controller& data_controller,
     context active_context,
     bool force) {
     if (active_context == context::none) {
@@ -40,14 +49,20 @@ void title_selection_media_coordinator::sync_current(
         return;
     }
 
-    sync_ranking(state, data_controller, key, force);
+    sync_ranking(state, key, force);
 }
 
-void title_selection_media_coordinator::request_ranking_reload(
-    song_select::state& state,
-    title_play_data_controller& data_controller) {
+void title_selection_media_coordinator::request_ranking_reload(song_select::state& state) {
     const selection_key key = current_selection_key(state);
-    sync_ranking(state, data_controller, key, true);
+    sync_ranking(state, key, true);
+}
+
+void title_selection_media_coordinator::poll_ranking_reload(song_select::state& state) {
+    ranking_controller_.poll(state);
+}
+
+song_select::ranking_load_controller::load_status title_selection_media_coordinator::ranking_status() const {
+    return ranking_controller_.status();
 }
 
 title_selection_media_coordinator::selection_key
@@ -80,9 +95,15 @@ title_selection_media_coordinator::ranking_key_for(const selection_key& key) {
     return ranking_key{key.chart_id, key.ranking_source};
 }
 
+ranking_service::listing title_selection_media_coordinator::load_ranking_from_service(
+    std::string chart_id,
+    ranking_service::source source,
+    int limit) {
+    return ranking_service::load_chart_ranking(std::move(chart_id), source, limit);
+}
+
 void title_selection_media_coordinator::sync_ranking(
     song_select::state& state,
-    title_play_data_controller& data_controller,
     const selection_key& key,
     bool force) {
     const ranking_key next_ranking = ranking_key_for(key);
@@ -93,7 +114,7 @@ void title_selection_media_coordinator::sync_ranking(
         return;
     }
 
-    data_controller.request_ranking_reload(state);
+    ranking_controller_.request_reload(state);
     ranking_key_ = next_ranking;
     ranking_synced_ = true;
 }

@@ -148,7 +148,7 @@ const title_create_tools_model::view_model& title_play_create_feature::create_to
 void title_play_create_feature::reset() {
     song_select::reset_for_enter(state_);
     data_controller_.reset(state_);
-    media_coordinator_.reset();
+    media_coordinator_.reset(state_);
     create_tools_model_ = {};
     create_tools_bindings_ = {};
     create_tools_binding_cache_valid_ = false;
@@ -206,11 +206,11 @@ void title_play_create_feature::poll_catalog_reload(title_audio_controller& audi
 }
 
 void title_play_create_feature::request_ranking_reload() {
-    media_coordinator_.request_ranking_reload(state_, data_controller_);
+    media_coordinator_.request_ranking_reload(state_);
 }
 
 void title_play_create_feature::poll_ranking_reload() {
-    data_controller_.poll_ranking_reload(state_);
+    media_coordinator_.poll_ranking_reload(state_);
 }
 
 void title_play_create_feature::request_scoring_ruleset_warm(bool force_refresh) {
@@ -242,7 +242,7 @@ bool title_play_create_feature::busy() const {
 }
 
 song_select::ranking_load_controller::load_status title_play_create_feature::ranking_status() const {
-    return data_controller_.ranking_status();
+    return media_coordinator_.ranking_status();
 }
 
 void title_play_create_feature::poll_transfer(const cross_callbacks& callbacks) {
@@ -506,5 +506,5 @@ void title_play_create_feature::sync_selection_media(
     title_audio_controller& audio_controller,
     title_selection_media_coordinator::context active_context,
     bool force) {
-    media_coordinator_.sync_current(state_, audio_controller, data_controller_, active_context, force);
+    media_coordinator_.sync_current(state_, audio_controller, active_context, force);
 }
