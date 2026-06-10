@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "localization/localization.h"
 #include "theme.h"
 #include "ui_draw.h"
 
@@ -41,9 +42,10 @@ void draw(const config& config) {
     const float progress = std::clamp(config.progress, 0.0f, 1.0f);
     const Color tone = config.error ? g_theme->error : g_theme->accent;
     const Color detail_color = config.error ? g_theme->error : g_theme->text_muted;
+    const char* message = localization::tr_literal(config.message);
 
     ui::draw_display_text_in_rect(config.title, 28, config.geometry.title_rect, g_theme->text);
-    ui::draw_text_in_rect(config.message, 18, config.geometry.detail_rect, detail_color);
+    ui::draw_text_in_rect(message, 18, config.geometry.detail_rect, detail_color);
     ui::draw_progress_bar(config.geometry.bar_rect,
                           progress,
                           with_alpha(g_theme->row, 180),
@@ -53,7 +55,7 @@ void draw(const config& config) {
                           1.5f);
 
     if (config.hint != nullptr && config.hint[0] != '\0') {
-        ui::draw_text_in_rect(config.hint, 15, config.geometry.hint_rect, g_theme->text_hint);
+        ui::draw_text_in_rect(localization::tr_literal(config.hint), 15, config.geometry.hint_rect, g_theme->text_hint);
     }
 }
 

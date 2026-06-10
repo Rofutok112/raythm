@@ -210,7 +210,7 @@ void draw_loading(state& startup, float dt) {
 
 void draw_status(const state& startup) {
     const Rectangle status_rect = {520.0f, 704.0f, 880.0f, 34.0f};
-    ui::draw_text_in_rect(startup.loading_message.c_str(), 18, status_rect,
+    ui::draw_text_in_rect(localization::tr_literal(startup.loading_message.c_str()), 18, status_rect,
                           startup.load_failed ? g_theme->error : g_theme->text_muted);
 }
 

@@ -918,7 +918,7 @@ void draw_pause_overlay() {
         });
     }
 
-    ui::enqueue_body_text_in_rect("ESC: Resume", 20, kPauseHintRect, g_theme->text_muted,
+    ui::enqueue_body_text_in_rect(localization::tr_literal("ESC: Resume"), 20, kPauseHintRect, g_theme->text_muted,
                                   ui::text_align::left, ui::draw_layer::modal);
 }
 

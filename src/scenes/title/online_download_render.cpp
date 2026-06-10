@@ -993,7 +993,7 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                           {current.content_rect.x + current.content_rect.width * 0.46f, current.content_rect.y + 8.0f,
                            current.content_rect.width * 0.5f - 12.0f, 16.0f},
                           with_alpha(t.text_muted, grid_alpha), ui::text_align::right);
-    draw_browse_body_text_in_rect("Press Esc to return to the grid",
+    draw_browse_body_text_in_rect(localization::tr_literal("Press Esc to return to the grid"),
                           14,
                           {current.content_rect.x + current.content_rect.width * 0.46f, current.content_rect.y + 8.0f,
                            current.content_rect.width * 0.5f - 12.0f, 16.0f},
@@ -1013,12 +1013,14 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
             ui::draw_rect_f(placeholder, with_alpha(button_base, static_cast<unsigned char>(selected_row_alpha * grid_fade_t)));
             ui::draw_rect_lines(placeholder, 1.5f, with_alpha(t.border_light, grid_alpha));
             const char* empty_title = loading
-                ? "Loading..."
+                ? localization::tr_literal("Loading...")
                 : (state.mode == catalog_mode::owned && state.owned_loading)
-                    ? "Syncing owned songs..."
+                    ? localization::tr_literal("Syncing owned songs...")
                 : state.catalog_maintenance
-                    ? "Server maintenance"
-                : (state.catalog_request_failed ? "Could not reach raythm-Server." : "No songs found.");
+                    ? localization::tr_literal("Server maintenance")
+                : (state.catalog_request_failed
+                    ? localization::tr_literal("Could not reach raythm-Server.")
+                    : localization::tr_literal("No songs found."));
             draw_browse_body_text_in_rect(empty_title,
                                   26, {placeholder.x, placeholder.y + 8.0f, placeholder.width, 28.0f},
                                   with_alpha(t.text, grid_alpha), ui::text_align::center);
@@ -1026,13 +1028,14 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                 const std::string detail = !state.catalog_status_message.empty()
                     ? state.catalog_status_message
                     : state.catalog_maintenance
-                        ? "Online features are temporarily unavailable. Please try again later."
-                        : "Check the server URL and confirm raythm-Server is running.";
+                        ? localization::tr_literal("Online features are temporarily unavailable. Please try again later.")
+                        : localization::tr_literal("Check the server URL and confirm raythm-Server is running.");
                 draw_browse_body_text_in_rect(detail.c_str(),
                                       14, {placeholder.x + 20.0f, placeholder.y + 42.0f, placeholder.width - 40.0f, 16.0f},
                                       with_alpha(t.text_muted, grid_alpha), ui::text_align::center);
                 if (!state.catalog_server_url.empty()) {
-                    const std::string server_label = "Tried: " + state.catalog_server_url;
+                    const std::string server_label =
+                        std::string(localization::tr_literal("Tried: ")) + state.catalog_server_url;
                     draw_browse_body_text_in_rect(server_label.c_str(),
                                           12, {placeholder.x + 20.0f, placeholder.y + 58.0f, placeholder.width - 40.0f, 14.0f},
                                           with_alpha(t.text_hint, grid_alpha), ui::text_align::center);
