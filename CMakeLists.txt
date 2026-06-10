@@ -1593,7 +1593,12 @@ if(MINGW)
     endforeach()
 endif()
 
-add_custom_target(raythm_runtime_files
+file(GLOB_RECURSE RAYTHM_ASSET_FILES CONFIGURE_DEPENDS
+        "${CMAKE_SOURCE_DIR}/assets/*")
+set(RAYTHM_RUNTIME_FILES_STAMP
+        "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/raythm_runtime_files.stamp")
+
+add_custom_command(OUTPUT "${RAYTHM_RUNTIME_FILES_STAMP}"
         COMMAND ${CMAKE_COMMAND} -E make_directory
         $<TARGET_FILE_DIR:raythm>
         $<TARGET_FILE_DIR:raythm>/assets
@@ -1603,7 +1608,16 @@ add_custom_target(raythm_runtime_files
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/assets
         $<TARGET_FILE_DIR:raythm>/assets
+        COMMAND ${CMAKE_COMMAND} -E touch
+        "${RAYTHM_RUNTIME_FILES_STAMP}"
+        DEPENDS
+        ${RAYTHM_RUNTIME_DLLS}
+        ${RAYTHM_ASSET_FILES}
         COMMAND_EXPAND_LISTS
+)
+
+add_custom_target(raythm_runtime_files
+        DEPENDS "${RAYTHM_RUNTIME_FILES_STAMP}"
 )
 add_dependencies(raythm raythm_runtime_files)
 
