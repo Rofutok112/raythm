@@ -328,7 +328,7 @@ void title_play_create_feature::update_create(scene_manager& manager,
         create_tools_model_,
         {
             .enter_home = callbacks.enter_home,
-            .sync_preview = [this, &audio_controller]() {
+            .sync_media = [this, &audio_controller]() {
                 sync_selection_media(audio_controller, media_context::create);
             },
             .start_song_upload = [this](const song_select::song_entry& song) {

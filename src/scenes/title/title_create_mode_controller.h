@@ -12,7 +12,7 @@ class title_create_mode_controller {
 public:
     struct callbacks {
         std::function<void()> enter_home;
-        std::function<void()> sync_preview;
+        std::function<void()> sync_media;
         std::function<void(const song_select::song_entry&)> start_song_upload;
         std::function<void(const song_select::song_entry&, const song_select::chart_option&)> start_chart_upload;
         std::function<title_play_transfer_controller::catalog_callbacks()> transfer_callbacks;

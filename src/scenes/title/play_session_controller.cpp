@@ -4,10 +4,6 @@
 
 namespace title_play_session {
 
-void sync_preview(song_select::state& state, title_audio_controller& audio_controller) {
-    audio_controller.select_preview_song(song_select::selected_song(state));
-}
-
 bool start_selected_chart(scene_manager& manager,
                           song_select::state& state,
                           title_audio_controller& audio_controller) {

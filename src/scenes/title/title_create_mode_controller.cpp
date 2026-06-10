@@ -34,7 +34,7 @@ void title_create_mode_controller::update(scene_manager& manager,
         return;
     }
     if (result.song_selection_changed) {
-        callbacks.sync_preview();
+        callbacks.sync_media();
         return;
     }
     if (result.chart_selection_changed) {
