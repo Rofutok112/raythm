@@ -32,9 +32,12 @@ private:
     struct selection_key {
         std::string song_id;
         std::string chart_id;
+        ranking_service::source ranking_source = ranking_service::source::local;
 
         [[nodiscard]] bool operator==(const selection_key& other) const {
-            return song_id == other.song_id && chart_id == other.chart_id;
+            return song_id == other.song_id &&
+                chart_id == other.chart_id &&
+                ranking_source == other.ranking_source;
         }
 
         [[nodiscard]] bool operator!=(const selection_key& other) const {
@@ -42,12 +45,37 @@ private:
         }
     };
 
-    static selection_key current_selection_key(const song_select::state& state);
-    static ranking_service::source ranking_source_for_selection(const song_select::state& state);
+    struct preview_key {
+        std::string song_id;
 
-    selection_key preview_key_;
-    selection_key ranking_key_;
-    ranking_service::source ranking_source_ = ranking_service::source::local;
+        [[nodiscard]] bool operator==(const preview_key& other) const {
+            return song_id == other.song_id;
+        }
+
+        [[nodiscard]] bool operator!=(const preview_key& other) const {
+            return !(*this == other);
+        }
+    };
+
+    struct ranking_key {
+        std::string chart_id;
+        ranking_service::source source = ranking_service::source::local;
+
+        [[nodiscard]] bool operator==(const ranking_key& other) const {
+            return chart_id == other.chart_id && source == other.source;
+        }
+
+        [[nodiscard]] bool operator!=(const ranking_key& other) const {
+            return !(*this == other);
+        }
+    };
+
+    static selection_key current_selection_key(const song_select::state& state);
+    static preview_key preview_key_for(const selection_key& key);
+    static ranking_key ranking_key_for(const selection_key& key);
+
+    preview_key preview_key_;
+    ranking_key ranking_key_;
     bool preview_synced_ = false;
     bool ranking_synced_ = false;
 };

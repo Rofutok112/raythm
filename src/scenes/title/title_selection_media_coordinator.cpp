@@ -7,7 +7,6 @@
 void title_selection_media_coordinator::reset() {
     preview_key_ = {};
     ranking_key_ = {};
-    ranking_source_ = ranking_service::source::local;
     preview_synced_ = false;
     ranking_synced_ = false;
 }
@@ -23,9 +22,10 @@ void title_selection_media_coordinator::sync_current(
     }
 
     const selection_key key = current_selection_key(state);
-    if (force || !preview_synced_ || preview_key_ != key) {
+    const preview_key next_preview = preview_key_for(key);
+    if (force || !preview_synced_ || preview_key_ != next_preview) {
         audio_controller.select_preview_song(song_select::selected_song(state));
-        preview_key_ = key;
+        preview_key_ = next_preview;
         preview_synced_ = true;
     }
 
@@ -33,17 +33,16 @@ void title_selection_media_coordinator::sync_current(
         return;
     }
 
-    const ranking_service::source source = ranking_source_for_selection(state);
-    state.ranking_panel.selected_source = source;
+    const ranking_key next_ranking = ranking_key_for(key);
+    state.ranking_panel.selected_source = next_ranking.source;
     const bool ranking_changed =
-        force || !ranking_synced_ || ranking_key_ != key || ranking_source_ != source;
+        force || !ranking_synced_ || ranking_key_ != next_ranking;
     if (!ranking_changed) {
         return;
     }
 
     data_controller.request_ranking_reload(state);
-    ranking_key_ = key;
-    ranking_source_ = source;
+    ranking_key_ = next_ranking;
     ranking_synced_ = true;
 }
 
@@ -51,8 +50,8 @@ void title_selection_media_coordinator::request_ranking_reload(
     song_select::state& state,
     title_play_data_controller& data_controller) {
     data_controller.request_ranking_reload(state);
-    ranking_key_ = current_selection_key(state);
-    ranking_source_ = state.ranking_panel.selected_source;
+    const selection_key key = current_selection_key(state);
+    ranking_key_ = ranking_key{key.chart_id, state.ranking_panel.selected_source};
     ranking_synced_ = true;
 }
 
@@ -65,15 +64,19 @@ title_selection_media_coordinator::current_selection_key(const song_select::stat
     const auto filtered = song_select::filtered_charts_for_selected_song(state);
     if (const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered)) {
         key.chart_id = chart->meta.chart_id;
+        key.ranking_source = song_select::can_use_online_chart_routes(*chart)
+            ? ranking_service::source::online
+            : ranking_service::source::local;
     }
     return key;
 }
 
-ranking_service::source title_selection_media_coordinator::ranking_source_for_selection(
-    const song_select::state& state) {
-    const auto filtered = song_select::filtered_charts_for_selected_song(state);
-    const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
-    return chart != nullptr && song_select::can_use_online_chart_routes(*chart)
-        ? ranking_service::source::online
-        : ranking_service::source::local;
+title_selection_media_coordinator::preview_key
+title_selection_media_coordinator::preview_key_for(const selection_key& key) {
+    return preview_key{key.song_id};
+}
+
+title_selection_media_coordinator::ranking_key
+title_selection_media_coordinator::ranking_key_for(const selection_key& key) {
+    return ranking_key{key.chart_id, key.ranking_source};
 }
