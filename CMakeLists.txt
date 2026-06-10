@@ -420,6 +420,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_transfer_controller.h
         src/scenes/song_select/song_select_last_played.cpp
         src/scenes/song_select/song_select_last_played.h
+        src/scenes/song_select/song_jacket_loader.cpp
+        src/scenes/song_select/song_jacket_loader.h
         src/scenes/song_select/song_preview_audio_loader.cpp
         src/scenes/song_select/song_preview_audio_loader.h
         src/scenes/song_select/song_preview_controller.cpp
