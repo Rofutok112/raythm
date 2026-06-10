@@ -80,8 +80,9 @@ void ranking_load_controller::request_reload(state& state) {
             return;
         }
 
+        const ranking_service::source source = next.source;
         queued_request_ = std::move(next);
-        mark_online_loading(state);
+        mark_online_loading(state, source);
         return;
     }
 
@@ -96,7 +97,7 @@ void ranking_load_controller::request_reload(state& state) {
         state.ranking_panel.best_loaded = false;
         state.ranking_panel.best_entry.reset();
     }
-    mark_online_loading(state);
+    mark_online_loading(state, next.source);
     start_load(std::move(next));
 }
 
@@ -149,17 +150,18 @@ ranking_reload_result ranking_load_controller::poll(state& state) {
     return result;
 }
 
-ranking_load_controller::request ranking_load_controller::build_request(state& state) const {
+ranking_load_controller::request ranking_load_controller::build_request(const state& state) const {
     const auto filtered = filtered_charts_for_selected_song(state);
     const chart_option* chart = selected_chart_for(state, filtered);
-    if (state.ranking_panel.selected_source == ranking_service::source::online &&
-        (chart == nullptr || !can_use_online_chart_routes(*chart))) {
-        state.ranking_panel.selected_source = ranking_service::source::local;
-    }
 
     request next;
     next.chart_id = chart != nullptr ? chart->meta.chart_id : "";
-    next.source = state.ranking_panel.selected_source;
+    next.source =
+        state.ranking_panel.selected_source == ranking_service::source::online &&
+            chart != nullptr &&
+            can_use_online_chart_routes(*chart)
+        ? ranking_service::source::online
+        : ranking_service::source::local;
     next.best_source = uses_submitted_ranking_best(chart)
         ? ranking_service::source::online
         : ranking_service::source::local;
@@ -229,13 +231,13 @@ void ranking_load_controller::apply_loaded(state& state, load_data loaded) {
     state.ranking_panel.reveal_anim = 0.0f;
 }
 
-void ranking_load_controller::mark_online_loading(state& state) const {
-    if (state.ranking_panel.selected_source != ranking_service::source::online) {
+void ranking_load_controller::mark_online_loading(state& state, ranking_service::source source) const {
+    if (source != ranking_service::source::online) {
         return;
     }
 
     state.ranking_panel.listing = {};
-    state.ranking_panel.listing.ranking_source = state.ranking_panel.selected_source;
+    state.ranking_panel.listing.ranking_source = source;
     state.ranking_panel.listing.available = false;
     state.ranking_panel.listing.message = "ランキング読み込み中...";
 }

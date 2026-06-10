@@ -55,12 +55,12 @@ private:
         std::optional<ranking_service::entry> best_entry;
     };
 
-    request build_request(state& state) const;
+    request build_request(const state& state) const;
     [[nodiscard]] bool active_request_covers(const request& next) const;
     [[nodiscard]] bool loaded_request_covers(const request& next) const;
     void start_load(request next);
     void apply_loaded(state& state, load_data loaded);
-    void mark_online_loading(state& state) const;
+    void mark_online_loading(state& state, ranking_service::source source) const;
     void reset_panel_scroll(state& state) const;
 
     listing_loader loader_;

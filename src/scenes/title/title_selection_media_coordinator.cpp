@@ -56,9 +56,11 @@ void title_selection_media_coordinator::sync_current(
 void title_selection_media_coordinator::request_ranking_reload(
     song_select::state& state,
     title_play_data_controller& data_controller) {
-    data_controller.request_ranking_reload(state);
     const selection_key key = current_selection_key(state);
-    ranking_key_ = ranking_key{key.chart_id, state.ranking_panel.selected_source};
+    const ranking_key next_ranking = ranking_key_for(key);
+    state.ranking_panel.selected_source = next_ranking.source;
+    data_controller.request_ranking_reload(state);
+    ranking_key_ = next_ranking;
     ranking_synced_ = true;
 }
 

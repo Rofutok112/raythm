@@ -259,7 +259,7 @@ int main() {
     spin_until([&] {
         return ranking_controller.poll(legacy_state).completed;
     });
-    assert(legacy_state.ranking_panel.selected_source == ranking_service::source::local);
+    assert(legacy_state.ranking_panel.selected_source == ranking_service::source::online);
     assert(legacy_state.ranking_panel.listing.ranking_source == ranking_service::source::local);
     assert(last_loaded_source == ranking_service::source::local);
     assert(ranking_service::last_personal_best_source == ranking_service::source::local);
