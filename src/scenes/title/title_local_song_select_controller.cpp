@@ -180,8 +180,10 @@ title_play_view::update_result update(song_select::state& state,
                                       float dt,
                                       title_audio_controller* audio_controller,
                                       const title_create_tools_model::view_model* create_tools_model,
-                                      bool preview_loading) {
+                                      song_select::preview_audio_loader::load_status preview_audio_status) {
     update_result result;
+    const bool preview_loading =
+        preview_audio_status == song_select::preview_audio_loader::load_status::loading;
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     const bool right_pressed = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);

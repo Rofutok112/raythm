@@ -13,6 +13,7 @@ title_play_view::update_result update(song_select::state& state,
                                       float dt,
                                       title_audio_controller* audio_controller = nullptr,
                                       const title_create_tools_model::view_model* create_tools_model = nullptr,
-                                      bool preview_loading = false);
+                                      song_select::preview_audio_loader::load_status preview_audio_status =
+                                          song_select::preview_audio_loader::load_status::idle);
 
 }  // namespace title_local_song_select_controller

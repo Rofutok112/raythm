@@ -24,7 +24,7 @@ void title_play_mode_controller::update(scene_manager& manager,
             dt,
             &audio_controller,
             nullptr,
-            audio_controller.preview_snapshot(song_select::selected_song(state)).loading);
+            audio_controller.preview_snapshot(song_select::selected_song(state)).audio_status);
 
     if (result.back_requested) {
         callbacks.enter_home();
