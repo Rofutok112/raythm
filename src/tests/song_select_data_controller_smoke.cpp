@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "song_select/song_select_data_controller.h"
+#include "song_select/song_select_ranking_loader.h"
 
 namespace {
 
@@ -121,7 +122,8 @@ int main() {
             catalog.songs.push_back(make_song(catalog_load_count == 1 ? "song-a" : "song-b",
                                               calculate_missing_levels ? "chart-level" : "chart-normal"));
             return catalog;
-        },
+        });
+    song_select::ranking_load_controller ranking_controller(
         [&](std::string chart_id, ranking_service::source source, int) {
             ++ranking_load_count;
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -162,19 +164,19 @@ int main() {
 
     state.ranking_panel.selected_source = ranking_service::source::online;
     logged_in = false;
-    controller.request_ranking_reload(state);
+    ranking_controller.request_reload(state);
     spin_until([&] {
-        return controller.poll_ranking_reload(state).completed;
+        return ranking_controller.poll(state).completed;
     });
     assert(ranking_service::last_personal_best_source == ranking_service::source::local);
 
     logged_in = true;
-    controller.request_ranking_reload(state);
+    ranking_controller.request_reload(state);
     assert(state.ranking_panel.listing.message == "Loading online rankings...");
-    controller.request_ranking_reload(state);
+    ranking_controller.request_reload(state);
 
     spin_until([&] {
-        const song_select::ranking_reload_result result = controller.poll_ranking_reload(state);
+        const song_select::ranking_reload_result result = ranking_controller.poll(state);
         return result.completed && !result.stale && !result.queued_reload_started;
     });
     assert(state.ranking_panel.listing.available);
@@ -183,25 +185,25 @@ int main() {
     assert(ranking_service::last_personal_best_source == ranking_service::source::online);
     const int loaded_ranking_count = ranking_load_count;
     state.ranking_panel.reveal_anim = 1.0f;
-    controller.request_ranking_reload(state);
-    assert(!controller.ranking_loading());
+    ranking_controller.request_reload(state);
+    assert(!ranking_controller.loading());
     assert(ranking_load_count == loaded_ranking_count);
     assert(state.ranking_panel.reveal_anim == 1.0f);
 
     state.ranking_panel.selected_source = ranking_service::source::local;
-    controller.request_ranking_reload(state);
-    assert(controller.ranking_loading());
+    ranking_controller.request_reload(state);
+    assert(ranking_controller.loading());
     state.ranking_panel.selected_source = ranking_service::source::online;
-    controller.request_ranking_reload(state);
+    ranking_controller.request_reload(state);
 
     spin_until([&] {
-        const song_select::ranking_reload_result result = controller.poll_ranking_reload(state);
+        const song_select::ranking_reload_result result = ranking_controller.poll(state);
         return result.completed && result.stale && result.queued_reload_started;
     });
     assert(state.ranking_panel.listing.message == "Loading online rankings...");
 
     spin_until([&] {
-        const song_select::ranking_reload_result result = controller.poll_ranking_reload(state);
+        const song_select::ranking_reload_result result = ranking_controller.poll(state);
         return result.completed && !result.stale && !result.queued_reload_started;
     });
     assert(state.ranking_panel.listing.available);
@@ -238,9 +240,9 @@ int main() {
     song_select::state legacy_state;
     song_select::apply_catalog(legacy_state, std::move(legacy_catalog), "legacy-song", "legacy-chart");
     legacy_state.ranking_panel.selected_source = ranking_service::source::online;
-    controller.request_ranking_reload(legacy_state);
+    ranking_controller.request_reload(legacy_state);
     spin_until([&] {
-        return controller.poll_ranking_reload(legacy_state).completed;
+        return ranking_controller.poll(legacy_state).completed;
     });
     assert(legacy_state.ranking_panel.selected_source == ranking_service::source::local);
     assert(legacy_state.ranking_panel.listing.ranking_source == ranking_service::source::local);

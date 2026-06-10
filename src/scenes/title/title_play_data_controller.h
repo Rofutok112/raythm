@@ -7,6 +7,7 @@
 #include "ranking_service.h"
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_select_data_controller.h"
+#include "song_select/song_select_ranking_loader.h"
 #include "song_select/song_select_state.h"
 #include "title/catalog_reload_policy.h"
 #include "title/create_upload_client.h"
@@ -21,6 +22,8 @@ public:
     struct upload_poll_result {
         bool refresh_catalog = false;
     };
+
+    title_play_data_controller();
 
     void reset(song_select::state& state);
 
@@ -52,8 +55,12 @@ private:
                             std::string preferred_song_id,
                             std::string preferred_chart_id,
                             title_catalog::reload_policy policy);
+    static ranking_service::listing load_ranking_from_service(std::string chart_id,
+                                                              ranking_service::source source,
+                                                              int limit);
 
     song_select::data_controller data_controller_;
+    song_select::ranking_load_controller ranking_controller_;
     bool catalog_sync_media_on_apply_ = false;
     bool queued_catalog_sync_media_on_apply_ = false;
 

@@ -36,23 +36,16 @@ catalog_selection current_catalog_selection(const state& state) {
 }  // namespace
 
 data_controller::data_controller()
-    : data_controller(load_catalog_from_service, load_ranking_from_service) {
+    : data_controller(load_catalog_from_service) {
 }
 
-data_controller::data_controller(catalog_loader catalog_loader_fn, ranking_loader ranking_loader_fn)
-    : catalog_loader_(std::move(catalog_loader_fn)),
-      ranking_controller_(ranking_load_controller::listing_loader(std::move(ranking_loader_fn))) {
+data_controller::data_controller(catalog_loader catalog_loader_fn)
+    : catalog_loader_(std::move(catalog_loader_fn)) {
 }
 
 catalog_data data_controller::load_catalog_from_service(bool calculate_missing_levels,
                                                         catalog_progress_callback progress) {
     return load_catalog(calculate_missing_levels, std::move(progress));
-}
-
-ranking_service::listing data_controller::load_ranking_from_service(std::string chart_id,
-                                                                    ranking_service::source source,
-                                                                    int limit) {
-    return ranking_service::load_chart_ranking(std::move(chart_id), source, limit);
 }
 
 void data_controller::reset(state& state) {
@@ -62,16 +55,10 @@ void data_controller::reset(state& state) {
     queued_catalog_request_ = {};
     catalog_progress_.set("", 0.0f, false);
     state.catalog_loading = false;
-
-    ranking_controller_.reset(state);
 }
 
 bool data_controller::catalog_loading() const {
     return catalog_loading_;
-}
-
-bool data_controller::ranking_loading() const {
-    return ranking_controller_.loading();
 }
 
 load_progress data_controller::catalog_progress() const {
@@ -141,14 +128,6 @@ catalog_reload_result data_controller::poll_catalog_reload(state& state) {
     }
 
     return result;
-}
-
-void data_controller::request_ranking_reload(state& state) {
-    ranking_controller_.request_reload(state);
-}
-
-ranking_reload_result data_controller::poll_ranking_reload(state& state) {
-    return ranking_controller_.poll(state);
 }
 
 void data_controller::start_catalog_load(state& state, catalog_reload_request request) {

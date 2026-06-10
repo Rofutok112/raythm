@@ -8,8 +8,13 @@
 #include "song_select/song_select_navigation.h"
 #include "ui_notice.h"
 
+title_play_data_controller::title_play_data_controller()
+    : ranking_controller_(song_select::ranking_load_controller::listing_loader(load_ranking_from_service)) {
+}
+
 void title_play_data_controller::reset(song_select::state& state) {
     data_controller_.reset(state);
+    ranking_controller_.reset(state);
     catalog_sync_media_on_apply_ = false;
     queued_catalog_sync_media_on_apply_ = false;
 
@@ -72,11 +77,18 @@ title_play_data_controller::catalog_poll_result title_play_data_controller::poll
 }
 
 void title_play_data_controller::request_ranking_reload(song_select::state& state) {
-    data_controller_.request_ranking_reload(state);
+    ranking_controller_.request_reload(state);
 }
 
 void title_play_data_controller::poll_ranking_reload(song_select::state& state) {
-    data_controller_.poll_ranking_reload(state);
+    ranking_controller_.poll(state);
+}
+
+ranking_service::listing title_play_data_controller::load_ranking_from_service(
+    std::string chart_id,
+    ranking_service::source source,
+    int limit) {
+    return ranking_service::load_chart_ranking(std::move(chart_id), source, limit);
 }
 
 void title_play_data_controller::request_scoring_ruleset_warm(bool force_refresh) {
