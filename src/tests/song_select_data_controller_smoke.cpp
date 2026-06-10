@@ -188,6 +188,26 @@ int main() {
     assert(ranking_load_count == loaded_ranking_count);
     assert(state.ranking_panel.reveal_anim == 1.0f);
 
+    state.ranking_panel.selected_source = ranking_service::source::local;
+    controller.request_ranking_reload(state);
+    assert(controller.ranking_loading());
+    state.ranking_panel.selected_source = ranking_service::source::online;
+    controller.request_ranking_reload(state);
+
+    spin_until([&] {
+        const song_select::ranking_reload_result result = controller.poll_ranking_reload(state);
+        return result.completed && result.stale && result.queued_reload_started;
+    });
+    assert(state.ranking_panel.listing.message == "Loading online rankings...");
+
+    spin_until([&] {
+        const song_select::ranking_reload_result result = controller.poll_ranking_reload(state);
+        return result.completed && !result.stale && !result.queued_reload_started;
+    });
+    assert(state.ranking_panel.listing.available);
+    assert(state.ranking_panel.listing.message == "chart-level");
+    assert(last_loaded_source == ranking_service::source::online);
+
     song_select::catalog_data legacy_catalog;
     legacy_catalog.songs.push_back(make_song("legacy-song", "legacy-chart"));
     legacy_catalog.songs.back().charts.back().remote_links.push_back(online_content::chart_identity{
