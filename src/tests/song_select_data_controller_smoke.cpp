@@ -109,6 +109,7 @@ session_summary load_session_summary() {
 
 int main() {
     int catalog_load_count = 0;
+    int ranking_load_count = 0;
     song_select::data_controller controller(
         [&](bool calculate_missing_levels, song_select::catalog_progress_callback progress) {
             ++catalog_load_count;
@@ -122,6 +123,7 @@ int main() {
             return catalog;
         },
         [&](std::string chart_id, ranking_service::source source, int) {
+            ++ranking_load_count;
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
             last_loaded_source = source;
             ranking_service::listing listing;
@@ -173,18 +175,18 @@ int main() {
 
     spin_until([&] {
         const song_select::ranking_reload_result result = controller.poll_ranking_reload(state);
-        return result.completed && result.stale && result.queued_reload_started;
-    });
-    assert(state.ranking_panel.listing.message == "Loading online rankings...");
-
-    spin_until([&] {
-        const song_select::ranking_reload_result result = controller.poll_ranking_reload(state);
-        return result.completed && !result.stale;
+        return result.completed && !result.stale && !result.queued_reload_started;
     });
     assert(state.ranking_panel.listing.available);
     assert(state.ranking_panel.listing.message == "chart-level");
     assert(last_loaded_source == ranking_service::source::online);
     assert(ranking_service::last_personal_best_source == ranking_service::source::online);
+    const int loaded_ranking_count = ranking_load_count;
+    state.ranking_panel.reveal_anim = 1.0f;
+    controller.request_ranking_reload(state);
+    assert(!controller.ranking_loading());
+    assert(ranking_load_count == loaded_ranking_count);
+    assert(state.ranking_panel.reveal_anim == 1.0f);
 
     song_select::catalog_data legacy_catalog;
     legacy_catalog.songs.push_back(make_song("legacy-song", "legacy-chart"));

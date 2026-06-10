@@ -81,6 +81,13 @@ void data_controller::reset(state& state) {
     ranking_reload_pending_ = false;
     ranking_generation_ = 0;
     ranking_pending_generation_ = 0;
+    ranking_loaded_once_ = false;
+    active_ranking_chart_id_.clear();
+    active_ranking_source_ = ranking_service::source::local;
+    active_ranking_best_source_ = ranking_service::source::local;
+    active_ranking_refresh_best_ = false;
+    loaded_ranking_chart_id_.clear();
+    loaded_ranking_source_ = ranking_service::source::local;
     state.ranking_panel.selected_source = ranking_service::source::local;
 }
 
@@ -156,13 +163,6 @@ void data_controller::request_ranking_reload(state& state) {
         state.ranking_panel.selected_source = ranking_service::source::local;
     }
 
-    if (ranking_loading_) {
-        ++ranking_generation_;
-        ranking_reload_pending_ = true;
-        mark_online_ranking_loading(state);
-        return;
-    }
-
     const std::string chart_id = chart != nullptr ? chart->meta.chart_id : "";
     const ranking_service::source source = state.ranking_panel.selected_source;
     const ranking_service::source best_source = uses_submitted_ranking_best(chart)
@@ -172,6 +172,31 @@ void data_controller::request_ranking_reload(state& state) {
         state.ranking_panel.best_chart_id != chart_id ||
         state.ranking_panel.best_source != best_source ||
         !state.ranking_panel.best_loaded;
+
+    if (ranking_loading_) {
+        const bool active_matches =
+            active_ranking_chart_id_ == chart_id &&
+            active_ranking_source_ == source &&
+            active_ranking_best_source_ == best_source &&
+            (!refresh_best || active_ranking_refresh_best_);
+        if (active_matches) {
+            return;
+        }
+
+        ++ranking_generation_;
+        ranking_reload_pending_ = true;
+        mark_online_ranking_loading(state);
+        return;
+    }
+
+    const bool loaded_matches =
+        ranking_loaded_once_ &&
+        loaded_ranking_chart_id_ == chart_id &&
+        loaded_ranking_source_ == source &&
+        !refresh_best;
+    if (loaded_matches) {
+        return;
+    }
 
     ++ranking_generation_;
     ranking_pending_generation_ = ranking_generation_;
@@ -217,6 +242,9 @@ ranking_reload_result data_controller::poll_ranking_reload(state& state) {
             state.ranking_panel.best_entry = std::move(loaded.best_entry);
             state.ranking_panel.best_loaded = true;
         }
+        loaded_ranking_chart_id_ = active_ranking_chart_id_;
+        loaded_ranking_source_ = active_ranking_source_;
+        ranking_loaded_once_ = true;
         state.ranking_panel.reveal_anim = 0.0f;
     }
 
@@ -264,6 +292,10 @@ void data_controller::start_ranking_load(state&,
                                          ranking_service::source best_source,
                                          bool refresh_best) {
     ranking_loading_ = true;
+    active_ranking_chart_id_ = chart_id;
+    active_ranking_source_ = source;
+    active_ranking_best_source_ = best_source;
+    active_ranking_refresh_best_ = refresh_best;
     std::promise<ranking_load_data> promise;
     ranking_future_ = promise.get_future();
     auto loader = ranking_loader_;

@@ -92,6 +92,13 @@ private:
     bool ranking_reload_pending_ = false;
     int ranking_generation_ = 0;
     int ranking_pending_generation_ = 0;
+    bool ranking_loaded_once_ = false;
+    std::string active_ranking_chart_id_;
+    ranking_service::source active_ranking_source_ = ranking_service::source::local;
+    ranking_service::source active_ranking_best_source_ = ranking_service::source::local;
+    bool active_ranking_refresh_best_ = false;
+    std::string loaded_ranking_chart_id_;
+    ranking_service::source loaded_ranking_source_ = ranking_service::source::local;
 };
 
 }  // namespace song_select

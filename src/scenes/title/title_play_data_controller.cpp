@@ -62,8 +62,8 @@ title_play_data_controller::catalog_poll_result title_play_data_controller::poll
     }
 
     result.completed = true;
-    result.sync_play_media = catalog_sync_media_on_apply_ || play_mode_active;
-    result.sync_create_preview = !result.sync_play_media && create_mode_active;
+    result.sync_play_media = catalog_sync_media_on_apply_ && play_mode_active;
+    result.sync_create_preview = catalog_sync_media_on_apply_ && !result.sync_play_media && create_mode_active;
     catalog_sync_media_on_apply_ = false;
 
     if (reload.queued_reload_started) {
