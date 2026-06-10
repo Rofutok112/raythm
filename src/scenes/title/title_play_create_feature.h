@@ -114,8 +114,6 @@ private:
     title_selection_media_coordinator media_coordinator_;
     title_create_tools_model::view_model create_tools_model_;
     title_create_tools_model::bindings create_tools_bindings_;
-    bool catalog_sync_media_on_apply_ = false;
-    bool queued_catalog_sync_media_on_apply_ = false;
     bool create_tools_binding_cache_valid_ = false;
     bool create_permission_refresh_in_progress_ = false;
     std::future<bool> create_permission_refresh_future_;

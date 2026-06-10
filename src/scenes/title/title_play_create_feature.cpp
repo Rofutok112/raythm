@@ -151,8 +151,6 @@ void title_play_create_feature::reset() {
     media_coordinator_.reset();
     create_tools_model_ = {};
     create_tools_bindings_ = {};
-    catalog_sync_media_on_apply_ = false;
-    queued_catalog_sync_media_on_apply_ = false;
     create_tools_binding_cache_valid_ = false;
     create_permission_refresh_in_progress_ = false;
     create_permission_refresh_key_.clear();
@@ -184,13 +182,6 @@ void title_play_create_feature::on_enter_create(title_audio_controller& audio_co
 void title_play_create_feature::request_catalog_reload(std::string preferred_song_id,
                                                        std::string preferred_chart_id,
                                                        title_catalog::reload_policy policy) {
-    if (data_controller_.catalog_loading()) {
-        queued_catalog_sync_media_on_apply_ =
-            queued_catalog_sync_media_on_apply_ || policy.sync_media_on_apply;
-    } else {
-        catalog_sync_media_on_apply_ = policy.sync_media_on_apply;
-    }
-
     data_controller_.request_catalog_reload(state_, std::move(preferred_song_id),
                                             std::move(preferred_chart_id),
                                             policy.calculate_missing_levels);
@@ -209,14 +200,8 @@ void title_play_create_feature::poll_catalog_reload(title_audio_controller& audi
         refresh_create_tools_model(true);
     }
 
-    if (catalog_sync_media_on_apply_ && result.selection_changed) {
+    if (result.selection_changed) {
         sync_selection_media(audio_controller, media_context_for(play_mode_active, create_mode_active), true);
-    }
-    catalog_sync_media_on_apply_ = false;
-
-    if (result.queued_reload_started) {
-        catalog_sync_media_on_apply_ = queued_catalog_sync_media_on_apply_;
-        queued_catalog_sync_media_on_apply_ = false;
     }
 }
 
