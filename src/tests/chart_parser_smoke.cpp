@@ -225,6 +225,44 @@ bool expect_wide_note_bounds_failure() {
     });
 }
 
+bool expect_decorative_hold_success() {
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "raythm_parser_decorative_hold.rchart";
+    std::ofstream output(path, std::ios::trunc);
+    output << "[Metadata]\n"
+           << "chartId=parser-decorative-hold\n"
+           << "keyCount=4\n"
+           << "difficulty=Decorative\n"
+           << "chartAuthor=Codex\n"
+           << "formatVersion=5\n"
+           << "resolution=480\n"
+           << "offset=0\n\n"
+           << "[Timing]\n"
+           << "bpm,0,120\n"
+           << "meter,0,4/4\n\n"
+           << "[Notes]\n"
+           << "hold,0,1,960\n"
+           << "decorativeHold,0,1,960,width=2\n";
+    output.close();
+
+    const chart_parse_result result = chart_parser::parse(path.string());
+    std::filesystem::remove(path);
+    if (!result.success || !result.data.has_value() || result.data->notes.size() != 2) {
+        std::cerr << "Expected decorative hold to parse and overlap gameplay notes\n";
+        if (!result.success) {
+            for (const std::string& error : result.errors) {
+                std::cerr << "  " << error << '\n';
+            }
+        }
+        return false;
+    }
+    const note_data& note = result.data->notes[1];
+    return note.type == note_type::decorative_hold &&
+           note.tick == 0 &&
+           note.end_tick == 960 &&
+           note.lane_width == 2;
+}
+
 bool expect_scroll_automation_success() {
     const std::filesystem::path path =
         std::filesystem::temp_directory_path() / "raythm_parser_scroll_automation.rchart";
@@ -277,6 +315,7 @@ int main() {
     ok = expect_server_managed_metadata_success() && ok;
     ok = expect_wide_note_success() && ok;
     ok = expect_wide_note_bounds_failure() && ok;
+    ok = expect_decorative_hold_success() && ok;
     ok = expect_scroll_automation_success() && ok;
 
     if (!ok) {

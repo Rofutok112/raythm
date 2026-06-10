@@ -15,9 +15,6 @@ struct online_song_binding {
     std::string local_song_id;
     std::string remote_song_id;
     online_origin origin = online_origin::owned_upload;
-    std::optional<bool> can_edit;
-    std::string lifecycle_status;
-    std::string review_status;
 };
 
 struct online_chart_binding {
@@ -27,9 +24,6 @@ struct online_chart_binding {
     std::string remote_song_id;
     int remote_chart_version = 0;
     online_origin origin = online_origin::owned_upload;
-    std::optional<bool> can_edit;
-    std::string lifecycle_status;
-    std::string review_status;
 };
 
 struct snapshot {

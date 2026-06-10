@@ -137,6 +137,7 @@ struct play_session_state {
     float camera_angle_degrees = 45.0f;
     float lane_width = 3.5f;
     float lane_fog_hidden_percent = 0.0f;
+    float note_height = 1.0f;
     double chart_time_ms = 0.0;
     double paused_chart_time_ms = 0.0;
     double song_end_chart_time_ms = 0.0;
@@ -169,6 +170,7 @@ struct play_session_state {
     bool chart_end_fade_started = false;
     float chart_end_hold_timer = 0.0f;
     std::string hitsound_path;
+    float status_progress = 0.0f;
     play_hitsound_paths hitsounds;
     std::vector<float> mv_waveform;
     int start_tick = 0;

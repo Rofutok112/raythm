@@ -78,6 +78,11 @@ int main() {
         std::cerr << "Expected chart max RC to be positive\n";
         return EXIT_FAILURE;
     }
+    if (performance.max_rc() != 600.0f) {
+        std::cerr << "Expected chart max RC to use a readable level x 100 scale for level 6: "
+                  << performance.max_rc() << "\n";
+        return EXIT_FAILURE;
+    }
 
     performance.on_judge(perfect_event(0));
     const float first_delta = performance.current_rc();

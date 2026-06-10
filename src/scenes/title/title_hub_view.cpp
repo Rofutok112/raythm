@@ -108,6 +108,10 @@ draw_result draw(draw_context context) {
         .now = GetTime(),
     };
 
+    if (context.view.current_mode == mode::settings) {
+        context.settings_overlay.prepare_current_page();
+    }
+
     virtual_screen::begin_ui();
     draw_scene_background(t);
     ui::begin_draw_queue();
@@ -130,15 +134,17 @@ draw_result draw(draw_context context) {
     } else if (context.view.current_mode == mode::settings) {
         context.settings_overlay.draw();
     } else if (is_play_surface(context.view.current_mode)) {
+        const title_selection_media_snapshot media =
+            context.play_create_feature.media_snapshot(context.audio_controller);
         title_play_view::draw(
             play_state,
-            context.audio_controller.preview(),
+            media,
             context.view.current_mode == mode::create ? title_play_view::mode::create : title_play_view::mode::play,
             context.view.play_view_anim,
             context.view.play_entry_origin_rect,
             &context.play_create_feature.create_tools_model());
     } else if (context.view.current_mode == mode::online) {
-        context.browse_feature.draw(context.view.play_view_anim, context.view.play_entry_origin_rect);
+        context.browse_feature.draw(context.audio_controller, context.view.play_view_anim, context.view.play_entry_origin_rect);
     } else if (context.view.current_mode == mode::multiplayer) {
         multiplayer::view::draw(context.multiplayer_state);
     }
@@ -151,9 +157,8 @@ draw_result draw(draw_context context) {
     };
     if (is_play_surface(context.view.current_mode)) {
         context.play_create_feature.draw_or_apply_confirmation(
-            context.audio_controller.preview(),
-            context.play_cross_callbacks,
-            context.play_sync_media_on_transfer);
+            context.audio_controller,
+            context.play_cross_callbacks);
     }
     context.profile_controller.draw(play_state.auth, context.auth_controller.request_active, kTitleModalLayer);
     result.login_command = song_select::draw_login_dialog(

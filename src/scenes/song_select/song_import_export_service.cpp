@@ -25,12 +25,12 @@
 #endif
 
 #include "app_paths.h"
-#include "chart_level_cache.h"
 #include "chart_parser.h"
 #include "chart_serializer.h"
 #include "file_dialog.h"
 #include "path_utils.h"
 #include "song_loader.h"
+#include "song_select/local_catalog_cache_service.h"
 #include "song_select/song_export_identity.h"
 #include "song_writer.h"
 #include "title/local_content_index.h"
@@ -450,7 +450,8 @@ transfer_result import_chart_package(const chart_import_request& request) {
     }
     chart_data chart_data_for_cache = chart_data_for_save;
     chart_data_for_cache.meta.song_id = request.target_song_id;
-    chart_level_cache::calculate_and_store(path_utils::to_utf8(destination_path), chart_data_for_cache);
+    local_catalog_cache_service::calculate_and_store_chart_level(
+        path_utils::to_utf8(destination_path), chart_data_for_cache);
 
     result.success = true;
     result.reload_catalog = true;
@@ -734,7 +735,8 @@ transfer_result import_song_package(const song_import_request& request) {
             }
             chart_data chart_data_for_cache = chart_data_for_save;
             chart_data_for_cache.meta.song_id = request.imported_song.meta.song_id;
-            chart_level_cache::calculate_and_store(destination_chart_utf8, chart_data_for_cache);
+            local_catalog_cache_service::calculate_and_store_chart_level(
+                destination_chart_utf8, chart_data_for_cache);
         }
     }
 

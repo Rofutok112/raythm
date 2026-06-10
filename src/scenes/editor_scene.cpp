@@ -17,12 +17,11 @@
 #include "editor/view/editor_layout.h"
 #include "editor/viewport/editor_timeline_viewport.h"
 #include "editor/editor_session_loader.h"
-#include "chart_level_cache.h"
+#include "chart_level_memory_cache.h"
 #include "play_scene.h"
 #include "platform/window_chrome.h"
 #include "scene_common.h"
 #include "scene_manager.h"
-#include "settings_scene.h"
 #include "song_select/song_select_navigation.h"
 #include "theme.h"
 #include "ui_draw.h"
@@ -39,26 +38,30 @@ Rectangle snap_dropdown_menu_rect() {
 }
 
 editor_scene::editor_scene(scene_manager& manager, song_data song, std::string chart_path)
-    : scene(manager), song_(std::move(song)), chart_path_(std::move(chart_path)), state_(std::make_shared<editor_state>()) {
+    : scene(manager), song_(std::move(song)), chart_path_(std::move(chart_path)), state_(std::make_shared<editor_state>()),
+      settings_overlay_(g_settings) {
 }
 
 editor_scene::editor_scene(scene_manager& manager, song_data song, int key_count)
     : scene(manager), song_(std::move(song)), chart_path_(std::nullopt),
-      new_chart_key_count_(key_count), state_(std::make_shared<editor_state>()) {
+      new_chart_key_count_(key_count), state_(std::make_shared<editor_state>()),
+      settings_overlay_(g_settings) {
 }
 
 editor_scene::editor_scene(scene_manager& manager, song_data song, chart_meta initial_meta)
     : scene(manager), song_(std::move(song)), chart_path_(std::nullopt),
       initial_meta_(std::move(initial_meta)),
       new_chart_key_count_(initial_meta_.has_value() ? initial_meta_->key_count : 4),
-      state_(std::make_shared<editor_state>()) {
+      state_(std::make_shared<editor_state>()),
+      settings_overlay_(g_settings) {
 }
 
 editor_scene::editor_scene(scene_manager& manager, song_data song, editor_resume_state resume)
     : scene(manager), song_(std::move(song)), chart_path_(std::nullopt),
       new_chart_key_count_(resume.state ? resume.state->data().meta.key_count : 4),
       state_(resume.state ? resume.state : std::make_shared<editor_state>()),
-      resume_state_(std::move(resume)) {
+      resume_state_(std::move(resume)),
+      settings_overlay_(g_settings) {
 }
 
 void editor_scene::on_enter() {
@@ -105,6 +108,9 @@ void editor_scene::on_enter() {
 }
 
 void editor_scene::on_exit() {
+    if (settings_overlay_active_) {
+        settings_overlay_.save();
+    }
     window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
     audio_manager::instance().stop_bgm();
     audio_manager::instance().stop_all_se();
@@ -113,6 +119,20 @@ void editor_scene::on_exit() {
 void editor_scene::update(float dt) {
     rebuild_hit_regions();
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, false, dt);
+
+    if (settings_overlay_active_) {
+        settings_overlay_.update_animation(true, dt);
+        if (settings_overlay_.closing()) {
+            if (settings_overlay_.closed()) {
+                settings_overlay_active_ = false;
+            }
+            window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
+            return;
+        }
+        settings_overlay_.update(dt);
+        window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
+        return;
+    }
 
     if ((metadata_modal_open_ || timing_modal_open_) &&
         !metadata_panel_.key_count_confirm_open &&
@@ -127,10 +147,15 @@ void editor_scene::update(float dt) {
         return;
     }
 
+    const bool ctrl_down = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    const bool ctrl_s_pressed = ctrl_down && IsKeyPressed(KEY_S);
     const bool save_dialog_submit = save_dialog_.submit_requested ||
-        (save_dialog_.open && ui::is_clicked(layout::save_submit_button_rect(), ui::draw_layer::modal));
+        (save_dialog_.open && (ctrl_s_pressed ||
+                               ui::is_clicked(layout::save_submit_button_rect(), ui::draw_layer::modal)));
     save_dialog_.submit_requested = false;
-    const bool playtest_requested = IsKeyPressed(KEY_F5) || playtest_button_requested_;
+    const bool playtest_requested = IsKeyPressed(KEY_F5) ||
+        playtest_button_requested_ ||
+        (!has_blocking_modal() && ui::is_clicked(layout::kHeaderPlaytestButtonRect));
     playtest_button_requested_ = false;
 
     const editor_flow_result flow_result = editor_flow_controller::update({
@@ -142,7 +167,7 @@ void editor_scene::update(float dt) {
         &unsaved_changes_dialog_,
         IsKeyPressed(KEY_ESCAPE),
         ui::is_clicked(layout::kBackButtonRect),
-        (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_S),
+        ctrl_s_pressed,
         playtest_requested,
         IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
         has_active_metadata_input(),
@@ -151,7 +176,8 @@ void editor_scene::update(float dt) {
         timeline_drag_.active,
         save_dialog_submit,
         save_dialog_.open && ui::is_clicked(layout::save_cancel_button_rect(), ui::draw_layer::modal),
-        unsaved_changes_dialog_.open && ui::is_clicked(layout::unsaved_save_button_rect(), ui::draw_layer::modal),
+        unsaved_changes_dialog_.open && (ctrl_s_pressed ||
+                                         ui::is_clicked(layout::unsaved_save_button_rect(), ui::draw_layer::modal)),
         unsaved_changes_dialog_.open && ui::is_clicked(layout::unsaved_discard_button_rect(), ui::draw_layer::modal),
         unsaved_changes_dialog_.open && ui::is_clicked(layout::unsaved_cancel_button_rect(), ui::draw_layer::modal),
         metadata_panel_.key_count_confirm_open && ui::is_clicked(layout::key_count_confirm_button_rect(), ui::draw_layer::modal),
@@ -164,9 +190,25 @@ void editor_scene::update(float dt) {
         return;
     }
 
+    if (!has_blocking_modal() && ui::is_clicked(layout::kHeaderRestartButtonRect)) {
+        editor_transport_service::seek_to_tick(
+            transport_, state_.get(), 0, hitsound_path_, &hitsounds_);
+        scroll_to_tick(0);
+    }
+
+    if (!has_blocking_modal() && ui::is_clicked(layout::kHeaderPlayButtonRect)) {
+        const std::optional<int> restore_scroll_tick = editor_transport_service::toggle_playback(
+            transport_, state_.get(), space_playback_start_tick_, hitsound_path_, &hitsounds_);
+        if (restore_scroll_tick.has_value()) {
+            scroll_to_tick(*restore_scroll_tick);
+        }
+    }
+
     if (!has_blocking_modal() && ui::is_clicked(layout::kSettingsButtonRect)) {
         window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
-        manager_.change_scene(std::make_unique<settings_scene>(manager_, song_, build_resume_state()));
+        editor_transport_service::pause_for_seek(transport_, state_.get(), space_playback_start_tick_, hitsound_path_, &hitsounds_);
+        settings_overlay_.open();
+        settings_overlay_active_ = true;
         return;
     }
 
@@ -279,6 +321,17 @@ void editor_scene::rebuild_hit_regions() const {
 }
 
 void editor_scene::draw() {
+    if (settings_overlay_active_) {
+        settings_overlay_.prepare_current_page();
+        virtual_screen::begin_ui();
+        draw_scene_background(*g_theme);
+        settings_overlay_.draw();
+        virtual_screen::end();
+        ClearBackground(BLACK);
+        virtual_screen::draw_to_screen();
+        return;
+    }
+
     editor_screen_controller::draw_and_update({
         song_,
         *state_,
@@ -333,8 +386,16 @@ chart_data editor_scene::make_chart_data_for_save() {
     pending_level_refresh_generation_ = state_->level_refresh_generation();
     level_refresh_after_time_ = 0.0;
     chart_data data = state_->data();
-    if (state_->file_path().empty()) {
-        data.meta.chart_id = generated_chart_id(data.meta.difficulty);
+    if (data.meta.chart_id.empty()) {
+        chart_meta updated_meta = data.meta;
+        updated_meta.chart_id = generated_chart_id(data.meta.difficulty);
+        if (state_->modify_metadata(updated_meta)) {
+            state_->refresh_auto_level();
+            pending_level_refresh_generation_ = state_->level_refresh_generation();
+            data = state_->data();
+        } else {
+            data.meta.chart_id = updated_meta.chart_id;
+        }
     }
     data.meta.song_id = song_.meta.song_id;
     return data;
@@ -518,6 +579,6 @@ bool editor_scene::apply_chart_offset(int offset_ms) {
 
     editor_scene_sync::sync_after_offset_change(make_sync_context());
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, true);
-    chart_level_cache::clear();
+    chart_level_memory_cache::clear();
     return true;
 }

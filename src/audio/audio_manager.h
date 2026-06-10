@@ -64,9 +64,12 @@ public:
 
     bool load_preview(const std::string& file_path);
     bool load_preview_from_memory(std::vector<unsigned char> bytes);
+    // Requests a replacement preview stream asynchronously. The current preview remains owned until
+    // poll_preview_load() installs the completed replacement or unload_preview() is called.
     bool request_preview_load(const std::string& file_path);
     bool request_preview_load_from_memory(std::vector<unsigned char> bytes);
     async_preview_load_result poll_preview_load();
+    void cancel_preview_load_request();
     bool is_preview_loading() const;
     void play_preview(bool restart = true);
     void pause_preview();
@@ -85,7 +88,7 @@ public:
     double get_preview_sample_rate_hz() const;
 
     bool preload_se(const std::string& file_path);
-    int play_se(const std::string& file_path, float volume = 1.0f);
+    int play_se(const std::string& file_path, float volume = 1.0f, float pan = 0.0f);
     bool is_se_voice_active(int voice_id) const;
     std::size_t get_active_se_voice_count() const;
     void stop_se(int voice_id);

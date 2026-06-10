@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game_settings.h"
+#include "settings/settings_gameplay_preview.h"
 #include "settings/settings_key_config_state.h"
 #include "settings/settings_runtime_applier.h"
 
@@ -9,14 +10,14 @@ public:
     explicit settings_gameplay_page(game_settings& settings);
 
     void reset_interaction();
+    void prepare_frame();
     void update();
     void draw() const;
 
 private:
-    enum class slider { none, note_speed, camera_angle, lane_width, note_height, lane_fog };
-
     game_settings& settings_;
-    slider active_slider_ = slider::none;
+    settings_gameplay_preview preview_;
+    int active_slider_index_ = -1;
 };
 
 class settings_audio_page {
@@ -28,11 +29,9 @@ public:
     void draw() const;
 
 private:
-    enum class slider { none, bgm_volume, se_volume };
-
     game_settings& settings_;
     const settings_runtime_applier& runtime_applier_;
-    slider active_slider_ = slider::none;
+    int active_slider_index_ = -1;
 };
 
 class settings_video_page {

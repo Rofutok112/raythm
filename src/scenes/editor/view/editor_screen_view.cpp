@@ -56,11 +56,7 @@ editor_right_panel_view_result draw_timeline(
 
 editor_header_view_result draw_header(const header_context& context) {
     return editor::daw::draw_header({
-        "",
-        context.transport.audio_loaded,
         context.transport.audio_playing || context.transport.pre_audio_playing,
-        context.offset_label,
-        context.waveform_visible,
         editor_timeline_viewport::snap_labels(),
         context.viewport.snap_index,
         context.snap_dropdown_open,

@@ -100,6 +100,20 @@ void title_bgm_controller::suspend() {
     suspended_ = true;
 }
 
+void title_bgm_controller::suspend_immediate() {
+    if (phase_ == phase::stopped) {
+        return;
+    }
+    suspended_ = true;
+    current_volume_ = 0.0f;
+    target_volume_ = 0.0f;
+    audio_manager::instance().set_bgm_fade_gain(current_volume_);
+    if (audio_manager::instance().is_bgm_playing()) {
+        audio_manager::instance().pause_bgm();
+        paused_for_suspend_ = true;
+    }
+}
+
 void title_bgm_controller::resume() {
     if (phase_ == phase::stopped) {
         return;

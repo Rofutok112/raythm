@@ -9,6 +9,7 @@
 #include "game_settings.h"
 #include "localization/localization.h"
 #include "scene_common.h"
+#include "shared/loading_screen_view.h"
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
@@ -80,14 +81,6 @@ constexpr Rectangle kJudgeFeedbackRect = ui::place(kScreenRect, 480.0f, 63.0f,
                                                    Vector2{0.0f, 51.0f});
 constexpr Rectangle kFailureTextRect = ui::place(kScreenRect, 540.0f, 66.0f,
                                                  ui::anchor::center, ui::anchor::center);
-constexpr Rectangle kLoadingPanelRect{690.0f, 702.0f, 540.0f, 122.0f};
-constexpr Rectangle kLoadingTitleRect{kLoadingPanelRect.x, kLoadingPanelRect.y, kLoadingPanelRect.width, 38.0f};
-constexpr Rectangle kLoadingDetailRect{kLoadingPanelRect.x, kLoadingPanelRect.y + 38.0f,
-                                       kLoadingPanelRect.width, 30.0f};
-constexpr Rectangle kLoadingBarRect{kLoadingPanelRect.x + 2.0f, kLoadingPanelRect.y + 84.0f,
-                                    kLoadingPanelRect.width - 4.0f, 8.0f};
-constexpr Rectangle kLoadingHintRect{kLoadingPanelRect.x - 120.0f, kLoadingPanelRect.y + 100.0f,
-                                     kLoadingPanelRect.width + 240.0f, 28.0f};
 constexpr float kTapNoteBaseLength = 0.78f;
 constexpr float kJudgeLineY = 0.40f;
 constexpr float kJudgeLineGlowY = 0.46f;
@@ -101,7 +94,33 @@ constexpr float kDamageVignetteMaxAlpha = 86.0f;
 constexpr float kLaneCoverEdgeFadeRatio = 0.085f;
 constexpr float kLaneCoverMinEdgeFadeHeight = 36.0f;
 constexpr float kLaneCoverMaxEdgeFadeHeight = 126.0f;
-constexpr int kLaneCoverFadeSteps = 18;
+constexpr int kLaneCoverFallbackFadeSteps = 18;
+
+constexpr const char* kLaneLayerFadeFragmentShader = R"(
+#version 330
+
+in vec2 fragTexCoord;
+in vec4 fragColor;
+
+uniform sampler2D texture0;
+uniform vec4 colDiffuse;
+uniform float hiddenEndY;
+uniform float fadeEndY;
+uniform float screenHeight;
+
+out vec4 finalColor;
+
+void main()
+{
+    vec4 texel = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
+    float screenY = (1.0 - fragTexCoord.y) * screenHeight;
+    float alpha = smoothstep(hiddenEndY, fadeEndY, screenY);
+    finalColor = vec4(texel.rgb, texel.a * alpha);
+}
+)";
+
+Shader g_lane_layer_fade_shader = {};
+bool g_lane_layer_fade_shader_loaded = false;
 
 float lane_total_width(int key_count, float lane_width) {
     return key_count * lane_width + (key_count - 1) * kLaneGap;
@@ -185,8 +204,15 @@ void draw_play_marquee_text(const char* text, Rectangle clip_rect, int font_size
     draw_play_text_clipped(text, clip_rect.x - offset, draw_y, font_size, color, clip_rect);
 }
 
+bool is_status_loading(const play_session_state& state) {
+    return !state.initialized && state.status_progress > 0.0f && state.status_progress < 1.0f;
+}
+
 bool is_status_error(const play_session_state& state) {
     if (state.initialized || state.status_text.empty() || state.status_text == "Loading...") {
+        return false;
+    }
+    if (is_status_loading(state)) {
         return false;
     }
     return true;
@@ -203,8 +229,14 @@ std::string localized_status_text(const std::string& status_text) {
 }
 
 float loading_progress_value(const play_session_state& state) {
+    if (is_status_loading(state)) {
+        return std::clamp(state.status_progress, 0.0f, 1.0f);
+    }
     if (is_status_error(state)) {
         return 1.0f;
+    }
+    if (state.status_progress > 0.0f) {
+        return std::clamp(state.status_progress, 0.0f, 1.0f);
     }
     if (state.status_text == "Ready") {
         return 0.92f;
@@ -362,6 +394,54 @@ void draw_hold_body(float center_x, float center_z, float width, float length, f
     draw_horizontal_gradient_plane(center_x, kHoldNoteY + 0.074f,
                                    center_z + length * 0.5f - cap_length * 0.5f,
                                    cap_width, cap_length, cap_left, cap_right);
+}
+
+Color decorative_hold_gradient_color(Color base, float t) {
+    const float center_factor = 1.0f - std::pow(std::fabs(t - 0.5f) * 2.0f, 1.35f);
+    const unsigned char alpha = static_cast<unsigned char>(54.0f + center_factor * 74.0f);
+    return with_alpha(lerp_color(base, WHITE, 0.14f + center_factor * 0.20f), alpha);
+}
+
+void draw_decorative_hold_gradient_plane(float center_x, float center_z, float width, float length, Color base) {
+    constexpr int kGradientSteps = 18;
+    const float left = center_x - width * 0.5f;
+    const float near_z = center_z - length * 0.5f;
+    const float far_z = center_z + length * 0.5f;
+    const float y = kHoldNoteY + 0.004f;
+
+    rlBegin(RL_QUADS);
+    for (int i = 0; i < kGradientSteps; ++i) {
+        const float t0 = static_cast<float>(i) / static_cast<float>(kGradientSteps);
+        const float t1 = static_cast<float>(i + 1) / static_cast<float>(kGradientSteps);
+        const float x0 = left + width * t0;
+        const float x1 = left + width * t1;
+        const Color c0 = decorative_hold_gradient_color(base, t0);
+        const Color c1 = decorative_hold_gradient_color(base, t1);
+
+        rlColor4ub(c0.r, c0.g, c0.b, c0.a);
+        rlVertex3f(x0, y, near_z);
+        rlVertex3f(x0, y, far_z);
+        rlColor4ub(c1.r, c1.g, c1.b, c1.a);
+        rlVertex3f(x1, y, far_z);
+        rlVertex3f(x1, y, near_z);
+    }
+    rlEnd();
+}
+
+void draw_decorative_hold_body(float center_x, float center_z, float width, float length, float lane_width,
+                               Color fill, bool ray_style = false) {
+    const Color decor_base = ray_style
+                                 ? lerp_color(fill, {194, 156, 255, 255}, 0.62f)
+                                 : lerp_color(fill, {86, 220, 232, 255}, 0.64f);
+    const float inner_width = std::max(lane_width * 0.12f, width * 0.64f);
+    draw_decorative_hold_gradient_plane(center_x, center_z, inner_width, length, decor_base);
+
+    const Color edge = with_alpha(lerp_color(decor_base, WHITE, 0.30f), 150);
+    const float rail_width = std::max(0.018f, std::min(lane_width * 0.018f, inner_width * 0.035f));
+    draw_depth_gradient_plane(center_x - inner_width * 0.5f + rail_width * 0.5f, kHoldNoteY + 0.040f,
+                              center_z, rail_width, length, edge, with_alpha(edge, 72));
+    draw_depth_gradient_plane(center_x + inner_width * 0.5f - rail_width * 0.5f, kHoldNoteY + 0.040f,
+                              center_z, rail_width, length, edge, with_alpha(edge, 72));
 }
 
 Color stay_gradient_color(Color base, float t) {
@@ -560,6 +640,34 @@ void draw_lane_layer_texture(const Texture2D& texture, Color tint) {
     DrawTexturePro(texture, source, dest, {0.0f, 0.0f}, 0.0f, tint);
 }
 
+void draw_lane_layer_texture_scissor_fade(const Texture2D& texture, float hidden_end_y, float fade_end_y) {
+    const int full_y = static_cast<int>(std::ceil(fade_end_y));
+    if (full_y < kScreenHeight) {
+        BeginScissorMode(0, full_y, kScreenWidth, kScreenHeight - full_y);
+        draw_lane_layer_texture(texture, WHITE);
+        EndScissorMode();
+    }
+
+    if (fade_end_y <= hidden_end_y) {
+        return;
+    }
+
+    for (int step = 0; step < kLaneCoverFallbackFadeSteps; ++step) {
+        const float t0 = static_cast<float>(step) / static_cast<float>(kLaneCoverFallbackFadeSteps);
+        const float t1 = static_cast<float>(step + 1) / static_cast<float>(kLaneCoverFallbackFadeSteps);
+        const float y0 = hidden_end_y + (fade_end_y - hidden_end_y) * t0;
+        const float y1 = hidden_end_y + (fade_end_y - hidden_end_y) * t1;
+        const int scissor_y = static_cast<int>(std::floor(y0));
+        const int scissor_bottom = static_cast<int>(std::ceil(y1));
+        const int scissor_height = std::max(1, scissor_bottom - scissor_y);
+        const float alpha_t = std::clamp((t0 + t1) * 0.5f, 0.0f, 1.0f);
+        const unsigned char alpha = static_cast<unsigned char>(255.0f * alpha_t * alpha_t);
+        BeginScissorMode(0, scissor_y, kScreenWidth, scissor_height);
+        draw_lane_layer_texture(texture, with_alpha(WHITE, alpha));
+        EndScissorMode();
+    }
+}
+
 const char* judge_text(const judge_event& event) {
     if (event.feedback_label == judge_feedback_label::auto_play) {
         return "AUTO";
@@ -690,6 +798,8 @@ Color note_draw_color(const note_state& note_state, Color base) {
         switch (note_state.note_ref.type) {
             case note_type::hold:
                 return lerp_color(base, {142, 92, 236, 255}, 0.72f);
+            case note_type::decorative_hold:
+                return lerp_color(base, {172, 132, 255, 255}, 0.58f);
             case note_type::release:
                 return lerp_color(base, {198, 116, 255, 255}, 0.76f);
             case note_type::stay:
@@ -707,6 +817,8 @@ Color note_draw_color(const note_state& note_state, Color base) {
             return lerp_color(base, WHITE, 0.42f);
         case note_type::hold:
             return lerp_color(base, WHITE, 0.96f);
+        case note_type::decorative_hold:
+            return lerp_color(base, {86, 220, 232, 255}, 0.55f);
     }
     return base;
 }
@@ -714,7 +826,7 @@ Color note_draw_color(const note_state& note_state, Color base) {
 bool should_draw_note_in_pass(note_type type, int pass) {
     switch (pass) {
         case 0:
-            return type == note_type::hold;
+            return type == note_type::hold || type == note_type::decorative_hold;
         case 1:
             return type == note_type::tap;
         case 2:
@@ -730,7 +842,7 @@ void draw_hud(const play_session_state& state) {
     const float live_accuracy = state.score_system.get_live_accuracy();
     ui::enqueue_body_text_in_rect(TextFormat("SCORE %07d", result.score), 30,
                                   kScoreRect, g_theme->hud_score, ui::text_align::left);
-    ui::enqueue_body_text_in_rect(TextFormat("RC %.2f", state.performance_system.current_rc()), 24,
+    ui::enqueue_body_text_in_rect(TextFormat("RC %.0f", state.performance_system.current_rc()), 24,
                                   kRcRect, g_theme->text_secondary, ui::text_align::left);
 
     ui::enqueue_body_text_in_rect(TextFormat("FPS: %d", GetFPS()), 20,
@@ -806,7 +918,7 @@ void draw_pause_overlay() {
         });
     }
 
-    ui::enqueue_body_text_in_rect("ESC: Resume", 20, kPauseHintRect, g_theme->text_muted,
+    ui::enqueue_body_text_in_rect(localization::tr_literal("ESC: Resume"), 20, kPauseHintRect, g_theme->text_muted,
                                   ui::text_align::left, ui::draw_layer::modal);
 }
 
@@ -859,25 +971,15 @@ std::array<Rectangle, 3> pause_button_rects() {
 void draw_status(const play_session_state& state) {
     draw_scene_background(*g_theme);
     const bool error = is_status_error(state);
-    const Color tone = error ? g_theme->error : g_theme->accent;
     const std::string detail = localized_status_text(state.status_text.empty() ? "Loading..." : state.status_text);
 
-    ui::draw_display_text_in_rect("raythm", 28, kLoadingTitleRect, g_theme->text);
-    ui::draw_text_in_rect(detail.c_str(), 18, kLoadingDetailRect,
-                          error ? g_theme->error : g_theme->text_muted);
-    ui::draw_progress_bar(kLoadingBarRect,
-                          loading_progress_value(state),
-                          with_alpha(g_theme->row, 180),
-                          tone,
-                          with_alpha(g_theme->border, 180),
-                          1.5f,
-                          1.5f);
-    if (error) {
-        ui::draw_text_in_rect(localization::tr_literal("ESC: Back to Song Select"),
-                              15,
-                              kLoadingHintRect,
-                              g_theme->text_hint);
-    }
+    loading_screen_view::draw({
+        .message = detail.c_str(),
+        .hint = error ? localization::tr_literal("ESC: Back to Song Select") : nullptr,
+        .progress = loading_progress_value(state),
+        .error = error,
+        .geometry = loading_screen_view::default_layout_with_hint(),
+    });
 }
 
 void draw_world_background() {
@@ -919,23 +1021,32 @@ void draw_world(const play_session_state& state, const play_note_draw_queue& dra
                     const float body_width = note_body_width(note_state.note_ref, lane_width);
                     const float hold_body_width = note_hold_body_width(note_state.note_ref, lane_width);
 
-                    if (note_state.note_ref.type == note_type::hold) {
+                    if (note_has_duration(note_state.note_ref)) {
                         const double tail_target_ms = draw_queue.visual_end_target_ms(idx);
                         const float tail_z = static_cast<float>(judgement_z + state.lane_speed * (tail_target_ms - visual_time_ms));
-                        const float visual_head_z = note_state.is_holding() ? judgement_z : head_z;
+                        const bool clips_at_judge_line =
+                            note_state.is_holding() ||
+                            (note_is_visual_only(note_state.note_ref) && head_z < judgement_z);
+                        const float visual_head_z = clips_at_judge_line ? judgement_z : head_z;
                         const float segment_start = std::max(std::min(visual_head_z, tail_z), lane_start_z);
                         const float segment_end = std::min(std::max(head_z, tail_z), lane_end_z);
                         if (segment_end > segment_start) {
-                            draw_hold_body(center_x, (segment_start + segment_end) * 0.5f,
-                                           hold_body_width, segment_end - segment_start, lane_width, note_color_for_type,
-                                           note_state.note_ref.is_ray);
+                            if (note_state.note_ref.type == note_type::decorative_hold) {
+                                draw_decorative_hold_body(center_x, (segment_start + segment_end) * 0.5f,
+                                                          hold_body_width, segment_end - segment_start, lane_width,
+                                                          note_color_for_type, note_state.note_ref.is_ray);
+                            } else {
+                                draw_hold_body(center_x, (segment_start + segment_end) * 0.5f,
+                                               hold_body_width, segment_end - segment_start, lane_width,
+                                               note_color_for_type, note_state.note_ref.is_ray);
+                            }
                         }
                     } else if (note_state.note_ref.type == note_type::stay) {
                         draw_stay_dot(center_x, head_z, body_width, lane_width, note_color_for_type,
                                       note_state.note_ref.is_ray);
                     } else {
                         draw_tap_slab(center_x, head_z, body_width,
-                                      kTapNoteBaseLength * g_settings.note_height,
+                                      kTapNoteBaseLength * state.note_height,
                                       note_color_for_type,
                                       note_state.note_ref.type == note_type::release,
                                       note_state.note_ref.is_ray);
@@ -963,34 +1074,41 @@ void draw_lane_layer(const Texture2D& lane_layer_texture, float hidden_percent) 
         draw_lane_layer_texture(lane_layer_texture, WHITE);
         return;
     }
-
-    const float fade_height = lane_cover_fade_height();
-    const float fade_end_y = std::min(static_cast<float>(kScreenHeight), hidden_end_y + fade_height);
-    const int full_y = static_cast<int>(std::ceil(fade_end_y));
-    if (full_y < kScreenHeight) {
-        BeginScissorMode(0, full_y, kScreenWidth, kScreenHeight - full_y);
-        draw_lane_layer_texture(lane_layer_texture, WHITE);
-        EndScissorMode();
-    }
-
-    if (hidden_end_y >= static_cast<float>(kScreenHeight) || fade_end_y <= hidden_end_y) {
+    if (hidden_end_y >= static_cast<float>(kScreenHeight)) {
         return;
     }
 
-    for (int step = 0; step < kLaneCoverFadeSteps; ++step) {
-        const float t0 = static_cast<float>(step) / static_cast<float>(kLaneCoverFadeSteps);
-        const float t1 = static_cast<float>(step + 1) / static_cast<float>(kLaneCoverFadeSteps);
-        const float y0 = hidden_end_y + (fade_end_y - hidden_end_y) * t0;
-        const float y1 = hidden_end_y + (fade_end_y - hidden_end_y) * t1;
-        const int scissor_y = static_cast<int>(std::floor(y0));
-        const int scissor_bottom = static_cast<int>(std::ceil(y1));
-        const int scissor_height = std::max(1, scissor_bottom - scissor_y);
-        const float alpha_t = std::clamp((t0 + t1) * 0.5f, 0.0f, 1.0f);
-        const unsigned char alpha = static_cast<unsigned char>(255.0f * alpha_t * alpha_t);
-        BeginScissorMode(0, scissor_y, kScreenWidth, scissor_height);
-        draw_lane_layer_texture(lane_layer_texture, with_alpha(WHITE, alpha));
-        EndScissorMode();
+    const float fade_height = lane_cover_fade_height();
+    const float fade_end_y = std::min(static_cast<float>(kScreenHeight), hidden_end_y + fade_height);
+
+    if (!g_lane_layer_fade_shader_loaded) {
+        g_lane_layer_fade_shader = LoadShaderFromMemory(nullptr, kLaneLayerFadeFragmentShader);
+        g_lane_layer_fade_shader_loaded = g_lane_layer_fade_shader.id > 0;
     }
+    if (!g_lane_layer_fade_shader_loaded) {
+        draw_lane_layer_texture_scissor_fade(lane_layer_texture, hidden_end_y, fade_end_y);
+        return;
+    }
+
+    float hidden_uniform = hidden_end_y;
+    float fade_uniform = fade_end_y;
+    float screen_height_uniform = static_cast<float>(kScreenHeight);
+    SetShaderValue(g_lane_layer_fade_shader,
+                   GetShaderLocation(g_lane_layer_fade_shader, "hiddenEndY"),
+                   &hidden_uniform,
+                   SHADER_UNIFORM_FLOAT);
+    SetShaderValue(g_lane_layer_fade_shader,
+                   GetShaderLocation(g_lane_layer_fade_shader, "fadeEndY"),
+                   &fade_uniform,
+                   SHADER_UNIFORM_FLOAT);
+    SetShaderValue(g_lane_layer_fade_shader,
+                   GetShaderLocation(g_lane_layer_fade_shader, "screenHeight"),
+                   &screen_height_uniform,
+                   SHADER_UNIFORM_FLOAT);
+
+    BeginShaderMode(g_lane_layer_fade_shader);
+    draw_lane_layer_texture(lane_layer_texture, WHITE);
+    EndShaderMode();
 }
 
 void draw_overlay(const play_session_state& state, const Texture2D* jacket_texture) {

@@ -9,9 +9,9 @@
 
 #include "ranking_service.h"
 #include "raylib.h"
-#include "song_select/song_preview_controller.h"
 #include "song_select/song_select_state.h"
 #include "title/online_download_remote_client.h"
+#include "title/title_audio_controller.h"
 #include "ui_text_input.h"
 
 namespace online_catalog {
@@ -266,8 +266,8 @@ void start_chart_download_by_remote_id(state& state,
 bool poll_download(state& state, online_catalog::data_controller& data_controller);
 void mark_song_removed(state& state, const std::string& song_id);
 void on_enter(state& state,
-              online_catalog::data_controller& data_controller,
-              song_select::preview_controller& preview_controller);
+               online_catalog::data_controller& data_controller,
+               title_audio_controller& audio_controller);
 void on_exit(state& state);
 
 const song_entry_state* selected_song(const state& state);
@@ -285,9 +285,10 @@ void select_local_update_target(state& state,
 layout make_layout(float anim_t, Rectangle origin_rect);
 update_result update(state& state,
                      online_catalog::data_controller& data_controller,
+                     title_audio_controller& audio_controller,
                      float anim_t,
                      Rectangle origin_rect,
                      float dt);
-void draw(state& state, float anim_t, Rectangle origin_rect);
+void draw(state& state, const title_audio_controller& audio_controller, float anim_t, Rectangle origin_rect);
 
 }  // namespace title_online_view

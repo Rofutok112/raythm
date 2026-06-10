@@ -8,10 +8,10 @@
 #include "song_select/song_select_navigation.h"
 #include "ui_notice.h"
 
+title_play_data_controller::title_play_data_controller() = default;
+
 void title_play_data_controller::reset(song_select::state& state) {
     data_controller_.reset(state);
-    catalog_sync_media_on_apply_ = false;
-    queued_catalog_sync_media_on_apply_ = false;
 
     scoring_ruleset_loading_ = false;
     upload_in_progress_ = false;
@@ -19,6 +19,10 @@ void title_play_data_controller::reset(song_select::state& state) {
 
 bool title_play_data_controller::catalog_loading() const {
     return data_controller_.catalog_loading();
+}
+
+load_progress title_play_data_controller::catalog_progress() const {
+    return data_controller_.catalog_progress();
 }
 
 bool title_play_data_controller::scoring_ruleset_loading() const {
@@ -32,15 +36,7 @@ bool title_play_data_controller::upload_in_progress() const {
 void title_play_data_controller::request_catalog_reload(song_select::state& state,
                                                         std::string preferred_song_id,
                                                         std::string preferred_chart_id,
-                                                        bool sync_media_on_apply,
                                                         bool calculate_missing_levels) {
-    if (data_controller_.catalog_loading()) {
-        queued_catalog_sync_media_on_apply_ =
-            queued_catalog_sync_media_on_apply_ || sync_media_on_apply;
-    } else {
-        catalog_sync_media_on_apply_ = sync_media_on_apply;
-    }
-
     data_controller_.request_catalog_reload(
         state,
         song_select::catalog_reload_request{std::move(preferred_song_id),
@@ -49,9 +45,7 @@ void title_play_data_controller::request_catalog_reload(song_select::state& stat
 }
 
 title_play_data_controller::catalog_poll_result title_play_data_controller::poll_catalog_reload(
-    song_select::state& state,
-    bool play_mode_active,
-    bool create_mode_active) {
+    song_select::state& state) {
     catalog_poll_result result;
     const song_select::catalog_reload_result reload = data_controller_.poll_catalog_reload(state);
     if (!reload.completed) {
@@ -59,24 +53,10 @@ title_play_data_controller::catalog_poll_result title_play_data_controller::poll
     }
 
     result.completed = true;
-    result.sync_play_media = catalog_sync_media_on_apply_ || play_mode_active;
-    result.sync_create_preview = !result.sync_play_media && create_mode_active;
-    catalog_sync_media_on_apply_ = false;
-
-    if (reload.queued_reload_started) {
-        catalog_sync_media_on_apply_ = queued_catalog_sync_media_on_apply_;
-        queued_catalog_sync_media_on_apply_ = false;
-    }
+    result.queued_reload_started = reload.queued_reload_started;
+    result.selection_changed = reload.selection_changed;
 
     return result;
-}
-
-void title_play_data_controller::request_ranking_reload(song_select::state& state) {
-    data_controller_.request_ranking_reload(state);
-}
-
-void title_play_data_controller::poll_ranking_reload(song_select::state& state) {
-    data_controller_.poll_ranking_reload(state);
 }
 
 void title_play_data_controller::request_scoring_ruleset_warm(bool force_refresh) {
@@ -176,16 +156,4 @@ title_play_data_controller::upload_poll_result title_play_data_controller::poll_
     song_select::queue_status_message(state, result.message, !result.success);
     poll_result.refresh_catalog = result.success && result.should_refresh_online_catalog;
     return poll_result;
-}
-
-void title_play_data_controller::start_catalog_load(song_select::state& state,
-                                                    std::string preferred_song_id,
-                                                    std::string preferred_chart_id,
-                                                    bool sync_media_on_apply,
-                                                    bool calculate_missing_levels) {
-    request_catalog_reload(state,
-                           std::move(preferred_song_id),
-                           std::move(preferred_chart_id),
-                           sync_media_on_apply,
-                           calculate_missing_levels);
 }

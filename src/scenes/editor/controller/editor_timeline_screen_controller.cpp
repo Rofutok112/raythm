@@ -22,6 +22,7 @@ editor_timeline_viewport_model viewport_model(const editor_timeline_screen_contr
 editor_timeline_note make_timeline_note(const note_data& note) {
     return {
         note.type == note_type::hold ? editor_timeline_note_type::hold :
+        note.type == note_type::decorative_hold ? editor_timeline_note_type::decorative_hold :
         note.type == note_type::release ? editor_timeline_note_type::release :
         note.type == note_type::stay ? editor_timeline_note_type::stay :
         editor_timeline_note_type::tap,
@@ -55,10 +56,10 @@ std::optional<note_data> dragged_note(const editor_timeline_screen_controller::c
         } else if (drag.mode == editor_timeline_drag_mode::resize_right) {
             const int last_lane = std::clamp(drag.current_lane, note.lane, context.state.data().meta.key_count - 1);
             note.lane_width = last_lane - note.lane + 1;
-        } else if (drag.mode == editor_timeline_drag_mode::resize_start && note.type == note_type::hold) {
+        } else if (drag.mode == editor_timeline_drag_mode::resize_start && note_has_duration(note)) {
             const int min_gap = editor_timeline_viewport::snap_interval(viewport_model(context));
             note.tick = std::clamp(drag.current_tick, 0, note.end_tick - min_gap);
-        } else if (note.type == note_type::hold) {
+        } else if (note_has_duration(note)) {
             const int min_gap = editor_timeline_viewport::snap_interval(viewport_model(context));
             note.end_tick = std::max(note.tick + min_gap, drag.current_tick);
         }
@@ -80,7 +81,9 @@ std::optional<note_data> dragged_note(const editor_timeline_screen_controller::c
     if (note.type == note_type::tap) {
         note.end_tick = note.tick;
     }
-    if (context.note_palette.type != note_type::hold) {
+    if (note_type_has_duration(context.note_palette.type)) {
+        note.type = context.note_palette.type;
+    } else {
         note.type = context.note_palette.type;
         note.end_tick = note.tick;
     }
@@ -108,7 +111,7 @@ std::vector<note_data> dragged_notes(const editor_timeline_screen_controller::co
     notes.reserve(drag.original_notes.size());
     for (note_data note : drag.original_notes) {
         note.tick = std::max(0, note.tick + tick_delta);
-        if (note.type == note_type::hold) {
+        if (note_has_duration(note)) {
             note.end_tick = std::max(note.tick + 1, note.end_tick + tick_delta);
         } else {
             note.end_tick = note.tick;
@@ -196,15 +199,16 @@ int mouse_cursor(const cursor_context& context) {
     }
 
     const note_data& note = context.state.data().notes[*active_index];
-    const editor_timeline_note_draw_info info = context.metrics.note_rects(make_timeline_note(note));
-    if (note.type == note_type::hold &&
-        (CheckCollisionPointRec(context.mouse, info.start_resize_rect) ||
-         CheckCollisionPointRec(context.mouse, info.end_resize_rect))) {
-        return MOUSE_CURSOR_RESIZE_NS;
-    }
-    if (CheckCollisionPointRec(context.mouse, info.left_resize_rect) ||
-        CheckCollisionPointRec(context.mouse, info.right_resize_rect)) {
-        return MOUSE_CURSOR_RESIZE_EW;
+    const editor_timeline_note_geometry geometry = context.metrics.note_rects(make_timeline_note(note));
+    switch (editor_timeline_note_resize_handle_at(geometry, context.mouse)) {
+        case editor_timeline_note_resize_handle::start_tick:
+        case editor_timeline_note_resize_handle::end_tick:
+            return MOUSE_CURSOR_RESIZE_NS;
+        case editor_timeline_note_resize_handle::lane_left:
+        case editor_timeline_note_resize_handle::lane_right:
+            return MOUSE_CURSOR_RESIZE_EW;
+        case editor_timeline_note_resize_handle::none:
+            break;
     }
     return MOUSE_CURSOR_DEFAULT;
 }

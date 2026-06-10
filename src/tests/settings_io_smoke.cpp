@@ -83,6 +83,7 @@ int main() {
         defaults.lane_fog_hidden_percent = 37.0f;
         defaults.note_height = 1.4f;
         defaults.target_fps = 240;
+        defaults.hitsound_pan_strength = 0.75f;
         defaults.loudness_normalization_enabled = true;
         defaults.fullscreen = true;
         defaults.window_maximized = true;
@@ -111,6 +112,9 @@ int main() {
                ok);
         expect(loaded.target_fps == defaults.target_fps,
                "Expected default target FPS to be written to settings.json.",
+               ok);
+        expect(std::fabs(loaded.hitsound_pan_strength - defaults.hitsound_pan_strength) < 0.001f,
+               "Expected hitsound pan strength to be written to settings.json.",
                ok);
         expect(loaded.loudness_normalization_enabled == defaults.loudness_normalization_enabled,
                "Expected loudness normalization setting to be written to settings.json.",
@@ -157,6 +161,9 @@ int main() {
                ok);
         expect(content.find("\"loudnessNormalizationEnabled\": true") != std::string::npos,
                "Expected loudnessNormalizationEnabled key to be present in settings.json.",
+               ok);
+        expect(content.find("\"hitsoundPanStrength\": 0.75") != std::string::npos,
+               "Expected hitsoundPanStrength key to be present in settings.json.",
                ok);
         expect(content.find("\"laneFogHiddenPercent\": 37") != std::string::npos,
                "Expected laneFogHiddenPercent key to be present in settings.json.",

@@ -145,6 +145,8 @@ void load_settings(game_settings& settings) {
         settings.bgm_volume = std::clamp(std::stof(*v), 0.0f, 1.0f);
     if (auto v = extract_number_token(content, "seVolume"))
         settings.se_volume = std::clamp(std::stof(*v), 0.0f, 1.0f);
+    if (auto v = extract_number_token(content, "hitsoundPanStrength"))
+        settings.hitsound_pan_strength = std::clamp(std::stof(*v), 0.0f, 1.0f);
     if (auto v = extract_bool(content, "loudnessNormalizationEnabled"))
         settings.loudness_normalization_enabled = *v;
     if (auto v = extract_number_token(content, "targetFps"))
@@ -197,6 +199,7 @@ void save_settings(const game_settings& settings) {
     out << "  \"globalNoteOffsetMs\": " << settings.global_note_offset_ms << ",\n";
     out << "  \"bgmVolume\": " << settings.bgm_volume << ",\n";
     out << "  \"seVolume\": " << settings.se_volume << ",\n";
+    out << "  \"hitsoundPanStrength\": " << settings.hitsound_pan_strength << ",\n";
     out << "  \"loudnessNormalizationEnabled\": "
         << (settings.loudness_normalization_enabled ? "true" : "false") << ",\n";
     out << "  \"targetFps\": " << settings.target_fps << ",\n";

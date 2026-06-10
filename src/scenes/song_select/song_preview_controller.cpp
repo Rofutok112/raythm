@@ -1,12 +1,9 @@
 #include "song_select/song_preview_controller.h"
 
 #include <algorithm>
-#include <filesystem>
 
 #include "audio_manager.h"
 #include "game_settings.h"
-#include "managed_content_storage.h"
-#include "path_utils.h"
 
 namespace {
 
@@ -43,31 +40,93 @@ void preview_controller::select_song(const song_entry* song) {
         stop();
         return;
     }
+    select_song(song_media_key_for_song_id(song->song.meta.song_id), song);
+}
 
-    load_jacket(song);
-    queue_preview(song);
+void preview_controller::select_song(const selection_key& key, const song_entry* song) {
+    if (song == nullptr) {
+        stop();
+        return;
+    }
+
+    request_jacket(key, song);
+    request_audio(key, song);
+}
+
+void preview_controller::request_jacket(const song_entry* song) {
+    if (song == nullptr) {
+        jacket_loader_.reset();
+        return;
+    }
+
+    request_jacket(song_media_key_for_song_id(song->song.meta.song_id), song);
+}
+
+void preview_controller::request_jacket(const selection_key& key, const song_entry* song) {
+    if (song == nullptr) {
+        jacket_loader_.reset();
+        return;
+    }
+
+    jacket_loader_.request(key, song);
+}
+
+void preview_controller::request_audio(const song_entry* song) {
+    if (song == nullptr) {
+        audio_loader_.reset();
+        pending_preview_song_.reset();
+        active_preview_song_.reset();
+        preview_volume_ = 0.0f;
+        preview_fade_direction_ = 0;
+        audio_manager::instance().unload_preview();
+        return;
+    }
+
+    request_audio(song_media_key_for_song_id(song->song.meta.song_id), song);
+}
+
+void preview_controller::request_audio(const selection_key& key, const song_entry* song) {
+    if (song == nullptr) {
+        audio_loader_.reset();
+        pending_preview_song_.reset();
+        active_preview_song_.reset();
+        preview_volume_ = 0.0f;
+        preview_fade_direction_ = 0;
+        audio_manager::instance().unload_preview();
+        return;
+    }
+
+    queue_preview(key, song);
 }
 
 void preview_controller::update(float dt, const song_entry* selected_song) {
+    selection_key current_key;
+    if (selected_song != nullptr) {
+        current_key = song_media_key_for_song_id(selected_song->song.meta.song_id);
+    }
+    update(dt, current_key, selected_song);
+}
+
+void preview_controller::update(float dt, const selection_key& current_key, const song_entry* selected_song) {
+    jacket_loader_.poll();
+
     audio_manager& audio = audio_manager::instance();
-    const audio_manager::async_preview_load_result load_result = audio.poll_preview_load();
-    if (load_result.completed && preview_load_pending_) {
-        if (load_result.loaded && selected_song != nullptr &&
-            selected_song->song.meta.song_id == preview_song_id_) {
-            audio.seek_preview(preview_load_song_->meta.preview_start_seconds);
-            audio.set_preview_volume(g_settings.bgm_volume);
-            audio.set_preview_fade_gain(0.0f);
-            audio.play_preview(false);
-            preview_volume_ = 0.0f;
-            active_preview_song_ = preview_load_song_;
-            preview_fade_direction_ = 1;
-        } else if (!load_result.loaded) {
-            preview_song_id_.clear();
-            preview_volume_ = 0.0f;
-            preview_fade_direction_ = 0;
-        }
-        preview_load_pending_ = false;
-        preview_load_song_.reset();
+    const preview_audio_loader::load_event load_event = audio_loader_.update(current_key, selected_song);
+    if (load_event.result == preview_audio_loader::load_event::status::loaded &&
+        load_event.song.has_value()) {
+        audio.seek_preview(load_event.song->meta.preview_start_seconds);
+        audio.set_preview_volume(g_settings.bgm_volume);
+        audio.set_preview_fade_gain(0.0f);
+        audio.play_preview(false);
+        preview_volume_ = 0.0f;
+        active_preview_song_ = load_event.song;
+        preview_fade_direction_ = 1;
+    } else if (load_event.result == preview_audio_loader::load_event::status::failed) {
+        audio.unload_preview();
+        preview_volume_ = 0.0f;
+        preview_fade_direction_ = 0;
+        active_preview_song_.reset();
+        pending_preview_song_.reset();
     }
 
     if (preview_fade_direction_ < 0) {
@@ -76,12 +135,12 @@ void preview_controller::update(float dt, const song_entry* selected_song) {
         audio.set_preview_fade_gain(preview_volume_);
         if (preview_volume_ <= 0.0f) {
             audio.stop_preview();
-            preview_song_id_.clear();
+            audio_loader_.reset();
             active_preview_song_.reset();
             preview_fade_direction_ = 0;
             if (pending_preview_song_.has_value()) {
                 if (selected_song != nullptr && selected_song->song.meta.song_id == pending_preview_song_->meta.song_id) {
-                    start_preview(*selected_song);
+                    start_preview(current_key, *selected_song);
                 } else {
                     pending_preview_song_.reset();
                 }
@@ -116,12 +175,23 @@ void preview_controller::resume(const song_entry* song) {
         return;
     }
 
-    load_jacket(song);
-    audio_manager& audio = audio_manager::instance();
-    if (preview_song_id_ == song->song.meta.song_id && audio.is_preview_loading()) {
+    resume(song_media_key_for_song_id(song->song.meta.song_id), song);
+}
+
+void preview_controller::resume(const selection_key& key, const song_entry* song) {
+    if (song == nullptr) {
+        stop();
         return;
     }
-    if (preview_song_id_ == song->song.meta.song_id && audio.is_preview_loaded()) {
+
+    const selection_key media_key = song_media_key_for(key);
+    jacket_loader_.request(key, song);
+    audio_manager& audio = audio_manager::instance();
+    if (audio_loader_.target_key() == media_key &&
+        audio_loader_.status() == preview_audio_loader::load_status::loading) {
+        return;
+    }
+    if (audio_loader_.target_key() == media_key && audio.is_preview_loaded()) {
         pending_preview_song_.reset();
         active_preview_song_ = song->song;
         preview_fade_direction_ = 0;
@@ -132,7 +202,7 @@ void preview_controller::resume(const song_entry* song) {
         return;
     }
 
-    select_song(song);
+    select_song(key, song);
 }
 
 void preview_controller::pause() {
@@ -148,7 +218,7 @@ void preview_controller::pause() {
 
 void preview_controller::fade_out() {
     pending_preview_song_.reset();
-    if (preview_song_id_.empty() || !audio_manager::instance().is_preview_loaded()) {
+    if (audio_loader_.target_song_id().empty() || !audio_manager::instance().is_preview_loaded()) {
         stop();
         return;
     }
@@ -157,15 +227,12 @@ void preview_controller::fade_out() {
 
 void preview_controller::stop() {
     audio_manager::instance().unload_preview();
-    preview_song_id_.clear();
-    jacket_song_id_.clear();
+    audio_loader_.reset();
+    jacket_loader_.reset();
     pending_preview_song_.reset();
     active_preview_song_.reset();
-    preview_load_pending_ = false;
-    preview_load_song_.reset();
     preview_volume_ = 0.0f;
     preview_fade_direction_ = 0;
-    unload_jacket();
 }
 
 bool preview_controller::is_audio_active() const {
@@ -177,126 +244,53 @@ bool preview_controller::is_playing() const {
     return audio_manager::instance().is_preview_playing();
 }
 
-void preview_controller::unload_jacket() {
-    if (!jacket_loaded_) {
-        return;
-    }
-
-    UnloadTexture(jacket_texture_);
-    jacket_texture_ = {};
-    jacket_loaded_ = false;
+bool preview_controller::is_loading() const {
+    return audio_loader_.loading_or_preparing();
 }
 
-void preview_controller::load_jacket(const song_entry* song) {
-    if (song == nullptr) {
-        unload_jacket();
-        jacket_song_id_.clear();
-        return;
-    }
+preview_audio_loader::snapshot preview_controller::audio_snapshot() const {
+    return audio_loader_.current();
+}
 
-    if (jacket_song_id_ == song->song.meta.song_id && jacket_loaded_) {
-        return;
-    }
-
-    unload_jacket();
-    jacket_song_id_ = song->song.meta.song_id;
-    if (song->song.meta.jacket_file.empty()) {
-        return;
-    }
-
-    const std::filesystem::path jacket_path = path_utils::join_utf8(song->song.directory, song->song.meta.jacket_file);
-    const managed_content_storage::managed_file_read_result managed =
-        managed_content_storage::read_managed_file(jacket_path);
-    if (managed.managed) {
-        if (!managed.success || managed.bytes.empty()) {
-            return;
-        }
-        Image image = LoadImageFromMemory(jacket_path.extension().string().c_str(),
-                                          managed.bytes.data(),
-                                          static_cast<int>(managed.bytes.size()));
-        if (image.data == nullptr) {
-            return;
-        }
-        jacket_texture_ = LoadTextureFromImage(image);
-        UnloadImage(image);
-    } else {
-        if (!std::filesystem::exists(jacket_path) || !std::filesystem::is_regular_file(jacket_path)) {
-            return;
-        }
-        const std::string jacket_path_utf8 = path_utils::to_utf8(jacket_path);
-        jacket_texture_ = LoadTexture(jacket_path_utf8.c_str());
-    }
-    jacket_loaded_ = jacket_texture_.id != 0;
-    if (jacket_loaded_) {
-        SetTextureFilter(jacket_texture_, TEXTURE_FILTER_BILINEAR);
-    }
+jacket_loader::snapshot preview_controller::jacket_snapshot() const {
+    return jacket_loader_.current();
 }
 
 void preview_controller::queue_preview(const song_entry* song) {
     if (song == nullptr) {
         return;
     }
+    queue_preview(song_media_key_for_song_id(song->song.meta.song_id), song);
+}
 
-    if (preview_song_id_ == song->song.meta.song_id) {
+void preview_controller::queue_preview(const selection_key& key, const song_entry* song) {
+    if (song == nullptr) {
+        return;
+    }
+    if (audio_loader_.target_song_id() == song->song.meta.song_id) {
         return;
     }
 
     pending_preview_song_ = song->song;
-    if (preview_song_id_.empty() || !audio_manager::instance().is_preview_loaded()) {
-        start_preview(*song);
-        return;
-    }
-
-    preview_fade_direction_ = -1;
+    start_preview(key, *song);
 }
 
-void preview_controller::start_preview(const song_entry& song) {
+void preview_controller::start_preview(const selection_key& key, const song_entry& song) {
     audio_manager& audio = audio_manager::instance();
-    std::string audio_source = song.song.meta.audio_url;
-    if (audio_source.empty()) {
-        if (song.song.meta.audio_file.empty()) {
-            preview_song_id_.clear();
-            preview_volume_ = 0.0f;
-            preview_fade_direction_ = 0;
-            return;
-        }
+    audio.stop_preview();
 
-        const std::filesystem::path audio_path = path_utils::join_utf8(song.song.directory, song.song.meta.audio_file);
-        const managed_content_storage::managed_file_read_result managed_audio =
-            managed_content_storage::read_managed_file(audio_path);
-        if (managed_audio.managed) {
-            if (!managed_audio.success || !audio.request_preview_load_from_memory(managed_audio.bytes)) {
-                preview_song_id_.clear();
-                preview_volume_ = 0.0f;
-                preview_fade_direction_ = 0;
-                return;
-            }
-
-            preview_volume_ = 0.0f;
-            preview_song_id_ = song.song.meta.song_id;
-            active_preview_song_.reset();
-            preview_fade_direction_ = 0;
-            preview_load_pending_ = true;
-            preview_load_song_ = song.song;
-            pending_preview_song_.reset();
-            return;
-        }
-        audio_source = path_utils::to_utf8(audio_path);
-    }
-
-    if (!audio.request_preview_load(audio_source)) {
-        preview_song_id_.clear();
+    if (!audio_loader_.request(key, song)) {
+        audio.unload_preview();
         preview_volume_ = 0.0f;
         preview_fade_direction_ = 0;
+        active_preview_song_.reset();
+        pending_preview_song_.reset();
         return;
     }
 
     preview_volume_ = 0.0f;
-    preview_song_id_ = song.song.meta.song_id;
     active_preview_song_.reset();
     preview_fade_direction_ = 0;
-    preview_load_pending_ = true;
-    preview_load_song_ = song.song;
     pending_preview_song_.reset();
 }
 

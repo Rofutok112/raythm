@@ -1,0 +1,108 @@
+#include "shared/loading_screen_view.h"
+
+#include <algorithm>
+#include <string>
+#include <string_view>
+
+#include "localization/localization.h"
+#include "theme.h"
+#include "ui_draw.h"
+
+namespace {
+
+constexpr Rectangle kDefaultPanelRect{690.0f, 702.0f, 540.0f, 112.0f};
+constexpr Rectangle kHintPanelRect{690.0f, 702.0f, 540.0f, 122.0f};
+
+std::string translate_count_progress(std::string_view text) {
+    struct prefix_translation {
+        std::string_view english;
+        std::string_view japanese;
+    };
+
+    constexpr prefix_translation kProgressPrefixes[] = {
+        {"Loading local charts ", "ローカル譜面を読み込み中 "},
+        {"Loading downloaded charts ", "ダウンロード譜面を読み込み中 "},
+        {"Reading cached songs ", "キャッシュ済み曲を読み込み中 "},
+        {"Reading cached charts ", "キャッシュ済み譜面を読み込み中 "},
+        {"Validating cached songs ", "キャッシュ済み曲を検証中 "},
+    };
+
+    for (const prefix_translation& entry : kProgressPrefixes) {
+        if (text.starts_with(entry.english)) {
+            std::string translated(entry.japanese);
+            translated.append(text.substr(entry.english.size()));
+            return translated;
+        }
+    }
+    return {};
+}
+
+std::string translate_loading_text(const char* text) {
+    if (text == nullptr || text[0] == '\0') {
+        return "";
+    }
+
+    const std::string_view original(text);
+    const char* literal = localization::tr_literal(text);
+    if (std::string_view(literal) != original) {
+        return literal;
+    }
+
+    if (localization::current_locale() == localization::locale::japanese) {
+        if (std::string translated = translate_count_progress(original); !translated.empty()) {
+            return translated;
+        }
+    }
+    return std::string(original);
+}
+
+}  // namespace
+
+namespace loading_screen_view {
+
+layout default_layout() {
+    return {
+        {kDefaultPanelRect.x, kDefaultPanelRect.y, kDefaultPanelRect.width, 38.0f},
+        {kDefaultPanelRect.x, kDefaultPanelRect.y + 36.0f, kDefaultPanelRect.width, 28.0f},
+        {kDefaultPanelRect.x + 2.0f, kDefaultPanelRect.y + 82.0f, kDefaultPanelRect.width - 4.0f, 8.0f},
+        {kDefaultPanelRect.x, kDefaultPanelRect.y + 100.0f, kDefaultPanelRect.width, 28.0f},
+    };
+}
+
+layout default_layout_with_hint() {
+    return {
+        {kHintPanelRect.x, kHintPanelRect.y, kHintPanelRect.width, 38.0f},
+        {kHintPanelRect.x, kHintPanelRect.y + 38.0f, kHintPanelRect.width, 30.0f},
+        {kHintPanelRect.x + 2.0f, kHintPanelRect.y + 84.0f, kHintPanelRect.width - 4.0f, 8.0f},
+        {
+            kHintPanelRect.x - 120.0f,
+            kHintPanelRect.y + 100.0f,
+            kHintPanelRect.width + 240.0f,
+            28.0f,
+        },
+    };
+}
+
+void draw(const config& config) {
+    const float progress = std::clamp(config.progress, 0.0f, 1.0f);
+    const Color tone = config.error ? g_theme->error : g_theme->accent;
+    const Color detail_color = config.error ? g_theme->error : g_theme->text_muted;
+    const std::string message = translate_loading_text(config.message);
+
+    ui::draw_display_text_in_rect(config.title, 28, config.geometry.title_rect, g_theme->text);
+    ui::draw_text_in_rect(message.c_str(), 18, config.geometry.detail_rect, detail_color);
+    ui::draw_progress_bar(config.geometry.bar_rect,
+                          progress,
+                          with_alpha(g_theme->row, 180),
+                          tone,
+                          with_alpha(g_theme->border, 180),
+                          1.5f,
+                          1.5f);
+
+    if (config.hint != nullptr && config.hint[0] != '\0') {
+        const std::string hint = translate_loading_text(config.hint);
+        ui::draw_text_in_rect(hint.c_str(), 15, config.geometry.hint_rect, g_theme->text_hint);
+    }
+}
+
+}  // namespace loading_screen_view

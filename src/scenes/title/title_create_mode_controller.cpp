@@ -27,15 +27,14 @@ void title_create_mode_controller::update(scene_manager& manager,
         result.upload_chart_requested ||
         result.import_chart_requested ||
         result.export_chart_requested ||
-        result.edit_mv_requested ||
-        result.manage_library_requested;
+        result.edit_mv_requested;
 
     if (result.back_requested) {
         callbacks.enter_home();
         return;
     }
     if (result.song_selection_changed) {
-        callbacks.sync_preview();
+        callbacks.sync_media();
         return;
     }
     if (result.chart_selection_changed) {
@@ -96,8 +95,7 @@ void title_create_mode_controller::update(scene_manager& manager,
         if (song == nullptr) {
             song_select::queue_status_message(state, "Select a song before importing a chart.", true);
         } else {
-            transfer_controller.start_chart_import(state, callbacks.transfer_callbacks(),
-                                                   callbacks.sync_media_on_transfer());
+            transfer_controller.start_chart_import(state, callbacks.transfer_callbacks());
         }
         return;
     }
@@ -105,8 +103,7 @@ void title_create_mode_controller::update(scene_manager& manager,
         if (song == nullptr || chart == nullptr) {
             song_select::queue_status_message(state, "Select a chart to export.", true);
         } else {
-            transfer_controller.start_chart_export(state, callbacks.transfer_callbacks(),
-                                                   callbacks.sync_media_on_transfer());
+            transfer_controller.start_chart_export(state, callbacks.transfer_callbacks());
         }
         return;
     }
@@ -122,15 +119,6 @@ void title_create_mode_controller::update(scene_manager& manager,
     }
     if (result.edit_mv_requested && song != nullptr) {
         manager.change_scene(song_select::make_mv_editor_scene(manager, *song));
-        return;
-    }
-    if (result.manage_library_requested) {
-        manager.change_scene(song_select::make_legacy_song_select_scene(
-            manager,
-            song != nullptr ? song->song.meta.song_id : "",
-            chart != nullptr ? chart->meta.chart_id : "",
-            std::nullopt,
-            false));
         return;
     }
 }

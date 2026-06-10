@@ -1,11 +1,14 @@
 #pragma once
 
+#include <memory>
+#include <mutex>
 #include <vector>
 #include <string>
 #include <future>
 #include <optional>
 
 #include "editor/editor_scene_types.h"
+#include "load_progress.h"
 #include "multiplayer/multiplayer_client.h"
 #include "play_mods.h"
 #include "play/play_mv_controller.h"
@@ -35,9 +38,19 @@ public:
     void draw() override;
 
 private:
+    struct async_load_result {
+        play_session_state state;
+        play_note_draw_queue draw_queue;
+    };
+
     Camera3D make_play_camera() const;
     bool get_lane_view_bounds(const Camera3D& camera, float& lane_start_z, float& judgement_z, float& lane_end_z) const;
     float lane_width_for_bottom_edge(const Camera3D& camera, float lane_start_z) const;
+    void start_async_load();
+    void sync_async_load_progress();
+    bool poll_async_load();
+    void apply_loaded_session(async_load_result result);
+    void wait_for_pending_load();
     void load_jacket_texture();
     void unload_jacket_texture();
     void load_lane_layer_texture();
@@ -52,6 +65,8 @@ private:
     play_session_state state_;
     play_note_draw_queue draw_queue_;
     play_mv_controller mv_controller_;
+    std::optional<std::future<async_load_result>> load_future_;
+    std::shared_ptr<shared_load_progress> load_progress_;
     Texture2D jacket_texture_{};
     bool jacket_texture_loaded_ = false;
     RenderTexture2D lane_layer_texture_{};

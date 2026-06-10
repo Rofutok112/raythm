@@ -36,6 +36,8 @@ struct resolved_song {
     bool update_available = false;
     bool identity_matched = false;
     bool binding_matched = false;
+    content_source source = content_source::unknown;
+    content_sync_state sync = content_sync_state::unknown;
     content_status display_status = content_status::local;
 };
 
@@ -46,6 +48,8 @@ struct resolved_chart {
     bool update_available = false;
     bool identity_matched = false;
     bool binding_matched = false;
+    content_source source = content_source::unknown;
+    content_sync_state sync = content_sync_state::unknown;
     content_status display_status = content_status::local;
 };
 

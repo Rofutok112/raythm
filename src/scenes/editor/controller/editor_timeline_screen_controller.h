@@ -3,10 +3,10 @@
 #include <vector>
 
 #include "audio_waveform.h"
+#include "editor/daw/editor_daw_types.h"
 #include "editor/editor_meter_map.h"
 #include "editor/editor_scene_types.h"
 #include "editor/editor_state.h"
-#include "editor/view/editor_right_panel_view.h"
 #include "editor/viewport/editor_timeline_viewport.h"
 #include "raylib.h"
 

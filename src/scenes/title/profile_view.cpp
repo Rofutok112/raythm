@@ -5,6 +5,7 @@
 #include <string>
 
 #include "content_lifecycle.h"
+#include "localization/localization.h"
 #include "scene_common.h"
 #include "shared/avatar_texture_cache.h"
 #include "theme.h"
@@ -639,7 +640,7 @@ void draw(state& profile,
 
         const Rectangle content = content_rect();
         if (profile.loading && !profile.loaded_once) {
-            draw_empty(content, "Loading profile...");
+            draw_empty(content, localization::tr_literal("Loading profile..."));
         } else if (profile.selected_tab == tab::overview) {
             ui::draw_section(content);
             draw_metric_card(overview_card_rect(content, 0), "Uploaded Songs",
@@ -663,7 +664,7 @@ void draw(state& profile,
                                   {recent.x + 18.0f, recent.y + 16.0f, recent.width - 36.0f, 26.0f},
                                   t.text, ui::text_align::left);
             if (profile.activity.empty()) {
-                ui::draw_text_in_rect("No recent play activity yet.", 13,
+                ui::draw_text_in_rect(localization::tr_literal("No recent play activity yet."), 13,
                                       {recent.x + 18.0f, recent.y + 54.0f, recent.width - 36.0f, 22.0f},
                                       t.text_muted, ui::text_align::left);
             } else {
@@ -696,7 +697,7 @@ void draw(state& profile,
                                    first_place.width - 36.0f, 26.0f},
                                   t.text, ui::text_align::left);
             if (profile.first_place_records.empty()) {
-                ui::draw_text_in_rect("No #1 online records yet.", 13,
+                ui::draw_text_in_rect(localization::tr_literal("No #1 online records yet."), 13,
                                       {first_place.x + 18.0f, first_place.y + 54.0f,
                                        first_place.width - 36.0f, 22.0f},
                                       t.text_muted, ui::text_align::left);
@@ -715,7 +716,7 @@ void draw(state& profile,
             }
         } else if (profile.selected_tab == tab::activity) {
             if (profile.activity.empty()) {
-                draw_empty(content, "No recent play activity yet.");
+                draw_empty(content, localization::tr_literal("No recent play activity yet."));
             } else {
                 ui::scoped_clip_rect clip(content);
                 for (int i = 0; i < static_cast<int>(profile.activity.size()); ++i) {
@@ -841,7 +842,7 @@ void draw(state& profile,
                                    560.0f,
                                    kSettingsLabelHeight},
                                   t.text_secondary, ui::text_align::left);
-            ui::draw_text_in_rect("This does not delete local songs or charts.",
+            ui::draw_text_in_rect(localization::tr_literal("This does not delete local songs or charts."),
                                   12,
                                   {content.x + kSettingsInsetX,
                                    content.y + kSettingsAccountDescriptionY,
@@ -852,25 +853,25 @@ void draw(state& profile,
         }
 
         if (profile.loading && profile.loaded_once) {
-            ui::draw_text_in_rect("Refreshing...", 13,
+            ui::draw_text_in_rect(localization::tr_literal("Refreshing..."), 13,
                                   {kDialogRect.x + 42.0f, kDialogRect.y + kDialogRect.height - 104.0f,
                                    260.0f, 24.0f},
                                   t.text_muted, ui::text_align::left);
         }
         if (profile.deleting) {
-            ui::draw_text_in_rect("Deleting...", 13,
+            ui::draw_text_in_rect(localization::tr_literal("Deleting..."), 13,
                                   {kDialogRect.x + 42.0f, kDialogRect.y + kDialogRect.height - 104.0f,
                                    260.0f, 24.0f},
                                   t.text_muted, ui::text_align::left);
         }
         if (profile.saving_links) {
-            ui::draw_text_in_rect("Saving links...", 13,
+            ui::draw_text_in_rect(localization::tr_literal("Saving links..."), 13,
                                   {kDialogRect.x + 42.0f, kDialogRect.y + kDialogRect.height - 104.0f,
                                    260.0f, 24.0f},
                                   t.text_muted, ui::text_align::left);
         }
         if (profile.saving_avatar) {
-            ui::draw_text_in_rect("Saving profile image...", 13,
+            ui::draw_text_in_rect(localization::tr_literal("Saving profile image..."), 13,
                                   {kDialogRect.x + 42.0f, kDialogRect.y + kDialogRect.height - 104.0f,
                                    320.0f, 24.0f},
                                   t.text_muted, ui::text_align::left);

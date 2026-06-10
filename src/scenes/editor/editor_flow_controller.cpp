@@ -6,8 +6,11 @@
 #include <optional>
 
 #include "app_paths.h"
+#include "chart_fingerprint.h"
 #include "chart_serializer.h"
+#include "managed_content_storage.h"
 #include "path_utils.h"
+#include "updater/update_verify.h"
 
 namespace {
 
@@ -93,6 +96,42 @@ bool save_to_path(const editor_flow_context& context, const chart_data& chart_fo
     }
 
     const std::filesystem::path path = path_utils::from_utf8(file_path);
+    chart_data normalized_chart = chart_for_save;
+    const managed_content_storage::managed_chart_file_info managed_info =
+        managed_content_storage::describe_managed_chart_file(path);
+    if (managed_info.managed && !managed_info.local_chart_id.empty()) {
+        normalized_chart.meta.chart_id = managed_info.local_chart_id;
+    }
+
+    const std::string chart_text = chart_serializer::serialize_to_string(normalized_chart);
+    if (chart_text.empty()) {
+        context.save_dialog->error = "Failed to save the chart file.";
+        return false;
+    }
+
+    const std::string chart_fingerprint_hash =
+        updater::compute_sha256_hex(std::string_view(chart_fingerprint::build(chart_text)));
+    const managed_content_storage::managed_file_write_result managed_write =
+        managed_content_storage::write_managed_chart_file(path, chart_text, chart_fingerprint_hash);
+    if (managed_write.managed) {
+        if (!managed_write.success) {
+            context.save_dialog->error = managed_write.error_message.empty()
+                ? "Failed to save the managed chart file."
+                : managed_write.error_message;
+            return false;
+        }
+
+        if (context.state->data().meta.key_count == normalized_chart.meta.key_count) {
+            context.state->modify_metadata(normalized_chart.meta);
+        }
+
+        const std::string saved_path = path_utils::to_utf8(path);
+        context.state->mark_saved(saved_path);
+        context.save_dialog->error.clear();
+        result.saved_chart_path = saved_path;
+        return true;
+    }
+
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
     if (ec) {
@@ -100,9 +139,13 @@ bool save_to_path(const editor_flow_context& context, const chart_data& chart_fo
         return false;
     }
 
-    if (!chart_serializer::serialize(chart_for_save, path_utils::to_utf8(path))) {
+    if (!chart_serializer::serialize(normalized_chart, path_utils::to_utf8(path))) {
         context.save_dialog->error = "Failed to save the chart file.";
         return false;
+    }
+
+    if (context.state->data().meta.key_count == normalized_chart.meta.key_count) {
+        context.state->modify_metadata(normalized_chart.meta);
     }
 
     const std::string saved_path = path_utils::to_utf8(path);
@@ -112,6 +155,26 @@ bool save_to_path(const editor_flow_context& context, const chart_data& chart_fo
     return true;
 }
 
+bool save_appdata_chart(const editor_flow_context& context, const chart_data& chart_for_save,
+                        editor_flow_result& result) {
+    if (context.song == nullptr || context.save_dialog == nullptr) {
+        return false;
+    }
+
+    if (chart_for_save.meta.chart_id.empty()) {
+        context.save_dialog->error = "Chart ID is missing.";
+        return false;
+    }
+
+    const std::filesystem::path current_song_dir = path_utils::from_utf8(context.song->directory);
+    const std::filesystem::path dest =
+        managed_content_storage::read_manifest(current_song_dir).has_value()
+            ? managed_content_storage::chart_file_path(current_song_dir, chart_for_save.meta.chart_id)
+            : app_paths::song_chart_path(context.song->meta.song_id, chart_for_save.meta.chart_id);
+    app_paths::ensure_directories();
+    return save_to_path(context, chart_for_save, path_utils::to_utf8(dest), result);
+}
+
 bool save_chart_from_dialog(const editor_flow_context& context, const chart_data& chart_for_save,
                             editor_flow_result& result) {
     if (context.song == nullptr || context.state == nullptr || context.save_dialog == nullptr) {
@@ -119,13 +182,9 @@ bool save_chart_from_dialog(const editor_flow_context& context, const chart_data
     }
 
     if (is_appdata_song(*context.song)) {
-        const std::filesystem::path dest =
-            app_paths::song_chart_path(context.song->meta.song_id, context.state->data().meta.chart_id);
-        app_paths::ensure_directories();
-        if (!save_to_path(context, chart_for_save, path_utils::to_utf8(dest), result)) {
+        if (!save_appdata_chart(context, chart_for_save, result)) {
             return false;
         }
-
         const editor_pending_action action = context.save_dialog->action_after_save;
         close_save_dialog(*context.save_dialog);
         result.navigation = navigation_for_action(action);
@@ -178,6 +237,14 @@ bool save_chart(const editor_flow_context& context, const chart_data& chart_for_
         return save_to_path(context, chart_for_save, context.state->file_path(), result);
     }
 
+    if (context.song != nullptr && is_appdata_song(*context.song)) {
+        if (!save_appdata_chart(context, chart_for_save, result)) {
+            return false;
+        }
+        result.navigation = navigation_for_action(action_after_save);
+        return true;
+    }
+
     open_save_dialog(*context.save_dialog, action_after_save, chart_for_save);
     return false;
 }
@@ -212,7 +279,7 @@ editor_flow_result editor_flow_controller::update(const editor_flow_context& con
         return *chart_for_save;
     };
 
-    if (context.save_dialog_submit && context.save_dialog->open) {
+    if (context.save_dialog->open && (context.save_dialog_submit || context.ctrl_s_pressed)) {
         context.save_dialog->submit_requested = false;
         if (context.make_chart_data_for_save) {
             save_chart_from_dialog(context, get_chart_for_save(), result);
@@ -247,7 +314,7 @@ editor_flow_result editor_flow_controller::update(const editor_flow_context& con
     }
 
     if (context.unsaved_changes_dialog->open) {
-        if (context.unsaved_save_clicked) {
+        if (context.unsaved_save_clicked || context.ctrl_s_pressed) {
             const editor_pending_action action = context.unsaved_changes_dialog->pending;
             *context.unsaved_changes_dialog = {};
             if (context.state != nullptr && context.state->file_path().empty()) {

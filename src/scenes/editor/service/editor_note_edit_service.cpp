@@ -15,7 +15,7 @@ std::vector<size_t> normalized_selection(std::vector<size_t> indices) {
 std::vector<note_data> shifted_notes(std::vector<note_data> notes, int tick_delta) {
     for (note_data& note : notes) {
         note.tick = std::max(0, note.tick + tick_delta);
-        note.end_tick = note.type == note_type::hold
+        note.end_tick = note_has_duration(note)
             ? std::max(note.tick + 1, note.end_tick + tick_delta)
             : note.tick;
     }

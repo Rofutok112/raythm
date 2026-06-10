@@ -8,7 +8,24 @@
 #include "song_select/song_import_export_service.h"
 #include "song_select/song_select_command_controller.h"
 #include "song_select/song_select_confirmation_dialog.h"
-#include "song_select/song_select_detail_view.h"
+#include "song_select/song_select_layout.h"
+#include "theme.h"
+#include "ui_draw.h"
+
+namespace {
+
+void draw_busy_overlay(const std::string& message) {
+    const auto& theme = *g_theme;
+    ui::draw_fullscreen_overlay(Color{0, 0, 0, 120});
+    const Rectangle panel = ui::place(song_select::layout::kScreenRect, 420.0f, 96.0f,
+                                      ui::anchor::center, ui::anchor::center);
+    ui::draw_panel(panel);
+    ui::draw_text_in_rect(message.c_str(), 22,
+                          {panel.x + 24.0f, panel.y + 18.0f, panel.width - 48.0f, panel.height - 36.0f},
+                          theme.text, ui::text_align::center);
+}
+
+}  // namespace
 
 void title_play_transfer_controller::on_exit() {
     transfer_controller_.on_exit();
@@ -29,11 +46,10 @@ void title_play_transfer_controller::cancel_confirmation(song_select::state& sta
 }
 
 void title_play_transfer_controller::poll(song_select::state& state,
-                                          const catalog_callbacks& callbacks,
-                                          bool sync_media_on_reload) {
+                                          const catalog_callbacks& callbacks) {
     if (const auto prepared = transfer_controller_.poll_song_import_prepare(); prepared.has_value()) {
         if (prepared->requests.empty()) {
-            apply_transfer_result(state, prepared->transfer, callbacks, sync_media_on_reload);
+            apply_transfer_result(state, prepared->transfer, callbacks);
         } else if (prepared->overwrite_count > 0) {
             open_overwrite_song_confirmation(state, prepared->requests);
         } else {
@@ -42,7 +58,7 @@ void title_play_transfer_controller::poll(song_select::state& state,
         }
     }
     if (const auto result = transfer_controller_.poll_background_transfer(); result.has_value()) {
-        apply_transfer_result(state, *result, callbacks, sync_media_on_reload);
+        apply_transfer_result(state, *result, callbacks);
     }
 }
 
@@ -56,18 +72,17 @@ void title_play_transfer_controller::start_song_import(song_select::state& state
 }
 
 void title_play_transfer_controller::start_chart_import(song_select::state& state,
-                                                       const catalog_callbacks& callbacks,
-                                                       bool sync_media_on_reload) {
+                                                       const catalog_callbacks& callbacks) {
     song_select::transfer_result result;
     if (const auto batch = song_select::prepare_chart_imports(state, result); batch.has_value()) {
         if (batch->overwrite_count > 0) {
             open_overwrite_chart_confirmation(state, batch->requests);
         } else {
             apply_transfer_result(state, song_select::import_chart_packages(batch->requests),
-                                  callbacks, sync_media_on_reload);
+                                  callbacks);
         }
     } else {
-        apply_transfer_result(state, result, callbacks, sync_media_on_reload);
+        apply_transfer_result(state, result, callbacks);
     }
 }
 
@@ -80,43 +95,41 @@ void title_play_transfer_controller::start_song_export(song_select::state& state
 }
 
 void title_play_transfer_controller::start_chart_export(song_select::state& state,
-                                                       const catalog_callbacks& callbacks,
-                                                       bool sync_media_on_reload) {
+                                                       const catalog_callbacks& callbacks) {
     apply_transfer_result(
         state,
         song_select::export_chart_package(state, state.selected_song_index, state.difficulty_index),
-        callbacks,
-        sync_media_on_reload);
+        callbacks);
 }
 
 void title_play_transfer_controller::draw_or_apply_confirmation(
     song_select::state& state,
-    song_select::preview_controller& preview_controller,
-    const catalog_callbacks& callbacks,
-    bool sync_media_on_reload) {
+    title_audio_controller& audio_controller,
+    const catalog_callbacks& callbacks) {
     if (transfer_controller_.busy()) {
-        song_select::draw_busy_overlay(transfer_controller_.busy_label());
+        draw_busy_overlay(transfer_controller_.busy_label());
         return;
     }
 
     const song_select::confirmation_command command = song_select::draw_confirmation_dialog(state);
     song_select::commands::apply_confirmation_command(
         state,
-        preview_controller,
+        [&audio_controller]() {
+            audio_controller.stop_preview();
+        },
         transfer_controller_,
         command,
-        [this, &state, &callbacks, sync_media_on_reload](const song_select::delete_result& result) {
-            apply_delete_result(state, result, callbacks, sync_media_on_reload);
+        [this, &state, &callbacks](const song_select::delete_result& result) {
+            apply_delete_result(state, result, callbacks);
         },
-        [this, &state, &callbacks, sync_media_on_reload](const song_select::transfer_result& result) {
-            apply_transfer_result(state, result, callbacks, sync_media_on_reload);
+        [this, &state, &callbacks](const song_select::transfer_result& result) {
+            apply_transfer_result(state, result, callbacks);
         });
 }
 
 void title_play_transfer_controller::apply_delete_result(song_select::state& state,
                                                          const song_select::delete_result& result,
-                                                         const catalog_callbacks& callbacks,
-                                                         bool sync_media_on_reload) {
+                                                         const catalog_callbacks& callbacks) {
     state.confirmation_dialog = {};
     if (!result.success) {
         song_select::queue_status_message(state, result.message, true);
@@ -129,14 +142,13 @@ void title_play_transfer_controller::apply_delete_result(song_select::state& sta
     callbacks.stop_preview();
     callbacks.mark_online_song_removed(deleted_song_id);
     callbacks.reload_online_catalog();
-    callbacks.request_play_catalog_reload(result.preferred_song_id, result.preferred_chart_id, sync_media_on_reload);
+    callbacks.request_play_catalog_reload(result.preferred_song_id, result.preferred_chart_id);
     song_select::queue_status_message(state, result.message, false);
 }
 
 void title_play_transfer_controller::apply_transfer_result(song_select::state& state,
                                                            const song_select::transfer_result& result,
-                                                           const catalog_callbacks& callbacks,
-                                                           bool sync_media_on_reload) {
+                                                           const catalog_callbacks& callbacks) {
     if (result.cancelled) {
         return;
     }
@@ -148,8 +160,7 @@ void title_play_transfer_controller::apply_transfer_result(song_select::state& s
     if (result.reload_catalog) {
         callbacks.set_preferred_selection(result.preferred_song_id, result.preferred_chart_id);
         callbacks.reload_online_catalog();
-        callbacks.request_play_catalog_reload(result.preferred_song_id, result.preferred_chart_id,
-                                              sync_media_on_reload);
+        callbacks.request_play_catalog_reload(result.preferred_song_id, result.preferred_chart_id);
     }
     song_select::queue_status_message(state, result.message, false);
 }

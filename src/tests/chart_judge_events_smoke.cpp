@@ -38,9 +38,11 @@ int main() {
     stay.lane_width = 4;
     note_data ray_hold{note_type::hold, 1440, 3, 1920};
     ray_hold.is_ray = true;
+    note_data decorative_hold{note_type::decorative_hold, 480, 0, 1920};
+    decorative_hold.lane_width = 2;
 
     chart_data chart;
-    chart.notes = {wide_tap, hold, release, stay, ray_hold};
+    chart.notes = {wide_tap, hold, release, stay, ray_hold, decorative_hold};
 
     const std::vector<chart_judge_event> events = chart_judge_events::build(chart, engine);
     if (events.size() != 7 || chart_judge_events::count(chart, engine) != 7) {

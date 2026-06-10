@@ -216,7 +216,7 @@ void draw_song_info(const song_data& song, const chart_meta& chart, int key_coun
     ui::draw_text_in_rect(key_mode_label(key_count), 18,
                           {level.x + level.width + kBadgeGap + 8.0f, visual.y + 116.0f, 62.0f, 38.0f},
                           alpha(g_theme->accent, reveal_t));
-    ui::draw_text_in_rect(TextFormat("RC %.2f", rc_value), 32,
+    ui::draw_text_in_rect(TextFormat("RC %.0f", rc_value), 32,
                           {difficulty.x, 410.0f, difficulty.width + level.width + 180.0f, 42.0f},
                           alpha(g_theme->text, reveal_t), ui::text_align::left);
 }

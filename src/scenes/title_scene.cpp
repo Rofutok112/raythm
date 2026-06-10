@@ -1,13 +1,16 @@
 #include "title_scene.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <exception>
+#include <future>
+#include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
-#include "audio_manager.h"
 #include "raylib.h"
 #include "scene_common.h"
 #include "scene_manager.h"
@@ -21,7 +24,10 @@
 #include "song_select/song_select_navigation.h"
 #include "tween.h"
 #include "title/home_menu_view.h"
+#include "title/catalog_reload_policy.h"
 #include "title/local_content_index.h"
+#include "title/online_download_internal.h"
+#include "title/online_download_remote_client.h"
 #include "title/title_home_input_controller.h"
 #include "title/title_hub_view.h"
 #include "title/title_layout.h"
@@ -71,6 +77,16 @@ bool select_local_song(song_select::state& state, const std::string& song_id) {
     return false;
 }
 
+std::optional<song_select::song_entry> fetch_remote_preview_song_entry(std::string song_id,
+                                                                       std::string server_url) {
+    const title_online_view::remote_song_lookup_result result =
+        title_online_view::fetch_remote_song_by_id(song_id, server_url);
+    if (!result.success || result.song.audio_url.empty()) {
+        return std::nullopt;
+    }
+    return title_online_view::detail::make_remote_song_entry(result.song, result.server_url);
+}
+
 title_scene::transition_target transition_target_for_home_action(title_home_view::action action) {
     return action == title_home_view::action::multiplayer
         ? title_scene::transition_target::multiplayer
@@ -92,7 +108,8 @@ title_scene::title_scene(scene_manager& manager,
                           bool start_in_play_view,
                           bool start_in_create_view,
                           std::string preferred_multiplayer_room_id,
-                          bool start_in_multiplayer_view) :
+                          bool start_in_multiplayer_view,
+                          bool start_in_settings_view) :
     scene(manager),
     start_with_home_open_(start_with_home_open),
     play_intro_fade_(play_intro_fade),
@@ -103,6 +120,7 @@ title_scene::title_scene(scene_manager& manager,
     start_in_create_view_(start_in_create_view),
     preferred_multiplayer_room_id_(std::move(preferred_multiplayer_room_id)),
     start_in_multiplayer_view_(start_in_multiplayer_view),
+    start_in_settings_view_(start_in_settings_view),
     settings_overlay_(g_settings) {
 }
 
@@ -112,11 +130,11 @@ struct local_chart_match {
 };
 
 local_chart_match find_online_chart_match(const song_select::state& state,
+                                          const local_content_index::snapshot& index,
                                           const std::string& server_url,
                                           const std::string& remote_song_id,
                                           const std::string& remote_chart_id,
                                           int remote_chart_version = 0) {
-    const local_content_index::snapshot index = local_content_index::load_snapshot();
     const online_content_availability::resolved_song song =
         online_content_availability::resolve_song(
             state.songs,
@@ -162,7 +180,7 @@ void title_scene::enter_play_mode() {
     play_create_feature_.on_enter_play(
         multiplayer_chart_pick_active_,
         server_environment::normalize_url(multiplayer_state_.auth.server_url),
-        audio_controller_.preview());
+        audio_controller_);
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_create_feature_.state(), browse_feature_.state()), 0.0f);
 }
 
@@ -170,18 +188,26 @@ void title_scene::enter_multiplayer_mode(bool reset_room_state) {
     mode_ = hub_mode::multiplayer;
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
+    multiplayer_preview_song_id_.clear();
+    reset_multiplayer_remote_preview();
+    audio_controller_.stop_preview();
+    refresh_multiplayer_local_index();
     if (reset_room_state) {
         multiplayer::on_enter(multiplayer_state_, preferred_multiplayer_room_id_);
         preferred_multiplayer_room_id_.clear();
     }
-    audio_controller_.update(current_audio_mode(), song_select::selected_song(play_create_feature_.state()), 0.0f);
+    audio_controller_.update_multiplayer_preview(nullptr, 0.0f);
+}
+
+void title_scene::refresh_multiplayer_local_index() {
+    multiplayer_local_index_ = local_content_index::load_snapshot();
 }
 
 void title_scene::enter_online_mode() {
     mode_ = hub_mode::online;
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
-    browse_feature_.on_enter(audio_controller_.preview());
+    browse_feature_.on_enter(audio_controller_);
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_create_feature_.state(), browse_feature_.state()), 0.0f);
 }
 
@@ -189,7 +215,7 @@ void title_scene::enter_create_mode() {
     mode_ = hub_mode::create;
     home_status_message_.clear();
     play_entry_origin_rect_ = title_home_view::button_rect(home_menu_selected_index_, home_menu_anim_);
-    play_create_feature_.on_enter_create(audio_controller_.preview());
+    play_create_feature_.on_enter_create(audio_controller_);
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_create_feature_.state(), browse_feature_.state()), 0.0f);
 }
 
@@ -212,11 +238,9 @@ void title_scene::update_startup_loading() {
         play_create_feature_.state(),
         preferred_song_id_,
         preferred_chart_id_,
-        mode_ == hub_mode::play || mode_ == hub_mode::create,
         home_status_message_,
-        [this](std::string song_id, std::string chart_id, bool sync_media, bool calculate_missing_levels) {
-            play_create_feature_.request_catalog_reload(
-                std::move(song_id), std::move(chart_id), sync_media, calculate_missing_levels);
+        [this](std::string song_id, std::string chart_id, title_catalog::reload_policy policy) {
+            play_create_feature_.request_catalog_reload(std::move(song_id), std::move(chart_id), policy);
         },
         [this]() {
             return play_create_feature_.catalog_loading();
@@ -234,6 +258,9 @@ void title_scene::update_startup_loading() {
         },
         [this]() {
             return play_create_feature_.scoring_ruleset_loading();
+        },
+        [this]() {
+            return play_create_feature_.catalog_progress();
         },
     });
 }
@@ -272,7 +299,7 @@ bool title_scene::handle_profile_input() {
 title_play_create_feature::cross_callbacks title_scene::play_cross_callbacks() {
     return {
         .stop_preview = [this]() {
-            audio_controller_.preview().stop();
+            audio_controller_.stop_preview();
         },
         .mark_online_song_removed = [this](const std::string& song_id) {
             browse_feature_.mark_song_removed(song_id);
@@ -286,7 +313,7 @@ title_play_create_feature::cross_callbacks title_scene::play_cross_callbacks() {
 void title_scene::update_play_mode(float dt) {
     play_create_feature_.update_play(
         manager_,
-        audio_controller_.preview(),
+        audio_controller_,
         play_view_anim_,
         play_entry_origin_rect_,
         dt,
@@ -329,7 +356,7 @@ bool title_scene::add_selected_chart_to_multiplayer_room() {
 void title_scene::update_create_mode(float dt) {
     play_create_feature_.update_create(
         manager_,
-        audio_controller_.preview(),
+        audio_controller_,
         play_view_anim_,
         play_entry_origin_rect_,
         dt,
@@ -394,7 +421,8 @@ void title_scene::update_multiplayer_mode(float dt) {
     if (multiplayer_state_.current_room.has_value()) {
         for (const multiplayer::room_queue_item& item : multiplayer_state_.current_room->queue) {
             const local_chart_match match =
-                find_online_chart_match(play_create_feature_.state(), room_server_url, item.song_id, item.chart_id);
+                find_online_chart_match(
+                    play_create_feature_.state(), multiplayer_local_index_, room_server_url, item.song_id, item.chart_id);
             const bool installed = match.song != nullptr && match.chart != nullptr;
             if (installed) {
                 multiplayer_state_.installed_queue_item_ids.push_back(item.id);
@@ -444,6 +472,7 @@ void title_scene::update_multiplayer_mode(float dt) {
         multiplayer_state_.start_play_requested = false;
         const local_chart_match match =
             find_online_chart_match(play_create_feature_.state(),
+                                    multiplayer_local_index_,
                                     room_server_url,
                                     multiplayer_state_.requested_start_song_id,
                                     multiplayer_state_.requested_start_chart_id);
@@ -452,7 +481,7 @@ void title_scene::update_multiplayer_mode(float dt) {
             multiplayer_state_.local_ready = false;
             return;
         }
-        audio_controller_.preview().stop();
+        audio_controller_.stop_preview();
         manager_.change_scene(song_select::make_multiplayer_play_scene(
             manager_,
             *match.song,
@@ -462,65 +491,133 @@ void title_scene::update_multiplayer_mode(float dt) {
     }
 }
 
-const song_select::song_entry* title_scene::multiplayer_queue_preview_song() const {
+const multiplayer::room_queue_item* title_scene::multiplayer_queue_preview_item() const {
     if (!multiplayer_state_.current_room.has_value() || multiplayer_state_.current_room->queue.empty()) {
         return nullptr;
     }
-    const multiplayer::room_queue_item& item = multiplayer_state_.current_room->queue.front();
+    return &multiplayer_state_.current_room->queue.front();
+}
+
+const song_select::song_entry* title_scene::multiplayer_queue_preview_song() const {
+    const multiplayer::room_queue_item* item = multiplayer_queue_preview_item();
+    if (item == nullptr) {
+        return nullptr;
+    }
     const std::string room_server_url = server_environment::normalize_url(multiplayer_state_.auth.server_url);
     const local_chart_match match =
-        find_online_chart_match(play_create_feature_.state(), room_server_url, item.song_id, item.chart_id);
+        find_online_chart_match(
+            play_create_feature_.state(), multiplayer_local_index_, room_server_url, item->song_id, item->chart_id);
     return match.song;
 }
 
+const song_select::song_entry* title_scene::multiplayer_remote_queue_preview_song(const multiplayer::room_queue_item& item) {
+    if (item.song_id.empty()) {
+        reset_multiplayer_remote_preview();
+        return nullptr;
+    }
+
+    const std::string room_server_url = server_environment::normalize_url(multiplayer_state_.auth.server_url);
+    const std::string preview_key = room_server_url + "\n" + item.song_id;
+    if (preview_key != multiplayer_remote_preview_key_) {
+        reset_multiplayer_remote_preview();
+        multiplayer_remote_preview_key_ = preview_key;
+        std::promise<std::optional<song_select::song_entry>> promise;
+        multiplayer_remote_preview_future_ = promise.get_future();
+        const std::string song_id = item.song_id;
+        std::thread([promise = std::move(promise), song_id, room_server_url]() mutable {
+            try {
+                promise.set_value(fetch_remote_preview_song_entry(song_id, room_server_url));
+            } catch (...) {
+                promise.set_value(std::nullopt);
+            }
+        }).detach();
+    }
+
+    if (multiplayer_remote_preview_future_.valid() &&
+        multiplayer_remote_preview_future_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        try {
+            multiplayer_remote_preview_song_ = multiplayer_remote_preview_future_.get();
+        } catch (...) {
+            multiplayer_remote_preview_song_.reset();
+        }
+    }
+
+    return multiplayer_remote_preview_song_.has_value() ? &*multiplayer_remote_preview_song_ : nullptr;
+}
+
+void title_scene::reset_multiplayer_remote_preview() {
+    multiplayer_remote_preview_key_.clear();
+    multiplayer_remote_preview_song_.reset();
+    multiplayer_remote_preview_future_ = {};
+}
+
 void title_scene::update_multiplayer_audio(float dt) {
+    const multiplayer::room_queue_item* preview_item = multiplayer_queue_preview_item();
     const song_select::song_entry* preview_song = multiplayer_queue_preview_song();
+    if (preview_song != nullptr) {
+        reset_multiplayer_remote_preview();
+    } else if (preview_item != nullptr) {
+        preview_song = multiplayer_remote_queue_preview_song(*preview_item);
+    } else {
+        reset_multiplayer_remote_preview();
+    }
+    const std::string preview_song_id = preview_song != nullptr ? preview_song->song.meta.song_id : "";
+    if (preview_song_id != multiplayer_preview_song_id_) {
+        multiplayer_preview_song_id_ = preview_song_id;
+        audio_controller_.stop_preview();
+        if (preview_song != nullptr) {
+            audio_controller_.resume_preview_song(preview_song);
+        }
+    }
+
     if (multiplayer_state_.queue_preview_seek_requested) {
         multiplayer_state_.queue_preview_seek_requested = false;
-        audio_manager::instance().seek_preview(multiplayer_state_.queue_preview_seek_seconds);
+        if (preview_song != nullptr &&
+            audio_controller_.preview_snapshot(preview_song).audio.status ==
+                song_select::preview_audio_loader::load_status::ready) {
+            audio_controller_.seek_preview(multiplayer_state_.queue_preview_seek_seconds);
+        }
     }
     if (multiplayer_state_.command == multiplayer::ui_command::toggle_queue_preview) {
         multiplayer_state_.command = multiplayer::ui_command::none;
-        if (audio_manager::instance().is_preview_playing()) {
-            audio_controller_.preview().pause();
-        } else {
-            audio_controller_.preview().resume(preview_song);
-        }
+        audio_controller_.toggle_preview_song(preview_song);
     }
-    audio_controller_.update_preview_only(preview_song, dt);
+
+    audio_controller_.update_multiplayer_preview(preview_song, dt);
     multiplayer_state_.queue_preview_available = preview_song != nullptr;
-    multiplayer_state_.queue_preview_playing = audio_manager::instance().is_preview_playing();
-    multiplayer_state_.queue_preview_position_seconds = preview_song != nullptr
-        ? audio_manager::instance().get_preview_position_seconds()
-        : 0.0;
-    const double stream_length = audio_manager::instance().get_preview_length_seconds();
-    multiplayer_state_.queue_preview_duration_seconds = preview_song != nullptr
-        ? (stream_length > 0.0 ? stream_length : static_cast<double>(preview_song->song.meta.duration_seconds))
-        : 0.0;
+    const title_preview_snapshot preview = audio_controller_.preview_snapshot(preview_song);
+    multiplayer_state_.queue_preview_playing = preview.playing;
+    multiplayer_state_.queue_preview_position_seconds = preview_song != nullptr ? preview.position_seconds : 0.0;
+    multiplayer_state_.queue_preview_duration_seconds = preview_song != nullptr ? preview.length_seconds : 0.0;
 }
 
 void title_scene::update_online_mode(float dt) {
-    browse_feature_.update(
+        browse_feature_.update(
         play_view_anim_,
         play_entry_origin_rect_,
         dt,
+        audio_controller_,
         {
             .online = {
                 .enter_home = [this]() { enter_home_mode(false); },
                 .select_preview_song = [this]() {
-                    audio_controller_.preview().select_song(browse_feature_.preview_song());
+                    audio_controller_.select_preview_song(browse_feature_.preview_song());
                 },
                 .resume_preview = [this]() {
-                    audio_controller_.preview().resume(browse_feature_.preview_song());
+                    audio_controller_.resume_preview_song(browse_feature_.preview_song());
                 },
                 .pause_preview = [this]() {
-                    audio_controller_.preview().pause();
+                    audio_controller_.pause_preview();
                 },
                 .open_local_selection = [this]() {
                     preferred_song_id_ = browse_feature_.selected_song_id();
                     preferred_chart_id_.clear();
                     if (!select_local_song(play_create_feature_.state(), preferred_song_id_)) {
-                        play_create_feature_.request_catalog_reload(preferred_song_id_, preferred_chart_id_, true);
+                        catalog_reload_coordinator_.request_reload(
+                            play_create_feature_,
+                            preferred_song_id_,
+                            preferred_chart_id_,
+                            title_catalog::policy_for(title_catalog::reload_mode::selection_sync));
                     }
                     enter_play_mode();
                 },
@@ -539,24 +636,34 @@ void title_scene::update_common_animation(float dt) {
                                play_create_feature_.state().auth,
                                play_create_feature_.state().login_dialog);
     play_create_feature_.poll_catalog_reload(
-        audio_controller_.preview(), mode_ == hub_mode::play, mode_ == hub_mode::create);
-    play_create_feature_.poll_transfer(play_cross_callbacks(), content_mode_is_play_or_create);
-    play_create_feature_.poll_ranking_reload();
-    if (play_create_feature_.poll_scoring_ruleset_warm()) {
-        play_create_feature_.capture_current_selection();
-        play_create_feature_.request_catalog_reload(
-            play_create_feature_.preferred_song_id(),
-            play_create_feature_.preferred_chart_id(),
-            content_mode_is_play_or_create);
+        audio_controller_, mode_ == hub_mode::play, mode_ == hub_mode::create);
+    play_create_feature_.poll_transfer(play_cross_callbacks());
+    if (content_mode == hub_mode::play) {
+        play_create_feature_.poll_ranking_reload();
     }
-    if (play_create_feature_.poll_create_upload(content_mode_is_play_or_create)) {
+    if (play_create_feature_.poll_scoring_ruleset_warm()) {
+        if (!content_mode_is_play_or_create) {
+            play_create_feature_.capture_current_selection();
+            catalog_reload_coordinator_.request_reload(
+                play_create_feature_,
+                play_create_feature_.preferred_song_id(),
+                play_create_feature_.preferred_chart_id(),
+                title_catalog::policy_for(title_catalog::reload_mode::scoring_ruleset_warmed));
+        }
+    }
+    if (play_create_feature_.poll_create_upload()) {
+        catalog_reload_coordinator_.mark_level_refresh_covered();
         browse_feature_.request_reload(true);
     }
 
     if (profile_controller_.poll().content_changed) {
         auth_overlay::refresh_auth_state(play_create_feature_.state().auth);
         browse_feature_.request_reload();
-        play_create_feature_.request_catalog_reload("", "", content_mode_is_play_or_create, true);
+        catalog_reload_coordinator_.request_reload(
+            play_create_feature_,
+            "",
+            "",
+            title_catalog::policy_for(title_catalog::reload_mode::content_changed));
     }
 
     profile_controller_.close_if_logged_out(play_create_feature_.state().auth.logged_in);
@@ -566,13 +673,23 @@ void title_scene::update_common_animation(float dt) {
     if (browse_poll.downloaded_content) {
         preferred_song_id_ = browse_poll.downloaded_song_id;
         preferred_chart_id_.clear();
-        play_create_feature_.request_catalog_reload(preferred_song_id_, preferred_chart_id_,
-                                                    content_mode_is_play_or_create,
-                                                    true);
+        if (content_mode == hub_mode::multiplayer) {
+            refresh_multiplayer_local_index();
+        }
+        catalog_reload_coordinator_.request_reload(
+            play_create_feature_,
+            preferred_song_id_,
+            preferred_chart_id_,
+            title_catalog::policy_for(title_catalog::reload_mode::content_changed));
     }
     if (browse_poll.select_preview_song) {
-        audio_controller_.preview().select_song(browse_feature_.preview_song());
+        audio_controller_.select_preview_song(browse_feature_.preview_song());
     }
+
+    catalog_reload_coordinator_.request_background_rebuild_if_due(
+        play_create_feature_,
+        startup_.loading,
+        content_mode_is_play_or_create);
 
     if (intro_hold_t_ > 0.0f) {
         intro_hold_t_ = std::max(0.0f, intro_hold_t_ - dt);
@@ -648,10 +765,11 @@ bool title_scene::handle_refresh_button_input() {
 
     play_create_feature_.capture_current_selection();
     browse_feature_.request_reload(true);
-    play_create_feature_.request_catalog_reload(play_create_feature_.preferred_song_id(),
-                                                play_create_feature_.preferred_chart_id(),
-                                                mode_ == hub_mode::play || mode_ == hub_mode::create,
-                                                true);
+    catalog_reload_coordinator_.request_reload(
+        play_create_feature_,
+        play_create_feature_.preferred_song_id(),
+        play_create_feature_.preferred_chart_id(),
+        title_catalog::policy_for(title_catalog::reload_mode::user_refresh));
     ui::notify("Refreshing catalog...", ui::notice_tone::info, 1.8f);
     return true;
 }
@@ -801,6 +919,7 @@ void title_scene::on_enter() {
     audio_controller_.configure(kTitleIntroPath, kTitleLoopPath);
     audio_controller_.on_enter();
     play_create_feature_.reset();
+    catalog_reload_coordinator_.reset();
     auth_overlay::refresh_auth_state(play_create_feature_.state().auth);
     profile_controller_.reset();
     play_create_feature_.state().recent_result_offset = recent_result_offset_;
@@ -811,30 +930,31 @@ void title_scene::on_enter() {
         intro_fade_.restart(scene_fade::direction::in, 0.0f, 0.0f);
         intro_hold_t_ = 0.0f;
     }
-    mode_ = start_in_multiplayer_view_ ? hub_mode::multiplayer
+    const hub_mode requested_mode = start_in_multiplayer_view_ ? hub_mode::multiplayer
         : (start_in_create_view_ ? hub_mode::create
         : (start_in_play_view_ ? hub_mode::play : (start_with_home_open_ ? hub_mode::home : hub_mode::title)));
-    if (mode_ == hub_mode::play) {
+    mode_ = start_in_settings_view_ ? hub_mode::settings : requested_mode;
+    if (requested_mode == hub_mode::play) {
         play_create_feature_.on_enter_play(
             multiplayer_chart_pick_active_,
             server_environment::normalize_url(multiplayer_state_.auth.server_url),
-            audio_controller_.preview());
-    } else if (mode_ == hub_mode::create) {
-        play_create_feature_.on_enter_create(audio_controller_.preview());
-    } else if (mode_ == hub_mode::online) {
-        browse_feature_.on_enter(audio_controller_.preview());
+            audio_controller_);
+    } else if (requested_mode == hub_mode::create) {
+        play_create_feature_.on_enter_create(audio_controller_);
+    } else if (requested_mode == hub_mode::online) {
+        browse_feature_.on_enter(audio_controller_);
     }
-    if (mode_ == hub_mode::multiplayer) {
+    if (requested_mode == hub_mode::multiplayer) {
         multiplayer::on_enter(multiplayer_state_, preferred_multiplayer_room_id_);
         preferred_multiplayer_room_id_.clear();
     }
     suppress_home_pointer_until_release_ = false;
-    settings_return_mode_ = hub_mode::home;
-    home_menu_anim_ = mode_ == hub_mode::title ? 0.0f : 1.0f;
+    settings_return_mode_ = start_in_settings_view_ ? requested_mode : hub_mode::home;
+    home_menu_anim_ = requested_mode == hub_mode::title ? 0.0f : 1.0f;
     home_menu_selected_index_ = 0;
     home_status_message_.clear();
-    play_view_anim_ = (mode_ == hub_mode::play || mode_ == hub_mode::multiplayer ||
-                       mode_ == hub_mode::online || mode_ == hub_mode::create) ? 1.0f : 0.0f;
+    play_view_anim_ = (requested_mode == hub_mode::play || requested_mode == hub_mode::multiplayer ||
+                       requested_mode == hub_mode::online || requested_mode == hub_mode::create) ? 1.0f : 0.0f;
     play_entry_origin_rect_ = {};
     settings_overlay_.open();
     play_create_feature_.state().login_dialog.open = false;
@@ -1013,7 +1133,6 @@ void title_scene::draw() {
         profile_controller_,
         auth_controller_,
         cross_callbacks,
-        mode_ == hub_mode::play || mode_ == hub_mode::create,
         intro_fade_,
         transition_fade_,
         quit_fade_,

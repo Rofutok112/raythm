@@ -141,6 +141,15 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    const std::filesystem::path missing_songs_root =
+        appdata_root / "missing-songs-root";
+    const song_load_result missing_root_result =
+        song_loader::load_all(missing_songs_root.string());
+    if (!missing_root_result.songs.empty() || !missing_root_result.errors.empty()) {
+        std::cerr << "Expected a missing songs root to load as an empty catalog without warnings\n";
+        ok = false;
+    }
+
     song_load_result load_result;
     if (std::filesystem::exists(songs_root())) {
         load_result = song_loader::load_all(songs_root());

@@ -138,6 +138,12 @@ std::optional<note_type> parse_note_type(const std::string& value) {
     if (normalized == "stay") {
         return note_type::stay;
     }
+    if (normalized == "decorativehold" ||
+        normalized == "decorhold" ||
+        normalized == "decorative_hold" ||
+        normalized == "decor_hold") {
+        return note_type::decorative_hold;
+    }
     (void)ray_prefix;
     return std::nullopt;
 }
@@ -533,7 +539,7 @@ std::vector<note_data> chart_parser::parse_notes(const std::vector<numbered_line
             continue;
         }
 
-        const size_t required_fields = *type == note_type::hold ? 4 : 3;
+        const size_t required_fields = note_type_has_duration(*type) ? 4 : 3;
         if (tokens.size() < required_fields ||
             !std::all_of(tokens.begin() + static_cast<std::ptrdiff_t>(required_fields), tokens.end(),
                          is_note_modifier_token)) {
@@ -561,10 +567,10 @@ std::vector<note_data> chart_parser::parse_notes(const std::vector<numbered_line
         }
         note.lane_width = *lane_width;
 
-        if (*type == note_type::hold) {
+        if (note_type_has_duration(*type)) {
             const std::optional<int> end_tick = parse_int(tokens[3]);
             if (!end_tick.has_value()) {
-                errors.push_back(format_line_error(line.first, "Hold endTick must be an integer"));
+                errors.push_back(format_line_error(line.first, "Long note endTick must be an integer"));
                 continue;
             }
             note.end_tick = *end_tick;
@@ -622,6 +628,7 @@ std::vector<std::string> chart_parser::validate(const chart_data& data) {
         hold_tail,
         release,
         stay,
+        visual_only,
     };
 
     struct note_interval {
@@ -641,6 +648,9 @@ std::vector<std::string> chart_parser::validate(const chart_data& data) {
             case note_type::stay:
                 intervals.push_back({note.tick, note.tick, note_overlap_role::stay});
                 break;
+            case note_type::decorative_hold:
+                intervals.push_back({note.tick, note.end_tick, note_overlap_role::visual_only});
+                break;
             case note_type::hold:
                 intervals.push_back({note.tick, note.tick, note_overlap_role::hold_head});
                 if (note.end_tick - note.tick > 1) {
@@ -652,6 +662,10 @@ std::vector<std::string> chart_parser::validate(const chart_data& data) {
     };
 
     auto roles_can_overlap = [](note_overlap_role left, note_overlap_role right) {
+        if (left == note_overlap_role::visual_only || right == note_overlap_role::visual_only) {
+            return true;
+        }
+
         if (left == note_overlap_role::stay || right == note_overlap_role::stay) {
             return true;
         }
@@ -699,9 +713,9 @@ std::vector<std::string> chart_parser::validate(const chart_data& data) {
             continue;
         }
 
-        if (note.type == note_type::hold) {
+        if (note_has_duration(note)) {
             if (note.end_tick <= note.tick) {
-                errors.push_back("Hold note endTick must be greater than tick");
+                errors.push_back("Long note endTick must be greater than tick");
                 continue;
             }
         }

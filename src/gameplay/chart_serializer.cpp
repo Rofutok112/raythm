@@ -56,6 +56,8 @@ const char* note_type_name(note_type type) {
             return "release";
         case note_type::stay:
             return "stay";
+        case note_type::decorative_hold:
+            return "decorativeHold";
     }
 
     return "";
@@ -88,12 +90,15 @@ bool write_chart(std::ostream& output, const chart_data& data) {
                note.is_ray ||
                note_lane_width(note) > 1;
     });
-    int required_format_version = needs_format_v2 ? 2 : 1;
+    const bool needs_format_v5 = std::any_of(data.notes.begin(), data.notes.end(), [](const note_data& note) {
+        return note.type == note_type::decorative_hold;
+    });
+    int required_format_version = needs_format_v5 ? 5 : (needs_format_v2 ? 2 : 1);
     if (!data.scroll_automation.empty()) {
-        required_format_version = 4;
+        required_format_version = std::max(required_format_version, 4);
     }
     if (!scroll_guides_are_default(data.scroll_guides)) {
-        required_format_version = 4;
+        required_format_version = std::max(required_format_version, 4);
     }
     output << "formatVersion=" << std::max(data.meta.format_version, required_format_version) << '\n';
     output << "resolution=" << data.meta.resolution << '\n';
@@ -152,7 +157,7 @@ bool write_chart(std::ostream& output, const chart_data& data) {
     output << "[Notes]\n";
     for (const note_data& note : sorted_notes) {
         output << note_type_name(note.type) << ',' << note.tick << ',' << note.lane;
-        if (note.type == note_type::hold) {
+        if (note_has_duration(note)) {
             output << ',' << note.end_tick;
         }
         if (note_lane_width(note) > 1) {

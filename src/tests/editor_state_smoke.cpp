@@ -38,6 +38,7 @@ chart_data make_chart() {
 
 int main() {
     editor_state state(make_chart(), "assets/charts/editor_state.rchart");
+    const size_t loaded_revision = state.revision_generation();
 
     if (state.is_dirty()) {
         std::cerr << "freshly loaded state should not be dirty\n";
@@ -50,6 +51,27 @@ int main() {
 
     if (!nearly_equal(state.engine().tick_to_ms(480), 524.0)) {
         std::cerr << "initial timing engine state is invalid\n";
+        return EXIT_FAILURE;
+    }
+
+    chart_data reloaded_chart = make_chart();
+    reloaded_chart.meta.chart_id = "editor-state-reloaded";
+    reloaded_chart.notes = {
+        {note_type::tap, 720, 3, 720},
+    };
+    state.load(reloaded_chart, "assets/charts/editor_state_reloaded.rchart");
+    if (state.revision_generation() == loaded_revision ||
+        state.data().meta.chart_id != "editor-state-reloaded" ||
+        state.note_indices_in_tick_range(0, 100).size() != 0 ||
+        state.note_indices_in_tick_range(700, 740).size() != 1) {
+        std::cerr << "load should advance editor revision and invalidate cached note views\n";
+        return EXIT_FAILURE;
+    }
+    state.load(make_chart(), "assets/charts/editor_state.rchart");
+
+    editor_state next_state(make_chart(), "assets/charts/editor_state_next.rchart");
+    if (next_state.revision_generation() == state.revision_generation()) {
+        std::cerr << "separate editor states should not reuse cache revision keys\n";
         return EXIT_FAILURE;
     }
 
@@ -81,6 +103,12 @@ int main() {
     wide_clear.lane_width = 2;
     if (!state.has_note_overlap(wide_overlap) || state.has_note_overlap(wide_clear)) {
         std::cerr << "has_note_overlap should account for wide lane ranges\n";
+        return EXIT_FAILURE;
+    }
+    note_data decorative_overlap{note_type::decorative_hold, 480, 2, 960};
+    decorative_overlap.lane_width = 2;
+    if (state.has_note_overlap(decorative_overlap)) {
+        std::cerr << "Decorative hold notes should not block gameplay note placement\n";
         return EXIT_FAILURE;
     }
     if (state.max_note_tick() != 960) {

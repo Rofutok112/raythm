@@ -188,40 +188,14 @@ void draw_and_update(const context& context) {
         (context.state.data().meta.offset > 0 ? "+" : "") + std::to_string(context.state.data().meta.offset) + " ms";
     const editor_header_view_result header_result = editor_screen_view::draw_header({
         context.transport,
-        context.meter_map,
-        context.waveform_visible,
         context.viewport,
         context.snap_dropdown_open,
-        offset_label.c_str(),
     });
-    if (header_result.restart_requested) {
-        editor_transport_service::seek_to_tick(
-            context.transport, &context.state, 0, context.hitsound_path, &context.hitsounds);
-        context.scroll_to_tick(0);
-    }
-    if (header_result.playback_toggled) {
-        const std::optional<int> restore_scroll_tick = editor_transport_service::toggle_playback(
-            context.transport, &context.state, context.space_playback_start_tick, context.hitsound_path, &context.hitsounds);
-        if (restore_scroll_tick.has_value()) {
-            context.scroll_to_tick(*restore_scroll_tick);
-        }
-    }
-    if (header_result.playtest_requested) {
-        context.playtest_button_requested = true;
-    }
     if (header_result.metadata_modal_requested) {
         context.metadata_modal_open = true;
     }
     if (header_result.timing_modal_requested) {
         context.timing_modal_open = true;
-    }
-    if (header_result.offset_left_clicked) {
-        context.apply_chart_offset(std::max(-10000, context.state.data().meta.offset - 5));
-    } else if (header_result.offset_right_clicked) {
-        context.apply_chart_offset(std::min(10000, context.state.data().meta.offset + 5));
-    }
-    if (header_result.waveform_toggled) {
-        context.waveform_visible = !context.waveform_visible;
     }
     if (header_result.snap_dropdown_toggled) {
         context.snap_dropdown_open = !context.snap_dropdown_open;

@@ -252,6 +252,8 @@ std::vector<note_event> build_note_events(const chart_data& data, const timing_e
                 events.push_back({start_ms, representative_lane, note_event::kind::stay,
                                   active_hold_load_at(holds, start_ms) > 0.0f ? kHeldStayEffort : kFreeStayEffort});
                 break;
+            case note_type::decorative_hold:
+                break;
         }
     }
 

@@ -30,6 +30,7 @@ struct se_sample_entry {
 struct se_voice_entry {
     unsigned long handle = 0;
     float local_volume = 1.0f;
+    float pan = 0.0f;
     bool stream_fallback = false;
     std::string sample_path;
 };
@@ -349,7 +350,7 @@ audio_clock_snapshot audio_manager::get_bgm_clock() const {
 
 bool audio_manager::get_bgm_fft256(std::array<float, 128>& spectrum) const {
     spectrum.fill(0.0f);
-    if (!is_voice_loaded(bgm_handle_)) {
+    if (!is_voice_playing(bgm_handle_)) {
         return false;
     }
 
@@ -359,7 +360,7 @@ bool audio_manager::get_bgm_fft256(std::array<float, 128>& spectrum) const {
 
 bool audio_manager::get_bgm_fft1024(std::array<float, 512>& spectrum) const {
     spectrum.fill(0.0f);
-    if (!is_voice_loaded(bgm_handle_)) {
+    if (!is_voice_playing(bgm_handle_)) {
         return false;
     }
 
@@ -369,7 +370,7 @@ bool audio_manager::get_bgm_fft1024(std::array<float, 512>& spectrum) const {
 
 bool audio_manager::get_bgm_fft4096(std::array<float, 2048>& spectrum) const {
     spectrum.fill(0.0f);
-    if (!is_voice_loaded(bgm_handle_)) {
+    if (!is_voice_playing(bgm_handle_)) {
         return false;
     }
 
@@ -484,9 +485,6 @@ bool audio_manager::request_preview_load(const std::string& file_path) {
         stale_preview_load_futures_.push_back(std::move(preview_load_future_));
     }
 
-    stop_voice(preview_handle_);
-    free_voice(preview_handle_);
-    preview_memory_.clear();
     reset_preview_fade();
     preview_loading_ = true;
     const std::string source = file_path;
@@ -519,9 +517,6 @@ bool audio_manager::request_preview_load_from_memory(std::vector<unsigned char> 
         stale_preview_load_futures_.push_back(std::move(preview_load_future_));
     }
 
-    stop_voice(preview_handle_);
-    free_voice(preview_handle_);
-    preview_memory_.clear();
     reset_preview_fade();
     preview_loading_ = true;
     preview_path_.clear();
@@ -582,11 +577,20 @@ audio_manager::async_preview_load_result audio_manager::poll_preview_load() {
     free_voice(preview_handle_);
     preview_handle_ = loaded.handle;
     preview_memory_ = std::move(loaded.memory);
-    preview_loudness_ = preview_path_.empty() ? audio_loudness_analysis{} : analyze_or_get_cached_loudness(preview_path_);
+    preview_loudness_ = {};
     reset_preview_fade();
     apply_preview_volume();
     result.loaded = is_voice_loaded(preview_handle_);
     return result;
+}
+
+void audio_manager::cancel_preview_load_request() {
+    ++preview_load_generation_;
+    active_preview_load_generation_ = preview_load_generation_;
+    if (preview_load_future_.valid()) {
+        stale_preview_load_futures_.push_back(std::move(preview_load_future_));
+    }
+    preview_loading_ = false;
 }
 
 bool audio_manager::is_preview_loading() const {
@@ -657,7 +661,7 @@ double audio_manager::get_preview_length_seconds() const {
 
 bool audio_manager::get_preview_fft256(std::array<float, 128>& spectrum) const {
     spectrum.fill(0.0f);
-    if (!is_voice_loaded(preview_handle_)) {
+    if (!is_voice_playing(preview_handle_)) {
         return false;
     }
 
@@ -667,7 +671,7 @@ bool audio_manager::get_preview_fft256(std::array<float, 128>& spectrum) const {
 
 bool audio_manager::get_preview_fft1024(std::array<float, 512>& spectrum) const {
     spectrum.fill(0.0f);
-    if (!is_voice_loaded(preview_handle_)) {
+    if (!is_voice_playing(preview_handle_)) {
         return false;
     }
 
@@ -677,7 +681,7 @@ bool audio_manager::get_preview_fft1024(std::array<float, 512>& spectrum) const 
 
 bool audio_manager::get_preview_fft4096(std::array<float, 2048>& spectrum) const {
     spectrum.fill(0.0f);
-    if (!is_voice_loaded(preview_handle_)) {
+    if (!is_voice_playing(preview_handle_)) {
         return false;
     }
 
@@ -689,7 +693,7 @@ double audio_manager::get_preview_sample_rate_hz() const {
     return get_voice_sample_rate_hz(preview_handle_);
 }
 
-int audio_manager::play_se(const std::string& file_path, float volume) {
+int audio_manager::play_se(const std::string& file_path, float volume, float pan) {
     if (!ensure_initialized()) {
         return 0;
     }
@@ -710,9 +714,11 @@ int audio_manager::play_se(const std::string& file_path, float volume) {
     }
 
     const int voice_id = next_se_voice_id_++;
-    se_voices()[voice_id] = {handle, std::clamp(volume, 0.0f, 1.0f), stream_fallback,
+    se_voices()[voice_id] = {handle, std::clamp(volume, 0.0f, 1.0f), std::clamp(pan, -1.0f, 1.0f), stream_fallback,
                              stream_fallback ? std::string{} : file_path};
+    BASS_ChannelSetAttribute(handle, BASS_ATTRIB_NOBUFFER, 1.0f);
     BASS_ChannelSetAttribute(handle, BASS_ATTRIB_VOL, se_voices()[voice_id].local_volume * se_volume_);
+    BASS_ChannelSetAttribute(handle, BASS_ATTRIB_PAN, se_voices()[voice_id].pan);
     play_voice(handle, true);
     trim_se_sample_cache();
     return voice_id;

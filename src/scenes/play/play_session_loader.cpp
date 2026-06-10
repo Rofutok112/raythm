@@ -8,7 +8,6 @@
 #include "audio_manager.h"
 #include "audio_waveform.h"
 #include "chart_judge_events.h"
-#include "chart_level_cache.h"
 #include "game_settings.h"
 #include "managed_content_storage.h"
 #include "path_utils.h"
@@ -16,8 +15,20 @@
 #include "play_chart_filter.h"
 #include "play_speed_compensation.h"
 #include "ranking_service.h"
+#include "song_select/local_catalog_cache_service.h"
 
 namespace {
+
+void report_progress(const play_session_loader::progress_callback& progress,
+                     play_session_state& state,
+                     float value,
+                     const std::string& message) {
+    state.status_progress = std::clamp(value, 0.0f, 1.0f);
+    state.status_text = message;
+    if (progress) {
+        progress(state.status_progress, state.status_text);
+    }
+}
 
 std::optional<song_data> load_sample_song() {
     song_load_result result = song_loader::load_all(path_utils::to_utf8(app_paths::songs_root()));
@@ -33,7 +44,8 @@ std::optional<chart_data> load_chart_for_key_count(const song_data& song, int ke
         if (parse_result.success && parse_result.data.has_value() &&
             parse_result.data->meta.key_count == key_count) {
             chart_data chart = *parse_result.data;
-            if (const std::optional<float> cached_level = chart_level_cache::find_level(chart_path);
+            if (const std::optional<float> cached_level =
+                    song_select::local_catalog_cache_service::find_chart_level(chart_path);
                 cached_level.has_value()) {
                 chart.meta.level = *cached_level;
             }
@@ -46,7 +58,7 @@ std::optional<chart_data> load_chart_for_key_count(const song_data& song, int ke
 double calculate_song_end_ms(const chart_data& chart, const timing_engine& engine, const audio_manager& audio) {
     int last_tick = 0;
     for (const note_data& note : chart.notes) {
-        last_tick = std::max(last_tick, note.type == note_type::hold ? note.end_tick : note.tick);
+        last_tick = std::max(last_tick, note_has_duration(note) ? note.end_tick : note.tick);
     }
 
     const double chart_tail_ms = engine.tick_to_ms(last_tick) + play_session_constants::kChartEndTailMs;
@@ -142,7 +154,9 @@ void preload_hitsounds(audio_manager& audio, const play_hitsound_paths& hitsound
 
 namespace play_session_loader {
 
-play_session_state load(const play_start_request& request, play_note_draw_queue& draw_queue) {
+play_session_state load(const play_start_request& request,
+                        play_note_draw_queue& draw_queue,
+                        progress_callback progress) {
     play_session_state state;
     state.key_count = request.key_count;
     state.song_data = request.song_data;
@@ -157,18 +171,23 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.lane_width = std::clamp(g_settings.lane_width, kMinLaneWidth, kMaxLaneWidth);
     state.lane_fog_hidden_percent =
         std::clamp(g_settings.lane_fog_hidden_percent, kMinLaneFogHiddenPercent, kMaxLaneFogHiddenPercent);
+    state.note_height = g_settings.note_height;
     state.lane_speed =
         play_speed_compensation::compensated_lane_speed(g_settings.note_speed, state.camera_angle_degrees);
 
+    report_progress(progress, state, 0.04f, "Preparing play session...");
     if (!state.song_data.has_value()) {
+        report_progress(progress, state, 0.08f, "Finding playable songs...");
         state.song_data = load_sample_song();
         if (!state.song_data.has_value()) {
+            state.status_progress = 1.0f;
             state.status_text = "No playable song package found";
             draw_queue.clear();
             return state;
         }
     }
 
+    report_progress(progress, state, 0.14f, "Preparing hitsounds...");
     state.hitsounds = load_hitsound_paths();
     state.hitsound_path = state.hitsounds.tap;
     if (state.hitsound_path.empty()) {
@@ -176,6 +195,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
         state.hitsounds.tap = state.hitsound_path;
     }
 
+    report_progress(progress, state, 0.22f, "Loading selected chart...");
     if (state.chart_data.has_value()) {
         state.key_count = state.chart_data->meta.key_count;
     } else if (state.selected_chart_path.has_value()) {
@@ -186,11 +206,13 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
             if (request.selected_chart_level.has_value()) {
                 state.chart_data->meta.level = *request.selected_chart_level;
             } else if (const std::optional<float> cached_level =
-                           chart_level_cache::find_level(*state.selected_chart_path);
+                           song_select::local_catalog_cache_service::find_chart_level(
+                               *state.selected_chart_path);
                        cached_level.has_value()) {
                 state.chart_data->meta.level = *cached_level;
             }
         } else {
+            state.status_progress = 1.0f;
             state.status_text = "Failed to load selected chart";
             draw_queue.clear();
             return state;
@@ -200,11 +222,13 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     }
 
     if (!state.chart_data.has_value()) {
+        state.status_progress = 1.0f;
         state.status_text = "No chart found for selected key mode";
         draw_queue.clear();
         return state;
     }
 
+    report_progress(progress, state, 0.34f, "Preparing chart timing...");
     state.chart_data->meta.song_id = state.song_data->meta.song_id;
     state.chart_data = play_chart_filter::prepare_chart_for_playback(*state.chart_data, state.start_tick);
 
@@ -220,6 +244,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.start_ms = state.timing_engine.tick_to_ms(state.start_tick);
     state.judge_system.init(state.chart_data->notes, state.timing_engine);
     if (!state.editor_resume_state.has_value() && request.online_ranking_enabled) {
+        report_progress(progress, state, 0.46f, "Preparing scoring cache...");
         ranking_service::refresh_scoring_ruleset_cache_for_chart_start(state.chart_data->meta, false);
     }
     state.score_system.init(chart_judge_events::count(*state.chart_data, state.timing_engine));
@@ -229,10 +254,12 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     audio_manager& audio = audio_manager::instance();
     const std::filesystem::path audio_path =
         path_utils::join_utf8(state.song_data->directory, state.song_data->meta.audio_file);
+    report_progress(progress, state, 0.58f, "Loading audio...");
     const managed_content_storage::managed_file_read_result managed_audio =
         managed_content_storage::read_managed_file(audio_path);
     if (managed_audio.managed) {
         if (!managed_audio.success || !audio.load_bgm_from_memory(managed_audio.bytes)) {
+            state.status_progress = 1.0f;
             state.status_text = "Failed to decrypt managed audio";
             draw_queue.clear();
             return state;
@@ -241,11 +268,14 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
         audio.load_bgm(path_utils::to_utf8(audio_path));
     }
     audio.set_bgm_volume(g_settings.bgm_volume);
+    report_progress(progress, state, 0.70f, "Preloading hitsounds...");
     preload_hitsounds(audio, state.hitsounds);
+    report_progress(progress, state, 0.78f, "Analyzing waveform...");
     state.mv_waveform = managed_audio.managed
         ? build_mv_waveform_from_memory(managed_audio.bytes)
         : build_mv_waveform(audio_path);
     if (!state.editor_resume_state.has_value() && state.start_tick == 0) {
+        report_progress(progress, state, 0.86f, "Detecting song lead-in...");
         const std::optional<double> first_audible_ms = managed_audio.managed
             ? detect_first_audible_ms_from_memory(managed_audio.bytes)
             : detect_first_audible_ms(audio_path);
@@ -259,6 +289,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
         audio.seek_bgm(0.0);
     }
 
+    report_progress(progress, state, 0.94f, "Preparing notes...");
     draw_queue.init_from_note_states(state.key_count, state.judge_system.note_states(), &state.scroll_map);
 
     state.song_end_chart_time_ms = calculate_song_end_ms(*state.chart_data, state.timing_engine, audio);
@@ -285,6 +316,7 @@ play_session_state load(const play_start_request& request, play_note_draw_queue&
     state.chart_end_fade_started = false;
     state.chart_end_hold_timer = 0.0f;
     state.combo_display = 0;
+    state.status_progress = 1.0f;
     return state;
 }
 

@@ -2,6 +2,8 @@
 
 #include <utility>
 
+#include "audio_manager.h"
+
 void title_audio_controller::configure(std::string intro_path, std::string loop_path) {
     bgm_controller_.configure(std::move(intro_path), std::move(loop_path));
 }
@@ -22,9 +24,20 @@ void title_audio_controller::on_exit() {
 void title_audio_controller::update(title_audio_policy::hub_mode mode,
                                     const song_select::song_entry* selected_song,
                                     float dt) {
+    song_select::selection_key current_key;
+    if (selected_song != nullptr) {
+        current_key.song_id = selected_song->song.meta.song_id;
+    }
+    update(mode, current_key, selected_song, dt);
+}
+
+void title_audio_controller::update(title_audio_policy::hub_mode mode,
+                                    const song_select::selection_key& current_key,
+                                    const song_select::song_entry* selected_song,
+                                    float dt) {
     title_audio_policy::resolved_state next_state = resolve_state(mode);
-    if (next_state.update_preview) {
-        preview_controller_.update(dt, selected_song);
+    if (next_state.update_preview || preview_controller_.is_loading()) {
+        preview_controller_.update(dt, current_key, selected_song);
         next_state = resolve_state(mode);
     }
 
@@ -55,20 +68,121 @@ void title_audio_controller::update_preview_only(const song_select::song_entry* 
     spectrum_visualizer_.update(current_state_.spectrum, dt);
 }
 
+void title_audio_controller::update_multiplayer_preview(const song_select::song_entry* selected_song, float dt) {
+    if (selected_song != nullptr) {
+        preview_controller_.update(dt, selected_song);
+    } else if (preview_controller_.is_audio_active()) {
+        preview_controller_.stop();
+    }
+
+    const bool preview_active = preview_controller_.is_audio_active();
+    current_state_ = {
+        .music = preview_active
+            ? title_audio_policy::music_source::preview_song
+            : title_audio_policy::music_source::theme_song,
+        .spectrum = preview_active
+            ? title_spectrum_visualizer::source::preview
+            : title_spectrum_visualizer::source::bgm,
+        .update_preview = selected_song != nullptr,
+    };
+    bgm_controller_.suspend_immediate();
+    bgm_controller_.update();
+    spectrum_visualizer_.update(current_state_.spectrum, dt);
+}
+
 void title_audio_controller::draw_spectrum(const Rectangle& rect, float alpha_scale) const {
     spectrum_visualizer_.draw(rect, alpha_scale);
+}
+
+void title_audio_controller::select_preview_song(const song_select::song_entry* song) {
+    preview_controller_.select_song(song);
+}
+
+void title_audio_controller::request_preview_audio(const song_select::selection_key& key,
+                                                  const song_select::song_entry* song) {
+    preview_controller_.request_audio(key, song);
+}
+
+void title_audio_controller::request_preview_jacket(const song_select::selection_key& key,
+                                                   const song_select::song_entry* song) {
+    preview_controller_.request_jacket(key, song);
+}
+
+void title_audio_controller::resume_preview_song(const song_select::song_entry* song) {
+    preview_controller_.resume(song);
+}
+
+void title_audio_controller::resume_preview_song(const song_select::selection_key& key,
+                                                 const song_select::song_entry* song) {
+    preview_controller_.resume(key, song);
+}
+
+void title_audio_controller::pause_preview() {
+    preview_controller_.pause();
+}
+
+void title_audio_controller::stop_preview() {
+    preview_controller_.stop();
+}
+
+void title_audio_controller::toggle_preview_song(const song_select::song_entry* song) {
+    if (preview_controller_.is_playing()) {
+        preview_controller_.pause();
+    } else {
+        preview_controller_.resume(song);
+    }
+}
+
+void title_audio_controller::toggle_preview_song(const song_select::selection_key& key,
+                                                 const song_select::song_entry* song) {
+    if (preview_controller_.is_playing()) {
+        preview_controller_.pause();
+    } else {
+        preview_controller_.resume(key, song);
+    }
+}
+
+void title_audio_controller::seek_preview(double seconds) {
+    audio_manager::instance().seek_preview(seconds);
+}
+
+void title_audio_controller::play_preview_from_current() {
+    audio_manager::instance().play_preview(false);
 }
 
 title_audio_policy::resolved_state title_audio_controller::current_state() const {
     return current_state_;
 }
 
-song_select::preview_controller& title_audio_controller::preview() {
-    return preview_controller_;
-}
-
-const song_select::preview_controller& title_audio_controller::preview() const {
-    return preview_controller_;
+title_preview_snapshot title_audio_controller::preview_snapshot(const song_select::song_entry* fallback_song) const {
+    const audio_manager& audio = audio_manager::instance();
+    title_preview_snapshot snapshot;
+    snapshot.audio = preview_controller_.audio_snapshot();
+    snapshot.jacket = preview_controller_.jacket_snapshot();
+    if (fallback_song != nullptr) {
+        const song_select::selection_key expected_key =
+            song_select::song_media_key_for_song_id(fallback_song->song.meta.song_id);
+        if (snapshot.audio.key.has_value() && *snapshot.audio.key != expected_key) {
+            snapshot.audio = {};
+        }
+        if (snapshot.jacket.key.has_value() && *snapshot.jacket.key != expected_key) {
+            snapshot.jacket = {};
+        }
+    }
+    const bool audio_loaded =
+        snapshot.audio.status == song_select::preview_audio_loader::load_status::ready &&
+        audio.is_preview_loaded();
+    snapshot.playing = audio_loaded && audio.is_preview_playing();
+    snapshot.position_seconds = audio_loaded ? audio.get_preview_position_seconds() : 0.0;
+    snapshot.length_seconds = audio_loaded ? audio.get_preview_length_seconds() : 0.0;
+    if (snapshot.length_seconds <= 0.0 && fallback_song != nullptr) {
+        snapshot.length_seconds = static_cast<double>(fallback_song->song.meta.duration_seconds);
+    }
+    if (snapshot.jacket.status == song_select::jacket_loader::load_status::ready &&
+        preview_controller_.jacket_loaded()) {
+        snapshot.jacket_texture = &preview_controller_.jacket_texture();
+    }
+    return snapshot;
 }
 
 title_audio_policy::resolved_state title_audio_controller::resolve_state(title_audio_policy::hub_mode mode) const {

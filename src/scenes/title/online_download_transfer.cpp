@@ -25,7 +25,9 @@
 #include "managed_content_storage.h"
 #include "network/json_helpers.h"
 #include "path_utils.h"
+#include "services/content_sync_service.h"
 #include "song_fingerprint.h"
+#include "title/local_content_database.h"
 #include "song_writer.h"
 #include "title/local_content_index.h"
 #include "title/online_catalog_data_controller.h"
@@ -37,8 +39,52 @@ namespace title_online_view {
 namespace {
 namespace json = network::json;
 
-content_status source_status_from_remote_download(const std::string& content_source) {
-    return content_source == "official" ? content_status::official : content_status::community;
+content_status source_status_from_remote_download(const std::string& remote_source) {
+    return remote_source == "official" ? content_status::official : content_status::community;
+}
+
+content_source content_source_from_remote_download(const std::string& remote_source) {
+    return remote_source == "official" ? content_source::official : content_source::community;
+}
+
+std::string source_text_from_identity(const std::optional<online_content::song_identity>& identity) {
+    return identity.has_value() ? online_content::source_label(identity->content_source) : "";
+}
+
+std::string source_text_from_identity(const std::optional<online_content::chart_identity>& identity) {
+    return identity.has_value() ? online_content::source_label(identity->content_source) : "";
+}
+
+void cache_remote_song_metadata(const song_entry_state& song, const std::string& server_url) {
+    local_content_database::put_remote_metadata({
+        .server_url = server_url,
+        .type = local_content_database::remote_content_type::song,
+        .remote_id = song.song.song.meta.song_id,
+        .content_source = source_text_from_identity(song.song.online_identity),
+        .lifecycle_status = song.song.online_identity.has_value() ? song.song.online_identity->lifecycle_status : "",
+        .review_status = song.song.online_identity.has_value() ? song.song.online_identity->review_status : "",
+        .remote_version = song.song.song.meta.song_version,
+        .revision_id = song.remote_revision_id,
+        .content_hash = !song.remote_song_json_fingerprint.empty()
+            ? song.remote_song_json_fingerprint
+            : song.remote_song_json_hash,
+    });
+}
+
+void cache_remote_chart_metadata(const chart_entry_state& chart, const std::string& server_url) {
+    local_content_database::put_remote_metadata({
+        .server_url = server_url,
+        .type = local_content_database::remote_content_type::chart,
+        .remote_id = chart.chart.meta.chart_id,
+        .content_source = source_text_from_identity(chart.chart.online_identity),
+        .lifecycle_status = chart.chart.online_identity.has_value() ? chart.chart.online_identity->lifecycle_status : "",
+        .review_status = chart.chart.online_identity.has_value() ? chart.chart.online_identity->review_status : "",
+        .remote_version = chart.chart.meta.chart_version,
+        .revision_id = chart.remote_revision_id,
+        .content_hash = !chart.remote_chart_fingerprint.empty()
+            ? chart.remote_chart_fingerprint
+            : chart.remote_chart_hash,
+    });
 }
 
 online_content::source online_source_from_remote_download(const std::string& content_source) {
@@ -221,6 +267,9 @@ song_entry_state make_download_song_state(const remote_song_payload& remote_song
     song.song.storage = storage_policy::managed_package;
     song.song.verification = verification_state::unchecked;
     song.song.source_status = source_status_from_remote_download(remote_song.content_source);
+    song.song.source = content_source_from_remote_download(remote_song.content_source);
+    song.song.sync_state = content_sync_state::clean;
+    song.song.status = song.song.source_status;
     song.song.online_identity = online_content::song_identity{
         .server_url = server_url,
         .remote_song_id = remote_song.id,
@@ -240,9 +289,11 @@ song_entry_state make_download_song_state(const remote_song_payload& remote_song
     song.installed = local_song != nullptr;
     song.installed_local_song_id = local_song_id;
     if (local_song != nullptr) {
-        song.song.status = local_song->status == content_status::modified
-            ? content_status::modified
-            : song.song.source_status;
+        song.song.sync_state = local_song->sync_state;
+        song.song.status = content_sync_service::legacy_status_for_display({
+            .source = song.song.source,
+            .sync = song.song.sync_state,
+        });
         song.update_available = local_song->song.meta.song_version < remote_song.song_version;
     }
     return song;
@@ -252,6 +303,7 @@ chart_entry_state make_download_chart_state(const remote_chart_payload& remote_c
                                             const remote_song_payload& remote_song,
                                             const std::string& server_url,
                                             const song_entry_state& song,
+                                            const std::vector<song_select::song_entry>& local_songs,
                                             const local_content_index::snapshot& index) {
     chart_entry_state chart;
     chart.chart.meta.chart_id = remote_chart.id;
@@ -268,6 +320,8 @@ chart_entry_state make_download_chart_state(const remote_chart_payload& remote_c
     chart.chart.storage = storage_policy::managed_package;
     chart.chart.verification = verification_state::unchecked;
     chart.chart.source_status = source_status_from_remote_download(remote_chart.content_source);
+    chart.chart.source = content_source_from_remote_download(remote_chart.content_source);
+    chart.chart.sync_state = content_sync_state::clean;
     chart.chart.status = chart.chart.source_status;
     chart.chart.online_identity = online_content::chart_identity{
         .server_url = server_url,
@@ -293,6 +347,20 @@ chart_entry_state make_download_chart_state(const remote_chart_payload& remote_c
     chart.installed = binding.has_value() && !binding->local_chart_id.empty();
     chart.update_available = chart.installed &&
                              remote_chart.chart_version > std::max(1, binding->remote_chart_version);
+    if (chart.installed) {
+        const song_select::song_entry* local_song =
+            find_local_song_by_id(local_songs, song.installed_local_song_id);
+        const song_select::chart_option* local_chart = local_song == nullptr
+            ? nullptr
+            : find_local_chart(*local_song, chart.installed_local_chart_id);
+        if (local_chart != nullptr) {
+            chart.chart.sync_state = local_chart->sync_state;
+            chart.chart.status = content_sync_service::legacy_status_for_display({
+                .source = chart.chart.source,
+                .sync = chart.chart.sync_state,
+            });
+        }
+    }
     if (chart.installed && song.installed_local_song_id.empty()) {
         chart.installed = false;
         chart.installed_local_chart_id.clear();
@@ -572,6 +640,7 @@ void mark_song_downloaded(std::vector<song_entry_state>& songs,
             song.installed_local_song_id = local_song_id;
         }
         song.update_available = false;
+        song.song.sync_state = content_sync_state::clean;
         song.song.status = song.song.source_status;
         song.charts_loaded = true;
         song.charts_loading = false;
@@ -596,6 +665,7 @@ void mark_chart_downloaded(std::vector<song_entry_state>& songs,
                     chart.installed_local_chart_id = local_chart_id;
                 }
                 chart.update_available = false;
+                chart.chart.sync_state = content_sync_state::clean;
                 chart.chart.status = chart.chart.source_status;
             }
         }
@@ -893,10 +963,8 @@ download_song_result download_song_package(const song_entry_state song,
         .local_song_id = local_song_id,
         .remote_song_id = result.song_id,
         .origin = origin,
-        .can_edit = song.song.online_identity.has_value() ? song.song.online_identity->can_edit : std::nullopt,
-        .lifecycle_status = song.song.online_identity.has_value() ? song.song.online_identity->lifecycle_status : "",
-        .review_status = song.song.online_identity.has_value() ? song.song.online_identity->review_status : "",
     });
+    cache_remote_song_metadata(song, server_url);
     if (!use_legacy_workspace &&
         installed_target.found &&
         installed_target.storage == storage_policy::managed_package &&
@@ -946,7 +1014,7 @@ download_song_result download_chart_file(const song_entry_state song,
         result.message = "Download the song first.";
         return result;
     }
-    if (song.update_available || song.song.status == content_status::modified) {
+    if (song.update_available || content_sync_service::is_modified(song.song.sync_state)) {
         result.message = "Update the song first.";
         return result;
     }
@@ -1088,10 +1156,8 @@ download_song_result download_chart_file(const song_entry_state song,
             .local_song_id = local_song_id,
             .remote_song_id = result.song_id,
             .origin = local_content_index::online_origin::downloaded,
-            .can_edit = song.song.online_identity.has_value() ? song.song.online_identity->can_edit : std::nullopt,
-            .lifecycle_status = song.song.online_identity.has_value() ? song.song.online_identity->lifecycle_status : "",
-            .review_status = song.song.online_identity.has_value() ? song.song.online_identity->review_status : "",
         });
+        cache_remote_song_metadata(song, server_url);
     }
     local_content_index::put_chart_binding({
         .server_url = server_url,
@@ -1100,10 +1166,8 @@ download_song_result download_chart_file(const song_entry_state song,
         .remote_song_id = result.song_id,
         .remote_chart_version = chart.chart.meta.chart_version,
         .origin = local_content_index::online_origin::downloaded,
-        .can_edit = chart.chart.online_identity.has_value() ? chart.chart.online_identity->can_edit : std::nullopt,
-        .lifecycle_status = chart.chart.online_identity.has_value() ? chart.chart.online_identity->lifecycle_status : "",
-        .review_status = chart.chart.online_identity.has_value() ? chart.chart.online_identity->review_status : "",
     });
+    cache_remote_chart_metadata(chart, server_url);
 
     result.success = true;
     result.message = "Chart downloaded.";
@@ -1119,7 +1183,7 @@ bool needs_download(const song_entry_state& song) {
     }
     return !song.installed ||
            song.update_available ||
-           song.song.status == content_status::modified;
+           content_sync_service::is_modified(song.song.sync_state);
 }
 
 void start_download(state& state, online_catalog::data_controller& data_controller) {
@@ -1180,7 +1244,7 @@ void start_chart_download(state& state, online_catalog::data_controller& data_co
     }
     if (chart->installed &&
         !chart->update_available &&
-        chart->chart.status != content_status::modified) {
+        !content_sync_service::is_modified(chart->chart.sync_state)) {
         return;
     }
 
@@ -1280,7 +1344,7 @@ void start_chart_download_by_remote_id(state& state,
             const local_content_index::snapshot index = local_content_index::load_snapshot();
             song_entry_state song =
                 make_download_song_state(song_lookup.song, song_lookup.server_url, local_songs, index);
-            if (!song.installed || song.update_available || song.song.status == content_status::modified) {
+            if (!song.installed || song.update_available || content_sync_service::is_modified(song.song.sync_state)) {
                 result = download_song_package(song, song_lookup.server_url, progress, local_songs);
                 if (!result.success) {
                     promise.set_value(std::move(result));
@@ -1289,12 +1353,13 @@ void start_chart_download_by_remote_id(state& state,
                 song.installed = true;
                 song.installed_local_song_id = result.local_song_id;
                 song.update_available = false;
+                song.song.sync_state = content_sync_state::clean;
                 song.song.status = song.song.source_status;
             }
 
             const local_content_index::snapshot chart_index = local_content_index::load_snapshot();
             const chart_entry_state chart =
-                make_download_chart_state(remote_chart, song_lookup.song, song_lookup.server_url, song, chart_index);
+                make_download_chart_state(remote_chart, song_lookup.song, song_lookup.server_url, song, local_songs, chart_index);
             result = download_chart_file(song, chart, song_lookup.server_url, progress, local_songs);
             promise.set_value(std::move(result));
         } catch (...) {

@@ -6,11 +6,11 @@
 #include <string>
 #include <vector>
 
-#include "audio_manager.h"
 #include "content_lifecycle.h"
 #include "localization/localization.h"
 #include "platform/windows_input_source.h"
 #include "scene_common.h"
+#include "services/content_sync_service.h"
 #include "tween.h"
 #include "title/title_layout.h"
 #include "theme.h"
@@ -442,7 +442,7 @@ const char* chart_source_label(content_status status) {
 }
 
 Color chart_source_status_color(const chart_entry_state& chart) {
-    if (chart.chart.status == content_status::modified) {
+    if (content_sync_service::is_modified(chart.chart.sync_state)) {
         return g_theme->slow;
     }
     if (chart.installed || chart.update_available) {
@@ -879,7 +879,7 @@ void draw_toned_button(Rectangle rect,
 
 }  // namespace
 
-void draw(state& state, float anim_t, Rectangle origin_rect) {
+void draw(state& state, const title_audio_controller& audio_controller, float anim_t, Rectangle origin_rect) {
     const auto& t = *g_theme;
     const float play_t = std::clamp(anim_t, 0.0f, 1.0f);
     if (play_t <= 0.01f) {
@@ -993,7 +993,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                           {current.content_rect.x + current.content_rect.width * 0.46f, current.content_rect.y + 8.0f,
                            current.content_rect.width * 0.5f - 12.0f, 16.0f},
                           with_alpha(t.text_muted, grid_alpha), ui::text_align::right);
-    draw_browse_body_text_in_rect("Press Esc to return to the grid",
+    draw_browse_body_text_in_rect(localization::tr_literal("Press Esc to return to the grid"),
                           14,
                           {current.content_rect.x + current.content_rect.width * 0.46f, current.content_rect.y + 8.0f,
                            current.content_rect.width * 0.5f - 12.0f, 16.0f},
@@ -1013,12 +1013,14 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             ui::draw_rect_f(placeholder, with_alpha(button_base, static_cast<unsigned char>(selected_row_alpha * grid_fade_t)));
             ui::draw_rect_lines(placeholder, 1.5f, with_alpha(t.border_light, grid_alpha));
             const char* empty_title = loading
-                ? "Loading..."
+                ? localization::tr_literal("Loading...")
                 : (state.mode == catalog_mode::owned && state.owned_loading)
-                    ? "Syncing owned songs..."
+                    ? localization::tr_literal("Syncing owned songs...")
                 : state.catalog_maintenance
-                    ? "Server maintenance"
-                : (state.catalog_request_failed ? "Could not reach raythm-Server." : "No songs found.");
+                    ? localization::tr_literal("Server maintenance")
+                : (state.catalog_request_failed
+                    ? localization::tr_literal("Could not reach raythm-Server.")
+                    : localization::tr_literal("No songs found."));
             draw_browse_body_text_in_rect(empty_title,
                                   26, {placeholder.x, placeholder.y + 8.0f, placeholder.width, 28.0f},
                                   with_alpha(t.text, grid_alpha), ui::text_align::center);
@@ -1026,13 +1028,14 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                 const std::string detail = !state.catalog_status_message.empty()
                     ? state.catalog_status_message
                     : state.catalog_maintenance
-                        ? "Online features are temporarily unavailable. Please try again later."
-                        : "Check the server URL and confirm raythm-Server is running.";
+                        ? localization::tr_literal("Online features are temporarily unavailable. Please try again later.")
+                        : localization::tr_literal("Check the server URL and confirm raythm-Server is running.");
                 draw_browse_body_text_in_rect(detail.c_str(),
                                       14, {placeholder.x + 20.0f, placeholder.y + 42.0f, placeholder.width - 40.0f, 16.0f},
                                       with_alpha(t.text_muted, grid_alpha), ui::text_align::center);
                 if (!state.catalog_server_url.empty()) {
-                    const std::string server_label = "Tried: " + state.catalog_server_url;
+                    const std::string server_label =
+                        std::string(localization::tr_literal("Tried: ")) + state.catalog_server_url;
                     draw_browse_body_text_in_rect(server_label.c_str(),
                                           12, {placeholder.x + 20.0f, placeholder.y + 58.0f, placeholder.width - 40.0f, 14.0f},
                                           with_alpha(t.text_hint, grid_alpha), ui::text_align::center);
@@ -1241,15 +1244,16 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
                            current.preview_panel_rect.width - 52.0f, 26.0f},
                           17, with_alpha(t.text_secondary, alpha), now, ui::text_align::center);
 
+        const title_preview_snapshot preview = audio_controller.preview_snapshot(&song->song);
         draw_transport_skip_button(preview_prev_button_rect(current.preview_panel_rect), false, alpha);
         draw_transport_toggle_button(preview_play_button_rect(current.preview_panel_rect),
-                                     audio_manager::instance().is_preview_playing(), alpha);
+                                     preview.playing, alpha);
         draw_transport_skip_button(preview_next_button_rect(current.preview_panel_rect), true, alpha);
         const Rectangle bar = preview_progress_rect(current.preview_panel_rect);
-        const double preview_length = detail::preview_display_length_seconds(*song);
+        const double preview_length = detail::preview_display_length_seconds(*song, preview);
         const double preview_position = state.preview_bar_dragging
             ? state.preview_bar_drag_position_seconds
-            : audio_manager::instance().get_preview_position_seconds();
+            : preview.position_seconds;
         const float preview_ratio =
             preview_length > 0.0 ? std::clamp(static_cast<float>(preview_position / preview_length), 0.0f, 1.0f) : 0.0f;
         ui::draw_rect_f(bar, with_alpha(t.bg_alt, normal_row_alpha));
@@ -1415,11 +1419,11 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             with_alpha(t.text_muted, detail_alpha), ui::text_align::right);
     }
 
-    const audio_manager& audio = audio_manager::instance();
-    const double preview_length = detail::preview_display_length_seconds(*song);
+    const title_preview_snapshot preview = audio_controller.preview_snapshot(&song->song);
+    const double preview_length = detail::preview_display_length_seconds(*song, preview);
     const double preview_position = state.preview_bar_dragging
         ? state.preview_bar_drag_position_seconds
-        : audio.get_preview_position_seconds();
+        : preview.position_seconds;
     const float preview_ratio =
         preview_length > 0.0 ? std::clamp(static_cast<float>(preview_position / preview_length), 0.0f, 1.0f) : 0.0f;
     ui::draw_rect_f(current.preview_bar_rect, with_alpha(t.bg_alt, static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
@@ -1434,7 +1438,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         12,
         {current.preview_bar_rect.x, current.preview_bar_rect.y + 14.0f, current.preview_bar_rect.width, 16.0f},
         with_alpha(t.text_muted, detail_alpha), ui::text_align::right);
-    draw_transport_toggle_button(current.preview_play_rect, audio.is_preview_playing(), detail_alpha);
+    draw_transport_toggle_button(current.preview_play_rect, preview.playing, detail_alpha);
 
     const Rectangle ranking_header = {preview_panel.x + 28.0f, preview_panel.y + 452.0f, preview_panel.width - 56.0f, 26.0f};
     draw_browse_body_text_in_rect(localization::tr_literal("GLOBAL RANKING"), 14, ranking_header,
@@ -1488,7 +1492,8 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
     const bool selected_chart_update =
         chart != nullptr && chart->installed && chart->update_available;
     const bool selected_chart_repair =
-        chart != nullptr && chart->installed && chart->chart.status == content_status::modified;
+        chart != nullptr && chart->installed && content_sync_service::is_modified(chart->chart.sync_state);
+    const bool selected_song_repair = content_sync_service::is_modified(song->song.sync_state);
     const bool song_lifecycle_blocked = lifecycle_blocks_song_download(*song);
     const std::string song_lifecycle_label = song->song.online_identity.has_value()
         ? content_lifecycle::display_label(song->song.online_identity->review_status,
@@ -1496,7 +1501,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         : "";
     const char* primary_label = state.download_in_progress ? "DOWNLOADING..."
         : (song_lifecycle_blocked ? (song_lifecycle_label.empty() ? "UNAVAILABLE" : song_lifecycle_label.c_str())
-           : needs_download(*song) ? (song->song.status == content_status::modified ? "REPAIR SONG"
+           : needs_download(*song) ? (selected_song_repair ? "REPAIR SONG"
                                       : song->update_available ? "UPDATE SONG"
                                                                : "DOWNLOAD SONG")
            : (selected_chart_repair ? "REPAIR CHART"
@@ -1695,7 +1700,8 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
             const float badge_width = chart_badge.size() > 8 ? 122.0f : 62.0f;
             const float badge_right = can_download_chart ? download_icon_rect.x - 12.0f
                                                          : card.x + card.width - 16.0f;
-            Color badge_color = item.chart.status == content_status::modified ? t.slow
+            const bool chart_modified = content_sync_service::is_modified(item.chart.sync_state);
+            Color badge_color = chart_modified ? t.slow
                 : item.update_available ? t.accent
                                         : t.text_muted;
             if (has_review_badge) {
@@ -1712,7 +1718,7 @@ void draw(state& state, float anim_t, Rectangle origin_rect) {
         if (can_download_chart) {
             draw_download_icon_button(download_icon_rect,
                                       item.update_available ||
-                                          item.chart.status == content_status::modified,
+                                          content_sync_service::is_modified(item.chart.sync_state),
                                       detail_alpha);
         }
         draw_difficulty_level_badge(item.chart.meta.level,

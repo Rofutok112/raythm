@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdio>
 #include <ctime>
+#include <exception>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -16,10 +17,11 @@
 #include "managed_content_storage.h"
 #include "path_utils.h"
 #include "play/play_flow_controller.h"
+#include "play/play_hitsound_service.h"
 #include "play/play_renderer.h"
 #include "play/play_session_loader.h"
+#include "play/play_view_geometry.h"
 #include "raylib.h"
-#include "raymath.h"
 #include "result_scene.h"
 #include "scene_common.h"
 #include "scene_manager.h"
@@ -32,12 +34,6 @@
 
 namespace {
 
-constexpr float kJudgementLineScreenRatioFromBottom = 0.10f;
-constexpr float kCameraHeight = 42.0f;
-constexpr float kCameraFovY = 42.0f;
-constexpr float kJudgeLineWorldZ = 12.0f;
-constexpr float kMaxGroundDistance = 1000.0f;
-constexpr float kMinResolvedLaneWidth = 0.05f;
 constexpr float kSoloStartGateSeconds = 0.75f;
 constexpr float kMatchLoadedPollSeconds = 1.0f;
 constexpr float kFallbackMatchCountdownSeconds = 3.0f;
@@ -119,28 +115,6 @@ float countdown_seconds_from_start_at(const std::string& start_at, const std::st
     return seconds_until_iso_utc(start_at).value_or(kFallbackMatchCountdownSeconds);
 }
 
-Vector3 build_camera_forward(float camera_angle_degrees) {
-    const float angle_rad = std::clamp(camera_angle_degrees, 5.0f, 90.0f) * DEG2RAD;
-    return Vector3{0.0f, -std::sin(angle_rad), std::cos(angle_rad)};
-}
-
-Vector3 choose_camera_up(Vector3 forward) {
-    return std::fabs(Vector3DotProduct(forward, Vector3{0.0f, 1.0f, 0.0f})) > 0.98f
-               ? Vector3{0.0f, 0.0f, 1.0f}
-               : Vector3{0.0f, 1.0f, 0.0f};
-}
-
-std::optional<float> ground_z_offset(float height, float angle_rad, float half_fov_rad, float screen_ndc_y) {
-    const float k = screen_ndc_y * std::tan(half_fov_rad);
-    const float sin_a = std::sin(angle_rad);
-    const float cos_a = std::cos(angle_rad);
-    const float denominator = sin_a - k * cos_a;
-    if (denominator <= 0.0001f) {
-        return std::nullopt;
-    }
-    return height * (cos_a + k * sin_a) / denominator;
-}
-
 void present_virtual_screen() {
     ClearBackground(BLACK);
     virtual_screen::draw_to_screen();
@@ -193,35 +167,40 @@ play_scene::play_scene(scene_manager& manager, song_data song, chart_data chart,
 }
 
 play_scene::~play_scene() {
+    wait_for_pending_load();
     unload_jacket_texture();
     unload_lane_layer_texture();
 }
 
 void play_scene::on_enter() {
+    wait_for_pending_load();
+    unload_jacket_texture();
+    unload_lane_layer_texture();
+    mv_controller_.reset();
+    draw_queue_.clear();
+    state_ = play_session_state();
+    state_.key_count = request_.key_count;
+    state_.song_data = request_.song_data;
+    state_.selected_chart_path = request_.selected_chart_path;
+    state_.chart_data = request_.chart_data;
+    state_.editor_resume_state = request_.editor_resume_state;
+    state_.start_tick = std::max(0, request_.start_tick);
+    state_.multiplayer_room_id = request_.multiplayer_room_id;
+    state_.multiplayer_match_id = request_.multiplayer_match_id;
+    state_.mods = request_.mods;
     state_.status_text = "Loading...";
-    state_ = play_session_loader::load(request_, draw_queue_);
-    load_jacket_texture();
-    load_lane_layer_texture();
-    mv_controller_.load_for_song(state_.song_data);
-    if (!state_.multiplayer_room_id.empty()) {
-        multiplayer_realtime_ = std::make_unique<multiplayer::client::realtime_client>();
-        if (!multiplayer_realtime_->connect(auth::load_session_summary(), state_.multiplayer_room_id)) {
-            multiplayer_realtime_.reset();
-        }
-    }
-    start_gate_active_ = state_.initialized;
+    state_.status_progress = 0.0f;
+    start_gate_active_ = false;
     multiplayer_loaded_sent_ = false;
     multiplayer_countdown_started_ = false;
-    start_gate_timer_ = state_.multiplayer_room_id.empty() ? kSoloStartGateSeconds : 0.0f;
+    start_gate_timer_ = 0.0f;
     match_loaded_poll_t_ = 0.0f;
-    if (start_gate_active_) {
-        state_.status_text = state_.multiplayer_room_id.empty()
-            ? "Ready"
-            : "Loaded. Waiting for players...";
-    }
+    multiplayer_score_sync_t_ = 0.0f;
+    start_async_load();
 }
 
 void play_scene::on_exit() {
+    wait_for_pending_load();
     if (multiplayer_realtime_ != nullptr) {
         multiplayer_realtime_->close();
         multiplayer_realtime_.reset();
@@ -260,6 +239,10 @@ void play_scene::update(float dt) {
     context.backspace_pressed = IsKeyPressed(KEY_BACKSPACE);
     context.window_focused = IsWindowFocused();
 
+    if (poll_async_load()) {
+        return;
+    }
+
     if (start_gate_active_) {
         update_start_gate(dt);
         return;
@@ -280,11 +263,10 @@ void play_scene::update(float dt) {
         context.pause_song_select_clicked = ui::is_clicked(pause_buttons[2], ui::draw_layer::modal);
     }
     if (!state_.hitsound_path.empty() || state_.hitsounds.has_any()) {
-        context.play_hitsound_immediately = [hitsounds = state_.hitsounds](const judge_event& event) {
-            const std::string& path = hitsounds.path_for(event);
-            if (!path.empty()) {
-                audio_manager::instance().play_se(path);
-            }
+        context.play_hitsound_immediately = [hitsounds = state_.hitsounds,
+                                             key_count = state_.key_count,
+                                             pan_strength = g_settings.hitsound_pan_strength](const judge_event& event) {
+            play_hitsound_service::play(hitsounds, event, key_count, pan_strength);
         };
     }
 
@@ -320,6 +302,143 @@ void play_scene::update(float dt) {
     }
 }
 
+void play_scene::start_async_load() {
+    const play_start_request request = request_;
+    load_progress_ = std::make_shared<shared_load_progress>();
+    const std::shared_ptr<shared_load_progress> progress = load_progress_;
+    progress->set("Loading...", 0.0f);
+    load_future_ = std::async(std::launch::async, [request, progress]() mutable {
+        async_load_result result;
+        result.state.key_count = request.key_count;
+        result.state.song_data = request.song_data;
+        result.state.selected_chart_path = request.selected_chart_path;
+        result.state.chart_data = request.chart_data;
+        result.state.editor_resume_state = request.editor_resume_state;
+        result.state.start_tick = std::max(0, request.start_tick);
+        result.state.multiplayer_room_id = request.multiplayer_room_id;
+        result.state.multiplayer_match_id = request.multiplayer_match_id;
+        result.state.mods = request.mods;
+        result.state.status_text = "Loading...";
+        result.state.status_progress = 0.0f;
+        try {
+            result.state = play_session_loader::load(
+                request,
+                result.draw_queue,
+                [progress](float value, const std::string& message) {
+                    if (progress == nullptr) {
+                        return;
+                    }
+                    progress->set(message, value);
+                });
+        } catch (const std::exception& ex) {
+            result.draw_queue.clear();
+            result.state.status_text =
+                ex.what() != nullptr && ex.what()[0] != '\0' ? ex.what() : "Failed to load play session";
+            result.state.status_progress = 1.0f;
+        } catch (...) {
+            result.draw_queue.clear();
+            result.state.status_text = "Failed to load play session";
+            result.state.status_progress = 1.0f;
+        }
+        return result;
+    });
+}
+
+void play_scene::sync_async_load_progress() {
+    if (load_progress_ == nullptr) {
+        return;
+    }
+    const load_progress progress = load_progress_->snapshot();
+    state_.status_progress = progress.progress;
+    if (!progress.message.empty()) {
+        state_.status_text = progress.message;
+    }
+}
+
+bool play_scene::poll_async_load() {
+    if (!load_future_.has_value()) {
+        return false;
+    }
+    if (load_future_->wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        sync_async_load_progress();
+        return true;
+    }
+
+    async_load_result result;
+    try {
+        result = load_future_->get();
+    } catch (const std::exception& ex) {
+        result.state.key_count = request_.key_count;
+        result.state.song_data = request_.song_data;
+        result.state.selected_chart_path = request_.selected_chart_path;
+        result.state.chart_data = request_.chart_data;
+        result.state.editor_resume_state = request_.editor_resume_state;
+        result.state.start_tick = std::max(0, request_.start_tick);
+        result.state.multiplayer_room_id = request_.multiplayer_room_id;
+        result.state.multiplayer_match_id = request_.multiplayer_match_id;
+        result.state.mods = request_.mods;
+        result.state.status_text =
+            ex.what() != nullptr && ex.what()[0] != '\0' ? ex.what() : "Failed to load play session";
+        result.state.status_progress = 1.0f;
+    } catch (...) {
+        result.state.key_count = request_.key_count;
+        result.state.song_data = request_.song_data;
+        result.state.selected_chart_path = request_.selected_chart_path;
+        result.state.chart_data = request_.chart_data;
+        result.state.editor_resume_state = request_.editor_resume_state;
+        result.state.start_tick = std::max(0, request_.start_tick);
+        result.state.multiplayer_room_id = request_.multiplayer_room_id;
+        result.state.multiplayer_match_id = request_.multiplayer_match_id;
+        result.state.mods = request_.mods;
+        result.state.status_text = "Failed to load play session";
+        result.state.status_progress = 1.0f;
+    }
+    load_future_.reset();
+    load_progress_.reset();
+    apply_loaded_session(std::move(result));
+    return false;
+}
+
+void play_scene::apply_loaded_session(async_load_result result) {
+    state_ = std::move(result.state);
+    draw_queue_ = std::move(result.draw_queue);
+    if (!state_.initialized) {
+        start_gate_active_ = false;
+        return;
+    }
+
+    load_jacket_texture();
+    load_lane_layer_texture();
+    mv_controller_.load_for_song(state_.song_data);
+    if (!state_.multiplayer_room_id.empty()) {
+        multiplayer_realtime_ = std::make_unique<multiplayer::client::realtime_client>();
+        if (!multiplayer_realtime_->connect(auth::load_session_summary(), state_.multiplayer_room_id)) {
+            multiplayer_realtime_.reset();
+        }
+    }
+    start_gate_active_ = true;
+    multiplayer_loaded_sent_ = false;
+    multiplayer_countdown_started_ = false;
+    start_gate_timer_ = state_.multiplayer_room_id.empty() ? kSoloStartGateSeconds : 0.0f;
+    match_loaded_poll_t_ = 0.0f;
+    multiplayer_score_sync_t_ = 0.0f;
+    state_.status_text = state_.multiplayer_room_id.empty()
+        ? "Ready"
+        : "Loaded. Waiting for players...";
+    state_.status_progress = state_.multiplayer_room_id.empty() ? 0.92f : 0.96f;
+}
+
+void play_scene::wait_for_pending_load() {
+    if (!load_future_.has_value()) {
+        return;
+    }
+    if (load_future_->valid()) {
+        load_future_->wait();
+    }
+    load_future_.reset();
+    load_progress_.reset();
+}
+
 void play_scene::rebuild_hit_regions() const {
     ui::begin_hit_regions();
     if (state_.paused) {
@@ -330,70 +449,24 @@ void play_scene::rebuild_hit_regions() const {
 }
 
 Camera3D play_scene::make_play_camera() const {
-    const float angle_rad = std::clamp(state_.camera_angle_degrees, 5.0f, 90.0f) * DEG2RAD;
-    constexpr float half_fov_rad = kCameraFovY * DEG2RAD * 0.5f;
-
-    constexpr float judge_ndc_y = (kJudgementLineScreenRatioFromBottom - 0.5f) * 2.0f;
-    const std::optional<float> judge_offset = ground_z_offset(kCameraHeight, angle_rad, half_fov_rad, judge_ndc_y);
-    const float camera_z = judge_offset.has_value() ? (kJudgeLineWorldZ - *judge_offset) : 0.0f;
-
-    const Vector3 forward = build_camera_forward(state_.camera_angle_degrees);
-    const Vector3 up = choose_camera_up(forward);
-
-    Camera3D camera = {};
-    camera.position = {0.0f, kCameraHeight, camera_z};
-    camera.target = Vector3Add(camera.position, forward);
-    camera.up = up;
-    camera.fovy = kCameraFovY;
-    camera.projection = CAMERA_PERSPECTIVE;
-    return camera;
+    return play_view_geometry::make_camera(state_.camera_angle_degrees);
 }
 
 bool play_scene::get_lane_view_bounds(const Camera3D& camera, float& lane_start_z, float& judgement_z,
                                       float& lane_end_z) const {
-    const float angle_rad = std::clamp(state_.camera_angle_degrees, 5.0f, 90.0f) * DEG2RAD;
-    constexpr float half_fov_rad = kCameraFovY * DEG2RAD * 0.5f;
-
-    const std::optional<float> near_offset = ground_z_offset(kCameraHeight, angle_rad, half_fov_rad, -1.0f);
-    if (!near_offset.has_value()) {
+    const std::optional<play_view_geometry::lane_view> lane_view =
+        play_view_geometry::resolve_lane_view(camera, state_.key_count, state_.camera_angle_degrees, state_.lane_width);
+    if (!lane_view.has_value()) {
         return false;
     }
-
-    judgement_z = kJudgeLineWorldZ;
-    lane_start_z = camera.position.z + *near_offset;
-
-    const std::optional<float> far_offset = ground_z_offset(kCameraHeight, angle_rad, half_fov_rad, 1.0f);
-    if (far_offset.has_value()) {
-        lane_end_z = std::min(camera.position.z + *far_offset, camera.position.z + kMaxGroundDistance);
-    } else {
-        lane_end_z = camera.position.z + kMaxGroundDistance;
-    }
-
-    if (lane_end_z <= lane_start_z) {
-        return false;
-    }
-
-    lane_start_z = std::min(lane_start_z, judgement_z - 0.5f);
-    lane_end_z = std::max(lane_end_z, judgement_z + 8.0f);
+    lane_start_z = lane_view->lane_start_z;
+    judgement_z = lane_view->judgement_z;
+    lane_end_z = lane_view->lane_end_z;
     return true;
 }
 
 float play_scene::lane_width_for_bottom_edge(const Camera3D& camera, float lane_start_z) const {
-    const int key_count = std::max(1, state_.key_count);
-    const float setting_width = std::clamp(state_.lane_width, kMinLaneWidth, kMaxLaneWidth);
-    const Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
-    const Vector3 bottom_center = {0.0f, 0.0f, lane_start_z};
-    const float depth = Vector3DotProduct(Vector3Subtract(bottom_center, camera.position), forward);
-    if (depth <= 0.001f || camera.fovy <= 0.0f) {
-        return setting_width;
-    }
-
-    const float half_fov_y = camera.fovy * DEG2RAD * 0.5f;
-    const float aspect = static_cast<float>(kScreenWidth) / static_cast<float>(kScreenHeight);
-    const float half_fov_x = std::atan(std::tan(half_fov_y) * aspect);
-    const float bottom_world_width = depth * std::tan(half_fov_x) * 2.0f;
-    const float desired_total_width = bottom_world_width * (setting_width / kMaxLaneWidth);
-    return std::max(kMinResolvedLaneWidth, desired_total_width / static_cast<float>(key_count));
+    return play_view_geometry::lane_width_for_bottom_edge(camera, lane_start_z, state_.key_count, state_.lane_width);
 }
 
 void play_scene::load_jacket_texture() {

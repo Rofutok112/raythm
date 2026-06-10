@@ -38,6 +38,7 @@ enum class text_key {
     global_offset,
     bgm_volume,
     se_volume,
+    hitsound_pan,
     loudness_normalization,
     enabled,
     disabled,

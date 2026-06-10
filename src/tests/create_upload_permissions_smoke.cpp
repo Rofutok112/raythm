@@ -2,7 +2,6 @@
 
 #include <cstdlib>
 #include <iostream>
-#include <optional>
 #include <string>
 
 #include "online_content_identity.h"
@@ -17,26 +16,24 @@ void expect(bool condition, const std::string& message, bool& ok) {
 }
 
 local_content_index::online_song_binding song_binding(local_content_index::online_origin origin,
-                                                      std::optional<bool> can_edit) {
+                                                      bool has_remote = true) {
     return {
         .server_url = "https://server.example",
         .local_song_id = "local-song",
-        .remote_song_id = "remote-song",
+        .remote_song_id = has_remote ? "remote-song" : "",
         .origin = origin,
-        .can_edit = can_edit,
     };
 }
 
 local_content_index::online_chart_binding chart_binding(local_content_index::online_origin origin,
-                                                        std::optional<bool> can_edit) {
+                                                        bool has_remote = true) {
     return {
         .server_url = "https://server.example",
         .local_chart_id = "local-chart",
-        .remote_chart_id = "remote-chart",
-        .remote_song_id = "remote-song",
+        .remote_chart_id = has_remote ? "remote-chart" : "",
+        .remote_song_id = has_remote ? "remote-song" : "",
         .remote_chart_version = 2,
         .origin = origin,
-        .can_edit = can_edit,
     };
 }
 
@@ -58,70 +55,32 @@ int main() {
            "Expected missing canEdit without owned_upload to deny direct update.",
            ok);
 
-    const auto owned_unknown = song_binding(local_content_index::online_origin::owned_upload, std::nullopt);
-    const auto downloaded_editable = song_binding(local_content_index::online_origin::downloaded, true);
-    const auto downloaded_denied = song_binding(local_content_index::online_origin::downloaded, false);
-    const auto downloaded_unknown = song_binding(local_content_index::online_origin::downloaded, std::nullopt);
-
-    expect(title_create_upload_permissions::can_edit_remote(owned_unknown),
-           "Expected owned_upload with no canEdit to stay editable.",
-           ok);
-    expect(title_create_upload_permissions::can_edit_remote(downloaded_editable),
-           "Expected canEdit=true downloaded song to be editable.",
-           ok);
-    expect(!title_create_upload_permissions::can_edit_remote(downloaded_denied),
-           "Expected canEdit=false downloaded song to be non-editable.",
-           ok);
-    expect(!title_create_upload_permissions::can_edit_remote(downloaded_unknown),
-           "Expected missing canEdit without owned_upload to deny direct remote edit.",
-           ok);
+    const auto owned_unknown = song_binding(local_content_index::online_origin::owned_upload);
+    const auto downloaded_linked = song_binding(local_content_index::online_origin::downloaded);
 
     expect(title_create_upload_permissions::can_start_song_upload(true, false, std::nullopt),
            "Expected local unlinked songs to remain uploadable.",
            ok);
-    expect(title_create_upload_permissions::can_start_song_upload(true, false, downloaded_editable),
-           "Expected canEdit=true linked songs to expose update.",
-           ok);
-    expect(!title_create_upload_permissions::can_start_song_upload(true, false, downloaded_denied),
-           "Expected canEdit=false linked songs to hide update.",
+    expect(title_create_upload_permissions::can_start_song_upload(true, false, downloaded_linked),
+           "Expected linked songs to expose update for a fresh permission check.",
            ok);
     expect(title_create_upload_permissions::can_start_song_upload(true, false, owned_unknown),
            "Expected missing canEdit owned songs to preserve old update behavior.",
            ok);
-    expect(title_create_upload_permissions::can_start_song_upload(true, false, downloaded_unknown),
-           "Expected missing canEdit linked songs to start upload for a permission check.",
-           ok);
 
-    const auto chart_editable = chart_binding(local_content_index::online_origin::downloaded, true);
-    const auto chart_denied = chart_binding(local_content_index::online_origin::downloaded, false);
-    const auto chart_unknown = chart_binding(local_content_index::online_origin::downloaded, std::nullopt);
-    const auto owned_chart_unknown = chart_binding(local_content_index::online_origin::owned_upload, std::nullopt);
+    const auto chart_linked = chart_binding(local_content_index::online_origin::downloaded);
+    const auto owned_chart_unknown = chart_binding(local_content_index::online_origin::owned_upload);
 
-    expect(title_create_upload_permissions::can_start_chart_upload(true, false, downloaded_editable, std::nullopt),
-           "Expected canEdit=true linked songs to allow new chart upload.",
+    expect(title_create_upload_permissions::can_start_chart_upload(true, false, downloaded_linked, std::nullopt),
+           "Expected linked songs to allow new chart upload for a fresh permission check.",
            ok);
-    expect(!title_create_upload_permissions::can_start_chart_upload(true, false, downloaded_denied, std::nullopt),
-           "Expected canEdit=false linked songs to block new chart upload.",
+    expect(title_create_upload_permissions::can_start_chart_upload(true, false, downloaded_linked, chart_linked),
+           "Expected linked charts to expose update for a fresh permission check.",
            ok);
-    expect(title_create_upload_permissions::can_start_chart_upload(true, false, downloaded_unknown, std::nullopt),
-           "Expected missing song canEdit to start new chart upload for a permission check.",
-           ok);
-    expect(title_create_upload_permissions::can_start_chart_upload(true, false, downloaded_editable, chart_editable),
-           "Expected canEdit=true linked charts to expose update.",
-           ok);
-    expect(!title_create_upload_permissions::can_start_chart_upload(true, false, downloaded_editable, chart_denied),
-           "Expected canEdit=false linked charts to hide update.",
-           ok);
-    expect(title_create_upload_permissions::can_start_chart_upload(true, false, downloaded_editable, chart_unknown),
-           "Expected missing chart canEdit to start chart update for a permission check.",
-           ok);
-    expect(title_create_upload_permissions::can_start_chart_upload(true, false, std::nullopt, chart_editable),
+    expect(title_create_upload_permissions::can_start_chart_upload(true, false, std::nullopt, chart_linked),
            "Expected linked charts with a remote song target to update without a local song binding.",
            ok);
-    expect(title_create_upload_permissions::can_start_chart_upload(true, false, std::nullopt, chart_unknown),
-           "Expected linked charts with missing canEdit to start upload for a permission check.",
-           ok);
-    expect(title_create_upload_permissions::can_start_chart_upload(true, false, downloaded_denied, owned_chart_unknown),
+    expect(title_create_upload_permissions::can_start_chart_upload(true, false, downloaded_linked, owned_chart_unknown),
            "Expected missing canEdit owned charts to preserve old update behavior.",
            ok);
 

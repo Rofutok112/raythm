@@ -46,7 +46,6 @@ struct draw_context {
     title_profile_controller& profile_controller;
     auth_overlay::controller& auth_controller;
     const title_play_create_feature::cross_callbacks& play_cross_callbacks;
-    bool play_sync_media_on_transfer = false;
     scene_fade& intro_fade;
     scene_fade& transition_fade;
     scene_fade& quit_fade;

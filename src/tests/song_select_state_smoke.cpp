@@ -156,6 +156,31 @@ int main() {
     assert(scrolled_state.scroll_y > 0.0f);
     assert(std::fabs(scrolled_state.scroll_y - scrolled_state.scroll_y_target) < 0.01f);
 
+    song_select::catalog_data chartless_catalog;
+    chartless_catalog.songs.push_back(make_song("chartless-song", "Chartless", {}));
+    chartless_catalog.songs.push_back(make_song("charted-song", "Charted",
+                                                {make_chart("charted-chart", "Normal", 5)}));
+
+    song_select::state play_visibility_state;
+    song_select::apply_catalog(play_visibility_state, std::move(chartless_catalog), "chartless-song", "");
+    const std::vector<int> play_visible_indices = song_select::filtered_song_indices(play_visibility_state);
+    assert(play_visible_indices.size() == 1);
+    assert(play_visibility_state.catalog.songs[play_visible_indices.front()].song.meta.song_id == "charted-song");
+    assert(play_visibility_state.catalog.songs[play_visibility_state.selected_song_index].song.meta.song_id ==
+           "charted-song");
+
+    song_select::catalog_data create_catalog;
+    create_catalog.songs.push_back(make_song("chartless-song", "Chartless", {}));
+    create_catalog.songs.push_back(make_song("charted-song", "Charted",
+                                             {make_chart("charted-chart", "Normal", 5)}));
+    song_select::state create_visibility_state;
+    create_visibility_state.filter.include_chartless_songs = true;
+    song_select::apply_catalog(create_visibility_state, std::move(create_catalog), "chartless-song", "");
+    const std::vector<int> create_visible_indices = song_select::filtered_song_indices(create_visibility_state);
+    assert(create_visible_indices.size() == 2);
+    assert(create_visibility_state.catalog.songs[create_visibility_state.selected_song_index].song.meta.song_id ==
+           "chartless-song");
+
     song_select::catalog_data multiplayer_catalog;
     assert(!song_select::can_use_online_chart_routes(
         make_legacy_local_remote_linked_chart("legacy-route-check", "Normal", 4, "https://api.example")));

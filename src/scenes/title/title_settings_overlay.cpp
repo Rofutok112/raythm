@@ -1,11 +1,13 @@
 #include "title/title_settings_overlay.h"
 
 #include <algorithm>
+#include <optional>
 
 #include "raylib.h"
 #include "rlgl.h"
 #include "scene_common.h"
 #include "settings_io.h"
+#include "settings/settings_shell_view.h"
 #include "localization/localization.h"
 #include "theme.h"
 #include "tween.h"
@@ -65,22 +67,13 @@ ui_theme make_overlay_theme(const ui_theme& source, float fade) {
 }  // namespace
 
 title_settings_overlay::title_settings_overlay(game_settings& settings)
-    : gameplay_page_(settings),
-      audio_page_(settings, runtime_applier_),
-      video_page_(settings, runtime_applier_),
-      system_page_(settings, runtime_applier_),
-      key_config_page_(settings) {
+    : pages_(settings) {
 }
 
 void title_settings_overlay::open() {
-    current_page_ = settings::page_id::gameplay;
+    pages_.reset();
     animation_ = 0.0f;
     closing_ = false;
-    gameplay_page_.reset_interaction();
-    audio_page_.reset_interaction();
-    video_page_.reset_interaction();
-    system_page_.reset_interaction();
-    key_config_page_.reset();
 }
 
 void title_settings_overlay::save() {
@@ -93,8 +86,16 @@ void title_settings_overlay::request_close() {
     }
 
     save();
-    key_config_page_.clear_selection();
+    pages_.clear_key_config_selection();
     closing_ = true;
+}
+
+void title_settings_overlay::prepare_current_page() {
+    const ui_theme* previous_theme = g_theme;
+    ui_theme overlay_theme = make_overlay_theme(*previous_theme, tween::ease_out_cubic(animation_));
+    g_theme = &overlay_theme;
+    pages_.prepare_current_page();
+    g_theme = previous_theme;
 }
 
 void title_settings_overlay::update_animation(bool active, float dt) {
@@ -112,14 +113,14 @@ void title_settings_overlay::update_animation(bool active, float dt) {
 }
 
 void title_settings_overlay::update(float dt) {
-    key_config_page_.tick(dt);
+    pages_.tick(dt);
 
     if (closing_ || animation_ < 0.95f) {
         return;
     }
 
-    if (current_page_blocks_navigation()) {
-        update_current_page();
+    if (pages_.current_page_blocks_navigation()) {
+        pages_.update_current_page();
         return;
     }
 
@@ -129,16 +130,11 @@ void title_settings_overlay::update(float dt) {
         return;
     }
 
-    Rectangle tabs[settings::kPageCount];
-    settings::build_tab_rects(tabs);
-    for (int i = 0; i < settings::kPageCount; ++i) {
-        if (ui::is_clicked(tabs[i], settings::kLayer)) {
-            change_page(static_cast<settings::page_id>(i));
-            break;
-        }
+    if (const std::optional<settings::page_id> next_page = settings::clicked_tab_page()) {
+        pages_.change_page(*next_page);
     }
 
-    update_current_page();
+    pages_.update_current_page();
 }
 
 void title_settings_overlay::draw() const {
@@ -147,7 +143,6 @@ void title_settings_overlay::draw() const {
     const ui_theme* previous_theme = g_theme;
     ui_theme overlay_theme = make_overlay_theme(*previous_theme, eased);
     g_theme = &overlay_theme;
-    const auto& theme = *g_theme;
 
     rlPushMatrix();
     rlTranslatef(0.0f, slide_y, 0.0f);
@@ -158,27 +153,12 @@ void title_settings_overlay::draw() const {
     ui::draw_header_block(settings::kSidebarHeaderRect, localization::tr(localization::text_key::settings),
                           localization::tr(localization::text_key::saved_on_back));
 
-    Rectangle tabs[settings::kPageCount];
-    settings::build_tab_rects(tabs);
-    for (int i = 0; i < settings::kPageCount; ++i) {
-        const settings::page_descriptor& descriptor =
-            settings::page_descriptor_for(static_cast<settings::page_id>(i));
-        if (static_cast<int>(current_page_) == i) {
-            ui::draw_button_colored(tabs[i], localization::tr(descriptor.navigation_label), 22,
-                                    theme.row_selected, theme.row_active, theme.text);
-        } else {
-            ui::draw_button_colored(tabs[i], localization::tr(descriptor.navigation_label), 22,
-                                    theme.row, theme.row_hover, theme.text_secondary);
-        }
-    }
+    settings::draw_tab_buttons(pages_.current_page());
 
     ui::draw_button(settings::kBackRect, localization::tr(localization::text_key::back), 22);
 
-    const settings::page_descriptor& descriptor = settings::page_descriptor_for(current_page_);
-    ui::draw_header_block(settings::kContentHeaderRect, localization::tr(descriptor.title),
-                          localization::tr(descriptor.subtitle));
-
-    draw_current_page();
+    settings::draw_content_header(pages_.current_page());
+    pages_.draw_current_page();
 
     rlPopMatrix();
     g_theme = previous_theme;
@@ -190,59 +170,4 @@ bool title_settings_overlay::closing() const {
 
 bool title_settings_overlay::closed() const {
     return closing_ && animation_ <= 0.0f;
-}
-
-void title_settings_overlay::update_current_page() {
-    switch (current_page_) {
-        case settings::page_id::gameplay:
-            gameplay_page_.update();
-            break;
-        case settings::page_id::audio:
-            audio_page_.update();
-            break;
-        case settings::page_id::video:
-            video_page_.update();
-            break;
-        case settings::page_id::system:
-            system_page_.update();
-            break;
-        case settings::page_id::key_config:
-            key_config_page_.update();
-            break;
-    }
-}
-
-void title_settings_overlay::draw_current_page() const {
-    switch (current_page_) {
-        case settings::page_id::gameplay:
-            gameplay_page_.draw();
-            break;
-        case settings::page_id::audio:
-            audio_page_.draw();
-            break;
-        case settings::page_id::video:
-            video_page_.draw();
-            break;
-        case settings::page_id::system:
-            system_page_.draw();
-            break;
-        case settings::page_id::key_config:
-            key_config_page_.draw();
-            break;
-    }
-}
-
-void title_settings_overlay::change_page(settings::page_id next_page) {
-    gameplay_page_.reset_interaction();
-    audio_page_.reset_interaction();
-    video_page_.reset_interaction();
-    system_page_.reset_interaction();
-    if (current_page_ == settings::page_id::key_config && next_page != settings::page_id::key_config) {
-        key_config_page_.clear_selection();
-    }
-    current_page_ = next_page;
-}
-
-bool title_settings_overlay::current_page_blocks_navigation() const {
-    return current_page_ == settings::page_id::key_config && key_config_page_.blocks_navigation();
 }

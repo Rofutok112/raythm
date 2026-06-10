@@ -7,6 +7,7 @@
 #include "app_paths.h"
 #include "local_catalog_signature.h"
 #include "local_sqlite.h"
+#include "title/local_content_database.h"
 #include "title/local_content_index.h"
 
 #include "sqlite3.h"
@@ -80,9 +81,17 @@ int main() {
         .local_song_id = "local-song",
         .remote_song_id = "remote-song",
         .origin = local_content_index::online_origin::owned_upload,
-        .can_edit = true,
+    });
+    local_content_database::put_remote_metadata({
+        .server_url = "https://server.example",
+        .type = local_content_database::remote_content_type::song,
+        .remote_id = "remote-song",
+        .content_source = "community",
         .lifecycle_status = "active",
         .review_status = "pending_review",
+        .remote_version = 4,
+        .revision_id = "song-rev-4",
+        .content_hash = "song-hash-4",
     });
     local_content_index::put_chart_binding({
         .server_url = "https://server.example",
@@ -91,9 +100,17 @@ int main() {
         .remote_song_id = "remote-song",
         .remote_chart_version = 7,
         .origin = local_content_index::online_origin::downloaded,
-        .can_edit = false,
+    });
+    local_content_database::put_remote_metadata({
+        .server_url = "https://server.example",
+        .type = local_content_database::remote_content_type::chart,
+        .remote_id = "remote-chart",
+        .content_source = "official",
         .lifecycle_status = "archived",
         .review_status = "rejected",
+        .remote_version = 7,
+        .revision_id = "chart-rev-7",
+        .content_hash = "chart-hash-7",
     });
     local_content_index::put_chart_binding({
         .server_url = "https://server.example",
@@ -115,18 +132,57 @@ int main() {
 
     bool ok = true;
     ok = song_by_local.has_value() && song_by_local->remote_song_id == "remote-song" && ok;
-    ok = song_by_local.has_value() && song_by_local->can_edit == std::optional<bool>(true) && ok;
-    ok = song_by_local.has_value() && song_by_local->lifecycle_status == "active" && ok;
-    ok = song_by_local.has_value() && song_by_local->review_status == "pending_review" && ok;
     ok = song_by_remote.has_value() && song_by_remote->local_song_id == "local-song" && ok;
     ok = chart_by_local.has_value() && chart_by_local->remote_chart_id == "remote-chart" && ok;
     ok = chart_by_remote.has_value() && chart_by_remote->local_chart_id == "local-chart" && ok;
     ok = chart_by_local.has_value() &&
          chart_by_local->remote_chart_version == 7 &&
          chart_by_local->origin == local_content_index::online_origin::downloaded &&
-         chart_by_local->can_edit == std::optional<bool>(false) &&
-         chart_by_local->lifecycle_status == "archived" &&
-         chart_by_local->review_status == "rejected" && ok;
+         ok;
+
+    const auto song_metadata = local_content_database::find_remote_metadata(
+        local_content_database::remote_content_type::song,
+        "https://server.example",
+        "remote-song");
+    const auto chart_metadata = local_content_database::find_remote_metadata(
+        local_content_database::remote_content_type::chart,
+        "https://server.example",
+        "remote-chart");
+    ok = song_metadata.has_value() &&
+         song_metadata->content_source == "community" &&
+         song_metadata->remote_version == 4 &&
+         song_metadata->revision_id == "song-rev-4" &&
+         song_metadata->content_hash == "song-hash-4" &&
+         song_metadata->lifecycle_status == "active" &&
+         song_metadata->review_status == "pending_review" && ok;
+    ok = chart_metadata.has_value() && chart_metadata->remote_version == 7 &&
+         chart_metadata->content_source == "official" &&
+         chart_metadata->revision_id == "chart-rev-7" &&
+         chart_metadata->content_hash == "chart-hash-7" &&
+         chart_metadata->lifecycle_status == "archived" &&
+         chart_metadata->review_status == "rejected" && ok;
+
+    local_content_database::put_account_permission({
+        .server_url = "https://server.example",
+        .type = local_content_database::remote_content_type::song,
+        .remote_id = "remote-song",
+        .user_id = "alice",
+        .can_edit = false,
+    });
+    const auto alice_permission = local_content_database::find_account_permission(
+        local_content_database::remote_content_type::song,
+        "https://server.example",
+        "remote-song",
+        "alice");
+    const auto bob_permission = local_content_database::find_account_permission(
+        local_content_database::remote_content_type::song,
+        "https://server.example",
+        "remote-song",
+        "bob");
+    ok = alice_permission.has_value() &&
+         alice_permission->can_edit == std::optional<bool>(false) &&
+         alice_permission->fetched_at_unix_seconds > 0 && ok;
+    ok = !bob_permission.has_value() && ok;
 
     local_content_index::put_song_binding({
         .server_url = "https://server.example",

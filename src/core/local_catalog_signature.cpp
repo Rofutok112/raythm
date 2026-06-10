@@ -39,8 +39,8 @@ bool is_chart_file(const fs::path& path) {
     return path.extension() == ".rchart";
 }
 
-bool is_encrypted_chart_file(const fs::path& path) {
-    return path.extension() == ".renc" && path.stem().extension() == ".rchart";
+bool is_encrypted_asset_file(const fs::path& path) {
+    return path.extension() == ".renc";
 }
 
 void add_chart_files(std::vector<fs::path>& files, const fs::path& charts_dir) {
@@ -59,25 +59,24 @@ void add_chart_files(std::vector<fs::path>& files, const fs::path& charts_dir) {
     }
 }
 
-void add_encrypted_chart_files(std::vector<fs::path>& files, const fs::path& encrypted_charts_dir) {
-    if (!path_is_directory(encrypted_charts_dir)) {
+void add_encrypted_asset_files(std::vector<fs::path>& files, const fs::path& encrypted_dir) {
+    if (!path_is_directory(encrypted_dir)) {
         return;
     }
 
     std::error_code ec;
-    for (const fs::directory_entry& entry : fs::directory_iterator(encrypted_charts_dir, ec)) {
+    for (const fs::directory_entry& entry : fs::recursive_directory_iterator(encrypted_dir, ec)) {
         if (ec) {
             break;
         }
-        if (entry.is_regular_file(ec) && is_encrypted_chart_file(entry.path())) {
+        if (entry.is_regular_file(ec) && is_encrypted_asset_file(entry.path())) {
             files.push_back(entry.path());
         }
     }
 }
 
 void add_managed_catalog_assets(std::vector<fs::path>& files, const fs::path& song_dir) {
-    add_file_if_present(files, song_dir / ".encrypted" / "song.json.renc");
-    add_encrypted_chart_files(files, song_dir / ".encrypted" / "charts");
+    add_encrypted_asset_files(files, song_dir / ".encrypted");
 }
 
 void add_song_directory_files(std::vector<fs::path>& files, const fs::path& song_dir) {

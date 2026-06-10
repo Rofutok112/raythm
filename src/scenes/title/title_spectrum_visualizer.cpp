@@ -109,40 +109,40 @@ void title_spectrum_visualizer::update(source input_source, float dt) {
             : audio.get_bgm_sample_rate_hz());
     std::array<float, kBarCount> raw_levels = {};
     constexpr float kNoiseFloor = 0.002f;
-    constexpr float kMinFrequencyHz = 1.0f;
-    constexpr float kMaxFrequencyHz = 16000.0f;
-    constexpr float kFftSize = 4096.0f;
-    const float nyquist_hz = std::max(sample_rate_hz * 0.5f, kMinFrequencyHz * 2.0f);
-    const float max_frequency_hz = std::min(kMaxFrequencyHz, nyquist_hz * 0.96f);
-    const float bin_width_hz = sample_rate_hz / kFftSize;
-    const int min_bin = std::max(1, static_cast<int>(std::floor(kMinFrequencyHz / bin_width_hz)));
-    const int max_bin = std::clamp(
-        static_cast<int>(std::ceil(max_frequency_hz / bin_width_hz)),
-        min_bin + kBarCount,
-        static_cast<int>(spectrum.size()));
-    const float bin_span = static_cast<float>(max_bin) / static_cast<float>(min_bin);
-    std::array<int, kBarCount + 1> bin_edges = {};
-    bin_edges[0] = min_bin;
-    for (int i = 1; i <= kBarCount; ++i) {
-        const float edge_t = static_cast<float>(i) / static_cast<float>(kBarCount);
-        const int requested_edge = static_cast<int>(
-            std::ceil(static_cast<float>(min_bin) * std::pow(bin_span, edge_t)));
-        const int min_allowed = bin_edges[static_cast<size_t>(i - 1)] + 1;
-        const int max_allowed = max_bin - (kBarCount - i);
-        bin_edges[static_cast<size_t>(i)] = std::clamp(requested_edge, min_allowed, max_allowed);
-    }
 
-    for (int i = 0; i < kBarCount; ++i) {
-        float level = 0.0f;
-        if (has_audio) {
+    if (has_audio && sample_rate_hz > 0.0f) {
+        constexpr float kMinFrequencyHz = 1.0f;
+        constexpr float kMaxFrequencyHz = 16000.0f;
+        constexpr float kFftSize = 4096.0f;
+        const float nyquist_hz = std::max(sample_rate_hz * 0.5f, kMinFrequencyHz * 2.0f);
+        const float max_frequency_hz = std::min(kMaxFrequencyHz, nyquist_hz * 0.96f);
+        const float bin_width_hz = sample_rate_hz / kFftSize;
+        const int min_bin = std::max(1, static_cast<int>(std::floor(kMinFrequencyHz / bin_width_hz)));
+        const int max_bin = std::clamp(
+            static_cast<int>(std::ceil(max_frequency_hz / bin_width_hz)),
+            min_bin + kBarCount,
+            static_cast<int>(spectrum.size()));
+        const float bin_span = static_cast<float>(max_bin) / static_cast<float>(min_bin);
+        std::array<int, kBarCount + 1> bin_edges = {};
+        bin_edges[0] = min_bin;
+        for (int i = 1; i <= kBarCount; ++i) {
+            const float edge_t = static_cast<float>(i) / static_cast<float>(kBarCount);
+            const int requested_edge = static_cast<int>(
+                std::ceil(static_cast<float>(min_bin) * std::pow(bin_span, edge_t)));
+            const int min_allowed = bin_edges[static_cast<size_t>(i - 1)] + 1;
+            const int max_allowed = max_bin - (kBarCount - i);
+            bin_edges[static_cast<size_t>(i)] = std::clamp(requested_edge, min_allowed, max_allowed);
+        }
+
+        for (int i = 0; i < kBarCount; ++i) {
             const int begin = bin_edges[static_cast<size_t>(i)];
             const int end = bin_edges[static_cast<size_t>(i + 1)];
 
             const float averaged = average_bucket_energy(spectrum, begin, end);
             const float center_hz = (static_cast<float>(begin + end) * 0.5f) * bin_width_hz;
-            level = suppress_below_threshold(amplitude_to_db_level(averaged, center_hz));
+            raw_levels[static_cast<size_t>(i)] =
+                suppress_below_threshold(amplitude_to_db_level(averaged, center_hz));
         }
-        raw_levels[static_cast<size_t>(i)] = level;
     }
 
     const float frame_dt = visual_dt(dt);

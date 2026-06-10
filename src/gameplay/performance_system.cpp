@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "chart_difficulty.h"
+#include "chart_rc_calculator.h"
 
 namespace {
 
@@ -22,29 +23,6 @@ size_t judge_index(judge_result result) {
     }
 
     return 4;
-}
-
-float event_weight_for(float local_difficulty) {
-    if (local_difficulty <= 0.0f) {
-        return 0.0f;
-    }
-    return std::pow(std::max(local_difficulty, 0.001f), 1.12f);
-}
-
-float chart_max_rc_for(const chart_data& chart, size_t event_count) {
-    const float level = chart.meta.level > 0.0f
-                            ? chart.meta.level
-                            : chart_difficulty::calculate_level(chart);
-    if (level <= 0.0f || event_count == 0) {
-        return 0.0f;
-    }
-
-    const float event_ratio = static_cast<float>(event_count) / 600.0f;
-    const float length_bonus =
-        0.92f +
-        0.08f * std::min(1.0f, event_ratio) +
-        (event_count > 600 ? std::min(0.12f, std::log10(event_ratio) * 0.06f) : 0.0f);
-    return std::pow(level, 2.25f) * 2.2f * length_bonus;
 }
 
 }  // namespace
@@ -70,7 +48,7 @@ void performance_system::init(const chart_data& chart, const timing_engine& engi
             continue;
         }
         event_weights_[static_cast<size_t>(event.event_index)] =
-            event_weight_for(event.local_difficulty);
+            chart_rc::event_weight_for(event.local_difficulty);
     }
 
     for (float weight : event_weights_) {
@@ -80,7 +58,7 @@ void performance_system::init(const chart_data& chart, const timing_engine& engi
         static_cast<size_t>(std::count_if(event_weights_.begin(), event_weights_.end(), [](float weight) {
             return weight > 0.0f;
         }));
-    chart_max_rc_ = chart_max_rc_for(chart, positive_event_count);
+    chart_max_rc_ = chart_rc::max_rc_for(chart, positive_event_count);
 }
 
 void performance_system::reset() {
@@ -157,7 +135,7 @@ float performance_system::calculate_current_rc() const {
         combo_factor = 0.78f + 0.22f * std::sqrt(combo_ratio);
     }
 
-    return chart_max_rc_ * strain_progress * accuracy_factor * miss_penalty * combo_factor;
+    return std::round(chart_max_rc_ * strain_progress * accuracy_factor * miss_penalty * combo_factor);
 }
 
 float performance_system::judge_factor(judge_result result) const {

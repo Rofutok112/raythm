@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "core/scene_manager.h"
-#include "song_select/song_preview_controller.h"
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_overlay_view.h"
@@ -18,6 +17,7 @@ using apply_delete_result_fn = std::function<void(const delete_result&)>;
 using reload_song_library_fn = std::function<void(const std::string&, const std::string&)>;
 using open_overwrite_song_confirmation_fn = std::function<void(std::vector<song_import_request>)>;
 using open_overwrite_chart_confirmation_fn = std::function<void(std::vector<chart_import_request>)>;
+using stop_preview_fn = std::function<void()>;
 
 void apply_context_menu_command(scene_manager& manager, state& state,
                                 transfer::controller& transfer_controller,
@@ -28,7 +28,7 @@ void apply_context_menu_command(scene_manager& manager, state& state,
                                 const open_overwrite_chart_confirmation_fn& open_overwrite_chart_confirmation);
 
 void apply_confirmation_command(state& state,
-                                preview_controller& preview_controller,
+                                const stop_preview_fn& stop_preview,
                                 transfer::controller& transfer_controller,
                                 confirmation_command command,
                                 const apply_delete_result_fn& apply_delete_result,

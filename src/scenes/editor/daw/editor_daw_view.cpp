@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "editor/editor_timeline_view.h"
+#include "editor/editor_timeline_types.h"
 #include "editor/view/editor_layout.h"
 #include "editor/viewport/editor_timeline_viewport.h"
 #include "scene_common.h"
@@ -57,6 +57,8 @@ const char* palette_label(note_type type) {
             return "RELEASE";
         case note_type::stay:
             return "STAY";
+        case note_type::decorative_hold:
+            return "DECO";
     }
     return "TAP";
 }
@@ -72,6 +74,8 @@ Color palette_tone(note_type type) {
             return t.slow;
         case note_type::stay:
             return t.fast;
+        case note_type::decorative_hold:
+            return t.accent;
     }
     return t.accent;
 }
@@ -357,6 +361,9 @@ void draw_palette_icon(Rectangle rect, note_type type, Color color) {
         case note_type::stay:
             raythm_icons::draw_note_stay(rect, color, 3.0f);
             break;
+        case note_type::decorative_hold:
+            raythm_icons::draw_note_long(rect, color, 2.6f);
+            break;
     }
 }
 
@@ -424,13 +431,16 @@ editor_timeline_note make_timeline_note(const note_data& note, size_t source_ind
         case note_type::stay:
             type = editor_timeline_note_type::stay;
             break;
+        case note_type::decorative_hold:
+            type = editor_timeline_note_type::decorative_hold;
+            break;
     }
     return {type, note.tick, note.lane, note.end_tick, note.is_ray, note_lane_width(note), source_index};
 }
 
 bool note_intersects_tick_range(const note_data& note, int min_tick, int max_tick) {
     const int start_tick = note.tick;
-    const int end_tick = note.type == note_type::hold ? std::max(note.tick, note.end_tick) : note.tick;
+    const int end_tick = note_has_duration(note) ? std::max(note.tick, note.end_tick) : note.tick;
     return end_tick >= min_tick && start_tick <= max_tick;
 }
 
@@ -442,7 +452,7 @@ struct timeline_note_cache {
 
 const std::vector<editor_timeline_note>* cached_minimap_notes(const editor_state& state) {
     static timeline_note_cache cache;
-    const size_t generation = state.level_refresh_generation();
+    const size_t generation = state.revision_generation();
     if (cache.state != &state || cache.generation != generation) {
         cache.state = &state;
         cache.generation = generation;
@@ -490,7 +500,7 @@ editor_timeline_view_model make_timeline_model(const editor_timeline_presenter_m
         std::move(scroll_automation),
         std::move(notes),
         cached_minimap_notes(model.state),
-        model.state.level_refresh_generation(),
+        model.state.revision_generation(),
         model.selected_note_indices,
         model.selected_scroll_event_index,
         model.audio_loaded ? std::optional<int>(model.playback_tick) : std::nullopt,
@@ -578,6 +588,8 @@ Color editor_play_note_color(editor_timeline_note_type type, bool is_ray, Color 
         switch (type) {
             case editor_timeline_note_type::hold:
                 return lerp_color(base, {142, 92, 236, 255}, 0.72f);
+            case editor_timeline_note_type::decorative_hold:
+                return lerp_color(base, {172, 132, 255, 255}, 0.58f);
             case editor_timeline_note_type::release:
                 return lerp_color(base, {198, 116, 255, 255}, 0.76f);
             case editor_timeline_note_type::stay:
@@ -595,6 +607,8 @@ Color editor_play_note_color(editor_timeline_note_type type, bool is_ray, Color 
             return lerp_color(base, WHITE, 0.42f);
         case editor_timeline_note_type::hold:
             return lerp_color(base, WHITE, 0.96f);
+        case editor_timeline_note_type::decorative_hold:
+            return lerp_color(base, {86, 220, 232, 255}, 0.55f);
     }
     return base;
 }
@@ -610,6 +624,12 @@ Color editor_hold_gradient_color(Color base, float t) {
     const float edge_factor = std::pow(std::fabs(t - 0.5f) * 2.0f, 1.55f);
     const unsigned char alpha = static_cast<unsigned char>(84.0f + edge_factor * 110.0f);
     return with_alpha(lerp_color(base, WHITE, edge_factor * 0.10f), alpha);
+}
+
+Color editor_decorative_hold_gradient_color(Color base, float t) {
+    const float center_factor = 1.0f - std::pow(std::fabs(t - 0.5f) * 2.0f, 1.35f);
+    const unsigned char alpha = static_cast<unsigned char>(48.0f + center_factor * 86.0f);
+    return with_alpha(lerp_color(base, WHITE, 0.14f + center_factor * 0.20f), alpha);
 }
 
 Color editor_stay_gradient_color(Color base, float t) {
@@ -693,6 +713,25 @@ void draw_editor_hold_body(Rectangle rect, Color fill, bool ray_style, bool sele
     }
 }
 
+void draw_editor_decorative_hold_body(Rectangle rect, Color fill, bool ray_style, bool selected) {
+    const Color decor_base = ray_style
+                                 ? lerp_color(fill, {194, 156, 255, 255}, 0.62f)
+                                 : lerp_color(fill, {86, 220, 232, 255}, 0.64f);
+    draw_horizontal_strip_gradient(rect, 18, editor_decorative_hold_gradient_color, decor_base);
+
+    const Color rail = with_alpha(lerp_color(decor_base, WHITE, 0.30f), 150);
+    const float rail_width = std::clamp(rect.width * 0.035f, 1.5f, 4.0f);
+    DrawRectangleGradientV(static_cast<int>(rect.x), static_cast<int>(rect.y),
+                           static_cast<int>(rail_width), static_cast<int>(rect.height),
+                           rail, with_alpha(rail, 72));
+    DrawRectangleGradientV(static_cast<int>(rect.x + rect.width - rail_width), static_cast<int>(rect.y),
+                           static_cast<int>(rail_width), static_cast<int>(rect.height),
+                           rail, with_alpha(rail, 72));
+    if (selected) {
+        ui::draw_rect_lines(ui::inset(rect, -2.0f), 2.0f, g_theme->accent);
+    }
+}
+
 void draw_editor_stay_dot(Rectangle rect, Color fill, bool ray_style, bool selected) {
     const Color stay_base = ray_style
                                 ? lerp_color(WHITE, {224, 214, 255, 255}, 0.14f)
@@ -747,14 +786,14 @@ void draw_editor_release_chevron(Rectangle note_rect, Color marker, Color contou
 }
 
 void draw_simple_note_block(const editor_timeline_note& note,
-                            const editor_timeline_note_draw_info& info,
+                            const editor_timeline_note_geometry& geometry,
                             bool selected,
                             bool preview,
                             bool overlap) {
     const auto& t = *g_theme;
     const Color fill = overlap ? t.error : editor_play_note_color(note.type, note.is_ray, t.note_color);
     const Color color = preview ? with_alpha(fill, 160) : with_alpha(fill, note.is_ray ? 235 : 205);
-    const Rectangle rect = info.has_body ? info.body_rect : info.head_rect;
+    const Rectangle rect = geometry.visual.has_body ? geometry.visual.body_rect : geometry.visual.head_rect;
     ui::draw_rect_f(rect, color);
     if (selected || preview) {
         ui::draw_rect_lines(ui::inset(rect, selected ? -1.5f : 0.0f), selected ? 2.0f : 1.0f,
@@ -763,13 +802,13 @@ void draw_simple_note_block(const editor_timeline_note& note,
 }
 
 void draw_note_block(const editor_timeline_note& note,
-                     const editor_timeline_note_draw_info& info,
+                     const editor_timeline_note_geometry& geometry,
                      bool selected,
                      bool preview,
                      bool overlap,
                      bool simplified = false) {
     if (simplified && !selected) {
-        draw_simple_note_block(note, info, selected, preview, overlap);
+        draw_simple_note_block(note, geometry, selected, preview, overlap);
         return;
     }
 
@@ -777,24 +816,28 @@ void draw_note_block(const editor_timeline_note& note,
     const Color fill = overlap ? t.error : editor_play_note_color(note.type, note.is_ray, t.note_color);
     const Color draw_fill = preview ? with_alpha(fill, 170) : fill;
 
-    if (info.has_body) {
-        draw_editor_hold_body(info.body_rect, draw_fill, note.is_ray, selected);
+    if (geometry.visual.has_body) {
+        if (note.type == editor_timeline_note_type::decorative_hold) {
+            draw_editor_decorative_hold_body(geometry.visual.visual_body_rect, draw_fill, note.is_ray, selected);
+            return;
+        }
+        draw_editor_hold_body(geometry.visual.body_rect, draw_fill, note.is_ray, selected);
         return;
     }
 
     if (note.type == editor_timeline_note_type::stay) {
-        draw_editor_stay_dot(info.head_rect, draw_fill, note.is_ray, selected);
+        draw_editor_stay_dot(geometry.visual.head_rect, draw_fill, note.is_ray, selected);
         return;
     }
 
-    draw_editor_tap_slab(info.head_rect, draw_fill, note.type == editor_timeline_note_type::release,
+    draw_editor_tap_slab(geometry.visual.head_rect, draw_fill, note.type == editor_timeline_note_type::release,
                          note.is_ray, selected);
     if (note.type == editor_timeline_note_type::release) {
         const Color release_seed = note.is_ray ? Color{190, 112, 255, 255} : Color{255, 90, 132, 255};
         const Color release_base = lerp_color(release_seed, draw_fill, note.is_ray ? 0.24f : 0.16f);
         const Color marker = with_alpha(lerp_color(release_base, WHITE, 0.28f), 255);
         const Color contour = with_alpha(lerp_color(release_base, BLACK, 0.16f), 255);
-        draw_editor_release_chevron(info.head_rect, marker, contour);
+        draw_editor_release_chevron(geometry.visual.head_rect, marker, contour);
     }
 }
 
@@ -889,12 +932,16 @@ minimap_shape_cache& cached_minimap_shapes(const editor_timeline_view_model& mod
         const float x = inner.x + lane_width * static_cast<float>(note.lane);
         const float note_width = lane_width * static_cast<float>(std::max(1, note.lane_width));
         const Color color = editor_play_note_color(note.type, note.is_ray, t.note_color);
-        if (note.type == editor_timeline_note_type::hold && note.end_tick > note.tick) {
+        if ((note.type == editor_timeline_note_type::hold ||
+             note.type == editor_timeline_note_type::decorative_hold) &&
+            note.end_tick > note.tick) {
             const float end_y = minimap_y_for_cached_tick(cache, static_cast<float>(note.end_tick));
             cache.bodies.push_back({
                 {x + note_width * 0.35f, std::min(y, end_y), std::max(2.0f, note_width * 0.3f),
                  std::max(2.0f, std::fabs(end_y - y))},
-                with_alpha(color, note.is_ray ? 170 : 125)
+                note.type == editor_timeline_note_type::decorative_hold
+                    ? with_alpha(color, note.is_ray ? 120 : 82)
+                    : with_alpha(color, note.is_ray ? 170 : 125)
             });
         }
 
@@ -992,9 +1039,11 @@ editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model
                      note_type::release, model.note_palette, result);
     draw_palette_pad({palette.x + 12.0f, note_row_y + (pad_height + gap) * 3.0f, pad_width, pad_height},
                      note_type::stay, model.note_palette, result);
+    draw_palette_pad({palette.x + 12.0f, note_row_y + (pad_height + gap) * 4.0f, pad_width, pad_height},
+                     note_type::decorative_hold, model.note_palette, result);
 
     result.ray_toggled = draw_ray_toggle(
-        {palette.x + 12.0f, note_row_y + (pad_height + gap) * 4.0f + 8.0f,
+        {palette.x + 12.0f, note_row_y + (pad_height + gap) * 5.0f + 8.0f,
          palette.width - 24.0f, pad_height},
         model.note_palette.is_ray);
 
@@ -1227,28 +1276,18 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
     result.timing_modal_requested = ui::draw_button_colored(
         timing_button, "TIMING", 13, t.row, t.row_hover, t.text_secondary, 1.2f).clicked;
 
-    const float transport_padding = 10.0f;
-    const float transport_button_size = 42.0f;
-    const float transport_button_gap = 8.0f;
-    const float transport_width = transport_padding * 2.0f + transport_button_size * 3.0f + transport_button_gap * 2.0f;
-    const Rectangle transport = {bar.x + bar.width * 0.5f - transport_width * 0.5f, content.y + 1.0f,
-                                 transport_width, 50.0f};
+    const Rectangle transport = layout::kHeaderTransportRect;
     ui::draw_section(transport);
-    const Rectangle restart_rect = {transport.x + transport_padding, transport.y + 4.0f,
-                                    transport_button_size, transport_button_size};
-    const ui::button_state restart_button =
-        draw_icon_button(restart_rect, raythm_icons::draw_skip_back, false, t.text);
-    result.restart_requested = restart_button.clicked;
-    const Rectangle play_rect = {restart_rect.x + restart_rect.width + transport_button_gap, restart_rect.y,
-                                 transport_button_size, transport_button_size};
-    const ui::button_state play_button = model.audio_playing
-        ? draw_icon_button(play_rect, raythm_icons::draw_pause, true, t.accent)
-        : draw_icon_button(play_rect, raythm_icons::draw_play, false, t.text);
-    result.playback_toggled = play_button.clicked;
-    const Rectangle playtest_rect = {play_rect.x + play_rect.width + transport_button_gap, play_rect.y,
-                                     transport_button_size, transport_button_size};
-    result.playtest_requested =
-        draw_icon_button(playtest_rect, raythm_icons::draw_flask_conical, false, t.text).clicked;
+    const Rectangle restart_rect = layout::kHeaderRestartButtonRect;
+    draw_icon_button(restart_rect, raythm_icons::draw_skip_back, false, t.text);
+    const Rectangle play_rect = layout::kHeaderPlayButtonRect;
+    if (model.audio_playing) {
+        draw_icon_button(play_rect, raythm_icons::draw_pause, true, t.accent);
+    } else {
+        draw_icon_button(play_rect, raythm_icons::draw_play, false, t.text);
+    }
+    const Rectangle playtest_rect = layout::kHeaderPlaytestButtonRect;
+    draw_icon_button(playtest_rect, raythm_icons::draw_flask_conical, false, t.text);
     ui::enqueue_hover_tooltip(playtest_rect, "プレイテスト");
     const ui::dropdown_state dropdown = ui::enqueue_dropdown(
         layout::kSnapDropdownRect, snap_menu_rect,
@@ -1333,14 +1372,14 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
             if (note.lane < 0 || note.lane >= model.metrics.key_count) {
                 continue;
             }
-            const editor_timeline_note_draw_info info = model.metrics.note_rects(note);
+            const editor_timeline_note_geometry geometry = model.metrics.note_rects(note);
             const bool selected = contains_sorted_index(model.selected_note_indices, note.source_index);
-            draw_note_block(note, info, selected, false, false, simplified_notes);
+            draw_note_block(note, geometry, selected, false, false, simplified_notes);
         }
 
         for (const editor_timeline_note& preview_note : model.preview_notes) {
-            const editor_timeline_note_draw_info info = model.metrics.note_rects(preview_note);
-            draw_note_block(preview_note, info, true, true, model.preview_has_overlap, simplified_notes);
+            const editor_timeline_note_geometry geometry = model.metrics.note_rects(preview_note);
+            draw_note_block(preview_note, geometry, true, true, model.preview_has_overlap, simplified_notes);
         }
 
         if (model.selection_rect.has_value()) {

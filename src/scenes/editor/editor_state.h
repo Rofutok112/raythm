@@ -43,6 +43,7 @@ public:
     void refresh_auto_level();
     bool level_needs_refresh() const;
     size_t level_refresh_generation() const;
+    size_t revision_generation() const;
 
     const chart_data& data() const;
 
@@ -70,6 +71,7 @@ private:
     void invalidate_note_index() const;
     void rebuild_note_index() const;
     void mark_level_dirty();
+    void mark_revision_dirty();
     void sync_dirty_flag();
 
     chart_data chart_;
@@ -78,6 +80,7 @@ private:
     bool dirty_ = false;
     bool level_dirty_ = false;
     size_t level_refresh_generation_ = 0;
+    size_t revision_generation_ = 0;
     std::string file_path_;
     size_t saved_history_index_ = 0;
     mutable bool note_index_dirty_ = true;

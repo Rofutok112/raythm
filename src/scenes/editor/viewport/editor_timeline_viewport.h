@@ -4,7 +4,7 @@
 #include <span>
 
 #include "editor/editor_state.h"
-#include "editor/editor_timeline_view.h"
+#include "editor/editor_timeline_types.h"
 
 struct editor_timeline_viewport_state {
     float bottom_tick = 0.0f;

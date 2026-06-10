@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "localization/localization.h"
+#include "shared/loading_screen_view.h"
 #include "theme.h"
 #include "tween.h"
 #include "ui/ui_font.h"
@@ -111,6 +112,7 @@ void reset(state& startup) {
     startup.load_complete = false;
     startup.load_failed = false;
     startup.progress_visual = kStartupProgressMin;
+    startup.catalog_progress = 0.0f;
     startup.loading_message = "Initializing audio...";
 }
 
@@ -125,19 +127,28 @@ void update(state& startup, const update_context& context) {
         context.request_play_catalog_reload(
             context.preferred_song_id,
             context.preferred_chart_id,
-            context.sync_media_on_catalog_apply,
-            false);
+            title_catalog::policy_for(title_catalog::reload_mode::fast_startup));
         return;
     }
 
     if (context.play_catalog_loading()) {
-        startup.loading_message = "Loading local catalog...";
+        if (context.catalog_progress) {
+            const load_progress catalog_progress = context.catalog_progress();
+            startup.catalog_progress = catalog_progress.progress;
+            startup.loading_message = catalog_progress.message.empty()
+                ? "Loading local catalog..."
+                : catalog_progress.message;
+        } else {
+            startup.loading_message = "Loading local catalog...";
+        }
         return;
     }
 
     if (!context.play_state.catalog_loaded_once) {
         return;
     }
+
+    startup.catalog_progress = 1.0f;
 
     if (!startup.fonts_preload_started) {
         startup.fonts_preload_started = true;
@@ -173,14 +184,11 @@ void update(state& startup, const update_context& context) {
 }
 
 void draw_loading(state& startup, float dt) {
-    const Rectangle panel = {690.0f, 702.0f, 540.0f, 112.0f};
-    const Rectangle label_rect = {panel.x, panel.y, panel.width, 38.0f};
-    const Rectangle detail_rect = {panel.x, panel.y + 36.0f, panel.width, 28.0f};
-    const Rectangle bar_rect = {panel.x + 2.0f, panel.y + 82.0f, panel.width - 4.0f, 8.0f};
-
     float base_progress = kStartupProgressMin;
     if (startup.catalog_requested) {
-        base_progress = kStartupProgressCatalog;
+        base_progress = kStartupProgressMin +
+                        (kStartupProgressCatalog - kStartupProgressMin) *
+                            std::clamp(startup.catalog_progress, 0.0f, 1.0f);
     }
     if (startup.fonts_preload_started) {
         base_progress = kStartupProgressFonts;
@@ -192,19 +200,16 @@ void draw_loading(state& startup, float dt) {
         base_progress = 1.0f;
     }
     startup.progress_visual = tween::damp(startup.progress_visual, base_progress, dt, 5.0f, 0.0005f);
-    const float progress = std::clamp(startup.progress_visual, 0.0f, 1.0f);
-
-    ui::draw_display_text_in_rect("raythm", 28, label_rect, g_theme->text);
-    ui::draw_text_in_rect(startup.loading_message.c_str(), 18, detail_rect,
-                          startup.load_failed ? g_theme->error : g_theme->text_muted);
-    ui::draw_progress_bar(bar_rect, progress, with_alpha(g_theme->row, 180),
-                          startup.load_failed ? g_theme->error : g_theme->accent,
-                          with_alpha(g_theme->border, 180), 1.5f, 1.5f);
+    loading_screen_view::draw({
+        .message = startup.loading_message.c_str(),
+        .progress = startup.progress_visual,
+        .error = startup.load_failed,
+    });
 }
 
 void draw_status(const state& startup) {
     const Rectangle status_rect = {520.0f, 704.0f, 880.0f, 34.0f};
-    ui::draw_text_in_rect(startup.loading_message.c_str(), 18, status_rect,
+    ui::draw_text_in_rect(localization::tr_literal(startup.loading_message.c_str()), 18, status_rect,
                           startup.load_failed ? g_theme->error : g_theme->text_muted);
 }
 

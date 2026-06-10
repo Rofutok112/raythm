@@ -1,5 +1,7 @@
 #include "app_paths.h"
 #include "local_sqlite.h"
+#include "path_utils.h"
+#include "song_select/local_catalog_cache_service.h"
 #include "song_select/local_catalog_database.h"
 
 #include <cassert>
@@ -59,7 +61,7 @@ void assert_database_stored_managed_content() {
                                   "FROM local_charts WHERE chart_id = 'chart-a';");
     assert(chart.valid());
     assert(sqlite3_step(chart.get()) == SQLITE_ROW);
-    assert(local_sqlite::column_text(chart.get(), 0) == "community");
+    assert(local_sqlite::column_text(chart.get(), 0) == "modified");
     assert(local_sqlite::column_text(chart.get(), 1) == "community");
     assert(local_sqlite::column_text(chart.get(), 2) == "community");
     assert(local_sqlite::column_text(chart.get(), 3) == "managed_package");
@@ -87,8 +89,10 @@ song_select::chart_option make_chart(const char* chart_id, const char* song_id, 
     chart.kind = content_kind::community;
     chart.storage = storage_policy::managed_package;
     chart.verification = verification_state::matched;
-    chart.status = content_status::community;
+    chart.status = content_status::modified;
     chart.source_status = content_status::community;
+    chart.source = content_source::community;
+    chart.sync_state = content_sync_state::modified;
     chart.online_identity = online_content::chart_identity{
         .server_url = "https://server.example",
         .remote_song_id = "remote-song-a",
@@ -138,6 +142,8 @@ song_select::song_entry make_song(const fs::path& song_dir, const fs::path& char
     song.verification = verification_state::matched;
     song.status = content_status::community;
     song.source_status = content_status::community;
+    song.source = content_source::community;
+    song.sync_state = content_sync_state::clean;
     song.online_identity = online_content::song_identity{
         .server_url = "https://server.example",
         .remote_song_id = "remote-song-a",
@@ -203,6 +209,8 @@ int main() {
     assert(cached.songs[0].verification == verification_state::matched);
     assert(cached.songs[0].status == content_status::community);
     assert(cached.songs[0].source_status == content_status::community);
+    assert(cached.songs[0].source == content_source::community);
+    assert(cached.songs[0].sync_state == content_sync_state::clean);
     assert(cached.songs[0].online_identity.has_value());
     assert(cached.songs[0].online_identity->remote_song_id == "remote-song-a");
     assert(cached.songs[0].managed_manifest.has_value());
@@ -216,8 +224,10 @@ int main() {
     assert(cached.songs[0].charts[0].kind == content_kind::community);
     assert(cached.songs[0].charts[0].storage == storage_policy::managed_package);
     assert(cached.songs[0].charts[0].verification == verification_state::matched);
-    assert(cached.songs[0].charts[0].status == content_status::community);
+    assert(cached.songs[0].charts[0].status == content_status::modified);
     assert(cached.songs[0].charts[0].source_status == content_status::community);
+    assert(cached.songs[0].charts[0].source == content_source::community);
+    assert(cached.songs[0].charts[0].sync_state == content_sync_state::modified);
     assert(cached.songs[0].charts[0].online_identity.has_value());
     assert(cached.songs[0].charts[0].online_identity->remote_chart_id == "remote-chart-a");
     assert(cached.songs[0].charts[0].managed_manifest.has_value());
@@ -225,6 +235,14 @@ int main() {
     assert(cached.songs[0].charts[0].managed_manifest->remote_chart_fingerprint == "remote-chart-fingerprint");
     assert(cached.songs[0].charts[0].remote_links.empty());
     assert(cached.songs[0].song.chart_paths.size() == 1);
+    const std::optional<float> cached_level =
+        song_select::local_catalog_database::find_chart_level_by_path(path_utils::to_utf8(chart_path));
+    assert(cached_level.has_value());
+    assert(*cached_level == 7.5f);
+    const std::optional<float> service_cached_level =
+        song_select::local_catalog_cache_service::find_chart_level(path_utils::to_utf8(chart_path));
+    assert(service_cached_level.has_value());
+    assert(*service_cached_level == 7.5f);
 
     std::ofstream(song_dir / "notes.txt") << "not catalog metadata";
     cached = song_select::local_catalog_database::load_cached_catalog();

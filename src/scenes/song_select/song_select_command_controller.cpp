@@ -213,7 +213,7 @@ void apply_context_menu_command(scene_manager& manager, state& state,
 }
 
 void apply_confirmation_command(state& state,
-                                preview_controller& preview_controller,
+                                const stop_preview_fn& stop_preview,
                                 transfer::controller& transfer_controller,
                                 confirmation_command command,
                                 const apply_delete_result_fn& apply_delete_result,
@@ -247,7 +247,9 @@ void apply_confirmation_command(state& state,
             return;
         }
         if (state.confirmation_dialog.action == pending_confirmation_action::delete_song) {
-            preview_controller.stop();
+            if (stop_preview) {
+                stop_preview();
+            }
             apply_delete_result(delete_song(state, state.confirmation_dialog.song_index));
         } else if (state.confirmation_dialog.action == pending_confirmation_action::delete_chart) {
             apply_delete_result(delete_chart(state, state.confirmation_dialog.song_index,

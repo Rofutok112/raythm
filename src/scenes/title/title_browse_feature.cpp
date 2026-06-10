@@ -8,12 +8,13 @@ const title_online_view::state& title_browse_feature::state() const {
     return state_;
 }
 
-void title_browse_feature::on_enter(song_select::preview_controller& preview_controller) {
-    title_online_view::on_enter(state_, data_controller_, preview_controller);
+void title_browse_feature::on_enter(title_audio_controller& audio_controller) {
+    title_online_view::on_enter(state_, data_controller_, audio_controller);
 }
 
 void title_browse_feature::on_exit() {
     title_online_view::on_exit(state_);
+    ranking_controller_.reset();
 }
 
 void title_browse_feature::request_reload(bool preserve_view) {
@@ -48,9 +49,10 @@ std::string title_browse_feature::selected_song_id() const {
 void title_browse_feature::update(float anim_t,
                                   Rectangle origin_rect,
                                   float dt,
+                                  title_audio_controller& audio_controller,
                                   const update_callbacks& callbacks) {
     title_online_mode_controller::update(
-        state_, data_controller_, anim_t, origin_rect, dt, callbacks.online);
+        state_, data_controller_, ranking_controller_, audio_controller, anim_t, origin_rect, dt, callbacks.online);
 }
 
 title_browse_feature::poll_result title_browse_feature::poll(bool active) {
@@ -67,6 +69,6 @@ title_browse_feature::poll_result title_browse_feature::poll(bool active) {
     return result;
 }
 
-void title_browse_feature::draw(float anim_t, Rectangle origin_rect) {
-    title_online_view::draw(state_, anim_t, origin_rect);
+void title_browse_feature::draw(const title_audio_controller& audio_controller, float anim_t, Rectangle origin_rect) {
+    title_online_view::draw(state_, audio_controller, anim_t, origin_rect);
 }

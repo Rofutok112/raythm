@@ -12,6 +12,18 @@ bool same_judgement_time(double left_ms, double right_ms) {
     return std::fabs(left_ms - right_ms) <= kSameJudgementTimeToleranceMs;
 }
 
+void complete_visual_only_notes(std::vector<note_state>& note_states, double current_ms) {
+    for (note_state& state : note_states) {
+        if (!note_is_visual_only(state.note_ref) || state.is_completed()) {
+            continue;
+        }
+        if (current_ms >= state.end_target_ms) {
+            state.progress = note_progress_state::completed;
+            state.result = judge_result::perfect;
+        }
+    }
+}
+
 }  // namespace
 
 void judge_system::init(const std::vector<note_data>& notes, const timing_engine& engine) {
@@ -28,7 +40,7 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
         note_state state;
         state.note_ref = note;
         state.target_ms = engine.tick_to_ms(note.tick);
-        state.end_target_ms = engine.tick_to_ms(note.type == note_type::hold ? note.end_tick : note.tick);
+        state.end_target_ms = engine.tick_to_ms(note_has_duration(note) ? note.end_tick : note.tick);
         note_states_.push_back(state);
     }
     active_hold_sessions_.resize(note_states_.size());
@@ -72,6 +84,7 @@ void judge_system::init(const std::vector<note_data>& notes, const timing_engine
 
 void judge_system::update(double current_ms, const input_handler& input) {
     judge_events_.clear();
+    complete_visual_only_notes(note_states_, current_ms);
 
     std::vector<input_event> ordered_events(input.events().begin(), input.events().end());
     std::stable_sort(ordered_events.begin(), ordered_events.end(), [](const input_event& left,
@@ -90,6 +103,7 @@ void judge_system::update(double current_ms, const input_handler& input) {
 
 void judge_system::update_auto(double current_ms, double hitsound_lead_ms) {
     judge_events_.clear();
+    complete_visual_only_notes(note_states_, current_ms);
 
     for (size_t event_index = 0; event_index < event_descriptors_.size(); ++event_index) {
         if (event_completed_[event_index]) {
@@ -444,6 +458,9 @@ void judge_system::resolve_hold_completions(double current_ms) {
 
 void judge_system::resolve_auto_misses(double current_ms) {
     for (note_state& state : note_states_) {
+        if (note_is_visual_only(state.note_ref)) {
+            continue;
+        }
         if (state.is_judged()) {
             continue;
         }

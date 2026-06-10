@@ -40,6 +40,20 @@ local_content_binding::origin origin_from_int(int value) {
     }
 }
 
+const char* remote_content_type_to_text(remote_content_type type) {
+    switch (type) {
+    case remote_content_type::song:
+        return "song";
+    case remote_content_type::chart:
+        return "chart";
+    }
+    return "song";
+}
+
+remote_content_type remote_content_type_from_text(const std::string& value) {
+    return value == "chart" ? remote_content_type::chart : remote_content_type::song;
+}
+
 local_content_binding::origin merge_origin(local_content_binding::origin current,
                                                   local_content_binding::origin incoming) {
     if (current == local_content_binding::origin::owned_upload) {
@@ -229,6 +243,8 @@ void bind_optional_bool(sqlite3_stmt* statement, int index, const std::optional<
     }
 }
 
+void upsert_remote_metadata(sqlite3* database, const remote_metadata& metadata);
+
 bool migrate_chart_bindings_without_local_song_id(sqlite3* database) {
     if (!chart_bindings_has_local_song_id(database)) {
         return true;
@@ -362,6 +378,30 @@ bool ensure_schema(sqlite3* database) {
            exec(database,
                 "CREATE INDEX IF NOT EXISTS idx_chart_bindings_remote "
                 "ON chart_bindings(server_url, remote_chart_id);") &&
+           exec(database,
+                "CREATE TABLE IF NOT EXISTS remote_content_metadata ("
+                "server_url TEXT NOT NULL,"
+                "content_type TEXT NOT NULL,"
+                "remote_id TEXT NOT NULL,"
+                "content_source TEXT NOT NULL DEFAULT '',"
+                "lifecycle_status TEXT NOT NULL DEFAULT '',"
+                "review_status TEXT NOT NULL DEFAULT '',"
+                "remote_version INTEGER NOT NULL DEFAULT 0,"
+                "revision_id TEXT NOT NULL DEFAULT '',"
+                "content_hash TEXT NOT NULL DEFAULT '',"
+                "updated_at INTEGER NOT NULL,"
+                "PRIMARY KEY (server_url, content_type, remote_id)"
+                ");") &&
+           exec(database,
+                "CREATE TABLE IF NOT EXISTS account_content_permissions ("
+                "server_url TEXT NOT NULL,"
+                "content_type TEXT NOT NULL,"
+                "remote_id TEXT NOT NULL,"
+                "user_id TEXT NOT NULL,"
+                "can_edit INTEGER,"
+                "fetched_at INTEGER NOT NULL,"
+                "PRIMARY KEY (server_url, content_type, remote_id, user_id)"
+                ");") &&
            migrate_chart_bindings_without_local_song_id(database) &&
            ensure_chart_binding_version_column(database) &&
            ensure_binding_permission_columns(database, "song_bindings") &&
@@ -369,7 +409,7 @@ bool ensure_schema(sqlite3* database) {
            ensure_non_unique_remote_binding_indexes(database) &&
            remove_legacy_catalog_cache(database) &&
            exec(database,
-                "INSERT INTO metadata(key, value) VALUES('schema_version', '5') "
+                "INSERT INTO metadata(key, value) VALUES('schema_version', '6') "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value;");
 }
 
@@ -419,13 +459,13 @@ void put_song(sqlite3* database, const local_content_binding::song_binding& bind
     statement query(database,
                     "INSERT INTO song_bindings(server_url, local_song_id, remote_song_id, origin, "
                     "can_edit, lifecycle_status, review_status, updated_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?) "
+                    "VALUES(?, ?, ?, ?, NULL, '', '', ?) "
                     "ON CONFLICT(server_url, local_song_id) DO UPDATE SET "
                     "remote_song_id = excluded.remote_song_id,"
                     "origin = excluded.origin,"
-                    "can_edit = excluded.can_edit,"
-                    "lifecycle_status = excluded.lifecycle_status,"
-                    "review_status = excluded.review_status,"
+                    "can_edit = NULL,"
+                    "lifecycle_status = '',"
+                    "review_status = '',"
                     "updated_at = excluded.updated_at;");
     if (!query.valid()) {
         return;
@@ -434,10 +474,7 @@ void put_song(sqlite3* database, const local_content_binding::song_binding& bind
     bind_text(query.get(), 2, binding.local_song_id);
     bind_text(query.get(), 3, binding.remote_song_id);
     sqlite3_bind_int(query.get(), 4, origin_to_int(origin));
-    bind_optional_bool(query.get(), 5, binding.can_edit);
-    bind_text(query.get(), 6, binding.lifecycle_status);
-    bind_text(query.get(), 7, binding.review_status);
-    sqlite3_bind_int64(query.get(), 8, now_unix_seconds());
+    sqlite3_bind_int64(query.get(), 5, now_unix_seconds());
     step_done(query.get());
 }
 
@@ -456,15 +493,15 @@ void put_chart(sqlite3* database, const local_content_binding::chart_binding& bi
     statement query(database,
                     "INSERT INTO chart_bindings(server_url, local_chart_id, remote_chart_id, "
                     "remote_song_id, remote_chart_version, origin, can_edit, lifecycle_status, review_status, updated_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                    "VALUES(?, ?, ?, ?, ?, ?, NULL, '', '', ?) "
                     "ON CONFLICT(server_url, local_chart_id) DO UPDATE SET "
                     "remote_chart_id = excluded.remote_chart_id,"
                     "remote_song_id = excluded.remote_song_id,"
                     "remote_chart_version = excluded.remote_chart_version,"
                     "origin = excluded.origin,"
-                    "can_edit = excluded.can_edit,"
-                    "lifecycle_status = excluded.lifecycle_status,"
-                    "review_status = excluded.review_status,"
+                    "can_edit = NULL,"
+                    "lifecycle_status = '',"
+                    "review_status = '',"
                     "updated_at = excluded.updated_at;");
     if (!query.valid()) {
         return;
@@ -475,10 +512,7 @@ void put_chart(sqlite3* database, const local_content_binding::chart_binding& bi
     bind_text(query.get(), 4, binding.remote_song_id);
     sqlite3_bind_int(query.get(), 5, binding.remote_chart_version);
     sqlite3_bind_int(query.get(), 6, origin_to_int(origin));
-    bind_optional_bool(query.get(), 7, binding.can_edit);
-    bind_text(query.get(), 8, binding.lifecycle_status);
-    bind_text(query.get(), 9, binding.review_status);
-    sqlite3_bind_int64(query.get(), 10, now_unix_seconds());
+    sqlite3_bind_int64(query.get(), 7, now_unix_seconds());
     step_done(query.get());
 }
 
@@ -557,9 +591,6 @@ std::optional<local_content_binding::song_binding> read_song(sqlite3_stmt* state
         .local_song_id = column_text(statement, 1),
         .remote_song_id = column_text(statement, 2),
         .origin = origin_from_int(sqlite3_column_int(statement, 3)),
-        .can_edit = column_optional_bool(statement, 4),
-        .lifecycle_status = column_text(statement, 5),
-        .review_status = column_text(statement, 6),
     };
 }
 
@@ -571,10 +602,86 @@ std::optional<local_content_binding::chart_binding> read_chart(sqlite3_stmt* sta
         .remote_song_id = column_text(statement, 3),
         .remote_chart_version = sqlite3_column_int(statement, 4),
         .origin = origin_from_int(sqlite3_column_int(statement, 5)),
-        .can_edit = column_optional_bool(statement, 6),
-        .lifecycle_status = column_text(statement, 7),
-        .review_status = column_text(statement, 8),
     };
+}
+
+std::optional<remote_metadata> read_remote_metadata(sqlite3_stmt* statement) {
+    return remote_metadata{
+        .server_url = column_text(statement, 0),
+        .type = remote_content_type_from_text(column_text(statement, 1)),
+        .remote_id = column_text(statement, 2),
+        .content_source = column_text(statement, 3),
+        .lifecycle_status = column_text(statement, 4),
+        .review_status = column_text(statement, 5),
+        .remote_version = sqlite3_column_int(statement, 6),
+        .revision_id = column_text(statement, 7),
+        .content_hash = column_text(statement, 8),
+    };
+}
+
+std::optional<account_permission> read_account_permission(sqlite3_stmt* statement) {
+    return account_permission{
+        .server_url = column_text(statement, 0),
+        .type = remote_content_type_from_text(column_text(statement, 1)),
+        .remote_id = column_text(statement, 2),
+        .user_id = column_text(statement, 3),
+        .can_edit = column_optional_bool(statement, 4),
+        .fetched_at_unix_seconds = sqlite3_column_int64(statement, 5),
+    };
+}
+
+std::optional<remote_metadata> find_remote_metadata(sqlite3* database,
+                                                    remote_content_type type,
+                                                    const std::string& server_url,
+                                                    const std::string& remote_id) {
+    statement query(database,
+                    "SELECT server_url, content_type, remote_id, content_source, lifecycle_status, "
+                    "review_status, remote_version, revision_id, content_hash "
+                    "FROM remote_content_metadata "
+                    "WHERE server_url = ? AND content_type = ? AND remote_id = ?;");
+    if (!query.valid()) {
+        return std::nullopt;
+    }
+    bind_text(query.get(), 1, server_url);
+    bind_text(query.get(), 2, remote_content_type_to_text(type));
+    bind_text(query.get(), 3, remote_id);
+    if (sqlite3_step(query.get()) != SQLITE_ROW) {
+        return std::nullopt;
+    }
+    return read_remote_metadata(query.get());
+}
+
+void upsert_remote_metadata(sqlite3* database, const remote_metadata& metadata) {
+    if (metadata.server_url.empty() || metadata.remote_id.empty()) {
+        return;
+    }
+    statement query(database,
+                    "INSERT INTO remote_content_metadata("
+                    "server_url, content_type, remote_id, content_source, lifecycle_status, review_status, "
+                    "remote_version, revision_id, content_hash, updated_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(server_url, content_type, remote_id) DO UPDATE SET "
+                    "content_source = CASE WHEN excluded.content_source != '' THEN excluded.content_source ELSE content_source END,"
+                    "lifecycle_status = CASE WHEN excluded.lifecycle_status != '' THEN excluded.lifecycle_status ELSE lifecycle_status END,"
+                    "review_status = CASE WHEN excluded.review_status != '' THEN excluded.review_status ELSE review_status END,"
+                    "remote_version = CASE WHEN excluded.remote_version > 0 THEN excluded.remote_version ELSE remote_version END,"
+                    "revision_id = CASE WHEN excluded.revision_id != '' THEN excluded.revision_id ELSE revision_id END,"
+                    "content_hash = CASE WHEN excluded.content_hash != '' THEN excluded.content_hash ELSE content_hash END,"
+                    "updated_at = excluded.updated_at;");
+    if (!query.valid()) {
+        return;
+    }
+    bind_text(query.get(), 1, metadata.server_url);
+    bind_text(query.get(), 2, remote_content_type_to_text(metadata.type));
+    bind_text(query.get(), 3, metadata.remote_id);
+    bind_text(query.get(), 4, metadata.content_source);
+    bind_text(query.get(), 5, metadata.lifecycle_status);
+    bind_text(query.get(), 6, metadata.review_status);
+    sqlite3_bind_int(query.get(), 7, metadata.remote_version);
+    bind_text(query.get(), 8, metadata.revision_id);
+    bind_text(query.get(), 9, metadata.content_hash);
+    sqlite3_bind_int64(query.get(), 10, now_unix_seconds());
+    step_done(query.get());
 }
 
 std::optional<local_content_binding::song_binding> find_song(sqlite3* database,
@@ -714,6 +821,75 @@ void put_chart(const local_content_binding::chart_binding& binding) {
         put_chart(database.get(), binding);
         invalidate_prune_cache();
     }
+}
+
+void put_remote_metadata(const remote_metadata& metadata) {
+    local_sqlite::database database = open_ready_database();
+    if (database.valid()) {
+        upsert_remote_metadata(database.get(), metadata);
+    }
+}
+
+std::optional<remote_metadata> find_remote_metadata(remote_content_type type,
+                                                    const std::string& server_url,
+                                                    const std::string& remote_id) {
+    local_sqlite::database database = open_ready_database();
+    if (!database.valid()) {
+        return std::nullopt;
+    }
+    return find_remote_metadata(database.get(), type, server_url, remote_id);
+}
+
+void put_account_permission(const account_permission& permission) {
+    if (permission.server_url.empty() || permission.remote_id.empty() || permission.user_id.empty()) {
+        return;
+    }
+    local_sqlite::database database = open_ready_database();
+    if (!database.valid()) {
+        return;
+    }
+    statement query(database.get(),
+                    "INSERT INTO account_content_permissions("
+                    "server_url, content_type, remote_id, user_id, can_edit, fetched_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(server_url, content_type, remote_id, user_id) DO UPDATE SET "
+                    "can_edit = excluded.can_edit,"
+                    "fetched_at = excluded.fetched_at;");
+    if (!query.valid()) {
+        return;
+    }
+    bind_text(query.get(), 1, permission.server_url);
+    bind_text(query.get(), 2, remote_content_type_to_text(permission.type));
+    bind_text(query.get(), 3, permission.remote_id);
+    bind_text(query.get(), 4, permission.user_id);
+    bind_optional_bool(query.get(), 5, permission.can_edit);
+    sqlite3_bind_int64(query.get(), 6, now_unix_seconds());
+    step_done(query.get());
+}
+
+std::optional<account_permission> find_account_permission(remote_content_type type,
+                                                          const std::string& server_url,
+                                                          const std::string& remote_id,
+                                                          const std::string& user_id) {
+    local_sqlite::database database = open_ready_database();
+    if (!database.valid()) {
+        return std::nullopt;
+    }
+    statement query(database.get(),
+                    "SELECT server_url, content_type, remote_id, user_id, can_edit, fetched_at "
+                    "FROM account_content_permissions "
+                    "WHERE server_url = ? AND content_type = ? AND remote_id = ? AND user_id = ?;");
+    if (!query.valid()) {
+        return std::nullopt;
+    }
+    bind_text(query.get(), 1, server_url);
+    bind_text(query.get(), 2, remote_content_type_to_text(type));
+    bind_text(query.get(), 3, remote_id);
+    bind_text(query.get(), 4, user_id);
+    if (sqlite3_step(query.get()) != SQLITE_ROW) {
+        return std::nullopt;
+    }
+    return read_account_permission(query.get());
 }
 
 void remove_song(const std::string& server_url, const std::string& local_song_id) {

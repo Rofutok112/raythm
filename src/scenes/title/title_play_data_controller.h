@@ -14,31 +14,28 @@ class title_play_data_controller {
 public:
     struct catalog_poll_result {
         bool completed = false;
-        bool sync_play_media = false;
-        bool sync_create_preview = false;
+        bool queued_reload_started = false;
+        bool selection_changed = false;
     };
 
     struct upload_poll_result {
         bool refresh_catalog = false;
     };
 
+    title_play_data_controller();
+
     void reset(song_select::state& state);
 
     [[nodiscard]] bool catalog_loading() const;
+    [[nodiscard]] load_progress catalog_progress() const;
     [[nodiscard]] bool scoring_ruleset_loading() const;
     [[nodiscard]] bool upload_in_progress() const;
 
     void request_catalog_reload(song_select::state& state,
                                 std::string preferred_song_id = "",
                                 std::string preferred_chart_id = "",
-                                bool sync_media_on_apply = false,
                                 bool calculate_missing_levels = false);
-    catalog_poll_result poll_catalog_reload(song_select::state& state,
-                                            bool play_mode_active,
-                                            bool create_mode_active);
-
-    void request_ranking_reload(song_select::state& state);
-    void poll_ranking_reload(song_select::state& state);
+    catalog_poll_result poll_catalog_reload(song_select::state& state);
 
     void request_scoring_ruleset_warm(bool force_refresh = false);
     bool poll_scoring_ruleset_warm();
@@ -49,15 +46,7 @@ public:
     upload_poll_result poll_create_upload(song_select::state& state);
 
 private:
-    void start_catalog_load(song_select::state& state,
-                            std::string preferred_song_id,
-                            std::string preferred_chart_id,
-                            bool sync_media_on_apply,
-                            bool calculate_missing_levels);
-
     song_select::data_controller data_controller_;
-    bool catalog_sync_media_on_apply_ = false;
-    bool queued_catalog_sync_media_on_apply_ = false;
 
     std::future<bool> scoring_ruleset_future_;
     bool scoring_ruleset_loading_ = false;

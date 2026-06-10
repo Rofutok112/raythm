@@ -3,8 +3,8 @@
 #include <string>
 
 #include "raylib.h"
-#include "song_select/song_preview_controller.h"
 #include "title/online_catalog_data_controller.h"
+#include "title/online_catalog_ranking_loader.h"
 #include "title/online_download_view.h"
 #include "title/title_online_mode_controller.h"
 
@@ -24,7 +24,7 @@ public:
     [[nodiscard]] title_online_view::state& state();
     [[nodiscard]] const title_online_view::state& state() const;
 
-    void on_enter(song_select::preview_controller& preview_controller);
+    void on_enter(title_audio_controller& audio_controller);
     void on_exit();
 
     void request_reload(bool preserve_view = false);
@@ -38,11 +38,12 @@ public:
     [[nodiscard]] const song_select::song_entry* preview_song() const;
     [[nodiscard]] std::string selected_song_id() const;
 
-    void update(float anim_t, Rectangle origin_rect, float dt, const update_callbacks& callbacks);
+    void update(float anim_t, Rectangle origin_rect, float dt, title_audio_controller& audio_controller, const update_callbacks& callbacks);
     poll_result poll(bool active);
-    void draw(float anim_t, Rectangle origin_rect);
+    void draw(const title_audio_controller& audio_controller, float anim_t, Rectangle origin_rect);
 
 private:
     title_online_view::state state_;
     online_catalog::data_controller data_controller_;
+    online_catalog::ranking_load_controller ranking_controller_;
 };

@@ -397,6 +397,12 @@ void on_enter(state& state, const std::string& preferred_room_id) {
     state.requested_download_chart_id.clear();
     state.current_queue_chart_installed = false;
     state.installed_queue_item_ids.clear();
+    state.queue_preview_available = false;
+    state.queue_preview_playing = false;
+    state.queue_preview_position_seconds = 0.0;
+    state.queue_preview_duration_seconds = 0.0;
+    state.queue_preview_seek_requested = false;
+    state.queue_preview_seek_seconds = 0.0;
     state.loading_rooms = false;
     state.room_request_started = false;
     state.room_list_future.reset();
