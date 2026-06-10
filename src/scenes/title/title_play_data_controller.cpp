@@ -59,9 +59,18 @@ void title_play_data_controller::request_catalog_reload(song_select::state& stat
 title_play_data_controller::catalog_poll_result title_play_data_controller::poll_catalog_reload(
     song_select::state& state) {
     catalog_poll_result result;
+    const song_select::ranking_panel_state previous_ranking_panel = state.ranking_panel;
+    const float previous_song_change_anim_t = state.song_change_anim_t;
+    const float previous_chart_change_anim_t = state.chart_change_anim_t;
     const song_select::catalog_reload_result reload = data_controller_.poll_catalog_reload(state);
     if (!reload.completed) {
         return result;
+    }
+
+    if (!reload.selection_changed) {
+        state.ranking_panel = previous_ranking_panel;
+        state.song_change_anim_t = previous_song_change_anim_t;
+        state.chart_change_anim_t = previous_chart_change_anim_t;
     }
 
     result.completed = true;

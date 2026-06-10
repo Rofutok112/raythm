@@ -89,9 +89,6 @@ catalog_reload_result data_controller::poll_catalog_reload(state& state) {
     }
 
     const catalog_selection previous_selection = current_catalog_selection(state);
-    const ranking_panel_state previous_ranking_panel = state.ranking_panel;
-    const float previous_song_change_anim_t = state.song_change_anim_t;
-    const float previous_chart_change_anim_t = state.chart_change_anim_t;
 
     try {
         apply_catalog(state,
@@ -111,11 +108,6 @@ catalog_reload_result data_controller::poll_catalog_reload(state& state) {
     }
     const catalog_selection next_selection = current_catalog_selection(state);
     result.selection_changed = previous_selection != next_selection;
-    if (!result.selection_changed) {
-        state.ranking_panel = previous_ranking_panel;
-        state.song_change_anim_t = previous_song_change_anim_t;
-        state.chart_change_anim_t = previous_chart_change_anim_t;
-    }
 
     catalog_loading_ = false;
     result.completed = true;
