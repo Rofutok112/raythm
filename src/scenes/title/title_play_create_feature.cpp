@@ -199,19 +199,10 @@ void title_play_create_feature::request_catalog_reload(std::string preferred_son
 void title_play_create_feature::poll_catalog_reload(title_audio_controller& audio_controller,
                                                     bool play_mode_active,
                                                     bool create_mode_active) {
-    const song_select::ranking_panel_state previous_ranking_panel = state_.ranking_panel;
-    const float previous_song_change_anim_t = state_.song_change_anim_t;
-    const float previous_chart_change_anim_t = state_.chart_change_anim_t;
     const title_play_data_controller::catalog_poll_result result =
         data_controller_.poll_catalog_reload(state_);
     if (!result.completed) {
         return;
-    }
-
-    if (!result.selection_changed) {
-        state_.ranking_panel = previous_ranking_panel;
-        state_.song_change_anim_t = previous_song_change_anim_t;
-        state_.chart_change_anim_t = previous_chart_change_anim_t;
     }
 
     if (create_mode_active) {

@@ -239,9 +239,9 @@ int main() {
     });
     assert(state.ranking_panel.listing.available);
     assert(state.ranking_panel.listing.message == "chart-level");
-    assert(state.ranking_panel.reveal_anim == 0.0f);
-    assert(state.song_change_anim_t == 1.0f);
-    assert(state.chart_change_anim_t == 1.0f);
+    assert(state.ranking_panel.reveal_anim == 0.75f);
+    assert(state.song_change_anim_t == 0.25f);
+    assert(state.chart_change_anim_t == 0.5f);
 
     song_select::catalog_data legacy_catalog;
     legacy_catalog.songs.push_back(make_song("legacy-song", "legacy-chart"));

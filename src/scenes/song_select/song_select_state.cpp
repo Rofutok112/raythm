@@ -493,6 +493,14 @@ void apply_catalog(state& state, catalog_data catalog,
                    const std::string& preferred_song_id,
                    const std::string& preferred_chart_id) {
     ensure_jacket_cache(state);
+    const song_entry* previous_song = selected_song(state);
+    const std::string previous_song_id = previous_song != nullptr ? previous_song->song.meta.song_id : "";
+    std::string previous_chart_id;
+    const auto previous_filtered = filtered_charts_for_selected_song(state);
+    if (const chart_option* previous_chart = selected_chart_for(state, previous_filtered)) {
+        previous_chart_id = previous_chart->meta.chart_id;
+    }
+
     state.jackets->clear();
     state.songs = std::move(catalog.songs);
     state.load_errors = std::move(catalog.load_errors);
@@ -524,12 +532,6 @@ void apply_catalog(state& state, catalog_data catalog,
     state.scrollbar_drag_offset = 0.0f;
     state.context_menu = {};
     state.confirmation_dialog = {};
-    state.ranking_panel.scroll_y = 0.0f;
-    state.ranking_panel.scroll_y_target = 0.0f;
-    state.ranking_panel.reveal_anim = 0.0f;
-    state.ranking_panel.source_dropdown_open = false;
-    state.ranking_panel.scrollbar_dragging = false;
-    state.ranking_panel.scrollbar_drag_offset = 0.0f;
 
     if (!preferred_song_id.empty()) {
         for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
@@ -565,8 +567,21 @@ void apply_catalog(state& state, catalog_data catalog,
     }
 
     if (!state.songs.empty()) {
-        state.song_change_anim_t = 1.0f;
-        state.chart_change_anim_t = 1.0f;
+        const song_entry* next_song = selected_song(state);
+        const std::string next_song_id = next_song != nullptr ? next_song->song.meta.song_id : "";
+        std::string next_chart_id;
+        const auto next_filtered = filtered_charts_for_selected_song(state);
+        if (const chart_option* next_chart = selected_chart_for(state, next_filtered)) {
+            next_chart_id = next_chart->meta.chart_id;
+        }
+        const bool song_changed = previous_song_id != next_song_id;
+        const bool chart_changed = previous_chart_id != next_chart_id;
+        if (song_changed) {
+            state.song_change_anim_t = 1.0f;
+        }
+        if (song_changed || chart_changed) {
+            state.chart_change_anim_t = 1.0f;
+        }
         const float restored_scroll = scroll_offset_for_selected_song(state);
         state.scroll_y = restored_scroll;
         state.scroll_y_target = restored_scroll;
