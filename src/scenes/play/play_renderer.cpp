@@ -9,6 +9,7 @@
 #include "game_settings.h"
 #include "localization/localization.h"
 #include "scene_common.h"
+#include "shared/loading_screen_view.h"
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
@@ -80,14 +81,6 @@ constexpr Rectangle kJudgeFeedbackRect = ui::place(kScreenRect, 480.0f, 63.0f,
                                                    Vector2{0.0f, 51.0f});
 constexpr Rectangle kFailureTextRect = ui::place(kScreenRect, 540.0f, 66.0f,
                                                  ui::anchor::center, ui::anchor::center);
-constexpr Rectangle kLoadingPanelRect{690.0f, 702.0f, 540.0f, 122.0f};
-constexpr Rectangle kLoadingTitleRect{kLoadingPanelRect.x, kLoadingPanelRect.y, kLoadingPanelRect.width, 38.0f};
-constexpr Rectangle kLoadingDetailRect{kLoadingPanelRect.x, kLoadingPanelRect.y + 38.0f,
-                                       kLoadingPanelRect.width, 30.0f};
-constexpr Rectangle kLoadingBarRect{kLoadingPanelRect.x + 2.0f, kLoadingPanelRect.y + 84.0f,
-                                    kLoadingPanelRect.width - 4.0f, 8.0f};
-constexpr Rectangle kLoadingHintRect{kLoadingPanelRect.x - 120.0f, kLoadingPanelRect.y + 100.0f,
-                                     kLoadingPanelRect.width + 240.0f, 28.0f};
 constexpr float kTapNoteBaseLength = 0.78f;
 constexpr float kJudgeLineY = 0.40f;
 constexpr float kJudgeLineGlowY = 0.46f;
@@ -978,25 +971,15 @@ std::array<Rectangle, 3> pause_button_rects() {
 void draw_status(const play_session_state& state) {
     draw_scene_background(*g_theme);
     const bool error = is_status_error(state);
-    const Color tone = error ? g_theme->error : g_theme->accent;
     const std::string detail = localized_status_text(state.status_text.empty() ? "Loading..." : state.status_text);
 
-    ui::draw_display_text_in_rect("raythm", 28, kLoadingTitleRect, g_theme->text);
-    ui::draw_text_in_rect(detail.c_str(), 18, kLoadingDetailRect,
-                          error ? g_theme->error : g_theme->text_muted);
-    ui::draw_progress_bar(kLoadingBarRect,
-                          loading_progress_value(state),
-                          with_alpha(g_theme->row, 180),
-                          tone,
-                          with_alpha(g_theme->border, 180),
-                          1.5f,
-                          1.5f);
-    if (error) {
-        ui::draw_text_in_rect(localization::tr_literal("ESC: Back to Song Select"),
-                              15,
-                              kLoadingHintRect,
-                              g_theme->text_hint);
-    }
+    loading_screen_view::draw({
+        .message = detail.c_str(),
+        .hint = error ? localization::tr_literal("ESC: Back to Song Select") : nullptr,
+        .progress = loading_progress_value(state),
+        .error = error,
+        .geometry = loading_screen_view::default_layout_with_hint(),
+    });
 }
 
 void draw_world_background() {

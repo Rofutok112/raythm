@@ -277,6 +277,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/shared/auth_overlay_controller.h
         src/scenes/shared/avatar_texture_cache.cpp
         src/scenes/shared/avatar_texture_cache.h
+        src/scenes/shared/loading_screen_view.cpp
+        src/scenes/shared/loading_screen_view.h
         src/scenes/shared/square_image_picker.cpp
         src/scenes/shared/square_image_picker.h
         src/scenes/shared/content_status_badge.h
@@ -743,6 +745,8 @@ add_executable(title_startup_controller_smoke
         src/network/json_helpers.h
         src/scenes/virtual_screen.cpp
         src/scenes/virtual_screen.h
+        src/scenes/shared/loading_screen_view.cpp
+        src/scenes/shared/loading_screen_view.h
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
         src/scenes/song_select/song_select_layout.h
