@@ -74,8 +74,10 @@ private:
     static preview_key preview_key_for(const selection_key& key);
     static ranking_key ranking_key_for(const selection_key& key);
 
-    preview_key preview_key_;
+    preview_key audio_key_;
+    preview_key jacket_key_;
     ranking_key ranking_key_;
-    bool preview_synced_ = false;
+    bool audio_synced_ = false;
+    bool jacket_synced_ = false;
     bool ranking_synced_ = false;
 };

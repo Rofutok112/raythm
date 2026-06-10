@@ -206,12 +206,15 @@ void draw(const song_select::state& state,
 
     ui::draw_rect_lines(jacket_frame, kJacketBorderWidth,
                         with_alpha(t.border_image, static_cast<unsigned char>(190.0f * config.play_t)));
-    if (preview.jacket_loaded && preview.jacket_texture != nullptr) {
+    if (preview.jacket_status == song_select::jacket_loader::load_status::ready &&
+        preview.jacket_texture != nullptr) {
         const Texture2D& jacket = *preview.jacket_texture;
         DrawTexturePro(jacket,
                        {0.0f, 0.0f, static_cast<float>(jacket.width), static_cast<float>(jacket.height)},
                        jacket_inner, {0.0f, 0.0f}, 0.0f,
                        with_alpha(WHITE, config.alpha));
+    } else if (preview.jacket_status == song_select::jacket_loader::load_status::loading) {
+        ui::draw_text_in_rect("読み込み中", 22, jacket_inner, with_alpha(t.text_muted, config.alpha));
     } else {
         ui::draw_text_in_rect("JACKET", 26, jacket_inner, with_alpha(t.text_muted, config.alpha));
     }

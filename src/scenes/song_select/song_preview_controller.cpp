@@ -41,7 +41,30 @@ void preview_controller::select_song(const song_entry* song) {
         return;
     }
 
+    request_jacket(song);
+    request_audio(song);
+}
+
+void preview_controller::request_jacket(const song_entry* song) {
+    if (song == nullptr) {
+        jacket_loader_.reset();
+        return;
+    }
+
     jacket_loader_.request(song);
+}
+
+void preview_controller::request_audio(const song_entry* song) {
+    if (song == nullptr) {
+        audio_loader_.reset();
+        pending_preview_song_.reset();
+        active_preview_song_.reset();
+        preview_volume_ = 0.0f;
+        preview_fade_direction_ = 0;
+        audio_manager::instance().unload_preview();
+        return;
+    }
+
     queue_preview(song);
 }
 
@@ -178,6 +201,10 @@ bool preview_controller::is_loading() const {
 
 preview_audio_loader::load_status preview_controller::audio_status() const {
     return audio_loader_.status();
+}
+
+jacket_loader::load_status preview_controller::jacket_status() const {
+    return jacket_loader_.status();
 }
 
 void preview_controller::queue_preview(const song_entry* song) {

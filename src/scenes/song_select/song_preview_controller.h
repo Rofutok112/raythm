@@ -16,6 +16,8 @@ public:
     ~preview_controller();
 
     void select_song(const song_entry* song);
+    void request_jacket(const song_entry* song);
+    void request_audio(const song_entry* song);
     void update(float dt, const song_entry* selected_song);
     void resume(const song_entry* song);
     void pause();
@@ -25,6 +27,7 @@ public:
     [[nodiscard]] bool is_playing() const;
     [[nodiscard]] bool is_loading() const;
     [[nodiscard]] preview_audio_loader::load_status audio_status() const;
+    [[nodiscard]] jacket_loader::load_status jacket_status() const;
 
     [[nodiscard]] bool jacket_loaded() const {
         return jacket_loader_.loaded();

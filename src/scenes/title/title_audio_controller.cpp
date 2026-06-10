@@ -87,6 +87,14 @@ void title_audio_controller::select_preview_song(const song_select::song_entry* 
     preview_controller_.select_song(song);
 }
 
+void title_audio_controller::request_preview_audio(const song_select::song_entry* song) {
+    preview_controller_.request_audio(song);
+}
+
+void title_audio_controller::request_preview_jacket(const song_select::song_entry* song) {
+    preview_controller_.request_jacket(song);
+}
+
 void title_audio_controller::resume_preview_song(const song_select::song_entry* song) {
     preview_controller_.resume(song);
 }
@@ -123,6 +131,7 @@ title_preview_snapshot title_audio_controller::preview_snapshot(const song_selec
     const audio_manager& audio = audio_manager::instance();
     title_preview_snapshot snapshot;
     snapshot.audio_status = preview_controller_.audio_status();
+    snapshot.jacket_status = preview_controller_.jacket_status();
     snapshot.loaded = audio.is_preview_loaded();
     snapshot.loading = snapshot.audio_status == song_select::preview_audio_loader::load_status::loading;
     snapshot.playing = audio.is_preview_playing();
@@ -131,7 +140,8 @@ title_preview_snapshot title_audio_controller::preview_snapshot(const song_selec
     if (snapshot.length_seconds <= 0.0 && fallback_song != nullptr) {
         snapshot.length_seconds = static_cast<double>(fallback_song->song.meta.duration_seconds);
     }
-    snapshot.jacket_loaded = preview_controller_.jacket_loaded();
+    snapshot.jacket_loaded = snapshot.jacket_status == song_select::jacket_loader::load_status::ready &&
+        preview_controller_.jacket_loaded();
     snapshot.jacket_texture = snapshot.jacket_loaded ? &preview_controller_.jacket_texture() : nullptr;
     return snapshot;
 }

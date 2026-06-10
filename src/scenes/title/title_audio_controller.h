@@ -11,6 +11,8 @@
 struct title_preview_snapshot {
     song_select::preview_audio_loader::load_status audio_status =
         song_select::preview_audio_loader::load_status::idle;
+    song_select::jacket_loader::load_status jacket_status =
+        song_select::jacket_loader::load_status::idle;
     bool loaded = false;
     bool loading = false;
     bool playing = false;
@@ -31,6 +33,8 @@ public:
     void draw_spectrum(const Rectangle& rect, float alpha_scale = 1.0f) const;
 
     void select_preview_song(const song_select::song_entry* song);
+    void request_preview_audio(const song_select::song_entry* song);
+    void request_preview_jacket(const song_select::song_entry* song);
     void resume_preview_song(const song_select::song_entry* song);
     void pause_preview();
     void stop_preview();

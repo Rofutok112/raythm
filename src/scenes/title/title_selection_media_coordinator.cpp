@@ -5,9 +5,11 @@
 #include "title/title_play_data_controller.h"
 
 void title_selection_media_coordinator::reset() {
-    preview_key_ = {};
+    audio_key_ = {};
+    jacket_key_ = {};
     ranking_key_ = {};
-    preview_synced_ = false;
+    audio_synced_ = false;
+    jacket_synced_ = false;
     ranking_synced_ = false;
 }
 
@@ -23,10 +25,15 @@ void title_selection_media_coordinator::sync_current(
 
     const selection_key key = current_selection_key(state);
     const preview_key next_preview = preview_key_for(key);
-    if (force || !preview_synced_ || preview_key_ != next_preview) {
-        audio_controller.select_preview_song(song_select::selected_song(state));
-        preview_key_ = next_preview;
-        preview_synced_ = true;
+    if (force || !jacket_synced_ || jacket_key_ != next_preview) {
+        audio_controller.request_preview_jacket(song_select::selected_song(state));
+        jacket_key_ = next_preview;
+        jacket_synced_ = true;
+    }
+    if (force || !audio_synced_ || audio_key_ != next_preview) {
+        audio_controller.request_preview_audio(song_select::selected_song(state));
+        audio_key_ = next_preview;
+        audio_synced_ = true;
     }
 
     if (active_context != context::play) {
