@@ -127,8 +127,7 @@ void update(state& startup, const update_context& context) {
         context.request_play_catalog_reload(
             context.preferred_song_id,
             context.preferred_chart_id,
-            title_catalog::policy_for(title_catalog::reload_mode::fast_startup,
-                                      context.sync_media_on_catalog_apply));
+            title_catalog::policy_for(title_catalog::reload_mode::fast_startup));
         return;
     }
 

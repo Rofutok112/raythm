@@ -16,7 +16,6 @@ public:
         std::function<void(const song_select::song_entry&)> start_song_upload;
         std::function<void(const song_select::song_entry&, const song_select::chart_option&)> start_chart_upload;
         std::function<title_play_transfer_controller::catalog_callbacks()> transfer_callbacks;
-        std::function<bool()> sync_media_on_transfer;
         std::function<bool()> upload_in_progress;
     };
 

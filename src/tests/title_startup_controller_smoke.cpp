@@ -35,7 +35,6 @@ int main() {
         play_state,
         "preferred-song",
         "preferred-chart",
-        true,
         home_status,
         [&](std::string song_id, std::string chart_id, title_catalog::reload_policy policy) {
             requested = true;
@@ -62,7 +61,6 @@ int main() {
     assert(requested_song_id == "preferred-song");
     assert(requested_chart_id == "preferred-chart");
     assert(requested_policy.mode == title_catalog::reload_mode::fast_startup);
-    assert(requested_policy.sync_media_on_apply);
     assert(!requested_policy.calculate_missing_levels);
     assert(startup.catalog_requested);
     assert(startup.loading_message == "Loading local catalog...");
@@ -71,7 +69,6 @@ int main() {
         play_state,
         "",
         "",
-        false,
         home_status,
         [](std::string, std::string, title_catalog::reload_policy) {},
         [] {
@@ -99,7 +96,6 @@ int main() {
         play_state,
         "",
         "",
-        false,
         home_status,
         [](std::string, std::string, title_catalog::reload_policy) {},
         [] {
@@ -123,7 +119,6 @@ int main() {
         play_state,
         "",
         "",
-        false,
         home_status,
         [](std::string, std::string, title_catalog::reload_policy) {},
         [] {

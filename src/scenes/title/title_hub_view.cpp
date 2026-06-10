@@ -157,8 +157,7 @@ draw_result draw(draw_context context) {
     if (is_play_surface(context.view.current_mode)) {
         context.play_create_feature.draw_or_apply_confirmation(
             context.audio_controller,
-            context.play_cross_callbacks,
-            context.play_sync_media_on_transfer);
+            context.play_cross_callbacks);
     }
     context.profile_controller.draw(play_state.auth, context.auth_controller.request_active, kTitleModalLayer);
     result.login_command = song_select::draw_login_dialog(

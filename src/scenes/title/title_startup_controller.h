@@ -26,7 +26,6 @@ struct update_context {
     song_select::state& play_state;
     std::string preferred_song_id;
     std::string preferred_chart_id;
-    bool sync_media_on_catalog_apply = false;
     std::string& home_status_message;
     std::function<void(std::string, std::string, title_catalog::reload_policy)> request_play_catalog_reload;
     std::function<bool()> play_catalog_loading;

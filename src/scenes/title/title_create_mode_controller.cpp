@@ -95,8 +95,7 @@ void title_create_mode_controller::update(scene_manager& manager,
         if (song == nullptr) {
             song_select::queue_status_message(state, "Select a song before importing a chart.", true);
         } else {
-            transfer_controller.start_chart_import(state, callbacks.transfer_callbacks(),
-                                                   callbacks.sync_media_on_transfer());
+            transfer_controller.start_chart_import(state, callbacks.transfer_callbacks());
         }
         return;
     }
@@ -104,8 +103,7 @@ void title_create_mode_controller::update(scene_manager& manager,
         if (song == nullptr || chart == nullptr) {
             song_select::queue_status_message(state, "Select a chart to export.", true);
         } else {
-            transfer_controller.start_chart_export(state, callbacks.transfer_callbacks(),
-                                                   callbacks.sync_media_on_transfer());
+            transfer_controller.start_chart_export(state, callbacks.transfer_callbacks());
         }
         return;
     }

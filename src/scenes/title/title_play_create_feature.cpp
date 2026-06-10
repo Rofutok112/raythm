@@ -245,19 +245,18 @@ song_select::ranking_load_controller::load_status title_play_create_feature::ran
     return data_controller_.ranking_status();
 }
 
-void title_play_create_feature::poll_transfer(const cross_callbacks& callbacks, bool sync_media_on_reload) {
-    transfer_controller_.poll(state_, make_transfer_callbacks(callbacks), sync_media_on_reload);
+void title_play_create_feature::poll_transfer(const cross_callbacks& callbacks) {
+    transfer_controller_.poll(state_, make_transfer_callbacks(callbacks));
 }
 
-bool title_play_create_feature::poll_create_upload(bool sync_media_on_apply) {
+bool title_play_create_feature::poll_create_upload() {
     if (!data_controller_.poll_create_upload(state_).refresh_catalog) {
         return false;
     }
     capture_current_selection();
     request_catalog_reload(preferred_song_id_,
                            preferred_chart_id_,
-                           title_catalog::policy_for(title_catalog::reload_mode::import_completed,
-                                                     sync_media_on_apply));
+                           title_catalog::policy_for(title_catalog::reload_mode::import_completed));
     return true;
 }
 
@@ -266,10 +265,9 @@ void title_play_create_feature::cancel_confirmation() {
 }
 
 void title_play_create_feature::draw_or_apply_confirmation(title_audio_controller& audio_controller,
-                                                           const cross_callbacks& callbacks,
-                                                           bool sync_media_on_reload) {
+                                                           const cross_callbacks& callbacks) {
     transfer_controller_.draw_or_apply_confirmation(
-        state_, audio_controller, make_transfer_callbacks(callbacks), sync_media_on_reload);
+        state_, audio_controller, make_transfer_callbacks(callbacks));
 }
 
 void title_play_create_feature::update_play(scene_manager& manager,
@@ -343,9 +341,6 @@ void title_play_create_feature::update_create(scene_manager& manager,
             .transfer_callbacks = [this, &cross]() {
                 return make_transfer_callbacks(cross);
             },
-            .sync_media_on_transfer = []() {
-                return true;
-            },
             .upload_in_progress = [this]() {
                 return upload_in_progress();
             },
@@ -391,12 +386,11 @@ title_play_transfer_controller::catalog_callbacks title_play_create_feature::mak
         .mark_online_song_removed = callbacks.mark_online_song_removed,
         .reload_online_catalog = callbacks.reload_online_catalog,
         .request_play_catalog_reload =
-            [this](const std::string& song_id, const std::string& chart_id, bool sync_media_on_apply) {
+            [this](const std::string& song_id, const std::string& chart_id) {
                 request_catalog_reload(
                     song_id,
                     chart_id,
-                    title_catalog::policy_for(title_catalog::reload_mode::transfer_completed,
-                                              sync_media_on_apply));
+                    title_catalog::policy_for(title_catalog::reload_mode::transfer_completed));
             },
     };
 }

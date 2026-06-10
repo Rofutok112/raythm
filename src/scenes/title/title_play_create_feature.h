@@ -68,12 +68,11 @@ public:
     [[nodiscard]] bool busy() const;
     [[nodiscard]] song_select::ranking_load_controller::load_status ranking_status() const;
 
-    void poll_transfer(const cross_callbacks& callbacks, bool sync_media_on_reload);
-    bool poll_create_upload(bool sync_media_on_apply);
+    void poll_transfer(const cross_callbacks& callbacks);
+    bool poll_create_upload();
     void cancel_confirmation();
     void draw_or_apply_confirmation(title_audio_controller& audio_controller,
-                                    const cross_callbacks& callbacks,
-                                    bool sync_media_on_reload);
+                                    const cross_callbacks& callbacks);
 
     void update_play(scene_manager& manager,
                      title_audio_controller& audio_controller,

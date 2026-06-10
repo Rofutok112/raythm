@@ -238,7 +238,6 @@ void title_scene::update_startup_loading() {
         play_create_feature_.state(),
         preferred_song_id_,
         preferred_chart_id_,
-        mode_ == hub_mode::play || mode_ == hub_mode::create,
         home_status_message_,
         [this](std::string song_id, std::string chart_id, title_catalog::reload_policy policy) {
             play_create_feature_.request_catalog_reload(std::move(song_id), std::move(chart_id), policy);
@@ -573,7 +572,9 @@ void title_scene::update_multiplayer_audio(float dt) {
 
     if (multiplayer_state_.queue_preview_seek_requested) {
         multiplayer_state_.queue_preview_seek_requested = false;
-        if (preview_song != nullptr && audio_controller_.preview_snapshot(preview_song).loaded) {
+        if (preview_song != nullptr &&
+            audio_controller_.preview_snapshot(preview_song).audio_status ==
+                song_select::preview_audio_loader::load_status::ready) {
             audio_controller_.seek_preview(multiplayer_state_.queue_preview_seek_seconds);
         }
     }
@@ -636,7 +637,7 @@ void title_scene::update_common_animation(float dt) {
                                play_create_feature_.state().login_dialog);
     play_create_feature_.poll_catalog_reload(
         audio_controller_, mode_ == hub_mode::play, mode_ == hub_mode::create);
-    play_create_feature_.poll_transfer(play_cross_callbacks(), content_mode_is_play_or_create);
+    play_create_feature_.poll_transfer(play_cross_callbacks());
     play_create_feature_.poll_ranking_reload();
     if (play_create_feature_.poll_scoring_ruleset_warm()) {
         if (!content_mode_is_play_or_create) {
@@ -648,7 +649,7 @@ void title_scene::update_common_animation(float dt) {
                 title_catalog::policy_for(title_catalog::reload_mode::scoring_ruleset_warmed));
         }
     }
-    if (play_create_feature_.poll_create_upload(content_mode_is_play_or_create)) {
+    if (play_create_feature_.poll_create_upload()) {
         catalog_reload_coordinator_.mark_level_refresh_covered();
         browse_feature_.request_reload(true);
     }
@@ -660,8 +661,7 @@ void title_scene::update_common_animation(float dt) {
             play_create_feature_,
             "",
             "",
-            title_catalog::policy_for(title_catalog::reload_mode::content_changed,
-                                      content_mode_is_play_or_create));
+            title_catalog::policy_for(title_catalog::reload_mode::content_changed));
     }
 
     profile_controller_.close_if_logged_out(play_create_feature_.state().auth.logged_in);
@@ -678,8 +678,7 @@ void title_scene::update_common_animation(float dt) {
             play_create_feature_,
             preferred_song_id_,
             preferred_chart_id_,
-            title_catalog::policy_for(title_catalog::reload_mode::content_changed,
-                                      content_mode_is_play_or_create));
+            title_catalog::policy_for(title_catalog::reload_mode::content_changed));
     }
     if (browse_poll.select_preview_song) {
         audio_controller_.select_preview_song(browse_feature_.preview_song());
@@ -768,8 +767,7 @@ bool title_scene::handle_refresh_button_input() {
         play_create_feature_,
         play_create_feature_.preferred_song_id(),
         play_create_feature_.preferred_chart_id(),
-        title_catalog::policy_for(title_catalog::reload_mode::user_refresh,
-                                  mode_ == hub_mode::play || mode_ == hub_mode::create));
+        title_catalog::policy_for(title_catalog::reload_mode::user_refresh));
     ui::notify("Refreshing catalog...", ui::notice_tone::info, 1.8f);
     return true;
 }
@@ -1133,7 +1131,6 @@ void title_scene::draw() {
         profile_controller_,
         auth_controller_,
         cross_callbacks,
-        mode_ == hub_mode::play || mode_ == hub_mode::create,
         intro_fade_,
         transition_fade_,
         quit_fade_,
