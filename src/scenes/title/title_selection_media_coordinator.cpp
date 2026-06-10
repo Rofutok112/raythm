@@ -65,15 +65,19 @@ void title_selection_media_coordinator::request_ranking_reload(
 title_selection_media_coordinator::selection_key
 title_selection_media_coordinator::current_selection_key(const song_select::state& state) {
     selection_key key;
+    key.ranking_source = state.ranking_panel.selected_source;
     if (const song_select::song_entry* song = song_select::selected_song(state)) {
         key.song_id = song->song.meta.song_id;
     }
     const auto filtered = song_select::filtered_charts_for_selected_song(state);
     if (const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered)) {
         key.chart_id = chart->meta.chart_id;
-        key.ranking_source = song_select::can_use_online_chart_routes(*chart)
-            ? ranking_service::source::online
-            : ranking_service::source::local;
+        if (key.ranking_source == ranking_service::source::online &&
+            !song_select::can_use_online_chart_routes(*chart)) {
+            key.ranking_source = ranking_service::source::local;
+        }
+    } else {
+        key.ranking_source = ranking_service::source::local;
     }
     return key;
 }
