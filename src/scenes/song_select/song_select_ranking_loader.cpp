@@ -123,7 +123,7 @@ ranking_reload_result ranking_load_controller::poll(state& state) {
     } catch (...) {
         failed = true;
         loaded.listing.available = false;
-        loaded.listing.message = "Ranking load failed.";
+        loaded.listing.message = "ランキングを読み込めませんでした。";
         loaded.listing.ranking_source = state.ranking_panel.selected_source;
         loaded.best_source = state.ranking_panel.best_source;
         loaded.best_chart_id = state.ranking_panel.best_chart_id;
@@ -235,7 +235,7 @@ void ranking_load_controller::mark_online_loading(state& state) const {
     state.ranking_panel.listing = {};
     state.ranking_panel.listing.ranking_source = state.ranking_panel.selected_source;
     state.ranking_panel.listing.available = false;
-    state.ranking_panel.listing.message = "Loading online rankings...";
+    state.ranking_panel.listing.message = "ランキング読み込み中...";
 }
 
 void ranking_load_controller::reset_panel_scroll(state& state) const {

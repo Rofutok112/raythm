@@ -140,7 +140,8 @@ draw_result draw(draw_context context) {
             context.view.current_mode == mode::create ? title_play_view::mode::create : title_play_view::mode::play,
             context.view.play_view_anim,
             context.view.play_entry_origin_rect,
-            &context.play_create_feature.create_tools_model());
+            &context.play_create_feature.create_tools_model(),
+            context.play_create_feature.ranking_status());
     } else if (context.view.current_mode == mode::online) {
         context.browse_feature.draw(context.audio_controller, context.view.play_view_anim, context.view.play_entry_origin_rect);
     } else if (context.view.current_mode == mode::multiplayer) {

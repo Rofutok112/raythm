@@ -93,6 +93,10 @@ void title_play_data_controller::poll_ranking_reload(song_select::state& state) 
     ranking_controller_.poll(state);
 }
 
+song_select::ranking_load_controller::load_status title_play_data_controller::ranking_status() const {
+    return ranking_controller_.status();
+}
+
 ranking_service::listing title_play_data_controller::load_ranking_from_service(
     std::string chart_id,
     ranking_service::source source,

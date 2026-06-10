@@ -236,6 +236,10 @@ bool title_play_create_feature::busy() const {
     return transfer_controller_.busy();
 }
 
+song_select::ranking_load_controller::load_status title_play_create_feature::ranking_status() const {
+    return data_controller_.ranking_status();
+}
+
 void title_play_create_feature::poll_transfer(const cross_callbacks& callbacks, bool sync_media_on_reload) {
     transfer_controller_.poll(state_, make_transfer_callbacks(callbacks), sync_media_on_reload);
 }

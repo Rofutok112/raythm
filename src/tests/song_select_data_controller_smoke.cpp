@@ -172,7 +172,7 @@ int main() {
 
     logged_in = true;
     ranking_controller.request_reload(state);
-    assert(state.ranking_panel.listing.message == "Loading online rankings...");
+    assert(state.ranking_panel.listing.message == "ランキング読み込み中...");
     ranking_controller.request_reload(state);
 
     spin_until([&] {
@@ -200,7 +200,7 @@ int main() {
         const song_select::ranking_reload_result result = ranking_controller.poll(state);
         return result.completed && result.stale && result.queued_reload_started;
     });
-    assert(state.ranking_panel.listing.message == "Loading online rankings...");
+    assert(state.ranking_panel.listing.message == "ランキング読み込み中...");
 
     spin_until([&] {
         const song_select::ranking_reload_result result = ranking_controller.poll(state);

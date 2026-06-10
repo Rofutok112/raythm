@@ -1306,7 +1306,8 @@ void draw(song_select::state& state,
           mode view_mode,
           float anim_t,
           Rectangle origin_rect,
-          const title_create_tools_model::view_model* create_tools_model) {
+          const title_create_tools_model::view_model* create_tools_model,
+          song_select::ranking_load_controller::load_status ranking_status) {
     const auto& t = *g_theme;
     const float play_t = tween::ease_out_cubic(anim_t);
     if (play_t <= 0.01f) {
@@ -1428,6 +1429,7 @@ void draw(song_select::state& state,
             .hover_row_alpha = hover_row_alpha,
             .selected_row_alpha = selected_row_alpha,
             .selected_hover_row_alpha = selected_hover_row_alpha,
+            .ranking_status = ranking_status,
             .self_player_display_name = state.auth.display_name,
             .avatar_base_url = state.auth.server_url,
         });

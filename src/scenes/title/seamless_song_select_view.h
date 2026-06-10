@@ -1,6 +1,7 @@
 #pragma once
 
 #include "raylib.h"
+#include "song_select/song_select_ranking_loader.h"
 #include "song_select/song_select_state.h"
 #include "title/title_audio_controller.h"
 
@@ -87,6 +88,8 @@ void draw(song_select::state& state,
           mode view_mode,
           float anim_t,
           Rectangle origin_rect,
-          const title_create_tools_model::view_model* create_tools_model = nullptr);
+          const title_create_tools_model::view_model* create_tools_model = nullptr,
+          song_select::ranking_load_controller::load_status ranking_status =
+              song_select::ranking_load_controller::load_status::idle);
 
 }  // namespace title_play_view

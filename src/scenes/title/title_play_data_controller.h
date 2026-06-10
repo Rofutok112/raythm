@@ -41,6 +41,7 @@ public:
 
     void request_ranking_reload(song_select::state& state);
     void poll_ranking_reload(song_select::state& state);
+    [[nodiscard]] song_select::ranking_load_controller::load_status ranking_status() const;
 
     void request_scoring_ruleset_warm(bool force_refresh = false);
     bool poll_scoring_ruleset_warm();

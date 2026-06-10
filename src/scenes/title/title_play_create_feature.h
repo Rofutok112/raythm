@@ -65,6 +65,7 @@ public:
     [[nodiscard]] bool scoring_ruleset_loading() const;
     [[nodiscard]] bool upload_in_progress() const;
     [[nodiscard]] bool busy() const;
+    [[nodiscard]] song_select::ranking_load_controller::load_status ranking_status() const;
 
     void poll_transfer(const cross_callbacks& callbacks, bool sync_media_on_reload);
     bool poll_create_upload(bool sync_media_on_apply);

@@ -5,6 +5,7 @@
 
 #include "raylib.h"
 #include "ranking_service.h"
+#include "song_select/song_select_ranking_loader.h"
 #include "song_select/song_select_state.h"
 
 namespace title_ranking_view {
@@ -24,6 +25,8 @@ struct draw_config {
     unsigned char hover_row_alpha = 255;
     unsigned char selected_row_alpha = 255;
     unsigned char selected_hover_row_alpha = 255;
+    song_select::ranking_load_controller::load_status ranking_status =
+        song_select::ranking_load_controller::load_status::idle;
     std::string self_player_display_name;
     std::string avatar_base_url;
 };
