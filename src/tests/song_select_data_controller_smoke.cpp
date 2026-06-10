@@ -210,6 +210,21 @@ int main() {
     assert(state.ranking_panel.listing.message == "chart-level");
     assert(last_loaded_source == ranking_service::source::online);
 
+    state.ranking_panel.reveal_anim = 0.9f;
+    state.ranking_panel.selected_source = ranking_service::source::local;
+    ranking_controller.request_reload(state);
+    assert(ranking_controller.loading());
+    state.ranking_panel.selected_source = ranking_service::source::online;
+    spin_until([&] {
+        const song_select::ranking_reload_result result = ranking_controller.poll(state);
+        return result.completed && result.stale && !result.queued_reload_started;
+    });
+    assert(!ranking_controller.loading());
+    assert(ranking_controller.status() == song_select::ranking_load_controller::load_status::idle);
+    assert(state.ranking_panel.listing.available);
+    assert(state.ranking_panel.listing.ranking_source == ranking_service::source::online);
+    assert(state.ranking_panel.reveal_anim == 0.9f);
+
     state.ranking_panel.reveal_anim = 0.75f;
     state.song_change_anim_t = 0.25f;
     state.chart_change_anim_t = 0.5f;

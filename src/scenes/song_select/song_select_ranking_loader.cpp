@@ -129,11 +129,13 @@ ranking_reload_result ranking_load_controller::poll(state& state) {
         loaded.best_chart_id = state.ranking_panel.best_chart_id;
     }
 
-    status_ = failed ? load_status::failed : load_status::ready;
     result.completed = true;
-    result.stale = queued_request_.has_value();
+    result.stale = queued_request_.has_value() || !active_request_covers(build_request(state));
     if (!result.stale) {
+        status_ = failed ? load_status::failed : load_status::ready;
         apply_loaded(state, std::move(loaded));
+    } else if (!queued_request_.has_value()) {
+        status_ = load_status::idle;
     }
 
     active_request_.reset();
