@@ -40,6 +40,7 @@ public:
     void reset();
 
 private:
+    [[nodiscard]] bool selected_song_matches_target(const song_entry* selected_song) const;
     bool request_prepared_audio(std::vector<unsigned char> bytes);
     bool request_path_audio(const std::string& audio_source);
     void clear_prepared_audio_state();

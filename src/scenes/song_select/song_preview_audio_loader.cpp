@@ -95,10 +95,12 @@ preview_audio_loader::load_event preview_audio_loader::update(const song_entry* 
     }
 
     audio_load_pending_ = false;
-    if (result.loaded &&
-        load_song_.has_value() &&
-        selected_song != nullptr &&
-        selected_song->song.meta.song_id == target_song_id_) {
+    if (!selected_song_matches_target(selected_song)) {
+        reset();
+        return {};
+    }
+
+    if (result.loaded && load_song_.has_value()) {
         status_ = load_status::ready;
         load_event event;
         event.result = load_event::status::loaded;
@@ -152,9 +154,8 @@ preview_audio_loader::load_event preview_audio_loader::poll_managed_audio_prepar
     }
 
     if (!load_song_.has_value() ||
-        selected_song == nullptr ||
-        selected_song->song.meta.song_id != load_song_->meta.song_id ||
-        target_song_id_ != load_song_->meta.song_id) {
+        target_song_id_ != load_song_->meta.song_id ||
+        !selected_song_matches_target(selected_song)) {
         reset();
         return {};
     }
@@ -177,6 +178,12 @@ preview_audio_loader::load_event preview_audio_loader::poll_managed_audio_prepar
     status_ = load_status::loading;
     audio_load_pending_ = true;
     return {};
+}
+
+bool preview_audio_loader::selected_song_matches_target(const song_entry* selected_song) const {
+    return selected_song != nullptr &&
+        !target_song_id_.empty() &&
+        selected_song->song.meta.song_id == target_song_id_;
 }
 
 }  // namespace song_select

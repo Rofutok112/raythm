@@ -63,6 +63,7 @@ void jacket_loader::poll() {
     }
 
     if (pending.song_id != target_song_id_) {
+        status_ = pending.song_id.empty() ? load_status::failed : load_status::idle;
         return;
     }
 
