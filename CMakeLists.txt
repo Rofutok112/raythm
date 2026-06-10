@@ -279,6 +279,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/shared/avatar_texture_cache.h
         src/scenes/shared/loading_screen_view.cpp
         src/scenes/shared/loading_screen_view.h
+        src/scenes/shared/public_profile_controller.cpp
+        src/scenes/shared/public_profile_controller.h
         src/scenes/shared/square_image_picker.cpp
         src/scenes/shared/square_image_picker.h
         src/scenes/shared/content_status_badge.h
@@ -307,8 +309,20 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_create_mode_controller.h
         src/scenes/title/title_browse_feature.cpp
         src/scenes/title/title_browse_feature.h
+        src/scenes/title/title_common_update_controller.cpp
+        src/scenes/title/title_common_update_controller.h
+        src/scenes/title/title_frame_input_controller.cpp
+        src/scenes/title/title_frame_input_controller.h
         src/scenes/title/title_online_mode_controller.cpp
         src/scenes/title/title_online_mode_controller.h
+        src/scenes/title/title_mode_update_controller.cpp
+        src/scenes/title/title_mode_update_controller.h
+        src/scenes/title/title_multiplayer_audio_controller.cpp
+        src/scenes/title/title_multiplayer_audio_controller.h
+        src/scenes/title/title_multiplayer_content_resolver.cpp
+        src/scenes/title/title_multiplayer_content_resolver.h
+        src/scenes/title/title_multiplayer_flow_controller.cpp
+        src/scenes/title/title_multiplayer_flow_controller.h
         src/scenes/title/title_play_create_feature.cpp
         src/scenes/title/title_play_create_feature.h
         src/scenes/title/title_play_data_controller.cpp
@@ -364,12 +378,17 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/song_list_view.h
         src/scenes/title/title_bgm_controller.cpp
         src/scenes/title/title_bgm_controller.h
+        src/scenes/title/title_command.h
+        src/scenes/title/title_command_dispatcher.cpp
+        src/scenes/title/title_command_dispatcher.h
         src/scenes/title/seamless_song_select_view.cpp
         src/scenes/title/seamless_song_select_view.h
         src/scenes/title/title_spectrum_visualizer.cpp
         src/scenes/title/title_spectrum_visualizer.h
         src/scenes/title/title_settings_overlay.cpp
         src/scenes/title/title_settings_overlay.h
+        src/scenes/title/title_settings_flow_controller.cpp
+        src/scenes/title/title_settings_flow_controller.h
         src/scenes/multiplayer/multiplayer_client.cpp
         src/scenes/multiplayer/multiplayer_client.h
         src/scenes/multiplayer/multiplayer_controller.cpp

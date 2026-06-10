@@ -71,6 +71,7 @@ struct state {
     bool saving_avatar = false;
     bool loaded_once = false;
     bool settings_links_initialized = false;
+    bool suppress_background_close_until_release = false;
     float open_anim = 0.0f;
     tab selected_tab = tab::overview;
     float activity_scroll = 0.0f;

@@ -155,6 +155,7 @@ enum class ui_command {
     start_match,
     toggle_queue_preview,
     back_to_home,
+    open_profile,
 };
 
 struct state {
@@ -168,6 +169,7 @@ struct state {
     std::string status_message = "Loading rooms...";
     std::string selected_room_id;
     std::string selected_queue_item_id;
+    std::string selected_profile_user_id;
     std::string active_match_id;
     std::string requested_start_song_id;
     std::string requested_start_chart_id;

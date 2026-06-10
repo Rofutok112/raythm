@@ -401,7 +401,7 @@ void draw_room_list(state& state) {
     }
 }
 
-void draw_members(const state& state, const room_detail& room) {
+void draw_members(state& state, const room_detail& room) {
     ui::draw_panel(kMemberPanelRect);
     draw_panel_title(kMemberPanelRect, localization::tr_literal("Players"));
     Rectangle row{kMemberPanelRect.x + 16.0f, kMemberPanelRect.y + 72.0f, kMemberPanelRect.width - 32.0f, 56.0f};
@@ -410,8 +410,13 @@ void draw_members(const state& state, const room_detail& room) {
             continue;
         }
         const bool self = (!state.self_user_id.empty() && member.user_id == state.self_user_id);
-        ui::draw_row(row, self ? g_theme->row_selected : g_theme->row, g_theme->row_hover,
-                     member.role == "HOST" ? g_theme->slow : g_theme->border, 1.5f);
+        const ui::row_state member_row =
+            ui::draw_row(row, self ? g_theme->row_selected : g_theme->row, g_theme->row_hover,
+                         member.role == "HOST" ? g_theme->slow : g_theme->border, 1.5f);
+        if (member_row.clicked && !member.user_id.empty()) {
+            state.selected_profile_user_id = member.user_id;
+            state.command = ui_command::open_profile;
+        }
         const bool host = member.role == "HOST";
         const std::string name = member.display_name;
         const Rectangle avatar_rect{row.x + 12.0f,

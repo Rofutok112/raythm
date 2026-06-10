@@ -43,6 +43,13 @@ struct session_summary {
     std::vector<external_link> external_links;
 };
 
+struct public_profile {
+    std::string id;
+    std::string display_name;
+    std::string avatar_url;
+    std::vector<external_link> external_links;
+};
+
 enum class verification_purpose {
     none,
     email_verification,
@@ -137,6 +144,15 @@ struct profile_rankings_result {
     std::vector<profile_ranking_record> first_place_records;
 };
 
+struct public_profile_result {
+    bool success = false;
+    bool unauthorized = false;
+    bool maintenance = false;
+    std::string message;
+    std::string retry_after;
+    std::optional<public_profile> profile;
+};
+
 std::string normalize_server_url(const std::string& server_url);
 
 std::optional<session> load_saved_session();
@@ -168,6 +184,7 @@ operation_result update_profile_avatar(const std::string& image_path);
 operation_result delete_profile_avatar();
 my_uploads_result fetch_my_community_uploads();
 profile_rankings_result fetch_my_profile_rankings();
+public_profile_result fetch_public_profile(const std::string& user_id);
 operation_result delete_community_song_upload(const std::string& song_id);
 operation_result delete_community_chart_upload(const std::string& chart_id);
 

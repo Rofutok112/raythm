@@ -217,6 +217,9 @@ bool handle_command(state& state) {
     if (command == ui_command::none) {
         return false;
     }
+    if (command == ui_command::open_profile) {
+        return false;
+    }
     if (operation_busy(state)) {
         state.command = ui_command::none;
         return false;
@@ -391,6 +394,7 @@ void on_enter(state& state, const std::string& preferred_room_id) {
     state.requested_start_song_id.clear();
     state.requested_start_chart_id.clear();
     state.selected_queue_item_id.clear();
+    state.selected_profile_user_id.clear();
     state.start_play_requested = false;
     state.current_queue_download_requested = false;
     state.requested_download_song_id.clear();
@@ -469,6 +473,11 @@ update_result update(state& state, float dt) {
         return result;
     }
 
+    if (state.command == ui_command::open_profile) {
+        result.requested_profile_user_id = state.selected_profile_user_id;
+        state.selected_profile_user_id.clear();
+        state.command = ui_command::none;
+    }
     result.open_song_select_requested = handle_command(state);
     if (result.back_requested) {
         return result;

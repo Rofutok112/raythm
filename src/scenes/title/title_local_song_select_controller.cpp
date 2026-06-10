@@ -498,6 +498,12 @@ title_play_view::update_result update(song_select::state& state,
                 result.ranking_source_changed = true;
                 return result;
             }
+            const auto profile_user_id =
+                title_ranking_view::hit_test_profile_user_id(state.ranking_panel, ranking_config, mouse);
+            if (profile_user_id.has_value()) {
+                result.requested_profile_user_id = *profile_user_id;
+                return result;
+            }
         }
     } else {
         const title_create_tools_model::view_model empty_create_tools;

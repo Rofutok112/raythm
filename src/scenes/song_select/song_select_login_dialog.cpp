@@ -199,18 +199,33 @@ void open_login_dialog(login_dialog_state& dialog_state, const auth::session_sum
 
 Rectangle login_dialog_rect(const auth_state& auth_state, const login_dialog_state& dialog_state,
                             Rectangle anchor_rect, Rectangle screen_rect) {
-    return dialog_rect_for(auth_state, dialog_state, anchor_rect, screen_rect);
+    return make_login_dialog_layout(auth_state, dialog_state, anchor_rect, screen_rect).dialog_rect;
 }
 
-login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialog_state& dialog_state,
-                                       Rectangle anchor_rect, Rectangle screen_rect,
-                                       bool request_active, ui::draw_layer layer) {
+login_dialog_layout make_login_dialog_layout(const auth_state& auth_state,
+                                             const login_dialog_state& dialog_state,
+                                             Rectangle anchor_rect,
+                                             Rectangle screen_rect,
+                                             ui::draw_layer layer) {
+    return {
+        .anchor_rect = anchor_rect,
+        .screen_rect = screen_rect,
+        .dialog_rect = dialog_rect_for(auth_state, dialog_state, anchor_rect, screen_rect),
+        .layer = layer,
+    };
+}
+
+login_dialog_command draw_login_dialog(const auth_state& auth_state,
+                                       login_dialog_state& dialog_state,
+                                       const login_dialog_layout& layout,
+                                       bool request_active) {
     if (!dialog_state.open) {
         return login_dialog_command::none;
     }
 
     const auto& theme = *g_theme;
-    const Rectangle dialog_rect = dialog_rect_for(auth_state, dialog_state, anchor_rect, screen_rect);
+    const Rectangle dialog_rect = layout.dialog_rect;
+    const ui::draw_layer layer = layout.layer;
     const float form_x = dialog_rect.x + kDialogPaddingX;
     const float form_width = dialog_rect.width - kDialogPaddingX * 2.0f;
 
@@ -382,22 +397,34 @@ login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialo
     return login_dialog_command::none;
 }
 
+login_dialog_command draw_login_dialog(const auth_state& auth_state, login_dialog_state& dialog_state,
+                                       Rectangle anchor_rect, Rectangle screen_rect,
+                                       bool request_active, ui::draw_layer layer) {
+    const login_dialog_layout layout =
+        make_login_dialog_layout(auth_state, dialog_state, anchor_rect, screen_rect, layer);
+    return draw_login_dialog(auth_state, dialog_state, layout, request_active);
+}
+
 void open_login_dialog(state& state, const auth::session_summary& summary) {
     open_login_dialog(state.login_dialog, summary);
 }
 
 Rectangle login_dialog_rect(const state& state) {
-    return login_dialog_rect(state.auth, state.login_dialog,
-                             song_select::layout::kLoginButtonRect,
-                             song_select::layout::kScreenRect);
+    return make_login_dialog_layout(state.auth,
+                                    state.login_dialog,
+                                    song_select::layout::kLoginButtonRect,
+                                    song_select::layout::kScreenRect,
+                                    song_select::layout::kModalLayer).dialog_rect;
 }
 
 login_dialog_command draw_login_dialog(state& state, bool request_active) {
-    return draw_login_dialog(state.auth, state.login_dialog,
-                             song_select::layout::kLoginButtonRect,
-                             song_select::layout::kScreenRect,
-                             request_active,
-                             song_select::layout::kModalLayer);
+    const login_dialog_layout layout =
+        make_login_dialog_layout(state.auth,
+                                 state.login_dialog,
+                                 song_select::layout::kLoginButtonRect,
+                                 song_select::layout::kScreenRect,
+                                 song_select::layout::kModalLayer);
+    return draw_login_dialog(state.auth, state.login_dialog, layout, request_active);
 }
 
 }  // namespace song_select

@@ -190,6 +190,35 @@ std::optional<ranking_service::source> hit_test_source(const draw_config& config
     return std::nullopt;
 }
 
+std::optional<std::string> hit_test_profile_user_id(const song_select::ranking_panel_state& panel,
+                                                    const draw_config& config,
+                                                    Vector2 point) {
+    if (panel.selected_source != ranking_service::source::online ||
+        !panel.listing.available ||
+        panel.listing.entries.empty() ||
+        !CheckCollisionPointRec(point, config.list_rect)) {
+        return std::nullopt;
+    }
+
+    const float base_y = config.list_rect.y + kHeaderRowHeight - panel.scroll_y;
+    for (int i = 0; i < static_cast<int>(panel.listing.entries.size()); ++i) {
+        const ranking_service::entry& entry = panel.listing.entries[static_cast<size_t>(i)];
+        if (entry.player_user_id.empty()) {
+            continue;
+        }
+        const Rectangle row = {
+            config.list_rect.x + 10.0f,
+            base_y + static_cast<float>(i) * kBrowseRankRowStep,
+            config.list_rect.width - 20.0f,
+            kBrowseRankRowHeight
+        };
+        if (CheckCollisionPointRec(point, row)) {
+            return entry.player_user_id;
+        }
+    }
+    return std::nullopt;
+}
+
 void draw(const song_select::ranking_panel_state& panel, const draw_config& config) {
     const auto& t = *g_theme;
     ui::draw_text_in_rect(panel.selected_source == ranking_service::source::online ? "GLOBAL RANKING" : "ローカルランキング",

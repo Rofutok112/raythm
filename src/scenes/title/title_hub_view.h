@@ -2,10 +2,12 @@
 
 #include "shared/auth_overlay_controller.h"
 #include "multiplayer/multiplayer_state.h"
+#include "shared/public_profile_controller.h"
 #include "shared/scene_fade.h"
 #include "song_select/song_select_state.h"
 #include "title/title_browse_feature.h"
 #include "title/title_audio_controller.h"
+#include "title/title_command.h"
 #include "title/title_play_create_feature.h"
 #include "title/title_profile_controller.h"
 #include "title/title_settings_overlay.h"
@@ -44,6 +46,7 @@ struct draw_context {
     title_audio_controller& audio_controller;
     title_settings_overlay& settings_overlay;
     title_profile_controller& profile_controller;
+    public_profile::controller& public_profile_controller;
     auth_overlay::controller& auth_controller;
     const title_play_create_feature::cross_callbacks& play_cross_callbacks;
     scene_fade& intro_fade;
@@ -53,8 +56,8 @@ struct draw_context {
 
 struct draw_result {
     song_select::login_dialog_command login_command = song_select::login_dialog_command::none;
+    title::command title_command;
     bool close_login_dialog = false;
-    bool open_profile = false;
 };
 
 draw_result draw(draw_context context);

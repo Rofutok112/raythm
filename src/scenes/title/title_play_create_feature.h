@@ -10,6 +10,7 @@
 #include "song_select/song_select_state.h"
 #include "title/catalog_reload_policy.h"
 #include "title/create_tools_model.h"
+#include "title/title_command.h"
 #include "title/title_audio_controller.h"
 #include "title/title_create_mode_controller.h"
 #include "title/title_play_data_controller.h"
@@ -25,10 +26,8 @@ public:
         std::function<void()> reload_online_catalog;
     };
 
-    struct play_update_callbacks {
-        std::function<void()> enter_home;
-        std::function<void(const std::string&, const std::string&)> open_update_catalog;
-        std::function<bool()> add_selected_to_multiplayer;
+    struct play_update_result {
+        title::command title_command;
     };
 
     struct create_update_callbacks {
@@ -75,12 +74,11 @@ public:
     void draw_or_apply_confirmation(title_audio_controller& audio_controller,
                                     const cross_callbacks& callbacks);
 
-    void update_play(scene_manager& manager,
-                     title_audio_controller& audio_controller,
-                     float anim_t,
-                     Rectangle origin_rect,
-                     float dt,
-                     const play_update_callbacks& callbacks);
+    [[nodiscard]] play_update_result update_play(scene_manager& manager,
+                                                 title_audio_controller& audio_controller,
+                                                 float anim_t,
+                                                 Rectangle origin_rect,
+                                                 float dt);
     void update_create(scene_manager& manager,
                        title_audio_controller& audio_controller,
                        float anim_t,

@@ -523,6 +523,41 @@ session_summary load_session_summary() {
     };
 }
 
+std::optional<auth::public_profile> parse_public_profile_response(const std::string& body) {
+    const std::optional<std::string> profile_object = json::extract_object(body, "profile");
+    if (!profile_object.has_value()) {
+        return std::nullopt;
+    }
+
+    const std::optional<std::string> id = json::extract_string(*profile_object, "id");
+    const std::optional<std::string> display_name = json::extract_string(*profile_object, "displayName");
+    if (!id.has_value() || !display_name.has_value()) {
+        return std::nullopt;
+    }
+
+    std::vector<auth::external_link> external_links;
+    if (const std::optional<std::string> links_array = json::extract_array(*profile_object, "externalLinks");
+        links_array.has_value()) {
+        for (const std::string& link_object : json::extract_objects_from_array(*links_array)) {
+            const std::string url = json::extract_string(link_object, "url").value_or("");
+            if (url.empty()) {
+                continue;
+            }
+            external_links.push_back({
+                .label = json::extract_string(link_object, "label").value_or(""),
+                .url = url,
+            });
+        }
+    }
+
+    return auth::public_profile{
+        .id = *id,
+        .display_name = *display_name,
+        .avatar_url = json::extract_string(*profile_object, "avatarUrl").value_or(""),
+        .external_links = std::move(external_links),
+    };
+}
+
 bool save_session(const session& session_data) {
     return write_session_file(session_data);
 }
@@ -1265,6 +1300,61 @@ profile_rankings_result fetch_my_profile_rankings() {
     parse_profile_ranking_array(response.body, "firstPlaceRecords", result.first_place_records);
     result.success = true;
     result.message = "Profile rankings loaded.";
+    return result;
+}
+
+public_profile_result fetch_public_profile(const std::string& user_id) {
+    public_profile_result result;
+    if (json::trim(user_id).empty()) {
+        result.message = "No profile selected.";
+        return result;
+    }
+
+    std::optional<session> stored = load_saved_session();
+    if (!stored.has_value()) {
+        result.unauthorized = true;
+        result.message = "Login required.";
+        return result;
+    }
+
+    const std::string path = "/users/" + json::escape_string(user_id) + "/profile";
+    auto send_profile_request = [&](const session& session_data) {
+        return send_authenticated_request(session_data, "GET", path);
+    };
+
+    http_response response = send_profile_request(*stored);
+    if (response.error_message.empty() && response.status_code == 401) {
+        const operation_result restored = restore_saved_session();
+        if (restored.success && restored.session_data.has_value()) {
+            stored = restored.session_data;
+            response = send_profile_request(*stored);
+        }
+    }
+
+    if (!response.error_message.empty()) {
+        result.message = response.error_message;
+        return result;
+    }
+    if (response.status_code == 401) {
+        result.unauthorized = true;
+        result.message = "Login required.";
+        return result;
+    }
+    if (response.status_code < 200 || response.status_code >= 300) {
+        apply_error_classification(
+            result,
+            classify_response_error(response, "Failed to load profile."));
+        return result;
+    }
+
+    result.profile = parse_public_profile_response(response.body);
+    if (!result.profile.has_value()) {
+        result.message = "Server returned an unexpected profile response.";
+        return result;
+    }
+
+    result.success = true;
+    result.message = "Profile loaded.";
     return result;
 }
 

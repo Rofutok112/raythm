@@ -7,6 +7,7 @@ namespace multiplayer {
 struct update_result {
     bool back_requested = false;
     bool open_song_select_requested = false;
+    std::string requested_profile_user_id;
 };
 
 void on_enter(state& state);

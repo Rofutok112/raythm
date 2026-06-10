@@ -15,6 +15,7 @@ enum class source {
 
 struct entry {
     int placement = 0;
+    std::string player_user_id;
     std::string player_display_name;
     std::string player_avatar_url;
     float accuracy = 0.0f;

@@ -9,6 +9,7 @@
 #include "scene_common.h"
 #include "shared/avatar_texture_cache.h"
 #include "theme.h"
+#include "title/title_layout.h"
 #include "tween.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
@@ -42,17 +43,41 @@ constexpr float kSettingsAccountButtonY = 502.0f;
 constexpr float kSettingsLabelHeight = 22.0f;
 constexpr float kSettingsButtonHeight = 42.0f;
 
-Rectangle content_rect() {
+struct profile_layout {
+    Rectangle dialog_rect{};
+    Rectangle content_rect{};
+    Rectangle close_rect{};
+};
+
+profile_layout make_profile_layout() {
+    const Rectangle dialog = kDialogRect;
     return {
-        kDialogRect.x + kContentOuterPadding,
-        kDialogRect.y + kHeaderHeight + kTabHeight + kContentTopGap,
-        kDialogRect.width - kContentOuterPadding * 2.0f,
-        kDialogRect.height - kHeaderHeight - kTabHeight - kContentTopGap - kContentOuterPadding,
+        .dialog_rect = dialog,
+        .content_rect = {
+            dialog.x + kContentOuterPadding,
+            dialog.y + kHeaderHeight + kTabHeight + kContentTopGap,
+            dialog.width - kContentOuterPadding * 2.0f,
+            dialog.height - kHeaderHeight - kTabHeight - kContentTopGap - kContentOuterPadding,
+        },
+        .close_rect = {
+            dialog.x + dialog.width - 132.0f,
+            dialog.y + 24.0f,
+            92.0f,
+            42.0f,
+        },
     };
 }
 
+Rectangle content_rect() {
+    return make_profile_layout().content_rect;
+}
+
 Rectangle close_rect() {
-    return {kDialogRect.x + kDialogRect.width - 132.0f, kDialogRect.y + 24.0f, 92.0f, 42.0f};
+    return make_profile_layout().close_rect;
+}
+
+Rectangle dialog_rect() {
+    return make_profile_layout().dialog_rect;
 }
 
 Rectangle confirm_rect() {
@@ -92,6 +117,16 @@ Rectangle row_rect(Rectangle list_rect, int visible_index, float scroll_y) {
 
 Rectangle row_action_rect(Rectangle row) {
     return {row.x + row.width - 112.0f, row.y + 14.0f, 92.0f, 42.0f};
+}
+
+bool is_title_header_chrome(Rectangle rect) {
+    return CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), rect);
+}
+
+bool is_background_close_exclusion() {
+    return is_title_header_chrome(title_layout::account_chip_rect()) ||
+           is_title_header_chrome(title_layout::settings_chip_rect()) ||
+           is_title_header_chrome(title_layout::refresh_chip_rect());
 }
 
 Rectangle overview_card_rect(Rectangle content, int index) {
@@ -339,7 +374,7 @@ std::vector<auth::external_link> collect_settings_links(const state& profile) {
 }  // namespace
 
 Rectangle bounds() {
-    return kDialogRect;
+    return dialog_rect();
 }
 
 void open(state& profile) {
@@ -348,6 +383,7 @@ void open(state& profile) {
     }
     profile.open = true;
     profile.closing = false;
+    profile.suppress_background_close_until_release = true;
     profile.pending_delete = delete_target::none;
     profile.pending_id.clear();
     profile.pending_label.clear();
@@ -395,6 +431,13 @@ command update(state& profile, bool request_active) {
     const bool busy = profile.loading || profile.deleting || profile.saving_links || profile.saving_avatar || request_active;
     const Rectangle content = content_rect();
 
+    if (profile.suppress_background_close_until_release) {
+        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+            return {};
+        }
+        profile.suppress_background_close_until_release = false;
+    }
+
     if (!busy && profile.pending_delete != delete_target::none &&
         (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))) {
         profile.pending_delete = delete_target::none;
@@ -429,6 +472,11 @@ command update(state& profile, bool request_active) {
 
     if (!left_pressed) {
         return {};
+    }
+
+    if (!busy && !CheckCollisionPointRec(mouse, dialog_rect()) && !is_background_close_exclusion()) {
+        close(profile);
+        return {.type = command_type::close};
     }
 
     if (profile.pending_delete != delete_target::none) {
@@ -562,9 +610,10 @@ void draw(state& profile,
         rlTranslatef(center.x, center.y + offset_y, 0.0f);
         rlScalef(scale, scale, 1.0f);
         rlTranslatef(-center.x, -center.y, 0.0f);
-        ui::draw_panel(kDialogRect);
+        const profile_layout layout = make_profile_layout();
+        ui::draw_panel(layout.dialog_rect);
 
-        const Rectangle avatar = {kDialogRect.x + 44.0f, kDialogRect.y + 42.0f, 96.0f, 96.0f};
+        const Rectangle avatar = {layout.dialog_rect.x + 44.0f, layout.dialog_rect.y + 42.0f, 96.0f, 96.0f};
         avatar_texture_cache::draw_avatar(
             avatar,
             auth_state.avatar_url,

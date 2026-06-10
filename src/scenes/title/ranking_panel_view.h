@@ -33,6 +33,9 @@ struct draw_config {
 float content_height(const ranking_service::listing& listing);
 float max_scroll(Rectangle list_rect, const ranking_service::listing& listing);
 std::optional<ranking_service::source> hit_test_source(const draw_config& config, Vector2 point);
+std::optional<std::string> hit_test_profile_user_id(const song_select::ranking_panel_state& panel,
+                                                    const draw_config& config,
+                                                    Vector2 point);
 void draw(const song_select::ranking_panel_state& panel, const draw_config& config);
 
 }  // namespace title_ranking_view

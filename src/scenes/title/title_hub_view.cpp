@@ -161,15 +161,22 @@ draw_result draw(draw_context context) {
             context.play_cross_callbacks);
     }
     context.profile_controller.draw(play_state.auth, context.auth_controller.request_active, kTitleModalLayer);
-    result.login_command = song_select::draw_login_dialog(
+    context.public_profile_controller.draw(kTitleModalLayer);
+    const song_select::login_dialog_layout login_layout = song_select::make_login_dialog_layout(
         play_state.auth,
         play_state.login_dialog,
         account_dialog_anchor,
         screen_rect,
-        context.auth_controller.request_active,
         kTitleModalLayer);
+    result.login_command = song_select::draw_login_dialog(
+        play_state.auth,
+        play_state.login_dialog,
+        login_layout,
+        context.auth_controller.request_active);
     result.close_login_dialog = result.login_command == song_select::login_dialog_command::close;
-    result.open_profile = result.login_command == song_select::login_dialog_command::request_profile;
+    if (result.login_command == song_select::login_dialog_command::request_profile) {
+        result.title_command = title::command::open_self_profile();
+    }
 
     ui::flush_draw_queue();
 

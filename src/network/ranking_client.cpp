@@ -29,7 +29,9 @@ void apply_error_classification(Result& result, const network::error_classificat
 std::optional<ranking_service::entry> parse_ranking_entry(const std::string& content) {
     std::string player_display_name;
     std::string player_avatar_url;
+    std::string player_user_id;
     if (const auto player_object = json::extract_object(content, "player"); player_object.has_value()) {
+        player_user_id = json::extract_string(*player_object, "id").value_or("");
         player_display_name = json::extract_string(*player_object, "displayName").value_or("");
         player_avatar_url = json::extract_string(*player_object, "avatarUrl").value_or("");
     }
@@ -54,6 +56,7 @@ std::optional<ranking_service::entry> parse_ranking_entry(const std::string& con
 
     return ranking_service::entry{
         .placement = *placement,
+        .player_user_id = player_user_id,
         .player_display_name = player_display_name,
         .player_avatar_url = player_avatar_url,
         .accuracy = *accuracy,

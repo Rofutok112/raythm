@@ -4,20 +4,27 @@
 #include "network/auth_client.h"
 #include "multiplayer/multiplayer_state.h"
 #include "shared/auth_overlay_controller.h"
+#include "shared/public_profile_controller.h"
 #include "shared/scene_fade.h"
 #include "song_select/song_select_state.h"
 #include "title/catalog_reload_coordinator.h"
 #include "title/local_content_index.h"
 #include "title/title_audio_controller.h"
 #include "title/title_browse_feature.h"
+#include "title/title_command.h"
+#include "title/title_multiplayer_audio_controller.h"
 #include "title/title_play_create_feature.h"
 #include "title/title_profile_controller.h"
 #include "title/title_settings_overlay.h"
 #include "title/title_startup_controller.h"
-#include <future>
 #include <optional>
 #include <string>
 #include <vector>
+
+namespace title {
+struct common_update_context;
+struct mode_update_context;
+}  // namespace title
 
 // タイトル画面。曲選択画面・設定画面への遷移を提供する。
 class title_scene final : public scene {
@@ -67,14 +74,12 @@ private:
     void enter_create_mode();
     void enter_settings_mode();
     void close_settings_mode();
+    [[nodiscard]] title::mode_update_context make_mode_update_context();
+    [[nodiscard]] title::common_update_context make_common_update_context();
     void update_play_mode(float dt);
     bool return_to_multiplayer_room(bool queue_selected_chart);
     bool add_selected_chart_to_multiplayer_room();
-    const multiplayer::room_queue_item* multiplayer_queue_preview_item() const;
-    const song_select::song_entry* multiplayer_queue_preview_song() const;
-    const song_select::song_entry* multiplayer_remote_queue_preview_song(const multiplayer::room_queue_item& item);
-    void reset_multiplayer_remote_preview();
-    void update_multiplayer_audio(float dt);
+    [[nodiscard]] bool apply_title_command(const title::command& command);
     void update_multiplayer_mode(float dt);
     void refresh_multiplayer_local_index();
     void update_online_mode(float dt);
@@ -83,14 +88,8 @@ private:
     void update_common_animation(float dt);
     void update_startup_loading();
     [[nodiscard]] title_play_create_feature::cross_callbacks play_cross_callbacks();
-    bool handle_account_input();
-    bool handle_settings_button_input();
-    bool handle_refresh_button_input();
-    bool handle_login_dialog_input();
     bool handle_profile_input();
-    bool update_home_pointer_suppression();
-    bool handle_title_input(bool left_click_for_home, bool right_click_for_home);
-    bool handle_home_input(bool suppress_pointer_this_frame);
+    bool handle_public_profile_input();
     void update_title_quit(float dt);
     [[nodiscard]] title_audio_policy::hub_mode current_audio_mode() const;
 
@@ -115,11 +114,8 @@ private:
     bool multiplayer_chart_pick_active_ = false;
     bool queue_selected_chart_on_multiplayer_return_ = false;
     title_catalog_reload_coordinator catalog_reload_coordinator_;
-    std::string multiplayer_preview_song_id_;
     local_content_index::snapshot multiplayer_local_index_;
-    std::string multiplayer_remote_preview_key_;
-    std::optional<song_select::song_entry> multiplayer_remote_preview_song_;
-    std::future<std::optional<song_select::song_entry>> multiplayer_remote_preview_future_;
+    title::multiplayer_audio_state multiplayer_audio_state_;
     title_startup_controller::state startup_;
     bool suppress_home_pointer_until_release_ = false;
     hub_mode mode_ = hub_mode::title;
@@ -132,6 +128,7 @@ private:
     title_settings_overlay settings_overlay_;
     title_play_create_feature play_create_feature_;
     title_profile_controller profile_controller_;
+    public_profile::controller public_profile_controller_;
     multiplayer::state multiplayer_state_;
     title_browse_feature browse_feature_;
     title_audio_controller audio_controller_;
