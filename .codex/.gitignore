@@ -1,0 +1,13 @@
+*
+
+!.gitignore
+
+!rules/
+!rules/**
+
+!memories/
+!memories/**
+
+!skills/
+!skills/raythm-*/
+!skills/raythm-*/**
