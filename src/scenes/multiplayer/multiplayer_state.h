@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "network/auth_client.h"
+#include "network/friend_client.h"
 #include "ui_text_input.h"
 
 namespace multiplayer {
@@ -118,6 +119,7 @@ enum class modal_mode {
     none,
     create_room,
     password,
+    invite_friends,
 };
 
 enum class pending_operation {
@@ -134,6 +136,7 @@ enum class pending_operation {
     queue_reorder,
     settings,
     start_match,
+    invite_friend,
 };
 
 enum class ui_command {
@@ -156,6 +159,8 @@ enum class ui_command {
     toggle_queue_preview,
     back_to_home,
     open_profile,
+    open_invite_friends,
+    send_room_invite,
 };
 
 struct state {
@@ -170,6 +175,7 @@ struct state {
     std::string selected_room_id;
     std::string selected_queue_item_id;
     std::string selected_profile_user_id;
+    std::string selected_invite_user_id;
     std::string active_match_id;
     std::string requested_start_song_id;
     std::string requested_start_chart_id;
@@ -206,12 +212,17 @@ struct state {
     float queue_scroll_y = 0.0f;
     float queue_scroll_y_target = 0.0f;
     bool loading_rooms = false;
+    bool loading_invite_friends = false;
+    bool invite_friends_loaded_once = false;
     bool room_request_started = false;
     bool local_ready = false;
     bool create_host_only = false;
     int create_max_players = 4;
     std::optional<std::future<room_list_result>> room_list_future;
     std::optional<std::future<room_operation_result>> operation_future;
+    std::optional<std::future<friend_client::friend_listing_result>> invite_friends_future;
+    std::optional<std::future<friend_client::invite_operation_result>> invite_operation_future;
+    friend_client::friend_listing invite_friends;
     std::unique_ptr<client::realtime_client> realtime;
 };
 
