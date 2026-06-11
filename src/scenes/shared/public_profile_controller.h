@@ -20,7 +20,7 @@ struct state {
     float open_anim = 0.0f;
     std::string requested_user_id;
     auth::public_profile_result result;
-    friend_client::request_operation_result relationship_result;
+    friend_client::operation_result relationship_result;
 };
 
 class controller {
@@ -38,11 +38,11 @@ public:
 
 private:
     void request_load();
-    void start_send_friend_request();
+    void start_relationship_action();
 
     state state_;
     std::future<auth::public_profile_result> load_future_;
-    std::future<friend_client::request_operation_result> relationship_future_;
+    std::future<friend_client::operation_result> relationship_future_;
 };
 
 }  // namespace public_profile

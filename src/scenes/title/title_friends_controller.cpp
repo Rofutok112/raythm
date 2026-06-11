@@ -99,14 +99,15 @@ void draw_user_row(Rectangle row, const friend_client::social_user& user, ui::dr
     avatar_texture_cache::draw_avatar(avatar_rect, user.avatar_url, avatar_label(user), t.row_soft_selected, t.text, 16);
     ui::draw_text_in_rect(user.display_name.empty() ? "Unknown Player" : user.display_name.c_str(),
                           20,
-                          {row.x + 78.0f, row.y + 11.0f, row.width - 250.0f, 28.0f},
+                          {row.x + 78.0f, row.y + 11.0f, row.width - 420.0f, 28.0f},
                           t.text,
                           ui::text_align::left);
     const std::string status = user.online_status.empty() ? "offline" : user.online_status;
-    ui::draw_text_in_rect(status.c_str(),
+    const std::string detail = user.current_room_name.empty() ? status : "in " + user.current_room_name;
+    ui::draw_text_in_rect(detail.c_str(),
                           14,
-                          {row.x + 78.0f, row.y + 41.0f, row.width - 250.0f, 20.0f},
-                          status == "offline" ? t.text_muted : t.success,
+                          {row.x + 78.0f, row.y + 41.0f, row.width - 420.0f, 20.0f},
+                          detail == "offline" ? t.text_muted : t.success,
                           ui::text_align::left);
     (void)row_state;
     (void)layer;
@@ -270,7 +271,28 @@ bool title_friends_controller::handle_input() {
 
     const Rectangle viewport = ui::inset(layout.list, ui::edge_insets::uniform(14.0f));
     float y = viewport.y;
-    if (state_.selected_tab == tab::requests && !state_.operation_active) {
+    if (state_.selected_tab == tab::friends && !state_.operation_active) {
+        for (const friend_client::social_user& user : state_.friends.friends) {
+            const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
+            const Rectangle profile_button{row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f};
+            const Rectangle remove_button{row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f};
+            const Rectangle block_button{row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f};
+            if (ui::is_clicked(profile_button, ui::draw_layer::modal)) {
+                state_.pending_profile_user_id = user.id;
+                close();
+                return true;
+            }
+            if (ui::is_clicked(remove_button, ui::draw_layer::modal)) {
+                start_remove_friend(user.id);
+                return true;
+            }
+            if (ui::is_clicked(block_button, ui::draw_layer::modal)) {
+                start_block_user(user.id);
+                return true;
+            }
+            y += kRowHeight + kRowGap;
+        }
+    } else if (state_.selected_tab == tab::requests && !state_.operation_active) {
         for (const friend_client::friend_request& request : state_.requests.incoming) {
             const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
             const Rectangle accept_button{row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f};
@@ -344,6 +366,12 @@ void title_friends_controller::draw(ui::draw_layer layer) {
         if (state.selected_tab == tab::friends) {
             draw_list(layout.list, state.friends.friends, "No friends yet.", [&](Rectangle row, const friend_client::social_user& user) {
                 draw_user_row(row, user, layer);
+                ui::detail::draw_button_visual({row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f},
+                                               false, false, "PROFILE", 12, t.row, t.row_hover, t.text_muted, 1.5f);
+                ui::detail::draw_button_visual({row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f},
+                                               false, false, "REMOVE", 12, t.row, t.row_hover, t.text_muted, 1.5f);
+                ui::detail::draw_button_visual({row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f},
+                                               false, false, "BLOCK", 12, t.row, t.row_hover, t.error, 1.5f);
             });
             return;
         }
@@ -384,6 +412,12 @@ int title_friends_controller::unread_badge_count() const {
 std::optional<title_friends_controller::room_join_request> title_friends_controller::consume_room_join_request() {
     std::optional<room_join_request> request = state_.pending_room_join;
     state_.pending_room_join.reset();
+    return request;
+}
+
+std::optional<std::string> title_friends_controller::consume_profile_request() {
+    std::optional<std::string> request = state_.pending_profile_user_id;
+    state_.pending_profile_user_id.reset();
     return request;
 }
 
@@ -430,6 +464,30 @@ void title_friends_controller::start_decline_request(std::string request_id) {
     operation_future_ = promise.get_future();
     std::thread([promise = std::move(promise), request_id = std::move(request_id)]() mutable {
         promise.set_value(friend_client::decline_friend_request(request_id));
+    }).detach();
+}
+
+void title_friends_controller::start_remove_friend(std::string user_id) {
+    if (state_.operation_active || user_id.empty()) {
+        return;
+    }
+    state_.operation_active = true;
+    std::promise<friend_client::operation_result> promise;
+    operation_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), user_id = std::move(user_id)]() mutable {
+        promise.set_value(friend_client::remove_friend(user_id));
+    }).detach();
+}
+
+void title_friends_controller::start_block_user(std::string user_id) {
+    if (state_.operation_active || user_id.empty()) {
+        return;
+    }
+    state_.operation_active = true;
+    std::promise<friend_client::operation_result> promise;
+    operation_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), user_id = std::move(user_id)]() mutable {
+        promise.set_value(friend_client::block_user(user_id));
     }).detach();
 }
 

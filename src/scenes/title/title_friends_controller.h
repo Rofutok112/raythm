@@ -25,6 +25,7 @@ public:
     [[nodiscard]] bool is_open() const;
     [[nodiscard]] int unread_badge_count() const;
     [[nodiscard]] std::optional<room_join_request> consume_room_join_request();
+    [[nodiscard]] std::optional<std::string> consume_profile_request();
 
 private:
     enum class tab {
@@ -46,12 +47,15 @@ private:
         friend_client::request_listing requests;
         friend_client::invite_listing invites;
         std::optional<room_join_request> pending_room_join;
+        std::optional<std::string> pending_profile_user_id;
         std::string message;
     };
 
     void request_reload();
     void start_accept_request(std::string request_id);
     void start_decline_request(std::string request_id);
+    void start_remove_friend(std::string user_id);
+    void start_block_user(std::string user_id);
     void start_accept_invite(std::string invite_id);
     void start_decline_invite(std::string invite_id);
     void apply_operation_result(const friend_client::operation_result& result);

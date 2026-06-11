@@ -69,7 +69,7 @@ modal_layout make_layout(const state& state, ui::draw_layer layer = ui::draw_lay
 
 const char* relationship_action_label(const auth::public_profile& profile, bool active) {
     if (active) {
-        return "SENDING";
+        return "WORKING";
     }
     if (profile.relationship_status == "none") {
         return "ADD";
@@ -81,10 +81,10 @@ const char* relationship_action_label(const auth::public_profile& profile, bool 
         return "PENDING";
     }
     if (profile.relationship_status == "accepted") {
-        return "FRIEND";
+        return "REMOVE";
     }
     if (profile.relationship_status == "blocked") {
-        return "BLOCKED";
+        return "UNBLOCK";
     }
     if (profile.relationship_status == "self") {
         return "SELF";
@@ -93,7 +93,10 @@ const char* relationship_action_label(const auth::public_profile& profile, bool 
 }
 
 bool relationship_action_enabled(const auth::public_profile& profile, bool active) {
-    return !active && profile.relationship_status == "none";
+    return !active &&
+           (profile.relationship_status == "none" ||
+            profile.relationship_status == "accepted" ||
+            profile.relationship_status == "blocked");
 }
 
 void draw_profile_body(const state& state, Rectangle modal) {
@@ -243,7 +246,7 @@ void controller::poll() {
         if (!state_.relationship_result.success) {
             ui::notify(state_.relationship_result.message, ui::notice_tone::error, 2.8f);
         } else {
-            ui::notify("Friend request sent.", ui::notice_tone::success, 1.8f);
+            ui::notify("Relationship updated.", ui::notice_tone::success, 1.8f);
             request_load();
         }
         return;
@@ -286,7 +289,7 @@ bool controller::handle_input() {
         state_.result.profile.has_value() &&
         relationship_action_enabled(*state_.result.profile, state_.relationship_operation_active) &&
         ui::is_clicked(layout.relationship_button_rect, layout.layer)) {
-        start_send_friend_request();
+        start_relationship_action();
         return true;
     }
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
@@ -335,18 +338,26 @@ void controller::request_load() {
     }).detach();
 }
 
-void controller::start_send_friend_request() {
+void controller::start_relationship_action() {
     if (state_.relationship_operation_active ||
         !state_.result.success ||
         !state_.result.profile.has_value()) {
         return;
     }
     state_.relationship_operation_active = true;
-    std::promise<friend_client::request_operation_result> promise;
+    std::promise<friend_client::operation_result> promise;
     relationship_future_ = promise.get_future();
-    std::thread([promise = std::move(promise), user_id = state_.result.profile->id]() mutable {
+    std::thread([promise = std::move(promise),
+                 user_id = state_.result.profile->id,
+                 relationship_status = state_.result.profile->relationship_status]() mutable {
         try {
-            promise.set_value(friend_client::send_friend_request(user_id));
+            if (relationship_status == "accepted") {
+                promise.set_value(friend_client::remove_friend(user_id));
+            } else if (relationship_status == "blocked") {
+                promise.set_value(friend_client::unblock_user(user_id));
+            } else {
+                promise.set_value(friend_client::send_friend_request(user_id));
+            }
         } catch (...) {
             promise.set_exception(std::current_exception());
         }

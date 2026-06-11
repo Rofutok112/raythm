@@ -639,6 +639,10 @@ void title_scene::update(float dt) {
         enter_multiplayer_room_invite(room_join->room_id, room_join->invite_id);
         return;
     }
+    if (const auto profile_user_id = friends_controller_.consume_profile_request(); profile_user_id.has_value()) {
+        public_profile_controller_.open(*profile_user_id);
+        return;
+    }
 
     if (handle_friends_input()) {
         return;
