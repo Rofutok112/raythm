@@ -95,6 +95,29 @@ void draw_tab(Rectangle rect, const char* label, bool selected, ui::draw_layer l
         selected ? 2.4f : 1.5f);
 }
 
+std::string presence_label(const friend_client::social_user& user) {
+    if (!user.current_room_name.empty()) {
+        return "in " + user.current_room_name;
+    }
+    if (user.online_status == "in_room") {
+        return "in room";
+    }
+    if (user.online_status == "in_match") {
+        return "in match";
+    }
+    if (user.online_status == "away") {
+        return "away";
+    }
+    if (user.online_status == "online") {
+        return "online";
+    }
+    return "offline";
+}
+
+bool presence_active(const std::string& label) {
+    return label != "offline" && !label.empty();
+}
+
 void draw_user_row(Rectangle row, const friend_client::social_user& user, ui::draw_layer layer) {
     const auto& t = *g_theme;
     const ui::row_state row_state = ui::draw_row(row, t.row, t.row_hover, t.border_light, 1.5f);
@@ -105,12 +128,11 @@ void draw_user_row(Rectangle row, const friend_client::social_user& user, ui::dr
                           {row.x + 78.0f, row.y + 11.0f, row.width - 420.0f, 28.0f},
                           t.text,
                           ui::text_align::left);
-    const std::string status = user.online_status.empty() ? "offline" : user.online_status;
-    const std::string detail = user.current_room_name.empty() ? status : "in " + user.current_room_name;
+    const std::string detail = presence_label(user);
     ui::draw_text_in_rect(detail.c_str(),
                           14,
                           {row.x + 78.0f, row.y + 41.0f, row.width - 420.0f, 20.0f},
-                          detail == "offline" ? t.text_muted : t.success,
+                          presence_active(detail) ? t.success : t.text_muted,
                           ui::text_align::left);
     (void)row_state;
     (void)layer;
