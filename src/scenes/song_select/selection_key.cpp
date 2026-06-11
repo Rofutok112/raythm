@@ -13,7 +13,7 @@ selection_key selection_key_for_state(const state& state) {
     const auto filtered = filtered_charts_for_selected_song(state);
     if (const chart_option* chart = selected_chart_for(state, filtered)) {
         key.chart_id = chart->meta.chart_id;
-        if (key.source == ranking_service::source::online &&
+        if (key.source != ranking_service::source::local &&
             !can_use_online_chart_routes(*chart)) {
             key.source = ranking_service::source::local;
         }

@@ -13,6 +13,7 @@
 #include "title/title_browse_feature.h"
 #include "title/title_command.h"
 #include "title/title_multiplayer_audio_controller.h"
+#include "title/title_friends_controller.h"
 #include "title/title_play_create_feature.h"
 #include "title/title_profile_controller.h"
 #include "title/title_settings_overlay.h"
@@ -70,6 +71,7 @@ private:
     void enter_home_mode(bool suppress_pointer = false);
     void enter_play_mode();
     void enter_multiplayer_mode(bool reset_room_state = true);
+    void enter_multiplayer_room_invite(std::string room_id, std::string invite_id);
     void enter_online_mode();
     void enter_create_mode();
     void enter_settings_mode();
@@ -90,6 +92,7 @@ private:
     [[nodiscard]] title_play_create_feature::cross_callbacks play_cross_callbacks();
     bool handle_profile_input();
     bool handle_public_profile_input();
+    bool handle_friends_input();
     void update_title_quit(float dt);
     [[nodiscard]] title_audio_policy::hub_mode current_audio_mode() const;
 
@@ -113,6 +116,7 @@ private:
     bool start_in_settings_view_ = false;
     bool multiplayer_chart_pick_active_ = false;
     bool queue_selected_chart_on_multiplayer_return_ = false;
+    std::string preferred_multiplayer_invite_id_;
     title_catalog_reload_coordinator catalog_reload_coordinator_;
     local_content_index::snapshot multiplayer_local_index_;
     title::multiplayer_audio_state multiplayer_audio_state_;
@@ -127,6 +131,7 @@ private:
     Rectangle play_entry_origin_rect_{};
     title_settings_overlay settings_overlay_;
     title_play_create_feature play_create_feature_;
+    title_friends_controller friends_controller_;
     title_profile_controller profile_controller_;
     public_profile::controller public_profile_controller_;
     multiplayer::state multiplayer_state_;

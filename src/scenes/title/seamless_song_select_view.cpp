@@ -46,8 +46,9 @@ constexpr float kChartFilterMaxLevel = 99.0f;
 constexpr float kChartFilterUsefulTrack = 0.97f;
 constexpr Rectangle kPlayChartButtonsRect = {565.0f, 542.0f, 617.0f, 444.0f};
 constexpr Rectangle kPlayRankingHeaderRect = {1256.0f, 466.0f, 596.0f, 38.0f};
-constexpr Rectangle kPlayRankingSourceLocalRect = {1708.0f, 466.0f, 144.0f, 38.0f};
-constexpr Rectangle kPlayRankingSourceOnlineRect = {1556.0f, 466.0f, 144.0f, 38.0f};
+constexpr Rectangle kPlayRankingSourceFriendsRect = {1428.0f, 466.0f, 136.0f, 38.0f};
+constexpr Rectangle kPlayRankingSourceOnlineRect = {1572.0f, 466.0f, 136.0f, 38.0f};
+constexpr Rectangle kPlayRankingSourceLocalRect = {1716.0f, 466.0f, 136.0f, 38.0f};
 constexpr Rectangle kPlayRankingListRect = {1256.0f, 512.0f, 596.0f, 431.0f};
 constexpr Rectangle kCreateSongColumnRect = {99.0f, 162.0f, 507.0f, 756.0f};
 constexpr Rectangle kCreateMainColumnRect = {657.0f, 150.0f, 603.0f, 780.0f};
@@ -57,8 +58,9 @@ constexpr Rectangle kCreateChartDetailRect = {1002.0f, 273.0f, 258.0f, 135.0f};
 constexpr Rectangle kCreateMetaRect = {684.0f, 582.0f, 576.0f, 90.0f};
 constexpr Rectangle kCreateChartButtonsRect = {684.0f, 600.0f, 576.0f, 327.0f};
 constexpr Rectangle kCreateRankingHeaderRect = {1317.0f, 153.0f, 507.0f, 54.0f};
-constexpr Rectangle kCreateRankingSourceLocalRect = {1551.0f, 147.0f, 129.0f, 51.0f};
-constexpr Rectangle kCreateRankingSourceOnlineRect = {1689.0f, 147.0f, 135.0f, 51.0f};
+constexpr Rectangle kCreateRankingSourceFriendsRect = {1446.0f, 147.0f, 114.0f, 51.0f};
+constexpr Rectangle kCreateRankingSourceOnlineRect = {1568.0f, 147.0f, 114.0f, 51.0f};
+constexpr Rectangle kCreateRankingSourceLocalRect = {1690.0f, 147.0f, 114.0f, 51.0f};
 constexpr Rectangle kCreateRankingListRect = {1317.0f, 225.0f, 507.0f, 702.0f};
 constexpr float kContextMenuInnerPadding = 6.0f;
 constexpr Rectangle kFallbackOriginRect = {840.0f, 564.0f, 240.0f, 90.0f};
@@ -1239,6 +1241,7 @@ layout make_layout_for_targets(float anim_t,
                                Rectangle chart_detail_rect,
                                Rectangle chart_buttons_rect,
                                Rectangle ranking_header_rect,
+                               Rectangle ranking_source_friends_rect,
                                Rectangle ranking_source_local_rect,
                                Rectangle ranking_source_online_rect,
                                Rectangle ranking_list_rect) {
@@ -1254,6 +1257,7 @@ layout make_layout_for_targets(float anim_t,
     const Rectangle seed_chart_detail = centered_scaled_rect(origin, chart_detail_rect, 0.76f, kSeedChartDetailOffset);
     const Rectangle seed_chart_buttons = centered_scaled_rect(origin, chart_buttons_rect, 0.88f, kSeedChartButtonsOffset);
     const Rectangle seed_ranking_header = centered_scaled_rect(origin, ranking_header_rect, 0.7f, kSeedRankingHeaderOffset);
+    const Rectangle seed_ranking_source_friends = centered_scaled_rect(origin, ranking_source_friends_rect, 0.8f, kSeedRankingSourceOnlineOffset);
     const Rectangle seed_ranking_source_local = centered_scaled_rect(origin, ranking_source_local_rect, 0.8f, kSeedRankingSourceLocalOffset);
     const Rectangle seed_ranking_source_online = centered_scaled_rect(origin, ranking_source_online_rect, 0.8f, kSeedRankingSourceOnlineOffset);
     const Rectangle seed_ranking_list = centered_scaled_rect(origin, ranking_list_rect, 0.7f, kSeedRankingListOffset);
@@ -1268,6 +1272,7 @@ layout make_layout_for_targets(float anim_t,
         tween::lerp(seed_chart_detail, chart_detail_rect, t),
         tween::lerp(seed_chart_buttons, chart_buttons_rect, t),
         tween::lerp(seed_ranking_header, ranking_header_rect, t),
+        tween::lerp(seed_ranking_source_friends, ranking_source_friends_rect, t),
         tween::lerp(seed_ranking_source_local, ranking_source_local_rect, t),
         tween::lerp(seed_ranking_source_online, ranking_source_online_rect, t),
         tween::lerp(seed_ranking_list, ranking_list_rect, t),
@@ -1287,6 +1292,7 @@ layout build_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode) {
         play ? kPlayChartDetailRect : kCreateChartDetailRect,
         play ? kPlayChartButtonsRect : kCreateChartButtonsRect,
         play ? kPlayRankingHeaderRect : kCreateRankingHeaderRect,
+        play ? kPlayRankingSourceFriendsRect : kCreateRankingSourceFriendsRect,
         play ? kPlayRankingSourceLocalRect : kCreateRankingSourceLocalRect,
         play ? kPlayRankingSourceOnlineRect : kCreateRankingSourceOnlineRect,
         play ? kPlayRankingListRect : kCreateRankingListRect);
@@ -1416,6 +1422,7 @@ void draw(song_select::state& state,
                                      selected_row_alpha);
         title_ranking_view::draw(state.ranking_panel, {
             .header_rect = current.ranking_header_rect,
+            .source_friends_rect = current.ranking_source_friends_rect,
             .source_local_rect = current.ranking_source_local_rect,
             .source_online_rect = current.ranking_source_online_rect,
             .list_rect = current.ranking_list_rect,

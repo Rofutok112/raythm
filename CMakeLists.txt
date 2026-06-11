@@ -233,6 +233,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/timing_engine.h
         src/network/auth_client.cpp
         src/network/auth_client.h
+        src/network/friend_client.cpp
+        src/network/friend_client.h
         src/network/http_client.cpp
         src/network/http_client.h
         src/network/websocket_client.cpp
@@ -313,6 +315,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_common_update_controller.h
         src/scenes/title/title_frame_input_controller.cpp
         src/scenes/title/title_frame_input_controller.h
+        src/scenes/title/title_friends_controller.cpp
+        src/scenes/title/title_friends_controller.h
         src/scenes/title/title_online_mode_controller.cpp
         src/scenes/title/title_online_mode_controller.h
         src/scenes/title/title_mode_update_controller.cpp

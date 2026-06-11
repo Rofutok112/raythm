@@ -556,9 +556,23 @@ room_operation_result create_room(const auth::session_summary& session,
 
 room_operation_result join_room(const auth::session_summary& session,
                                 const std::string& room_id,
-                                const std::string& password) {
-    const std::string body = password.empty() ? "{}" : ("{" + json_string_field("password", password) + "}");
-    return send_room_request(session, "POST", "/" + room_id + "/join", body,
+                                const std::string& password,
+                                const std::string& invite_id) {
+    std::ostringstream body;
+    body << "{";
+    bool needs_comma = false;
+    if (!password.empty()) {
+        body << json_string_field("password", password);
+        needs_comma = true;
+    }
+    if (!invite_id.empty()) {
+        if (needs_comma) {
+            body << ",";
+        }
+        body << json_string_field("inviteId", invite_id);
+    }
+    body << "}";
+    return send_room_request(session, "POST", "/" + room_id + "/join", body.str(),
                              "Joined room.", "Failed to join room.");
 }
 

@@ -12,6 +12,7 @@ namespace title_ranking_view {
 
 struct draw_config {
     Rectangle header_rect;
+    Rectangle source_friends_rect;
     Rectangle source_local_rect;
     Rectangle source_online_rect;
     Rectangle list_rect;

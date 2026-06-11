@@ -109,6 +109,11 @@ operation_result fetch_chart_ranking(const std::string& server_url,
                                      const std::string& chart_id,
                                      int limit = 50);
 
+operation_result fetch_friend_chart_ranking(const std::string& server_url,
+                                            const std::string& access_token,
+                                            const std::string& chart_id,
+                                            int limit = 50);
+
 personal_best_operation_result fetch_my_chart_ranking(const std::string& server_url,
                                                       const std::string& access_token,
                                                       const std::string& chart_id);

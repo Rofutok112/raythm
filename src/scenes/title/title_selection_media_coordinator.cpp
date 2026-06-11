@@ -195,7 +195,7 @@ void title_selection_media_coordinator::apply_ranking_loaded(
 
 void title_selection_media_coordinator::mark_online_loading(song_select::state& state,
                                                            ranking_service::source source) const {
-    if (source != ranking_service::source::online) {
+    if (source == ranking_service::source::local) {
         return;
     }
 

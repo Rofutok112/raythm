@@ -103,6 +103,18 @@ bool handle_refresh_button_input(title::frame_input_context& context) {
     return true;
 }
 
+bool handle_friends_button_input(title::frame_input_context& context) {
+    if (is_settings_mode(context.mode) || context.home_menu_anim < kAccountChipInteractiveThreshold) {
+        return false;
+    }
+    if (!ui::is_clicked(title_layout::friends_chip_rect())) {
+        return false;
+    }
+    context.play_create_feature.state().login_dialog.open = false;
+    context.friends_controller.open();
+    return true;
+}
+
 bool settings_button_clicked(const title::frame_input_context& context) {
     if (is_settings_mode(context.mode) || context.home_menu_anim < kAccountChipInteractiveThreshold) {
         return false;
@@ -114,17 +126,21 @@ bool left_click_for_title_home(float home_menu_anim) {
     const Rectangle account_chip_rect = title_layout::account_chip_rect();
     const Rectangle refresh_chip_rect = title_layout::refresh_chip_rect();
     const Rectangle settings_chip_rect = title_layout::settings_chip_rect();
+    const Rectangle friends_chip_rect = title_layout::friends_chip_rect();
     const bool account_hovered =
         home_menu_anim >= kAccountChipInteractiveThreshold && ui::is_hovered(account_chip_rect);
     const bool refresh_hovered =
         home_menu_anim >= kAccountChipInteractiveThreshold && ui::is_hovered(refresh_chip_rect);
     const bool settings_hovered =
         home_menu_anim >= kAccountChipInteractiveThreshold && ui::is_hovered(settings_chip_rect);
+    const bool friends_hovered =
+        home_menu_anim >= kAccountChipInteractiveThreshold && ui::is_hovered(friends_chip_rect);
     return IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
            !window_chrome::is_pointer_over_chrome() &&
            !account_hovered &&
            !refresh_hovered &&
-           !settings_hovered;
+           !settings_hovered &&
+           !friends_hovered;
 }
 
 }  // namespace
@@ -144,6 +160,10 @@ frame_input_result update_frame_input(frame_input_context& context) {
     }
 
     if (!suppress_home_pointer_this_frame && handle_refresh_button_input(context)) {
+        return {.consumed = true};
+    }
+
+    if (!suppress_home_pointer_this_frame && handle_friends_button_input(context)) {
         return {.consumed = true};
     }
 

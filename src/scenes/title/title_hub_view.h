@@ -10,6 +10,7 @@
 #include "title/title_command.h"
 #include "title/title_play_create_feature.h"
 #include "title/title_profile_controller.h"
+#include "title/title_friends_controller.h"
 #include "title/title_settings_overlay.h"
 #include "title/title_startup_controller.h"
 
@@ -45,6 +46,7 @@ struct draw_context {
     title_startup_controller::state& startup;
     title_audio_controller& audio_controller;
     title_settings_overlay& settings_overlay;
+    title_friends_controller& friends_controller;
     title_profile_controller& profile_controller;
     public_profile::controller& public_profile_controller;
     auth_overlay::controller& auth_controller;

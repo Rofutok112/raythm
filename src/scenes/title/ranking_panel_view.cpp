@@ -181,6 +181,9 @@ float max_scroll(Rectangle list_rect, const ranking_service::listing& listing) {
 }
 
 std::optional<ranking_service::source> hit_test_source(const draw_config& config, Vector2 point) {
+    if (ui::is_hovered(config.source_friends_rect) && CheckCollisionPointRec(point, config.source_friends_rect)) {
+        return ranking_service::source::friends;
+    }
     if (ui::is_hovered(config.source_local_rect) && CheckCollisionPointRec(point, config.source_local_rect)) {
         return ranking_service::source::local;
     }
@@ -193,7 +196,8 @@ std::optional<ranking_service::source> hit_test_source(const draw_config& config
 std::optional<std::string> hit_test_profile_user_id(const song_select::ranking_panel_state& panel,
                                                     const draw_config& config,
                                                     Vector2 point) {
-    if (panel.selected_source != ranking_service::source::online ||
+    if ((panel.selected_source != ranking_service::source::online &&
+         panel.selected_source != ranking_service::source::friends) ||
         !panel.listing.available ||
         panel.listing.entries.empty() ||
         !CheckCollisionPointRec(point, config.list_rect)) {
@@ -221,9 +225,22 @@ std::optional<std::string> hit_test_profile_user_id(const song_select::ranking_p
 
 void draw(const song_select::ranking_panel_state& panel, const draw_config& config) {
     const auto& t = *g_theme;
-    ui::draw_text_in_rect(panel.selected_source == ranking_service::source::online ? "GLOBAL RANKING" : "ローカルランキング",
-                          16, {config.header_rect.x, config.header_rect.y, 280.0f, config.header_rect.height},
+    const char* header_label = "ローカルランキング";
+    if (panel.selected_source == ranking_service::source::online) {
+        header_label = "GLOBAL RANKING";
+    } else if (panel.selected_source == ranking_service::source::friends) {
+        header_label = "FRIEND RANKING";
+    }
+    const float header_width = std::max(120.0f, config.source_friends_rect.x - config.header_rect.x - 12.0f);
+    ui::draw_text_in_rect(header_label,
+                          16, {config.header_rect.x, config.header_rect.y, header_width, config.header_rect.height},
                           with_alpha(t.accent, config.alpha), ui::text_align::left);
+    ui::draw_button_colored(config.source_friends_rect, "FRIENDS", 14,
+                            with_alpha(panel.selected_source == ranking_service::source::friends ? config.button_selected : config.button_base,
+                                       panel.selected_source == ranking_service::source::friends ? config.selected_row_alpha : config.normal_row_alpha),
+                            with_alpha(panel.selected_source == ranking_service::source::friends ? config.button_selected_hover : config.button_hover,
+                                       panel.selected_source == ranking_service::source::friends ? config.selected_hover_row_alpha : config.hover_row_alpha),
+                            with_alpha(t.text, config.alpha), 1.5f);
     ui::draw_button_colored(config.source_online_rect, "GLOBAL", 14,
                             with_alpha(panel.selected_source == ranking_service::source::online ? config.button_selected : config.button_base,
                                        panel.selected_source == ranking_service::source::online ? config.selected_row_alpha : config.normal_row_alpha),

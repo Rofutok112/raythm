@@ -142,10 +142,18 @@ void title_scene::enter_multiplayer_mode(bool reset_room_state) {
     audio_controller_.stop_preview();
     refresh_multiplayer_local_index();
     if (reset_room_state) {
-        multiplayer::on_enter(multiplayer_state_, preferred_multiplayer_room_id_);
+        multiplayer::on_enter(multiplayer_state_, preferred_multiplayer_room_id_, preferred_multiplayer_invite_id_);
         preferred_multiplayer_room_id_.clear();
+        preferred_multiplayer_invite_id_.clear();
     }
     audio_controller_.update_multiplayer_preview(nullptr, 0.0f);
+}
+
+void title_scene::enter_multiplayer_room_invite(std::string room_id, std::string invite_id) {
+    preferred_multiplayer_room_id_ = std::move(room_id);
+    preferred_multiplayer_invite_id_ = std::move(invite_id);
+    friends_controller_.close();
+    enter_multiplayer_mode(true);
 }
 
 void title_scene::refresh_multiplayer_local_index() {
@@ -173,6 +181,7 @@ void title_scene::enter_settings_mode() {
     mode_ = hub_mode::settings;
     home_status_message_.clear();
     play_create_feature_.state().login_dialog.open = false;
+    friends_controller_.close();
     profile_controller_.close();
     public_profile_controller_.close();
     settings_overlay_.open();
@@ -248,6 +257,10 @@ bool title_scene::handle_profile_input() {
 
 bool title_scene::handle_public_profile_input() {
     return public_profile_controller_.handle_input();
+}
+
+bool title_scene::handle_friends_input() {
+    return friends_controller_.handle_input();
 }
 
 title_play_create_feature::cross_callbacks title_scene::play_cross_callbacks() {
@@ -620,6 +633,17 @@ void title_scene::update(float dt) {
         return;
     }
 
+    friends_controller_.tick(dt);
+    friends_controller_.poll();
+    if (const auto room_join = friends_controller_.consume_room_join_request(); room_join.has_value()) {
+        enter_multiplayer_room_invite(room_join->room_id, room_join->invite_id);
+        return;
+    }
+
+    if (handle_friends_input()) {
+        return;
+    }
+
     if (handle_profile_input()) {
         return;
     }
@@ -637,6 +661,7 @@ void title_scene::update(float dt) {
         .play_create_feature = play_create_feature_,
         .browse_feature = browse_feature_,
         .catalog_reload_coordinator = catalog_reload_coordinator_,
+        .friends_controller = friends_controller_,
         .auth_controller = auth_controller_,
     };
     const title::frame_input_result input_result = title::update_frame_input(input_context);
@@ -705,6 +730,7 @@ void title_scene::draw() {
         startup_,
         audio_controller_,
         settings_overlay_,
+        friends_controller_,
         profile_controller_,
         public_profile_controller_,
         auth_controller_,

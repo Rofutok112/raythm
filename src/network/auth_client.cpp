@@ -554,6 +554,7 @@ std::optional<auth::public_profile> parse_public_profile_response(const std::str
         .id = *id,
         .display_name = *display_name,
         .avatar_url = json::extract_string(*profile_object, "avatarUrl").value_or(""),
+        .relationship_status = json::extract_string(*profile_object, "relationshipStatus").value_or("none"),
         .external_links = std::move(external_links),
     };
 }

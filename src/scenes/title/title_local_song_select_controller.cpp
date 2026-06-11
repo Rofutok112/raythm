@@ -487,6 +487,7 @@ title_play_view::update_result update(song_select::state& state,
 
         const title_ranking_view::draw_config ranking_config = {
             .header_rect = current.ranking_header_rect,
+            .source_friends_rect = current.ranking_source_friends_rect,
             .source_local_rect = current.ranking_source_local_rect,
             .source_online_rect = current.ranking_source_online_rect,
             .list_rect = current.ranking_list_rect,

@@ -11,6 +11,7 @@ namespace ranking_service {
 enum class source {
     local,
     online,
+    friends,
 };
 
 struct entry {

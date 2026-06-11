@@ -1011,17 +1011,21 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
         return result;
     }
 
-    if (ranking_source == source::online) {
+    if (ranking_source == source::online || ranking_source == source::friends) {
         const std::optional<auth::session> stored = auth::load_saved_session();
         if (!stored.has_value()) {
             result.available = false;
-            result.message = "Sign in to view online rankings.";
+            result.message = ranking_source == source::friends
+                ? "Sign in to view friend rankings."
+                : "Sign in to view online rankings.";
             return result;
         }
 
         const std::string remote_chart_id = expected_remote_chart_id(stored->server_url, chart_id);
         ranking_client::operation_result online_result =
-            ranking_client::fetch_chart_ranking(stored->server_url, stored->access_token, remote_chart_id, limit);
+            ranking_source == source::friends
+                ? ranking_client::fetch_friend_chart_ranking(stored->server_url, stored->access_token, remote_chart_id, limit)
+                : ranking_client::fetch_chart_ranking(stored->server_url, stored->access_token, remote_chart_id, limit);
 
         if (online_result.unauthorized) {
             const auth::operation_result restored = auth::restore_saved_session();
@@ -1030,16 +1034,26 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
                 result.maintenance = restored.maintenance;
                 result.retry_after = restored.retry_after;
                 result.message = restored.message.empty()
-                    ? "Sign in to view online rankings."
+                    ? (ranking_source == source::friends
+                           ? "Sign in to view friend rankings."
+                           : "Sign in to view online rankings.")
                     : restored.message;
                 return result;
             }
 
-            online_result = ranking_client::fetch_chart_ranking(
-                restored.session_data->server_url,
-                restored.session_data->access_token,
-                expected_remote_chart_id(restored.session_data->server_url, chart_id),
-                limit);
+            const std::string restored_chart_id =
+                expected_remote_chart_id(restored.session_data->server_url, chart_id);
+            online_result = ranking_source == source::friends
+                ? ranking_client::fetch_friend_chart_ranking(
+                      restored.session_data->server_url,
+                      restored.session_data->access_token,
+                      restored_chart_id,
+                      limit)
+                : ranking_client::fetch_chart_ranking(
+                      restored.session_data->server_url,
+                      restored.session_data->access_token,
+                      restored_chart_id,
+                      limit);
         }
 
         if (!online_result.success || !online_result.listing.has_value()) {
@@ -1047,7 +1061,9 @@ listing load_chart_ranking(const std::string& chart_id, source ranking_source, i
             result.maintenance = online_result.maintenance;
             result.retry_after = online_result.retry_after;
             result.message = online_result.message.empty()
-                ? "Failed to load online rankings."
+                ? (ranking_source == source::friends
+                       ? "Failed to load friend rankings."
+                       : "Failed to load online rankings.")
                 : online_result.message;
             return result;
         }
@@ -1091,7 +1107,7 @@ std::optional<entry> load_chart_personal_best(const std::string& chart_id, sourc
         return std::nullopt;
     }
 
-    if (ranking_source == source::local) {
+    if (ranking_source == source::local || ranking_source == source::friends) {
         listing local = load_chart_ranking(chart_id, source::local, 1);
         if (local.available && !local.entries.empty()) {
             return local.entries.front();

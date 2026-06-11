@@ -384,7 +384,7 @@ bool handle_command(state& state) {
 
 }  // namespace
 
-void on_enter(state& state, const std::string& preferred_room_id) {
+void on_enter(state& state, const std::string& preferred_room_id, const std::string& invite_id) {
     state.auth = auth::load_session_summary();
     const std::optional<auth::session> saved_session = auth::load_saved_session();
     state.self_user_id = saved_session.has_value() ? saved_session->user.id : "";
@@ -438,13 +438,26 @@ void on_enter(state& state, const std::string& preferred_room_id) {
         state.selected_room_id = preferred_room_id;
         state.screen = screen_mode::room;
         state.room_request_started = true;
-        start_operation(state,
-                        pending_operation::refresh_room,
-                        std::async(std::launch::async, [session = state.auth, preferred_room_id]() {
-                            return client::fetch_room(session, preferred_room_id);
-                        }),
-                        "Returning to room...");
+        if (!invite_id.empty()) {
+            start_operation(state,
+                            pending_operation::join_room,
+                            std::async(std::launch::async, [session = state.auth, preferred_room_id, invite_id]() {
+                                return client::join_room(session, preferred_room_id, "", invite_id);
+                            }),
+                            "Joining invited room...");
+        } else {
+            start_operation(state,
+                            pending_operation::refresh_room,
+                            std::async(std::launch::async, [session = state.auth, preferred_room_id]() {
+                                return client::fetch_room(session, preferred_room_id);
+                            }),
+                            "Returning to room...");
+        }
     }
+}
+
+void on_enter(state& state, const std::string& preferred_room_id) {
+    on_enter(state, preferred_room_id, "");
 }
 
 void on_enter(state& state) {

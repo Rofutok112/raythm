@@ -8,6 +8,7 @@
 #include "title/home_menu_view.h"
 #include "title/title_browse_feature.h"
 #include "title/title_common_update_controller.h"
+#include "title/title_friends_controller.h"
 #include "title/title_play_create_feature.h"
 
 namespace title {
@@ -21,6 +22,7 @@ struct frame_input_context {
     title_play_create_feature& play_create_feature;
     title_browse_feature& browse_feature;
     title_catalog_reload_coordinator& catalog_reload_coordinator;
+    title_friends_controller& friends_controller;
     auth_overlay::controller& auth_controller;
 };
 

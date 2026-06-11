@@ -88,12 +88,14 @@ draw_result draw(draw_context context) {
     const Rectangle spectrum_rect = title_layout::spectrum_rect();
     const Rectangle settings_chip_rect = title_layout::settings_chip_rect();
     const Rectangle refresh_chip_rect = title_layout::refresh_chip_rect();
+    const Rectangle friends_chip_rect = title_layout::friends_chip_rect();
     const Rectangle account_chip_rect = title_layout::account_chip_rect();
     const bool draw_title_header = context.view.current_mode != mode::settings;
     const title_header_view::draw_config header_config = {
         .closed_header_rect = title_layout::closed_header_rect(),
         .open_header_rect = title_layout::open_header_rect(),
         .refresh_chip_rect = refresh_chip_rect,
+        .friends_chip_rect = friends_chip_rect,
         .settings_chip_rect = settings_chip_rect,
         .account_chip_rect = account_chip_rect,
         .menu_t = menu_t,
@@ -105,6 +107,7 @@ draw_result draw(draw_context context) {
         .avatar_base_url = play_state.auth.server_url,
         .logged_in = play_state.auth.logged_in,
         .email_verified = play_state.auth.email_verified,
+        .friends_badge_count = context.friends_controller.unread_badge_count(),
         .now = GetTime(),
     };
 
@@ -160,6 +163,7 @@ draw_result draw(draw_context context) {
             context.audio_controller,
             context.play_cross_callbacks);
     }
+    context.friends_controller.draw(kTitleModalLayer);
     context.profile_controller.draw(play_state.auth, context.auth_controller.request_active, kTitleModalLayer);
     context.public_profile_controller.draw(kTitleModalLayer);
     const song_select::login_dialog_layout login_layout = song_select::make_login_dialog_layout(

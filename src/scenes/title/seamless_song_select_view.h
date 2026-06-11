@@ -51,6 +51,7 @@ struct layout {
     Rectangle chart_detail_rect;
     Rectangle chart_buttons_rect;
     Rectangle ranking_header_rect;
+    Rectangle ranking_source_friends_rect;
     Rectangle ranking_source_local_rect;
     Rectangle ranking_source_online_rect;
     Rectangle ranking_list_rect;
