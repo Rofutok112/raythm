@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -82,6 +83,38 @@ struct invite_operation_result : operation_result {
     std::optional<room_invite> invite;
     std::string join_room_id;
     std::string join_invite_id;
+};
+
+struct social_presence {
+    std::string user_id;
+    std::string online_status;
+};
+
+struct social_realtime_event {
+    std::string type;
+    std::vector<social_presence> presence;
+    std::optional<room_invite> invite;
+    std::string message;
+};
+
+class social_realtime_client {
+public:
+    social_realtime_client();
+    ~social_realtime_client();
+
+    social_realtime_client(const social_realtime_client&) = delete;
+    social_realtime_client& operator=(const social_realtime_client&) = delete;
+
+    bool connect();
+    void close();
+    bool connected() const;
+    bool send_ping();
+    std::vector<social_realtime_event> poll_events();
+    std::string last_error() const;
+
+private:
+    class impl;
+    std::unique_ptr<impl> impl_;
 };
 
 friend_listing_result fetch_friends();

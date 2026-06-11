@@ -8,6 +8,7 @@
 #include <thread>
 #include <utility>
 
+#include "network/auth_client.h"
 #include "scene_common.h"
 #include "shared/avatar_texture_cache.h"
 #include "theme.h"
@@ -22,6 +23,8 @@ namespace {
 constexpr Rectangle kModalRect{470.0f, 170.0f, 980.0f, 720.0f};
 constexpr float kRowHeight = 72.0f;
 constexpr float kRowGap = 10.0f;
+constexpr float kSocialReconnectSeconds = 8.0f;
+constexpr float kSocialPingSeconds = 25.0f;
 
 struct friends_layout {
     Rectangle modal{};
@@ -137,6 +140,12 @@ void draw_list(Rectangle list, const Items& items, const char* empty_text, DrawR
 
 void title_friends_controller::reset() {
     state_ = {};
+    if (social_realtime_) {
+        social_realtime_->close();
+    }
+    social_realtime_.reset();
+    social_reconnect_t_ = 0.0f;
+    social_ping_t_ = 0.0f;
 }
 
 void title_friends_controller::open() {
@@ -156,6 +165,27 @@ void title_friends_controller::close() {
 }
 
 void title_friends_controller::tick(float dt) {
+    const auth::session_summary session = auth::load_session_summary();
+    if (!session.logged_in) {
+        if (social_realtime_) {
+            social_realtime_->close();
+            social_realtime_.reset();
+        }
+        social_reconnect_t_ = 0.0f;
+        social_ping_t_ = 0.0f;
+    } else {
+        social_reconnect_t_ += dt;
+        social_ping_t_ += dt;
+        if (!social_realtime_ || !social_realtime_->connected()) {
+            if (!social_realtime_ || social_reconnect_t_ >= kSocialReconnectSeconds) {
+                ensure_social_realtime();
+            }
+        } else if (social_ping_t_ >= kSocialPingSeconds) {
+            social_ping_t_ = 0.0f;
+            (void)social_realtime_->send_ping();
+        }
+    }
+
     if (state_.open && state_.closing) {
         state_.open_anim = tween::retreat(state_.open_anim, dt, 8.0f);
         if (state_.open_anim <= 0.0f) {
@@ -170,6 +200,7 @@ void title_friends_controller::tick(float dt) {
 }
 
 void title_friends_controller::poll() {
+    poll_social_realtime();
     auto ready = [](auto& future) {
         return future.valid() && future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready;
     };
@@ -523,4 +554,57 @@ void title_friends_controller::apply_operation_result(const friend_client::opera
     ui::notify("Friends updated.", ui::notice_tone::success, 1.8f);
     state_.loading = false;
     request_reload();
+}
+
+void title_friends_controller::ensure_social_realtime() {
+    social_reconnect_t_ = 0.0f;
+    if (!social_realtime_) {
+        social_realtime_ = std::make_unique<friend_client::social_realtime_client>();
+    }
+    if (!social_realtime_->connected()) {
+        (void)social_realtime_->connect();
+    }
+}
+
+void title_friends_controller::poll_social_realtime() {
+    if (!social_realtime_ || !social_realtime_->connected()) {
+        return;
+    }
+    for (const friend_client::social_realtime_event& event : social_realtime_->poll_events()) {
+        apply_social_event(event);
+    }
+}
+
+void title_friends_controller::apply_social_event(const friend_client::social_realtime_event& event) {
+    for (const friend_client::social_presence& presence : event.presence) {
+        for (friend_client::social_user& user : state_.friends.friends) {
+            if (user.id == presence.user_id) {
+                user.online_status = presence.online_status.empty() ? "offline" : presence.online_status;
+                break;
+            }
+        }
+    }
+
+    if (event.invite.has_value()) {
+        const friend_client::room_invite& invite = *event.invite;
+        const auto existing = std::find_if(
+            state_.invites.invites.begin(),
+            state_.invites.invites.end(),
+            [&invite](const friend_client::room_invite& current) {
+                return current.id == invite.id;
+            });
+        if (existing == state_.invites.invites.end()) {
+            state_.invites.invites.insert(state_.invites.invites.begin(), invite);
+            ++state_.friends.unread_invite_count;
+        } else {
+            *existing = invite;
+        }
+        const std::string sender = invite.sender.display_name.empty() ? "Friend" : invite.sender.display_name;
+        const std::string room = invite.room_name.empty() ? "a room" : invite.room_name;
+        ui::notify(sender + " invited you to " + room + ".", ui::notice_tone::info, 3.2f);
+    }
+
+    if (event.type == "error" && !event.message.empty()) {
+        ui::notify(event.message, ui::notice_tone::error, 2.8f);
+    }
 }

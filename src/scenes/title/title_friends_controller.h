@@ -1,6 +1,7 @@
 #pragma once
 
 #include <future>
+#include <memory>
 #include <optional>
 
 #include "network/friend_client.h"
@@ -59,6 +60,9 @@ private:
     void start_accept_invite(std::string invite_id);
     void start_decline_invite(std::string invite_id);
     void apply_operation_result(const friend_client::operation_result& result);
+    void ensure_social_realtime();
+    void poll_social_realtime();
+    void apply_social_event(const friend_client::social_realtime_event& event);
 
     state state_;
     std::future<friend_client::friend_listing_result> friends_future_;
@@ -66,4 +70,7 @@ private:
     std::future<friend_client::invite_listing_result> invites_future_;
     std::future<friend_client::operation_result> operation_future_;
     std::future<friend_client::invite_operation_result> invite_operation_future_;
+    std::unique_ptr<friend_client::social_realtime_client> social_realtime_;
+    float social_reconnect_t_ = 0.0f;
+    float social_ping_t_ = 0.0f;
 };

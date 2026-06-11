@@ -10,6 +10,7 @@
 #include "network/http_client.h"
 #include "network/json_helpers.h"
 #include "network/network_error.h"
+#include "network/websocket_client.h"
 
 namespace {
 namespace json = network::json;
@@ -52,6 +53,17 @@ std::optional<auth::session> load_active_session() {
         return restored.session_data;
     }
     return std::nullopt;
+}
+
+std::vector<std::pair<std::string, std::string>> websocket_auth_headers(const auth::session& session_data) {
+    return {
+        {"Authorization", "Bearer " + session_data.access_token},
+        {"User-Agent", "raythm/0.1"},
+    };
+}
+
+std::string social_ws_url(const auth::session& session_data) {
+    return auth::normalize_server_url(session_data.server_url) + "/social/ws";
 }
 
 http_response send_session_request(const auth::session& session_data,
@@ -171,6 +183,36 @@ std::optional<friend_client::room_invite> parse_room_invite(const std::string& o
     return invite;
 }
 
+friend_client::social_realtime_event parse_social_event(const std::string& message) {
+    friend_client::social_realtime_event event;
+    event.type = json::extract_string(message, "type").value_or("");
+    const std::optional<std::string> payload = json::extract_object(message, "payload");
+    if (!payload.has_value()) {
+        return event;
+    }
+    event.message = json::extract_string(*payload, "message").value_or("");
+    if (const std::optional<std::string> friends = json::extract_array(*payload, "friends"); friends.has_value()) {
+        for (const std::string& object : json::extract_objects_from_array(*friends)) {
+            friend_client::social_presence presence;
+            presence.user_id = json::extract_string(object, "userId").value_or("");
+            presence.online_status = json::extract_string(object, "onlineStatus").value_or("offline");
+            if (!presence.user_id.empty()) {
+                event.presence.push_back(std::move(presence));
+            }
+        }
+    }
+    if (const std::optional<std::string> user_id = json::extract_string(*payload, "userId"); user_id.has_value()) {
+        event.presence.push_back({
+            .user_id = *user_id,
+            .online_status = json::extract_string(*payload, "onlineStatus").value_or("offline"),
+        });
+    }
+    if (const std::optional<std::string> invite = json::extract_object(*payload, "invite"); invite.has_value()) {
+        event.invite = parse_room_invite(*invite);
+    }
+    return event;
+}
+
 std::optional<friend_client::friend_listing_result> parse_friend_listing(const http_response& response) {
     friend_client::friend_listing_result result;
     result.listing = friend_client::friend_listing{};
@@ -244,6 +286,62 @@ std::optional<friend_client::operation_result> parse_basic_operation(const http_
 }  // namespace
 
 namespace friend_client {
+
+class social_realtime_client::impl {
+public:
+    network::websocket::client socket;
+};
+
+social_realtime_client::social_realtime_client() : impl_(std::make_unique<impl>()) {
+}
+
+social_realtime_client::~social_realtime_client() {
+    close();
+}
+
+bool social_realtime_client::connect() {
+    close();
+    std::optional<auth::session> session_data = load_active_session();
+    if (!session_data.has_value()) {
+        return false;
+    }
+    if (impl_->socket.connect(social_ws_url(*session_data), websocket_auth_headers(*session_data))) {
+        return true;
+    }
+    const auth::operation_result restored = auth::restore_saved_session();
+    if (!restored.success || !restored.session_data.has_value()) {
+        return false;
+    }
+    close();
+    return impl_->socket.connect(social_ws_url(*restored.session_data), websocket_auth_headers(*restored.session_data));
+}
+
+void social_realtime_client::close() {
+    impl_->socket.close();
+}
+
+bool social_realtime_client::connected() const {
+    return impl_->socket.connected();
+}
+
+bool social_realtime_client::send_ping() {
+    return impl_->socket.send_text("{\"command\":\"ping\"}");
+}
+
+std::vector<social_realtime_event> social_realtime_client::poll_events() {
+    std::vector<social_realtime_event> events;
+    for (const std::string& message : impl_->socket.poll_messages()) {
+        social_realtime_event event = parse_social_event(message);
+        if (!event.type.empty()) {
+            events.push_back(std::move(event));
+        }
+    }
+    return events;
+}
+
+std::string social_realtime_client::last_error() const {
+    return impl_->socket.last_error();
+}
 
 friend_listing_result fetch_friends() {
     return send_with_refresh<friend_listing_result>(
