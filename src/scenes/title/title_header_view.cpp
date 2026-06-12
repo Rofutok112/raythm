@@ -38,6 +38,16 @@ void draw_top_bar_item_background(Rectangle rect, Color bg, unsigned char alpha)
     }
 }
 
+Rectangle centered_icon_rect(Rectangle rect, float inset) {
+    const float size = std::max(1.0f, std::min(rect.width, rect.height) - inset * 2.0f);
+    return {
+        rect.x + (rect.width - size) * 0.5f,
+        rect.y + (rect.height - size) * 0.5f,
+        size,
+        size
+    };
+}
+
 void draw_refresh_icon(Rectangle rect, Color color, unsigned char alpha) {
     raythm_icons::draw_refresh(ui::inset(rect, 17.0f), with_alpha(color, alpha), 3.0f);
 }
@@ -47,17 +57,7 @@ void draw_settings_icon(Rectangle rect, Color color, unsigned char alpha) {
 }
 
 void draw_friends_icon(Rectangle rect, Color color, unsigned char alpha) {
-    ui::draw_text_in_rect("FR", 20, rect, with_alpha(color, alpha), ui::text_align::center);
-}
-
-Rectangle centered_icon_rect(Rectangle rect, float inset) {
-    const float size = std::max(1.0f, std::min(rect.width, rect.height) - inset * 2.0f);
-    return {
-        rect.x + (rect.width - size) * 0.5f,
-        rect.y + (rect.height - size) * 0.5f,
-        size,
-        size
-    };
+    raythm_icons::draw_friends(centered_icon_rect(rect, 14.0f), with_alpha(color, alpha), 3.0f);
 }
 
 void draw_profile_chevron(Rectangle rect, Color color, unsigned char alpha) {

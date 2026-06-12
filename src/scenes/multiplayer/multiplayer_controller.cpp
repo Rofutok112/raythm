@@ -276,6 +276,10 @@ bool handle_command(state& state) {
         state.create_max_players = 4;
         state.modal = modal_mode::create_room;
     } else if (command == ui_command::open_invite_friends && state.current_room.has_value()) {
+        if (!can_invite_friends(*state.current_room)) {
+            state.status_message = invite_friends_unavailable_message(*state.current_room);
+            return false;
+        }
         state.modal = modal_mode::invite_friends;
         state.selected_invite_user_id.clear();
         refresh_invite_friends(state);
@@ -408,6 +412,10 @@ bool handle_command(state& state) {
                         "Starting match...");
     } else if (command == ui_command::send_room_invite && state.current_room.has_value() &&
                !state.selected_invite_user_id.empty()) {
+        if (!can_invite_friends(*state.current_room)) {
+            state.status_message = invite_friends_unavailable_message(*state.current_room);
+            return false;
+        }
         state.pending = pending_operation::invite_friend;
         state.status_message = "Sending room invite...";
         state.invite_operation_future = std::async(std::launch::async,

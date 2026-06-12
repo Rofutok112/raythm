@@ -226,4 +226,18 @@ struct state {
     std::unique_ptr<client::realtime_client> realtime;
 };
 
+inline bool can_invite_friends(const room_detail& room) {
+    return room.status == "OPEN";
+}
+
+inline const char* invite_friends_unavailable_message(const room_detail& room) {
+    if (room.status == "IN_MATCH") {
+        return "Invites are available after the match.";
+    }
+    if (room.status == "CLOSED") {
+        return "This room is closed.";
+    }
+    return "Invites are available in open rooms.";
+}
+
 }  // namespace multiplayer

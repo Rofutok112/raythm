@@ -1,6 +1,5 @@
 #include "title/title_friends_controller.h"
 
-#include <algorithm>
 #include <chrono>
 #include <cctype>
 #include <exception>
@@ -158,6 +157,11 @@ void draw_list(Rectangle list, const Items& items, const char* empty_text, DrawR
     }
 }
 
+void draw_request_section_header(Rectangle rect, const char* label) {
+    const auto& t = *g_theme;
+    ui::draw_text_in_rect(label, 14, rect, t.accent, ui::text_align::left);
+}
+
 }  // namespace
 
 void title_friends_controller::reset() {
@@ -230,7 +234,7 @@ void title_friends_controller::poll() {
         if (ready(friends_future_)) {
             const friend_client::friend_listing_result result = friends_future_.get();
             if (result.success && result.listing.has_value()) {
-                state_.friends = *result.listing;
+                state_.social.friends = *result.listing;
             } else {
                 state_.message = result.message;
                 ui::notify(result.message, ui::notice_tone::error, 2.8f);
@@ -239,7 +243,7 @@ void title_friends_controller::poll() {
         if (ready(requests_future_)) {
             const friend_client::request_listing_result result = requests_future_.get();
             if (result.success && result.listing.has_value()) {
-                state_.requests = *result.listing;
+                state_.social.requests = *result.listing;
             } else {
                 state_.message = result.message;
                 ui::notify(result.message, ui::notice_tone::error, 2.8f);
@@ -248,7 +252,7 @@ void title_friends_controller::poll() {
         if (ready(invites_future_)) {
             const friend_client::invite_listing_result result = invites_future_.get();
             if (result.success && result.listing.has_value()) {
-                state_.invites = *result.listing;
+                state_.social.invites = *result.listing;
             } else {
                 state_.message = result.message;
                 ui::notify(result.message, ui::notice_tone::error, 2.8f);
@@ -325,7 +329,7 @@ bool title_friends_controller::handle_input() {
     const Rectangle viewport = ui::inset(layout.list, ui::edge_insets::uniform(14.0f));
     float y = viewport.y;
     if (state_.selected_tab == tab::friends && !state_.operation_active) {
-        for (const friend_client::social_user& user : state_.friends.friends) {
+        for (const friend_client::social_user& user : state_.social.friends.friends) {
             const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
             const Rectangle profile_button{row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f};
             const Rectangle remove_button{row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f};
@@ -346,27 +350,54 @@ bool title_friends_controller::handle_input() {
             y += kRowHeight + kRowGap;
         }
     } else if (state_.selected_tab == tab::requests && !state_.operation_active) {
-        for (const friend_client::friend_request& request : state_.requests.incoming) {
-            const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
-            const Rectangle accept_button{row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f};
-            const Rectangle decline_button{row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f};
-            if (ui::is_clicked(accept_button, ui::draw_layer::modal)) {
-                start_accept_request(request.id);
-                return true;
+        if (!state_.social.requests.incoming.empty()) {
+            y += 30.0f;
+            for (const friend_client::friend_request& request : state_.social.requests.incoming) {
+                const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
+                const Rectangle profile_button{row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f};
+                const Rectangle accept_button{row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f};
+                const Rectangle decline_button{row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f};
+                if (ui::is_clicked(profile_button, ui::draw_layer::modal)) {
+                    state_.pending_profile_user_id = request.requester.id;
+                    close();
+                    return true;
+                }
+                if (ui::is_clicked(accept_button, ui::draw_layer::modal)) {
+                    start_accept_request(request.id);
+                    return true;
+                }
+                if (ui::is_clicked(decline_button, ui::draw_layer::modal)) {
+                    start_decline_request(request.id);
+                    return true;
+                }
+                y += kRowHeight + kRowGap;
             }
-            if (ui::is_clicked(decline_button, ui::draw_layer::modal)) {
-                start_decline_request(request.id);
-                return true;
+        }
+        if (!state_.social.requests.outgoing.empty()) {
+            y += state_.social.requests.incoming.empty() ? 30.0f : 38.0f;
+            for (const friend_client::friend_request& request : state_.social.requests.outgoing) {
+                const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
+                const Rectangle profile_button{row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f};
+                if (ui::is_clicked(profile_button, ui::draw_layer::modal)) {
+                    state_.pending_profile_user_id = request.addressee.id;
+                    close();
+                    return true;
+                }
+                y += kRowHeight + kRowGap;
             }
-            y += kRowHeight + kRowGap;
         }
     } else if (state_.selected_tab == tab::invites && !state_.operation_active) {
-        for (const friend_client::room_invite& invite : state_.invites.invites) {
+        for (const friend_client::room_invite& invite : state_.social.invites.invites) {
             const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
-            const Rectangle accept_button{row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f};
+            const Rectangle accept_button{row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f};
+            const Rectangle read_button{row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f};
             const Rectangle decline_button{row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f};
             if (ui::is_clicked(accept_button, ui::draw_layer::modal)) {
                 start_accept_invite(invite.id);
+                return true;
+            }
+            if (!invite.read && ui::is_clicked(read_button, ui::draw_layer::modal)) {
+                start_read_invite(invite.id);
                 return true;
             }
             if (ui::is_clicked(decline_button, ui::draw_layer::modal)) {
@@ -417,7 +448,7 @@ void title_friends_controller::draw(ui::draw_layer layer) {
         }
 
         if (state.selected_tab == tab::friends) {
-            draw_list(layout.list, state.friends.friends, "No friends yet.", [&](Rectangle row, const friend_client::social_user& user) {
+            draw_list(layout.list, state.social.friends.friends, "No friends yet.", [&](Rectangle row, const friend_client::social_user& user) {
                 draw_user_row(row, user, layer);
                 ui::detail::draw_button_visual({row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f},
                                                false, false, "PROFILE", 12, t.row, t.row_hover, t.text_muted, 1.5f);
@@ -429,25 +460,63 @@ void title_friends_controller::draw(ui::draw_layer layer) {
             return;
         }
         if (state.selected_tab == tab::requests) {
-            draw_list(layout.list, state.requests.incoming, "No incoming friend requests.", [&](Rectangle row, const friend_client::friend_request& request) {
-                const friend_client::social_user& user = request.requester;
-                draw_user_row(row, user, layer);
-                ui::detail::draw_button_visual({row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f},
-                                               false, false, "ACCEPT", 13, t.row_selected, t.row_active, t.accent, 1.5f);
-                ui::detail::draw_button_visual({row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f},
-                                               false, false, "DECLINE", 13, t.row, t.row_hover, t.text_muted, 1.5f);
-            });
+            ui::draw_section(layout.list);
+            const Rectangle viewport = ui::inset(layout.list, ui::edge_insets::uniform(14.0f));
+            if (state.social.requests.incoming.empty() && state.social.requests.outgoing.empty()) {
+                ui::draw_text_in_rect("No friend requests.", 18, viewport, t.text_muted, ui::text_align::center);
+                return;
+            }
+            ui::scoped_clip_rect clip(viewport);
+            float y = viewport.y;
+            if (!state.social.requests.incoming.empty()) {
+                draw_request_section_header({viewport.x, y, viewport.width, 22.0f}, "INCOMING");
+                y += 30.0f;
+                for (const friend_client::friend_request& request : state.social.requests.incoming) {
+                    if (y + kRowHeight > viewport.y + viewport.height) {
+                        break;
+                    }
+                    const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
+                    draw_user_row(row, request.requester, layer);
+                    ui::detail::draw_button_visual({row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f},
+                                                   false, false, "PROFILE", 12, t.row, t.row_hover, t.text_muted, 1.5f);
+                    ui::detail::draw_button_visual({row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f},
+                                                   false, false, "ACCEPT", 13, t.row_selected, t.row_active, t.accent, 1.5f);
+                    ui::detail::draw_button_visual({row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f},
+                                                   false, false, "DECLINE", 13, t.row, t.row_hover, t.text_muted, 1.5f);
+                    y += kRowHeight + kRowGap;
+                }
+            }
+            if (!state.social.requests.outgoing.empty() && y + 30.0f <= viewport.y + viewport.height) {
+                y += state.social.requests.incoming.empty() ? 0.0f : 8.0f;
+                draw_request_section_header({viewport.x, y, viewport.width, 22.0f}, "OUTGOING");
+                y += 30.0f;
+                for (const friend_client::friend_request& request : state.social.requests.outgoing) {
+                    if (y + kRowHeight > viewport.y + viewport.height) {
+                        break;
+                    }
+                    const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
+                    draw_user_row(row, request.addressee, layer);
+                    ui::detail::draw_button_visual({row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f},
+                                                   false, false, "PENDING", 12, t.row, t.row_hover, t.text_muted, 1.5f);
+                    ui::detail::draw_button_visual({row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f},
+                                                   false, false, "PROFILE", 12, t.row, t.row_hover, t.text_muted, 1.5f);
+                    y += kRowHeight + kRowGap;
+                }
+            }
             return;
         }
-        draw_list(layout.list, state.invites.invites, "No room invites.", [&](Rectangle row, const friend_client::room_invite& invite) {
+        draw_list(layout.list, state.social.invites.invites, "No room invites.", [&](Rectangle row, const friend_client::room_invite& invite) {
             draw_user_row(row, invite.sender, layer);
             ui::draw_text_in_rect(invite.room_name.empty() ? "Room invite" : invite.room_name.c_str(),
                                   14,
-                                  {row.x + 78.0f, row.y + 41.0f, row.width - 300.0f, 20.0f},
+                                  {row.x + 78.0f, row.y + 41.0f, row.width - 420.0f, 20.0f},
                                   t.text_muted,
                                   ui::text_align::left);
-            ui::detail::draw_button_visual({row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f},
+            ui::detail::draw_button_visual({row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f},
                                            false, false, "JOIN", 13, t.row_selected, t.row_active, t.accent, 1.5f);
+            ui::detail::draw_button_visual({row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f},
+                                           false, false, invite.read ? "SEEN" : "READ", 12, t.row, t.row_hover,
+                                           invite.read ? t.text_muted : t.accent, 1.5f);
             ui::detail::draw_button_visual({row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f},
                                            false, false, "DECLINE", 13, t.row, t.row_hover, t.text_muted, 1.5f);
         });
@@ -459,7 +528,7 @@ bool title_friends_controller::is_open() const {
 }
 
 int title_friends_controller::unread_badge_count() const {
-    return state_.friends.pending_request_count + state_.friends.unread_invite_count;
+    return title_friends_state::unread_badge_count(state_.social);
 }
 
 std::optional<title_friends_controller::room_join_request> title_friends_controller::consume_room_join_request() {
@@ -556,6 +625,18 @@ void title_friends_controller::start_accept_invite(std::string invite_id) {
     }).detach();
 }
 
+void title_friends_controller::start_read_invite(std::string invite_id) {
+    if (state_.operation_active) {
+        return;
+    }
+    state_.operation_active = true;
+    std::promise<friend_client::operation_result> promise;
+    operation_future_ = promise.get_future();
+    std::thread([promise = std::move(promise), invite_id = std::move(invite_id)]() mutable {
+        promise.set_value(friend_client::read_room_invite(invite_id));
+    }).detach();
+}
+
 void title_friends_controller::start_decline_invite(std::string invite_id) {
     if (state_.operation_active) {
         return;
@@ -598,32 +679,15 @@ void title_friends_controller::poll_social_realtime() {
 }
 
 void title_friends_controller::apply_social_event(const friend_client::social_realtime_event& event) {
-    for (const friend_client::social_presence& presence : event.presence) {
-        for (friend_client::social_user& user : state_.friends.friends) {
-            if (user.id == presence.user_id) {
-                user.online_status = presence.online_status.empty() ? "offline" : presence.online_status;
-                break;
-            }
-        }
-    }
-
+    const title_friends_state::event_apply_result apply_result =
+        title_friends_state::apply_social_event(state_.social, event);
     if (event.invite.has_value()) {
         const friend_client::room_invite& invite = *event.invite;
-        const auto existing = std::find_if(
-            state_.invites.invites.begin(),
-            state_.invites.invites.end(),
-            [&invite](const friend_client::room_invite& current) {
-                return current.id == invite.id;
-            });
-        if (existing == state_.invites.invites.end()) {
-            state_.invites.invites.insert(state_.invites.invites.begin(), invite);
-            ++state_.friends.unread_invite_count;
-        } else {
-            *existing = invite;
+        if (apply_result.invite_inserted) {
+            const std::string sender = invite.sender.display_name.empty() ? "Friend" : invite.sender.display_name;
+            const std::string room = invite.room_name.empty() ? "a room" : invite.room_name;
+            ui::notify(sender + " invited you to " + room + ".", ui::notice_tone::info, 3.2f);
         }
-        const std::string sender = invite.sender.display_name.empty() ? "Friend" : invite.sender.display_name;
-        const std::string room = invite.room_name.empty() ? "a room" : invite.room_name;
-        ui::notify(sender + " invited you to " + room + ".", ui::notice_tone::info, 3.2f);
     }
 
     if (event.type == "error" && !event.message.empty()) {

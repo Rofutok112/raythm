@@ -491,6 +491,7 @@ title_play_view::update_result update(song_select::state& state,
             .source_local_rect = current.ranking_source_local_rect,
             .source_online_rect = current.ranking_source_online_rect,
             .list_rect = current.ranking_list_rect,
+            .online_sources_available = chart != nullptr && song_select::can_use_online_chart_routes(*chart),
         };
         if (left_pressed) {
             const auto source = title_ranking_view::hit_test_source(ranking_config, mouse);

@@ -48,6 +48,7 @@ struct public_profile {
     std::string display_name;
     std::string avatar_url;
     std::string relationship_status;
+    std::string relationship_request_id;
     std::vector<external_link> external_links;
 };
 

@@ -9,6 +9,7 @@
 
 #include "scene_common.h"
 #include "shared/avatar_texture_cache.h"
+#include "shared/public_profile_state.h"
 #include "theme.h"
 #include "tween.h"
 #include "ui_clip.h"
@@ -67,38 +68,6 @@ modal_layout make_layout(const state& state, ui::draw_layer layer = ui::draw_lay
     };
 }
 
-const char* relationship_action_label(const auth::public_profile& profile, bool active) {
-    if (active) {
-        return "WORKING";
-    }
-    if (profile.relationship_status == "none") {
-        return "ADD";
-    }
-    if (profile.relationship_status == "pending_incoming") {
-        return "PENDING";
-    }
-    if (profile.relationship_status == "pending_outgoing") {
-        return "PENDING";
-    }
-    if (profile.relationship_status == "accepted") {
-        return "REMOVE";
-    }
-    if (profile.relationship_status == "blocked") {
-        return "UNBLOCK";
-    }
-    if (profile.relationship_status == "self") {
-        return "SELF";
-    }
-    return "N/A";
-}
-
-bool relationship_action_enabled(const auth::public_profile& profile, bool active) {
-    return !active &&
-           (profile.relationship_status == "none" ||
-            profile.relationship_status == "accepted" ||
-            profile.relationship_status == "blocked");
-}
-
 void draw_profile_body(const state& state, Rectangle modal) {
     const auto& t = *g_theme;
     const Rectangle content = ui::inset(modal, ui::edge_insets::uniform(30.0f));
@@ -114,6 +83,8 @@ void draw_profile_body(const state& state, Rectangle modal) {
 
     const auth::public_profile& profile = *state.result.profile;
     const modal_layout layout = make_layout(state);
+    const public_profile_state::relationship_action_view relationship_action =
+        public_profile_state::relationship_action_for(profile, state.relationship_operation_active);
     const Rectangle avatar_rect{content.x, content.y + 8.0f, kAvatarSize, kAvatarSize};
     avatar_texture_cache::draw_avatar(
         avatar_rect,
@@ -134,15 +105,14 @@ void draw_profile_body(const state& state, Rectangle modal) {
                           {content.x + 124.0f, content.y + 66.0f, content.width - 124.0f, 22.0f},
                           t.accent,
                           ui::text_align::left);
-    const bool relationship_enabled = relationship_action_enabled(profile, state.relationship_operation_active);
     ui::detail::draw_button_visual(layout.relationship_button_rect,
-                                   relationship_enabled && ui::is_hovered(layout.relationship_button_rect, layout.layer),
-                                   relationship_enabled && ui::is_pressed(layout.relationship_button_rect, layout.layer),
-                                   relationship_action_label(profile, state.relationship_operation_active),
+                                   relationship_action.enabled && ui::is_hovered(layout.relationship_button_rect, layout.layer),
+                                   relationship_action.enabled && ui::is_pressed(layout.relationship_button_rect, layout.layer),
+                                   relationship_action.label,
                                    13,
-                                   relationship_enabled ? t.row_selected : t.row,
-                                   relationship_enabled ? t.row_active : t.row_hover,
-                                   relationship_enabled ? t.accent : t.text_muted,
+                                   relationship_action.enabled ? t.row_selected : t.row,
+                                   relationship_action.enabled ? t.row_active : t.row_hover,
+                                   relationship_action.enabled ? t.accent : t.text_muted,
                                    1.5f);
 
     const Rectangle links_area{content.x, content.y + 142.0f, content.width, content.height - 142.0f};
@@ -287,7 +257,9 @@ bool controller::handle_input() {
     }
     if (state_.result.success &&
         state_.result.profile.has_value() &&
-        relationship_action_enabled(*state_.result.profile, state_.relationship_operation_active) &&
+        public_profile_state::relationship_action_for(
+            *state_.result.profile,
+            state_.relationship_operation_active).enabled &&
         ui::is_clicked(layout.relationship_button_rect, layout.layer)) {
         start_relationship_action();
         return true;
@@ -349,11 +321,16 @@ void controller::start_relationship_action() {
     relationship_future_ = promise.get_future();
     std::thread([promise = std::move(promise),
                  user_id = state_.result.profile->id,
-                 relationship_status = state_.result.profile->relationship_status]() mutable {
+                 relationship_action = public_profile_state::relationship_action_for(
+                     *state_.result.profile,
+                     false).action,
+                 relationship_request_id = state_.result.profile->relationship_request_id]() mutable {
         try {
-            if (relationship_status == "accepted") {
+            if (relationship_action == public_profile_state::relationship_action::remove_friend) {
                 promise.set_value(friend_client::remove_friend(user_id));
-            } else if (relationship_status == "blocked") {
+            } else if (relationship_action == public_profile_state::relationship_action::accept_request) {
+                promise.set_value(friend_client::accept_friend_request(relationship_request_id));
+            } else if (relationship_action == public_profile_state::relationship_action::unblock) {
                 promise.set_value(friend_client::unblock_user(user_id));
             } else {
                 promise.set_value(friend_client::send_friend_request(user_id));

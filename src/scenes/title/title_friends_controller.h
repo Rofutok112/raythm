@@ -6,6 +6,7 @@
 
 #include "network/friend_client.h"
 #include "raylib.h"
+#include "title/title_friends_state.h"
 #include "ui_draw.h"
 
 class title_friends_controller {
@@ -44,9 +45,7 @@ private:
         bool suppress_background_close_until_release = false;
         float open_anim = 0.0f;
         tab selected_tab = tab::friends;
-        friend_client::friend_listing friends;
-        friend_client::request_listing requests;
-        friend_client::invite_listing invites;
+        title_friends_state::social_state social;
         std::optional<room_join_request> pending_room_join;
         std::optional<std::string> pending_profile_user_id;
         std::string message;
@@ -58,6 +57,7 @@ private:
     void start_remove_friend(std::string user_id);
     void start_block_user(std::string user_id);
     void start_accept_invite(std::string invite_id);
+    void start_read_invite(std::string invite_id);
     void start_decline_invite(std::string invite_id);
     void apply_operation_result(const friend_client::operation_result& result);
     void ensure_social_realtime();

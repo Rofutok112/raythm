@@ -8,6 +8,7 @@
 #include "song_select/song_select_layout.h"
 #include "song_select/song_select_state.h"
 #include "ui_notice.h"
+#include "ui_hit.h"
 
 namespace {
 
@@ -119,11 +120,13 @@ int main() {
     assert(std::fabs(song_select::content_height(state) - expected_height) < 0.01f);
 
     ui::clear_global_notices();
+    ui::begin_hit_regions();
     song_select::queue_status_message(state, "First notice", true);
     song_select::queue_status_message(state, "Second notice", false);
     assert(ui::global_notice_queue().items.size() == 2);
     assert(ui::global_notice_queue().items.front().message == "First notice");
     assert(ui::global_notice_queue().items.back().message == "Second notice");
+    assert(ui::hit_regions().empty());
 
     ui::tick_global_notices(1.0f);
     assert(ui::global_notice_queue().items.size() == 2);

@@ -235,6 +235,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/network/auth_client.h
         src/network/friend_client.cpp
         src/network/friend_client.h
+        src/network/friend_client_parser.cpp
+        src/network/friend_client_parser.h
         src/network/http_client.cpp
         src/network/http_client.h
         src/network/websocket_client.cpp
@@ -283,6 +285,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/shared/loading_screen_view.h
         src/scenes/shared/public_profile_controller.cpp
         src/scenes/shared/public_profile_controller.h
+        src/scenes/shared/public_profile_state.cpp
+        src/scenes/shared/public_profile_state.h
         src/scenes/shared/square_image_picker.cpp
         src/scenes/shared/square_image_picker.h
         src/scenes/shared/content_status_badge.h
@@ -317,6 +321,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_frame_input_controller.h
         src/scenes/title/title_friends_controller.cpp
         src/scenes/title/title_friends_controller.h
+        src/scenes/title/title_friends_state.cpp
+        src/scenes/title/title_friends_state.h
         src/scenes/title/title_online_mode_controller.cpp
         src/scenes/title/title_online_mode_controller.h
         src/scenes/title/title_mode_update_controller.cpp
@@ -1151,6 +1157,69 @@ add_executable(network_error_smoke
         src/network/network_error.h
         src/tests/network_error_smoke.cpp)
 
+add_executable(friend_client_parser_smoke
+        src/network/friend_client_parser.cpp
+        src/network/friend_client_parser.h
+        src/network/friend_client.h
+        src/network/http_client.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/network/ranking_client.h
+        src/services/ranking_service.h
+        src/models/data_models.h
+        src/gameplay/scoring_ruleset_runtime.cpp
+        src/gameplay/scoring_ruleset_runtime.h
+        src/tests/friend_client_parser_smoke.cpp)
+
+add_executable(friend_client_refresh_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/models/data_models.h
+        src/network/auth_client.cpp
+        src/network/auth_client.h
+        src/network/friend_client.cpp
+        src/network/friend_client.h
+        src/network/friend_client_parser.cpp
+        src/network/friend_client_parser.h
+        src/network/http_client.cpp
+        src/network/http_client.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/network/network_error.cpp
+        src/network/network_error.h
+        src/network/ranking_client.cpp
+        src/network/ranking_client.h
+        src/network/server_environment.cpp
+        src/network/server_environment.h
+        src/network/websocket_client.cpp
+        src/network/websocket_client.h
+        src/services/ranking_service.h
+        src/gameplay/scoring_ruleset_runtime.cpp
+        src/gameplay/scoring_ruleset_runtime.h
+        src/tests/friend_client_refresh_smoke.cpp)
+
+add_executable(title_friends_state_smoke
+        src/network/friend_client.h
+        src/scenes/title/title_friends_state.cpp
+        src/scenes/title/title_friends_state.h
+        src/tests/title_friends_state_smoke.cpp)
+
+add_executable(public_profile_state_smoke
+        src/network/auth_client.h
+        src/scenes/shared/public_profile_state.cpp
+        src/scenes/shared/public_profile_state.h
+        src/tests/public_profile_state_smoke.cpp)
+
+add_executable(multiplayer_state_smoke
+        src/network/auth_client.h
+        src/network/friend_client.h
+        src/scenes/multiplayer/multiplayer_state.h
+        src/tests/multiplayer_state_smoke.cpp)
+
+add_executable(ranking_panel_view_smoke
+        src/scenes/title/ranking_panel_view.h
+        src/tests/ranking_panel_view_smoke.cpp)
+
 add_executable(play_note_draw_queue_smoke
         src/models/data_models.h
         src/scenes/play/play_note_draw_queue.cpp
@@ -1535,6 +1604,12 @@ set(RAYTHM_SMOKE_TARGETS
         performance_system_smoke
         ranking_service_smoke
         network_error_smoke
+        friend_client_parser_smoke
+        friend_client_refresh_smoke
+        title_friends_state_smoke
+        public_profile_state_smoke
+        multiplayer_state_smoke
+        ranking_panel_view_smoke
         play_note_draw_queue_smoke
         play_chart_filter_smoke
         play_flow_controller_smoke
@@ -1582,6 +1657,9 @@ target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)
 target_link_libraries(font_atlas_generator PRIVATE raylib)
 target_link_libraries(update_version_smoke PRIVATE winhttp)
+target_link_libraries(friend_client_refresh_smoke PRIVATE winhttp ws2_32)
+target_link_libraries(multiplayer_state_smoke PRIVATE raylib)
+target_link_libraries(ranking_panel_view_smoke PRIVATE raylib)
 target_link_libraries(song_loader_smoke PRIVATE sqlite3)
 target_link_libraries(local_catalog_database_smoke PRIVATE sqlite3 raylib)
 target_link_libraries(local_content_index_smoke PRIVATE sqlite3)

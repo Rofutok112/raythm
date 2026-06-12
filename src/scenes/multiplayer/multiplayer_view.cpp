@@ -422,9 +422,13 @@ void draw_room_list(state& state) {
 void draw_members(state& state, const room_detail& room) {
     ui::draw_panel(kMemberPanelRect);
     draw_panel_title(kMemberPanelRect, localization::tr_literal("Players"));
-    if (ui::draw_button_colored(kInviteFriendsButtonRect, localization::tr_literal("Invite"), 16,
-                                g_theme->row, g_theme->row_hover, g_theme->text).clicked &&
-        !busy(state)) {
+    const bool invite_available = can_invite_friends(room);
+    const ui::button_state invite_button =
+        ui::draw_button_colored(kInviteFriendsButtonRect, localization::tr_literal("Invite"), 16,
+                                invite_available ? g_theme->row : g_theme->row_soft,
+                                invite_available ? g_theme->row_hover : g_theme->row_soft,
+                                invite_available ? g_theme->text : g_theme->text_muted);
+    if (invite_button.clicked && invite_available && !busy(state)) {
         state.command = ui_command::open_invite_friends;
     }
     Rectangle row{kMemberPanelRect.x + 16.0f, kMemberPanelRect.y + 72.0f, kMemberPanelRect.width - 32.0f, 56.0f};

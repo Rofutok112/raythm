@@ -26,6 +26,7 @@ struct draw_config {
     unsigned char hover_row_alpha = 255;
     unsigned char selected_row_alpha = 255;
     unsigned char selected_hover_row_alpha = 255;
+    bool online_sources_available = true;
     song_select::ranking_load_controller::snapshot ranking_snapshot;
     std::string self_player_display_name;
     std::string avatar_base_url;
@@ -33,6 +34,9 @@ struct draw_config {
 
 float content_height(const ranking_service::listing& listing);
 float max_scroll(Rectangle list_rect, const ranking_service::listing& listing);
+inline bool source_available(const draw_config& config, ranking_service::source source) {
+    return source == ranking_service::source::local || config.online_sources_available;
+}
 std::optional<ranking_service::source> hit_test_source(const draw_config& config, Vector2 point);
 std::optional<std::string> hit_test_profile_user_id(const song_select::ranking_panel_state& panel,
                                                     const draw_config& config,
