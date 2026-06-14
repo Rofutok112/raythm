@@ -302,6 +302,56 @@ bool expect_scroll_automation_success() {
            result.data->scroll_guides.values[3] == 100.0f;
 }
 
+bool expect_extra_metadata_success() {
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "raythm_parser_extra_metadata.rchart";
+    std::ofstream output(path, std::ios::trunc);
+    output << "[Metadata]\n"
+           << "chartId=parser-extra-metadata\n"
+           << "keyCount=4\n"
+           << "difficulty=Extra\n"
+           << "chartAuthor=Codex\n"
+           << "formatVersion=1\n"
+           << "resolution=480\n"
+           << "offset=0\n\n"
+           << "[Timing]\n"
+           << "bpm,0,120\n"
+           << "meter,0,4/4\n\n"
+           << "[Unlocks]\n"
+           << "unlockState=locked\n"
+           << "locked=true\n"
+           << "canDownload=true\n"
+           << "canPlay=false\n"
+           << "lockReason=Clear another chart\n"
+           << "unlockRuleCount=2\n\n"
+           << "[Rewards]\n"
+           << "clearReward,badge,first-clear,First Clear\n\n"
+           << "[Notes]\n"
+           << "tap,0,0\n";
+    output.close();
+
+    const chart_parse_result result = chart_parser::parse(path.string());
+    std::filesystem::remove(path);
+    if (!result.success || !result.data.has_value()) {
+        std::cerr << "Expected extra metadata sections to parse\n";
+        for (const std::string& error : result.errors) {
+            std::cerr << "  " << error << '\n';
+        }
+        return false;
+    }
+
+    const content_unlock_meta& unlock = result.data->meta.extra.unlock;
+    return unlock.unlock_state == "locked" &&
+           unlock.locked &&
+           unlock.can_download &&
+           !unlock.can_play &&
+           unlock.lock_reason == "Clear another chart" &&
+           unlock.unlock_rule_count == 2 &&
+           result.data->meta.extra.clear_rewards.size() == 1 &&
+           result.data->meta.extra.clear_rewards.front().kind == "badge" &&
+           result.data->meta.extra.clear_rewards.front().id == "first-clear";
+}
+
 }
 
 int main() {
@@ -317,6 +367,7 @@ int main() {
     ok = expect_wide_note_bounds_failure() && ok;
     ok = expect_decorative_hold_success() && ok;
     ok = expect_scroll_automation_success() && ok;
+    ok = expect_extra_metadata_success() && ok;
 
     if (!ok) {
         return EXIT_FAILURE;

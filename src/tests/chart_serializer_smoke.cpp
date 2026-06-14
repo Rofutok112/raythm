@@ -27,7 +27,14 @@ bool equal_chart_meta(const chart_meta& left, const chart_meta& right) {
            left.chart_author == right.chart_author &&
            left.format_version == right.format_version &&
            left.resolution == right.resolution &&
-           left.offset == right.offset;
+           left.offset == right.offset &&
+           left.extra.unlock.unlock_state == right.extra.unlock.unlock_state &&
+           left.extra.unlock.locked == right.extra.unlock.locked &&
+           left.extra.unlock.can_download == right.extra.unlock.can_download &&
+           left.extra.unlock.can_play == right.extra.unlock.can_play &&
+           left.extra.unlock.lock_reason == right.extra.unlock.lock_reason &&
+           left.extra.unlock.unlock_rule_count == right.extra.unlock.unlock_rule_count &&
+           left.extra.clear_rewards.size() == right.extra.clear_rewards.size();
 }
 
 bool equal_timing_event(const timing_event& left, const timing_event& right) {
@@ -138,6 +145,14 @@ int main() {
     source.meta.format_version = 1;
     source.meta.resolution = 480;
     source.meta.offset = -35;
+    source.meta.extra.unlock.unlock_state = "locked";
+    source.meta.extra.unlock.locked = true;
+    source.meta.extra.unlock.can_play = false;
+    source.meta.extra.unlock.lock_reason = "Clear serializer-song first";
+    source.meta.extra.unlock.unlock_rule_count = 1;
+    source.meta.extra.clear_rewards = {
+        {.kind = "badge", .id = "serializer-clear", .label = "Serializer Clear"},
+    };
 
     source.timing_events = {
         {.type = timing_event_type::bpm, .tick = 960, .bpm = 180.5f, .numerator = 4, .denominator = 4},
@@ -184,8 +199,13 @@ int main() {
     ok = expect_contains_in_order(content, "chartId=", "keyCount=") && ok;
     ok = expect_contains_in_order(content, "meter,0,4/4", "bpm,960,180.5") && ok;
     ok = expect_contains_in_order(content, "[ScrollAutomation]", "[ScrollAutomationGuides]") && ok;
-    ok = expect_contains_in_order(content, "[ScrollAutomationGuides]", "[Notes]") && ok;
+    ok = expect_contains_in_order(content, "[ScrollAutomationGuides]", "[Unlocks]") && ok;
+    ok = expect_contains_in_order(content, "[Unlocks]", "[Rewards]") && ok;
+    ok = expect_contains_in_order(content, "[Rewards]", "[Notes]") && ok;
     ok = content.find("[Scroll]\n") == std::string::npos && ok;
+    ok = content.find("unlockState=locked") != std::string::npos && ok;
+    ok = content.find("canPlay=false") != std::string::npos && ok;
+    ok = content.find("clearReward,badge,serializer-clear,Serializer Clear") != std::string::npos && ok;
     ok = expect_contains_in_order(content, "point,0,1,hold", "point,1440,1.25,easeOut") && ok;
     ok = content.find("guides,0.25,0.75,2.5,100") != std::string::npos && ok;
     ok = expect_contains_in_order(content, "tap,480,0", "hold,480,2,840") && ok;

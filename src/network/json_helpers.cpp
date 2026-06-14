@@ -8,21 +8,51 @@ namespace {
 
 std::optional<size_t> find_key_end(const std::string& content, const std::string& key) {
     const std::string token = "\"" + key + "\"";
-    size_t search_start = 0;
-    while (true) {
-        const size_t key_pos = content.find(token, search_start);
-        if (key_pos == std::string::npos) {
-            return std::nullopt;
+    size_t object_depth = 0;
+    size_t array_depth = 0;
+    bool in_string = false;
+    bool escaping = false;
+    for (size_t index = 0; index < content.size(); ++index) {
+        const char ch = content[index];
+        if (in_string) {
+            if (escaping) {
+                escaping = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaping = true;
+                continue;
+            }
+            if (ch == '"') {
+                in_string = false;
+            }
+            continue;
         }
-        size_t prefix = key_pos;
-        while (prefix > 0 && std::isspace(static_cast<unsigned char>(content[prefix - 1]))) {
-            --prefix;
+
+        if (ch == '"') {
+            const bool at_current_object_level = object_depth == 1 && array_depth == 0;
+            if (at_current_object_level && content.compare(index, token.size(), token) == 0) {
+                return index + token.size();
+            }
+            in_string = true;
+            continue;
         }
-        if (prefix == 0 || content[prefix - 1] == '{' || content[prefix - 1] == ',') {
-            return key_pos + token.size();
+
+        if (ch == '{') {
+            ++object_depth;
+        } else if (ch == '}') {
+            if (object_depth > 0) {
+                --object_depth;
+            }
+        } else if (ch == '[') {
+            ++array_depth;
+        } else if (ch == ']') {
+            if (array_depth > 0) {
+                --array_depth;
+            }
         }
-        search_start = key_pos + token.size();
     }
+    return std::nullopt;
 }
 
 }  // namespace
