@@ -11,10 +11,12 @@ namespace ranking_service {
 enum class source {
     local,
     online,
+    friends,
 };
 
 struct entry {
     int placement = 0;
+    std::string player_user_id;
     std::string player_display_name;
     std::string player_avatar_url;
     float accuracy = 0.0f;

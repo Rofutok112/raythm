@@ -74,6 +74,16 @@ Rectangle refresh_chip_rect() {
     };
 }
 
+Rectangle friends_chip_rect() {
+    const Rectangle visible = virtual_screen::visible_rect();
+    return {
+        visible.x + visible.width - kAccountChipWidth - kTopBarButtonSize,
+        visible.y,
+        kTopBarButtonSize,
+        kTopBarHeight
+    };
+}
+
 Rectangle account_chip_rect() {
     const Rectangle visible = virtual_screen::visible_rect();
     return {

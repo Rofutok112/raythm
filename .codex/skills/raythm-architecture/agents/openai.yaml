@@ -1,0 +1,4 @@
+interface:
+  display_name: "Raythm Architecture"
+  short_description: "Ideal architecture guidance for raythm features and refactors."
+  default_prompt: "Use this when designing or refactoring raythm architecture, feature boundaries, gameplay systems, scenes, controllers, views, and services."

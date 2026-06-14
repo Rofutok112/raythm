@@ -9,6 +9,10 @@
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/refresh-cw.svg"
     },
     {
+      "name": "friends",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/users-round.svg"
+    },
+    {
       "name": "play",
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/play.svg"
     },

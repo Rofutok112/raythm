@@ -1,6 +1,7 @@
 #include "title/title_header_view.h"
 
 #include <algorithm>
+#include <string>
 
 #include "title/title_layout.h"
 #include "shared/avatar_texture_cache.h"
@@ -37,14 +38,6 @@ void draw_top_bar_item_background(Rectangle rect, Color bg, unsigned char alpha)
     }
 }
 
-void draw_refresh_icon(Rectangle rect, Color color, unsigned char alpha) {
-    raythm_icons::draw_refresh(ui::inset(rect, 17.0f), with_alpha(color, alpha), 3.0f);
-}
-
-void draw_settings_icon(Rectangle rect, Color color, unsigned char alpha) {
-    raythm_icons::draw_settings_gear(ui::inset(rect, 17.0f), with_alpha(color, alpha), 3.0f);
-}
-
 Rectangle centered_icon_rect(Rectangle rect, float inset) {
     const float size = std::max(1.0f, std::min(rect.width, rect.height) - inset * 2.0f);
     return {
@@ -53,6 +46,18 @@ Rectangle centered_icon_rect(Rectangle rect, float inset) {
         size,
         size
     };
+}
+
+void draw_refresh_icon(Rectangle rect, Color color, unsigned char alpha) {
+    raythm_icons::draw_refresh(ui::inset(rect, 17.0f), with_alpha(color, alpha), 3.0f);
+}
+
+void draw_settings_icon(Rectangle rect, Color color, unsigned char alpha) {
+    raythm_icons::draw_settings_gear(ui::inset(rect, 17.0f), with_alpha(color, alpha), 3.0f);
+}
+
+void draw_friends_icon(Rectangle rect, Color color, unsigned char alpha) {
+    raythm_icons::draw_friends(centered_icon_rect(rect, 14.0f), with_alpha(color, alpha), 3.0f);
 }
 
 void draw_profile_chevron(Rectangle rect, Color color, unsigned char alpha) {
@@ -86,6 +91,26 @@ void draw_top_bar_controls(const title_header_view::draw_config& config) {
         : config.refresh_chip_rect;
     draw_refresh_icon(refresh_visual,
                       ui::is_hovered(config.refresh_chip_rect) ? bar_text : bar_muted, account_alpha);
+
+    draw_top_bar_item_background(config.friends_chip_rect, t.row_hover, account_alpha);
+    const Rectangle friends_visual = ui::is_pressed(config.friends_chip_rect)
+        ? ui::inset(config.friends_chip_rect, 1.5f)
+        : config.friends_chip_rect;
+    draw_friends_icon(friends_visual,
+                      ui::is_hovered(config.friends_chip_rect) ? bar_text : bar_muted,
+                      account_alpha);
+    if (config.friends_badge_count > 0) {
+        const Rectangle badge_rect = {config.friends_chip_rect.x + config.friends_chip_rect.width - 26.0f,
+                                      config.friends_chip_rect.y + 12.0f,
+                                      18.0f,
+                                      18.0f};
+        ui::draw_rect_f(badge_rect, with_alpha(t.error, account_alpha));
+        ui::draw_text_in_rect(std::to_string(std::min(config.friends_badge_count, 9)).c_str(),
+                              12,
+                              badge_rect,
+                              with_alpha(WHITE, account_alpha),
+                              ui::text_align::center);
+    }
 
     draw_top_bar_item_background(config.account_chip_rect, t.row_hover, account_alpha);
     const Rectangle avatar_rect = {config.account_chip_rect.x + 16.0f,

@@ -5,6 +5,7 @@
 #include <thread>
 
 #include "multiplayer/multiplayer_client.h"
+#include "network/friend_client.h"
 #include "network/json_helpers.h"
 #include "raylib.h"
 
@@ -21,7 +22,7 @@ bool modal_open(const state& state) {
 
 bool operation_busy(const state& state) {
     return state.pending != pending_operation::none || state.room_list_future.has_value() ||
-           state.operation_future.has_value();
+           state.operation_future.has_value() || state.invite_operation_future.has_value();
 }
 
 bool realtime_connected(const state& state) {
@@ -74,6 +75,16 @@ void refresh_rooms(state& state) {
     });
 }
 
+void refresh_invite_friends(state& state) {
+    if (!state.auth.logged_in || state.invite_friends_future.has_value()) {
+        return;
+    }
+    state.loading_invite_friends = true;
+    state.invite_friends_future = std::async(std::launch::async, []() {
+        return friend_client::fetch_friends();
+    });
+}
+
 void start_operation(state& state, pending_operation operation,
                      std::future<room_operation_result>&& future,
                      const std::string& message) {
@@ -86,10 +97,11 @@ void start_operation(state& state, pending_operation operation,
 }
 
 void apply_room(state& state, const room_detail& room) {
+    const modal_mode existing_modal = state.modal;
     state.current_room = room;
     state.selected_room_id = room.id;
     state.screen = screen_mode::room;
-    state.modal = modal_mode::none;
+    state.modal = existing_modal == modal_mode::invite_friends ? modal_mode::invite_friends : modal_mode::none;
     state.room_refresh_t = 0.0f;
     state.realtime_ping_t = 0.0f;
     state.local_ready = false;
@@ -182,6 +194,18 @@ void finish_operation(state& state, room_operation_result operation) {
     }
 }
 
+void finish_invite_operation(state& state, const friend_client::invite_operation_result& operation) {
+    state.invite_operation_future.reset();
+    state.pending = pending_operation::none;
+    state.selected_invite_user_id.clear();
+    if (!operation.success) {
+        state.status_message = operation.message.empty() ? "Failed to send room invite." : operation.message;
+        return;
+    }
+    state.status_message = "Room invite sent.";
+    state.modal = modal_mode::none;
+}
+
 void submit_create(state& state) {
     std::string name = state.create_name_input.value;
     if (name.empty()) {
@@ -217,6 +241,9 @@ bool handle_command(state& state) {
     if (command == ui_command::none) {
         return false;
     }
+    if (command == ui_command::open_profile) {
+        return false;
+    }
     if (operation_busy(state)) {
         state.command = ui_command::none;
         return false;
@@ -248,6 +275,14 @@ bool handle_command(state& state) {
         state.create_host_only = false;
         state.create_max_players = 4;
         state.modal = modal_mode::create_room;
+    } else if (command == ui_command::open_invite_friends && state.current_room.has_value()) {
+        if (!can_invite_friends(*state.current_room)) {
+            state.status_message = invite_friends_unavailable_message(*state.current_room);
+            return false;
+        }
+        state.modal = modal_mode::invite_friends;
+        state.selected_invite_user_id.clear();
+        refresh_invite_friends(state);
     } else if (command == ui_command::cancel_modal) {
         state.modal = modal_mode::none;
     } else if (command == ui_command::submit_create_room) {
@@ -375,13 +410,26 @@ bool handle_command(state& state) {
                                        return client::start_match(session, room_id);
                                    }),
                         "Starting match...");
+    } else if (command == ui_command::send_room_invite && state.current_room.has_value() &&
+               !state.selected_invite_user_id.empty()) {
+        if (!can_invite_friends(*state.current_room)) {
+            state.status_message = invite_friends_unavailable_message(*state.current_room);
+            return false;
+        }
+        state.pending = pending_operation::invite_friend;
+        state.status_message = "Sending room invite...";
+        state.invite_operation_future = std::async(std::launch::async,
+                                                   [room_id = state.current_room->id,
+                                                    recipient_user_id = state.selected_invite_user_id]() {
+                                                       return friend_client::send_room_invite(room_id, recipient_user_id);
+                                                   });
     }
     return false;
 }
 
 }  // namespace
 
-void on_enter(state& state, const std::string& preferred_room_id) {
+void on_enter(state& state, const std::string& preferred_room_id, const std::string& invite_id) {
     state.auth = auth::load_session_summary();
     const std::optional<auth::session> saved_session = auth::load_saved_session();
     state.self_user_id = saved_session.has_value() ? saved_session->user.id : "";
@@ -391,6 +439,8 @@ void on_enter(state& state, const std::string& preferred_room_id) {
     state.requested_start_song_id.clear();
     state.requested_start_chart_id.clear();
     state.selected_queue_item_id.clear();
+    state.selected_profile_user_id.clear();
+    state.selected_invite_user_id.clear();
     state.start_play_requested = false;
     state.current_queue_download_requested = false;
     state.requested_download_song_id.clear();
@@ -404,9 +454,14 @@ void on_enter(state& state, const std::string& preferred_room_id) {
     state.queue_preview_seek_requested = false;
     state.queue_preview_seek_seconds = 0.0;
     state.loading_rooms = false;
+    state.loading_invite_friends = false;
+    state.invite_friends_loaded_once = false;
     state.room_request_started = false;
     state.room_list_future.reset();
     state.operation_future.reset();
+    state.invite_friends_future.reset();
+    state.invite_operation_future.reset();
+    state.invite_friends = {};
     if (state.realtime != nullptr) {
         state.realtime->close();
         state.realtime.reset();
@@ -434,13 +489,26 @@ void on_enter(state& state, const std::string& preferred_room_id) {
         state.selected_room_id = preferred_room_id;
         state.screen = screen_mode::room;
         state.room_request_started = true;
-        start_operation(state,
-                        pending_operation::refresh_room,
-                        std::async(std::launch::async, [session = state.auth, preferred_room_id]() {
-                            return client::fetch_room(session, preferred_room_id);
-                        }),
-                        "Returning to room...");
+        if (!invite_id.empty()) {
+            start_operation(state,
+                            pending_operation::join_room,
+                            std::async(std::launch::async, [session = state.auth, preferred_room_id, invite_id]() {
+                                return client::join_room(session, preferred_room_id, "", invite_id);
+                            }),
+                            "Joining invited room...");
+        } else {
+            start_operation(state,
+                            pending_operation::refresh_room,
+                            std::async(std::launch::async, [session = state.auth, preferred_room_id]() {
+                                return client::fetch_room(session, preferred_room_id);
+                            }),
+                            "Returning to room...");
+        }
     }
+}
+
+void on_enter(state& state, const std::string& preferred_room_id) {
+    on_enter(state, preferred_room_id, "");
 }
 
 void on_enter(state& state) {
@@ -469,6 +537,11 @@ update_result update(state& state, float dt) {
         return result;
     }
 
+    if (state.command == ui_command::open_profile) {
+        result.requested_profile_user_id = state.selected_profile_user_id;
+        state.selected_profile_user_id.clear();
+        state.command = ui_command::none;
+    }
     result.open_song_select_requested = handle_command(state);
     if (result.back_requested) {
         return result;
@@ -489,6 +562,24 @@ update_result update(state& state, float dt) {
     if (state.operation_future.has_value() &&
         state.operation_future->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         finish_operation(state, state.operation_future->get());
+    }
+
+    if (state.invite_friends_future.has_value() &&
+        state.invite_friends_future->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        const friend_client::friend_listing_result list = state.invite_friends_future->get();
+        state.invite_friends_future.reset();
+        state.loading_invite_friends = false;
+        state.invite_friends_loaded_once = true;
+        if (list.success && list.listing.has_value()) {
+            state.invite_friends = *list.listing;
+        } else {
+            state.status_message = list.message.empty() ? "Failed to load friends." : list.message;
+        }
+    }
+
+    if (state.invite_operation_future.has_value() &&
+        state.invite_operation_future->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        finish_invite_operation(state, state.invite_operation_future->get());
     }
 
     if (state.realtime != nullptr) {

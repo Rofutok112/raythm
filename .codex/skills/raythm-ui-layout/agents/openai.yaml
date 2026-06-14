@@ -1,0 +1,4 @@
+interface:
+  display_name: "Raythm UI Layout"
+  short_description: "Keep raythm UI aligned and uncluttered"
+  default_prompt: "Use $raythm-ui-layout to add or review a raythm UI screen without overlap or broken layout."

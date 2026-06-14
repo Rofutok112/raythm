@@ -16,7 +16,6 @@ libs/*
 !libs/bass/bass.lib
 !libs/bass/bass.dll
 .claude/
-.codex/
 
 # OS generated files
 .DS_Store

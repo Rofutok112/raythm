@@ -466,6 +466,8 @@ int main() {
     });
     source_state.ranking_panel.selected_source = ranking_service::source::online;
     assert(song_select::selection_key_for_state(source_state).source == ranking_service::source::online);
+    source_state.ranking_panel.selected_source = ranking_service::source::friends;
+    assert(song_select::selection_key_for_state(source_state).source == ranking_service::source::friends);
     source_controller.request_catalog_reload(source_state, {"source-song", "source-chart", false});
     spin_until([&] {
         const song_select::catalog_reload_result result = source_controller.poll_catalog_reload(source_state);
@@ -475,6 +477,8 @@ int main() {
         assert(result.selection_changed);
         return true;
     });
+    assert(song_select::selection_key_for_state(source_state).source == ranking_service::source::local);
+    source_state.ranking_panel.selected_source = ranking_service::source::friends;
     assert(song_select::selection_key_for_state(source_state).source == ranking_service::source::local);
 
     song_select::catalog_data legacy_catalog;
@@ -488,7 +492,7 @@ int main() {
     });
     song_select::state legacy_state;
     song_select::apply_catalog(legacy_state, std::move(legacy_catalog), "legacy-song", "legacy-chart");
-    legacy_state.ranking_panel.selected_source = ranking_service::source::online;
+    legacy_state.ranking_panel.selected_source = ranking_service::source::friends;
     const song_select::selection_key legacy_key = song_select::selection_key_for_state(legacy_state);
     assert(legacy_key.song_id == "legacy-song");
     assert(legacy_key.chart_id == "legacy-chart");
@@ -497,7 +501,7 @@ int main() {
     spin_until([&] {
         return poll_ranking(ranking_controller, legacy_state).completed;
     });
-    assert(legacy_state.ranking_panel.selected_source == ranking_service::source::online);
+    assert(legacy_state.ranking_panel.selected_source == ranking_service::source::friends);
     assert(legacy_state.ranking_panel.listing.ranking_source == ranking_service::source::local);
     assert(last_loaded_source == ranking_service::source::local);
     assert(ranking_service::last_personal_best_source == ranking_service::source::local);

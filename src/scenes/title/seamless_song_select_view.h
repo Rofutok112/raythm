@@ -51,6 +51,7 @@ struct layout {
     Rectangle chart_detail_rect;
     Rectangle chart_buttons_rect;
     Rectangle ranking_header_rect;
+    Rectangle ranking_source_friends_rect;
     Rectangle ranking_source_local_rect;
     Rectangle ranking_source_online_rect;
     Rectangle ranking_list_rect;
@@ -83,6 +84,7 @@ struct update_result {
     bool edit_mv_requested = false;
     bool update_song_requested = false;
     bool update_chart_requested = false;
+    std::string requested_profile_user_id;
 };
 
 layout make_layout(float anim_t, Rectangle origin_rect);

@@ -38,7 +38,8 @@ room_operation_result create_room(const auth::session_summary& session,
                                   bool host_only);
 room_operation_result join_room(const auth::session_summary& session,
                                 const std::string& room_id,
-                                const std::string& password);
+                                const std::string& password,
+                                const std::string& invite_id = "");
 room_operation_result fetch_room(const auth::session_summary& session, const std::string& room_id);
 room_operation_result leave_room(const auth::session_summary& session, const std::string& room_id);
 room_operation_result set_ready(const auth::session_summary& session, const std::string& room_id, bool ready);

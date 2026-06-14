@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "services/content_sync_service.h"
+#include "song_select/ranking_source_policy.h"
 #include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_layout.h"
 #include "title/center_panel_view.h"
@@ -487,15 +488,23 @@ title_play_view::update_result update(song_select::state& state,
 
         const title_ranking_view::draw_config ranking_config = {
             .header_rect = current.ranking_header_rect,
+            .source_friends_rect = current.ranking_source_friends_rect,
             .source_local_rect = current.ranking_source_local_rect,
             .source_online_rect = current.ranking_source_online_rect,
             .list_rect = current.ranking_list_rect,
+            .source_availability = song_select::ranking_source_policy::availability_for_chart(chart),
         };
         if (left_pressed) {
             const auto source = title_ranking_view::hit_test_source(ranking_config, mouse);
             if (source.has_value() && source.value() != state.ranking_panel.selected_source) {
                 state.ranking_panel.selected_source = *source;
                 result.ranking_source_changed = true;
+                return result;
+            }
+            const auto profile_user_id =
+                title_ranking_view::hit_test_profile_user_id(state.ranking_panel, ranking_config, mouse);
+            if (profile_user_id.has_value()) {
+                result.requested_profile_user_id = *profile_user_id;
                 return result;
             }
         }

@@ -233,6 +233,10 @@ add_executable(raythm WIN32 src/main.cpp
         src/gameplay/timing_engine.h
         src/network/auth_client.cpp
         src/network/auth_client.h
+        src/network/friend_client.cpp
+        src/network/friend_client.h
+        src/network/friend_client_parser.cpp
+        src/network/friend_client_parser.h
         src/network/http_client.cpp
         src/network/http_client.h
         src/network/websocket_client.cpp
@@ -279,6 +283,16 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/shared/avatar_texture_cache.h
         src/scenes/shared/loading_screen_view.cpp
         src/scenes/shared/loading_screen_view.h
+        src/scenes/shared/public_profile_controller.cpp
+        src/scenes/shared/public_profile_controller.h
+        src/scenes/shared/public_profile_effects.cpp
+        src/scenes/shared/public_profile_effects.h
+        src/scenes/shared/public_profile_service.cpp
+        src/scenes/shared/public_profile_service.h
+        src/scenes/shared/public_profile_state.cpp
+        src/scenes/shared/public_profile_state.h
+        src/scenes/shared/public_profile_view.cpp
+        src/scenes/shared/public_profile_view.h
         src/scenes/shared/square_image_picker.cpp
         src/scenes/shared/square_image_picker.h
         src/scenes/shared/content_status_badge.h
@@ -307,8 +321,32 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_create_mode_controller.h
         src/scenes/title/title_browse_feature.cpp
         src/scenes/title/title_browse_feature.h
+        src/scenes/title/title_common_update_controller.cpp
+        src/scenes/title/title_common_update_controller.h
+        src/scenes/title/title_frame_input_controller.cpp
+        src/scenes/title/title_frame_input_controller.h
+        src/scenes/title/title_friends_controller.cpp
+        src/scenes/title/title_friends_controller.h
+        src/scenes/title/title_friends_effects.cpp
+        src/scenes/title/title_friends_effects.h
+        src/scenes/title/title_friends_reducer.cpp
+        src/scenes/title/title_friends_reducer.h
+        src/scenes/title/title_friends_service.cpp
+        src/scenes/title/title_friends_service.h
+        src/scenes/title/title_friends_state.cpp
+        src/scenes/title/title_friends_state.h
+        src/scenes/title/title_friends_view.cpp
+        src/scenes/title/title_friends_view.h
         src/scenes/title/title_online_mode_controller.cpp
         src/scenes/title/title_online_mode_controller.h
+        src/scenes/title/title_mode_update_controller.cpp
+        src/scenes/title/title_mode_update_controller.h
+        src/scenes/title/title_multiplayer_audio_controller.cpp
+        src/scenes/title/title_multiplayer_audio_controller.h
+        src/scenes/title/title_multiplayer_content_resolver.cpp
+        src/scenes/title/title_multiplayer_content_resolver.h
+        src/scenes/title/title_multiplayer_flow_controller.cpp
+        src/scenes/title/title_multiplayer_flow_controller.h
         src/scenes/title/title_play_create_feature.cpp
         src/scenes/title/title_play_create_feature.h
         src/scenes/title/title_play_data_controller.cpp
@@ -319,6 +357,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_play_mode_controller.h
         src/scenes/title/title_startup_controller.cpp
         src/scenes/title/title_startup_controller.h
+        src/scenes/title/title_shell_effects.cpp
+        src/scenes/title/title_shell_effects.h
         src/scenes/title/title_play_transfer_controller.cpp
         src/scenes/title/title_play_transfer_controller.h
         src/scenes/title/title_profile_controller.cpp
@@ -364,12 +404,17 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/song_list_view.h
         src/scenes/title/title_bgm_controller.cpp
         src/scenes/title/title_bgm_controller.h
+        src/scenes/title/title_command.h
+        src/scenes/title/title_command_dispatcher.cpp
+        src/scenes/title/title_command_dispatcher.h
         src/scenes/title/seamless_song_select_view.cpp
         src/scenes/title/seamless_song_select_view.h
         src/scenes/title/title_spectrum_visualizer.cpp
         src/scenes/title/title_spectrum_visualizer.h
         src/scenes/title/title_settings_overlay.cpp
         src/scenes/title/title_settings_overlay.h
+        src/scenes/title/title_settings_flow_controller.cpp
+        src/scenes/title/title_settings_flow_controller.h
         src/scenes/multiplayer/multiplayer_client.cpp
         src/scenes/multiplayer/multiplayer_client.h
         src/scenes/multiplayer/multiplayer_controller.cpp
@@ -414,6 +459,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_import_export_service.h
         src/scenes/song_select/song_select_command_controller.cpp
         src/scenes/song_select/song_select_command_controller.h
+        src/scenes/song_select/ranking_source_policy.cpp
+        src/scenes/song_select/ranking_source_policy.h
         src/scenes/song_select/selection_key.cpp
         src/scenes/song_select/selection_key.h
         src/scenes/song_select/song_select_data_controller.cpp
@@ -735,6 +782,7 @@ add_executable(song_select_data_controller_smoke
         src/updater/update_verify.h
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
+        src/scenes/song_select/ranking_source_policy.h
         src/scenes/song_select/selection_key.cpp
         src/scenes/song_select/selection_key.h
         src/scenes/song_select/song_select_data_controller.cpp
@@ -1128,6 +1176,71 @@ add_executable(network_error_smoke
         src/network/network_error.h
         src/tests/network_error_smoke.cpp)
 
+add_executable(friend_client_parser_smoke
+        src/network/friend_client_parser.cpp
+        src/network/friend_client_parser.h
+        src/network/friend_client.h
+        src/network/http_client.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/network/ranking_client.h
+        src/services/ranking_service.h
+        src/models/data_models.h
+        src/gameplay/scoring_ruleset_runtime.cpp
+        src/gameplay/scoring_ruleset_runtime.h
+        src/tests/friend_client_parser_smoke.cpp)
+
+add_executable(friend_client_refresh_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/models/data_models.h
+        src/network/auth_client.cpp
+        src/network/auth_client.h
+        src/network/friend_client.cpp
+        src/network/friend_client.h
+        src/network/friend_client_parser.cpp
+        src/network/friend_client_parser.h
+        src/network/http_client.cpp
+        src/network/http_client.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/network/network_error.cpp
+        src/network/network_error.h
+        src/network/ranking_client.cpp
+        src/network/ranking_client.h
+        src/network/server_environment.cpp
+        src/network/server_environment.h
+        src/network/websocket_client.cpp
+        src/network/websocket_client.h
+        src/services/ranking_service.h
+        src/gameplay/scoring_ruleset_runtime.cpp
+        src/gameplay/scoring_ruleset_runtime.h
+        src/tests/friend_client_refresh_smoke.cpp)
+
+add_executable(title_friends_state_smoke
+        src/network/friend_client.h
+        src/scenes/title/title_friends_reducer.cpp
+        src/scenes/title/title_friends_reducer.h
+        src/scenes/title/title_friends_state.cpp
+        src/scenes/title/title_friends_state.h
+        src/tests/title_friends_state_smoke.cpp)
+
+add_executable(public_profile_state_smoke
+        src/network/auth_client.h
+        src/scenes/shared/public_profile_state.cpp
+        src/scenes/shared/public_profile_state.h
+        src/tests/public_profile_state_smoke.cpp)
+
+add_executable(multiplayer_state_smoke
+        src/network/auth_client.h
+        src/network/friend_client.h
+        src/scenes/multiplayer/multiplayer_state.h
+        src/tests/multiplayer_state_smoke.cpp)
+
+add_executable(ranking_panel_view_smoke
+        src/scenes/title/ranking_panel_view.h
+        src/tests/ranking_panel_view_smoke.cpp)
+
 add_executable(play_note_draw_queue_smoke
         src/models/data_models.h
         src/scenes/play/play_note_draw_queue.cpp
@@ -1512,6 +1625,12 @@ set(RAYTHM_SMOKE_TARGETS
         performance_system_smoke
         ranking_service_smoke
         network_error_smoke
+        friend_client_parser_smoke
+        friend_client_refresh_smoke
+        title_friends_state_smoke
+        public_profile_state_smoke
+        multiplayer_state_smoke
+        ranking_panel_view_smoke
         play_note_draw_queue_smoke
         play_chart_filter_smoke
         play_flow_controller_smoke
@@ -1559,6 +1678,9 @@ target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)
 target_link_libraries(font_atlas_generator PRIVATE raylib)
 target_link_libraries(update_version_smoke PRIVATE winhttp)
+target_link_libraries(friend_client_refresh_smoke PRIVATE winhttp ws2_32)
+target_link_libraries(multiplayer_state_smoke PRIVATE raylib)
+target_link_libraries(ranking_panel_view_smoke PRIVATE raylib)
 target_link_libraries(song_loader_smoke PRIVATE sqlite3)
 target_link_libraries(local_catalog_database_smoke PRIVATE sqlite3 raylib)
 target_link_libraries(local_content_index_smoke PRIVATE sqlite3)

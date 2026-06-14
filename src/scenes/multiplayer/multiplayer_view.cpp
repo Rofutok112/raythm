@@ -29,6 +29,8 @@ constexpr Rectangle kListTitleRect{kListRect.x + 30.0f, kListRect.y + 15.0f, 360
 constexpr Rectangle kRefreshButtonRect{kListRect.x + kListRect.width - 78.0f, kListRect.y + 15.0f, 54.0f, 54.0f};
 constexpr Rectangle kListViewRect{kListRect.x + 14.0f, kListRect.y + 84.0f, kListRect.width - 28.0f, kListRect.height - 102.0f};
 constexpr Rectangle kMemberPanelRect{39.0f, 109.0f, 430.0f, 854.0f};
+constexpr Rectangle kInviteFriendsButtonRect{kMemberPanelRect.x + kMemberPanelRect.width - 146.0f,
+                                             kMemberPanelRect.y + 15.0f, 122.0f, 42.0f};
 constexpr Rectangle kQueuePanelRect{500.0f, 109.0f, 820.0f, 854.0f};
 constexpr Rectangle kChatPanelRect{1351.0f, 109.0f, 527.0f, 854.0f};
 constexpr Rectangle kLeaveButtonRect{39.0f, 983.0f, 430.0f, 58.0f};
@@ -49,6 +51,7 @@ constexpr float kQueueRowGap = 10.0f;
 constexpr float kQueueWheelStep = 120.0f;
 constexpr Rectangle kCreateModalRect{610.0f, 250.0f, 700.0f, 430.0f};
 constexpr Rectangle kPasswordModalRect{660.0f, 310.0f, 600.0f, 300.0f};
+constexpr Rectangle kInviteModalRect{560.0f, 210.0f, 800.0f, 620.0f};
 constexpr int kRoomGridColumns = 3;
 constexpr float kRoomCardGap = 16.0f;
 constexpr float kRoomCardHeight = 132.0f;
@@ -236,6 +239,21 @@ std::string member_avatar_label(const room_member& member) {
     return result.empty() ? "P" : result;
 }
 
+std::string friend_avatar_label(const friend_client::social_user& user) {
+    const std::string& source = user.display_name.empty() ? user.id : user.display_name;
+    std::string result;
+    result.reserve(2);
+    for (char ch : source) {
+        if (std::isalnum(static_cast<unsigned char>(ch))) {
+            result.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
+            if (result.size() == 2) {
+                break;
+            }
+        }
+    }
+    return result.empty() ? "F" : result;
+}
+
 void draw_member_presence_icon(Rectangle rect, const room_member& member) {
     const Color color = member_presence_color(member);
     if (member.status == "PLAYING") {
@@ -401,17 +419,31 @@ void draw_room_list(state& state) {
     }
 }
 
-void draw_members(const state& state, const room_detail& room) {
+void draw_members(state& state, const room_detail& room) {
     ui::draw_panel(kMemberPanelRect);
     draw_panel_title(kMemberPanelRect, localization::tr_literal("Players"));
+    const bool invite_available = can_invite_friends(room);
+    const ui::button_state invite_button =
+        ui::draw_button_colored(kInviteFriendsButtonRect, localization::tr_literal("Invite"), 16,
+                                invite_available ? g_theme->row : g_theme->row_soft,
+                                invite_available ? g_theme->row_hover : g_theme->row_soft,
+                                invite_available ? g_theme->text : g_theme->text_muted);
+    if (invite_button.clicked && invite_available && !busy(state)) {
+        state.command = ui_command::open_invite_friends;
+    }
     Rectangle row{kMemberPanelRect.x + 16.0f, kMemberPanelRect.y + 72.0f, kMemberPanelRect.width - 32.0f, 56.0f};
     for (const room_member& member : room.members) {
         if (!visible_member_status(member.status)) {
             continue;
         }
         const bool self = (!state.self_user_id.empty() && member.user_id == state.self_user_id);
-        ui::draw_row(row, self ? g_theme->row_selected : g_theme->row, g_theme->row_hover,
-                     member.role == "HOST" ? g_theme->slow : g_theme->border, 1.5f);
+        const ui::row_state member_row =
+            ui::draw_row(row, self ? g_theme->row_selected : g_theme->row, g_theme->row_hover,
+                         member.role == "HOST" ? g_theme->slow : g_theme->border, 1.5f);
+        if (member_row.clicked && !member.user_id.empty()) {
+            state.selected_profile_user_id = member.user_id;
+            state.command = ui_command::open_profile;
+        }
         const bool host = member.role == "HOST";
         const std::string name = member.display_name;
         const Rectangle avatar_rect{row.x + 12.0f,
@@ -759,6 +791,84 @@ void draw_password_modal(state& state) {
     }
 }
 
+void draw_invite_friends_modal(state& state) {
+    ui::register_hit_region(kInviteModalRect, ui::draw_layer::modal);
+    ui::draw_fullscreen_overlay(with_alpha(BLACK, 130));
+    ui::draw_panel(kInviteModalRect);
+    ui::draw_text_in_rect(localization::tr_literal("Invite friends"), 28,
+                          {kInviteModalRect.x + 26.0f, kInviteModalRect.y + 22.0f,
+                           kInviteModalRect.width - 220.0f, 36.0f},
+                          g_theme->text, ui::text_align::left);
+    ui::draw_text_in_rect(state.loading_invite_friends ? localization::tr_literal("Loading friends...") : localization::tr_literal("Room invite"),
+                          16,
+                          {kInviteModalRect.x + 26.0f, kInviteModalRect.y + 60.0f,
+                           kInviteModalRect.width - 220.0f, 24.0f},
+                          g_theme->text_muted, ui::text_align::left);
+
+    const ui::button_state close =
+        ui::enqueue_button({kInviteModalRect.x + kInviteModalRect.width - 142.0f,
+                            kInviteModalRect.y + 26.0f, 104.0f, 42.0f},
+                           localization::tr(localization::text_key::cancel), 16, ui::draw_layer::modal);
+    if (close.clicked) {
+        state.command = ui_command::cancel_modal;
+    }
+
+    const Rectangle list{kInviteModalRect.x + 30.0f, kInviteModalRect.y + 108.0f,
+                         kInviteModalRect.width - 60.0f, kInviteModalRect.height - 146.0f};
+    ui::draw_section(list);
+    const Rectangle viewport = ui::inset(list, ui::edge_insets::uniform(14.0f));
+    if (state.loading_invite_friends && !state.invite_friends_loaded_once) {
+        ui::draw_text_in_rect(localization::tr_literal("Loading friends..."), 18, viewport,
+                              g_theme->text_muted, ui::text_align::center);
+        return;
+    }
+    if (state.invite_friends.friends.empty()) {
+        ui::draw_text_in_rect(localization::tr_literal("No friends yet."), 18, viewport,
+                              g_theme->text_muted, ui::text_align::center);
+        return;
+    }
+
+    ui::scoped_clip_rect clip(viewport);
+    Rectangle row{viewport.x, viewport.y, viewport.width, 72.0f};
+    for (const friend_client::social_user& user : state.invite_friends.friends) {
+        if (row.y + row.height > viewport.y + viewport.height) {
+            break;
+        }
+        ui::draw_row(row, g_theme->row, g_theme->row_hover, g_theme->border_light, 1.5f);
+        const Rectangle avatar_rect{row.x + 14.0f, row.y + 12.0f, 48.0f, 48.0f};
+        avatar_texture_cache::draw_avatar(avatar_rect,
+                                          user.avatar_url,
+                                          friend_avatar_label(user),
+                                          g_theme->row_soft_selected,
+                                          g_theme->text,
+                                          16,
+                                          state.auth.server_url);
+        ui::draw_text_in_rect(user.display_name.empty() ? "Unknown Player" : user.display_name.c_str(),
+                              20,
+                              {row.x + 78.0f, row.y + 11.0f, row.width - 240.0f, 28.0f},
+                              g_theme->text, ui::text_align::left);
+        const std::string status = user.current_room_name.empty()
+            ? (user.online_status.empty() ? "offline" : user.online_status)
+            : "in " + user.current_room_name;
+        ui::draw_text_in_rect(status.c_str(),
+                              14,
+                              {row.x + 78.0f, row.y + 41.0f, row.width - 240.0f, 20.0f},
+                              user.online_status == "offline" ? g_theme->text_muted : g_theme->success,
+                              ui::text_align::left);
+        const bool selected = state.selected_invite_user_id == user.id;
+        const ui::button_state invite =
+            ui::enqueue_button({row.x + row.width - 126.0f, row.y + 17.0f, 104.0f, 38.0f},
+                               localization::tr_literal(selected || state.pending == pending_operation::invite_friend ? "Sending..." : "Invite"),
+                               14,
+                               ui::draw_layer::modal);
+        if (invite.clicked && !busy(state) && !user.id.empty()) {
+            state.selected_invite_user_id = user.id;
+            state.command = ui_command::send_room_invite;
+        }
+        row.y += row.height + 10.0f;
+    }
+}
+
 }  // namespace
 
 void draw(state& state) {
@@ -772,6 +882,8 @@ void draw(state& state) {
         draw_create_modal(state);
     } else if (state.modal == modal_mode::password) {
         draw_password_modal(state);
+    } else if (state.modal == modal_mode::invite_friends) {
+        draw_invite_friends_modal(state);
     }
 }
 

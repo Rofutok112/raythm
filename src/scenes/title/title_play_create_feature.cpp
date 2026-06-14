@@ -271,15 +271,15 @@ void title_play_create_feature::draw_or_apply_confirmation(title_audio_controlle
         state_, audio_controller, make_transfer_callbacks(callbacks));
 }
 
-void title_play_create_feature::update_play(scene_manager& manager,
+title_play_create_feature::play_update_result title_play_create_feature::update_play(
+                                            scene_manager& manager,
                                             title_audio_controller& audio_controller,
                                             float anim_t,
                                             Rectangle origin_rect,
-                                            float dt,
-                                            const play_update_callbacks& callbacks) {
+                                            float dt) {
     state_.filter.include_chartless_songs = false;
     const title_selection_media_snapshot media = media_snapshot(audio_controller);
-    title_play_mode_controller::update(
+    const title_play_mode_controller::update_result result = title_play_mode_controller::update(
         manager,
         state_,
         audio_controller,
@@ -289,26 +289,29 @@ void title_play_create_feature::update_play(scene_manager& manager,
         origin_rect,
         dt,
         {
-            .enter_home = callbacks.enter_home,
             .sync_media = [this, &audio_controller]() {
                 sync_selection_media(audio_controller, media_context::play);
             },
             .request_ranking_reload = [this]() { request_ranking_reload(); },
-            .open_update_catalog = [this, &callbacks](bool include_chart) {
-                const song_select::song_entry* song = song_select::selected_song(state_);
-                if (song == nullptr || !callbacks.open_update_catalog) {
-                    return;
-                }
-                std::string chart_id;
-                const auto filtered = song_select::filtered_charts_for_selected_song(state_);
-                const song_select::chart_option* chart = song_select::selected_chart_for(state_, filtered);
-                if (include_chart && chart != nullptr) {
-                    chart_id = chart->meta.chart_id;
-                }
-                callbacks.open_update_catalog(song->song.meta.song_id, chart_id);
-            },
-            .add_selected_to_multiplayer = callbacks.add_selected_to_multiplayer,
         });
+    if (result.title_command.type == title::command_type::open_update_catalog) {
+        const song_select::song_entry* song = song_select::selected_song(state_);
+        if (song == nullptr) {
+            return {};
+        }
+        std::string chart_id;
+        const auto filtered = song_select::filtered_charts_for_selected_song(state_);
+        const song_select::chart_option* chart = song_select::selected_chart_for(state_, filtered);
+        if (result.update_catalog_include_chart && chart != nullptr) {
+            chart_id = chart->meta.chart_id;
+        }
+        return {
+            .title_command = title::command::open_update_catalog(song->song.meta.song_id, chart_id),
+        };
+    }
+    return {
+        .title_command = result.title_command,
+    };
 }
 
 void title_play_create_feature::update_create(scene_manager& manager,
