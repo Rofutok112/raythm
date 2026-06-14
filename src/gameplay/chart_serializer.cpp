@@ -72,6 +72,19 @@ bool scroll_guides_are_default(const scroll_automation_guides& guides) {
     }
     return true;
 }
+
+bool unlock_meta_is_default(const content_unlock_meta& unlock) {
+    return unlock.unlock_state == "unlocked" &&
+           !unlock.locked &&
+           unlock.can_download &&
+           unlock.can_play &&
+           unlock.lock_reason.empty() &&
+           unlock.unlock_rule_count == 0;
+}
+
+const char* bool_name(bool value) {
+    return value ? "true" : "false";
+}
 }
 
 bool write_chart(std::ostream& output, const chart_data& data) {
@@ -144,6 +157,34 @@ bool write_chart(std::ostream& output, const chart_data& data) {
             output << ',' << format_float(guide);
         }
         output << "\n\n";
+    }
+
+    if (!unlock_meta_is_default(data.meta.extra.unlock)) {
+        const content_unlock_meta& unlock = data.meta.extra.unlock;
+        output << "[Unlocks]\n";
+        output << "unlockState=" << unlock.unlock_state << '\n';
+        output << "locked=" << bool_name(unlock.locked) << '\n';
+        output << "canDownload=" << bool_name(unlock.can_download) << '\n';
+        output << "canPlay=" << bool_name(unlock.can_play) << '\n';
+        if (!unlock.lock_reason.empty()) {
+            output << "lockReason=" << unlock.lock_reason << '\n';
+        }
+        if (unlock.unlock_rule_count > 0) {
+            output << "unlockRuleCount=" << unlock.unlock_rule_count << '\n';
+        }
+        output << '\n';
+    }
+
+    if (!data.meta.extra.clear_rewards.empty()) {
+        output << "[Rewards]\n";
+        for (const content_clear_reward& reward : data.meta.extra.clear_rewards) {
+            output << "clearReward," << reward.kind << ',' << reward.id;
+            if (!reward.label.empty()) {
+                output << ',' << reward.label;
+            }
+            output << '\n';
+        }
+        output << '\n';
     }
 
     std::vector<note_data> sorted_notes = data.notes;

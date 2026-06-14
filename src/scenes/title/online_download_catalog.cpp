@@ -65,6 +65,7 @@ song_select::song_entry make_remote_song_entry(const remote_song_payload& song, 
     entry.song.meta.chart_count = song.chart_count;
     entry.song.meta.play_count = song.play_count;
     entry.song.meta.has_play_count = song.has_play_count;
+    entry.song.meta.extra = song.extra;
     entry.kind = content_kind_from_remote(song.content_source);
     entry.storage = storage_policy::managed_package;
     entry.verification = verification_state::unchecked;
@@ -191,6 +192,7 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
     state_entry.song.song.meta.chart_count = remote_song.chart_count;
     state_entry.song.song.meta.play_count = remote_song.play_count;
     state_entry.song.song.meta.has_play_count = remote_song.has_play_count;
+    state_entry.song.song.meta.extra = remote_song.extra;
     state_entry.song.source_status = source_status_from_remote(remote_song.content_source);
     state_entry.song.online_identity = online_content::song_identity{
         .server_url = server_url,
@@ -373,6 +375,7 @@ void append_chart_page(song_entry_state& song_state,
             .format_version = chart.format_version,
             .resolution = chart.resolution,
             .offset = chart.offset,
+            .extra = chart.extra,
         };
         remote_chart.kind = content_kind_from_remote(chart.content_source);
         remote_chart.storage = storage_policy::managed_package;

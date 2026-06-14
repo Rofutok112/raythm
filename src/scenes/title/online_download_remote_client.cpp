@@ -453,6 +453,49 @@ http_response send_request(const std::string&, const std::string&) {
 }
 #endif
 
+content_unlock_meta parse_content_unlock_meta(const std::string& object) {
+    content_unlock_meta unlock;
+    unlock.unlock_state = json::extract_string(object, "unlockState").value_or(unlock.unlock_state);
+    unlock.locked = json::extract_bool(object, "locked").value_or(unlock.locked);
+    unlock.can_download = json::extract_bool(object, "canDownload").value_or(unlock.can_download);
+    unlock.can_play = json::extract_bool(object, "canPlay").value_or(unlock.can_play);
+    unlock.lock_reason = json::extract_string(object, "lockReason").value_or("");
+    unlock.unlock_rule_count = std::max(0, json::extract_int(object, "unlockRuleCount").value_or(0));
+    return unlock;
+}
+
+std::vector<content_clear_reward> parse_clear_rewards(const std::string& array_content) {
+    std::vector<content_clear_reward> rewards;
+    for (const std::string& reward_object : json::extract_objects_from_array(array_content)) {
+        content_clear_reward reward;
+        reward.kind = json::extract_string(reward_object, "kind").value_or("");
+        reward.id = json::extract_string(reward_object, "id").value_or("");
+        reward.label = json::extract_string(reward_object, "label").value_or("");
+        if (!reward.kind.empty() || !reward.id.empty() || !reward.label.empty()) {
+            rewards.push_back(std::move(reward));
+        }
+    }
+    return rewards;
+}
+
+template <typename ExtraMeta>
+void parse_extra_meta(const std::string& object, ExtraMeta& extra) {
+    if (const std::optional<std::string> unlock_object = json::extract_object(object, "unlock")) {
+        extra.unlock = parse_content_unlock_meta(*unlock_object);
+    }
+    if (const std::optional<std::string> extensions = json::extract_object(object, "metadataExtensions")) {
+        if (const std::optional<std::string> mv_references = json::extract_object(*extensions, "mvReferences")) {
+            extra.mv_references.count = std::max(0, json::extract_int(*mv_references, "count").value_or(0));
+            if (const std::optional<std::string> ids = json::extract_array(*mv_references, "ids")) {
+                extra.mv_references.ids = json::extract_strings_from_array(*ids);
+            }
+        }
+        if (const std::optional<std::string> clear_rewards = json::extract_array(*extensions, "clearRewards")) {
+            extra.clear_rewards = parse_clear_rewards(*clear_rewards);
+        }
+    }
+}
+
 std::optional<remote_song_payload> parse_remote_song(const std::string& object) {
     const auto id = json::extract_string(object, "id");
     const auto title = json::extract_string(object, "title");
@@ -512,6 +555,8 @@ std::optional<remote_song_payload> parse_remote_song(const std::string& object) 
     }
     const std::optional<int> offset = json::extract_int(object, "offset");
     const std::optional<bool> can_edit = json::extract_bool(object, "canEdit");
+    song_extra_meta extra;
+    parse_extra_meta(object, extra);
 
     return remote_song_payload{
         .id = *id,
@@ -543,6 +588,7 @@ std::optional<remote_song_payload> parse_remote_song(const std::string& object) 
         .song_json_fingerprint = json::extract_string(object, "songJsonFingerprint").value_or(""),
         .audio_hash = json::extract_string(object, "audioSha256").value_or(""),
         .jacket_hash = json::extract_string(object, "jacketSha256").value_or(""),
+        .extra = std::move(extra),
     };
 }
 
@@ -590,6 +636,8 @@ std::optional<remote_chart_payload> parse_remote_chart(const std::string& object
         uploader_id = json::extract_string(*uploader_object, "id").value_or("");
     }
     const std::optional<bool> can_edit = json::extract_bool(object, "canEdit");
+    chart_extra_meta extra;
+    parse_extra_meta(object, extra);
 
     return remote_chart_payload{
         .id = *id,
@@ -617,6 +665,7 @@ std::optional<remote_chart_payload> parse_remote_chart(const std::string& object
         .can_edit = can_edit.value_or(false),
         .has_can_edit = can_edit.has_value(),
         .uploader_id = std::move(uploader_id),
+        .extra = std::move(extra),
     };
 }
 

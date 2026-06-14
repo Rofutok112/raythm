@@ -69,6 +69,16 @@ std::optional<float> parse_float(const std::string& value) {
     }
 }
 
+std::optional<bool> parse_bool(const std::string& value) {
+    if (value == "true" || value == "1") {
+        return true;
+    }
+    if (value == "false" || value == "0") {
+        return false;
+    }
+    return std::nullopt;
+}
+
 std::string format_line_error(int line_number, const std::string& message) {
     return "Line " + std::to_string(line_number) + ": " + message;
 }
@@ -278,6 +288,12 @@ chart_parse_result chart_parser::parse_stream(std::istream& input, const std::st
     if (sections.find("ScrollAutomationGuides") != sections.end()) {
         data.scroll_guides = parse_scroll_automation_guides(sections["ScrollAutomationGuides"], errors);
     }
+    if (sections.find("Unlocks") != sections.end()) {
+        data.meta.extra.unlock = parse_unlocks(sections["Unlocks"], errors);
+    }
+    if (sections.find("Rewards") != sections.end()) {
+        data.meta.extra.clear_rewards = parse_rewards(sections["Rewards"], errors);
+    }
     data.notes = parse_notes(sections["Notes"], errors);
 
     if (errors.empty()) {
@@ -380,6 +396,92 @@ chart_meta chart_parser::parse_metadata(const std::vector<numbered_line>& lines,
     }
 
     return meta;
+}
+
+content_unlock_meta chart_parser::parse_unlocks(const std::vector<numbered_line>& lines,
+                                                std::vector<std::string>& errors) {
+    content_unlock_meta unlock;
+    std::set<std::string> seen_keys;
+    for (const numbered_line& line : lines) {
+        const std::optional<std::pair<std::string, std::string>> entry = parse_metadata_entry(line);
+        if (!entry.has_value()) {
+            errors.push_back(format_line_error(line.first, "Unlock entry must be 'key=value'"));
+            continue;
+        }
+        const std::string& key = entry->first;
+        const std::string& value = entry->second;
+        if (!seen_keys.insert(key).second) {
+            errors.push_back(format_line_error(line.first, "Duplicate unlock key: " + key));
+            continue;
+        }
+
+        if (key == "unlockState") {
+            unlock.unlock_state = value;
+        } else if (key == "locked") {
+            const std::optional<bool> parsed = parse_bool(value);
+            if (!parsed.has_value()) {
+                errors.push_back(format_line_error(line.first, "locked must be true or false"));
+            } else {
+                unlock.locked = *parsed;
+            }
+        } else if (key == "canDownload") {
+            const std::optional<bool> parsed = parse_bool(value);
+            if (!parsed.has_value()) {
+                errors.push_back(format_line_error(line.first, "canDownload must be true or false"));
+            } else {
+                unlock.can_download = *parsed;
+            }
+        } else if (key == "canPlay") {
+            const std::optional<bool> parsed = parse_bool(value);
+            if (!parsed.has_value()) {
+                errors.push_back(format_line_error(line.first, "canPlay must be true or false"));
+            } else {
+                unlock.can_play = *parsed;
+            }
+        } else if (key == "lockReason") {
+            unlock.lock_reason = value;
+        } else if (key == "unlockRuleCount") {
+            const std::optional<int> parsed = parse_int(value);
+            if (!parsed.has_value() || *parsed < 0) {
+                errors.push_back(format_line_error(line.first, "unlockRuleCount must be a non-negative integer"));
+            } else {
+                unlock.unlock_rule_count = *parsed;
+            }
+        } else if (key == "mvCount") {
+            const std::optional<int> parsed = parse_int(value);
+            if (!parsed.has_value() || *parsed < 0) {
+                errors.push_back(format_line_error(line.first, "mvCount must be a non-negative integer"));
+            }
+        } else {
+            errors.push_back(format_line_error(line.first, "Unknown unlock key: " + key));
+        }
+    }
+    return unlock;
+}
+
+std::vector<content_clear_reward> chart_parser::parse_rewards(const std::vector<numbered_line>& lines,
+                                                              std::vector<std::string>& errors) {
+    std::vector<content_clear_reward> rewards;
+    for (const numbered_line& line : lines) {
+        const std::vector<std::string> tokens = split_csv_line(line.second);
+        if (tokens.empty()) {
+            continue;
+        }
+        if (tokens[0] != "clearReward") {
+            errors.push_back(format_line_error(line.first, "Unknown reward entry type: " + tokens[0]));
+            continue;
+        }
+        if (tokens.size() < 3 || tokens.size() > 4) {
+            errors.push_back(format_line_error(line.first, "clearReward must be clearReward,kind,id[,label]"));
+            continue;
+        }
+        content_clear_reward reward;
+        reward.kind = tokens[1];
+        reward.id = tokens[2];
+        reward.label = tokens.size() >= 4 ? tokens[3] : "";
+        rewards.push_back(std::move(reward));
+    }
+    return rewards;
 }
 
 std::vector<timing_event> chart_parser::parse_timing(const std::vector<numbered_line>& lines, std::vector<std::string>& errors) {
