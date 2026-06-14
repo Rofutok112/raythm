@@ -285,8 +285,14 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/shared/loading_screen_view.h
         src/scenes/shared/public_profile_controller.cpp
         src/scenes/shared/public_profile_controller.h
+        src/scenes/shared/public_profile_effects.cpp
+        src/scenes/shared/public_profile_effects.h
+        src/scenes/shared/public_profile_service.cpp
+        src/scenes/shared/public_profile_service.h
         src/scenes/shared/public_profile_state.cpp
         src/scenes/shared/public_profile_state.h
+        src/scenes/shared/public_profile_view.cpp
+        src/scenes/shared/public_profile_view.h
         src/scenes/shared/square_image_picker.cpp
         src/scenes/shared/square_image_picker.h
         src/scenes/shared/content_status_badge.h
@@ -321,8 +327,16 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_frame_input_controller.h
         src/scenes/title/title_friends_controller.cpp
         src/scenes/title/title_friends_controller.h
+        src/scenes/title/title_friends_effects.cpp
+        src/scenes/title/title_friends_effects.h
+        src/scenes/title/title_friends_reducer.cpp
+        src/scenes/title/title_friends_reducer.h
+        src/scenes/title/title_friends_service.cpp
+        src/scenes/title/title_friends_service.h
         src/scenes/title/title_friends_state.cpp
         src/scenes/title/title_friends_state.h
+        src/scenes/title/title_friends_view.cpp
+        src/scenes/title/title_friends_view.h
         src/scenes/title/title_online_mode_controller.cpp
         src/scenes/title/title_online_mode_controller.h
         src/scenes/title/title_mode_update_controller.cpp
@@ -343,6 +357,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_play_mode_controller.h
         src/scenes/title/title_startup_controller.cpp
         src/scenes/title/title_startup_controller.h
+        src/scenes/title/title_shell_effects.cpp
+        src/scenes/title/title_shell_effects.h
         src/scenes/title/title_play_transfer_controller.cpp
         src/scenes/title/title_play_transfer_controller.h
         src/scenes/title/title_profile_controller.cpp
@@ -443,6 +459,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/song_select/song_import_export_service.h
         src/scenes/song_select/song_select_command_controller.cpp
         src/scenes/song_select/song_select_command_controller.h
+        src/scenes/song_select/ranking_source_policy.cpp
+        src/scenes/song_select/ranking_source_policy.h
         src/scenes/song_select/selection_key.cpp
         src/scenes/song_select/selection_key.h
         src/scenes/song_select/song_select_data_controller.cpp
@@ -764,6 +782,7 @@ add_executable(song_select_data_controller_smoke
         src/updater/update_verify.h
         src/scenes/shared/scene_fade.cpp
         src/scenes/shared/scene_fade.h
+        src/scenes/song_select/ranking_source_policy.h
         src/scenes/song_select/selection_key.cpp
         src/scenes/song_select/selection_key.h
         src/scenes/song_select/song_select_data_controller.cpp
@@ -1200,6 +1219,8 @@ add_executable(friend_client_refresh_smoke
 
 add_executable(title_friends_state_smoke
         src/network/friend_client.h
+        src/scenes/title/title_friends_reducer.cpp
+        src/scenes/title/title_friends_reducer.h
         src/scenes/title/title_friends_state.cpp
         src/scenes/title/title_friends_state.h
         src/tests/title_friends_state_smoke.cpp)

@@ -16,6 +16,7 @@
 #include "scene_common.h"
 #include "shared/content_status_badge.h"
 #include "song_loader.h"
+#include "song_select/ranking_source_policy.h"
 #include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_layout.h"
 #include "song_select/song_select_login_dialog.h"
@@ -1436,7 +1437,7 @@ void draw(song_select::state& state,
             .hover_row_alpha = hover_row_alpha,
             .selected_row_alpha = selected_row_alpha,
             .selected_hover_row_alpha = selected_hover_row_alpha,
-            .online_sources_available = chart != nullptr && song_select::can_use_online_chart_routes(*chart),
+            .source_availability = song_select::ranking_source_policy::availability_for_chart(chart),
             .ranking_snapshot = media.ranking,
             .self_player_display_name = state.auth.display_name,
             .avatar_base_url = state.auth.server_url,

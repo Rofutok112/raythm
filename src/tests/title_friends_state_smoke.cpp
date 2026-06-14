@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 
+#include "title/title_friends_reducer.h"
 #include "title/title_friends_state.h"
 
 namespace {
@@ -139,6 +140,42 @@ int main() {
            "Presence-only event should not report invite changes.", ok);
     expect(state.friends.friends[0].online_status == "away",
            "Social event should apply presence changes.", ok);
+
+    friend_client::friend_listing_result friends_result;
+    friends_result.success = true;
+    friends_result.listing = friend_client::friend_listing{};
+    friends_result.listing->friends.push_back(social_user("friend-c", "Chika", "online"));
+    friends_result.listing->pending_request_count = 4;
+    const title_friends_reducer::apply_result friends_apply =
+        title_friends_reducer::apply_friend_listing(state, friends_result);
+    expect(friends_apply.applied, "Successful friend listing should be applied.", ok);
+    expect(state.friends.friends.size() == 1 && state.friends.friends.front().id == "friend-c",
+           "Friend reducer should replace the friends listing.", ok);
+    expect(state.friends.pending_request_count == 4,
+           "Friend reducer should carry pending request counts.", ok);
+
+    friend_client::request_listing_result request_result;
+    request_result.success = true;
+    request_result.listing = friend_client::request_listing{};
+    request_result.listing->incoming.push_back({
+        .id = "request-1",
+        .direction = "incoming",
+        .status = "pending",
+        .requester = social_user("friend-d", "Dora"),
+    });
+    const title_friends_reducer::apply_result request_apply =
+        title_friends_reducer::apply_request_listing(state, request_result);
+    expect(request_apply.applied, "Successful request listing should be applied.", ok);
+    expect(state.requests.incoming.size() == 1 && state.requests.incoming.front().id == "request-1",
+           "Request reducer should replace incoming requests.", ok);
+
+    friend_client::invite_listing_result invite_error;
+    invite_error.success = false;
+    invite_error.message = "invite load failed";
+    const title_friends_reducer::apply_result invite_error_apply =
+        title_friends_reducer::apply_invite_listing(state, invite_error);
+    expect(!invite_error_apply.applied && invite_error_apply.message == "invite load failed",
+           "Failed invite listing should report its message without applying state.", ok);
 
     if (!ok) {
         return EXIT_FAILURE;

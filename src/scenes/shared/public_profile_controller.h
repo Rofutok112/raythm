@@ -1,11 +1,13 @@
 #pragma once
 
-#include <future>
 #include <string>
 
 #include "network/auth_client.h"
 #include "network/friend_client.h"
 #include "raylib.h"
+#include "shared/public_profile_effects.h"
+#include "shared/public_profile_service.h"
+#include "shared/public_profile_view.h"
 #include "ui_draw.h"
 
 namespace public_profile {
@@ -35,14 +37,18 @@ public:
 
     [[nodiscard]] bool is_open() const;
     [[nodiscard]] Rectangle bounds() const;
+    [[nodiscard]] effects consume_effects();
 
 private:
     void request_load();
     void start_relationship_action();
+    void apply_view_command(const public_profile_view::command& command);
+    void apply_service_event(const service::event& event);
+    void emit_notice(notice_request notice);
 
     state state_;
-    std::future<auth::public_profile_result> load_future_;
-    std::future<friend_client::operation_result> relationship_future_;
+    service service_;
+    effects pending_effects_;
 };
 
 }  // namespace public_profile

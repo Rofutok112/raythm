@@ -228,7 +228,7 @@ std::optional<std::string> hit_test_profile_user_id(const song_select::ranking_p
 void draw(const song_select::ranking_panel_state& panel, const draw_config& config) {
     const auto& t = *g_theme;
     const ranking_service::source displayed_source =
-        config.online_sources_available ? panel.selected_source : ranking_service::source::local;
+        song_select::ranking_source_policy::effective_source(config.source_availability, panel.selected_source);
     const char* header_label = "ローカルランキング";
     if (displayed_source == ranking_service::source::online) {
         header_label = "GLOBAL RANKING";
@@ -236,12 +236,12 @@ void draw(const song_select::ranking_panel_state& panel, const draw_config& conf
         header_label = "FRIEND RANKING";
     }
     const float first_source_x =
-        config.online_sources_available ? config.source_friends_rect.x : config.source_local_rect.x;
+        config.source_availability.online_sources_available ? config.source_friends_rect.x : config.source_local_rect.x;
     const float header_width = std::max(120.0f, first_source_x - config.header_rect.x - 12.0f);
     ui::draw_text_in_rect(header_label,
                           16, {config.header_rect.x, config.header_rect.y, header_width, config.header_rect.height},
                           with_alpha(t.accent, config.alpha), ui::text_align::left);
-    if (config.online_sources_available) {
+    if (config.source_availability.online_sources_available) {
         ui::draw_button_colored(config.source_friends_rect, "FRIENDS", 14,
                                 with_alpha(displayed_source == ranking_service::source::friends ? config.button_selected : config.button_base,
                                            displayed_source == ranking_service::source::friends ? config.selected_row_alpha : config.normal_row_alpha),

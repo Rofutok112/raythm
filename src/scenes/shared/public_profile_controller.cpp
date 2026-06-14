@@ -1,162 +1,15 @@
 #include "shared/public_profile_controller.h"
 
-#include <algorithm>
-#include <chrono>
-#include <cctype>
-#include <exception>
-#include <thread>
 #include <utility>
 
-#include "scene_common.h"
-#include "shared/avatar_texture_cache.h"
-#include "shared/public_profile_state.h"
-#include "theme.h"
 #include "tween.h"
-#include "ui_clip.h"
-#include "ui_draw.h"
-#include "ui_notice.h"
-#include "virtual_screen.h"
 
 namespace public_profile {
-namespace {
-
-constexpr Rectangle kModalRect{610.0f, 280.0f, 700.0f, 430.0f};
-constexpr float kAvatarSize = 96.0f;
-
-struct modal_layout {
-    Rectangle modal_rect{};
-    Rectangle close_button_rect{};
-    Rectangle relationship_button_rect{};
-    ui::draw_layer layer = ui::draw_layer::modal;
-};
-
-std::string avatar_label(const auth::public_profile& profile) {
-    const std::string& source = profile.display_name.empty() ? profile.id : profile.display_name;
-    std::string result;
-    result.reserve(2);
-    for (char ch : source) {
-        if (std::isalnum(static_cast<unsigned char>(ch))) {
-            result.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
-            if (result.size() == 2) {
-                break;
-            }
-        }
-    }
-    return result.empty() ? "P" : result;
-}
-
-Rectangle animated_bounds(float open_anim) {
-    const float t = tween::ease_out_cubic(std::clamp(open_anim, 0.0f, 1.0f));
-    const float scale = 0.94f + 0.06f * t;
-    const Vector2 center{kModalRect.x + kModalRect.width * 0.5f,
-                         kModalRect.y + kModalRect.height * 0.5f};
-    return {
-        center.x - kModalRect.width * scale * 0.5f,
-        center.y - kModalRect.height * scale * 0.5f,
-        kModalRect.width * scale,
-        kModalRect.height * scale,
-    };
-}
-
-modal_layout make_layout(const state& state, ui::draw_layer layer = ui::draw_layer::modal) {
-    const Rectangle modal = animated_bounds(state.open_anim);
-    return {
-        .modal_rect = modal,
-        .close_button_rect = {modal.x + modal.width - 122.0f, modal.y + 24.0f, 92.0f, 42.0f},
-        .relationship_button_rect = {modal.x + modal.width - 232.0f, modal.y + 24.0f, 96.0f, 42.0f},
-        .layer = layer,
-    };
-}
-
-void draw_profile_body(const state& state, Rectangle modal) {
-    const auto& t = *g_theme;
-    const Rectangle content = ui::inset(modal, ui::edge_insets::uniform(30.0f));
-    if (state.loading && !state.loaded_once) {
-        ui::draw_text_in_rect("Loading profile...", 20, content, t.text_muted, ui::text_align::center);
-        return;
-    }
-    if (!state.result.success || !state.result.profile.has_value()) {
-        const std::string message = state.result.message.empty() ? "Could not load profile." : state.result.message;
-        ui::draw_text_in_rect(message.c_str(), 20, content, t.text_muted, ui::text_align::center);
-        return;
-    }
-
-    const auth::public_profile& profile = *state.result.profile;
-    const modal_layout layout = make_layout(state);
-    const public_profile_state::relationship_action_view relationship_action =
-        public_profile_state::relationship_action_for(profile, state.relationship_operation_active);
-    const Rectangle avatar_rect{content.x, content.y + 8.0f, kAvatarSize, kAvatarSize};
-    avatar_texture_cache::draw_avatar(
-        avatar_rect,
-        profile.avatar_url,
-        avatar_label(profile),
-        t.row_soft_selected,
-        t.text,
-        28,
-        auth::load_session_summary().server_url);
-    ui::draw_rect_lines(avatar_rect, 1.4f, t.border_light);
-
-    ui::draw_text_in_rect(profile.display_name.empty() ? "Unknown Player" : profile.display_name.c_str(),
-                          30,
-                          {content.x + 124.0f, content.y + 18.0f, content.width - 124.0f, 42.0f},
-                          t.text,
-                          ui::text_align::left);
-    ui::draw_text_in_rect("PROFILE", 13,
-                          {content.x + 124.0f, content.y + 66.0f, content.width - 124.0f, 22.0f},
-                          t.accent,
-                          ui::text_align::left);
-    ui::detail::draw_button_visual(layout.relationship_button_rect,
-                                   relationship_action.enabled && ui::is_hovered(layout.relationship_button_rect, layout.layer),
-                                   relationship_action.enabled && ui::is_pressed(layout.relationship_button_rect, layout.layer),
-                                   relationship_action.label,
-                                   13,
-                                   relationship_action.enabled ? t.row_selected : t.row,
-                                   relationship_action.enabled ? t.row_active : t.row_hover,
-                                   relationship_action.enabled ? t.accent : t.text_muted,
-                                   1.5f);
-
-    const Rectangle links_area{content.x, content.y + 142.0f, content.width, content.height - 142.0f};
-    if (profile.external_links.empty()) {
-        ui::draw_text_in_rect("No public profile links.", 18, links_area, t.text_muted, ui::text_align::left);
-        return;
-    }
-
-    float y = links_area.y;
-    for (const auth::external_link& link : profile.external_links) {
-        const Rectangle row{links_area.x, y, links_area.width, 46.0f};
-        ui::draw_rect_f(row, t.row);
-        ui::draw_rect_lines(row, 1.0f, t.border_light);
-        const std::string label = link.label.empty() ? "Link" : link.label;
-        ui::draw_text_in_rect(label.c_str(), 17,
-                              {row.x + 16.0f, row.y + 5.0f, row.width - 32.0f, 22.0f},
-                              t.text,
-                              ui::text_align::left);
-        ui::draw_text_in_rect(link.url.c_str(), 13,
-                              {row.x + 16.0f, row.y + 25.0f, row.width - 32.0f, 18.0f},
-                              t.text_muted,
-                              ui::text_align::left);
-        y += 54.0f;
-        if (y + 46.0f > links_area.y + links_area.height) {
-            break;
-        }
-    }
-}
-
-void draw_close_button(Rectangle rect, ui::draw_layer layer) {
-    const auto& t = *g_theme;
-    const bool hovered = ui::is_hovered(rect, layer);
-    const bool pressed = ui::is_pressed(rect, layer);
-    ui::detail::draw_button_visual(rect, hovered, pressed, "CLOSE", 14,
-                                   t.row_soft,
-                                   t.row_soft_hover,
-                                   t.text_muted,
-                                   2.0f);
-}
-
-}  // namespace
 
 void controller::reset() {
     state_ = {};
+    service_.reset();
+    pending_effects_ = {};
 }
 
 void controller::open(std::string user_id) {
@@ -196,43 +49,8 @@ void controller::tick(float dt) {
 }
 
 void controller::poll() {
-    if (!state_.loading ||
-        load_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
-        if (!state_.relationship_operation_active ||
-            !relationship_future_.valid() ||
-            relationship_future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
-            return;
-        }
-        try {
-            state_.relationship_result = relationship_future_.get();
-        } catch (const std::exception& ex) {
-            state_.relationship_result = {};
-            state_.relationship_result.message = ex.what();
-        } catch (...) {
-            state_.relationship_result = {};
-            state_.relationship_result.message = "Failed to update relationship.";
-        }
-        state_.relationship_operation_active = false;
-        if (!state_.relationship_result.success) {
-            ui::notify(state_.relationship_result.message, ui::notice_tone::error, 2.8f);
-        } else {
-            ui::notify("Relationship updated.", ui::notice_tone::success, 1.8f);
-            request_load();
-        }
-        return;
-    }
-
-    try {
-        state_.result = load_future_.get();
-    } catch (const std::exception& ex) {
-        state_.result = {.success = false, .message = ex.what()};
-    } catch (...) {
-        state_.result = {.success = false, .message = "Failed to load profile."};
-    }
-    state_.loading = false;
-    state_.loaded_once = true;
-    if (!state_.result.success) {
-        ui::notify(state_.result.message, ui::notice_tone::error, 2.8f);
+    for (const service::event& event : service_.poll()) {
+        apply_service_event(event);
     }
 }
 
@@ -250,23 +68,16 @@ bool controller::handle_input() {
         close();
         return true;
     }
-    const modal_layout layout = make_layout(state_);
-    if (ui::is_clicked(layout.close_button_rect, layout.layer)) {
-        close();
-        return true;
-    }
-    if (state_.result.success &&
-        state_.result.profile.has_value() &&
-        public_profile_state::relationship_action_for(
-            *state_.result.profile,
-            state_.relationship_operation_active).enabled &&
-        ui::is_clicked(layout.relationship_button_rect, layout.layer)) {
-        start_relationship_action();
-        return true;
-    }
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
-        !CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), layout.modal_rect)) {
-        close();
+    const public_profile_view::command command = public_profile_view::handle_input({
+        .loading = state_.loading,
+        .loaded_once = state_.loaded_once,
+        .relationship_operation_active = state_.relationship_operation_active,
+        .open_anim = state_.open_anim,
+        .avatar_base_url = auth::load_session_summary().server_url,
+        .result = state_.result,
+    });
+    if (command.type != public_profile_view::command_type::none) {
+        apply_view_command(command);
         return true;
     }
     return true;
@@ -276,14 +87,14 @@ void controller::draw(ui::draw_layer layer) {
     if (!state_.open) {
         return;
     }
-    ui::enqueue_draw_command(layer, [state = state_, layer]() {
-        const auto& t = *g_theme;
-        ui::draw_fullscreen_overlay(with_alpha(BLACK, 132));
-        const modal_layout layout = make_layout(state, layer);
-        ui::draw_panel(layout.modal_rect);
-        draw_close_button(layout.close_button_rect, layout.layer);
-        draw_profile_body(state, layout.modal_rect);
-    });
+    public_profile_view::draw({
+        .loading = state_.loading,
+        .loaded_once = state_.loaded_once,
+        .relationship_operation_active = state_.relationship_operation_active,
+        .open_anim = state_.open_anim,
+        .avatar_base_url = auth::load_session_summary().server_url,
+        .result = state_.result,
+    }, layer);
 }
 
 bool controller::is_open() const {
@@ -291,23 +102,22 @@ bool controller::is_open() const {
 }
 
 Rectangle controller::bounds() const {
-    return make_layout(state_).modal_rect;
+    return public_profile_view::bounds(state_.open_anim);
+}
+
+effects controller::consume_effects() {
+    effects result = std::move(pending_effects_);
+    pending_effects_ = {};
+    return result;
 }
 
 void controller::request_load() {
     if (state_.loading) {
         return;
     }
-    state_.loading = true;
-    std::promise<auth::public_profile_result> promise;
-    load_future_ = promise.get_future();
-    std::thread([promise = std::move(promise), user_id = state_.requested_user_id]() mutable {
-        try {
-            promise.set_value(auth::fetch_public_profile(user_id));
-        } catch (...) {
-            promise.set_exception(std::current_exception());
-        }
-    }).detach();
+    if (service_.request_load(state_.requested_user_id)) {
+        state_.loading = true;
+    }
 }
 
 void controller::start_relationship_action() {
@@ -316,29 +126,72 @@ void controller::start_relationship_action() {
         !state_.result.profile.has_value()) {
         return;
     }
-    state_.relationship_operation_active = true;
-    std::promise<friend_client::operation_result> promise;
-    relationship_future_ = promise.get_future();
-    std::thread([promise = std::move(promise),
-                 user_id = state_.result.profile->id,
-                 relationship_action = public_profile_state::relationship_action_for(
-                     *state_.result.profile,
-                     false).action,
-                 relationship_request_id = state_.result.profile->relationship_request_id]() mutable {
-        try {
-            if (relationship_action == public_profile_state::relationship_action::remove_friend) {
-                promise.set_value(friend_client::remove_friend(user_id));
-            } else if (relationship_action == public_profile_state::relationship_action::accept_request) {
-                promise.set_value(friend_client::accept_friend_request(relationship_request_id));
-            } else if (relationship_action == public_profile_state::relationship_action::unblock) {
-                promise.set_value(friend_client::unblock_user(user_id));
-            } else {
-                promise.set_value(friend_client::send_friend_request(user_id));
-            }
-        } catch (...) {
-            promise.set_exception(std::current_exception());
+    state_.relationship_operation_active = service_.start_relationship_action(*state_.result.profile);
+}
+
+void controller::apply_view_command(const public_profile_view::command& command) {
+    switch (command.type) {
+    case public_profile_view::command_type::none:
+        break;
+    case public_profile_view::command_type::close:
+        close();
+        break;
+    case public_profile_view::command_type::start_relationship_action:
+        start_relationship_action();
+        break;
+    }
+}
+
+void controller::apply_service_event(const service::event& event) {
+    switch (event.type) {
+    case service::event_type::profile_loaded:
+        state_.result = event.profile;
+        state_.loading = false;
+        state_.loaded_once = true;
+        if (!state_.result.success) {
+            emit_notice({
+                .message = state_.result.message,
+                .tone = ui::notice_tone::error,
+                .seconds = 2.8f,
+            });
         }
-    }).detach();
+        break;
+    case service::event_type::relationship_completed:
+        state_.relationship_result = event.relationship;
+        state_.relationship_operation_active = false;
+        if (!state_.relationship_result.success) {
+            emit_notice({
+                .message = state_.relationship_result.message.empty()
+                    ? "Failed to update relationship."
+                    : state_.relationship_result.message,
+                .tone = ui::notice_tone::error,
+                .seconds = 2.8f,
+            });
+        } else {
+            emit_notice({
+                .message = "Relationship updated.",
+                .tone = ui::notice_tone::success,
+                .seconds = 1.8f,
+            });
+            pending_effects_.reload_friends = true;
+            state_.loading = false;
+            request_load();
+        }
+        break;
+    case service::event_type::service_error:
+        state_.loading = false;
+        state_.relationship_operation_active = false;
+        emit_notice({
+            .message = event.message.empty() ? "Public profile operation failed." : event.message,
+            .tone = ui::notice_tone::error,
+            .seconds = 2.8f,
+        });
+        break;
+    }
+}
+
+void controller::emit_notice(notice_request notice) {
+    pending_effects_.notices.push_back(std::move(notice));
 }
 
 }  // namespace public_profile

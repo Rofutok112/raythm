@@ -23,10 +23,12 @@
 #include "title/title_common_update_controller.h"
 #include "title/title_frame_input_controller.h"
 #include "title/title_command_dispatcher.h"
+#include "title/title_friends_effects.h"
 #include "title/title_hub_view.h"
 #include "title/title_mode_update_controller.h"
 #include "title/title_multiplayer_flow_controller.h"
 #include "title/title_settings_flow_controller.h"
+#include "title/title_shell_effects.h"
 #include "title/title_startup_controller.h"
 #include "theme.h"
 #include "ui_clip.h"
@@ -589,6 +591,19 @@ void title_scene::update(float dt) {
     }
     update_common_animation(dt);
     update_startup_loading();
+    const title::shell_effect_context shell_effect_context{
+        .open_public_profile = [this](const std::string& user_id) {
+            public_profile_controller_.open(user_id);
+        },
+        .start_room_join = [this](const title_friends_effects::room_join_request& request) {
+            enter_multiplayer_room_invite(request.room_id, request.invite_id);
+        },
+        .reload_friends = [this]() {
+            friends_controller_.request_reload();
+        },
+    };
+    (void)title::apply_public_profile_effects(public_profile_controller_.consume_effects(),
+                                              shell_effect_context);
 
     if (transitioning_to_song_select_) {
         transition_fade_.update(dt);
@@ -635,12 +650,8 @@ void title_scene::update(float dt) {
 
     friends_controller_.tick(dt);
     friends_controller_.poll();
-    if (const auto room_join = friends_controller_.consume_room_join_request(); room_join.has_value()) {
-        enter_multiplayer_room_invite(room_join->room_id, room_join->invite_id);
-        return;
-    }
-    if (const auto profile_user_id = friends_controller_.consume_profile_request(); profile_user_id.has_value()) {
-        public_profile_controller_.open(*profile_user_id);
+    if (title::apply_friends_effects(friends_controller_.consume_effects(),
+                                     shell_effect_context).scene_flow_changed) {
         return;
     }
 

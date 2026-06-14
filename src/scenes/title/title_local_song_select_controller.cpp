@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "services/content_sync_service.h"
+#include "song_select/ranking_source_policy.h"
 #include "song_select/song_select_confirmation_dialog.h"
 #include "song_select/song_select_layout.h"
 #include "title/center_panel_view.h"
@@ -491,7 +492,7 @@ title_play_view::update_result update(song_select::state& state,
             .source_local_rect = current.ranking_source_local_rect,
             .source_online_rect = current.ranking_source_online_rect,
             .list_rect = current.ranking_list_rect,
-            .online_sources_available = chart != nullptr && song_select::can_use_online_chart_routes(*chart),
+            .source_availability = song_select::ranking_source_policy::availability_for_chart(chart),
         };
         if (left_pressed) {
             const auto source = title_ranking_view::hit_test_source(ranking_config, mouse);

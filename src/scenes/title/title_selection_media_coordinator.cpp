@@ -2,50 +2,9 @@
 
 #include <utility>
 
-#include "network/auth_client.h"
+#include "song_select/ranking_source_policy.h"
 #include "song_select/song_select_navigation.h"
 #include "title/title_audio_controller.h"
-
-namespace {
-
-bool has_queueable_link_for_server(const song_select::chart_option& chart, const std::string& server_url) {
-    if (!song_select::can_use_online_chart_routes(chart)) {
-        return false;
-    }
-    const std::string normalized_server_url = auth::normalize_server_url(server_url);
-    if (normalized_server_url.empty()) {
-        return false;
-    }
-    if (online_content::is_queueable(chart.online_identity) &&
-        auth::normalize_server_url(chart.online_identity->server_url) == normalized_server_url) {
-        return true;
-    }
-    for (const online_content::chart_identity& link : chart.remote_links) {
-        if (online_content::is_queueable(link) &&
-            auth::normalize_server_url(link.server_url) == normalized_server_url) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool uses_submitted_ranking_best(const song_select::chart_option* chart) {
-    if (chart == nullptr) {
-        return false;
-    }
-    if (!song_select::can_use_online_chart_routes(*chart)) {
-        return false;
-    }
-    if (chart->source == content_source::official ||
-            chart->source == content_source::community) {
-        return true;
-    }
-
-    const auth::session_summary summary = auth::load_session_summary();
-    return summary.logged_in && has_queueable_link_for_server(*chart, summary.server_url);
-}
-
-}  // namespace
 
 title_selection_media_coordinator::title_selection_media_coordinator()
     : ranking_controller_(song_select::ranking_load_controller::listing_loader(load_ranking_from_service)) {
@@ -132,9 +91,7 @@ song_select::ranking_load_request title_selection_media_coordinator::ranking_req
 
     song_select::ranking_load_request request;
     request.key = key;
-    request.best_source = uses_submitted_ranking_best(chart)
-        ? ranking_service::source::online
-        : ranking_service::source::local;
+    request.best_source = song_select::ranking_source_policy::personal_best_source_for_chart(chart);
     return request;
 }
 
