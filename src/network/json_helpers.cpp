@@ -1,58 +1,39 @@
 #include "network/json_helpers.h"
 
 #include <cctype>
-#include <utility>
+
+#include <nlohmann/json.hpp>
 
 namespace network::json {
 namespace {
 
-std::optional<size_t> find_key_end(const std::string& content, const std::string& key) {
-    const std::string token = "\"" + key + "\"";
-    size_t object_depth = 0;
-    size_t array_depth = 0;
-    bool in_string = false;
-    bool escaping = false;
-    for (size_t index = 0; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (in_string) {
-            if (escaping) {
-                escaping = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaping = true;
-                continue;
-            }
-            if (ch == '"') {
-                in_string = false;
-            }
-            continue;
-        }
+using json_value = nlohmann::json;
 
-        if (ch == '"') {
-            const bool at_current_object_level = object_depth == 1 && array_depth == 0;
-            if (at_current_object_level && content.compare(index, token.size(), token) == 0) {
-                return index + token.size();
-            }
-            in_string = true;
-            continue;
-        }
+json_value parse_json(const std::string& content) {
+    return json_value::parse(content, nullptr, false);
+}
 
-        if (ch == '{') {
-            ++object_depth;
-        } else if (ch == '}') {
-            if (object_depth > 0) {
-                --object_depth;
-            }
-        } else if (ch == '[') {
-            ++array_depth;
-        } else if (ch == ']') {
-            if (array_depth > 0) {
-                --array_depth;
-            }
-        }
+const json_value* find_member(const json_value& root, const std::string& key) {
+    if (!root.is_object()) {
+        return nullptr;
     }
-    return std::nullopt;
+    const auto it = root.find(key);
+    if (it == root.end()) {
+        return nullptr;
+    }
+    return &*it;
+}
+
+std::optional<json_value> extract_value(const std::string& content, const std::string& key) {
+    const json_value root = parse_json(content);
+    if (root.is_discarded()) {
+        return std::nullopt;
+    }
+    const json_value* value = find_member(root, key);
+    if (value == nullptr) {
+        return std::nullopt;
+    }
+    return *value;
 }
 
 }  // namespace
@@ -72,276 +53,86 @@ std::string trim(std::string_view value) {
 }
 
 std::string escape_string(const std::string& value) {
-    std::string result;
-    result.reserve(value.size() + 8);
-    for (const char ch : value) {
-        switch (ch) {
-            case '\\': result += "\\\\"; break;
-            case '"': result += "\\\""; break;
-            case '\n': result += "\\n"; break;
-            case '\r': result += "\\r"; break;
-            case '\t': result += "\\t"; break;
-            default: result += ch; break;
-        }
+    const std::string quoted = json_value(value).dump();
+    if (quoted.size() < 2) {
+        return {};
     }
-    return result;
-}
-
-std::optional<size_t> find_value_start(const std::string& content, const std::string& key) {
-    const auto key_end = find_key_end(content, key);
-    if (!key_end.has_value()) {
-        return std::nullopt;
-    }
-
-    const size_t colon_pos = content.find(':', *key_end);
-    if (colon_pos == std::string::npos) {
-        return std::nullopt;
-    }
-
-    size_t start = colon_pos + 1;
-    while (start < content.size() && std::isspace(static_cast<unsigned char>(content[start]))) {
-        ++start;
-    }
-
-    if (start >= content.size()) {
-        return std::nullopt;
-    }
-
-    return start;
+    return quoted.substr(1, quoted.size() - 2);
 }
 
 std::optional<std::string> extract_string(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '"') {
+    const std::optional<json_value> value = extract_value(content, key);
+    if (!value.has_value() || !value->is_string()) {
         return std::nullopt;
     }
-
-    std::string result;
-    bool escaping = false;
-    for (size_t index = *start_opt + 1; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (escaping) {
-            switch (ch) {
-                case 'n': result += '\n'; break;
-                case 'r': result += '\r'; break;
-                case 't': result += '\t'; break;
-                default: result += ch; break;
-            }
-            escaping = false;
-            continue;
-        }
-
-        if (ch == '\\') {
-            escaping = true;
-            continue;
-        }
-
-        if (ch == '"') {
-            return result;
-        }
-
-        result += ch;
+    try {
+        return value->get<std::string>();
+    } catch (...) {
+        return std::nullopt;
     }
-
-    return std::nullopt;
 }
 
 std::optional<std::string> extract_object(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '{') {
+    const std::optional<json_value> value = extract_value(content, key);
+    if (!value.has_value() || !value->is_object()) {
         return std::nullopt;
     }
-
-    size_t depth = 0;
-    bool in_string = false;
-    bool escaping = false;
-    for (size_t index = *start_opt; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (in_string) {
-            if (escaping) {
-                escaping = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaping = true;
-            } else if (ch == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-
-        if (ch == '"') {
-            in_string = true;
-            continue;
-        }
-
-        if (ch == '{') {
-            ++depth;
-        } else if (ch == '}') {
-            --depth;
-            if (depth == 0) {
-                return content.substr(*start_opt, index - *start_opt + 1);
-            }
-        }
-    }
-
-    return std::nullopt;
+    return value->dump();
 }
 
 std::optional<bool> extract_bool(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value()) {
+    const std::optional<json_value> value = extract_value(content, key);
+    if (!value.has_value() || !value->is_boolean()) {
         return std::nullopt;
     }
-
-    if (content.compare(*start_opt, 4, "true") == 0) {
-        return true;
+    try {
+        return value->get<bool>();
+    } catch (...) {
+        return std::nullopt;
     }
-
-    if (content.compare(*start_opt, 5, "false") == 0) {
-        return false;
-    }
-
-    return std::nullopt;
 }
 
 std::optional<int> extract_int(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value()) {
+    const std::optional<json_value> value = extract_value(content, key);
+    if (!value.has_value() || !(value->is_number_integer() || value->is_number_unsigned())) {
         return std::nullopt;
     }
-
-    size_t end = *start_opt;
-    if (content[end] == '-') {
-        ++end;
-    }
-    while (end < content.size() && std::isdigit(static_cast<unsigned char>(content[end]))) {
-        ++end;
-    }
-    if (end == *start_opt) {
-        return std::nullopt;
-    }
-
     try {
-        return std::stoi(content.substr(*start_opt, end - *start_opt));
+        return value->get<int>();
     } catch (...) {
         return std::nullopt;
     }
 }
 
 std::optional<float> extract_float(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value()) {
+    const std::optional<json_value> value = extract_value(content, key);
+    if (!value.has_value() || !value->is_number()) {
         return std::nullopt;
     }
-
-    size_t end = *start_opt;
-    if (content[end] == '-') {
-        ++end;
-    }
-    while (end < content.size()) {
-        const char ch = content[end];
-        if (!(std::isdigit(static_cast<unsigned char>(ch)) || ch == '.')) {
-            break;
-        }
-        ++end;
-    }
-    if (end == *start_opt) {
-        return std::nullopt;
-    }
-
     try {
-        return std::stof(content.substr(*start_opt, end - *start_opt));
+        return value->get<float>();
     } catch (...) {
         return std::nullopt;
     }
 }
 
 std::optional<std::string> extract_array(const std::string& content, const std::string& key) {
-    const auto start_opt = find_value_start(content, key);
-    if (!start_opt.has_value() || content[*start_opt] != '[') {
+    const std::optional<json_value> value = extract_value(content, key);
+    if (!value.has_value() || !value->is_array()) {
         return std::nullopt;
     }
-
-    size_t depth = 0;
-    bool in_string = false;
-    bool escaping = false;
-    for (size_t index = *start_opt; index < content.size(); ++index) {
-        const char ch = content[index];
-        if (in_string) {
-            if (escaping) {
-                escaping = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaping = true;
-            } else if (ch == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-
-        if (ch == '"') {
-            in_string = true;
-            continue;
-        }
-
-        if (ch == '[') {
-            ++depth;
-        } else if (ch == ']') {
-            --depth;
-            if (depth == 0) {
-                return content.substr(*start_opt, index - *start_opt + 1);
-            }
-        }
-    }
-
-    return std::nullopt;
+    return value->dump();
 }
 
 std::vector<std::string> extract_objects_from_array(const std::string& array_content) {
     std::vector<std::string> objects;
-    size_t index = 0;
-    while (index < array_content.size()) {
-        index = array_content.find('{', index);
-        if (index == std::string::npos) {
-            break;
-        }
-
-        const size_t start = index;
-        size_t depth = 0;
-        bool in_string = false;
-        bool escaping = false;
-        for (; index < array_content.size(); ++index) {
-            const char ch = array_content[index];
-            if (in_string) {
-                if (escaping) {
-                    escaping = false;
-                    continue;
-                }
-                if (ch == '\\') {
-                    escaping = true;
-                } else if (ch == '"') {
-                    in_string = false;
-                }
-                continue;
-            }
-
-            if (ch == '"') {
-                in_string = true;
-                continue;
-            }
-
-            if (ch == '{') {
-                ++depth;
-            } else if (ch == '}') {
-                --depth;
-                if (depth == 0) {
-                    objects.push_back(array_content.substr(start, index - start + 1));
-                    ++index;
-                    break;
-                }
-            }
+    const json_value array = parse_json(array_content);
+    if (!array.is_array()) {
+        return objects;
+    }
+    for (const json_value& item : array) {
+        if (item.is_object()) {
+            objects.push_back(item.dump());
         }
     }
     return objects;
@@ -349,49 +140,16 @@ std::vector<std::string> extract_objects_from_array(const std::string& array_con
 
 std::vector<std::string> extract_strings_from_array(const std::string& array_content) {
     std::vector<std::string> strings;
-    size_t index = 0;
-    while (index < array_content.size()) {
-        while (index < array_content.size() &&
-               (std::isspace(static_cast<unsigned char>(array_content[index])) ||
-                array_content[index] == '[' || array_content[index] == ',')) {
-            ++index;
-        }
-        if (index >= array_content.size() || array_content[index] == ']') {
-            break;
-        }
-        if (array_content[index] != '"') {
-            ++index;
-            continue;
-        }
-
-        std::string value;
-        bool escaping = false;
-        ++index;
-        for (; index < array_content.size(); ++index) {
-            const char ch = array_content[index];
-            if (escaping) {
-                switch (ch) {
-                    case 'n': value += '\n'; break;
-                    case 'r': value += '\r'; break;
-                    case 't': value += '\t'; break;
-                    default: value += ch; break;
-                }
-                escaping = false;
-                continue;
+    const json_value array = parse_json(array_content);
+    if (!array.is_array()) {
+        return strings;
+    }
+    for (const json_value& item : array) {
+        if (item.is_string()) {
+            try {
+                strings.push_back(item.get<std::string>());
+            } catch (...) {
             }
-
-            if (ch == '\\') {
-                escaping = true;
-                continue;
-            }
-
-            if (ch == '"') {
-                strings.push_back(std::move(value));
-                ++index;
-                break;
-            }
-
-            value += ch;
         }
     }
     return strings;
