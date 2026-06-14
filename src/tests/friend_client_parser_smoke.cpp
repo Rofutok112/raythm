@@ -78,6 +78,25 @@ int main() {
     expect(requests->listing->outgoing.front().addressee.id == "user-c",
            "Outgoing addressee id should parse.", ok);
 
+    const auto server_ordered_requests = friend_client::detail::parse_request_listing_response(response_with_body(
+        "{"
+        "\"incoming\":[{"
+        "\"addressee\":{\"id\":\"user-me\",\"displayName\":\"Me\"},"
+        "\"createdAt\":\"2026-06-14T00:00:00Z\","
+        "\"direction\":\"incoming\","
+        "\"id\":\"friendship-server-order\","
+        "\"requester\":{\"id\":\"user-b\",\"displayName\":\"Beni\"},"
+        "\"status\":\"pending\","
+        "\"updatedAt\":\"2026-06-14T00:00:00Z\""
+        "}],"
+        "\"outgoing\":[]"
+        "}"));
+    expect(server_ordered_requests.has_value(), "Server-ordered friend requests should parse.", ok);
+    expect(server_ordered_requests->listing->incoming.size() == 1,
+           "Server-ordered incoming request should parse.", ok);
+    expect(server_ordered_requests->listing->incoming.front().id == "friendship-server-order",
+           "Request id should prefer the friendship id over nested user ids.", ok);
+
     const auto invite_accept = friend_client::detail::parse_invite_operation_response(response_with_body(
         "{"
         "\"invite\":{"
