@@ -14,6 +14,7 @@ struct catalog_reload_request {
     std::string preferred_song_id;
     std::string preferred_chart_id;
     bool calculate_missing_levels = false;
+    bool preserve_current_selection = false;
 };
 
 struct catalog_reload_result {

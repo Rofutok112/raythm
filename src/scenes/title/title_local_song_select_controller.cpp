@@ -63,6 +63,17 @@ Rectangle mod_modal_rect(Rectangle ranking_column) {
             kModalHeight};
 }
 
+bool block_locked_play_if_needed(song_select::state& state,
+                                 const song_select::song_entry* song,
+                                 const song_select::chart_option* chart) {
+    if (song == nullptr || chart == nullptr ||
+        !content_is_play_locked(song->song.meta, chart->meta)) {
+        return false;
+    }
+    song_select::queue_status_message(state, content_play_lock_reason(song->song.meta, chart->meta), true);
+    return true;
+}
+
 Rectangle auto_mod_toggle_rect(Rectangle modal) {
     using namespace title_play_view::mod_layout;
     const float row_y = modal.y + kModalTopPadding + kHeaderHeight + kHeaderToDescriptionGap +
@@ -418,6 +429,11 @@ title_play_view::update_result update(song_select::state& state,
     }
 
     if (!state.play_search_input.active && IsKeyPressed(KEY_ENTER) && has_selection) {
+        const song_select::song_entry* song = song_select::selected_song(state);
+        const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
+        if (block_locked_play_if_needed(state, song, chart)) {
+            return result;
+        }
         if (state.filter.multiplayer_queueable_only) {
             result.multiplayer_select_requested = true;
         } else {
@@ -430,6 +446,9 @@ title_play_view::update_result update(song_select::state& state,
         const song_select::song_entry* song = song_select::selected_song(state);
         const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
         if (left_pressed && has_selection && CheckCollisionPointRec(mouse, start_button_rect(current.ranking_column))) {
+            if (block_locked_play_if_needed(state, song, chart)) {
+                return result;
+            }
             if (state.filter.multiplayer_queueable_only) {
                 result.multiplayer_select_requested = true;
             } else {
@@ -539,6 +558,11 @@ title_play_view::update_result update(song_select::state& state,
                                                           static_cast<int>(filtered.size()))};
         if (clicked_chart.chart_index >= 0) {
             if (state.difficulty_index == clicked_chart.chart_index) {
+                const song_select::song_entry* song = song_select::selected_song(state);
+                const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
+                if (block_locked_play_if_needed(state, song, chart)) {
+                    return result;
+                }
                 if (state.filter.multiplayer_queueable_only) {
                     result.multiplayer_select_requested = true;
                 } else {

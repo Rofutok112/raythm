@@ -34,7 +34,8 @@ public:
     void request_catalog_reload(song_select::state& state,
                                 std::string preferred_song_id = "",
                                 std::string preferred_chart_id = "",
-                                bool calculate_missing_levels = false);
+                                bool calculate_missing_levels = false,
+                                bool preserve_current_selection = false);
     catalog_poll_result poll_catalog_reload(song_select::state& state);
 
     void request_scoring_ruleset_warm(bool force_refresh = false);

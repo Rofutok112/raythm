@@ -292,29 +292,6 @@ std::optional<std::string> extract_json_object(const std::string& content, const
     return std::nullopt;
 }
 
-std::optional<bool> extract_json_bool(const std::string& content, const std::string& key) {
-    const std::optional<size_t> found_key = find_json_key(content, key);
-    if (!found_key.has_value()) {
-        return std::nullopt;
-    }
-    const size_t colon_pos = content.find(':', *found_key + key.size() + 2);
-    if (colon_pos == std::string::npos) {
-        return std::nullopt;
-    }
-    size_t value_start = colon_pos + 1;
-    while (value_start < content.size() &&
-           std::isspace(static_cast<unsigned char>(content[value_start])) != 0) {
-        ++value_start;
-    }
-    if (content.compare(value_start, 4, "true") == 0) {
-        return true;
-    }
-    if (content.compare(value_start, 5, "false") == 0) {
-        return false;
-    }
-    return std::nullopt;
-}
-
 std::vector<std::string> extract_json_object_array_values(const std::string& array_content) {
     std::vector<std::string> values;
     bool in_string = false;
@@ -397,49 +374,7 @@ std::vector<std::string> extract_json_string_array_values(const std::string& arr
 
 std::optional<int> parse_int(const std::string& value);
 
-content_unlock_meta parse_content_unlock_meta(const std::string& content) {
-    content_unlock_meta unlock;
-    if (const std::optional<std::string> state = extract_json_string(content, "unlockState")) {
-        unlock.unlock_state = *state;
-    }
-    if (const std::optional<bool> locked = extract_json_bool(content, "locked")) {
-        unlock.locked = *locked;
-    }
-    if (const std::optional<bool> can_download = extract_json_bool(content, "canDownload")) {
-        unlock.can_download = *can_download;
-    }
-    if (const std::optional<bool> can_play = extract_json_bool(content, "canPlay")) {
-        unlock.can_play = *can_play;
-    }
-    if (const std::optional<std::string> lock_reason = extract_json_string(content, "lockReason")) {
-        unlock.lock_reason = *lock_reason;
-    }
-    if (const std::optional<std::string> rule_count = extract_json_number_token(content, "unlockRuleCount")) {
-        if (const std::optional<int> parsed = parse_int(*rule_count)) {
-            unlock.unlock_rule_count = std::max(0, *parsed);
-        }
-    }
-    return unlock;
-}
-
-std::vector<content_clear_reward> parse_clear_rewards(const std::string& array_content) {
-    std::vector<content_clear_reward> rewards;
-    for (const std::string& object : extract_json_object_array_values(array_content)) {
-        content_clear_reward reward;
-        reward.kind = extract_json_string(object, "kind").value_or("");
-        reward.id = extract_json_string(object, "id").value_or("");
-        reward.label = extract_json_string(object, "label").value_or("");
-        if (!reward.kind.empty() || !reward.id.empty() || !reward.label.empty()) {
-            rewards.push_back(std::move(reward));
-        }
-    }
-    return rewards;
-}
-
 void parse_song_extra_meta(const std::string& content, song_extra_meta& extra) {
-    if (const std::optional<std::string> unlock_object = extract_json_object(content, "unlock")) {
-        extra.unlock = parse_content_unlock_meta(*unlock_object);
-    }
     if (const std::optional<std::string> extensions = extract_json_object(content, "metadataExtensions")) {
         if (const std::optional<std::string> mv_object = extract_json_object(*extensions, "mvReferences")) {
             if (const std::optional<std::string> mv_count = extract_json_number_token(*mv_object, "count")) {
@@ -450,9 +385,6 @@ void parse_song_extra_meta(const std::string& content, song_extra_meta& extra) {
             if (const std::optional<std::string> ids_array = extract_json_array(*mv_object, "ids")) {
                 extra.mv_references.ids = extract_json_string_array_values(*ids_array);
             }
-        }
-        if (const std::optional<std::string> rewards_array = extract_json_array(*extensions, "clearRewards")) {
-            extra.clear_rewards = parse_clear_rewards(*rewards_array);
         }
     }
 }

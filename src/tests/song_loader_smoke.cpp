@@ -144,17 +144,8 @@ std::filesystem::path write_temp_song_with_extra_metadata() {
            << "  \"jacketFile\": \"jacket.png\",\n"
            << "  \"previewStartMs\": 0,\n"
            << "  \"songVersion\": 1,\n"
-           << "  \"unlock\": {\n"
-           << "    \"unlockState\": \"locked\",\n"
-           << "    \"locked\": true,\n"
-           << "    \"canDownload\": true,\n"
-           << "    \"canPlay\": false,\n"
-           << "    \"lockReason\": \"Clear tutorial\",\n"
-           << "    \"unlockRuleCount\": 1\n"
-           << "  },\n"
            << "  \"metadataExtensions\": {\n"
-           << "    \"mvReferences\": {\"count\": 2, \"ids\": [\"mv-a\", \"mv-b\"]},\n"
-           << "    \"clearRewards\": [{\"kind\": \"badge\", \"id\": \"first-clear\", \"label\": \"First Clear\"}]\n"
+           << "    \"mvReferences\": {\"count\": 2, \"ids\": [\"mv-a\", \"mv-b\"]}\n"
            << "  }\n"
            << "}\n";
     return song_dir;
@@ -269,12 +260,9 @@ int main() {
     const std::filesystem::path extra_metadata_song = write_temp_song_with_extra_metadata();
     const song_load_result extra_metadata_result = song_loader::load_directory(extra_metadata_song.string());
     if (extra_metadata_result.songs.size() != 1 ||
-        !extra_metadata_result.songs.front().meta.extra.unlock.locked ||
-        extra_metadata_result.songs.front().meta.extra.unlock.can_play ||
-        extra_metadata_result.songs.front().meta.extra.unlock.lock_reason != "Clear tutorial" ||
         extra_metadata_result.songs.front().meta.extra.mv_references.count != 2 ||
         extra_metadata_result.songs.front().meta.extra.mv_references.ids.size() != 2 ||
-        extra_metadata_result.songs.front().meta.extra.clear_rewards.size() != 1) {
+        !extra_metadata_result.songs.front().meta.extra.clear_rewards.empty()) {
         std::cerr << "Expected song loader to parse extra metadata from song.json\n";
         for (const std::string& error : extra_metadata_result.errors) {
             std::cerr << "  " << error << '\n';

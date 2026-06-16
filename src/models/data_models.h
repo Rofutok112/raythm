@@ -29,6 +29,28 @@ struct content_unlock_meta {
     int unlock_rule_count = 0;
 };
 
+inline bool content_unlock_is_locked(const content_unlock_meta& unlock) {
+    return unlock.locked || !unlock.can_play || unlock.unlock_state == "locked";
+}
+
+inline bool content_unlock_allows_download(const content_unlock_meta& unlock) {
+    return unlock.can_download;
+}
+
+inline bool content_unlock_allows_play(const content_unlock_meta& unlock) {
+    return !content_unlock_is_locked(unlock) && unlock.can_play;
+}
+
+inline std::string content_unlock_reason_or_default(const content_unlock_meta& unlock) {
+    if (!unlock.lock_reason.empty()) {
+        return unlock.lock_reason;
+    }
+    if (unlock.unlock_rule_count > 0) {
+        return "Unlock requirement not met.";
+    }
+    return content_unlock_is_locked(unlock) ? "This content is locked." : "";
+}
+
 struct content_mv_references {
     int count = 0;
     std::vector<std::string> ids;
@@ -109,6 +131,21 @@ struct chart_meta {
     int offset = 0;
     chart_extra_meta extra;
 };
+
+inline bool content_is_play_locked(const song_meta& song, const chart_meta& chart) {
+    return !content_unlock_allows_play(song.extra.unlock) ||
+           !content_unlock_allows_play(chart.extra.unlock);
+}
+
+inline std::string content_play_lock_reason(const song_meta& song, const chart_meta& chart) {
+    if (!content_unlock_allows_play(chart.extra.unlock)) {
+        return content_unlock_reason_or_default(chart.extra.unlock);
+    }
+    if (!content_unlock_allows_play(song.extra.unlock)) {
+        return content_unlock_reason_or_default(song.extra.unlock);
+    }
+    return "";
+}
 
 enum class scroll_automation_curve {
     hold,

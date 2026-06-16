@@ -184,7 +184,8 @@ void title_play_create_feature::request_catalog_reload(std::string preferred_son
                                                        title_catalog::reload_policy policy) {
     data_controller_.request_catalog_reload(state_, std::move(preferred_song_id),
                                             std::move(preferred_chart_id),
-                                            policy.calculate_missing_levels);
+                                            policy.calculate_missing_levels,
+                                            policy.preserve_current_selection);
 }
 
 void title_play_create_feature::poll_catalog_reload(title_audio_controller& audio_controller,

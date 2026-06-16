@@ -36,12 +36,14 @@ bool title_play_data_controller::upload_in_progress() const {
 void title_play_data_controller::request_catalog_reload(song_select::state& state,
                                                         std::string preferred_song_id,
                                                         std::string preferred_chart_id,
-                                                        bool calculate_missing_levels) {
+                                                        bool calculate_missing_levels,
+                                                        bool preserve_current_selection) {
     data_controller_.request_catalog_reload(
         state,
         song_select::catalog_reload_request{std::move(preferred_song_id),
                                             std::move(preferred_chart_id),
-                                            calculate_missing_levels});
+                                            calculate_missing_levels,
+                                            preserve_current_selection});
 }
 
 title_play_data_controller::catalog_poll_result title_play_data_controller::poll_catalog_reload(

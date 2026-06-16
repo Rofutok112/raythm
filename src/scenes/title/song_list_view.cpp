@@ -221,6 +221,24 @@ void draw_status_tag(Rectangle rect, content_status status, unsigned char alpha,
                           with_alpha(color, alpha), ui::text_align::center);
 }
 
+void draw_lock_icon(Rectangle rect, unsigned char alpha) {
+    raythm_icons::draw_lock(rect, with_alpha(g_theme->slow, alpha), 2.4f);
+}
+
+Rectangle centered_square(Rectangle rect, float size) {
+    return {
+        rect.x + (rect.width - size) * 0.5f,
+        rect.y + (rect.height - size) * 0.5f,
+        size,
+        size,
+    };
+}
+
+void draw_locked_row_overlay(Rectangle row, unsigned char alpha) {
+    ui::draw_rect_f(row, with_alpha(g_theme->bg, static_cast<unsigned char>((static_cast<int>(alpha) * 120) / 255)));
+    draw_lock_icon(centered_square(row, 24.0f), alpha);
+}
+
 float status_tag_gap(content_status status) {
     return status == content_status::modified ? 4.0f : 7.0f;
 }
@@ -249,7 +267,11 @@ void draw_status_tags(Rectangle anchor, content_status source_status, content_st
     draw_status_tag(status_rect, status, alpha, font_size);
 }
 
-void draw_status_tags_fit(Rectangle bounds, content_status source_status, content_status status, unsigned char alpha, int font_size = 11) {
+void draw_status_tags_fit(Rectangle bounds,
+                          content_status source_status,
+                          content_status status,
+                          unsigned char alpha,
+                          int font_size = 11) {
     const float status_width = status_tag_width(status, font_size);
     const Rectangle status_rect = {
         bounds.x + bounds.width - status_width,
@@ -271,11 +293,18 @@ void draw_chart_row(const song_select::chart_option& chart,
                     const title_song_list_view::draw_config& config) {
     const auto& t = *g_theme;
     const bool hovered = ui::is_hovered(row);
+    const bool locked = content_unlock_is_locked(chart.meta.extra.unlock);
     const unsigned char row_alpha = selected ? config.selected_row_alpha
         : hovered ? config.hover_row_alpha
                   : config.normal_row_alpha;
-    ui::draw_rect_f(row, with_alpha(selected ? config.button_selected : config.button_base, row_alpha));
-    ui::draw_rect_lines(row, 1.0f, with_alpha(selected ? t.border_active : t.border_light, config.alpha));
+    const Color row_fill = locked
+        ? lerp_color(config.button_base, t.bg, selected ? 0.48f : 0.36f)
+        : (selected ? config.button_selected : config.button_base);
+    ui::draw_rect_f(row, with_alpha(row_fill, row_alpha));
+    ui::draw_rect_lines(row, 1.0f,
+                        with_alpha(locked ? t.slow : selected ? t.border_active : t.border_light,
+                                   locked ? static_cast<unsigned char>((static_cast<int>(config.alpha) * 180) / 255)
+                                          : config.alpha));
 
     const chart_columns columns = make_chart_columns(row);
     const Color key_color = key_mode_color(chart.meta.key_count);
@@ -293,7 +322,11 @@ void draw_chart_row(const song_select::chart_option& chart,
                           12,
                           columns.notes,
                           with_alpha(t.text_secondary, config.alpha), ui::text_align::right);
-    draw_status_tags_fit(columns.status, chart.source_status, chart.status, config.alpha, 9);
+    draw_status_tags_fit(columns.status,
+                         chart.source_status,
+                         chart.status,
+                         config.alpha,
+                         9);
     if (chart.best_local_rank.has_value()) {
         ui::draw_text_in_rect(rank_label(*chart.best_local_rank), 13,
                               columns.rank,
@@ -302,6 +335,9 @@ void draw_chart_row(const song_select::chart_option& chart,
         ui::draw_text_in_rect("-", 12,
                               columns.rank,
                               with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+    }
+    if (locked) {
+        draw_locked_row_overlay(row, config.alpha);
     }
 }
 

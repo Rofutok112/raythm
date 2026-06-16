@@ -440,6 +440,43 @@ int main() {
     assert(state.song_change_anim_t == 0.25f);
     assert(state.chart_change_anim_t == 0.5f);
 
+    song_select::state preserve_state;
+    song_select::catalog_data preserve_initial_catalog;
+    preserve_initial_catalog.songs.push_back(make_song("preserve-song-a", "preserve-chart-a"));
+    preserve_initial_catalog.songs.push_back(make_song("preserve-song-b", "preserve-chart-b"));
+    song_select::apply_catalog(
+        preserve_state,
+        std::move(preserve_initial_catalog),
+        "preserve-song-a",
+        "preserve-chart-a");
+    int preserve_reload_count = 0;
+    song_select::data_controller preserve_controller(
+        [&](bool, song_select::catalog_progress_callback) {
+            ++preserve_reload_count;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            song_select::catalog_data catalog;
+            catalog.songs.push_back(make_song("preserve-song-a", "preserve-chart-a"));
+            catalog.songs.push_back(make_song("preserve-song-b", "preserve-chart-b"));
+            return catalog;
+        });
+    preserve_controller.request_catalog_reload(
+        preserve_state,
+        {"preserve-song-a", "preserve-chart-a", true, true});
+    assert(song_select::apply_song_selection(preserve_state, 1, 0));
+    spin_until([&] {
+        const song_select::catalog_reload_result result =
+            preserve_controller.poll_catalog_reload(preserve_state);
+        if (!result.completed) {
+            return false;
+        }
+        assert(!result.selection_changed);
+        return true;
+    });
+    assert(preserve_reload_count == 1);
+    assert(song_select::selected_song(preserve_state)->song.meta.song_id == "preserve-song-b");
+    assert(song_select::selected_chart_for(preserve_state, song_select::filtered_charts_for_selected_song(preserve_state))
+               ->meta.chart_id == "preserve-chart-b");
+
     int source_reload_count = 0;
     song_select::data_controller source_controller(
         [&](bool, song_select::catalog_progress_callback) {

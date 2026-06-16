@@ -9,6 +9,30 @@
 
 namespace song_select {
 
+namespace {
+
+catalog_reload_request request_for_apply(const state& state, catalog_reload_request request) {
+    if (!request.preserve_current_selection) {
+        return request;
+    }
+
+    const song_entry* song = selected_song(state);
+    if (song == nullptr) {
+        return request;
+    }
+
+    request.preferred_song_id = song->song.meta.song_id;
+    const auto filtered = filtered_charts_for_selected_song(state);
+    if (const chart_option* chart = selected_chart_for(state, filtered)) {
+        request.preferred_chart_id = chart->meta.chart_id;
+    } else {
+        request.preferred_chart_id.clear();
+    }
+    return request;
+}
+
+}  // namespace
+
 data_controller::data_controller()
     : data_controller(load_catalog_from_service) {
 }
@@ -63,18 +87,19 @@ catalog_reload_result data_controller::poll_catalog_reload(state& state) {
     }
 
     const selection_key previous_selection = selection_key_for_state(state);
+    const catalog_reload_request apply_request = request_for_apply(state, active_catalog_request_);
 
     try {
         apply_catalog(state,
                       catalog_future_.get(),
-                      active_catalog_request_.preferred_song_id,
-                      active_catalog_request_.preferred_chart_id);
+                      apply_request.preferred_song_id,
+                      apply_request.preferred_chart_id);
         catalog_progress_.set("Local catalog ready.", 1.0f, false);
     } catch (const std::exception& ex) {
         apply_catalog(state,
                       {},
-                      active_catalog_request_.preferred_song_id,
-                      active_catalog_request_.preferred_chart_id);
+                      apply_request.preferred_song_id,
+                      apply_request.preferred_chart_id);
         state.load_errors = {ex.what()};
         catalog_progress_.set(ex.what(), 0.0f, false);
         result.failed = true;
