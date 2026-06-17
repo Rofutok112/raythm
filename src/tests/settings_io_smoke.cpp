@@ -184,6 +184,20 @@ int main() {
         expect(invalid_language.ui_locale == localization::locale::english,
                "Expected unknown language code to fall back to English.",
                ok);
+
+        const size_t fps_pos = content.find("\"targetFps\": 240");
+        if (fps_pos != std::string::npos) {
+            content.replace(fps_pos, std::string("\"targetFps\": 240").size(), "\"targetFps\": 0");
+        }
+        {
+            std::ofstream output(app_paths::settings_path());
+            output << content;
+        }
+        game_settings legacy_unlimited_fps;
+        load_settings(legacy_unlimited_fps);
+        expect(legacy_unlimited_fps.target_fps == kLegacyUnlimitedTargetFpsFallback,
+               "Expected legacy unlimited target FPS to be migrated to a safe cap.",
+               ok);
     }
 
     fs::remove_all(temp_local_app_data, ec);

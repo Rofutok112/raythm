@@ -19,6 +19,7 @@
 int main() {
     initialize_settings_storage(g_settings);
     load_settings(g_settings);
+    g_settings.target_fps = sanitize_target_fps(g_settings.target_fps);
     g_settings.windowed_width = kDefaultWindowedWidth;
     g_settings.windowed_height = kDefaultWindowedHeight;
     localization::set_current_locale(g_settings.ui_locale);
@@ -39,7 +40,7 @@ int main() {
     InitWindow(g_settings.windowed_width, g_settings.windowed_height, "raythm");
 #endif
     SetTraceLogLevel(LOG_WARNING);
-    SetTargetFPS(g_settings.target_fps);
+    SetTargetFPS(sanitize_target_fps(g_settings.target_fps));
     SetExitKey(KEY_NULL);
 #ifdef _WIN32
     SetWindowMinSize(640, 360 + chrome_height);
@@ -75,15 +76,17 @@ int main() {
 
     scene_manager manager;
     manager.set_initial_scene(std::unique_ptr<scene>(new title_scene(manager)));
-    int applied_target_fps = g_settings.target_fps;
+    int applied_target_fps = sanitize_target_fps(g_settings.target_fps);
     bool was_window_focused = IsWindowFocused();
     bool was_window_maximized = window_chrome::is_maximized();
 
     while (!WindowShouldClose() && !manager.exit_requested()) {
         windows_input_source::instance().begin_frame();
-        if (applied_target_fps != g_settings.target_fps) {
-            SetTargetFPS(g_settings.target_fps);
-            applied_target_fps = g_settings.target_fps;
+        const int target_fps = sanitize_target_fps(g_settings.target_fps);
+        if (applied_target_fps != target_fps) {
+            g_settings.target_fps = target_fps;
+            SetTargetFPS(target_fps);
+            applied_target_fps = target_fps;
         }
         if (!window_dialog_support::is_fullscreen() && IsWindowResized()) {
             g_settings.window_maximized = window_chrome::is_maximized();

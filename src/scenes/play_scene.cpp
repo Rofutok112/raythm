@@ -304,44 +304,34 @@ void play_scene::update(float dt) {
 
 void play_scene::start_async_load() {
     const play_start_request request = request_;
-    load_progress_ = std::make_shared<shared_load_progress>();
-    const std::shared_ptr<shared_load_progress> progress = load_progress_;
-    progress->set("Loading...", 0.0f);
-    load_future_ = std::async(std::launch::async, [request, progress]() mutable {
-        async_load_result result;
-        result.state.key_count = request.key_count;
-        result.state.song_data = request.song_data;
-        result.state.selected_chart_path = request.selected_chart_path;
-        result.state.chart_data = request.chart_data;
-        result.state.editor_resume_state = request.editor_resume_state;
-        result.state.start_tick = std::max(0, request.start_tick);
-        result.state.multiplayer_room_id = request.multiplayer_room_id;
-        result.state.multiplayer_match_id = request.multiplayer_match_id;
-        result.state.mods = request.mods;
-        result.state.status_text = "Loading...";
-        result.state.status_progress = 0.0f;
-        try {
-            result.state = play_session_loader::load(
-                request,
-                result.draw_queue,
-                [progress](float value, const std::string& message) {
-                    if (progress == nullptr) {
-                        return;
-                    }
-                    progress->set(message, value);
-                });
-        } catch (const std::exception& ex) {
-            result.draw_queue.clear();
-            result.state.status_text =
-                ex.what() != nullptr && ex.what()[0] != '\0' ? ex.what() : "Failed to load play session";
-            result.state.status_progress = 1.0f;
-        } catch (...) {
-            result.draw_queue.clear();
-            result.state.status_text = "Failed to load play session";
-            result.state.status_progress = 1.0f;
-        }
-        return result;
-    });
+    async_load_result result;
+    result.state.key_count = request.key_count;
+    result.state.song_data = request.song_data;
+    result.state.selected_chart_path = request.selected_chart_path;
+    result.state.chart_data = request.chart_data;
+    result.state.editor_resume_state = request.editor_resume_state;
+    result.state.start_tick = std::max(0, request.start_tick);
+    result.state.multiplayer_room_id = request.multiplayer_room_id;
+    result.state.multiplayer_match_id = request.multiplayer_match_id;
+    result.state.mods = request.mods;
+    result.state.status_text = "Loading...";
+    result.state.status_progress = 0.0f;
+    try {
+        result.state = play_session_loader::load(
+            request,
+            result.draw_queue,
+            nullptr);
+    } catch (const std::exception& ex) {
+        result.draw_queue.clear();
+        result.state.status_text =
+            ex.what() != nullptr && ex.what()[0] != '\0' ? ex.what() : "Failed to load play session";
+        result.state.status_progress = 1.0f;
+    } catch (...) {
+        result.draw_queue.clear();
+        result.state.status_text = "Failed to load play session";
+        result.state.status_progress = 1.0f;
+    }
+    apply_loaded_session(std::move(result));
 }
 
 void play_scene::sync_async_load_progress() {

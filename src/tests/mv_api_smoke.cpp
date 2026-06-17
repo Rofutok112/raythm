@@ -3,12 +3,14 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "mv/api/mv_builtins.h"
 #include "mv/api/mv_context.h"
 #include "mv/api/mv_scene.h"
+#include "mv/lang/mv_sandbox.h"
 #include "mv/render/mv_validator.h"
 #include "mv/mv_runtime.h"
 
@@ -344,6 +346,34 @@ def draw(ctx):
     ASSERT(!rt.load_source(src));
 }
 
+TEST(test_colorarray_typo_fails_compile_without_throwing) {
+    const char* src = R"(
+def draw(ctx):
+    c = ColorArRay(255, 255, 255)
+    DrawRect(x=0, y=0, w=10, h=10, fill=c)
+)";
+    mv::mv_runtime rt;
+    ASSERT(!rt.load_source(src));
+    ASSERT(!rt.is_loaded());
+}
+
+TEST(test_native_exception_reports_runtime_error) {
+    const char* src = R"(
+def draw(ctx):
+    explode()
+)";
+    mv::sandbox sb;
+    sb.register_native("explode", [](const std::vector<mv::mv_value>&) -> mv::mv_value {
+        throw std::runtime_error("ColorArRay");
+    });
+    ASSERT(sb.compile(src));
+
+    auto result = sb.call("draw", {std::monostate{}});
+    ASSERT(!result.success);
+    ASSERT(!result.errors.empty());
+    ASSERT(result.errors[0].message.find("ColorArRay") != std::string::npos);
+}
+
 TEST(test_unknown_variable_fails_compile) {
     const char* src = R"(
 def draw(ctx):
@@ -600,6 +630,8 @@ int main() {
     RUN(test_ctx_audio_oscilloscope_access_in_draw);
     RUN(test_imperative_draw_without_return);
     RUN(test_unknown_function_fails_compile);
+    RUN(test_colorarray_typo_fails_compile_without_throwing);
+    RUN(test_native_exception_reports_runtime_error);
     RUN(test_unknown_variable_fails_compile);
     RUN(test_imperative_progress_bar_draw);
     RUN(test_manual_spectrum_scene_from_primitives);

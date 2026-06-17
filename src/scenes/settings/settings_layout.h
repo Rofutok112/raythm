@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <span>
 
+#include "game_settings.h"
 #include "raylib.h"
 #include "localization/localization.h"
 #include "scene_common.h"
@@ -185,7 +186,8 @@ inline float slider_ratio_from_mouse(const Rectangle& row_rect) {
 }
 
 inline int fps_option_index(int target_fps) {
-    constexpr std::array<int, 4> kFrameRateOptions = {120, 144, 240, 0};
+    constexpr std::array<int, 4> kFrameRateOptions = {120, 144, 240, 360};
+    target_fps = sanitize_target_fps(target_fps);
     for (int i = 0; i < static_cast<int>(kFrameRateOptions.size()); ++i) {
         if (kFrameRateOptions[static_cast<std::size_t>(i)] == target_fps) {
             return i;

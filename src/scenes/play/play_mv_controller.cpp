@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <exception>
 
 #include "audio_manager.h"
 #include "mv/api/mv_context.h"
@@ -201,23 +202,31 @@ void play_mv_controller::draw(const play_session_state& state, double visual_tim
     input.screen_w = static_cast<float>(kScreenWidth);
     input.screen_h = static_cast<float>(kScreenHeight);
 
-    const mv::scene* scene = runtime_->tick_ref(input);
-    if (scene != nullptr) {
-        static int mv_log_count = 0;
-        if (mv_log_count < 3) {
-            TraceLog(LOG_INFO, "MV: tick OK, %d nodes", static_cast<int>(scene->nodes.size()));
-            ++mv_log_count;
+    try {
+        const mv::scene* scene = runtime_->tick_ref(input);
+        if (scene != nullptr) {
+            static int mv_log_count = 0;
+            if (mv_log_count < 3) {
+                TraceLog(LOG_INFO, "MV: tick OK, %d nodes", static_cast<int>(scene->nodes.size()));
+                ++mv_log_count;
+            }
+            mv::render_scene(*scene);
+            return;
         }
-        mv::render_scene(*scene);
-        return;
-    }
 
-    static int mv_fail_count = 0;
-    if (mv_fail_count < 3) {
-        TraceLog(LOG_WARNING, "MV: tick returned nullopt");
-        for (const auto& error : runtime_->last_errors()) {
-            TraceLog(LOG_WARNING, "MV:   L%d: %s (%s)", error.line, error.message.c_str(), error.phase.c_str());
+        static int mv_fail_count = 0;
+        if (mv_fail_count < 3) {
+            TraceLog(LOG_WARNING, "MV: tick returned nullopt");
+            for (const auto& error : runtime_->last_errors()) {
+                TraceLog(LOG_WARNING, "MV:   L%d: %s (%s)", error.line, error.message.c_str(), error.phase.c_str());
+            }
+            ++mv_fail_count;
         }
-        ++mv_fail_count;
+    } catch (const std::exception& ex) {
+        TraceLog(LOG_WARNING, "MV: disabled after exception: %s", ex.what());
+        reset();
+    } catch (...) {
+        TraceLog(LOG_WARNING, "MV: disabled after unknown exception");
+        reset();
     }
 }
