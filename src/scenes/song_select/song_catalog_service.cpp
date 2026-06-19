@@ -631,6 +631,8 @@ delete_result delete_song(const state& state, int song_index) {
 
     result.success = true;
     result.message = "Song deleted.";
+    result.deleted_song = true;
+    result.deleted_song_id = entry.song.meta.song_id;
     result.preferred_song_id = fallback_song_id_after_song_delete(state, song_index);
     return result;
 }
@@ -717,6 +719,9 @@ delete_result delete_chart(const state& state, int song_index, int chart_index) 
 
     result.success = true;
     result.message = "Chart deleted.";
+    result.deleted_song = false;
+    result.deleted_song_id = state.songs[static_cast<size_t>(song_index)].song.meta.song_id;
+    result.deleted_chart_id = deleted_chart_id;
     result.preferred_song_id = state.songs[static_cast<size_t>(song_index)].song.meta.song_id;
     result.preferred_chart_id = fallback_chart_id_after_chart_delete(state, song_index, chart_index);
     return result;

@@ -174,6 +174,15 @@ Rectangle chart_area_rect(Rectangle row) {
     return {row.x + 18.0f, row.y + 126.0f, row.width - 36.0f, row.height - 144.0f};
 }
 
+Rectangle row_rect_at_y(Rectangle area, float y, float height) {
+    return {
+        area.x,
+        y,
+        area.width,
+        height,
+    };
+}
+
 Rectangle chart_list_viewport_rect(Rectangle chart_area) {
     return {
         chart_area.x,
@@ -390,10 +399,11 @@ Rectangle row_rect(const song_select::state& state, Rectangle area, int index, f
     float y = area.y + kInitialRowOffsetY - scroll_y;
     for (int visible = 0; visible < static_cast<int>(indices.size()); ++visible) {
         const int song_index = indices[static_cast<size_t>(visible)];
+        const float height = row_height(state, song_index);
         if (song_index == index) {
-            return {area.x, y, area.width, row_height(state, song_index)};
+            return row_rect_at_y(area, y, height);
         }
-        y += row_height(state, song_index) + kSongRowGap;
+        y += height + kSongRowGap;
     }
     return {};
 }
@@ -415,10 +425,13 @@ int hit_test(const song_select::state& state, Rectangle area, float scroll_y, Ve
         return -1;
     }
     const std::vector<int> indices = song_select::filtered_song_indices(state);
+    float y = area.y + kInitialRowOffsetY - scroll_y;
     for (const int song_index : indices) {
-        if (CheckCollisionPointRec(point, row_rect(state, area, song_index, scroll_y))) {
+        const float height = row_height(state, song_index);
+        if (CheckCollisionPointRec(point, row_rect_at_y(area, y, height))) {
             return song_index;
         }
+        y += height + kSongRowGap;
     }
     return -1;
 }
@@ -504,15 +517,17 @@ void draw(const song_select::state& state, const draw_config& config) {
     }
 
     if (!config.expanded_cards) {
-        ui::draw_text_in_rect(TextFormat("%d songs", static_cast<int>(state.songs.size())), 16,
+        const std::vector<int> indices = song_select::filtered_song_indices(state);
+        ui::draw_text_in_rect(TextFormat("%d songs", static_cast<int>(indices.size())), 16,
                               {config.column_rect.x, config.column_rect.y - kSongCountOffsetY,
                                config.column_rect.width, kSongCountHeight},
                               with_alpha(t.text_muted, config.alpha), ui::text_align::left);
 
         ui::scoped_clip_rect clip(config.column_rect);
-        for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
+        for (int visible = 0; visible < static_cast<int>(indices.size()); ++visible) {
+            const int i = indices[static_cast<size_t>(visible)];
             const song_select::song_entry& song = state.songs[static_cast<size_t>(i)];
-            const Rectangle row = row_rect(config.column_rect, i, state.scroll_y);
+            const Rectangle row = row_rect(config.column_rect, visible, state.scroll_y);
             if (row.y + row.height < config.column_rect.y - kClipSlack ||
                 row.y > config.column_rect.y + config.column_rect.height + kClipSlack) {
                 continue;
@@ -569,9 +584,12 @@ void draw(const song_select::state& state, const draw_config& config) {
     }
 
     ui::scoped_clip_rect clip(config.column_rect);
+    float row_y = config.column_rect.y + kInitialRowOffsetY - state.scroll_y;
     for (const int i : indices) {
         const song_select::song_entry& song = state.songs[static_cast<size_t>(i)];
-        const Rectangle row = row_rect(state, config.column_rect, i, state.scroll_y);
+        const float current_row_height = row_height(state, i);
+        const Rectangle row = row_rect_at_y(config.column_rect, row_y, current_row_height);
+        row_y += current_row_height + kSongRowGap;
         if (row.width <= 0.0f || row.height <= 0.0f) {
             continue;
         }

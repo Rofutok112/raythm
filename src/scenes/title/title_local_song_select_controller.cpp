@@ -621,8 +621,7 @@ title_play_view::update_result update(song_select::state& state,
         const int clicked_song =
             view_mode == mode::play
                 ? title_song_list_view::hit_test(state, play_song_list_rect(current), state.scroll_y, mouse)
-                : title_song_list_view::hit_test(current.song_column, state.scroll_y, mouse,
-                                                 static_cast<int>(state.songs.size()));
+                : title_song_list_view::hit_test(state, current.song_column, state.scroll_y, mouse);
         if (clicked_song >= 0) {
             if (song_select::apply_song_selection(state, clicked_song, 0)) {
                 result.song_selection_changed = true;
@@ -676,7 +675,7 @@ title_play_view::update_result update(song_select::state& state,
         state.scroll_y_target, 0.0f,
         view_mode == mode::play
             ? title_song_list_view::max_scroll(play_song_list_rect(current), state)
-            : title_song_list_view::max_scroll(current.song_column, static_cast<int>(state.songs.size())));
+            : title_song_list_view::max_scroll(current.song_column, state));
     state.scroll_y = tween::damp(state.scroll_y, state.scroll_y_target, dt, 12.0f, 0.5f);
 
     state.chart_scroll_y_target = std::clamp(

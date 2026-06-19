@@ -167,7 +167,7 @@ void update(state& startup, const update_context& context) {
         startup.scoring_requested = true;
         startup.load_failed = !context.play_state.load_errors.empty();
         context.reload_online_catalog();
-        if (context.play_state.auth.logged_in) {
+        if (context.has_saved_auth_session && context.has_saved_auth_session()) {
             context.restore_auth();
         }
         context.request_scoring_ruleset_warm(false);

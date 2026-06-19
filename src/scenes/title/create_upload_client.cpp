@@ -16,6 +16,7 @@
 #include "network/auth_client.h"
 #include "network/json_helpers.h"
 #include "network/network_error.h"
+#include "network/unlock_rule_client.h"
 #include "content_lifecycle.h"
 #include "path_utils.h"
 #include "chart_fingerprint.h"
@@ -1048,7 +1049,8 @@ upload_request_result send_chart_upload_request(const auth::session& session,
                                                 const song_select::song_entry& song,
                                                 const song_select::chart_option& chart,
                                                 const std::string& remote_song_id,
-                                                const std::optional<std::string>& remote_chart_id) {
+                                                const std::optional<std::string>& remote_chart_id,
+                                                const std::vector<unlock_rule_client::rule>& unlock_rules) {
     upload_request_result result;
 
     const fs::path chart_path = path_utils::from_utf8(chart.path);
@@ -1062,6 +1064,9 @@ upload_request_result send_chart_upload_request(const auth::session& session,
     std::vector<multipart_field> fields;
     fields.push_back({"songId", remote_song_id});
     fields.push_back({"visibility", "public"});
+    if (!unlock_rules.empty()) {
+        fields.push_back({"unlockRules", unlock_rule_client::rules_json_payload(unlock_rules)});
+    }
     append_chart_contract_fields(fields, song, chart, chart_bytes);
 
     std::vector<multipart_file> files;
@@ -1359,6 +1364,7 @@ upload_result upload_song(const song_select::song_entry& song) {
     result.message = request_result.message;
     result.retry_after = request_result.retry_after;
     result.should_refresh_online_catalog = request_result.success;
+    result.remote_song_id = request_result.remote_song_id;
     if (!request_result.success) {
         return result;
     }
@@ -1394,8 +1400,10 @@ upload_result upload_song(const song_select::song_entry& song) {
 }
 
 upload_result upload_chart(const song_select::song_entry& song,
-                           const song_select::chart_option& chart) {
+                           const song_select::chart_option& chart,
+                           const std::vector<unlock_rule_client::rule>& unlock_rules) {
     upload_result result;
+    result.local_chart_id = chart.meta.chart_id;
 
     std::string error_message;
     const std::optional<auth::session> session_opt = require_saved_session(error_message);
@@ -1541,7 +1549,7 @@ upload_result upload_chart(const song_select::song_entry& song,
     const std::optional<std::string> effective_remote_chart_id = existing_remote_chart_id;
 
     upload_request_result request_result =
-        send_chart_upload_request(session, song, chart, *remote_song_id, effective_remote_chart_id);
+        send_chart_upload_request(session, song, chart, *remote_song_id, effective_remote_chart_id, unlock_rules);
     if (request_result.unauthorized) {
         std::string restore_error;
         const std::optional<auth::session> restored = restore_upload_session(restore_error);
@@ -1550,12 +1558,12 @@ upload_result upload_chart(const song_select::song_entry& song,
             return result;
         }
         session = *restored;
-        request_result = send_chart_upload_request(session, song, chart, *remote_song_id, effective_remote_chart_id);
+        request_result = send_chart_upload_request(session, song, chart, *remote_song_id, effective_remote_chart_id, unlock_rules);
     }
     if (request_result.not_found && existing_remote_chart_id.has_value()) {
         local_content_index::remove_chart_binding(session.server_url, chart.meta.chart_id);
         request_result =
-            send_chart_upload_request(session, song, chart, *remote_song_id, std::nullopt);
+            send_chart_upload_request(session, song, chart, *remote_song_id, std::nullopt, unlock_rules);
         if (request_result.unauthorized) {
             std::string restore_error;
             const std::optional<auth::session> restored = restore_upload_session(restore_error);
@@ -1565,7 +1573,7 @@ upload_result upload_chart(const song_select::song_entry& song,
             }
             session = *restored;
             request_result =
-                send_chart_upload_request(session, song, chart, *remote_song_id, std::nullopt);
+                send_chart_upload_request(session, song, chart, *remote_song_id, std::nullopt, unlock_rules);
         }
     }
     if (request_result.not_found && remote_song_id.has_value()) {
@@ -1580,6 +1588,8 @@ upload_result upload_chart(const song_select::song_entry& song,
     result.message = request_result.message;
     result.retry_after = request_result.retry_after;
     result.should_refresh_online_catalog = request_result.success;
+    result.remote_song_id = *remote_song_id;
+    result.remote_chart_id = request_result.remote_chart_id;
     if (!request_result.success) {
         return result;
     }

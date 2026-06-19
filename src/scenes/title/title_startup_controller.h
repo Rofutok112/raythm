@@ -30,6 +30,7 @@ struct update_context {
     std::function<void(std::string, std::string, title_catalog::reload_policy)> request_play_catalog_reload;
     std::function<bool()> play_catalog_loading;
     std::function<void()> reload_online_catalog;
+    std::function<bool()> has_saved_auth_session;
     std::function<void()> restore_auth;
     std::function<void(bool)> request_scoring_ruleset_warm;
     std::function<bool()> scoring_ruleset_loading;

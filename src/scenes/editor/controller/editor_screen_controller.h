@@ -43,6 +43,8 @@ struct context {
     std::function<void(int)> scroll_to_tick;
     std::function<bool(bool)> apply_metadata_changes;
     std::function<bool(int)> apply_chart_offset;
+    std::function<bool()> open_unlock_rules;
+    std::function<void()> draw_unlock_rules;
 };
 
 void draw_and_update(const context& context);

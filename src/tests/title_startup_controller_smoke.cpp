@@ -29,6 +29,8 @@ int main() {
     std::string requested_song_id;
     std::string requested_chart_id;
     bool online_reloaded = false;
+    bool has_saved_auth_session = false;
+    bool restore_auth_requested = false;
     bool scoring_warm_requested = false;
 
     title_startup_controller::update(startup, {
@@ -48,7 +50,12 @@ int main() {
         [&] {
             online_reloaded = true;
         },
-        [] {},
+        [&] {
+            return has_saved_auth_session;
+        },
+        [&] {
+            restore_auth_requested = true;
+        },
         [&](bool force_refresh) {
             scoring_warm_requested = !force_refresh;
         },
@@ -75,6 +82,9 @@ int main() {
             return true;
         },
         [] {},
+        [] {
+            return false;
+        },
         [] {},
         [](bool) {},
         [] {
@@ -104,7 +114,12 @@ int main() {
         [&] {
             online_reloaded = true;
         },
-        [] {},
+        [&] {
+            return has_saved_auth_session;
+        },
+        [&] {
+            restore_auth_requested = true;
+        },
         [&](bool force_refresh) {
             scoring_warm_requested = !force_refresh;
         },
@@ -127,7 +142,12 @@ int main() {
         [&] {
             online_reloaded = true;
         },
-        [] {},
+        [&] {
+            return has_saved_auth_session;
+        },
+        [&] {
+            restore_auth_requested = true;
+        },
         [&](bool force_refresh) {
             scoring_warm_requested = !force_refresh;
         },
@@ -141,7 +161,39 @@ int main() {
     assert(startup.loading_message == "Ready.");
     assert(home_status.empty());
     assert(online_reloaded);
+    assert(!restore_auth_requested);
     assert(scoring_warm_requested);
+
+    title_startup_controller::reset(startup);
+    play_state.catalog_loaded_once = true;
+    startup.catalog_requested = true;
+    startup.fonts_preload_started = true;
+    startup.fonts_preloaded = true;
+    has_saved_auth_session = true;
+    restore_auth_requested = false;
+
+    title_startup_controller::update(startup, {
+        play_state,
+        "",
+        "",
+        home_status,
+        [](std::string, std::string, title_catalog::reload_policy) {},
+        [] {
+            return false;
+        },
+        [] {},
+        [&] {
+            return has_saved_auth_session;
+        },
+        [&] {
+            restore_auth_requested = true;
+        },
+        [](bool) {},
+        [] {
+            return false;
+        },
+    });
+    assert(restore_auth_requested);
 
     std::cout << "title_startup_controller smoke test passed\n";
     return EXIT_SUCCESS;

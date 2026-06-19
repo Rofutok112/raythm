@@ -190,16 +190,19 @@ void play_scene::on_enter() {
     state_.mods = request_.mods;
     state_.status_text = "Loading...";
     state_.status_progress = 0.0f;
+    load_start_pending_ = true;
+    load_start_delay_frames_ = 1;
     start_gate_active_ = false;
     multiplayer_loaded_sent_ = false;
     multiplayer_countdown_started_ = false;
     start_gate_timer_ = 0.0f;
     match_loaded_poll_t_ = 0.0f;
     multiplayer_score_sync_t_ = 0.0f;
-    start_async_load();
 }
 
 void play_scene::on_exit() {
+    load_start_pending_ = false;
+    load_start_delay_frames_ = 0;
     wait_for_pending_load();
     if (multiplayer_realtime_ != nullptr) {
         multiplayer_realtime_->close();
@@ -238,6 +241,10 @@ void play_scene::update(float dt) {
     context.left_click_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     context.backspace_pressed = IsKeyPressed(KEY_BACKSPACE);
     context.window_focused = IsWindowFocused();
+
+    if (advance_deferred_load_start()) {
+        return;
+    }
 
     if (poll_async_load()) {
         return;
@@ -320,7 +327,13 @@ void play_scene::start_async_load() {
         result.state = play_session_loader::load(
             request,
             result.draw_queue,
-            nullptr);
+            [this](float value, const std::string& message) {
+                state_.status_progress = value;
+                if (!message.empty()) {
+                    state_.status_text = message;
+                }
+                draw_loading_status_frame();
+            });
     } catch (const std::exception& ex) {
         result.draw_queue.clear();
         result.state.status_text =
@@ -429,6 +442,15 @@ void play_scene::wait_for_pending_load() {
     load_progress_.reset();
 }
 
+void play_scene::draw_loading_status_frame() {
+    BeginDrawing();
+    virtual_screen::begin_ui();
+    play_renderer::draw_status(state_);
+    virtual_screen::end();
+    present_virtual_screen();
+    EndDrawing();
+}
+
 void play_scene::rebuild_hit_regions() const {
     ui::begin_hit_regions();
     if (state_.paused) {
@@ -436,6 +458,20 @@ void play_scene::rebuild_hit_regions() const {
                                 ui::draw_layer::overlay);
         ui::register_hit_region(play_renderer::pause_panel_rect(), ui::draw_layer::modal);
     }
+}
+
+bool play_scene::advance_deferred_load_start() {
+    if (!load_start_pending_) {
+        return false;
+    }
+    if (load_start_delay_frames_ > 0) {
+        --load_start_delay_frames_;
+        return true;
+    }
+
+    load_start_pending_ = false;
+    start_async_load();
+    return true;
 }
 
 Camera3D play_scene::make_play_camera() const {

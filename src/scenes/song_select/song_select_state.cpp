@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 
 #include "managed_content_storage.h"
@@ -110,6 +111,44 @@ void ensure_jacket_cache(song_select::state& state) {
     if (!state.jackets) {
         state.jackets = std::make_shared<song_select::jacket_cache>();
     }
+}
+
+struct jacket_identity {
+    std::string directory;
+    std::string file;
+    std::string managed_package_id;
+    std::string managed_jacket_hash;
+    std::string managed_remote_jacket_hash;
+};
+
+jacket_identity identity_for_jacket(const song_select::song_entry& song) {
+    return {
+        song.song.directory,
+        song.song.meta.jacket_file,
+        song.managed_manifest.has_value() ? song.managed_manifest->package_id : "",
+        song.managed_manifest.has_value() ? song.managed_manifest->jacket_hash : "",
+        song.managed_manifest.has_value() ? song.managed_manifest->remote_jacket_hash : "",
+    };
+}
+
+bool same_jacket_identity(const jacket_identity& lhs, const jacket_identity& rhs) {
+    return lhs.directory == rhs.directory &&
+           lhs.file == rhs.file &&
+           lhs.managed_package_id == rhs.managed_package_id &&
+           lhs.managed_jacket_hash == rhs.managed_jacket_hash &&
+           lhs.managed_remote_jacket_hash == rhs.managed_remote_jacket_hash;
+}
+
+std::unordered_map<std::string, jacket_identity> jacket_identity_map(
+    const std::vector<song_select::song_entry>& songs) {
+    std::unordered_map<std::string, jacket_identity> result;
+    result.reserve(songs.size());
+    for (const song_select::song_entry& song : songs) {
+        if (!song.song.meta.song_id.empty()) {
+            result[song.song.meta.song_id] = identity_for_jacket(song);
+        }
+    }
+    return result;
 }
 
 }  // namespace
@@ -248,13 +287,37 @@ void jacket_cache::poll() {
     }
 }
 
-void jacket_cache::clear() {
-    for (auto& [_, entry] : entries_) {
-        if (entry.loaded) {
-            UnloadTexture(entry.texture);
+void jacket_cache::reconcile_catalog(const std::vector<song_entry>& previous_songs,
+                                     const std::vector<song_entry>& next_songs) {
+    const std::unordered_map<std::string, jacket_identity> previous = jacket_identity_map(previous_songs);
+    const std::unordered_map<std::string, jacket_identity> next = jacket_identity_map(next_songs);
+
+    for (auto it = entries_.begin(); it != entries_.end();) {
+        const auto previous_it = previous.find(it->first);
+        const auto next_it = next.find(it->first);
+        const bool keep = previous_it != previous.end() &&
+                          next_it != next.end() &&
+                          same_jacket_identity(previous_it->second, next_it->second);
+        if (keep) {
+            ++it;
+        } else {
+            it = erase_entry(it);
         }
     }
-    entries_.clear();
+}
+
+void jacket_cache::clear() {
+    for (auto it = entries_.begin(); it != entries_.end();) {
+        it = erase_entry(it);
+    }
+}
+
+std::unordered_map<std::string, jacket_cache::cache_entry>::iterator jacket_cache::erase_entry(
+    std::unordered_map<std::string, cache_entry>::iterator it) {
+    if (it->second.loaded) {
+        UnloadTexture(it->second.texture);
+    }
+    return entries_.erase(it);
 }
 
 float scroll_offset_for_selected_song(const state& state);
@@ -383,6 +446,15 @@ bool song_has_visible_chart(const state& state, const song_entry& song) {
     });
 }
 
+bool chartless_song_matches_filters(const state& state, const song_entry& song) {
+    if (!state.filter.include_chartless_songs ||
+        !song.charts.empty() ||
+        state.filter.multiplayer_queueable_only) {
+        return false;
+    }
+    return true;
+}
+
 std::vector<int> filtered_song_indices(const state& state) {
     std::vector<int> indices;
     indices.reserve(state.songs.size());
@@ -392,7 +464,7 @@ std::vector<int> filtered_song_indices(const state& state) {
             continue;
         }
         if (song_has_visible_chart(state, song) ||
-            (state.filter.include_chartless_songs && song.charts.empty())) {
+            chartless_song_matches_filters(state, song)) {
             indices.push_back(song_index);
         }
     }
@@ -501,7 +573,7 @@ void apply_catalog(state& state, catalog_data catalog,
         previous_chart_id = previous_chart->meta.chart_id;
     }
 
-    state.jackets->clear();
+    state.jackets->reconcile_catalog(state.songs, catalog.songs);
     state.songs = std::move(catalog.songs);
     state.load_errors = std::move(catalog.load_errors);
     state.catalog_loading = false;
@@ -516,13 +588,8 @@ void apply_catalog(state& state, catalog_data catalog,
     state.embedded_chart_scroll_y_target = 0.0f;
     state.selected_song_expanded = true;
     state.selected_song_expand_t = 1.0f;
-    state.play_search_input = {};
-    state.chart_source = chart_source_filter::all;
     state.play_filter_modal_open = false;
     state.play_mod_modal_open = false;
-    state.chart_key_filter = 0;
-    state.chart_min_level = 0.0f;
-    state.chart_max_level = 99.0f;
     state.chart_level_filter_dragging = false;
     state.chart_level_filter_dragging_min = false;
     state.preview_bar_dragging = false;
@@ -586,6 +653,154 @@ void apply_catalog(state& state, catalog_data catalog,
         state.scroll_y = restored_scroll;
         state.scroll_y_target = restored_scroll;
     }
+}
+
+bool apply_catalog_chart_level_update(state& state, const catalog_data& catalog) {
+    struct level_entry {
+        std::string path;
+        float level = 0.0f;
+    };
+
+    std::unordered_map<std::string, level_entry> levels_by_chart_id;
+    for (const song_entry& song : catalog.songs) {
+        for (const chart_option& chart : song.charts) {
+            if (!chart.meta.chart_id.empty() && chart.meta.level > 0.0f) {
+                levels_by_chart_id[chart.meta.chart_id] = {
+                    chart.path,
+                    chart.meta.level,
+                };
+            }
+        }
+    }
+
+    bool matched_any_chart = false;
+    for (song_entry& song : state.songs) {
+        for (chart_option& chart : song.charts) {
+            const auto level_it = levels_by_chart_id.find(chart.meta.chart_id);
+            if (level_it == levels_by_chart_id.end() ||
+                level_it->second.path != chart.path) {
+                continue;
+            }
+            matched_any_chart = true;
+            chart.meta.level = level_it->second.level;
+        }
+    }
+    return matched_any_chart;
+}
+
+namespace {
+
+void select_after_catalog_item_removed(state& state,
+                                       const std::string& preferred_song_id,
+                                       const std::string& preferred_chart_id) {
+    if (state.jackets) {
+        state.jackets->clear();
+    }
+    state.context_menu = {};
+    state.confirmation_dialog = {};
+    state.preview_bar_dragging = false;
+    state.preview_bar_resume_after_drag = false;
+    state.preview_bar_drag_position_seconds = 0.0;
+    state.chart_scroll_y = 0.0f;
+    state.chart_scroll_y_target = 0.0f;
+    state.embedded_chart_scroll_y = 0.0f;
+    state.embedded_chart_scroll_y_target = 0.0f;
+
+    if (state.songs.empty()) {
+        state.selected_song_index = 0;
+        state.difficulty_index = 0;
+        state.scroll_y = 0.0f;
+        state.scroll_y_target = 0.0f;
+        state.song_change_anim_t = 1.0f;
+        state.chart_change_anim_t = 1.0f;
+        return;
+    }
+
+    state.selected_song_index = 0;
+    if (!preferred_song_id.empty()) {
+        for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
+            if (state.songs[static_cast<size_t>(i)].song.meta.song_id == preferred_song_id) {
+                state.selected_song_index = i;
+                break;
+            }
+        }
+    }
+
+    const std::vector<int> visible_song_indices = filtered_song_indices(state);
+    if (visible_song_indices.empty()) {
+        state.selected_song_index = 0;
+        state.difficulty_index = 0;
+    } else if (std::find(visible_song_indices.begin(), visible_song_indices.end(), state.selected_song_index) ==
+               visible_song_indices.end()) {
+        state.selected_song_index = visible_song_indices.front();
+        state.difficulty_index = 0;
+    }
+
+    const auto filtered_charts = filtered_charts_for_selected_song(state);
+    state.difficulty_index = 0;
+    if (!preferred_chart_id.empty()) {
+        for (int i = 0; i < static_cast<int>(filtered_charts.size()); ++i) {
+            if (filtered_charts[static_cast<size_t>(i)]->meta.chart_id == preferred_chart_id) {
+                state.difficulty_index = i;
+                break;
+            }
+        }
+    }
+    if (!filtered_charts.empty()) {
+        state.difficulty_index = std::clamp(state.difficulty_index, 0, static_cast<int>(filtered_charts.size()) - 1);
+    }
+
+    state.song_change_anim_t = 1.0f;
+    state.chart_change_anim_t = 1.0f;
+    const float restored_scroll = scroll_offset_for_selected_song(state);
+    state.scroll_y = restored_scroll;
+    state.scroll_y_target = restored_scroll;
+}
+
+}  // namespace
+
+bool remove_deleted_song_from_catalog(state& state,
+                                      const std::string& deleted_song_id,
+                                      const std::string& preferred_song_id,
+                                      const std::string& preferred_chart_id) {
+    const auto song_it = std::find_if(state.songs.begin(), state.songs.end(),
+                                      [&](const song_entry& song) {
+                                          return song.song.meta.song_id == deleted_song_id;
+                                      });
+    if (song_it == state.songs.end()) {
+        return false;
+    }
+
+    state.songs.erase(song_it);
+    select_after_catalog_item_removed(state, preferred_song_id, preferred_chart_id);
+    return true;
+}
+
+bool remove_deleted_chart_from_catalog(state& state,
+                                       const std::string& deleted_song_id,
+                                       const std::string& deleted_chart_id,
+                                       const std::string& preferred_song_id,
+                                       const std::string& preferred_chart_id) {
+    const auto song_it = std::find_if(state.songs.begin(), state.songs.end(),
+                                      [&](const song_entry& song) {
+                                          return song.song.meta.song_id == deleted_song_id;
+                                      });
+    if (song_it == state.songs.end()) {
+        return false;
+    }
+
+    auto& charts = song_it->charts;
+    const auto chart_it = std::find_if(charts.begin(), charts.end(),
+                                       [&](const chart_option& chart) {
+                                           return chart.meta.chart_id == deleted_chart_id;
+                                       });
+    if (chart_it == charts.end()) {
+        return false;
+    }
+
+    charts.erase(chart_it);
+    select_after_catalog_item_removed(state, preferred_song_id, preferred_chart_id);
+    return true;
 }
 
 bool apply_song_selection(state& state, int song_index, int chart_index) {

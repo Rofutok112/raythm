@@ -254,6 +254,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/network/network_error.h
         src/network/ranking_client.cpp
         src/network/ranking_client.h
+        src/network/unlock_rule_client.cpp
+        src/network/unlock_rule_client.h
         src/network/server_environment.cpp
         src/network/server_environment.h
         src/updater/update_verify.cpp
@@ -378,6 +380,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/create_tools_model.h
         src/scenes/title/create_tools_view.cpp
         src/scenes/title/create_tools_view.h
+        src/scenes/title/create_unlock_rules_controller.cpp
+        src/scenes/title/create_unlock_rules_controller.h
         src/scenes/title/create_upload_permissions.cpp
         src/scenes/title/create_upload_permissions.h
         src/scenes/title/create_upload_client.cpp

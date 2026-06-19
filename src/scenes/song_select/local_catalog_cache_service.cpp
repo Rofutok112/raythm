@@ -234,10 +234,6 @@ cache_repair_result repair_cached_song(song_entry& song, const player_chart_offs
         ++chart_it;
     }
     std::sort(song.charts.begin(), song.charts.end(), chart_source_less);
-    if (song.storage == storage_policy::managed_package && song.charts.empty()) {
-        result.remove_song = true;
-        result.changed = true;
-    }
     return result;
 }
 

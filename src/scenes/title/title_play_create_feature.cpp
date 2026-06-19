@@ -3,11 +3,12 @@
 #include <chrono>
 #include <ctime>
 #include <optional>
+#include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "network/auth_client.h"
-#include "network/server_environment.h"
 #include "services/content_authorization_service.h"
 #include "title/local_content_database.h"
 
@@ -123,6 +124,21 @@ std::string create_permission_refresh_key(const std::string& server_url,
     return server_url + "\n" + user_id + "\n" + remote_song_id + "\n" + remote_chart_id;
 }
 
+void apply_create_catalog_filter(song_select::state& state) {
+    state.filter.include_chartless_songs = true;
+    state.filter.multiplayer_queueable_only = false;
+    state.filter.multiplayer_queue_server_url.clear();
+    state.play_search_input = {};
+    state.chart_source = song_select::chart_source_filter::all;
+    state.chart_key_filter = 0;
+    state.chart_min_level = 0.0f;
+    state.chart_max_level = 99.0f;
+    state.play_filter_modal_open = false;
+    state.play_mod_modal_open = false;
+    state.chart_level_filter_dragging = false;
+    state.chart_level_filter_dragging_min = false;
+}
+
 }  // namespace
 
 song_select::state& title_play_create_feature::state() {
@@ -173,7 +189,7 @@ void title_play_create_feature::on_enter_play(bool multiplayer_chart_pick_active
 }
 
 void title_play_create_feature::on_enter_create(title_audio_controller& audio_controller) {
-    state_.filter.include_chartless_songs = true;
+    apply_create_catalog_filter(state_);
     capture_current_selection();
     refresh_create_tools_model(true);
     sync_selection_media(audio_controller, media_context::create, true);
@@ -194,6 +210,9 @@ void title_play_create_feature::poll_catalog_reload(title_audio_controller& audi
     const title_play_data_controller::catalog_poll_result result =
         data_controller_.poll_catalog_reload(state_);
     if (!result.completed) {
+        return;
+    }
+    if (result.stale) {
         return;
     }
 
@@ -252,7 +271,8 @@ void title_play_create_feature::poll_transfer(const cross_callbacks& callbacks) 
 }
 
 bool title_play_create_feature::poll_create_upload() {
-    if (!data_controller_.poll_create_upload(state_).refresh_catalog) {
+    const title_play_data_controller::upload_poll_result upload = data_controller_.poll_create_upload(state_);
+    if (!upload.refresh_catalog) {
         return false;
     }
     capture_current_selection();
@@ -322,7 +342,7 @@ void title_play_create_feature::update_create(scene_manager& manager,
                                               float dt,
                                               const cross_callbacks& cross,
                                               const create_update_callbacks& callbacks) {
-    state_.filter.include_chartless_songs = true;
+    apply_create_catalog_filter(state_);
     poll_create_permission_refresh();
     refresh_create_tools_model();
     title_create_mode_controller::update(

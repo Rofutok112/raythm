@@ -6,6 +6,7 @@ namespace editor::daw {
 
 struct metadata_modal_result {
     editor_left_panel_view_result metadata_result;
+    bool unlock_rules_requested = false;
     bool apply_requested = false;
     bool close_requested = false;
 };

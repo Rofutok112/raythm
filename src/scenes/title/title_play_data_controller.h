@@ -3,23 +3,32 @@
 #include <future>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "ranking_service.h"
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_select_data_controller.h"
 #include "song_select/song_select_state.h"
 #include "title/create_upload_client.h"
+#include "network/unlock_rule_client.h"
 
 class title_play_data_controller {
 public:
     struct catalog_poll_result {
         bool completed = false;
         bool queued_reload_started = false;
+        bool stale = false;
+        bool chart_levels_updated = false;
         bool selection_changed = false;
     };
 
     struct upload_poll_result {
+        bool completed = false;
+        bool success = false;
         bool refresh_catalog = false;
+        bool chart_uploaded = false;
+        std::string local_chart_id;
+        std::string remote_chart_id;
     };
 
     title_play_data_controller();
@@ -43,7 +52,8 @@ public:
 
     void start_song_upload(const song_select::song_entry& song);
     void start_chart_upload(const song_select::song_entry& song,
-                            const song_select::chart_option& chart);
+                            const song_select::chart_option& chart,
+                            std::vector<unlock_rule_client::rule> unlock_rules = {});
     upload_poll_result poll_create_upload(song_select::state& state);
 
 private:
