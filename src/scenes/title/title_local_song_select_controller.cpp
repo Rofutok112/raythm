@@ -63,6 +63,17 @@ Rectangle mod_modal_rect(Rectangle ranking_column) {
             kModalHeight};
 }
 
+bool block_locked_play_if_needed(song_select::state& state,
+                                 const song_select::song_entry* song,
+                                 const song_select::chart_option* chart) {
+    if (song == nullptr || chart == nullptr ||
+        !content_is_play_locked(song->song.meta, chart->meta)) {
+        return false;
+    }
+    song_select::queue_status_message(state, content_play_lock_reason(song->song.meta, chart->meta), true);
+    return true;
+}
+
 Rectangle auto_mod_toggle_rect(Rectangle modal) {
     using namespace title_play_view::mod_layout;
     const float row_y = modal.y + kModalTopPadding + kHeaderHeight + kHeaderToDescriptionGap +
@@ -418,6 +429,11 @@ title_play_view::update_result update(song_select::state& state,
     }
 
     if (!state.play_search_input.active && IsKeyPressed(KEY_ENTER) && has_selection) {
+        const song_select::song_entry* song = song_select::selected_song(state);
+        const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
+        if (block_locked_play_if_needed(state, song, chart)) {
+            return result;
+        }
         if (state.filter.multiplayer_queueable_only) {
             result.multiplayer_select_requested = true;
         } else {
@@ -430,6 +446,9 @@ title_play_view::update_result update(song_select::state& state,
         const song_select::song_entry* song = song_select::selected_song(state);
         const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
         if (left_pressed && has_selection && CheckCollisionPointRec(mouse, start_button_rect(current.ranking_column))) {
+            if (block_locked_play_if_needed(state, song, chart)) {
+                return result;
+            }
             if (state.filter.multiplayer_queueable_only) {
                 result.multiplayer_select_requested = true;
             } else {
@@ -539,6 +558,11 @@ title_play_view::update_result update(song_select::state& state,
                                                           static_cast<int>(filtered.size()))};
         if (clicked_chart.chart_index >= 0) {
             if (state.difficulty_index == clicked_chart.chart_index) {
+                const song_select::song_entry* song = song_select::selected_song(state);
+                const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
+                if (block_locked_play_if_needed(state, song, chart)) {
+                    return result;
+                }
                 if (state.filter.multiplayer_queueable_only) {
                     result.multiplayer_select_requested = true;
                 } else {
@@ -597,8 +621,7 @@ title_play_view::update_result update(song_select::state& state,
         const int clicked_song =
             view_mode == mode::play
                 ? title_song_list_view::hit_test(state, play_song_list_rect(current), state.scroll_y, mouse)
-                : title_song_list_view::hit_test(current.song_column, state.scroll_y, mouse,
-                                                 static_cast<int>(state.songs.size()));
+                : title_song_list_view::hit_test(state, current.song_column, state.scroll_y, mouse);
         if (clicked_song >= 0) {
             if (song_select::apply_song_selection(state, clicked_song, 0)) {
                 result.song_selection_changed = true;
@@ -652,7 +675,7 @@ title_play_view::update_result update(song_select::state& state,
         state.scroll_y_target, 0.0f,
         view_mode == mode::play
             ? title_song_list_view::max_scroll(play_song_list_rect(current), state)
-            : title_song_list_view::max_scroll(current.song_column, static_cast<int>(state.songs.size())));
+            : title_song_list_view::max_scroll(current.song_column, state));
     state.scroll_y = tween::damp(state.scroll_y, state.scroll_y_target, dt, 12.0f, 0.5f);
 
     state.chart_scroll_y_target = std::clamp(

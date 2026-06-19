@@ -1,6 +1,7 @@
 #include "mv_sandbox.h"
 
 #include <cctype>
+#include <exception>
 #include <initializer_list>
 #include <optional>
 #include <sstream>
@@ -548,61 +549,73 @@ bool sandbox::compile(const std::string& source) {
     compiled_ = false;
     runtime_vm_.reset();
 
-    // Parse
-    auto pr = parse(source);
-    if (!pr.success) {
-        for (auto& msg : pr.errors) {
-            if (auto parsed = parse_error_message("parse", msg)) {
-                errors_.push_back(*parsed);
-            } else {
-                errors_.push_back({"parse", msg, 0, 0});
+    try {
+        // Parse
+        auto pr = parse(source);
+        if (!pr.success) {
+            for (auto& msg : pr.errors) {
+                if (auto parsed = parse_error_message("parse", msg)) {
+                    errors_.push_back(*parsed);
+                } else {
+                    errors_.push_back({"parse", msg, 0, 0});
+                }
             }
+            return false;
         }
-        return false;
-    }
 
-    const auto validation_errors = validate_callable_names(pr.prog, globals_, natives_, natives_kwargs_);
-    if (!validation_errors.empty()) {
-        for (const auto& err : validation_errors) {
-            errors_.push_back({"compile", err.message, err.line, err.column});
-        }
-        return false;
-    }
-
-    // Compile
-    auto cr = mv::compile(pr.prog);
-    if (!cr.success) {
-        for (auto& msg : cr.errors) {
-            if (auto parsed = parse_error_message("compile", msg)) {
-                errors_.push_back(*parsed);
-            } else {
-                errors_.push_back({"compile", msg, 0, 0});
+        const auto validation_errors = validate_callable_names(pr.prog, globals_, natives_, natives_kwargs_);
+        if (!validation_errors.empty()) {
+            for (const auto& err : validation_errors) {
+                errors_.push_back({"compile", err.message, err.line, err.column});
             }
+            return false;
         }
+
+        // Compile
+        auto cr = mv::compile(pr.prog);
+        if (!cr.success) {
+            for (auto& msg : cr.errors) {
+                if (auto parsed = parse_error_message("compile", msg)) {
+                    errors_.push_back(*parsed);
+                } else {
+                    errors_.push_back({"compile", msg, 0, 0});
+                }
+            }
+            return false;
+        }
+
+        compiled_prog_ = std::move(cr.program);
+        runtime_vm_ = std::make_unique<vm>(compiled_prog_);
+        runtime_vm_->set_limits(limits_);
+        for (auto& [name, val] : globals_) {
+            runtime_vm_->set_global(name, val);
+        }
+        for (auto& [name, fn] : natives_) {
+            runtime_vm_->register_native(name, fn);
+        }
+        for (auto& [name, fn] : natives_kwargs_) {
+            runtime_vm_->register_native_kwargs(name, fn);
+        }
+
+        auto init_result = runtime_vm_->run_top_level();
+        if (!init_result.success) {
+            errors_.push_back({"runtime", init_result.error->message, init_result.error->line, 0});
+            runtime_vm_.reset();
+            return false;
+        }
+        compiled_ = true;
+        return true;
+    } catch (const std::exception& ex) {
+        errors_ = {{"runtime", ex.what() != nullptr ? ex.what() : "unexpected script error", 0, 0}};
+        compiled_ = false;
+        runtime_vm_.reset();
         return false;
-    }
-
-    compiled_prog_ = std::move(cr.program);
-    runtime_vm_ = std::make_unique<vm>(compiled_prog_);
-    runtime_vm_->set_limits(limits_);
-    for (auto& [name, val] : globals_) {
-        runtime_vm_->set_global(name, val);
-    }
-    for (auto& [name, fn] : natives_) {
-        runtime_vm_->register_native(name, fn);
-    }
-    for (auto& [name, fn] : natives_kwargs_) {
-        runtime_vm_->register_native_kwargs(name, fn);
-    }
-
-    auto init_result = runtime_vm_->run_top_level();
-    if (!init_result.success) {
-        errors_.push_back({"runtime", init_result.error->message, init_result.error->line, 0});
+    } catch (...) {
+        errors_ = {{"runtime", "unexpected script error", 0, 0}};
+        compiled_ = false;
         runtime_vm_.reset();
         return false;
     }
-    compiled_ = true;
-    return true;
 }
 
 script_result sandbox::call(const std::string& func_name, const std::vector<mv_value>& args) {
@@ -611,14 +624,22 @@ script_result sandbox::call(const std::string& func_name, const std::vector<mv_v
         return {std::monostate{}, errors_, false};
     }
 
-    auto result = runtime_vm_->call_function(func_name, args);
-    if (!result.success) {
-        errors_ = {{"runtime", result.error->message, result.error->line, 0}};
+    try {
+        auto result = runtime_vm_->call_function(func_name, args);
+        if (!result.success) {
+            errors_ = {{"runtime", result.error->message, result.error->line, 0}};
+            return {std::monostate{}, errors_, false};
+        }
+
+        errors_.clear();
+        return {std::move(result.value), {}, true};
+    } catch (const std::exception& ex) {
+        errors_ = {{"runtime", ex.what() != nullptr ? ex.what() : "unexpected script error", 0, 0}};
+        return {std::monostate{}, errors_, false};
+    } catch (...) {
+        errors_ = {{"runtime", "unexpected script error", 0, 0}};
         return {std::monostate{}, errors_, false};
     }
-
-    errors_.clear();
-    return {std::move(result.value), {}, true};
 }
 
 script_result sandbox::run_draw(const std::string& source, mv_value ctx) {

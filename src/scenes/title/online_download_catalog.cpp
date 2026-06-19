@@ -13,6 +13,7 @@
 
 #include "path_utils.h"
 #include "services/content_sync_service.h"
+#include "services/managed_content_storage.h"
 #include "services/online_content_availability.h"
 #include "song_select/song_catalog_service.h"
 #include "title/local_content_database.h"
@@ -65,6 +66,7 @@ song_select::song_entry make_remote_song_entry(const remote_song_payload& song, 
     entry.song.meta.chart_count = song.chart_count;
     entry.song.meta.play_count = song.play_count;
     entry.song.meta.has_play_count = song.has_play_count;
+    entry.song.meta.extra = song.extra;
     entry.kind = content_kind_from_remote(song.content_source);
     entry.storage = storage_policy::managed_package;
     entry.verification = verification_state::unchecked;
@@ -98,6 +100,81 @@ std::string preferred_song_content_hash(const remote_song_payload& song) {
 
 std::string preferred_chart_content_hash(const remote_chart_payload& chart) {
     return !chart.chart_fingerprint.empty() ? chart.chart_fingerprint : chart.chart_sha256;
+}
+
+bool unlock_meta_equal(const content_unlock_meta& left, const content_unlock_meta& right) {
+    return left.unlock_state == right.unlock_state &&
+           left.locked == right.locked &&
+           left.can_download == right.can_download &&
+           left.can_play == right.can_play &&
+           left.lock_reason == right.lock_reason &&
+           left.unlock_rule_count == right.unlock_rule_count;
+}
+
+const song_select::song_entry* find_local_managed_song(const std::vector<song_select::song_entry>& local_songs,
+                                                       const std::string& local_song_id) {
+    for (const song_select::song_entry& song : local_songs) {
+        if (song.song.meta.song_id == local_song_id &&
+            song.storage == storage_policy::managed_package &&
+            !song.song.directory.empty()) {
+            return &song;
+        }
+    }
+    return nullptr;
+}
+
+void sync_installed_song_unlock(const remote_song_payload& remote_song,
+                                const std::vector<song_select::song_entry>& local_songs,
+                                const online_content_availability::resolved_song& availability) {
+    if (!availability.installed) {
+        return;
+    }
+    const song_select::song_entry* local_song = find_local_managed_song(local_songs, availability.local_song_id);
+    if (local_song == nullptr) {
+        return;
+    }
+
+    std::optional<managed_content_storage::package_manifest> manifest =
+        managed_content_storage::read_manifest(path_utils::from_utf8(local_song->song.directory));
+    if (!manifest.has_value() || unlock_meta_equal(manifest->unlock, remote_song.extra.unlock)) {
+        return;
+    }
+
+    manifest->unlock = remote_song.extra.unlock;
+    std::string error_message;
+    (void)managed_content_storage::write_manifest(*manifest, error_message);
+}
+
+void sync_installed_chart_unlock(const remote_chart_payload& remote_chart,
+                                 const std::vector<song_select::song_entry>& local_songs,
+                                 const online_content_availability::resolved_song& resolved_song,
+                                 const online_content_availability::resolved_chart& availability) {
+    if (!resolved_song.installed || !availability.installed || availability.local_chart_id.empty()) {
+        return;
+    }
+    const song_select::song_entry* local_song = find_local_managed_song(local_songs, resolved_song.local_song_id);
+    if (local_song == nullptr) {
+        return;
+    }
+
+    std::optional<managed_content_storage::package_manifest> manifest =
+        managed_content_storage::read_manifest(path_utils::from_utf8(local_song->song.directory));
+    if (!manifest.has_value()) {
+        return;
+    }
+
+    auto chart = std::find_if(manifest->charts.begin(), manifest->charts.end(),
+                              [&](const managed_content_storage::chart_manifest_entry& entry) {
+                                  return entry.local_chart_id == availability.local_chart_id ||
+                                         entry.remote_chart_id == remote_chart.id;
+                              });
+    if (chart == manifest->charts.end() || unlock_meta_equal(chart->unlock, remote_chart.extra.unlock)) {
+        return;
+    }
+
+    chart->unlock = remote_chart.extra.unlock;
+    std::string error_message;
+    (void)managed_content_storage::write_manifest(*manifest, error_message);
 }
 
 void cache_remote_metadata(const remote_song_payload& song, const std::string& server_url) {
@@ -155,6 +232,7 @@ song_entry_state build_song_state(const remote_song_payload& remote_song,
                 .jacket_hash = remote_song.jacket_hash,
             },
             state_entry.song.source_status);
+    sync_installed_song_unlock(remote_song, local_songs, availability);
     state_entry.installed = availability.installed;
     state_entry.installed_local_song_id = availability.local_song_id;
     state_entry.song.status = availability.installed ? availability.display_status : state_entry.song.source_status;
@@ -191,6 +269,7 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
     state_entry.song.song.meta.chart_count = remote_song.chart_count;
     state_entry.song.song.meta.play_count = remote_song.play_count;
     state_entry.song.song.meta.has_play_count = remote_song.has_play_count;
+    state_entry.song.song.meta.extra = remote_song.extra;
     state_entry.song.source_status = source_status_from_remote(remote_song.content_source);
     state_entry.song.online_identity = online_content::song_identity{
         .server_url = server_url,
@@ -219,6 +298,7 @@ song_entry_state build_owned_song_state(const song_select::song_entry& local_son
                 .jacket_hash = remote_song.jacket_hash,
             },
             state_entry.song.source_status);
+    sync_installed_song_unlock(remote_song, {local_song}, availability);
     state_entry.installed = true;
     state_entry.installed_local_song_id = local_song.song.meta.song_id;
     state_entry.song.source = availability.source;
@@ -359,6 +439,7 @@ void append_chart_page(song_entry_state& song_state,
                     .chart_fingerprint = chart.chart_fingerprint,
                 },
                 chart_source_status);
+        sync_installed_chart_unlock(chart, local_songs, resolved_song, availability);
         const content_status chart_status =
             availability.installed ? availability.display_status : chart_source_status;
         song_select::chart_option remote_chart;
@@ -373,6 +454,7 @@ void append_chart_page(song_entry_state& song_state,
             .format_version = chart.format_version,
             .resolution = chart.resolution,
             .offset = chart.offset,
+            .extra = chart.extra,
         };
         remote_chart.kind = content_kind_from_remote(chart.content_source);
         remote_chart.storage = storage_policy::managed_package;

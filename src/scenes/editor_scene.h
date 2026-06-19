@@ -18,6 +18,7 @@
 #include "raylib.h"
 #include "scene.h"
 #include "song_loader.h"
+#include "title/create_unlock_rules_controller.h"
 #include "title/title_settings_overlay.h"
 
 class editor_scene final : public scene {
@@ -52,6 +53,7 @@ private:
     bool apply_chart_offset(int offset_ms);
     std::string generated_chart_id(const std::string& difficulty) const;
     bool has_blocking_modal() const;
+    bool open_unlock_rules_from_metadata();
 
     song_data song_;
     std::optional<std::string> chart_path_;
@@ -83,6 +85,7 @@ private:
     bool playtest_button_requested_ = false;
     bool settings_overlay_active_ = false;
     title_settings_overlay settings_overlay_;
+    title_create_unlock_rules::controller unlock_rules_controller_;
     size_t pending_level_refresh_generation_ = 0;
     double level_refresh_after_time_ = 0.0;
 };

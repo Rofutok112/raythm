@@ -517,6 +517,9 @@ Color key_mode_color(int key_count) {
 }
 
 std::string song_status_label(const song_entry_state& song) {
+    if (content_unlock_is_locked(song.song.song.meta.extra.unlock)) {
+        return "LOCKED";
+    }
     if (song.song.online_identity.has_value()) {
         const std::string label = content_lifecycle::display_label(
             song.song.online_identity->review_status,
@@ -561,6 +564,9 @@ Color song_status_color(const song_entry_state& song) {
 }
 
 std::string chart_status_label(const chart_entry_state& chart) {
+    if (content_unlock_is_locked(chart.chart.meta.extra.unlock)) {
+        return "LOCKED";
+    }
     if (chart.chart.online_identity.has_value()) {
         const std::string label = content_lifecycle::display_label(
             chart.chart.online_identity->review_status,
@@ -588,6 +594,10 @@ bool can_download_chart(const song_entry_state& song, const chart_entry_state& c
     }
     if (chart.chart.online_identity.has_value() &&
         !content_lifecycle::lifecycle_is_active(chart.chart.online_identity->lifecycle_status)) {
+        return false;
+    }
+    if (!content_unlock_allows_download(song.song.song.meta.extra.unlock) ||
+        !content_unlock_allows_download(chart.chart.meta.extra.unlock)) {
         return false;
     }
     return song.installed &&

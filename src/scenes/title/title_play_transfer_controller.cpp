@@ -140,6 +140,14 @@ void title_play_transfer_controller::apply_delete_result(song_select::state& sta
     const std::string deleted_song_id = selected_song != nullptr ? selected_song->song.meta.song_id : "";
     callbacks.set_preferred_selection(result.preferred_song_id, result.preferred_chart_id);
     callbacks.stop_preview();
+    if (result.deleted_song) {
+        song_select::remove_deleted_song_from_catalog(
+            state, result.deleted_song_id, result.preferred_song_id, result.preferred_chart_id);
+    } else {
+        song_select::remove_deleted_chart_from_catalog(
+            state, result.deleted_song_id, result.deleted_chart_id,
+            result.preferred_song_id, result.preferred_chart_id);
+    }
     callbacks.mark_online_song_removed(deleted_song_id);
     callbacks.reload_online_catalog();
     callbacks.request_play_catalog_reload(result.preferred_song_id, result.preferred_chart_id);

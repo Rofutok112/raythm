@@ -72,6 +72,7 @@ bool scroll_guides_are_default(const scroll_automation_guides& guides) {
     }
     return true;
 }
+
 }
 
 bool write_chart(std::ostream& output, const chart_data& data) {

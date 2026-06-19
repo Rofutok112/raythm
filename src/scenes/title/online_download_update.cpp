@@ -603,6 +603,12 @@ bool handle_detail_actions(state& state,
                    chart->installed &&
                    (chart->update_available || content_sync_service::is_modified(chart->chart.sync_state))) {
             result.action = requested_action::download_chart;
+        } else if (content_unlock_is_locked(song->song.song.meta.extra.unlock) ||
+                   (chart != nullptr && content_unlock_is_locked(chart->chart.meta.extra.unlock))) {
+            const std::string reason = chart != nullptr
+                ? content_play_lock_reason(song->song.song.meta, chart->chart.meta)
+                : content_unlock_reason_or_default(song->song.song.meta.extra.unlock);
+            ui::notify(reason, ui::notice_tone::error, 2.4f);
         } else {
             result.action = requested_action::open_local;
         }

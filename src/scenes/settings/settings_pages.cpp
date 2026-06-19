@@ -17,7 +17,7 @@ const char* ltr(text_key key) {
     return localization::tr(key);
 }
 
-constexpr std::array<int, 4> kFrameRateOptions = {120, 144, 240, 0};
+constexpr std::array<int, 4> kFrameRateOptions = {120, 144, 240, 360};
 constexpr float kMinNoteSpeed = 0.010f;
 constexpr float kMaxNoteSpeed = 0.200f;
 constexpr float kMinNoteHeight = 0.5f;
@@ -251,7 +251,7 @@ void settings_video_page::update() {
 }
 
 void settings_video_page::draw() const {
-    const std::string fps_label = settings_.target_fps == 0 ? ltr(text_key::unlimited) : std::to_string(settings_.target_fps);
+    const std::string fps_label = std::to_string(sanitize_target_fps(settings_.target_fps));
     ui::draw_slider_relative(settings::kGeneralRows[0], ltr(text_key::frame_rate), fps_label.c_str(),
                              static_cast<float>(settings::fps_option_index(settings_.target_fps)) / 3.0f,
                              settings::kSliderLeftInset, settings::kSliderRightInset,

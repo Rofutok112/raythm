@@ -194,6 +194,13 @@ audio_manager::~audio_manager() {
 }
 
 bool audio_manager::initialize() {
+    if (owner_thread_set_ && !is_owner_thread()) {
+        return false;
+    }
+    if (!owner_thread_set_) {
+        owner_thread_id_ = std::this_thread::get_id();
+        owner_thread_set_ = true;
+    }
     if (initialized_) {
         return true;
     }
@@ -205,6 +212,9 @@ bool audio_manager::initialize() {
 }
 
 void audio_manager::shutdown() {
+    if (owner_thread_set_ && !is_owner_thread()) {
+        return;
+    }
     stop_all_se();
     free_se_samples();
     if (preview_loading_ && preview_load_future_.valid()) {
@@ -493,16 +503,7 @@ bool audio_manager::request_preview_load(const std::string& file_path) {
     const unsigned int generation = active_preview_load_generation_;
     std::promise<preview_load_payload> promise;
     preview_load_future_ = promise.get_future();
-    std::thread([promise = std::move(promise), source, generation]() mutable {
-        try {
-            promise.set_value({
-                generation,
-                create_stream_from_path(source),
-            });
-        } catch (...) {
-            promise.set_value({generation, 0});
-        }
-    }).detach();
+    promise.set_value({generation, 0, source, {}});
     return true;
 }
 
@@ -524,14 +525,7 @@ bool audio_manager::request_preview_load_from_memory(std::vector<unsigned char> 
     const unsigned int generation = active_preview_load_generation_;
     std::promise<preview_load_payload> promise;
     preview_load_future_ = promise.get_future();
-    std::thread([promise = std::move(promise), memory = std::move(bytes), generation]() mutable {
-        try {
-            const unsigned long handle = create_stream_from_memory_bytes(memory);
-            promise.set_value({generation, handle, std::move(memory)});
-        } catch (...) {
-            promise.set_value({generation, 0, {}});
-        }
-    }).detach();
+    promise.set_value({generation, 0, {}, std::move(bytes)});
     return true;
 }
 
@@ -572,6 +566,14 @@ audio_manager::async_preview_load_result audio_manager::poll_preview_load() {
             BASS_StreamFree(loaded.handle);
         }
         return result;
+    }
+
+    if (loaded.handle == 0) {
+        if (!loaded.source_path.empty()) {
+            loaded.handle = create_stream(loaded.source_path);
+        } else if (!loaded.memory.empty()) {
+            loaded.handle = create_stream_from_memory(loaded.memory);
+        }
     }
 
     free_voice(preview_handle_);
@@ -907,7 +909,14 @@ void audio_manager::free_voice(unsigned long& handle) {
 }
 
 bool audio_manager::ensure_initialized() {
+    if (owner_thread_set_ && !is_owner_thread()) {
+        return false;
+    }
     return initialize();
+}
+
+bool audio_manager::is_owner_thread() const {
+    return !owner_thread_set_ || owner_thread_id_ == std::this_thread::get_id();
 }
 
 unsigned long audio_manager::create_stream(const std::string& file_path) const {

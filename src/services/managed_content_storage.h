@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "data_models.h"
 #include "online_content_identity.h"
 
 namespace managed_content_storage {
@@ -41,6 +42,7 @@ struct chart_identity {
     std::string chart_fingerprint;
     std::string remote_chart_hash;
     std::string remote_chart_fingerprint;
+    content_unlock_meta unlock;
 };
 
 struct chart_manifest_entry {
@@ -52,6 +54,7 @@ struct chart_manifest_entry {
     std::string chart_fingerprint;
     std::string remote_chart_hash;
     std::string remote_chart_fingerprint;
+    content_unlock_meta unlock;
     encrypted_asset_metadata encrypted_chart;
 };
 
@@ -72,6 +75,7 @@ struct package_manifest {
     std::string remote_song_json_fingerprint;
     std::string remote_audio_hash;
     std::string remote_jacket_hash;
+    content_unlock_meta unlock;
     std::string created_at;
     std::string updated_at;
     encrypted_asset_metadata song_json_asset;

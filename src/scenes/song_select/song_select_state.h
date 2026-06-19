@@ -95,6 +95,8 @@ public:
 
     const Texture2D* get(const song_data& song);
     void poll();
+    void reconcile_catalog(const std::vector<song_entry>& previous_songs,
+                           const std::vector<song_entry>& next_songs);
     void clear();
 
 private:
@@ -105,6 +107,9 @@ private:
         bool missing = false;
         bool requested = false;
     };
+
+    std::unordered_map<std::string, cache_entry>::iterator erase_entry(
+        std::unordered_map<std::string, cache_entry>::iterator it);
 
     std::unordered_map<std::string, cache_entry> entries_;
 };
@@ -338,6 +343,16 @@ void tick_animations(state& state, float dt);
 void apply_catalog(state& state, catalog_data catalog,
                    const std::string& preferred_song_id = "",
                    const std::string& preferred_chart_id = "");
+bool apply_catalog_chart_level_update(state& state, const catalog_data& catalog);
+bool remove_deleted_song_from_catalog(state& state,
+                                      const std::string& deleted_song_id,
+                                      const std::string& preferred_song_id = "",
+                                      const std::string& preferred_chart_id = "");
+bool remove_deleted_chart_from_catalog(state& state,
+                                       const std::string& deleted_song_id,
+                                       const std::string& deleted_chart_id,
+                                       const std::string& preferred_song_id = "",
+                                       const std::string& preferred_chart_id = "");
 bool apply_song_selection(state& state, int song_index, int chart_index = 0);
 bool apply_chart_filters(state& state,
                          chart_source_filter source,

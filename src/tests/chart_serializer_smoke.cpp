@@ -138,6 +138,9 @@ int main() {
     source.meta.format_version = 1;
     source.meta.resolution = 480;
     source.meta.offset = -35;
+    source.meta.extra.clear_rewards = {
+        {.kind = "badge", .id = "serializer-clear", .label = "Serializer Clear"},
+    };
 
     source.timing_events = {
         {.type = timing_event_type::bpm, .tick = 960, .bpm = 180.5f, .numerator = 4, .denominator = 4},
@@ -186,6 +189,9 @@ int main() {
     ok = expect_contains_in_order(content, "[ScrollAutomation]", "[ScrollAutomationGuides]") && ok;
     ok = expect_contains_in_order(content, "[ScrollAutomationGuides]", "[Notes]") && ok;
     ok = content.find("[Scroll]\n") == std::string::npos && ok;
+    ok = content.find("[Unlocks]") == std::string::npos && ok;
+    ok = content.find("[Rewards]") == std::string::npos && ok;
+    ok = content.find("clearReward,badge,serializer-clear,Serializer Clear") == std::string::npos && ok;
     ok = expect_contains_in_order(content, "point,0,1,hold", "point,1440,1.25,easeOut") && ok;
     ok = content.find("guides,0.25,0.75,2.5,100") != std::string::npos && ok;
     ok = expect_contains_in_order(content, "tap,480,0", "hold,480,2,840") && ok;

@@ -10,6 +10,9 @@ namespace song_select {
 struct delete_result {
     bool success = false;
     std::string message;
+    bool deleted_song = false;
+    std::string deleted_song_id;
+    std::string deleted_chart_id;
     std::string preferred_song_id;
     std::string preferred_chart_id;
 };

@@ -20,6 +20,60 @@ struct timing_event {
     int denominator = 4;
 };
 
+struct content_unlock_meta {
+    std::string unlock_state = "unlocked";
+    bool locked = false;
+    bool can_download = true;
+    bool can_play = true;
+    std::string lock_reason;
+    int unlock_rule_count = 0;
+};
+
+inline bool content_unlock_is_locked(const content_unlock_meta& unlock) {
+    return unlock.locked || !unlock.can_play || unlock.unlock_state == "locked";
+}
+
+inline bool content_unlock_allows_download(const content_unlock_meta& unlock) {
+    return unlock.can_download;
+}
+
+inline bool content_unlock_allows_play(const content_unlock_meta& unlock) {
+    return !content_unlock_is_locked(unlock) && unlock.can_play;
+}
+
+inline std::string content_unlock_reason_or_default(const content_unlock_meta& unlock) {
+    if (!unlock.lock_reason.empty()) {
+        return unlock.lock_reason;
+    }
+    if (unlock.unlock_rule_count > 0) {
+        return "Unlock requirement not met.";
+    }
+    return content_unlock_is_locked(unlock) ? "This content is locked." : "";
+}
+
+struct content_mv_references {
+    int count = 0;
+    std::vector<std::string> ids;
+};
+
+struct content_clear_reward {
+    std::string kind;
+    std::string id;
+    std::string label;
+};
+
+struct song_extra_meta {
+    content_unlock_meta unlock;
+    content_mv_references mv_references;
+    std::vector<content_clear_reward> clear_rewards;
+};
+
+struct chart_extra_meta {
+    content_unlock_meta unlock;
+    content_mv_references mv_references;
+    std::vector<content_clear_reward> clear_rewards;
+};
+
 // Song metadata sourced from song.json or the remote song catalog.
 // Storage and API use camelCase names, but runtime code keeps this normalized
 // snake_case shape with milliseconds as the canonical preview unit.
@@ -45,6 +99,7 @@ struct song_meta {
     int chart_count = 0;
     int play_count = 0;
     bool has_play_count = false;
+    song_extra_meta extra;
 };
 
 // 曲一覧で扱う読み込み済み楽曲データ。
@@ -74,7 +129,23 @@ struct chart_meta {
     int format_version = 0;
     int resolution = 0;
     int offset = 0;
+    chart_extra_meta extra;
 };
+
+inline bool content_is_play_locked(const song_meta& song, const chart_meta& chart) {
+    return !content_unlock_allows_play(song.extra.unlock) ||
+           !content_unlock_allows_play(chart.extra.unlock);
+}
+
+inline std::string content_play_lock_reason(const song_meta& song, const chart_meta& chart) {
+    if (!content_unlock_allows_play(chart.extra.unlock)) {
+        return content_unlock_reason_or_default(chart.extra.unlock);
+    }
+    if (!content_unlock_allows_play(song.extra.unlock)) {
+        return content_unlock_reason_or_default(song.extra.unlock);
+    }
+    return "";
+}
 
 enum class scroll_automation_curve {
     hold,

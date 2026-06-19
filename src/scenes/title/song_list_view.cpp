@@ -174,6 +174,15 @@ Rectangle chart_area_rect(Rectangle row) {
     return {row.x + 18.0f, row.y + 126.0f, row.width - 36.0f, row.height - 144.0f};
 }
 
+Rectangle row_rect_at_y(Rectangle area, float y, float height) {
+    return {
+        area.x,
+        y,
+        area.width,
+        height,
+    };
+}
+
 Rectangle chart_list_viewport_rect(Rectangle chart_area) {
     return {
         chart_area.x,
@@ -221,6 +230,24 @@ void draw_status_tag(Rectangle rect, content_status status, unsigned char alpha,
                           with_alpha(color, alpha), ui::text_align::center);
 }
 
+void draw_lock_icon(Rectangle rect, unsigned char alpha) {
+    raythm_icons::draw_lock(rect, with_alpha(g_theme->slow, alpha), 2.4f);
+}
+
+Rectangle centered_square(Rectangle rect, float size) {
+    return {
+        rect.x + (rect.width - size) * 0.5f,
+        rect.y + (rect.height - size) * 0.5f,
+        size,
+        size,
+    };
+}
+
+void draw_locked_row_overlay(Rectangle row, unsigned char alpha) {
+    ui::draw_rect_f(row, with_alpha(g_theme->bg, static_cast<unsigned char>((static_cast<int>(alpha) * 120) / 255)));
+    draw_lock_icon(centered_square(row, 24.0f), alpha);
+}
+
 float status_tag_gap(content_status status) {
     return status == content_status::modified ? 4.0f : 7.0f;
 }
@@ -249,7 +276,11 @@ void draw_status_tags(Rectangle anchor, content_status source_status, content_st
     draw_status_tag(status_rect, status, alpha, font_size);
 }
 
-void draw_status_tags_fit(Rectangle bounds, content_status source_status, content_status status, unsigned char alpha, int font_size = 11) {
+void draw_status_tags_fit(Rectangle bounds,
+                          content_status source_status,
+                          content_status status,
+                          unsigned char alpha,
+                          int font_size = 11) {
     const float status_width = status_tag_width(status, font_size);
     const Rectangle status_rect = {
         bounds.x + bounds.width - status_width,
@@ -265,17 +296,25 @@ void draw_status_tags_fit(Rectangle bounds, content_status source_status, conten
     draw_status_tag(status_rect, status, alpha, font_size);
 }
 
-void draw_chart_row(const song_select::chart_option& chart,
+void draw_chart_row(const song_select::song_entry& song,
+                    const song_select::chart_option& chart,
                     Rectangle row,
                     bool selected,
                     const title_song_list_view::draw_config& config) {
     const auto& t = *g_theme;
     const bool hovered = ui::is_hovered(row);
+    const bool locked = content_is_play_locked(song.song.meta, chart.meta);
     const unsigned char row_alpha = selected ? config.selected_row_alpha
         : hovered ? config.hover_row_alpha
                   : config.normal_row_alpha;
-    ui::draw_rect_f(row, with_alpha(selected ? config.button_selected : config.button_base, row_alpha));
-    ui::draw_rect_lines(row, 1.0f, with_alpha(selected ? t.border_active : t.border_light, config.alpha));
+    const Color row_fill = locked
+        ? lerp_color(config.button_base, t.bg, selected ? 0.48f : 0.36f)
+        : (selected ? config.button_selected : config.button_base);
+    ui::draw_rect_f(row, with_alpha(row_fill, row_alpha));
+    ui::draw_rect_lines(row, 1.0f,
+                        with_alpha(locked ? t.slow : selected ? t.border_active : t.border_light,
+                                   locked ? static_cast<unsigned char>((static_cast<int>(config.alpha) * 180) / 255)
+                                          : config.alpha));
 
     const chart_columns columns = make_chart_columns(row);
     const Color key_color = key_mode_color(chart.meta.key_count);
@@ -293,7 +332,11 @@ void draw_chart_row(const song_select::chart_option& chart,
                           12,
                           columns.notes,
                           with_alpha(t.text_secondary, config.alpha), ui::text_align::right);
-    draw_status_tags_fit(columns.status, chart.source_status, chart.status, config.alpha, 9);
+    draw_status_tags_fit(columns.status,
+                         chart.source_status,
+                         chart.status,
+                         config.alpha,
+                         9);
     if (chart.best_local_rank.has_value()) {
         ui::draw_text_in_rect(rank_label(*chart.best_local_rank), 13,
                               columns.rank,
@@ -302,6 +345,9 @@ void draw_chart_row(const song_select::chart_option& chart,
         ui::draw_text_in_rect("-", 12,
                               columns.rank,
                               with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+    }
+    if (locked) {
+        draw_locked_row_overlay(row, config.alpha);
     }
 }
 
@@ -353,10 +399,11 @@ Rectangle row_rect(const song_select::state& state, Rectangle area, int index, f
     float y = area.y + kInitialRowOffsetY - scroll_y;
     for (int visible = 0; visible < static_cast<int>(indices.size()); ++visible) {
         const int song_index = indices[static_cast<size_t>(visible)];
+        const float height = row_height(state, song_index);
         if (song_index == index) {
-            return {area.x, y, area.width, row_height(state, song_index)};
+            return row_rect_at_y(area, y, height);
         }
-        y += row_height(state, song_index) + kSongRowGap;
+        y += height + kSongRowGap;
     }
     return {};
 }
@@ -378,10 +425,13 @@ int hit_test(const song_select::state& state, Rectangle area, float scroll_y, Ve
         return -1;
     }
     const std::vector<int> indices = song_select::filtered_song_indices(state);
+    float y = area.y + kInitialRowOffsetY - scroll_y;
     for (const int song_index : indices) {
-        if (CheckCollisionPointRec(point, row_rect(state, area, song_index, scroll_y))) {
+        const float height = row_height(state, song_index);
+        if (CheckCollisionPointRec(point, row_rect_at_y(area, y, height))) {
             return song_index;
         }
+        y += height + kSongRowGap;
     }
     return -1;
 }
@@ -467,15 +517,17 @@ void draw(const song_select::state& state, const draw_config& config) {
     }
 
     if (!config.expanded_cards) {
-        ui::draw_text_in_rect(TextFormat("%d songs", static_cast<int>(state.songs.size())), 16,
+        const std::vector<int> indices = song_select::filtered_song_indices(state);
+        ui::draw_text_in_rect(TextFormat("%d songs", static_cast<int>(indices.size())), 16,
                               {config.column_rect.x, config.column_rect.y - kSongCountOffsetY,
                                config.column_rect.width, kSongCountHeight},
                               with_alpha(t.text_muted, config.alpha), ui::text_align::left);
 
         ui::scoped_clip_rect clip(config.column_rect);
-        for (int i = 0; i < static_cast<int>(state.songs.size()); ++i) {
+        for (int visible = 0; visible < static_cast<int>(indices.size()); ++visible) {
+            const int i = indices[static_cast<size_t>(visible)];
             const song_select::song_entry& song = state.songs[static_cast<size_t>(i)];
-            const Rectangle row = row_rect(config.column_rect, i, state.scroll_y);
+            const Rectangle row = row_rect(config.column_rect, visible, state.scroll_y);
             if (row.y + row.height < config.column_rect.y - kClipSlack ||
                 row.y > config.column_rect.y + config.column_rect.height + kClipSlack) {
                 continue;
@@ -532,9 +584,12 @@ void draw(const song_select::state& state, const draw_config& config) {
     }
 
     ui::scoped_clip_rect clip(config.column_rect);
+    float row_y = config.column_rect.y + kInitialRowOffsetY - state.scroll_y;
     for (const int i : indices) {
         const song_select::song_entry& song = state.songs[static_cast<size_t>(i)];
-        const Rectangle row = row_rect(state, config.column_rect, i, state.scroll_y);
+        const float current_row_height = row_height(state, i);
+        const Rectangle row = row_rect_at_y(config.column_rect, row_y, current_row_height);
+        row_y += current_row_height + kSongRowGap;
         if (row.width <= 0.0f || row.height <= 0.0f) {
             continue;
         }
@@ -650,7 +705,8 @@ void draw(const song_select::state& state, const draw_config& config) {
                 chart_row.y > viewport.y + viewport.height + kClipSlack) {
                 continue;
             }
-            draw_chart_row(*filtered[static_cast<size_t>(chart_index)],
+            draw_chart_row(song,
+                           *filtered[static_cast<size_t>(chart_index)],
                            chart_row,
                            chart_index == state.difficulty_index,
                            chart_config);

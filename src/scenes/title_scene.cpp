@@ -11,6 +11,7 @@
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "multiplayer/multiplayer_controller.h"
+#include "network/auth_client.h"
 #include "network/server_environment.h"
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_select_last_played.h"
@@ -208,6 +209,9 @@ void title_scene::update_startup_loading() {
         },
         [this]() {
             browse_feature_.request_reload();
+        },
+        []() {
+            return auth::load_session_summary().logged_in;
         },
         [this]() {
             if (!start_in_multiplayer_view_) {

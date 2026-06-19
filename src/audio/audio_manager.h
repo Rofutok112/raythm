@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <future>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "audio_loudness.h"
@@ -106,6 +107,7 @@ private:
     struct preview_load_payload {
         unsigned int generation = 0;
         unsigned long handle = 0;
+        std::string source_path;
         std::vector<unsigned char> memory;
     };
     struct volume_fade_state {
@@ -133,6 +135,7 @@ private:
     static void free_voice(unsigned long& handle);
 
     bool ensure_initialized();
+    bool is_owner_thread() const;
     unsigned long create_stream(const std::string& file_path) const;
     unsigned long create_stream_from_memory(const std::vector<unsigned char>& bytes) const;
     void replace_voice(unsigned long& handle, const std::string& file_path) const;
@@ -144,6 +147,8 @@ private:
     void apply_preview_volume() const;
 
     bool initialized_ = false;
+    bool owner_thread_set_ = false;
+    std::thread::id owner_thread_id_;
     int legacy_client_count_ = 0;
     float bgm_volume_ = 1.0f;
     float preview_volume_ = 1.0f;

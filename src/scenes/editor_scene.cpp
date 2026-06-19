@@ -22,6 +22,9 @@
 #include "platform/window_chrome.h"
 #include "scene_common.h"
 #include "scene_manager.h"
+#include "network/auth_client.h"
+#include "network/server_environment.h"
+#include "song_select/song_catalog_service.h"
 #include "song_select/song_select_navigation.h"
 #include "theme.h"
 #include "ui_draw.h"
@@ -33,6 +36,31 @@ constexpr double kLevelRefreshDebounceSeconds = 0.10;
 
 Rectangle snap_dropdown_menu_rect() {
     return layout::snap_dropdown_menu_rect(static_cast<int>(editor_timeline_viewport::snap_labels().size()));
+}
+
+std::optional<std::string> remote_chart_id_for(const song_select::chart_option& chart,
+                                               const std::string& server_url) {
+    const std::string normalized = server_environment::normalize_url(server_url);
+    if (chart.online_identity.has_value() &&
+        server_environment::normalize_url(chart.online_identity->server_url) == normalized &&
+        !chart.online_identity->remote_chart_id.empty()) {
+        return chart.online_identity->remote_chart_id;
+    }
+    for (const online_content::chart_identity& identity : chart.remote_links) {
+        if (server_environment::normalize_url(identity.server_url) == normalized &&
+            !identity.remote_chart_id.empty()) {
+            return identity.remote_chart_id;
+        }
+    }
+    return std::nullopt;
+}
+
+std::string unlock_chart_label(const song_data& song, const chart_meta& meta) {
+    std::string label = song.meta.title;
+    if (!meta.difficulty.empty()) {
+        label += " [" + meta.difficulty + "]";
+    }
+    return label;
 }
 
 }
@@ -119,6 +147,10 @@ void editor_scene::on_exit() {
 void editor_scene::update(float dt) {
     rebuild_hit_regions();
     editor_transport_service::sync(transport_, state_.get(), hitsound_path_, &hitsounds_, false, dt);
+    unlock_rules_controller_.update();
+    if (unlock_rules_controller_.consume_saved()) {
+        metadata_panel_.error = "Unlock rules saved.";
+    }
 
     if (settings_overlay_active_) {
         settings_overlay_.update_animation(true, dt);
@@ -130,6 +162,11 @@ void editor_scene::update(float dt) {
             return;
         }
         settings_overlay_.update(dt);
+        window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
+        return;
+    }
+
+    if (unlock_rules_controller_.open()) {
         window_chrome::set_content_cursor(MOUSE_CURSOR_DEFAULT);
         return;
     }
@@ -378,6 +415,8 @@ void editor_scene::draw() {
         [this](int tick) { scroll_to_tick(tick); },
         [this](bool clear_notes) { return apply_metadata_changes(clear_notes); },
         [this](int offset_ms) { return apply_chart_offset(offset_ms); },
+        [this]() { return open_unlock_rules_from_metadata(); },
+        [this]() { unlock_rules_controller_.draw(); },
     });
 }
 
@@ -459,7 +498,62 @@ void editor_scene::apply_flow_result(const editor_flow_result& result) {
 
 bool editor_scene::has_blocking_modal() const {
     return metadata_panel_.key_count_confirm_open || save_dialog_.open || unsaved_changes_dialog_.open ||
-        metadata_modal_open_ || timing_modal_open_;
+        metadata_modal_open_ || timing_modal_open_ || unlock_rules_controller_.open();
+}
+
+bool editor_scene::open_unlock_rules_from_metadata() {
+    if (!state_) {
+        return false;
+    }
+    const std::optional<auth::session> session = auth::load_saved_session();
+    if (!session.has_value() || session->server_url.empty()) {
+        metadata_panel_.error = "Login is required to edit unlock rules.";
+        return false;
+    }
+
+    const chart_data current_chart = state_->data();
+    const std::string local_chart_id = current_chart.meta.chart_id.empty()
+        ? generated_chart_id(current_chart.meta.difficulty)
+        : current_chart.meta.chart_id;
+    const song_select::catalog_data catalog = song_select::load_catalog(false);
+    std::string remote_chart_id;
+    std::vector<title_create_unlock_rules::source_chart_candidate> candidates;
+    for (const song_select::song_entry& song : catalog.songs) {
+        for (const song_select::chart_option& chart : song.charts) {
+            const std::optional<std::string> chart_remote_id =
+                remote_chart_id_for(chart, session->server_url);
+            if (!chart_remote_id.has_value()) {
+                continue;
+            }
+            std::string label = song.song.meta.title;
+            if (!chart.meta.difficulty.empty()) {
+                label += " [" + chart.meta.difficulty + "]";
+            }
+            candidates.push_back({
+                .remote_chart_id = *chart_remote_id,
+                .label = std::move(label),
+            });
+
+            const bool same_chart_id = !local_chart_id.empty() && chart.meta.chart_id == local_chart_id;
+            const bool same_path = chart_path_.has_value() && chart.path == *chart_path_;
+            const bool same_song = song.song.meta.song_id == song_.meta.song_id;
+            if (remote_chart_id.empty() && same_song && (same_chart_id || same_path)) {
+                remote_chart_id = *chart_remote_id;
+            }
+        }
+    }
+
+    if (remote_chart_id.empty()) {
+        metadata_panel_.error = "Upload or sync this chart before editing unlock rules.";
+        return false;
+    }
+
+    unlock_rules_controller_.open(
+        local_chart_id,
+        remote_chart_id,
+        unlock_chart_label(song_, current_chart.meta),
+        std::move(candidates));
+    return true;
 }
 
 std::vector<size_t> editor_scene::sorted_timing_event_indices() const {

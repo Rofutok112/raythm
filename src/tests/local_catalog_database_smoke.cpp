@@ -1,5 +1,6 @@
 #include "app_paths.h"
 #include "local_sqlite.h"
+#include "managed_content_storage.h"
 #include "path_utils.h"
 #include "song_select/local_catalog_cache_service.h"
 #include "song_select/local_catalog_database.h"
@@ -93,6 +94,14 @@ song_select::chart_option make_chart(const char* chart_id, const char* song_id, 
     chart.source_status = content_status::community;
     chart.source = content_source::community;
     chart.sync_state = content_sync_state::modified;
+    chart.meta.extra.unlock = {
+        .unlock_state = "locked",
+        .locked = true,
+        .can_download = true,
+        .can_play = false,
+        .lock_reason = "Clear KEY to play this chart.",
+        .unlock_rule_count = 1,
+    };
     chart.online_identity = online_content::chart_identity{
         .server_url = "https://server.example",
         .remote_song_id = "remote-song-a",
@@ -132,6 +141,14 @@ song_select::song_entry make_song(const fs::path& song_dir, const fs::path& char
     song.song.meta.song_version = 3;
     song.song.meta.offset = 45;
     song.song.meta.has_offset = true;
+    song.song.meta.extra.unlock = {
+        .unlock_state = "locked",
+        .locked = true,
+        .can_download = true,
+        .can_play = false,
+        .lock_reason = "Clear Alpha first.",
+        .unlock_rule_count = 1,
+    };
     song.song.meta.timing_events = {
         {timing_event_type::bpm, 0, 128.0f, 4, 4},
         {timing_event_type::meter, 960, 120.0f, 3, 4},
@@ -167,6 +184,24 @@ song_select::song_entry make_song(const fs::path& song_dir, const fs::path& char
     return song;
 }
 
+song_select::song_entry make_chartless_managed_song(const fs::path& song_dir, const std::string& song_id) {
+    song_select::song_entry song;
+    song.song.meta.song_id = song_id;
+    song.song.meta.title = "Chartless Managed";
+    song.song.meta.artist = "Artist";
+    song.song.meta.audio_file = "audio.ogg";
+    song.song.meta.jacket_file = "jacket.png";
+    song.song.directory = song_dir.string();
+    song.kind = content_kind::community;
+    song.storage = storage_policy::managed_package;
+    song.verification = verification_state::matched;
+    song.status = content_status::community;
+    song.source_status = content_status::community;
+    song.source = content_source::community;
+    song.sync_state = content_sync_state::clean;
+    return song;
+}
+
 int main() {
     const fs::path temp_root = fs::temp_directory_path() / "raythm-local-catalog-db-smoke";
     std::error_code ec;
@@ -198,6 +233,10 @@ int main() {
     assert(cached.songs[0].song.meta.preview_start_seconds == 12.0f);
     assert(cached.songs[0].song.meta.offset == 45);
     assert(cached.songs[0].song.meta.has_offset);
+    assert(cached.songs[0].song.meta.extra.unlock.locked);
+    assert(!cached.songs[0].song.meta.extra.unlock.can_play);
+    assert(cached.songs[0].song.meta.extra.unlock.lock_reason == "Clear Alpha first.");
+    assert(cached.songs[0].song.meta.extra.unlock.unlock_rule_count == 1);
     assert(cached.songs[0].song.meta.timing_events.size() == 2);
     assert(cached.songs[0].song.meta.timing_events[0].type == timing_event_type::bpm);
     assert(cached.songs[0].song.meta.timing_events[0].bpm == 128.0f);
@@ -219,6 +258,10 @@ int main() {
     assert(cached.songs[0].managed_manifest->remote_audio_hash == "remote-audio-sha");
     assert(cached.songs[0].charts.size() == 1);
     assert(cached.songs[0].charts[0].meta.chart_id == "chart-a");
+    assert(cached.songs[0].charts[0].meta.extra.unlock.locked);
+    assert(!cached.songs[0].charts[0].meta.extra.unlock.can_play);
+    assert(cached.songs[0].charts[0].meta.extra.unlock.lock_reason == "Clear KEY to play this chart.");
+    assert(cached.songs[0].charts[0].meta.extra.unlock.unlock_rule_count == 1);
     assert(cached.songs[0].charts[0].min_bpm == 140.0f);
     assert(cached.songs[0].charts[0].max_bpm == 190.0f);
     assert(cached.songs[0].charts[0].kind == content_kind::community);
@@ -263,6 +306,39 @@ int main() {
     }
     cached = song_select::local_catalog_database::load_cached_catalog();
     assert(cached.songs.empty());
+
+    const managed_content_storage::song_identity chartless_identity{
+        .source = online_content::source::community,
+        .server_url = "https://server.example/api",
+        .remote_song_id = "chartless-remote-song",
+        .song_version = 1,
+        .revision_id = "song-rev-chartless",
+        .package_id = "package-chartless-song",
+    };
+    const std::string chartless_song_id = managed_content_storage::local_song_id(chartless_identity);
+    const fs::path chartless_song_dir = managed_content_storage::song_directory(chartless_identity);
+    managed_content_storage::package_manifest chartless_manifest{
+        .song = chartless_identity,
+        .local_song_id = chartless_song_id,
+        .song_json_hash = "chartless-song-json-sha",
+        .song_json_fingerprint = "chartless-song-json-fingerprint",
+        .audio_hash = "chartless-audio-sha",
+        .jacket_hash = "chartless-jacket-sha",
+    };
+    std::string chartless_error;
+    assert(managed_content_storage::write_encrypted_asset(
+        chartless_manifest, chartless_song_dir, "song.json", "{}", chartless_manifest.song_json_asset,
+        chartless_error));
+    assert(managed_content_storage::write_manifest(chartless_manifest, chartless_error));
+
+    song_select::local_catalog_database::replace_catalog(
+        {make_chartless_managed_song(chartless_song_dir, chartless_song_id)});
+    const std::optional<song_select::catalog_data> ready_catalog =
+        song_select::local_catalog_cache_service::load_ready_catalog();
+    assert(ready_catalog.has_value());
+    assert(ready_catalog->songs.size() == 1);
+    assert(ready_catalog->songs[0].song.meta.song_id == chartless_song_id);
+    assert(ready_catalog->songs[0].charts.empty());
 
     fs::remove_all(temp_root, ec);
     return 0;

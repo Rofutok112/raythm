@@ -393,6 +393,29 @@ bool asset_empty(const encrypted_asset_metadata& asset) {
     return asset.logical_path.empty() || asset.encrypted_path.empty() || asset.nonce.empty();
 }
 
+content_unlock_meta parse_unlock(const std::string& object) {
+    content_unlock_meta unlock;
+    unlock.unlock_state = json::extract_string(object, "unlockState").value_or(unlock.unlock_state);
+    unlock.locked = json::extract_bool(object, "locked").value_or(unlock.locked);
+    unlock.can_download = json::extract_bool(object, "canDownload").value_or(unlock.can_download);
+    unlock.can_play = json::extract_bool(object, "canPlay").value_or(unlock.can_play);
+    unlock.lock_reason = json::extract_string(object, "lockReason").value_or("");
+    unlock.unlock_rule_count = std::max(0, json::extract_int(object, "unlockRuleCount").value_or(0));
+    return unlock;
+}
+
+void write_unlock(std::ostream& output, const content_unlock_meta& unlock, int indent) {
+    const std::string pad(static_cast<size_t>(std::max(0, indent)), ' ');
+    output << pad << "{"
+           << "\"unlockState\": \"" << json::escape_string(unlock.unlock_state) << "\", "
+           << "\"locked\": " << (unlock.locked ? "true" : "false") << ", "
+           << "\"canDownload\": " << (unlock.can_download ? "true" : "false") << ", "
+           << "\"canPlay\": " << (unlock.can_play ? "true" : "false") << ", "
+           << "\"lockReason\": \"" << json::escape_string(unlock.lock_reason) << "\", "
+           << "\"unlockRuleCount\": " << std::max(0, unlock.unlock_rule_count)
+           << "}";
+}
+
 std::optional<fs::path> validated_encrypted_asset_path(const fs::path& song_directory,
                                                        const encrypted_asset_metadata& asset,
                                                        std::string& error_message) {
@@ -563,6 +586,9 @@ std::optional<package_manifest> read_manifest(const fs::path& song_directory) {
     manifest.remote_song_json_fingerprint = json::extract_string(content, "remoteSongJsonFingerprint").value_or("");
     manifest.remote_audio_hash = json::extract_string(content, "remoteAudioHash").value_or("");
     manifest.remote_jacket_hash = json::extract_string(content, "remoteJacketHash").value_or("");
+    if (const std::optional<std::string> unlock = json::extract_object(content, "unlock")) {
+        manifest.unlock = parse_unlock(*unlock);
+    }
     manifest.created_at = json::extract_string(content, "createdAt").value_or("");
     manifest.updated_at = json::extract_string(content, "updatedAt").value_or("");
 
@@ -596,6 +622,9 @@ std::optional<package_manifest> read_manifest(const fs::path& song_directory) {
             chart.chart_fingerprint = json::extract_string(object, "chartFingerprint").value_or("");
             chart.remote_chart_hash = json::extract_string(object, "remoteChartHash").value_or("");
             chart.remote_chart_fingerprint = json::extract_string(object, "remoteChartFingerprint").value_or("");
+            if (const std::optional<std::string> unlock = json::extract_object(object, "unlock")) {
+                chart.unlock = parse_unlock(*unlock);
+            }
             if (const std::optional<std::string> asset = json::extract_object(object, "asset")) {
                 chart.encrypted_chart = parse_asset(*asset);
             }
@@ -659,6 +688,9 @@ bool write_manifest_at_path(package_manifest manifest,
     output << "  \"remoteSongJsonFingerprint\": \"" << json::escape_string(manifest.remote_song_json_fingerprint) << "\",\n";
     output << "  \"remoteAudioHash\": \"" << json::escape_string(manifest.remote_audio_hash) << "\",\n";
     output << "  \"remoteJacketHash\": \"" << json::escape_string(manifest.remote_jacket_hash) << "\",\n";
+    output << "  \"unlock\": ";
+    write_unlock(output, manifest.unlock, 0);
+    output << ",\n";
     output << "  \"createdAt\": \"" << json::escape_string(manifest.created_at) << "\",\n";
     output << "  \"updatedAt\": \"" << json::escape_string(manifest.updated_at) << "\",\n";
     output << "  \"assets\": {\n";
@@ -684,6 +716,9 @@ bool write_manifest_at_path(package_manifest manifest,
         output << "      \"chartFingerprint\": \"" << json::escape_string(chart.chart_fingerprint) << "\",\n";
         output << "      \"remoteChartHash\": \"" << json::escape_string(chart.remote_chart_hash) << "\",\n";
         output << "      \"remoteChartFingerprint\": \"" << json::escape_string(chart.remote_chart_fingerprint) << "\",\n";
+        output << "      \"unlock\": ";
+        write_unlock(output, chart.unlock, 0);
+        output << ",\n";
         output << "      \"asset\": ";
         write_asset(output, chart.encrypted_chart, 6);
         output << "\n";
@@ -732,6 +767,7 @@ void upsert_chart(package_manifest& manifest, const chart_identity& identity) {
         .chart_fingerprint = identity.chart_fingerprint,
         .remote_chart_hash = identity.remote_chart_hash,
         .remote_chart_fingerprint = identity.remote_chart_fingerprint,
+        .unlock = identity.unlock,
     };
 
     const auto existing = std::find_if(manifest.charts.begin(), manifest.charts.end(),

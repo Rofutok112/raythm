@@ -1650,8 +1650,11 @@ metadata_modal_result draw_metadata_modal(const editor_left_panel_view_model& mo
                               t.error, ui::text_align::left);
     }
 
+    const Rectangle unlock_rect = {content.x, modal.y + modal.height - 58.0f, 168.0f, 34.0f};
     const Rectangle apply_rect = {content.x + content.width - 260.0f, modal.y + modal.height - 58.0f, 116.0f, 34.0f};
     const Rectangle close_rect = {content.x + content.width - 132.0f, apply_rect.y, 132.0f, 34.0f};
+    result.unlock_rules_requested = draw_layer_button(unlock_rect, "UNLOCK RULES", 14, ui::draw_layer::modal,
+                                                      t.row, t.row_hover, t.text).clicked;
     result.apply_requested = draw_layer_button(apply_rect, "APPLY", 14, ui::draw_layer::modal,
                                                t.row, t.row_hover, t.text).clicked;
     result.close_requested = draw_layer_button(close_rect, "CLOSE", 14, ui::draw_layer::modal,

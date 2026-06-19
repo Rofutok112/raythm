@@ -221,7 +221,6 @@ view_model build(const build_context& context) {
     const bool chart_action_enabled = chart_can_upload &&
                                       ((!linked_remote_chart || editable_chart_binding) &&
                                        (linked_remote_chart || editable_song_binding));
-
     std::string song_publish_title = "UPLOAD SONG";
     std::string song_publish_detail = "Publish selected song";
     if (!song_selected) {

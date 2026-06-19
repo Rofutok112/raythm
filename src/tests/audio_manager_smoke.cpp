@@ -1,7 +1,9 @@
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <thread>
+#include <vector>
 
 #include "audio_manager.h"
 
@@ -23,6 +25,52 @@ int main() {
         std::cerr << "AudioManager initialization failed\n";
         return 1;
     }
+
+    bool worker_preload_result = true;
+    std::thread worker([&]() {
+        worker_preload_result = manager.preload_se(audio_path.string());
+    });
+    worker.join();
+    if (worker_preload_result) {
+        std::cerr << "AudioManager accepted BASS work from a non-owner thread\n";
+        manager.shutdown();
+        return 1;
+    }
+
+    std::vector<unsigned char> preview_bytes;
+    {
+        std::ifstream input(audio_path, std::ios::binary);
+        preview_bytes.assign(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+    }
+    if (preview_bytes.empty()) {
+        std::cerr << "Audio asset read failed\n";
+        manager.shutdown();
+        return 1;
+    }
+
+    bool worker_preview_request_result = true;
+    std::thread preview_worker([&]() {
+        worker_preview_request_result = manager.request_preview_load_from_memory(preview_bytes);
+    });
+    preview_worker.join();
+    if (worker_preview_request_result) {
+        std::cerr << "AudioManager accepted preview load request from a non-owner thread\n";
+        manager.shutdown();
+        return 1;
+    }
+
+    if (!manager.request_preview_load_from_memory(preview_bytes)) {
+        std::cerr << "Managed preview load request failed\n";
+        manager.shutdown();
+        return 1;
+    }
+    const auto preview_result = manager.poll_preview_load();
+    if (!preview_result.completed || !preview_result.loaded || !manager.is_preview_loaded()) {
+        std::cerr << "Managed preview load did not complete on the owner thread\n";
+        manager.shutdown();
+        return 1;
+    }
+    manager.unload_preview();
 
     if (!manager.load_bgm(audio_path.string())) {
         std::cerr << "BGM load failed\n";

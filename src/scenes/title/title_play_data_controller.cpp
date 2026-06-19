@@ -36,12 +36,14 @@ bool title_play_data_controller::upload_in_progress() const {
 void title_play_data_controller::request_catalog_reload(song_select::state& state,
                                                         std::string preferred_song_id,
                                                         std::string preferred_chart_id,
-                                                        bool calculate_missing_levels) {
+                                                        bool calculate_missing_levels,
+                                                        bool preserve_current_selection) {
     data_controller_.request_catalog_reload(
         state,
         song_select::catalog_reload_request{std::move(preferred_song_id),
                                             std::move(preferred_chart_id),
-                                            calculate_missing_levels});
+                                            calculate_missing_levels,
+                                            preserve_current_selection});
 }
 
 title_play_data_controller::catalog_poll_result title_play_data_controller::poll_catalog_reload(
@@ -54,6 +56,8 @@ title_play_data_controller::catalog_poll_result title_play_data_controller::poll
 
     result.completed = true;
     result.queued_reload_started = reload.queued_reload_started;
+    result.stale = reload.stale;
+    result.chart_levels_updated = reload.chart_levels_updated;
     result.selection_changed = reload.selection_changed;
 
     return result;
@@ -113,7 +117,8 @@ void title_play_data_controller::start_song_upload(const song_select::song_entry
 }
 
 void title_play_data_controller::start_chart_upload(const song_select::song_entry& song,
-                                                    const song_select::chart_option& chart) {
+                                                    const song_select::chart_option& chart,
+                                                    std::vector<unlock_rule_client::rule> unlock_rules) {
     if (upload_in_progress_) {
         ui::notify("Upload already in progress.", ui::notice_tone::info, 1.8f);
         return;
@@ -123,9 +128,9 @@ void title_play_data_controller::start_chart_upload(const song_select::song_entr
     ui::notify("Uploading chart...", ui::notice_tone::info, 1.8f);
     std::promise<title_create_upload::upload_result> promise;
     upload_future_ = promise.get_future();
-    std::thread([promise = std::move(promise), song, chart]() mutable {
+    std::thread([promise = std::move(promise), song, chart, unlock_rules = std::move(unlock_rules)]() mutable {
         try {
-            promise.set_value(title_create_upload::upload_chart(song, chart));
+            promise.set_value(title_create_upload::upload_chart(song, chart, unlock_rules));
         } catch (...) {
             promise.set_exception(std::current_exception());
         }
@@ -154,6 +159,11 @@ title_play_data_controller::upload_poll_result title_play_data_controller::poll_
     }
     upload_in_progress_ = false;
     song_select::queue_status_message(state, result.message, !result.success);
+    poll_result.completed = true;
+    poll_result.success = result.success;
     poll_result.refresh_catalog = result.success && result.should_refresh_online_catalog;
+    poll_result.chart_uploaded = result.success && !result.remote_chart_id.empty();
+    poll_result.local_chart_id = result.local_chart_id;
+    poll_result.remote_chart_id = result.remote_chart_id;
     return poll_result;
 }

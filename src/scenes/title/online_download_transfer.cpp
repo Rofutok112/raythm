@@ -196,6 +196,7 @@ managed_content_storage::chart_identity managed_chart_identity_for(const song_en
         .revision_id = chart.remote_revision_id,
         .remote_chart_hash = chart.remote_chart_hash,
         .remote_chart_fingerprint = chart.remote_chart_fingerprint,
+        .unlock = chart.chart.meta.extra.unlock,
     };
 }
 
@@ -263,6 +264,7 @@ song_entry_state make_download_song_state(const remote_song_payload& remote_song
     song.song.song.meta.chart_count = remote_song.chart_count;
     song.song.song.meta.play_count = remote_song.play_count;
     song.song.song.meta.has_play_count = remote_song.has_play_count;
+    song.song.song.meta.extra = remote_song.extra;
     song.song.kind = content_kind_from_remote_download(remote_song.content_source);
     song.song.storage = storage_policy::managed_package;
     song.song.verification = verification_state::unchecked;
@@ -316,6 +318,7 @@ chart_entry_state make_download_chart_state(const remote_chart_payload& remote_c
     chart.chart.meta.format_version = remote_chart.format_version;
     chart.chart.meta.resolution = remote_chart.resolution;
     chart.chart.meta.offset = remote_chart.offset;
+    chart.chart.meta.extra = remote_chart.extra;
     chart.chart.kind = content_kind_from_remote_download(remote_chart.content_source);
     chart.chart.storage = storage_policy::managed_package;
     chart.chart.verification = verification_state::unchecked;
@@ -892,6 +895,7 @@ download_song_result download_song_package(const song_entry_state song,
         manifest.remote_song_json_fingerprint = song.remote_song_json_fingerprint;
         manifest.remote_audio_hash = song.remote_audio_hash;
         manifest.remote_jacket_hash = song.remote_jacket_hash;
+        manifest.unlock = song.song.song.meta.extra.unlock;
         const std::string song_json = song_writer::serialize_song_json(*local_meta);
         if (song_json.empty()) {
             result.message = "Failed to prepare downloaded song metadata.";
@@ -1110,6 +1114,7 @@ download_song_result download_chart_file(const song_entry_state song,
         chart_manifest_identity.chart_fingerprint = text_sha256_hex(chart_fingerprint::build(rewritten_chart_text));
         chart_manifest_identity.remote_chart_hash = chart.remote_chart_hash;
         chart_manifest_identity.remote_chart_fingerprint = chart.remote_chart_fingerprint;
+        chart_manifest_identity.unlock = chart.chart.meta.extra.unlock;
         managed_content_storage::package_manifest manifest =
             manifest_for_song(managed_song_identity_for(song, server_url), song_dir);
         managed_content_storage::upsert_chart(manifest, chart_manifest_identity);

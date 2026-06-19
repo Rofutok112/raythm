@@ -9,6 +9,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui/icons/raythm_icons.h"
 #include "shared/content_status_badge.h"
 
 namespace {
@@ -114,8 +115,30 @@ void draw_source_tag(Rectangle rect, content_status status, unsigned char alpha)
                           with_alpha(color, alpha), ui::text_align::center);
 }
 
+void draw_status_side_icons(Rectangle first_icon_rect,
+                            bool modified,
+                            unsigned char alpha) {
+    if (modified) {
+        raythm_icons::draw_triangle_alert(first_icon_rect, with_alpha(g_theme->slow, alpha), 2.4f);
+    }
+}
+
 unsigned char scale_alpha(unsigned char alpha, float scale) {
     return static_cast<unsigned char>(std::clamp(static_cast<float>(alpha) * scale, 0.0f, 255.0f));
+}
+
+Rectangle centered_square(Rectangle rect, float size) {
+    return {
+        rect.x + (rect.width - size) * 0.5f,
+        rect.y + (rect.height - size) * 0.5f,
+        size,
+        size,
+    };
+}
+
+void draw_locked_overlay(Rectangle rect, unsigned char alpha, float icon_size) {
+    ui::draw_rect_f(rect, with_alpha(g_theme->bg, scale_alpha(alpha, 0.48f)));
+    raythm_icons::draw_lock(centered_square(rect, icon_size), with_alpha(g_theme->slow, alpha), 3.0f);
 }
 
 }  // namespace
@@ -337,6 +360,12 @@ void draw(const song_select::state& state,
         content_status_badge::draw_compound(
             chart_status_badge_rect(config.chart_detail_rect),
             chart->source_status, chart->status, config.alpha, 12);
+        draw_status_side_icons({config.chart_detail_rect.x + kStatusBadgeWidth + 10.0f,
+                                config.chart_detail_rect.y + kChartStatusOffsetY + 2.0f,
+                                20.0f,
+                                20.0f},
+                               chart->status == content_status::modified,
+                               config.alpha);
         ui::draw_text_in_rect(TextFormat("%s   %d Notes", key_mode_label(chart->meta.key_count).c_str(),
                                          chart->note_count),
                               14,
@@ -352,6 +381,13 @@ void draw(const song_select::state& state,
                           {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartAuthorOffsetY,
                            config.chart_detail_rect.width, kChartAuthorHeight},
                           14, with_alpha(t.text_muted, config.alpha), config.now);
+        if (content_is_play_locked(song->song.meta, chart->meta)) {
+            const Rectangle lock_rect = {config.chart_detail_rect.x,
+                                         config.chart_detail_rect.y,
+                                         config.chart_detail_rect.width,
+                                         kChartAuthorOffsetY + kChartAuthorHeight};
+            draw_locked_overlay(lock_rect, config.alpha, 34.0f);
+        }
     }
 
     if (config.compact_song_header) {
@@ -389,14 +425,19 @@ void draw(const song_select::state& state,
 
         const bool selected = i == state.difficulty_index;
         const bool hovered = ui::is_hovered(row);
+        const bool locked = content_is_play_locked(song->song.meta, item.meta);
         const unsigned char row_alpha = selected ? config.selected_row_alpha
             : hovered ? config.hover_row_alpha
                       : config.normal_row_alpha;
         if (config.compact_song_header) {
             const Color level_color = difficulty_level_color(item.meta.level);
-            ui::draw_rect_f(row, with_alpha(selected ? config.button_selected : config.button_base, row_alpha));
+            const Color row_fill = locked
+                ? lerp_color(config.button_base, t.bg, selected ? 0.48f : 0.36f)
+                : (selected ? config.button_selected : config.button_base);
+            ui::draw_rect_f(row, with_alpha(row_fill, row_alpha));
             ui::draw_rect_lines(row, selected ? 1.5f : 1.0f,
-                                with_alpha(selected ? t.border_active : t.border_light, config.alpha));
+                                with_alpha(locked ? t.slow : selected ? t.border_active : t.border_light,
+                                           locked ? scale_alpha(config.alpha, 0.72f) : config.alpha));
             ui::draw_rect_f({row.x + 2.0f, row.y + 2.0f, 3.0f, row.height - 4.0f},
                             with_alpha(level_color, scale_alpha(config.alpha, 0.72f)));
             ui::draw_text_in_rect(key_mode_label(item.meta.key_count).c_str(), 18,
@@ -410,6 +451,9 @@ void draw(const song_select::state& state,
                                   with_alpha(t.text, config.alpha), ui::text_align::left);
             draw_source_tag({row.x + 332.0f, row.y + 17.0f, 72.0f, 20.0f},
                             item.source_status, config.alpha);
+            draw_status_side_icons({row.x + 410.0f, row.y + 18.0f, 18.0f, 18.0f},
+                                   item.status == content_status::modified,
+                                   config.alpha);
             ui::draw_text_in_rect(item.best_local_score.has_value() ? format_score(*item.best_local_score).c_str() : "--",
                                   16, {row.x + 430.0f, row.y + 14.0f, 116.0f, 28.0f},
                                   with_alpha(t.text, config.alpha), ui::text_align::right);
@@ -422,21 +466,35 @@ void draw(const song_select::state& state,
                                       {row.x + row.width - 58.0f, row.y + 14.0f, 42.0f, 28.0f},
                                       with_alpha(t.text_muted, config.alpha), ui::text_align::right);
             }
+            if (locked) {
+                draw_locked_overlay(row, config.alpha, 26.0f);
+            }
             continue;
         }
-        ui::draw_rect_f(row, with_alpha(selected ? config.button_selected : config.button_base, row_alpha));
+        const Color row_fill = locked
+            ? lerp_color(config.button_base, t.bg, selected ? 0.48f : 0.36f)
+            : (selected ? config.button_selected : config.button_base);
+        ui::draw_rect_f(row, with_alpha(row_fill, row_alpha));
         ui::draw_rect_lines(
             row, kChartRowBorderWidth,
-            with_alpha(t.border_light, static_cast<unsigned char>(130.0f * config.play_t)));
+            with_alpha(locked ? t.slow : t.border_light,
+                       static_cast<unsigned char>((locked ? 170.0f : 130.0f) * config.play_t)));
         ui::draw_text_in_rect(item.meta.difficulty.c_str(), 16,
                               {row.x + kChartTextPaddingX, row.y + kChartTitleOffsetY,
                                row.width - kChartRightReserved - kChartStatusWidth, kChartTitleHeight},
                               with_alpha(t.text, config.alpha), ui::text_align::left);
+        const Rectangle status_rect = {row.x + row.width - kChartRightReserved - kChartStatusWidth,
+                                       row.y + kChartTitleOffsetY + 1.0f,
+                                       kChartStatusWidth, kStatusBadgeHeight};
         content_status_badge::draw_compound(
-                              {row.x + row.width - kChartRightReserved - kChartStatusWidth,
-                               row.y + kChartTitleOffsetY + 1.0f,
-                               kChartStatusWidth, kStatusBadgeHeight},
+                              status_rect,
                               item.source_status, item.status, config.alpha, 10);
+        draw_status_side_icons({status_rect.x + status_rect.width + 8.0f,
+                                status_rect.y + 3.0f,
+                                18.0f,
+                                18.0f},
+                               item.status == content_status::modified,
+                               config.alpha);
         draw_difficulty_level_badge(item.meta.level,
                                     {row.x + kChartTextPaddingX, row.y + kChartLevelOffsetY - 1.0f,
                                      64.0f, 19.0f},
@@ -450,6 +508,9 @@ void draw(const song_select::state& state,
                                   {row.x + row.width - kChartBadgeRightInset, row.y + kChartRankOffsetY,
                                    kChartBadgeWidth, kChartRankHeight},
                                   with_alpha(rank_color(*item.best_local_rank), config.alpha), ui::text_align::right);
+        }
+        if (locked) {
+            draw_locked_overlay(row, config.alpha, 26.0f);
         }
     }
 }

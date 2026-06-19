@@ -251,13 +251,22 @@ int main() {
 
     spin_until([&] {
         const song_select::catalog_reload_result result = controller.poll_catalog_reload(state);
-        return result.completed && result.queued_reload_started;
+        if (!result.completed || !result.queued_reload_started) {
+            return false;
+        }
+        assert(result.stale);
+        return true;
     });
-    assert(state.catalog_loaded_once);
-    assert(song_select::selected_song(state)->song.meta.song_id == "song-a");
+    assert(!state.catalog_loaded_once);
+    assert(song_select::selected_song(state) == nullptr);
 
     spin_until([&] {
-        return controller.poll_catalog_reload(state).completed;
+        const song_select::catalog_reload_result result = controller.poll_catalog_reload(state);
+        if (!result.completed) {
+            return false;
+        }
+        assert(!result.stale);
+        return true;
     });
     assert(catalog_load_count == 2);
     assert(!state.catalog_loading);
@@ -439,6 +448,99 @@ int main() {
     assert(state.ranking_panel.reveal_anim == 0.75f);
     assert(state.song_change_anim_t == 0.25f);
     assert(state.chart_change_anim_t == 0.5f);
+
+    song_select::state preserve_state;
+    song_select::catalog_data preserve_initial_catalog;
+    preserve_initial_catalog.songs.push_back(make_song("preserve-song-a", "preserve-chart-a"));
+    preserve_initial_catalog.songs.push_back(make_song("preserve-song-b", "preserve-chart-b"));
+    song_select::apply_catalog(
+        preserve_state,
+        std::move(preserve_initial_catalog),
+        "preserve-song-a",
+        "preserve-chart-a");
+    int preserve_reload_count = 0;
+    song_select::data_controller preserve_controller(
+        [&](bool, song_select::catalog_progress_callback) {
+            ++preserve_reload_count;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            song_select::catalog_data catalog;
+            catalog.songs.push_back(make_song("preserve-song-a", "preserve-chart-a"));
+            catalog.songs.push_back(make_song("preserve-song-b", "preserve-chart-b"));
+            return catalog;
+        });
+    preserve_controller.request_catalog_reload(
+        preserve_state,
+        {"preserve-song-a", "preserve-chart-a", true, true});
+    assert(song_select::apply_song_selection(preserve_state, 1, 0));
+    spin_until([&] {
+        const song_select::catalog_reload_result result =
+            preserve_controller.poll_catalog_reload(preserve_state);
+        if (!result.completed) {
+            return false;
+        }
+        assert(result.chart_levels_updated);
+        assert(!result.selection_changed);
+        return true;
+    });
+    assert(preserve_reload_count == 1);
+    assert(song_select::selected_song(preserve_state)->song.meta.song_id == "preserve-song-b");
+    assert(song_select::selected_chart_for(preserve_state, song_select::filtered_charts_for_selected_song(preserve_state))
+               ->meta.chart_id == "preserve-chart-b");
+
+    song_select::state queued_preserve_state;
+    song_select::catalog_data queued_preserve_initial_catalog;
+    queued_preserve_initial_catalog.songs.push_back(make_song("queued-preserve-song-a", "queued-preserve-chart-a"));
+    queued_preserve_initial_catalog.songs.push_back(make_song("queued-preserve-song-b", "queued-preserve-chart-b"));
+    song_select::apply_catalog(
+        queued_preserve_state,
+        std::move(queued_preserve_initial_catalog),
+        "queued-preserve-song-a",
+        "queued-preserve-chart-a");
+    int queued_preserve_reload_count = 0;
+    song_select::data_controller queued_preserve_controller(
+        [&](bool, song_select::catalog_progress_callback) {
+            ++queued_preserve_reload_count;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            song_select::catalog_data catalog;
+            catalog.songs.push_back(make_song("queued-preserve-song-a", "queued-preserve-chart-a"));
+            catalog.songs.push_back(make_song("queued-preserve-song-b", "queued-preserve-chart-b"));
+            return catalog;
+        });
+    queued_preserve_controller.request_catalog_reload(
+        queued_preserve_state,
+        {"queued-preserve-song-a", "queued-preserve-chart-a", false, false});
+    queued_preserve_controller.request_catalog_reload(
+        queued_preserve_state,
+        {"queued-preserve-song-a", "queued-preserve-chart-a", true, true});
+    queued_preserve_controller.request_catalog_reload(
+        queued_preserve_state,
+        {"queued-preserve-song-a", "queued-preserve-chart-a", false, false});
+    spin_until([&] {
+        const song_select::catalog_reload_result result =
+            queued_preserve_controller.poll_catalog_reload(queued_preserve_state);
+        if (!result.completed || !result.queued_reload_started) {
+            return false;
+        }
+        assert(result.stale);
+        return true;
+    });
+    assert(song_select::apply_song_selection(queued_preserve_state, 1, 0));
+    spin_until([&] {
+        const song_select::catalog_reload_result result =
+            queued_preserve_controller.poll_catalog_reload(queued_preserve_state);
+        if (!result.completed) {
+            return false;
+        }
+        assert(result.chart_levels_updated);
+        assert(!result.selection_changed);
+        return true;
+    });
+    assert(queued_preserve_reload_count == 2);
+    assert(song_select::selected_song(queued_preserve_state)->song.meta.song_id == "queued-preserve-song-b");
+    assert(song_select::selected_chart_for(
+               queued_preserve_state,
+               song_select::filtered_charts_for_selected_song(queued_preserve_state))
+               ->meta.chart_id == "queued-preserve-chart-b");
 
     int source_reload_count = 0;
     song_select::data_controller source_controller(

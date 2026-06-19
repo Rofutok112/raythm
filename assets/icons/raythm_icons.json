@@ -57,6 +57,10 @@
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/download.svg"
     },
     {
+      "name": "lock",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/lock.svg"
+    },
+    {
       "name": "repeat_2",
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/repeat-2.svg"
     },

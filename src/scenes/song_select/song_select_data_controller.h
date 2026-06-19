@@ -2,6 +2,7 @@
 
 #include <future>
 #include <functional>
+#include <memory>
 #include <string>
 
 #include "load_progress.h"
@@ -14,11 +15,14 @@ struct catalog_reload_request {
     std::string preferred_song_id;
     std::string preferred_chart_id;
     bool calculate_missing_levels = false;
+    bool preserve_current_selection = false;
 };
 
 struct catalog_reload_result {
     bool completed = false;
     bool queued_reload_started = false;
+    bool stale = false;
+    bool chart_levels_updated = false;
     bool selection_changed = false;
     bool failed = false;
     std::string message;
@@ -47,7 +51,7 @@ private:
 
     catalog_loader catalog_loader_;
 
-    shared_load_progress catalog_progress_;
+    std::shared_ptr<shared_load_progress> catalog_progress_ = std::make_shared<shared_load_progress>();
     std::future<catalog_data> catalog_future_;
     bool catalog_loading_ = false;
     bool catalog_reload_pending_ = false;

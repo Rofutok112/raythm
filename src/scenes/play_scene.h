@@ -51,11 +51,13 @@ private:
     bool poll_async_load();
     void apply_loaded_session(async_load_result result);
     void wait_for_pending_load();
+    void draw_loading_status_frame();
     void load_jacket_texture();
     void unload_jacket_texture();
     void load_lane_layer_texture();
     void unload_lane_layer_texture();
     void rebuild_hit_regions() const;
+    bool advance_deferred_load_start();
     double get_visual_ms() const;
     void apply_navigation(play_navigation_request navigation);
     void update_start_gate(float dt);
@@ -71,6 +73,8 @@ private:
     bool jacket_texture_loaded_ = false;
     RenderTexture2D lane_layer_texture_{};
     bool lane_layer_texture_loaded_ = false;
+    bool load_start_pending_ = false;
+    int load_start_delay_frames_ = 0;
     bool start_gate_active_ = false;
     bool multiplayer_loaded_sent_ = false;
     bool multiplayer_countdown_started_ = false;

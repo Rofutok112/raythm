@@ -50,6 +50,13 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(raylib)
 
 FetchContent_Declare(
+        nlohmann_json
+        URL https://github.com/nlohmann/json/archive/refs/tags/v3.11.3.zip
+        URL_HASH SHA256=04022b05d806eb5ff73023c280b68697d12b93e1b7267a0b22a1a39ec7578069
+)
+FetchContent_MakeAvailable(nlohmann_json)
+
+FetchContent_Declare(
         sqlite3_amalgamation
         URL https://www.sqlite.org/2026/sqlite-amalgamation-3530000.zip
         URL_HASH SHA3_256=c2325c53b3b41761469f91cfb078e96882ac5d85bac10c11b0bd8f253b031e5b
@@ -247,6 +254,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/network/network_error.h
         src/network/ranking_client.cpp
         src/network/ranking_client.h
+        src/network/unlock_rule_client.cpp
+        src/network/unlock_rule_client.h
         src/network/server_environment.cpp
         src/network/server_environment.h
         src/updater/update_verify.cpp
@@ -371,6 +380,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/create_tools_model.h
         src/scenes/title/create_tools_view.cpp
         src/scenes/title/create_tools_view.h
+        src/scenes/title/create_unlock_rules_controller.cpp
+        src/scenes/title/create_unlock_rules_controller.h
         src/scenes/title/create_upload_permissions.cpp
         src/scenes/title/create_upload_permissions.h
         src/scenes/title/create_upload_client.cpp
@@ -1176,6 +1187,11 @@ add_executable(network_error_smoke
         src/network/network_error.h
         src/tests/network_error_smoke.cpp)
 
+add_executable(json_helpers_smoke
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/tests/json_helpers_smoke.cpp)
+
 add_executable(friend_client_parser_smoke
         src/network/friend_client_parser.cpp
         src/network/friend_client_parser.h
@@ -1625,6 +1641,7 @@ set(RAYTHM_SMOKE_TARGETS
         performance_system_smoke
         ranking_service_smoke
         network_error_smoke
+        json_helpers_smoke
         friend_client_parser_smoke
         friend_client_refresh_smoke
         title_friends_state_smoke
@@ -1650,6 +1667,7 @@ set(RAYTHM_SMOKE_TARGETS
 
 foreach(raythm_target IN LISTS RAYTHM_APP_TARGETS RAYTHM_SMOKE_TARGETS)
     target_include_directories(${raythm_target} PRIVATE ${RAYTHM_INCLUDE_DIRS})
+    target_link_libraries(${raythm_target} PRIVATE nlohmann_json::nlohmann_json)
 endforeach()
 target_include_directories(raythm BEFORE PRIVATE "${RAYTHM_GENERATED_INCLUDE_DIR}")
 

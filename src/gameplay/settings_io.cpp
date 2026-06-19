@@ -150,7 +150,7 @@ void load_settings(game_settings& settings) {
     if (auto v = extract_bool(content, "loudnessNormalizationEnabled"))
         settings.loudness_normalization_enabled = *v;
     if (auto v = extract_number_token(content, "targetFps"))
-        settings.target_fps = std::stoi(*v);
+        settings.target_fps = sanitize_target_fps(std::stoi(*v));
     if (auto v = extract_number_token(content, "resolutionIndex"))
         settings.resolution_index = std::clamp(std::stoi(*v), 0, kResolutionPresetCount - 1);
     if (auto v = extract_number_token(content, "windowedWidth"))
@@ -202,7 +202,7 @@ void save_settings(const game_settings& settings) {
     out << "  \"hitsoundPanStrength\": " << settings.hitsound_pan_strength << ",\n";
     out << "  \"loudnessNormalizationEnabled\": "
         << (settings.loudness_normalization_enabled ? "true" : "false") << ",\n";
-    out << "  \"targetFps\": " << settings.target_fps << ",\n";
+    out << "  \"targetFps\": " << sanitize_target_fps(settings.target_fps) << ",\n";
     out << "  \"resolutionIndex\": " << settings.resolution_index << ",\n";
     out << "  \"windowedWidth\": " << settings.windowed_width << ",\n";
     out << "  \"windowedHeight\": " << settings.windowed_height << ",\n";

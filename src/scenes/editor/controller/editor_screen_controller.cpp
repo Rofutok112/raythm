@@ -106,6 +106,13 @@ void draw_metadata_modal(const editor_screen_controller::context& context, doubl
     if (metadata_panel_result.request_apply_metadata) {
         context.apply_metadata_changes(false);
     }
+    if (modal_result.unlock_rules_requested) {
+        if (context.open_unlock_rules()) {
+            context.metadata_modal_open = false;
+            context.metadata_panel.difficulty_input.active = false;
+            context.metadata_panel.chart_author_input.active = false;
+        }
+    }
     if (modal_result.close_requested) {
         context.metadata_modal_open = false;
         context.metadata_panel.difficulty_input.active = false;
@@ -223,6 +230,7 @@ void draw_and_update(const context& context) {
     if (context.metadata_panel.key_count_confirm_open) {
         editor_screen_view::draw_key_count_confirmation(context.metadata_panel.pending_key_count);
     }
+    context.draw_unlock_rules();
 
     editor_screen_view::end_frame();
 }

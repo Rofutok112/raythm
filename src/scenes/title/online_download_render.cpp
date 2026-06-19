@@ -1495,18 +1495,25 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
         chart != nullptr && chart->installed && content_sync_service::is_modified(chart->chart.sync_state);
     const bool selected_song_repair = content_sync_service::is_modified(song->song.sync_state);
     const bool song_lifecycle_blocked = lifecycle_blocks_song_download(*song);
+    const bool selected_play_locked =
+        content_unlock_is_locked(song->song.song.meta.extra.unlock) ||
+        (chart != nullptr && content_unlock_is_locked(chart->chart.meta.extra.unlock));
+    const std::string selected_lock_reason = chart != nullptr
+        ? content_play_lock_reason(song->song.song.meta, chart->chart.meta)
+        : content_unlock_reason_or_default(song->song.song.meta.extra.unlock);
     const std::string song_lifecycle_label = song->song.online_identity.has_value()
         ? content_lifecycle::display_label(song->song.online_identity->review_status,
                                            song->song.online_identity->lifecycle_status)
         : "";
-    const char* primary_label = state.download_in_progress ? "DOWNLOADING..."
-        : (song_lifecycle_blocked ? (song_lifecycle_label.empty() ? "UNAVAILABLE" : song_lifecycle_label.c_str())
+    const std::string primary_label = state.download_in_progress ? "DOWNLOADING..."
+        : (song_lifecycle_blocked ? (song_lifecycle_label.empty() ? "UNAVAILABLE" : song_lifecycle_label)
            : needs_download(*song) ? (selected_song_repair ? "REPAIR SONG"
                                       : song->update_available ? "UPDATE SONG"
                                                                : "DOWNLOAD SONG")
            : (selected_chart_repair ? "REPAIR CHART"
                                     : selected_chart_update ? "UPDATE CHART"
-                                                            : "OPEN LOCAL"));
+                                    : selected_play_locked ? "LOCKED"
+                                                           : "OPEN LOCAL"));
     if (state.download_in_progress && state.download_progress) {
         const int total_steps = std::max(1, state.download_progress->total_steps.load());
         const int completed_steps = std::clamp(state.download_progress->completed_steps.load(), 0, total_steps);
@@ -1532,9 +1539,19 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                         with_alpha(t.accent, detail_alpha));
         ui::draw_rect_lines(progress_rect, 1.0f, with_alpha(t.border_light, detail_alpha));
     }
+    if (selected_play_locked && !selected_lock_reason.empty() && !needs_download(*song)) {
+        draw_browse_body_text_in_rect(selected_lock_reason.c_str(), 12,
+                              {current.primary_action_rect.x,
+                               current.primary_action_rect.y - 24.0f,
+                               current.primary_action_rect.width,
+                               18.0f},
+                              with_alpha(t.slow, detail_alpha),
+                              ui::text_align::center);
+    }
     draw_toned_button(current.primary_action_rect,
-                      primary_label,
+                      primary_label.c_str(),
                       15,
+                      selected_play_locked && !needs_download(*song) ? t.slow :
                       action_tone_for_state(song->update_available || selected_chart_update || selected_chart_repair,
                                             song->installed,
                                             state.download_in_progress),
@@ -1688,14 +1705,15 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                               {card.x + 72.0f, row_mid_y, 150.0f, 18.0f},
                               with_alpha(t.text, detail_alpha),
                               ui::text_align::left);
-        const std::string chart_badge = detail::chart_status_label(item);
         const bool can_download_chart = !state.download_in_progress && detail::can_download_chart(*song, item);
+        const bool chart_locked = content_is_play_locked(song->song.song.meta, item.chart.meta);
+        const std::string chart_badge = chart_locked ? "LOCKED" : detail::chart_status_label(item);
         const Rectangle download_icon_rect = detail::chart_download_icon_rect(card);
         const bool has_review_badge =
             item.chart.online_identity.has_value() &&
             !content_lifecycle::display_label(item.chart.online_identity->review_status,
                                               item.chart.online_identity->lifecycle_status).empty();
-        const bool show_chart_badge = !chart_badge.empty() && (!can_download_chart || has_review_badge);
+        const bool show_chart_badge = !chart_badge.empty() && (!can_download_chart || has_review_badge || chart_locked);
         if (show_chart_badge) {
             const float badge_width = chart_badge.size() > 8 ? 122.0f : 62.0f;
             const float badge_right = can_download_chart ? download_icon_rect.x - 12.0f
@@ -1704,6 +1722,9 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
             Color badge_color = chart_modified ? t.slow
                 : item.update_available ? t.accent
                                         : t.text_muted;
+            if (chart_locked) {
+                badge_color = t.slow;
+            }
             if (has_review_badge) {
                 badge_color = content_lifecycle::is_pending_review(item.chart.online_identity->review_status,
                                                                     item.chart.online_identity->lifecycle_status)

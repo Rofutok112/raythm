@@ -1018,6 +1018,11 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
     const Rectangle info_panel = play_info_panel_rect(panel);
     const Rectangle ranking_panel = play_ranking_panel_rect(panel);
     const Color chart_tone = chart != nullptr ? difficulty_level_color(chart->meta.level) : t.border_light;
+    const bool play_locked = song != nullptr && chart != nullptr &&
+                             content_is_play_locked(song->song.meta, chart->meta);
+    const std::string lock_reason = play_locked
+        ? content_play_lock_reason(song->song.meta, chart->meta)
+        : "";
     ui::draw_rect_f(info_panel, with_alpha(lerp_color(t.section, chart_tone, chart != nullptr ? 0.045f : 0.0f),
                                            static_cast<unsigned char>(normal_row_alpha / 2)));
     ui::draw_rect_f({info_panel.x, info_panel.y, 4.0f, info_panel.height},
@@ -1047,9 +1052,24 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
             chart->meta.level,
             {info_panel.x + info_panel.width - 146.0f, info_panel.y + 82.0f, 88.0f, 28.0f},
             14, alpha);
-        draw_square_status_badge(
-            {info_panel.x + info_panel.width - 250.0f, info_panel.y + 84.0f, 86.0f, 24.0f},
-            chart->source_status, alpha, 10);
+        const Rectangle source_badge_rect = {
+            info_panel.x + info_panel.width - 250.0f,
+            info_panel.y + 84.0f,
+            86.0f,
+            24.0f,
+        };
+        draw_square_status_badge(source_badge_rect, chart->source_status, alpha, 10);
+        if (play_locked) {
+            ui::draw_rect_f(source_badge_rect, with_alpha(t.bg, scaled_alpha(alpha, 0.54f)));
+            raythm_icons::draw_lock(centered_icon_rect(source_badge_rect, 3.0f),
+                                    with_alpha(t.slow, alpha), 2.7f);
+            ui::draw_text_in_rect(lock_reason.c_str(), 12,
+                                  {info_panel.x + 28.0f,
+                                   info_panel.y + 134.0f,
+                                   info_panel.width - 56.0f,
+                                   18.0f},
+                                  with_alpha(t.slow, alpha), ui::text_align::left);
+        }
         draw_difficulty_breakdown(
             {info_panel.x + 28.0f, info_panel.y + 164.0f, info_panel.width - 56.0f, 94.0f},
             chart, alpha, normal_row_alpha, state.chart_change_anim_t);
@@ -1110,10 +1130,19 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
     ui::draw_text_in_rect(mods_label.c_str(), 14,
                           {mods_visual.x + 62.0f, mods_visual.y + 30.0f, 130.0f, 20.0f},
                           with_alpha(mods_active ? t.accent : t.text_muted, alpha), ui::text_align::left);
-    ui::draw_button_colored(start_button_rect(panel), localization::tr_literal(state.filter.multiplayer_queueable_only ? "SELECT" : "START"), 22,
-                            with_alpha(button_selected, selected_row_alpha),
-                            with_alpha(button_hover, hover_row_alpha),
+    const Rectangle start_rect = start_button_rect(panel);
+    ui::draw_button_colored(start_rect,
+                            localization::tr_literal(play_locked ? "" :
+                                (state.filter.multiplayer_queueable_only ? "SELECT" : "START")),
+                            22,
+                            with_alpha(play_locked ? lerp_color(t.section, t.slow, 0.20f) : button_selected,
+                                       selected_row_alpha),
+                            with_alpha(play_locked ? lerp_color(t.section, t.slow, 0.28f) : button_hover,
+                                       hover_row_alpha),
                             with_alpha(t.text, alpha), 1.4f);
+    if (play_locked) {
+        raythm_icons::draw_lock(centered_icon_rect(start_rect, 18.0f), with_alpha(t.slow, alpha), 3.2f);
+    }
 }
 
 void draw_mod_toggle(Rectangle rect,

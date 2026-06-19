@@ -13,6 +13,10 @@ bool start_selected_chart(scene_manager& manager,
     if (song == nullptr || chart == nullptr) {
         return false;
     }
+    if (content_is_play_locked(song->song.meta, chart->meta)) {
+        song_select::queue_status_message(state, content_play_lock_reason(song->song.meta, chart->meta), true);
+        return false;
+    }
     audio_controller.stop_preview();
     manager.change_scene(song_select::make_play_scene(manager, *song, *chart, state.mods));
     return true;

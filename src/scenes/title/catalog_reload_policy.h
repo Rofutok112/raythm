@@ -17,27 +17,28 @@ enum class reload_mode {
 struct reload_policy {
     reload_mode mode = reload_mode::quiet_refresh;
     bool calculate_missing_levels = false;
+    bool preserve_current_selection = false;
 };
 
 inline reload_policy policy_for(reload_mode mode) {
     switch (mode) {
         case reload_mode::quiet_refresh:
-            return {mode, false};
+            return {mode, false, false};
         case reload_mode::fast_startup:
         case reload_mode::selection_sync:
-            return {mode, false};
+            return {mode, false, false};
         case reload_mode::background_rebuild:
-            return {mode, true};
+            return {mode, true, true};
         case reload_mode::scoring_ruleset_warmed:
-            return {mode, false};
+            return {mode, false, false};
         case reload_mode::user_refresh:
         case reload_mode::content_changed:
         case reload_mode::import_completed:
-            return {mode, true};
+            return {mode, true, false};
         case reload_mode::transfer_completed:
-            return {mode, false};
+            return {mode, false, false};
     }
-    return {mode, false};
+    return {mode, false, false};
 }
 
 }  // namespace title_catalog

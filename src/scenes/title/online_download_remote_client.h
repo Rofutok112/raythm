@@ -40,6 +40,7 @@ struct remote_song_payload {
     std::string song_json_fingerprint;
     std::string audio_hash;
     std::string jacket_hash;
+    song_extra_meta extra;
 };
 
 struct remote_chart_payload {
@@ -67,6 +68,7 @@ struct remote_chart_payload {
     bool can_edit = false;
     bool has_can_edit = false;
     std::string uploader_id;
+    chart_extra_meta extra;
 };
 
 struct remote_catalog_fetch_result {

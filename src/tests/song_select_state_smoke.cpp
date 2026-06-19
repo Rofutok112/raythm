@@ -119,6 +119,16 @@ int main() {
                                   song_select::layout::kRowHeight;
     assert(std::fabs(song_select::content_height(state) - expected_height) < 0.01f);
 
+    song_select::catalog_data level_update_catalog;
+    level_update_catalog.songs.push_back(make_song("song-a", "Alpha",
+                                                   {make_chart("chart-a-1", "Normal", 4.5f),
+                                                    make_chart("chart-a-2", "Hyper", 8.5f)}));
+    assert(song_select::apply_catalog_chart_level_update(state, level_update_catalog));
+    assert(state.songs.front().charts.front().meta.level == 4.5f);
+    assert(state.songs.front().charts.back().meta.level == 8.5f);
+    assert(state.selected_song_index == 0);
+    assert(state.difficulty_index == 1);
+
     ui::clear_global_notices();
     ui::begin_hit_regions();
     song_select::queue_status_message(state, "First notice", true);
@@ -144,6 +154,19 @@ int main() {
     assert(song_select::expanded_row_height(state, 1) == song_select::layout::kRowHeight);
     assert(song_select::fallback_song_id_after_song_delete(state, 0) == "song-b");
     assert(song_select::fallback_chart_id_after_chart_delete(state, 0, 0) == "chart-a-2");
+
+    assert(song_select::remove_deleted_chart_from_catalog(state, "song-a", "chart-a-1", "song-a", "chart-a-2"));
+    assert(state.songs.size() == 2);
+    assert(state.songs.front().charts.size() == 1);
+    assert(state.songs.front().charts.front().meta.chart_id == "chart-a-2");
+    assert(state.selected_song_index == 0);
+    assert(state.difficulty_index == 0);
+
+    assert(song_select::remove_deleted_song_from_catalog(state, "song-a", "song-b", ""));
+    assert(state.songs.size() == 1);
+    assert(state.songs.front().song.meta.song_id == "song-b");
+    assert(state.selected_song_index == 0);
+    assert(state.difficulty_index == 0);
 
     song_select::catalog_data large_catalog;
     for (int i = 0; i < 16; ++i) {
@@ -171,6 +194,35 @@ int main() {
     assert(play_visibility_state.catalog.songs[play_visible_indices.front()].song.meta.song_id == "charted-song");
     assert(play_visibility_state.catalog.songs[play_visibility_state.selected_song_index].song.meta.song_id ==
            "charted-song");
+    assert(!song_select::filtered_charts_for_selected_song(play_visibility_state).empty());
+    assert(song_select::selected_chart_for(
+               play_visibility_state,
+               song_select::filtered_charts_for_selected_song(play_visibility_state)) != nullptr);
+
+    song_select::apply_chart_filters(play_visibility_state,
+                                     song_select::chart_source_filter::all,
+                                     4,
+                                     0.0f,
+                                     99.0f);
+    const std::vector<int> keyed_visible_indices = song_select::filtered_song_indices(play_visibility_state);
+    assert(keyed_visible_indices.size() == 1);
+    assert(play_visibility_state.catalog.songs[keyed_visible_indices.front()].song.meta.song_id == "charted-song");
+
+    song_select::catalog_data filtered_reload_catalog;
+    filtered_reload_catalog.songs.push_back(make_song("chartless-song", "Chartless", {}));
+    filtered_reload_catalog.songs.push_back(make_song("charted-song", "Charted",
+                                                      {make_chart("charted-chart", "Normal", 5)}));
+    play_visibility_state.play_search_input.value = "Chart";
+    play_visibility_state.chart_source = song_select::chart_source_filter::community;
+    play_visibility_state.chart_key_filter = 4;
+    play_visibility_state.chart_min_level = 2.0f;
+    play_visibility_state.chart_max_level = 8.0f;
+    song_select::apply_catalog(play_visibility_state, std::move(filtered_reload_catalog), "charted-song", "charted-chart");
+    assert(play_visibility_state.play_search_input.value == "Chart");
+    assert(play_visibility_state.chart_source == song_select::chart_source_filter::community);
+    assert(play_visibility_state.chart_key_filter == 4);
+    assert(play_visibility_state.chart_min_level == 2.0f);
+    assert(play_visibility_state.chart_max_level == 8.0f);
 
     song_select::catalog_data create_catalog;
     create_catalog.songs.push_back(make_song("chartless-song", "Chartless", {}));
@@ -182,6 +234,26 @@ int main() {
     const std::vector<int> create_visible_indices = song_select::filtered_song_indices(create_visibility_state);
     assert(create_visible_indices.size() == 2);
     assert(create_visibility_state.catalog.songs[create_visibility_state.selected_song_index].song.meta.song_id ==
+           "chartless-song");
+
+    song_select::catalog_data filtered_create_catalog;
+    filtered_create_catalog.songs.push_back(make_song("chartless-song", "Chartless", {}));
+    filtered_create_catalog.songs.push_back(make_song("charted-song", "Charted",
+                                                      {make_chart("charted-chart", "Normal", 5)}));
+    song_select::state filtered_create_visibility_state;
+    filtered_create_visibility_state.filter.include_chartless_songs = true;
+    filtered_create_visibility_state.chart_source = song_select::chart_source_filter::community;
+    filtered_create_visibility_state.chart_key_filter = 7;
+    filtered_create_visibility_state.chart_min_level = 10.0f;
+    filtered_create_visibility_state.chart_max_level = 12.0f;
+    song_select::apply_catalog(filtered_create_visibility_state,
+                               std::move(filtered_create_catalog),
+                               "chartless-song",
+                               "");
+    const std::vector<int> filtered_create_visible_indices =
+        song_select::filtered_song_indices(filtered_create_visibility_state);
+    assert(filtered_create_visible_indices.size() == 1);
+    assert(filtered_create_visibility_state.catalog.songs[filtered_create_visible_indices.front()].song.meta.song_id ==
            "chartless-song");
 
     song_select::catalog_data multiplayer_catalog;

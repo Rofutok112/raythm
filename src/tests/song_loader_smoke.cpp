@@ -128,6 +128,29 @@ std::filesystem::path write_temp_song_with_legacy_timing_resolution() {
     return song_dir;
 }
 
+std::filesystem::path write_temp_song_with_extra_metadata() {
+    const std::filesystem::path song_dir =
+        std::filesystem::temp_directory_path() / "raythm_song_loader_extra_metadata";
+    std::error_code ec;
+    std::filesystem::remove_all(song_dir, ec);
+    std::filesystem::create_directories(song_dir);
+    std::ofstream output(song_dir / "song.json", std::ios::trunc);
+    output << "{\n"
+           << "  \"songId\": \"extra-metadata-song\",\n"
+           << "  \"title\": \"Extra Metadata Song\",\n"
+           << "  \"artist\": \"Codex\",\n"
+           << "  \"baseBpm\": 120,\n"
+           << "  \"audioFile\": \"audio.ogg\",\n"
+           << "  \"jacketFile\": \"jacket.png\",\n"
+           << "  \"previewStartMs\": 0,\n"
+           << "  \"songVersion\": 1,\n"
+           << "  \"metadataExtensions\": {\n"
+           << "    \"mvReferences\": {\"count\": 2, \"ids\": [\"mv-a\", \"mv-b\"]}\n"
+           << "  }\n"
+           << "}\n";
+    return song_dir;
+}
+
 }
 
 int main() {
@@ -233,6 +256,20 @@ int main() {
         ok = false;
     }
     std::filesystem::remove_all(legacy_timing_song);
+
+    const std::filesystem::path extra_metadata_song = write_temp_song_with_extra_metadata();
+    const song_load_result extra_metadata_result = song_loader::load_directory(extra_metadata_song.string());
+    if (extra_metadata_result.songs.size() != 1 ||
+        extra_metadata_result.songs.front().meta.extra.mv_references.count != 2 ||
+        extra_metadata_result.songs.front().meta.extra.mv_references.ids.size() != 2 ||
+        !extra_metadata_result.songs.front().meta.extra.clear_rewards.empty()) {
+        std::cerr << "Expected song loader to parse extra metadata from song.json\n";
+        for (const std::string& error : extra_metadata_result.errors) {
+            std::cerr << "  " << error << '\n';
+        }
+        ok = false;
+    }
+    std::filesystem::remove_all(extra_metadata_song);
 
     const std::filesystem::path written_song_dir =
         std::filesystem::temp_directory_path() / "raythm_song_writer_external_id";

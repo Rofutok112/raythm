@@ -126,8 +126,8 @@ std::optional<std::string> ready_catalog_signature(sqlite3* database) {
     const std::optional<std::string> signature =
         local_sqlite::metadata_value(database, "local_catalog.signature");
     if (!signature.has_value() ||
-        local_sqlite::metadata_value(database, "local_catalog.status_schema").value_or("") !=
-            local_catalog_signature::kStatusSchema ||
+        !local_catalog_signature::is_compatible_status_schema(
+            local_sqlite::metadata_value(database, "local_catalog.status_schema").value_or("")) ||
         !table_exists(database, "local_songs") ||
         !table_exists(database, "local_charts")) {
         return std::nullopt;

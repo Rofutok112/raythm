@@ -238,6 +238,60 @@ std::optional<std::string> extract_json_array(const std::string& content, const 
     return std::nullopt;
 }
 
+std::optional<std::string> extract_json_object(const std::string& content, const std::string& key) {
+    const std::string token = "\"" + key + "\"";
+    const std::optional<size_t> found_key = find_json_key(content, key);
+    if (!found_key.has_value()) {
+        return std::nullopt;
+    }
+    const size_t key_pos = *found_key;
+
+    const size_t colon_pos = content.find(':', key_pos + token.size());
+    if (colon_pos == std::string::npos) {
+        return std::nullopt;
+    }
+
+    size_t value_start = colon_pos + 1;
+    while (value_start < content.size() &&
+           std::isspace(static_cast<unsigned char>(content[value_start])) != 0) {
+        ++value_start;
+    }
+    if (value_start >= content.size() || content[value_start] != '{') {
+        return std::nullopt;
+    }
+
+    bool in_string = false;
+    bool escaped = false;
+    int depth = 0;
+    for (size_t index = value_start; index < content.size(); ++index) {
+        const char ch = content[index];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (in_string && ch == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch == '"') {
+            in_string = !in_string;
+            continue;
+        }
+        if (in_string) {
+            continue;
+        }
+        if (ch == '{') {
+            ++depth;
+        } else if (ch == '}') {
+            --depth;
+            if (depth == 0) {
+                return content.substr(value_start, index - value_start + 1);
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<std::string> extract_json_object_array_values(const std::string& array_content) {
     std::vector<std::string> values;
     bool in_string = false;
@@ -316,6 +370,23 @@ std::vector<std::string> extract_json_string_array_values(const std::string& arr
     }
 
     return values;
+}
+
+std::optional<int> parse_int(const std::string& value);
+
+void parse_song_extra_meta(const std::string& content, song_extra_meta& extra) {
+    if (const std::optional<std::string> extensions = extract_json_object(content, "metadataExtensions")) {
+        if (const std::optional<std::string> mv_object = extract_json_object(*extensions, "mvReferences")) {
+            if (const std::optional<std::string> mv_count = extract_json_number_token(*mv_object, "count")) {
+                if (const std::optional<int> parsed = parse_int(*mv_count)) {
+                    extra.mv_references.count = std::max(0, *parsed);
+                }
+            }
+            if (const std::optional<std::string> ids_array = extract_json_array(*mv_object, "ids")) {
+                extra.mv_references.ids = extract_json_string_array_values(*ids_array);
+            }
+        }
+    }
 }
 
 std::optional<timing_event_type> parse_timing_type(const std::string& value) {
@@ -541,6 +612,7 @@ std::optional<song_meta> parse_song_meta(const fs::path& song_json_path,
     }
 
     meta.timing_events = parse_song_timing_events(content, song_json_path, errors);
+    parse_song_extra_meta(content, meta.extra);
 
     if (chart_count.has_value()) {
         const std::optional<int> parsed = parse_int(*chart_count);
