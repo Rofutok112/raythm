@@ -383,6 +383,7 @@ void append_loaded_song(song_select::catalog_data& catalog,
         entry.sync_state = content_sync_service::sync_from_status(entry.status);
         entry.online_identity = managed_song_identity(*managed_manifest, local_index);
         entry.managed_manifest = managed_song_metadata(*managed_manifest);
+        entry.song.meta.extra.unlock = managed_manifest->unlock;
     } else {
         entry.kind = content_kind::local;
         entry.storage = storage_policy::plain_workspace;
@@ -444,6 +445,7 @@ void append_loaded_song(song_select::catalog_data& catalog,
                 option.remote_links.push_back(*option.online_identity);
             }
             option.meta.chart_version = managed_chart->chart_version;
+            option.meta.extra.unlock = managed_chart->unlock;
         }
         option.local_note_offset_ms = chart_offsets.contains(meta.chart_id) ? chart_offsets.at(meta.chart_id) : 0;
         option.best_local_rank.reset();
@@ -477,6 +479,7 @@ catalog_data load_catalog(bool calculate_missing_levels, catalog_progress_callba
             set_catalog_progress(progress, "保存済みカタログを使用しています...", 0.96f);
             return *cached_catalog;
         }
+        calculate_missing_levels = true;
     }
 
     set_catalog_progress(progress, "保存済み譜面設定を読み込んでいます...", 0.08f);

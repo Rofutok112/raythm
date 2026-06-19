@@ -93,6 +93,14 @@ song_select::chart_option make_chart(const char* chart_id, const char* song_id, 
     chart.source_status = content_status::community;
     chart.source = content_source::community;
     chart.sync_state = content_sync_state::modified;
+    chart.meta.extra.unlock = {
+        .unlock_state = "locked",
+        .locked = true,
+        .can_download = true,
+        .can_play = false,
+        .lock_reason = "Clear KEY to play this chart.",
+        .unlock_rule_count = 1,
+    };
     chart.online_identity = online_content::chart_identity{
         .server_url = "https://server.example",
         .remote_song_id = "remote-song-a",
@@ -132,6 +140,14 @@ song_select::song_entry make_song(const fs::path& song_dir, const fs::path& char
     song.song.meta.song_version = 3;
     song.song.meta.offset = 45;
     song.song.meta.has_offset = true;
+    song.song.meta.extra.unlock = {
+        .unlock_state = "locked",
+        .locked = true,
+        .can_download = true,
+        .can_play = false,
+        .lock_reason = "Clear Alpha first.",
+        .unlock_rule_count = 1,
+    };
     song.song.meta.timing_events = {
         {timing_event_type::bpm, 0, 128.0f, 4, 4},
         {timing_event_type::meter, 960, 120.0f, 3, 4},
@@ -198,6 +214,10 @@ int main() {
     assert(cached.songs[0].song.meta.preview_start_seconds == 12.0f);
     assert(cached.songs[0].song.meta.offset == 45);
     assert(cached.songs[0].song.meta.has_offset);
+    assert(cached.songs[0].song.meta.extra.unlock.locked);
+    assert(!cached.songs[0].song.meta.extra.unlock.can_play);
+    assert(cached.songs[0].song.meta.extra.unlock.lock_reason == "Clear Alpha first.");
+    assert(cached.songs[0].song.meta.extra.unlock.unlock_rule_count == 1);
     assert(cached.songs[0].song.meta.timing_events.size() == 2);
     assert(cached.songs[0].song.meta.timing_events[0].type == timing_event_type::bpm);
     assert(cached.songs[0].song.meta.timing_events[0].bpm == 128.0f);
@@ -219,6 +239,10 @@ int main() {
     assert(cached.songs[0].managed_manifest->remote_audio_hash == "remote-audio-sha");
     assert(cached.songs[0].charts.size() == 1);
     assert(cached.songs[0].charts[0].meta.chart_id == "chart-a");
+    assert(cached.songs[0].charts[0].meta.extra.unlock.locked);
+    assert(!cached.songs[0].charts[0].meta.extra.unlock.can_play);
+    assert(cached.songs[0].charts[0].meta.extra.unlock.lock_reason == "Clear KEY to play this chart.");
+    assert(cached.songs[0].charts[0].meta.extra.unlock.unlock_rule_count == 1);
     assert(cached.songs[0].charts[0].min_bpm == 140.0f);
     assert(cached.songs[0].charts[0].max_bpm == 190.0f);
     assert(cached.songs[0].charts[0].kind == content_kind::community);

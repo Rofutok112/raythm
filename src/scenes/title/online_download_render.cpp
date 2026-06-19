@@ -1705,9 +1705,9 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                               {card.x + 72.0f, row_mid_y, 150.0f, 18.0f},
                               with_alpha(t.text, detail_alpha),
                               ui::text_align::left);
-        const std::string chart_badge = detail::chart_status_label(item);
         const bool can_download_chart = !state.download_in_progress && detail::can_download_chart(*song, item);
-        const bool chart_locked = content_unlock_is_locked(item.chart.meta.extra.unlock);
+        const bool chart_locked = content_is_play_locked(song->song.song.meta, item.chart.meta);
+        const std::string chart_badge = chart_locked ? "LOCKED" : detail::chart_status_label(item);
         const Rectangle download_icon_rect = detail::chart_download_icon_rect(card);
         const bool has_review_badge =
             item.chart.online_identity.has_value() &&

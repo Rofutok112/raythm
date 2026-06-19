@@ -13,6 +13,8 @@ namespace local_catalog_signature {
 namespace {
 namespace fs = std::filesystem;
 
+constexpr const char* kAccidentalUnlockMetaSchema = "managed-content-v5-unlock-meta";
+
 std::string path_key(const fs::path& root, const fs::path& path) {
     std::error_code ec;
     const fs::path relative = fs::relative(path, root, ec);
@@ -164,6 +166,10 @@ void append_content_cache_signature(std::ostringstream& output, const fs::path& 
 }
 
 }  // namespace
+
+bool is_compatible_status_schema(const std::string& schema) {
+    return schema == kStatusSchema || schema == kAccidentalUnlockMetaSchema;
+}
 
 std::string current() {
     std::ostringstream output;

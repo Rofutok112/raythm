@@ -1,0 +1,4 @@
+interface:
+  display_name: "Raythm Full Implementation"
+  short_description: "Complete raythm features beyond MVP scope"
+  default_prompt: "Use $raythm-full-implementation to build this raythm feature as a complete, production-quality implementation."

@@ -76,6 +76,23 @@ const managed_content_storage::chart_manifest_entry* find_manifest_chart(
     return nullptr;
 }
 
+bool unlock_meta_equal(const content_unlock_meta& left, const content_unlock_meta& right) {
+    return left.unlock_state == right.unlock_state &&
+           left.locked == right.locked &&
+           left.can_download == right.can_download &&
+           left.can_play == right.can_play &&
+           left.lock_reason == right.lock_reason &&
+           left.unlock_rule_count == right.unlock_rule_count;
+}
+
+bool apply_unlock_meta(content_unlock_meta& target, const content_unlock_meta& source) {
+    if (unlock_meta_equal(target, source)) {
+        return false;
+    }
+    target = source;
+    return true;
+}
+
 bool encrypted_asset_exists(const std::filesystem::path& song_dir,
                             const managed_content_storage::encrypted_asset_metadata& asset) {
     if (asset.encrypted_path.empty()) {
@@ -184,6 +201,7 @@ cache_repair_result repair_cached_song(song_entry& song, const player_chart_offs
             return result;
         }
         sync_managed_manifest_identity(*manifest);
+        result.changed = apply_unlock_meta(song.song.meta.extra.unlock, manifest->unlock) || result.changed;
     }
 
     result.changed = sanitize_plain_workspace_song(song) || result.changed;
@@ -196,6 +214,13 @@ cache_repair_result repair_cached_song(song_entry& song, const player_chart_offs
         }
 
         result.changed = sanitize_plain_workspace_chart(chart) || result.changed;
+        if (chart.storage == storage_policy::managed_package && manifest.has_value()) {
+            if (const managed_content_storage::chart_manifest_entry* manifest_chart =
+                    find_manifest_chart(*manifest, chart.meta.chart_id)) {
+                result.changed =
+                    apply_unlock_meta(chart.meta.extra.unlock, manifest_chart->unlock) || result.changed;
+            }
+        }
         if (chart.online_identity.has_value()) {
             chart.remote_links = {*chart.online_identity};
         } else {
@@ -214,6 +239,17 @@ cache_repair_result repair_cached_song(song_entry& song, const player_chart_offs
         result.changed = true;
     }
     return result;
+}
+
+bool has_missing_chart_levels(const catalog_data& catalog) {
+    for (const song_entry& song : catalog.songs) {
+        for (const chart_option& chart : song.charts) {
+            if (chart.meta.level <= 0.0f) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 }  // namespace
@@ -372,6 +408,9 @@ std::optional<catalog_data> load_ready_catalog(progress_callback progress) {
     report_progress(progress, "Sorting cached catalog...", 0.90f);
     std::sort(catalog.songs.begin(), catalog.songs.end(), song_source_less);
     if (catalog.songs.empty()) {
+        return std::nullopt;
+    }
+    if (has_missing_chart_levels(catalog)) {
         return std::nullopt;
     }
     if (changed) {

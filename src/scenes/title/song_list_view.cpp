@@ -287,13 +287,14 @@ void draw_status_tags_fit(Rectangle bounds,
     draw_status_tag(status_rect, status, alpha, font_size);
 }
 
-void draw_chart_row(const song_select::chart_option& chart,
+void draw_chart_row(const song_select::song_entry& song,
+                    const song_select::chart_option& chart,
                     Rectangle row,
                     bool selected,
                     const title_song_list_view::draw_config& config) {
     const auto& t = *g_theme;
     const bool hovered = ui::is_hovered(row);
-    const bool locked = content_unlock_is_locked(chart.meta.extra.unlock);
+    const bool locked = content_is_play_locked(song.song.meta, chart.meta);
     const unsigned char row_alpha = selected ? config.selected_row_alpha
         : hovered ? config.hover_row_alpha
                   : config.normal_row_alpha;
@@ -686,7 +687,8 @@ void draw(const song_select::state& state, const draw_config& config) {
                 chart_row.y > viewport.y + viewport.height + kClipSlack) {
                 continue;
             }
-            draw_chart_row(*filtered[static_cast<size_t>(chart_index)],
+            draw_chart_row(song,
+                           *filtered[static_cast<size_t>(chart_index)],
                            chart_row,
                            chart_index == state.difficulty_index,
                            chart_config);

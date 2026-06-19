@@ -144,6 +144,14 @@ int main() {
         .chart_fingerprint = "local-chart-fingerprint",
         .remote_chart_hash = "remote-chart-sha",
         .remote_chart_fingerprint = "remote-chart-fingerprint",
+        .unlock = {
+            .unlock_state = "locked",
+            .locked = true,
+            .can_download = true,
+            .can_play = false,
+            .lock_reason = "Clear managed key first.",
+            .unlock_rule_count = 1,
+        },
     };
 
     const std::string managed_song_id = managed_content_storage::local_song_id(song_identity);
@@ -168,6 +176,14 @@ int main() {
         .remote_song_json_fingerprint = "remote-song-json-fingerprint",
         .remote_audio_hash = "remote-audio-sha",
         .remote_jacket_hash = "remote-jacket-sha",
+        .unlock = {
+            .unlock_state = "unlocked",
+            .locked = false,
+            .can_download = true,
+            .can_play = true,
+            .lock_reason = "",
+            .unlock_rule_count = 0,
+        },
     };
     managed_content_storage::upsert_chart(manifest, chart_identity);
     std::string error_message;
@@ -212,6 +228,8 @@ int main() {
     assert(stored_manifest->remote_song_json_fingerprint == "remote-song-json-fingerprint");
     assert(stored_manifest->remote_audio_hash == "remote-audio-sha");
     assert(stored_manifest->remote_jacket_hash == "remote-jacket-sha");
+    assert(!stored_manifest->unlock.locked);
+    assert(stored_manifest->unlock.can_play);
     assert(!stored_manifest->key_id.empty());
     assert(stored_manifest->content_key_version == 1);
     assert(std::string(stored_manifest->encryption_scheme) == managed_content_storage::default_encryption_scheme());
@@ -232,6 +250,9 @@ int main() {
     assert(stored_manifest->charts.front().chart_fingerprint == "local-chart-fingerprint");
     assert(stored_manifest->charts.front().remote_chart_hash == "remote-chart-sha");
     assert(stored_manifest->charts.front().remote_chart_fingerprint == "remote-chart-fingerprint");
+    assert(stored_manifest->charts.front().unlock.locked);
+    assert(!stored_manifest->charts.front().unlock.can_play);
+    assert(stored_manifest->charts.front().unlock.lock_reason == "Clear managed key first.");
     assert(!stored_manifest->charts.front().encrypted_chart.ciphertext_hash.empty());
 
     const chart_parse_result editor_loaded_chart = editor_chart_load_service::load_chart(
@@ -367,9 +388,14 @@ int main() {
     }
     assert(manifest_managed != nullptr);
     assert(manifest_managed->online_identity.has_value());
+    assert(!manifest_managed->song.meta.extra.unlock.locked);
+    assert(manifest_managed->song.meta.extra.unlock.can_play);
     assert(!manifest_managed->charts.empty());
     assert(manifest_managed->charts.front().online_identity.has_value());
     assert(manifest_managed->charts.front().online_identity->remote_chart_id == "remote-chart");
+    assert(manifest_managed->charts.front().meta.extra.unlock.locked);
+    assert(!manifest_managed->charts.front().meta.extra.unlock.can_play);
+    assert(manifest_managed->charts.front().meta.extra.unlock.lock_reason == "Clear managed key first.");
 
     const std::optional<local_content_index::online_song_binding> manifest_song_binding =
         local_content_index::find_song_by_local(song_identity.server_url, managed_song_id);
@@ -419,6 +445,8 @@ int main() {
     assert(managed->managed_manifest->package_id == "package-remote-song");
     assert(managed->managed_manifest->song_json_hash == "local-song-json-sha");
     assert(managed->managed_manifest->audio_hash == "local-audio-sha");
+    assert(!managed->song.meta.extra.unlock.locked);
+    assert(managed->song.meta.extra.unlock.can_play);
     assert(managed->song.directory.find("content-cache") != std::string::npos);
     assert(managed->song.directory.find("community") != std::string::npos);
     assert(managed->charts.size() == 2);
@@ -440,6 +468,9 @@ int main() {
     assert(managed_remote_chart->managed_manifest.has_value());
     assert(managed_remote_chart->managed_manifest->chart_hash == "local-chart-sha");
     assert(managed_remote_chart->managed_manifest->remote_chart_fingerprint == "remote-chart-fingerprint");
+    assert(managed_remote_chart->meta.extra.unlock.locked);
+    assert(!managed_remote_chart->meta.extra.unlock.can_play);
+    assert(managed_remote_chart->meta.extra.unlock.lock_reason == "Clear managed key first.");
     assert(managed_remote_chart->path.find("content-cache") != std::string::npos);
     assert(managed_remote_chart->meta.level > 0.0f);
     assert(local_extra_chart != nullptr);
@@ -457,9 +488,11 @@ int main() {
     song_select::catalog_data stale_cached_catalog = catalog;
     for (song_select::song_entry& song : stale_cached_catalog.songs) {
         if (song.song.meta.song_id == managed_song_id) {
+            song.song.meta.extra.unlock = {};
             for (song_select::chart_option& chart : song.charts) {
                 if (chart.meta.chart_id == managed_chart_id) {
                     chart.meta.level = 0.0f;
+                    chart.meta.extra.unlock = {};
                 }
             }
         }
@@ -487,7 +520,12 @@ int main() {
         }
     }
     assert(fast_cached_remote != nullptr);
-    assert(fast_cached_remote->meta.level == 0.0f);
+    assert(fast_cached_remote->meta.level > 0.0f);
+    assert(!fast_cached_managed->song.meta.extra.unlock.locked);
+    assert(fast_cached_managed->song.meta.extra.unlock.can_play);
+    assert(fast_cached_remote->meta.extra.unlock.locked);
+    assert(!fast_cached_remote->meta.extra.unlock.can_play);
+    assert(fast_cached_remote->meta.extra.unlock.lock_reason == "Clear managed key first.");
     assert(fast_cached_extra != nullptr);
     assert(fast_cached_extra->storage == storage_policy::plain_workspace);
 
@@ -513,6 +551,11 @@ int main() {
     }
     assert(repaired_remote != nullptr);
     assert(repaired_remote->meta.level > 0.0f);
+    assert(!repaired_managed->song.meta.extra.unlock.locked);
+    assert(repaired_managed->song.meta.extra.unlock.can_play);
+    assert(repaired_remote->meta.extra.unlock.locked);
+    assert(!repaired_remote->meta.extra.unlock.can_play);
+    assert(repaired_remote->meta.extra.unlock.lock_reason == "Clear managed key first.");
     assert(repaired_extra != nullptr);
     assert(repaired_extra->storage == storage_policy::plain_workspace);
 
@@ -539,6 +582,11 @@ int main() {
     }
     assert(persisted_remote != nullptr);
     assert(persisted_remote->meta.level > 0.0f);
+    assert(!persisted_managed->song.meta.extra.unlock.locked);
+    assert(persisted_managed->song.meta.extra.unlock.can_play);
+    assert(persisted_remote->meta.extra.unlock.locked);
+    assert(!persisted_remote->meta.extra.unlock.can_play);
+    assert(persisted_remote->meta.extra.unlock.lock_reason == "Clear managed key first.");
     assert(persisted_extra != nullptr);
     assert(persisted_extra->storage == storage_policy::plain_workspace);
 
