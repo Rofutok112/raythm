@@ -161,6 +161,55 @@ int main() {
            "Expected chart cache path to preserve the chart file extension.",
            ok);
 
+    const content_cache_paths::mv_cache_key_parts mv_a{
+        .server_url = song_a.server_url,
+        .remote_song_id = song_a.remote_song_id,
+        .remote_mv_id = "mv/with:unsafe?chars",
+        .song_version = song_a.song_version,
+        .mv_version = 2,
+        .revision_id = "mv-rev-2",
+    };
+    const content_cache_paths::mv_cache_key_parts mv_other_id{
+        .server_url = mv_a.server_url,
+        .remote_song_id = mv_a.remote_song_id,
+        .remote_mv_id = "other-mv",
+        .song_version = mv_a.song_version,
+        .mv_version = mv_a.mv_version,
+        .revision_id = mv_a.revision_id,
+    };
+    const content_cache_paths::mv_cache_key_parts mv_other_version{
+        .server_url = mv_a.server_url,
+        .remote_song_id = mv_a.remote_song_id,
+        .remote_mv_id = mv_a.remote_mv_id,
+        .song_version = mv_a.song_version,
+        .mv_version = 3,
+        .revision_id = mv_a.revision_id,
+    };
+    const std::string mv_key = content_cache_paths::mv_cache_key(mv_a);
+    expect(mv_key.rfind("mv_", 0) == 0,
+           "Expected MV cache key to use the mv_ namespace.",
+           ok);
+    expect(is_safe_path_component(mv_key),
+           "Expected MV cache key to avoid path separators and reserved characters.",
+           ok);
+    expect(mv_key != content_cache_paths::mv_cache_key(mv_other_id),
+           "Expected remote MV ID to be part of the MV cache key.",
+           ok);
+    expect(mv_key != content_cache_paths::mv_cache_key(mv_other_version),
+           "Expected MV version to be part of the MV cache key.",
+           ok);
+    expect(content_cache_paths::mv_dir(online_content::source::community, mv_a).parent_path().filename() == "mvs",
+           "Expected managed MV directories to live below an mvs bucket in the content cache.",
+           ok);
+    expect(content_cache_paths::mv_managed_package_manifest_path(online_content::source::community, mv_a).filename() ==
+               "managed-package.json",
+           "Expected managed MV manifest path to use managed-package.json.",
+           ok);
+    expect(content_cache_paths::mv_dir(online_content::source::community, mv_a).string().find("charts") ==
+               std::string::npos,
+           "Expected managed MV paths to stay independent from chart storage.",
+           ok);
+
     fs::remove_all(temp_local_app_data, ec);
     if (!ok) {
         return EXIT_FAILURE;

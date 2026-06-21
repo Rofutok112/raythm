@@ -48,7 +48,8 @@
   - `AppData/Local/raythm/songs/{song_id}/charts/{chart_id}.rchart`
 - MV:
   - `AppData/Local/raythm/mvs/{mv_id}/mv.json`
-  - `AppData/Local/raythm/mvs/{mv_id}/script.rmv`
+  - `AppData/Local/raythm/mvs/{mv_id}/composition.rmvcomp`
+  - `AppData/Local/raythm/mvs/{mv_id}/assets/`
 
 新規作成と import/export まわりは主に [song_import_export_service.cpp](C:/Users/rento/CLionProjects/raythm/src/scenes/song_select/song_import_export_service.cpp) と editor 保存処理から入ります。
 
@@ -97,16 +98,67 @@ song select の一覧は [song_catalog_service.cpp](C:/Users/rento/CLionProjects
 
 ## MV Package Layout
 
-MV は曲から独立したパッケージとして保存されます。
+MV は曲に付随するパッケージとして保存されます。`songId` が所有関係を表し、MV package の identity、Browse 公開、解禁状態、暗号化状態は曲単位で決まります。譜面情報は MV の保存形式や選択条件に入りません。
 
 - `mv.json`
   - `mvId`
   - `songId`
   - `name`
   - `author`
-  - `scriptFile`
-- `script.rmv`
-  - MV script 本体
+  - `compositionFile`
+  - `formatVersion`
+- `composition.rmvcomp`
+  - MV Composition authoring data
+  - JSON-based UTF-8 text
+  - Layer / Source / Transform / Effect / Keyframe / EventTrigger / Asset references
+  - `EventTrigger.timeMs` uses song timeline milliseconds for MV-local cues; it is not tied to chart selection
+  - `.rmvcomp` export is composition-only and does not carry image/generated assets
+- `.rmvpack`
+  - zip-compatible portable MV package
+  - contains `mv.json`, `composition.rmvcomp`, and `assets/`
+  - use this for user-facing import/export, Browse upload payloads, and any MV that must move with assets
+- Package paths
+  - `compositionFile` and composition asset paths must be package-relative
+  - absolute paths, Windows drive-relative paths, and `..` traversal are invalid
+- `assets/`
+  - package-local images and generated assets used by the composition
+  - imported images are copied under `assets/images/`
+  - composition files store package-relative asset paths only; absolute source paths are invalid
+  - image layers must reference an existing composition asset id; dangling image asset references are invalid
+
+Community / Official MV should follow the same managed-content pattern as downloaded content:
+
+```text
+content-cache/{community|official}/mvs/{managed_mv_id}/
+  managed-package.json
+  .encrypted/
+    assets/
+      *.renc
+```
+
+The logical MV files remain:
+
+- `mv.json`
+- `composition.rmvcomp`
+- `assets/...`
+
+Managed MV editing is gated before writes. A managed MV is editable only when its license is not revoked, at least one known license window is still valid, and unlock metadata allows play/edit. When editing is denied, the editor entry point should show the manifest reason instead of converting the MV into a plain local package. When editing is allowed, `mv.json`, `composition.rmvcomp`, and asset files stay logical managed assets backed by encrypted files; editor saves must not create plain logical files in the content cache.
+
+But in managed content they may be stored as encrypted assets described by `managed-package.json`.
+
+Local editing should stay readable and unencrypted. Community / Official downloaded MVs should stay managed and encrypted when edited: the editor loads the logical composition, saves back through managed storage, updates local hashes/fingerprints, and leaves remote hashes unchanged so the catalog can report the MV as modified.
+
+Implementation notes:
+
+- Managed MV paths are defined by [content_cache_paths.h](C:/Users/rento/CLionProjects/raythm/src/core/content_cache_paths.h) as `mv_cache_key`, `mv_dir`, and `mv_managed_package_manifest_path`.
+- Managed MV manifests and logical encrypted composition IO live in [mv_managed_storage.h](C:/Users/rento/CLionProjects/raythm/src/mv/mv_managed_storage.h).
+- The MV managed storage layer reuses [managed_content_storage.h](C:/Users/rento/CLionProjects/raythm/src/services/managed_content_storage.h) for encrypted asset bytes instead of inventing a second encryption primitive.
+- [mv_storage.h](C:/Users/rento/CLionProjects/raythm/src/mv/mv_storage.h) exposes both local and managed MV packages through the same `mv_package`, `load_composition`, and `save_composition` API.
+- Image assets imported into a managed MV are written as encrypted logical files and recorded in `managed-package.json` `assets.files`; local packages still keep plain `assets/images/*` files for easy editing.
+- Rendering code reads MV assets through `read_asset_bytes`: local packages read the package file, while managed packages decrypt the asset bytes without exposing a plain logical file path.
+- MV composition export always goes through `load_composition`; local packages read the plain file and managed packages decrypt the logical composition before writing a user-selected `.rmvcomp` export.
+- `mvHash` / `mvFingerprint` are local editable-state values. `remoteMvHash` / `remoteMvFingerprint` are preserved across local edits so modified detection can compare local vs remote state.
+- `mv_managed_storage_smoke` and `content_cache_paths_smoke` cover the current managed MV path and manifest foundation.
 
 ## Import And Export Summary
 
@@ -135,6 +187,7 @@ MV は曲から独立したパッケージとして保存されます。
 - MV が出ない / 読まれない
   - `AppData/Local/raythm/mvs/`
   - 対象の `mv.json`
-  - 対象の `script.rmv`
+  - 対象の `composition.rmvcomp`
+  - 対象の `assets/`
 - アップデート後に様子がおかしい
   - `AppData/Local/raythm/updater/update.log`

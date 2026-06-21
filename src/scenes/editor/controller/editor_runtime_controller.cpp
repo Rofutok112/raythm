@@ -24,7 +24,7 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
     const bool timing_input_active = context.timing_panel.active_input_field != editor_timing_input_field::none;
     const bool editing_blocked = metadata_input_active ||
         timing_input_active ||
-        context.mv_script_editor_active ||
+        context.external_text_input_active ||
         context.timing_panel.bar_pick_mode ||
         context.timeline_drag.active;
 
@@ -37,7 +37,7 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
             context.hitsounds);
     }
 
-    if (context.ctrl_down && context.z_pressed && !context.mv_script_editor_active) {
+    if (context.ctrl_down && context.z_pressed && !context.external_text_input_active) {
         if (context.shift_down) {
             result.history_changed = context.state.redo();
         } else {
@@ -47,7 +47,7 @@ editor_shortcut_result editor_runtime_controller::handle_shortcuts(const editor_
         editor_transport_service::sync(context.transport, &context.state, context.hitsound_path, context.hitsounds, true);
     }
 
-    if (context.ctrl_down && context.y_pressed && !context.mv_script_editor_active) {
+    if (context.ctrl_down && context.y_pressed && !context.external_text_input_active) {
         result.history_changed = context.state.redo();
         editor_scene_sync::sync_after_history_change(context.sync_context);
         editor_transport_service::sync(context.transport, &context.state, context.hitsound_path, context.hitsounds, true);

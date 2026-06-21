@@ -140,31 +140,6 @@ add_executable(raythm WIN32 src/main.cpp
         src/audio/audio_loudness.h
         src/audio/audio_manager.cpp
         src/audio/audio_manager.h
-        src/mv/lang/mv_lexer.cpp
-        src/mv/lang/mv_lexer.h
-        src/mv/lang/mv_ast.h
-        src/mv/lang/mv_parser.cpp
-        src/mv/lang/mv_parser.h
-        src/mv/lang/mv_bytecode.h
-        src/mv/lang/mv_compiler.cpp
-        src/mv/lang/mv_compiler.h
-        src/mv/lang/mv_vm.cpp
-        src/mv/lang/mv_vm.h
-        src/mv/lang/mv_sandbox.cpp
-        src/mv/lang/mv_sandbox.h
-        src/mv/api/mv_scene.h
-        src/mv/api/mv_context.cpp
-        src/mv/api/mv_context.h
-        src/mv/api/mv_builtins.cpp
-        src/mv/api/mv_builtins.h
-        src/mv/render/mv_renderer.cpp
-        src/mv/render/mv_renderer.h
-        src/mv/render/mv_validator.cpp
-        src/mv/render/mv_validator.h
-        src/mv/mv_runtime.cpp
-        src/mv/mv_runtime.h
-        src/mv/mv_script_editor_style.cpp
-        src/mv/mv_script_editor_style.h
         src/mv/mv_storage.cpp
         src/mv/mv_storage.h
         src/audio/audio_waveform.cpp
@@ -226,6 +201,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/services/content_sync_service.h
         src/services/managed_content_storage.cpp
         src/services/managed_content_storage.h
+        src/mv/mv_managed_storage.cpp
+        src/mv/mv_managed_storage.h
         src/gameplay/scoring_ruleset_runtime.cpp
         src/gameplay/scoring_ruleset_runtime.h
         src/gameplay/score_system.cpp
@@ -436,6 +413,20 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/multiplayer/multiplayer_view.h
         src/scenes/multiplayer_result_scene.cpp
         src/scenes/multiplayer_result_scene.h
+        src/mv/composition/mv_composition.cpp
+        src/mv/composition/mv_composition.h
+        src/mv/composition/mv_composition_edit_history.cpp
+        src/mv/composition/mv_composition_edit_history.h
+        src/mv/composition/mv_composition_event_authoring.cpp
+        src/mv/composition/mv_composition_event_authoring.h
+        src/mv/composition/mv_composition_event_evaluator.cpp
+        src/mv/composition/mv_composition_event_evaluator.h
+        src/mv/composition/mv_composition_evaluator.cpp
+        src/mv/composition/mv_composition_evaluator.h
+        src/mv/composition/mv_composition_presets.cpp
+        src/mv/composition/mv_composition_presets.h
+        src/mv/composition/mv_composition_serializer.cpp
+        src/mv/composition/mv_composition_serializer.h
         src/scenes/mv_editor_scene.cpp
         src/scenes/mv_editor_scene.h
          src/scenes/song_create_scene.cpp
@@ -597,9 +588,7 @@ add_executable(raythm WIN32 src/main.cpp
         src/ui/ui_clip.cpp
         src/ui/ui_clip.h
         src/ui/ui_text_editor.cpp
-        src/ui/ui_text_editor.h
-        src/mv/mv_script_panel.cpp
-        src/mv/mv_script_panel.h)
+        src/ui/ui_text_editor.h)
 
 target_sources(raythm PRIVATE "${RAYTHM_GENERATED_ICON_CPP}" "${RAYTHM_GENERATED_ICON_H}")
 
@@ -1046,13 +1035,110 @@ add_executable(local_content_index_smoke
         src/scenes/title/local_content_index.h
         src/tests/local_content_index_smoke.cpp)
 
+add_executable(mv_composition_model_smoke
+        src/mv/composition/mv_composition.cpp
+        src/mv/composition/mv_composition.h
+        src/mv/composition/mv_composition_evaluator.cpp
+        src/mv/composition/mv_composition_evaluator.h
+        src/mv/composition/mv_composition_serializer.cpp
+        src/mv/composition/mv_composition_serializer.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
+        src/tests/mv_composition_model_smoke.cpp)
+
+add_executable(mv_composition_edit_history_smoke
+        src/mv/composition/mv_composition.cpp
+        src/mv/composition/mv_composition.h
+        src/mv/composition/mv_composition_edit_history.cpp
+        src/mv/composition/mv_composition_edit_history.h
+        src/mv/composition/mv_composition_serializer.cpp
+        src/mv/composition/mv_composition_serializer.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
+        src/tests/mv_composition_edit_history_smoke.cpp)
+
+add_executable(mv_composition_presets_smoke
+        src/mv/composition/mv_composition.cpp
+        src/mv/composition/mv_composition.h
+        src/mv/composition/mv_composition_evaluator.cpp
+        src/mv/composition/mv_composition_evaluator.h
+        src/mv/composition/mv_composition_presets.cpp
+        src/mv/composition/mv_composition_presets.h
+        src/mv/composition/mv_composition_serializer.cpp
+        src/mv/composition/mv_composition_serializer.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
+        src/tests/mv_composition_presets_smoke.cpp)
+
+add_executable(mv_composition_event_evaluator_smoke
+        src/mv/composition/mv_composition.cpp
+        src/mv/composition/mv_composition.h
+        src/mv/composition/mv_composition_event_evaluator.cpp
+        src/mv/composition/mv_composition_event_evaluator.h
+        src/mv/composition/mv_composition_evaluator.cpp
+        src/mv/composition/mv_composition_evaluator.h
+        src/tests/mv_composition_event_evaluator_smoke.cpp)
+
+add_executable(mv_composition_event_authoring_smoke
+        src/mv/composition/mv_composition.cpp
+        src/mv/composition/mv_composition.h
+        src/mv/composition/mv_composition_event_authoring.cpp
+        src/mv/composition/mv_composition_event_authoring.h
+        src/mv/composition/mv_composition_event_evaluator.cpp
+        src/mv/composition/mv_composition_event_evaluator.h
+        src/tests/mv_composition_event_authoring_smoke.cpp)
+
 add_executable(mv_storage_smoke
         src/core/app_paths.cpp
         src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
         src/models/data_models.h
+        src/models/online_content_identity.h
+        src/mv/composition/mv_composition.cpp
+        src/mv/composition/mv_composition.h
+        src/mv/composition/mv_composition_evaluator.cpp
+        src/mv/composition/mv_composition_evaluator.h
+        src/mv/composition/mv_composition_serializer.cpp
+        src/mv/composition/mv_composition_serializer.h
+        src/mv/mv_managed_storage.cpp
+        src/mv/mv_managed_storage.h
         src/mv/mv_storage.cpp
         src/mv/mv_storage.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
         src/tests/mv_storage_smoke.cpp)
+
+add_executable(mv_managed_storage_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/core/content_cache_paths.cpp
+        src/core/content_cache_paths.h
+        src/models/data_models.h
+        src/models/online_content_identity.h
+        src/mv/composition/mv_composition.cpp
+        src/mv/composition/mv_composition.h
+        src/mv/composition/mv_composition_evaluator.cpp
+        src/mv/composition/mv_composition_evaluator.h
+        src/mv/composition/mv_composition_serializer.cpp
+        src/mv/composition/mv_composition_serializer.h
+        src/mv/mv_managed_storage.cpp
+        src/mv/mv_managed_storage.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/services/managed_content_storage.cpp
+        src/services/managed_content_storage.h
+        src/updater/update_verify.cpp
+        src/updater/update_verify.h
+        src/tests/mv_managed_storage_smoke.cpp)
 
 add_executable(input_handler_smoke
         src/platform/windows_input_source.cpp
@@ -1523,69 +1609,6 @@ add_executable(update_version_smoke
         src/updater/update_workflow.h
         src/tests/update_version_smoke.cpp)
 
-add_executable(mv_lang_smoke
-        src/mv/lang/mv_lexer.cpp
-        src/mv/lang/mv_lexer.h
-        src/mv/lang/mv_ast.h
-        src/mv/lang/mv_parser.cpp
-        src/mv/lang/mv_parser.h
-        src/mv/lang/mv_bytecode.h
-        src/mv/lang/mv_compiler.cpp
-        src/mv/lang/mv_compiler.h
-        src/mv/lang/mv_vm.cpp
-        src/mv/lang/mv_vm.h
-        src/mv/lang/mv_sandbox.cpp
-        src/mv/lang/mv_sandbox.h
-        src/tests/mv_lang_smoke.cpp)
-
-add_executable(mv_api_smoke
-        src/mv/lang/mv_lexer.cpp
-        src/mv/lang/mv_lexer.h
-        src/mv/lang/mv_ast.h
-        src/mv/lang/mv_parser.cpp
-        src/mv/lang/mv_parser.h
-        src/mv/lang/mv_bytecode.h
-        src/mv/lang/mv_compiler.cpp
-        src/mv/lang/mv_compiler.h
-        src/mv/lang/mv_vm.cpp
-        src/mv/lang/mv_vm.h
-        src/mv/lang/mv_sandbox.cpp
-        src/mv/lang/mv_sandbox.h
-        src/mv/api/mv_scene.h
-        src/mv/api/mv_context.cpp
-        src/mv/api/mv_context.h
-        src/mv/api/mv_builtins.cpp
-        src/mv/api/mv_builtins.h
-        src/mv/render/mv_validator.cpp
-        src/mv/render/mv_validator.h
-        src/mv/mv_runtime.cpp
-        src/mv/mv_runtime.h
-        src/tests/mv_api_smoke.cpp)
-
-add_executable(mv_runtime_benchmark_smoke
-        src/mv/lang/mv_lexer.cpp
-        src/mv/lang/mv_lexer.h
-        src/mv/lang/mv_ast.h
-        src/mv/lang/mv_parser.cpp
-        src/mv/lang/mv_parser.h
-        src/mv/lang/mv_bytecode.h
-        src/mv/lang/mv_compiler.cpp
-        src/mv/lang/mv_compiler.h
-        src/mv/lang/mv_vm.cpp
-        src/mv/lang/mv_vm.h
-        src/mv/lang/mv_sandbox.cpp
-        src/mv/lang/mv_sandbox.h
-        src/mv/api/mv_scene.h
-        src/mv/api/mv_context.cpp
-        src/mv/api/mv_context.h
-        src/mv/api/mv_builtins.cpp
-        src/mv/api/mv_builtins.h
-        src/mv/render/mv_validator.cpp
-        src/mv/render/mv_validator.h
-        src/mv/mv_runtime.cpp
-        src/mv/mv_runtime.h
-        src/tests/mv_runtime_benchmark_smoke.cpp)
-
 set(RAYTHM_INCLUDE_DIRS
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/src/audio
@@ -1629,7 +1652,13 @@ set(RAYTHM_SMOKE_TARGETS
         localization_smoke
         local_catalog_database_smoke
         local_content_index_smoke
+        mv_composition_model_smoke
+        mv_composition_edit_history_smoke
+        mv_composition_presets_smoke
+        mv_composition_event_evaluator_smoke
+        mv_composition_event_authoring_smoke
         mv_storage_smoke
+        mv_managed_storage_smoke
         lane_input_tracker_smoke
         input_handler_smoke
         timing_engine_smoke
@@ -1660,9 +1689,6 @@ set(RAYTHM_SMOKE_TARGETS
         editor_panel_controller_smoke
         audio_manager_smoke
         update_version_smoke
-        mv_lang_smoke
-        mv_api_smoke
-        mv_runtime_benchmark_smoke
 )
 
 foreach(raythm_target IN LISTS RAYTHM_APP_TARGETS RAYTHM_SMOKE_TARGETS)
@@ -1722,9 +1748,6 @@ target_link_libraries(editor_note_edit_service_smoke PRIVATE raylib)
 target_link_libraries(editor_timing_edit_service_smoke PRIVATE raylib)
 target_link_libraries(editor_panel_controller_smoke PRIVATE raylib)
 target_link_libraries(audio_manager_smoke PRIVATE ${RAYTHM_BASS_IMPORT_LIB})
-target_link_libraries(mv_lang_smoke PRIVATE raylib)
-target_link_libraries(mv_api_smoke PRIVATE raylib)
-target_link_libraries(mv_runtime_benchmark_smoke PRIVATE raylib)
 target_compile_definitions(raythm_launcher PRIVATE RAYTHM_PACKAGE_VERSION_STRING="${RAYTHM_PACKAGE_VERSION}")
 
 set(RAYTHM_RUNTIME_DLLS

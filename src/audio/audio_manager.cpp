@@ -691,6 +691,43 @@ bool audio_manager::get_preview_fft4096(std::array<float, 2048>& spectrum) const
                                BASS_DATA_FFT4096 | BASS_DATA_FFT_REMOVEDC) != static_cast<DWORD>(-1);
 }
 
+bool audio_manager::get_preview_oscilloscope256(std::array<float, 256>& samples) const {
+    samples.fill(0.0f);
+    if (!is_voice_playing(preview_handle_)) {
+        return false;
+    }
+
+    BASS_CHANNELINFO info = {};
+    if (BASS_ChannelGetInfo(preview_handle_, &info) == FALSE || info.chans <= 0) {
+        return false;
+    }
+
+    const std::size_t channels = static_cast<std::size_t>(info.chans);
+    std::vector<float> interleaved(samples.size() * channels, 0.0f);
+    const DWORD requested_bytes =
+        static_cast<DWORD>(interleaved.size() * sizeof(float)) | BASS_DATA_FLOAT;
+    const DWORD bytes_read = BASS_ChannelGetData(preview_handle_, interleaved.data(), requested_bytes);
+    if (bytes_read == static_cast<DWORD>(-1) || bytes_read == 0) {
+        return false;
+    }
+
+    const std::size_t samples_read = bytes_read / sizeof(float);
+    const std::size_t frames_read = std::min(samples.size(), samples_read / channels);
+    if (frames_read == 0) {
+        return false;
+    }
+
+    for (std::size_t frame = 0; frame < frames_read; ++frame) {
+        float mono = 0.0f;
+        const std::size_t base = frame * channels;
+        for (std::size_t channel = 0; channel < channels; ++channel) {
+            mono += interleaved[base + channel];
+        }
+        samples[frame] = std::clamp(mono / static_cast<float>(channels), -1.0f, 1.0f);
+    }
+    return true;
+}
+
 double audio_manager::get_preview_sample_rate_hz() const {
     return get_voice_sample_rate_hz(preview_handle_);
 }

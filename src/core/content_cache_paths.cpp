@@ -69,6 +69,17 @@ std::string chart_cache_key(const chart_cache_key_parts& parts) {
     return "chart_" + stable_digest(material.str());
 }
 
+std::string mv_cache_key(const mv_cache_key_parts& parts) {
+    std::ostringstream material;
+    append_key_part(material, parts.server_url);
+    append_key_part(material, parts.remote_song_id);
+    append_key_part(material, parts.remote_mv_id);
+    material << stable_version(parts.song_version) << '|'
+             << stable_version(parts.mv_version) << '|';
+    append_key_part(material, parts.revision_id);
+    return "mv_" + stable_digest(material.str());
+}
+
 std::filesystem::path source_root(online_content::source source) {
     return source == online_content::source::official
         ? app_paths::official_content_cache_root()
@@ -90,6 +101,15 @@ std::filesystem::path chart_path(online_content::source source, const chart_cach
 std::filesystem::path managed_package_manifest_path(online_content::source source,
                                                     const song_cache_key_parts& parts) {
     return song_dir(source, parts) / "managed-package.json";
+}
+
+std::filesystem::path mv_dir(online_content::source source, const mv_cache_key_parts& parts) {
+    return source_root(source) / "mvs" / mv_cache_key(parts);
+}
+
+std::filesystem::path mv_managed_package_manifest_path(online_content::source source,
+                                                       const mv_cache_key_parts& parts) {
+    return mv_dir(source, parts) / "managed-package.json";
 }
 
 }  // namespace content_cache_paths

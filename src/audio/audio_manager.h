@@ -86,6 +86,7 @@ public:
     bool get_preview_fft256(std::array<float, 128>& spectrum) const;
     bool get_preview_fft1024(std::array<float, 512>& spectrum) const;
     bool get_preview_fft4096(std::array<float, 2048>& spectrum) const;
+    bool get_preview_oscilloscope256(std::array<float, 256>& samples) const;
     double get_preview_sample_rate_hz() const;
 
     bool preload_se(const std::string& file_path);

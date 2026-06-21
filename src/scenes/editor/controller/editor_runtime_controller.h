@@ -19,7 +19,7 @@ struct editor_shortcut_context {
     const std::string& hitsound_path;
     const editor_hitsound_paths* hitsounds = nullptr;
     bool blocking_modal = false;
-    bool mv_script_editor_active = false;
+    bool external_text_input_active = false;
     bool space_pressed = false;
     bool ctrl_down = false;
     bool shift_down = false;

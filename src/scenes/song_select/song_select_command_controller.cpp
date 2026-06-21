@@ -156,6 +156,25 @@ void apply_context_menu_command(scene_manager& manager, state& state,
         if (state.context_menu.song_index >= 0 &&
             state.context_menu.song_index < static_cast<int>(state.songs.size())) {
             const auto& song = state.songs[static_cast<size_t>(state.context_menu.song_index)];
+            if (command == context_menu_command::new_mv) {
+                mv::mv_package package = mv::make_default_package_for_song(song.song.meta);
+                package.meta.song_id = song.song.meta.song_id;
+                if (!mv::ensure_composition_package(package)) {
+                    queue_status_message(state, "Failed to create MV composition.", true);
+                    close_context_menu(state);
+                    return;
+                }
+            } else if (const auto package = mv::find_first_package_for_song(song.song.meta.song_id);
+                       package.has_value()) {
+                const mv::edit_access_result access = mv::can_edit_package(*package);
+                if (!access.editable) {
+                    queue_status_message(state,
+                                         access.reason.empty() ? "This MV package is not editable." : access.reason,
+                                         true);
+                    close_context_menu(state);
+                    return;
+                }
+            }
             close_context_menu(state);
             manager.change_scene(make_mv_editor_scene(manager, song));
         }
@@ -163,8 +182,8 @@ void apply_context_menu_command(scene_manager& manager, state& state,
     case context_menu_command::delete_mv:
         open_confirmation_dialog(
             state, pending_confirmation_action::delete_mv,
-            "Delete MV Script",
-            "Are you sure you want to delete this MV script?",
+            "Delete MV",
+            "Are you sure you want to delete this MV composition?",
             "This action cannot be undone.",
             "DELETE",
             state.context_menu.song_index);
@@ -175,19 +194,16 @@ void apply_context_menu_command(scene_manager& manager, state& state,
             state.context_menu.song_index < static_cast<int>(state.songs.size())) {
             const auto& song = state.songs[static_cast<size_t>(state.context_menu.song_index)];
             close_context_menu(state);
-            const std::string src = file_dialog::open_mv_script_file();
+            const std::string src = file_dialog::open_mv_package_file();
             if (!src.empty()) {
-                mv::mv_package package = mv::find_first_package_for_song(song.song.meta.song_id)
-                    .value_or(mv::make_default_package_for_song(song.song.meta));
-                package.meta.song_id = song.song.meta.song_id;
-                package.meta.script_file = "script.rmv";
-                if (!mv::write_mv_json(package.meta, package.directory)) {
-                    queue_status_message(state, "Failed to prepare MV package.", true);
-                } else if (!mv::import_script(package, src)) {
-                    queue_status_message(state, "Failed to import MV script.", true);
+                std::vector<std::string> errors;
+                if (!mv::import_package(src, song.song.meta.song_id, &errors)) {
+                    queue_status_message(state,
+                                         errors.empty() ? "Failed to import MV package." : errors.front(),
+                                         true);
                 } else {
                     reload_song_library(song.song.meta.song_id, "");
-                    queue_status_message(state, "MV script imported.", false);
+                    queue_status_message(state, "MV package imported.", false);
                 }
             }
         }
@@ -198,12 +214,15 @@ void apply_context_menu_command(scene_manager& manager, state& state,
             const auto& song = state.songs[static_cast<size_t>(state.context_menu.song_index)];
             close_context_menu(state);
             if (const auto package = mv::find_first_package_for_song(song.song.meta.song_id); package.has_value()) {
-                const std::string dest = file_dialog::save_mv_script_file(package->meta.mv_id + ".rmv");
+                const std::string dest = file_dialog::save_mv_package_file(package->meta.mv_id + ".rmvpack");
                 if (!dest.empty()) {
-                    if (!mv::export_script(*package, dest)) {
-                        queue_status_message(state, "Failed to export MV script.", true);
+                    std::vector<std::string> errors;
+                    if (!mv::export_package(*package, dest, &errors)) {
+                        queue_status_message(state,
+                                             errors.empty() ? "Failed to export MV package." : errors.front(),
+                                             true);
                     } else {
-                        queue_status_message(state, "MV script exported.", false);
+                        queue_status_message(state, "MV package exported.", false);
                     }
                 }
             }
@@ -236,12 +255,12 @@ void apply_confirmation_command(state& state,
                     std::error_code ec;
                     std::filesystem::remove_all(path_utils::from_utf8(package->directory), ec);
                     if (ec) {
-                        queue_status_message(state, "Failed to delete MV script.", true);
+                        queue_status_message(state, "Failed to delete MV composition.", true);
                     } else {
-                        queue_status_message(state, "MV script deleted.", false);
+                        queue_status_message(state, "MV composition deleted.", false);
                     }
                 } else {
-                    queue_status_message(state, "MV script not found.", true);
+                    queue_status_message(state, "MV composition not found.", true);
                 }
             }
             return;

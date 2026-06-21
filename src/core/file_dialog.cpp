@@ -179,10 +179,16 @@ std::vector<std::string> open_song_package_files() {
         L"Import Song Packages");
 }
 
-std::string open_mv_script_file() {
+std::string open_mv_composition_file() {
     return open_file_dialog(
-        L"raythm MV Script (*.rmv)\0*.rmv\0All Files (*.*)\0*.*\0",
-        L"Import MV Script");
+        L"raythm MV Composition (*.rmvcomp)\0*.rmvcomp\0All Files (*.*)\0*.*\0",
+        L"Import MV Composition");
+}
+
+std::string open_mv_package_file() {
+    return open_file_dialog(
+        L"raythm MV Package (*.rmvpack)\0*.rmvpack\0All Files (*.*)\0*.*\0",
+        L"Import MV Package");
 }
 
 std::string open_midi_file() {
@@ -207,11 +213,19 @@ std::string save_song_package_file(const std::string& default_file_name) {
         default_file_name);
 }
 
-std::string save_mv_script_file(const std::string& default_file_name) {
+std::string save_mv_composition_file(const std::string& default_file_name) {
     return save_file_dialog(
-        L"raythm MV Script (*.rmv)\0*.rmv\0All Files (*.*)\0*.*\0",
-        L"Export MV Script",
-        L"rmv",
+        L"raythm MV Composition (*.rmvcomp)\0*.rmvcomp\0All Files (*.*)\0*.*\0",
+        L"Export MV Composition",
+        L"rmvcomp",
+        default_file_name);
+}
+
+std::string save_mv_package_file(const std::string& default_file_name) {
+    return save_file_dialog(
+        L"raythm MV Package (*.rmvpack)\0*.rmvpack\0All Files (*.*)\0*.*\0",
+        L"Export MV Package",
+        L"rmvpack",
         default_file_name);
 }
 
@@ -232,11 +246,13 @@ std::string open_chart_package_file() { return {}; }
 std::vector<std::string> open_chart_package_files() { return {}; }
 std::string open_song_package_file() { return {}; }
 std::vector<std::string> open_song_package_files() { return {}; }
-std::string open_mv_script_file() { return {}; }
+std::string open_mv_composition_file() { return {}; }
+std::string open_mv_package_file() { return {}; }
 std::string open_midi_file() { return {}; }
 std::string save_chart_package_file(const std::string&) { return {}; }
 std::string save_song_package_file(const std::string&) { return {}; }
-std::string save_mv_script_file(const std::string&) { return {}; }
+std::string save_mv_composition_file(const std::string&) { return {}; }
+std::string save_mv_package_file(const std::string&) { return {}; }
 bool confirm_yes_no(const std::string&, const std::string&) { return false; }
 
 #endif
