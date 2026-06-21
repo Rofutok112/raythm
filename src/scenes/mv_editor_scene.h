@@ -15,6 +15,14 @@
 // Song-scoped MV composition editor.
 class mv_editor_scene final : public scene {
 public:
+    enum class workspace {
+        compose,
+        timeline,
+        assets,
+        effects,
+        events,
+    };
+
     mv_editor_scene(scene_manager& manager, song_data song);
 
     void on_enter() override;
@@ -94,6 +102,7 @@ private:
     bool preview_playing_ = false;
     bool preview_audio_loaded_ = false;
     bool inspector_edit_pending_ = false;
+    workspace current_workspace_ = workspace::compose;
     double playhead_ms_ = 0.0;
     timeline_drag_mode timeline_drag_mode_ = timeline_drag_mode::none;
     std::string timeline_drag_layer_id_;

@@ -41,6 +41,8 @@ constexpr float kMetadataButtonWidth = 228.0f;
 constexpr float kLayerPanelWidth = 330.0f;
 constexpr float kInspectorWidth = 390.0f;
 constexpr float kTimelineHeight = 190.0f;
+constexpr float kWorkspaceTabHeight = 42.0f;
+constexpr float kWorkspaceTabGap = 8.0f;
 constexpr float kMetadataModalWidth = 540.0f;
 constexpr float kMetadataModalHeight = 312.0f;
 constexpr float kMetadataModalOffsetY = 27.0f;
@@ -482,6 +484,17 @@ void draw_section_title(Rectangle rect, const char* title, const char* subtitle 
     }
 }
 
+const char* workspace_label(mv_editor_scene::workspace value) {
+    switch (value) {
+        case mv_editor_scene::workspace::compose: return "Compose";
+        case mv_editor_scene::workspace::timeline: return "Timeline";
+        case mv_editor_scene::workspace::assets: return "Assets";
+        case mv_editor_scene::workspace::effects: return "Effects";
+        case mv_editor_scene::workspace::events: return "Events";
+    }
+    return "Compose";
+}
+
 }  // namespace
 
 mv_editor_scene::mv_editor_scene(scene_manager& manager, song_data song)
@@ -659,10 +672,40 @@ void mv_editor_scene::draw() {
                            play_btn.x - metadata_button_rect().x - metadata_button_rect().width - 48.0f, 22.0f},
                           g_theme->text_muted, ui::text_align::left);
 
-    const Rectangle content = {
-        kPadding, kHeaderHeight + kPadding,
+    const Rectangle tab_strip = {
+        kPadding,
+        kHeaderHeight + 12.0f,
         static_cast<float>(kScreenWidth) - kPadding * 2.0f,
-        static_cast<float>(kScreenHeight) - kHeaderHeight - kPadding * 2.0f
+        kWorkspaceTabHeight
+    };
+    constexpr float kTabWidth = 138.0f;
+    constexpr workspace kWorkspaces[] = {
+        workspace::compose,
+        workspace::timeline,
+        workspace::assets,
+        workspace::effects,
+        workspace::events,
+    };
+    float tab_x = tab_strip.x;
+    for (workspace item : kWorkspaces) {
+        const Rectangle tab_rect = {tab_x, tab_strip.y, kTabWidth, tab_strip.height};
+        const bool active = item == current_workspace_;
+        if (ui::draw_button_colored(tab_rect,
+                                    workspace_label(item),
+                                    13,
+                                    active ? g_theme->row_selected : g_theme->row,
+                                    active ? g_theme->row_active : g_theme->row_hover,
+                                    active ? g_theme->text : g_theme->text_muted,
+                                    active ? 2.0f : 1.5f).clicked) {
+            current_workspace_ = item;
+        }
+        tab_x += kTabWidth + kWorkspaceTabGap;
+    }
+
+    const Rectangle content = {
+        kPadding, tab_strip.y + tab_strip.height + 12.0f,
+        static_cast<float>(kScreenWidth) - kPadding * 2.0f,
+        static_cast<float>(kScreenHeight) - (tab_strip.y + tab_strip.height + 12.0f) - kPadding
     };
     const auto left_split = ui::split_columns(content, kLayerPanelWidth, kPanelGap);
     const auto right_split = ui::split_columns(left_split.second,
@@ -671,97 +714,264 @@ void mv_editor_scene::draw() {
     const Rectangle layers_panel = left_split.first;
     const Rectangle center_area = right_split.first;
     const Rectangle inspector_panel = right_split.second;
-    const auto center_rows = ui::split_rows(center_area, center_area.height - kTimelineHeight - kPanelGap, kPanelGap);
+    const float max_timeline_height = std::max(kTimelineHeight, center_area.height - 220.0f);
+    const float workspace_timeline_height = current_workspace_ == workspace::timeline
+        ? std::clamp(center_area.height * 0.68f, kTimelineHeight, max_timeline_height)
+        : kTimelineHeight;
+    const auto center_rows = ui::split_rows(center_area,
+                                            center_area.height - workspace_timeline_height - kPanelGap,
+                                            kPanelGap);
     const Rectangle preview_panel = center_rows.first;
     const Rectangle timeline_panel = center_rows.second;
 
     ui::draw_panel(layers_panel);
-    draw_section_title(layers_panel, "Layers", "Source stack for this song MV");
-    const float add_gap = 6.0f;
-    const float add_button_width = (layers_panel.width - 36.0f - add_gap * 4.0f) / 5.0f;
-    Rectangle add_text = {layers_panel.x + 18.0f, layers_panel.y + 56.0f, add_button_width, 38.0f};
-    Rectangle add_rect = {add_text.x + add_text.width + add_gap, add_text.y, add_button_width, 38.0f};
-    Rectangle add_image = {add_rect.x + add_rect.width + add_gap, add_text.y, add_button_width, 38.0f};
-    Rectangle add_grid = {add_image.x + add_image.width + add_gap, add_text.y, add_button_width, 38.0f};
-    Rectangle add_wave = {add_grid.x + add_grid.width + add_gap, add_text.y, add_button_width, 38.0f};
-    if (ui::draw_button(add_text, "+ Txt", 12).clicked) {
-        add_text_layer();
-    }
-    if (ui::draw_button(add_rect, "+ Rect", 12).clicked) {
-        add_rect_layer();
-    }
-    if (ui::draw_button(add_image, "+ Img", 12).clicked) {
-        add_image_layer();
-    }
-    if (ui::draw_button(add_grid, "+ Grid", 12).clicked) {
-        add_beat_grid_layer();
-    }
-    if (ui::draw_button(add_wave, "+ Wave", 12).clicked) {
-        add_waveform_layer();
-    }
-    const float preset_button_width = (layers_panel.width - 36.0f - add_gap * 2.0f) / 3.0f;
-    Rectangle preset_flash = {layers_panel.x + 18.0f, layers_panel.y + 100.0f, preset_button_width, 34.0f};
-    Rectangle preset_lyric = {preset_flash.x + preset_flash.width + add_gap, preset_flash.y,
-                              preset_button_width, preset_flash.height};
-    Rectangle preset_bass = {preset_lyric.x + preset_lyric.width + add_gap, preset_flash.y,
-                             preset_button_width, preset_flash.height};
-    if (ui::draw_button(preset_flash, "Flash", 11).clicked) {
-        apply_builtin_preset("chorusFlash");
-    }
-    if (ui::draw_button(preset_lyric, "Lyric", 11).clicked) {
-        apply_builtin_preset("lyricPop");
-    }
-    if (ui::draw_button(preset_bass, "Bass", 11).clicked) {
-        apply_builtin_preset("bassPulse");
-    }
-    Rectangle add_spectrum = {preset_bass.x - preset_button_width - add_gap, preset_bass.y + 40.0f,
-                              preset_button_width, 30.0f};
-    if (ui::draw_button(add_spectrum, "+ Spec", 10).clicked) {
-        add_spectrum_layer();
-    }
-    Rectangle layer_view = {layers_panel.x + 14.0f, layers_panel.y + 178.0f,
-                            layers_panel.width - 28.0f, layers_panel.height - 192.0f};
-    {
-        ui::scoped_clip_rect clip(layer_view);
-        float y = layer_view.y;
-        for (const mv::composition::layer& layer : composition_.layers) {
-            const std::size_t layer_index = layer_index_by_id(composition_, layer.id);
-            const Rectangle row = {layer_view.x, y, layer_view.width, 54.0f};
-            const bool selected = layer.id == selected_layer_id_;
-            const auto state = ui::draw_selectable_row(row, selected, 1.5f);
-            if (state.clicked) {
-                selected_layer_id_ = layer.id;
-                sync_inspector_inputs(layer);
-            }
-            const float reorder_button_width = selected ? 34.0f : 0.0f;
-            const float reorder_gap = selected ? 6.0f : 0.0f;
-            const float text_width = row.width - 24.0f - reorder_button_width * 2.0f - reorder_gap * 2.0f;
-            ui::draw_text_in_rect(layer.name.c_str(), 14,
-                                  {row.x + 12.0f, row.y + 6.0f, text_width, 22.0f},
-                                  g_theme->text, ui::text_align::left);
-            const std::string meta = layer_type_label(layer) + "   z " + std::to_string(layer.z);
-            ui::draw_text_in_rect(meta.c_str(), 11,
-                                  {row.x + 12.0f, row.y + 28.0f, text_width, 20.0f},
+    if (current_workspace_ == workspace::assets) {
+        draw_section_title(layers_panel, "Assets", "Package media used by this MV");
+        const Rectangle import_btn = {layers_panel.x + 18.0f, layers_panel.y + 58.0f,
+                                      layers_panel.width - 36.0f, 40.0f};
+        if (ui::draw_button(import_btn, "+ Image Layer", 13).clicked) {
+            add_image_layer();
+        }
+        const Rectangle asset_view = {layers_panel.x + 14.0f, layers_panel.y + 116.0f,
+                                      layers_panel.width - 28.0f, layers_panel.height - 132.0f};
+        ui::scoped_clip_rect clip(asset_view);
+        float y = asset_view.y;
+        if (composition_.assets.empty()) {
+            ui::draw_text_in_rect("No assets", 14,
+                                  {asset_view.x + 10.0f, y, asset_view.width - 20.0f, 32.0f},
                                   g_theme->text_muted, ui::text_align::left);
-            if (selected) {
-                const Rectangle up_btn = {row.x + row.width - 78.0f, row.y + 10.0f, 34.0f, 34.0f};
-                const Rectangle down_btn = {up_btn.x + up_btn.width + 6.0f, up_btn.y, 34.0f, 34.0f};
-                const bool can_move_up = layer_index != static_cast<std::size_t>(-1) && layer_index + 1 < composition_.layers.size();
-                const bool can_move_down = layer_index != static_cast<std::size_t>(-1) && layer_index > 0;
-                if (ui::draw_button_colored(up_btn, "Up", 10,
-                                            can_move_up ? g_theme->row : with_alpha(g_theme->row, 110),
-                                            g_theme->row_hover, g_theme->text, 1.5f).clicked &&
-                    can_move_up) {
-                    move_selected_layer(1);
-                }
-                if (ui::draw_button_colored(down_btn, "Dn", 10,
-                                            can_move_down ? g_theme->row : with_alpha(g_theme->row, 110),
-                                            g_theme->row_hover, g_theme->text, 1.5f).clicked &&
-                    can_move_down) {
-                    move_selected_layer(-1);
+        }
+        for (const mv::composition::asset_ref& asset : composition_.assets) {
+            const Rectangle row = {asset_view.x, y, asset_view.width, 58.0f};
+            ui::draw_rect_f(row, g_theme->section);
+            ui::draw_rect_lines(row, 1.0f, g_theme->border_light);
+            const int uses = static_cast<int>(std::count_if(
+                composition_.layers.begin(), composition_.layers.end(), [&](const mv::composition::layer& layer) {
+                    return layer.source_data.asset_id == asset.id;
+                }));
+            ui::draw_text_in_rect(asset.id.c_str(), 13,
+                                  {row.x + 12.0f, row.y + 6.0f, row.width - 24.0f, 22.0f},
+                                  g_theme->text, ui::text_align::left);
+            const std::string meta = asset.type + "   uses " + std::to_string(uses);
+            ui::draw_text_in_rect(meta.c_str(), 11,
+                                  {row.x + 12.0f, row.y + 29.0f, row.width - 24.0f, 20.0f},
+                                  g_theme->text_muted, ui::text_align::left);
+            y += 66.0f;
+        }
+    } else if (current_workspace_ == workspace::effects) {
+        draw_section_title(layers_panel, "Effects", "Selected layer effect chain");
+        mv::composition::layer* layer = selected_layer();
+        if (layer == nullptr) {
+            ui::draw_text_in_rect("No layer selected", 14,
+                                  {layers_panel.x + 18.0f, layers_panel.y + 62.0f,
+                                   layers_panel.width - 36.0f, 32.0f},
+                                  g_theme->text_muted, ui::text_align::left);
+        } else {
+            const float button_w = (layers_panel.width - 36.0f - 8.0f) * 0.5f;
+            Rectangle fade_btn = {layers_panel.x + 18.0f, layers_panel.y + 58.0f, button_w, 36.0f};
+            Rectangle pulse_btn = {fade_btn.x + fade_btn.width + 8.0f, fade_btn.y, button_w, 36.0f};
+            Rectangle flash_btn = {fade_btn.x, fade_btn.y + 44.0f, button_w, 36.0f};
+            Rectangle shake_btn = {pulse_btn.x, flash_btn.y, button_w, 36.0f};
+            Rectangle clear_btn = {fade_btn.x, flash_btn.y + 44.0f, layers_panel.width - 36.0f, 34.0f};
+            if (ui::draw_button(fade_btn, "+ Fade", 12).clicked) {
+                add_fade_effect_to_selected_layer();
+                layer = selected_layer();
+            }
+            if (ui::draw_button(pulse_btn, "+ Pulse", 12).clicked) {
+                add_pulse_effect_to_selected_layer();
+                layer = selected_layer();
+            }
+            if (ui::draw_button(flash_btn, "+ Flash", 12).clicked) {
+                add_flash_effect_to_selected_layer();
+                layer = selected_layer();
+            }
+            if (ui::draw_button(shake_btn, "+ Shake", 12).clicked) {
+                add_shake_effect_to_selected_layer();
+                layer = selected_layer();
+            }
+            if (ui::draw_button_colored(clear_btn, "Clear Effects", 12,
+                                        layer != nullptr && !layer->effects.empty()
+                                            ? g_theme->row
+                                            : with_alpha(g_theme->row, 110),
+                                        g_theme->row_hover, g_theme->text, 1.5f).clicked &&
+                layer != nullptr && !layer->effects.empty()) {
+                clear_selected_layer_effects();
+                layer = selected_layer();
+            }
+            const Rectangle effect_view = {layers_panel.x + 14.0f, layers_panel.y + 186.0f,
+                                           layers_panel.width - 28.0f, layers_panel.height - 202.0f};
+            ui::scoped_clip_rect clip(effect_view);
+            float y = effect_view.y;
+            if (layer != nullptr && layer->effects.empty()) {
+                ui::draw_text_in_rect("No effects", 14,
+                                      {effect_view.x + 10.0f, y, effect_view.width - 20.0f, 32.0f},
+                                      g_theme->text_muted, ui::text_align::left);
+            }
+            if (layer != nullptr) {
+                for (const mv::composition::effect& effect : layer->effects) {
+                    const Rectangle row = {effect_view.x, y, effect_view.width, 54.0f};
+                    ui::draw_rect_f(row, g_theme->section);
+                    ui::draw_rect_lines(row, 1.0f, g_theme->border_light);
+                    ui::draw_text_in_rect(effect.type.c_str(), 14,
+                                          {row.x + 12.0f, row.y + 6.0f, row.width - 24.0f, 22.0f},
+                                          g_theme->text, ui::text_align::left);
+                    const std::string meta = effect.target + "   " + std::to_string(effect.amount).substr(0, 5);
+                    ui::draw_text_in_rect(meta.c_str(), 11,
+                                          {row.x + 12.0f, row.y + 29.0f, row.width - 24.0f, 19.0f},
+                                          g_theme->text_muted, ui::text_align::left);
+                    y += 62.0f;
                 }
             }
-            y += 62.0f;
+        }
+    } else if (current_workspace_ == workspace::events) {
+        draw_section_title(layers_panel, "Events", "Timeline cues for selected layer");
+        const float button_w = (layers_panel.width - 36.0f - 8.0f) * 0.5f;
+        Rectangle flash_btn = {layers_panel.x + 18.0f, layers_panel.y + 58.0f, button_w, 36.0f};
+        Rectangle show_btn = {flash_btn.x + flash_btn.width + 8.0f, flash_btn.y, button_w, 36.0f};
+        Rectangle text_btn = {flash_btn.x, flash_btn.y + 44.0f, button_w, 36.0f};
+        Rectangle clear_btn = {show_btn.x, text_btn.y, button_w, 36.0f};
+        if (ui::draw_button(flash_btn, "Cue Flash", 11).clicked) {
+            add_flash_event_trigger_at_playhead();
+        }
+        if (ui::draw_button(show_btn, "Cue Show", 11).clicked) {
+            add_show_event_trigger_at_playhead();
+        }
+        if (ui::draw_button(text_btn, "Cue Text", 11).clicked) {
+            add_text_event_trigger_at_playhead();
+        }
+        const int cues_at_playhead = event_trigger_count_at_playhead();
+        if (ui::draw_button_colored(clear_btn, "Clear Cue", 11,
+                                    cues_at_playhead > 0 ? g_theme->row : with_alpha(g_theme->row, 110),
+                                    g_theme->row_hover, g_theme->text, 1.5f).clicked &&
+            cues_at_playhead > 0) {
+            clear_event_triggers_at_playhead();
+        }
+        const Rectangle cue_view = {layers_panel.x + 14.0f, layers_panel.y + 156.0f,
+                                    layers_panel.width - 28.0f, layers_panel.height - 172.0f};
+        ui::scoped_clip_rect clip(cue_view);
+        float y = cue_view.y;
+        int cue_count = 0;
+        for (const mv::composition::layer& cue_layer : composition_.layers) {
+            for (const mv::composition::event_trigger& trigger : cue_layer.event_triggers) {
+                const Rectangle row = {cue_view.x, y, cue_view.width, 58.0f};
+                ui::draw_rect_f(row, cue_layer.id == selected_layer_id_ ? g_theme->row_selected : g_theme->section);
+                ui::draw_rect_lines(row, 1.0f, g_theme->border_light);
+                const std::string title = trigger.time_ms >= 0.0
+                    ? ms_label(trigger.time_ms)
+                    : (trigger.event.empty() ? "Event" : trigger.event);
+                ui::draw_text_in_rect(title.c_str(), 13,
+                                      {row.x + 12.0f, row.y + 6.0f, row.width - 24.0f, 22.0f},
+                                      g_theme->text, ui::text_align::left);
+                const std::string meta = cue_layer.name + "   actions " + std::to_string(trigger.actions.size());
+                ui::draw_text_in_rect(meta.c_str(), 11,
+                                      {row.x + 12.0f, row.y + 29.0f, row.width - 24.0f, 20.0f},
+                                      g_theme->text_muted, ui::text_align::left);
+                if (ui::is_hovered(row) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    selected_layer_id_ = cue_layer.id;
+                    if (trigger.time_ms >= 0.0) {
+                        playhead_ms_ = std::clamp(trigger.time_ms, 0.0, composition_duration_ms());
+                        set_preview_playing(false);
+                        seek_preview_audio_to_playhead();
+                    }
+                }
+                y += 66.0f;
+                ++cue_count;
+            }
+        }
+        if (cue_count == 0) {
+            ui::draw_text_in_rect("No cues", 14,
+                                  {cue_view.x + 10.0f, cue_view.y, cue_view.width - 20.0f, 32.0f},
+                                  g_theme->text_muted, ui::text_align::left);
+        }
+    } else {
+        draw_section_title(layers_panel, "Layers", "Source stack for this song MV");
+        const float add_gap = 6.0f;
+        const float add_button_width = (layers_panel.width - 36.0f - add_gap * 4.0f) / 5.0f;
+        Rectangle add_text = {layers_panel.x + 18.0f, layers_panel.y + 56.0f, add_button_width, 38.0f};
+        Rectangle add_rect = {add_text.x + add_text.width + add_gap, add_text.y, add_button_width, 38.0f};
+        Rectangle add_image = {add_rect.x + add_rect.width + add_gap, add_text.y, add_button_width, 38.0f};
+        Rectangle add_grid = {add_image.x + add_image.width + add_gap, add_text.y, add_button_width, 38.0f};
+        Rectangle add_wave = {add_grid.x + add_grid.width + add_gap, add_text.y, add_button_width, 38.0f};
+        if (ui::draw_button(add_text, "+ Txt", 12).clicked) {
+            add_text_layer();
+        }
+        if (ui::draw_button(add_rect, "+ Rect", 12).clicked) {
+            add_rect_layer();
+        }
+        if (ui::draw_button(add_image, "+ Img", 12).clicked) {
+            add_image_layer();
+        }
+        if (ui::draw_button(add_grid, "+ Grid", 12).clicked) {
+            add_beat_grid_layer();
+        }
+        if (ui::draw_button(add_wave, "+ Wave", 12).clicked) {
+            add_waveform_layer();
+        }
+        const float preset_button_width = (layers_panel.width - 36.0f - add_gap * 2.0f) / 3.0f;
+        Rectangle preset_flash = {layers_panel.x + 18.0f, layers_panel.y + 100.0f, preset_button_width, 34.0f};
+        Rectangle preset_lyric = {preset_flash.x + preset_flash.width + add_gap, preset_flash.y,
+                                  preset_button_width, preset_flash.height};
+        Rectangle preset_bass = {preset_lyric.x + preset_lyric.width + add_gap, preset_flash.y,
+                                 preset_button_width, preset_flash.height};
+        if (ui::draw_button(preset_flash, "Flash", 11).clicked) {
+            apply_builtin_preset("chorusFlash");
+        }
+        if (ui::draw_button(preset_lyric, "Lyric", 11).clicked) {
+            apply_builtin_preset("lyricPop");
+        }
+        if (ui::draw_button(preset_bass, "Bass", 11).clicked) {
+            apply_builtin_preset("bassPulse");
+        }
+        Rectangle add_spectrum = {preset_bass.x - preset_button_width - add_gap, preset_bass.y + 40.0f,
+                                  preset_button_width, 30.0f};
+        if (ui::draw_button(add_spectrum, "+ Spec", 10).clicked) {
+            add_spectrum_layer();
+        }
+        Rectangle layer_view = {layers_panel.x + 14.0f, layers_panel.y + 178.0f,
+                                layers_panel.width - 28.0f, layers_panel.height - 192.0f};
+        {
+            ui::scoped_clip_rect clip(layer_view);
+            float y = layer_view.y;
+            for (const mv::composition::layer& layer : composition_.layers) {
+                const std::size_t layer_index = layer_index_by_id(composition_, layer.id);
+                const Rectangle row = {layer_view.x, y, layer_view.width, 54.0f};
+                const bool selected = layer.id == selected_layer_id_;
+                const auto state = ui::draw_selectable_row(row, selected, 1.5f);
+                if (state.clicked) {
+                    selected_layer_id_ = layer.id;
+                    sync_inspector_inputs(layer);
+                }
+                const float reorder_button_width = selected ? 34.0f : 0.0f;
+                const float reorder_gap = selected ? 6.0f : 0.0f;
+                const float text_width = row.width - 24.0f - reorder_button_width * 2.0f - reorder_gap * 2.0f;
+                ui::draw_text_in_rect(layer.name.c_str(), 14,
+                                      {row.x + 12.0f, row.y + 6.0f, text_width, 22.0f},
+                                      g_theme->text, ui::text_align::left);
+                const std::string meta = layer_type_label(layer) + "   z " + std::to_string(layer.z);
+                ui::draw_text_in_rect(meta.c_str(), 11,
+                                      {row.x + 12.0f, row.y + 28.0f, text_width, 20.0f},
+                                      g_theme->text_muted, ui::text_align::left);
+                if (selected) {
+                    const Rectangle up_btn = {row.x + row.width - 78.0f, row.y + 10.0f, 34.0f, 34.0f};
+                    const Rectangle down_btn = {up_btn.x + up_btn.width + 6.0f, up_btn.y, 34.0f, 34.0f};
+                    const bool can_move_up = layer_index != static_cast<std::size_t>(-1) &&
+                                             layer_index + 1 < composition_.layers.size();
+                    const bool can_move_down = layer_index != static_cast<std::size_t>(-1) && layer_index > 0;
+                    if (ui::draw_button_colored(up_btn, "Up", 10,
+                                                can_move_up ? g_theme->row : with_alpha(g_theme->row, 110),
+                                                g_theme->row_hover, g_theme->text, 1.5f).clicked &&
+                        can_move_up) {
+                        move_selected_layer(1);
+                    }
+                    if (ui::draw_button_colored(down_btn, "Dn", 10,
+                                                can_move_down ? g_theme->row : with_alpha(g_theme->row, 110),
+                                                g_theme->row_hover, g_theme->text, 1.5f).clicked &&
+                        can_move_down) {
+                        move_selected_layer(-1);
+                    }
+                }
+                y += 62.0f;
+            }
         }
     }
 
