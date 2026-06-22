@@ -25,6 +25,7 @@ int main() {
     localization::set_current_locale(g_settings.ui_locale);
     set_theme(g_settings.dark_mode);
     audio_manager::instance().set_bgm_volume(g_settings.bgm_volume);
+    audio_manager::instance().set_preview_volume(g_settings.bgm_volume);
     audio_manager::instance().set_se_volume(g_settings.se_volume);
     audio_manager::instance().set_loudness_normalization_enabled(g_settings.loudness_normalization_enabled);
 

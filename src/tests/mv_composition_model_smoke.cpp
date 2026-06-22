@@ -2,6 +2,8 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "mv/composition/mv_composition_evaluator.h"
 #include "mv/composition/mv_composition_serializer.h"
@@ -15,6 +17,41 @@ void expect(bool condition, const std::string& message, bool& ok) {
     }
 }
 
+mv::composition::component make_effect(std::string id, std::string type, std::string target, float amount) {
+    mv::composition::component effect;
+    effect.id = std::move(id);
+    effect.kind = "component";
+    effect.type = std::move(type);
+    effect.target = std::move(target);
+    effect.amount = amount;
+    return effect;
+}
+
+void add_transform_and_renderer(mv::composition::layer& layer,
+                                const std::string& type,
+                                const std::string& fill,
+                                float opacity,
+                                const std::string& asset_id = {}) {
+    mv::composition::transform transform;
+    transform.opacity = opacity;
+    mv::composition::component renderer = mv::composition::make_component(type);
+    renderer.fill = fill;
+    renderer.asset_id = asset_id;
+    layer.components.push_back(mv::composition::make_transform_component(transform));
+    layer.components.push_back(std::move(renderer));
+}
+
+bool has_renderer(const mv::composition::layer& layer,
+                  const std::string& type,
+                  const std::string& fill = {},
+                  const std::string& asset_id = {}) {
+    const mv::composition::component* renderer = mv::composition::renderable_component(layer);
+    return renderer != nullptr &&
+           renderer->type == type &&
+           (fill.empty() || renderer->fill == fill) &&
+           (asset_id.empty() || renderer->asset_id == asset_id);
+}
+
 }  // namespace
 
 int main() {
@@ -22,7 +59,7 @@ int main() {
 
     mv::composition::mv_composition composition = mv::composition::make_default_for_song("mv-model-smoke", 120000.0);
     expect(composition.format == "raythm.mv.composition", "Expected composition format marker.", ok);
-    expect(composition.format_version == 1, "Expected composition formatVersion 1.", ok);
+    expect(composition.format_version == 2, "Expected composition formatVersion 2.", ok);
     expect(composition.layers.size() >= 2, "Expected default composition layers.", ok);
 
     const mv::composition::mv_composition fallback_duration =
@@ -44,30 +81,17 @@ int main() {
     asset.sha256 = "abc123";
     composition.assets.push_back(asset);
 
-    mv::composition::event_action action;
-    action.type = "triggerEffect";
-    action.effect_id = "fx-pulse";
-    mv::composition::event_trigger trigger;
-    trigger.event = "section.chorus";
-    trigger.time_ms = 32000.0;
-    trigger.actions.push_back(action);
     const std::size_t animated_layer_index = composition.layers.size() - 1;
-    composition.layers[animated_layer_index].event_triggers.push_back(trigger);
-    composition.layers[animated_layer_index].effects.push_back({
-        .id = "fx-pulse",
-        .type = "pulse",
-        .target = "transform.scale",
-        .amount = 0.12f,
-    });
+    const std::string animated_layer_id = composition.layers[animated_layer_index].id;
+    composition.layers[animated_layer_index].components.push_back(
+        make_effect("fx-pulse", "pulse", "transform.scale", 0.12f));
     mv::composition::layer beat_grid;
     beat_grid.id = "layer-beat-grid";
     beat_grid.name = "Beat Grid";
     beat_grid.z = 5;
     beat_grid.start_ms = 0.0;
     beat_grid.duration_ms = 120000.0;
-    beat_grid.source_data.type = "beatGrid";
-    beat_grid.source_data.fill = "#8b7cf6";
-    beat_grid.transform_data.opacity = 0.8f;
+    add_transform_and_renderer(beat_grid, "beatGrid", "#8b7cf6", 0.8f);
     composition.layers.push_back(beat_grid);
     mv::composition::layer waveform;
     waveform.id = "layer-waveform";
@@ -75,9 +99,7 @@ int main() {
     waveform.z = 6;
     waveform.start_ms = 0.0;
     waveform.duration_ms = 120000.0;
-    waveform.source_data.type = "waveform";
-    waveform.source_data.fill = "#6ee7b7";
-    waveform.transform_data.opacity = 0.85f;
+    add_transform_and_renderer(waveform, "waveform", "#6ee7b7", 0.85f);
     composition.layers.push_back(waveform);
     mv::composition::layer spectrum;
     spectrum.id = "layer-spectrum";
@@ -85,9 +107,7 @@ int main() {
     spectrum.z = 7;
     spectrum.start_ms = 0.0;
     spectrum.duration_ms = 120000.0;
-    spectrum.source_data.type = "spectrum";
-    spectrum.source_data.fill = "#38bdf8";
-    spectrum.transform_data.opacity = 0.82f;
+    add_transform_and_renderer(spectrum, "spectrum", "#38bdf8", 0.82f);
     composition.layers.push_back(spectrum);
     mv::composition::layer image_layer;
     image_layer.id = "layer-image";
@@ -95,9 +115,7 @@ int main() {
     image_layer.z = 8;
     image_layer.start_ms = 0.0;
     image_layer.duration_ms = 120000.0;
-    image_layer.source_data.type = "image";
-    image_layer.source_data.asset_id = "asset-jacket";
-    image_layer.transform_data.opacity = 0.9f;
+    add_transform_and_renderer(image_layer, "image", "#ffffff", 0.9f, "asset-jacket");
     composition.layers.push_back(image_layer);
     mv::composition::keyframe_track& position_track =
         mv::composition::ensure_keyframe_track(composition.layers[animated_layer_index], "transform.position.x");
@@ -105,6 +123,14 @@ int main() {
     mv::composition::upsert_keyframe(position_track, {1000.0, 300.0f, "linear"});
 
     const std::string serialized = mv::composition::serialize(composition);
+    expect(serialized.find("\"components\"") != std::string::npos,
+           "Expected serialized objects to contain components.",
+           ok);
+    expect(serialized.find("\"source\"") == std::string::npos &&
+               serialized.find("\"effects\"") == std::string::npos &&
+               serialized.find("\"eventTriggers\"") == std::string::npos,
+           "Expected serialized objects to avoid legacy source/effects/eventTriggers fields.",
+           ok);
     const auto parsed = mv::composition::parse(serialized);
     expect(parsed.success, "Expected serialized composition to parse.", ok);
     if (parsed.success) {
@@ -118,16 +144,11 @@ int main() {
                "Expected assets to round-trip.",
                ok);
         const auto animated_it = std::find_if(parsed.composition.layers.begin(), parsed.composition.layers.end(),
-                                              [](const mv::composition::layer& layer) {
-                                                  return std::any_of(layer.event_triggers.begin(),
-                                                                     layer.event_triggers.end(),
-                                                                     [](const mv::composition::event_trigger& trigger) {
-                                                                         return trigger.event == "section.chorus" &&
-                                                                                trigger.time_ms == 32000.0;
-                                                                     });
+                                              [&](const mv::composition::layer& layer) {
+                                                  return layer.id == animated_layer_id;
                                               });
         expect(animated_it != parsed.composition.layers.end(),
-               "Expected event triggers to round-trip.",
+               "Expected animated layer to round-trip.",
                ok);
         if (animated_it != parsed.composition.layers.end()) {
             expect(!animated_it->keyframes.empty() &&
@@ -137,39 +158,37 @@ int main() {
         }
         expect(std::any_of(parsed.composition.layers.begin(), parsed.composition.layers.end(),
                            [](const mv::composition::layer& layer) {
-                               return std::any_of(layer.effects.begin(), layer.effects.end(),
-                                                  [](const mv::composition::effect& effect) {
-                                                      return effect.id == "fx-pulse" &&
-                                                             effect.amount > 0.11f;
+                               const std::vector<const mv::composition::component*> effects =
+                                   mv::composition::effect_components(layer);
+                               return std::any_of(effects.begin(), effects.end(),
+                                                  [](const mv::composition::component* effect) {
+                                                      return effect->id == "fx-pulse" &&
+                                                             effect->amount > 0.11f;
                                                   });
                            }),
                "Expected effects to round-trip.",
                ok);
         expect(std::any_of(parsed.composition.layers.begin(), parsed.composition.layers.end(),
                            [](const mv::composition::layer& layer) {
-                               return layer.source_data.type == "beatGrid" &&
-                                      layer.source_data.fill == "#8b7cf6";
+                               return has_renderer(layer, "beatGrid", "#8b7cf6");
                            }),
                "Expected generated beatGrid source to round-trip.",
                ok);
         expect(std::any_of(parsed.composition.layers.begin(), parsed.composition.layers.end(),
                            [](const mv::composition::layer& layer) {
-                               return layer.source_data.type == "waveform" &&
-                                      layer.source_data.fill == "#6ee7b7";
+                               return has_renderer(layer, "waveform", "#6ee7b7");
                            }),
                "Expected generated waveform source to round-trip.",
                ok);
         expect(std::any_of(parsed.composition.layers.begin(), parsed.composition.layers.end(),
                            [](const mv::composition::layer& layer) {
-                               return layer.source_data.type == "spectrum" &&
-                                      layer.source_data.fill == "#38bdf8";
+                               return has_renderer(layer, "spectrum", "#38bdf8");
                            }),
                "Expected generated spectrum source to round-trip.",
                ok);
         expect(std::any_of(parsed.composition.layers.begin(), parsed.composition.layers.end(),
                            [](const mv::composition::layer& layer) {
-                               return layer.source_data.type == "image" &&
-                                      layer.source_data.asset_id == "asset-jacket";
+                               return has_renderer(layer, "image", {}, "asset-jacket");
                            }),
                "Expected image source asset reference to round-trip.",
                ok);
@@ -206,21 +225,13 @@ int main() {
         mv::composition::layer effect_layer = parsed.composition.layers.back();
         effect_layer.start_ms = 0.0;
         effect_layer.duration_ms = 4000.0;
-        effect_layer.transform_data.opacity = 1.0f;
-        effect_layer.transform_data.scale_x = 1.0f;
-        effect_layer.transform_data.scale_y = 1.0f;
-        effect_layer.effects.push_back({
-            .id = "fx-fade",
-            .type = "fade",
-            .target = "transform.opacity",
-            .amount = 1000.0f,
-        });
-        effect_layer.effects.push_back({
-            .id = "fx-pulse",
-            .type = "pulse",
-            .target = "transform.scale",
-            .amount = 0.10f,
-        });
+        if (mv::composition::component* transform = mv::composition::transform_component(effect_layer)) {
+            transform->opacity = 1.0f;
+            transform->scale_x = 1.0f;
+            transform->scale_y = 1.0f;
+        }
+        effect_layer.components.push_back(make_effect("fx-fade", "fade", "transform.opacity", 1000.0f));
+        effect_layer.components.push_back(make_effect("fx-pulse", "pulse", "transform.scale", 0.10f));
         const mv::composition::transform faded_start =
             mv::composition::evaluate_transform(effect_layer, 0.0);
         const mv::composition::transform pulsed =
@@ -234,13 +245,10 @@ int main() {
         mv::composition::layer flash_layer = parsed.composition.layers.back();
         flash_layer.start_ms = 0.0;
         flash_layer.duration_ms = 2000.0;
-        flash_layer.transform_data.opacity = 0.20f;
-        flash_layer.effects.push_back({
-            .id = "fx-flash",
-            .type = "flash",
-            .target = "transform.opacity",
-            .amount = 0.50f,
-        });
+        if (mv::composition::component* transform = mv::composition::transform_component(flash_layer)) {
+            transform->opacity = 0.20f;
+        }
+        flash_layer.components.push_back(make_effect("fx-flash", "flash", "transform.opacity", 0.50f));
         const mv::composition::transform flashed =
             mv::composition::evaluate_transform(flash_layer, 0.0);
         expect(flashed.opacity > 0.55f,
@@ -249,14 +257,11 @@ int main() {
         mv::composition::layer shake_layer = parsed.composition.layers.back();
         shake_layer.start_ms = 0.0;
         shake_layer.duration_ms = 2000.0;
-        shake_layer.transform_data.position_x = 100.0f;
-        shake_layer.transform_data.position_y = 200.0f;
-        shake_layer.effects.push_back({
-            .id = "fx-shake",
-            .type = "shake",
-            .target = "transform.position",
-            .amount = 24.0f,
-        });
+        if (mv::composition::component* transform = mv::composition::transform_component(shake_layer)) {
+            transform->position_x = 100.0f;
+            transform->position_y = 200.0f;
+        }
+        shake_layer.components.push_back(make_effect("fx-shake", "shake", "transform.position", 24.0f));
         const mv::composition::transform shaken =
             mv::composition::evaluate_transform(shake_layer, 125.0);
         expect(shaken.position_x != 100.0f || shaken.position_y != 200.0f,
@@ -285,13 +290,13 @@ int main() {
     expect(!absolute_asset_result.success, "Expected absolute asset paths to fail validation.", ok);
 
     mv::composition::mv_composition missing_asset_id = composition;
-    missing_asset_id.layers.back().source_data.asset_id.clear();
+    mv::composition::renderable_component(missing_asset_id.layers.back())->asset_id.clear();
     const auto missing_asset_id_result =
         mv::composition::parse(mv::composition::serialize(missing_asset_id));
     expect(!missing_asset_id_result.success, "Expected image layers without assetId to fail validation.", ok);
 
     mv::composition::mv_composition unknown_asset_id = composition;
-    unknown_asset_id.layers.back().source_data.asset_id = "missing-asset";
+    mv::composition::renderable_component(unknown_asset_id.layers.back())->asset_id = "missing-asset";
     const auto unknown_asset_id_result =
         mv::composition::parse(mv::composition::serialize(unknown_asset_id));
     expect(!unknown_asset_id_result.success, "Expected unknown image assetId references to fail validation.", ok);
@@ -311,38 +316,17 @@ int main() {
     expect(!duplicate_layer_id_result.success, "Expected duplicate layer ids to fail validation.", ok);
 
     mv::composition::mv_composition duplicate_effect_id = composition;
-    duplicate_effect_id.layers[animated_layer_index].effects.push_back({
-        .id = "fx-pulse",
-        .type = "flash",
-        .target = "transform.opacity",
-        .amount = 0.5f,
-    });
+    duplicate_effect_id.layers[animated_layer_index].components.push_back(
+        make_effect("fx-pulse", "flash", "transform.opacity", 0.5f));
     const auto duplicate_effect_id_result =
         mv::composition::parse(mv::composition::serialize(duplicate_effect_id));
     expect(!duplicate_effect_id_result.success, "Expected duplicate layer effect ids to fail validation.", ok);
 
     mv::composition::mv_composition missing_effect_id = composition;
-    missing_effect_id.layers[animated_layer_index].effects.front().id.clear();
+    mv::composition::effect_components(missing_effect_id.layers[animated_layer_index]).front()->id.clear();
     const auto missing_effect_id_result =
         mv::composition::parse(mv::composition::serialize(missing_effect_id));
     expect(!missing_effect_id_result.success, "Expected effects without ids to fail validation.", ok);
-
-    mv::composition::mv_composition unknown_trigger_effect = composition;
-    unknown_trigger_effect.layers[animated_layer_index].event_triggers.front().actions.front().effect_id =
-        "missing-effect";
-    const auto unknown_trigger_effect_result =
-        mv::composition::parse(mv::composition::serialize(unknown_trigger_effect));
-    expect(!unknown_trigger_effect_result.success,
-           "Expected triggerEffect actions with unknown effect ids to fail validation.",
-           ok);
-
-    mv::composition::mv_composition missing_trigger_effect = composition;
-    missing_trigger_effect.layers[animated_layer_index].event_triggers.front().actions.front().effect_id.clear();
-    const auto missing_trigger_effect_result =
-        mv::composition::parse(mv::composition::serialize(missing_trigger_effect));
-    expect(!missing_trigger_effect_result.success,
-           "Expected triggerEffect actions without effect ids to fail validation.",
-           ok);
 
     if (!ok) {
         return EXIT_FAILURE;

@@ -11,7 +11,6 @@
 
 #include "audio_manager.h"
 #include "mv/composition/mv_composition_evaluator.h"
-#include "mv/composition/mv_composition_event_evaluator.h"
 #include "mv/mv_storage.h"
 #include "path_utils.h"
 #include "raylib.h"
@@ -58,6 +57,75 @@ Color parse_color(const std::string& value, float opacity) {
 Color with_opacity(Color color, float opacity) {
     color.a = static_cast<unsigned char>(std::clamp(opacity, 0.0f, 1.0f) * 255.0f);
     return color;
+}
+
+Color mix_color(Color from, Color to, float t) {
+    t = std::clamp(t, 0.0f, 1.0f);
+    return {
+        static_cast<unsigned char>(static_cast<float>(from.r) + (static_cast<float>(to.r) - static_cast<float>(from.r)) * t),
+        static_cast<unsigned char>(static_cast<float>(from.g) + (static_cast<float>(to.g) - static_cast<float>(from.g)) * t),
+        static_cast<unsigned char>(static_cast<float>(from.b) + (static_cast<float>(to.b) - static_cast<float>(from.b)) * t),
+        static_cast<unsigned char>(static_cast<float>(from.a) + (static_cast<float>(to.a) - static_cast<float>(from.a)) * t)
+    };
+}
+
+void draw_title_style_spectrum(Rectangle area, float opacity, double visual_time_ms,
+                               const std::array<float, 128>* spectrum) {
+    constexpr int kBars = 64;
+    const float alpha = std::clamp(opacity, 0.0f, 1.0f);
+    const float gap = 3.0f;
+    const float bar_w = std::max(2.0f, (area.width - gap * static_cast<float>(kBars - 1)) /
+                                           static_cast<float>(kBars));
+    const float baseline = area.y + area.height;
+    const float block_height = 8.0f;
+    const float block_gap = 4.0f;
+    const float block_step = block_height + block_gap;
+    const Color base_low = with_opacity({107, 33, 168, 255}, alpha * (128.0f / 255.0f));
+    const Color base_mid = with_opacity({168, 85, 247, 255}, alpha * (178.0f / 255.0f));
+    const Color base_top = with_opacity({216, 180, 254, 255}, alpha * (230.0f / 255.0f));
+    const Color peak_glow = with_opacity({216, 180, 254, 255}, alpha * (110.0f / 255.0f));
+    const Color peak_color = with_opacity({216, 180, 254, 255}, alpha * (166.0f / 255.0f));
+    const float phase = static_cast<float>(visual_time_ms / 260.0);
+
+    for (int i = 0; i < kBars; ++i) {
+        const float ratio = static_cast<float>(i) / static_cast<float>(kBars - 1);
+        float normalized = 0.0f;
+        if (spectrum != nullptr) {
+            const std::size_t start = static_cast<std::size_t>(i) * spectrum->size() / kBars;
+            const std::size_t end = std::max(start + 1, static_cast<std::size_t>(i + 1) * spectrum->size() / kBars);
+            float sum = 0.0f;
+            for (std::size_t j = start; j < end && j < spectrum->size(); ++j) {
+                sum += std::sqrt(std::max(0.0f, (*spectrum)[j])) * 8.0f;
+            }
+            normalized = std::clamp(sum / static_cast<float>(std::max<std::size_t>(1, end - start)), 0.0f, 1.0f);
+        } else {
+            const float bass_bias = 1.0f - ratio * 0.35f;
+            const float wave = 0.42f + 0.34f * std::sin(phase + ratio * 9.0f) +
+                               0.18f * std::sin(phase * 0.55f + ratio * 27.0f);
+            normalized = std::clamp(wave * bass_bias, 0.0f, 1.0f);
+        }
+
+        const float height = normalized * area.height;
+        const float x = area.x + static_cast<float>(i) * (bar_w + gap);
+        if (height > 0.5f) {
+            for (float block_bottom = baseline; block_bottom > baseline - height; block_bottom -= block_step) {
+                const float block_top = std::max(baseline - height, block_bottom - block_height);
+                const float segment_height = block_bottom - block_top;
+                if (segment_height > 0.5f) {
+                    const float color_t = std::clamp((baseline - block_top) / std::max(1.0f, area.height), 0.0f, 1.0f);
+                    const Color block_color =
+                        color_t < 0.6f
+                            ? mix_color(base_low, base_mid, color_t / 0.6f)
+                            : mix_color(base_mid, base_top, (color_t - 0.6f) / 0.4f);
+                    DrawRectangleRec({x, block_top, bar_w, segment_height}, block_color);
+                }
+            }
+        }
+
+        const float peak_y = baseline - normalized * area.height - 2.0f;
+        DrawRectangleRec({x, peak_y - 1.0f, bar_w, 4.0f}, peak_glow);
+        DrawRectangleRec({x, peak_y, bar_w, 2.0f}, peak_color);
+    }
 }
 
 const char* image_extension_for_asset(const mv::composition::asset_ref& asset) {
@@ -111,8 +179,13 @@ void draw_composition_layer(const mv::composition::mv_composition& composition,
                             double visual_time_ms,
                             const Texture2D* texture = nullptr,
                             const std::array<float, 128>* spectrum = nullptr) {
-    const auto& source = layer.source_data;
-    const auto& transform = layer.transform_data;
+    const mv::composition::component* source_ptr = mv::composition::renderable_component(layer);
+    const mv::composition::component* transform_ptr = mv::composition::transform_component(layer);
+    if (source_ptr == nullptr || transform_ptr == nullptr) {
+        return;
+    }
+    const auto& source = *source_ptr;
+    const mv::composition::transform transform = mv::composition::transform_from_component(*transform_ptr);
     const Color tint = parse_color(source.fill.empty() ? composition.canvas_data.background : source.fill,
                                    transform.opacity);
 
@@ -224,6 +297,10 @@ void draw_composition_layer(const mv::composition::mv_composition& composition,
         const Rectangle area = {position.x - rect_w * transform.anchor_x,
                                 position.y - rect_h * transform.anchor_y,
                                 rect_w, rect_h};
+        if (source.shape == "title") {
+            draw_title_style_spectrum(area, transform.opacity, visual_time_ms - layer.start_ms, spectrum);
+            return;
+        }
         const Color base = parse_color(source.fill.empty() ? "#38bdf8" : source.fill, 1.0f);
         const Color bar = with_opacity(base, 0.72f * transform.opacity);
         const Color peak = with_opacity(base, 0.95f * transform.opacity);
@@ -297,14 +374,6 @@ void play_mv_controller::reset() {
     unload_asset_textures();
     package_.reset();
     composition_.reset();
-    previous_visual_time_ms_.reset();
-}
-
-void play_mv_controller::notify_song_visual_event(const std::string& event_name, double event_time_ms) {
-    if (!composition_.has_value()) {
-        return;
-    }
-    mv::composition::apply_event(*composition_, event_name, event_time_ms);
 }
 
 void play_mv_controller::draw(const play_session_state& state, double visual_time_ms) {
@@ -312,12 +381,6 @@ void play_mv_controller::draw(const play_session_state& state, double visual_tim
     if (!composition_.has_value()) {
         return;
     }
-    const double previous_time_ms =
-        (!previous_visual_time_ms_.has_value() || visual_time_ms < *previous_visual_time_ms_)
-            ? -1.0
-            : *previous_visual_time_ms_;
-    mv::composition::apply_timeline_events(*composition_, previous_time_ms, visual_time_ms);
-    previous_visual_time_ms_ = visual_time_ms;
     std::array<float, 128> spectrum = {};
     const bool has_spectrum = audio_manager::instance().get_bgm_fft256(spectrum);
     std::vector<const mv::composition::layer*> layers;
@@ -332,14 +395,20 @@ void play_mv_controller::draw(const play_session_state& state, double visual_tim
     });
     for (const mv::composition::layer* layer : layers) {
         const Texture2D* texture = nullptr;
-        if (layer->source_data.type == "image") {
-            if (const mv::composition::asset_ref* asset = find_asset(layer->source_data.asset_id);
+        const mv::composition::component* renderer = mv::composition::renderable_component(*layer);
+        if (renderer != nullptr && renderer->type == "image") {
+            if (const mv::composition::asset_ref* asset = find_asset(renderer->asset_id);
                 asset != nullptr) {
                 texture = texture_for_asset(*asset);
             }
         }
         mv::composition::layer evaluated_layer = *layer;
-        evaluated_layer.transform_data = mv::composition::evaluate_transform(*layer, visual_time_ms);
+        if (mv::composition::component* transform = mv::composition::transform_component(evaluated_layer);
+            transform != nullptr) {
+            mv::composition::apply_transform_to_component(
+                *transform,
+                mv::composition::evaluate_transform(*layer, visual_time_ms));
+        }
         draw_composition_layer(*composition_, evaluated_layer, visual_time_ms, texture,
                                has_spectrum ? &spectrum : nullptr);
     }

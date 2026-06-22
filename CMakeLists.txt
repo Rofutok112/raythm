@@ -417,14 +417,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/mv/composition/mv_composition.h
         src/mv/composition/mv_composition_edit_history.cpp
         src/mv/composition/mv_composition_edit_history.h
-        src/mv/composition/mv_composition_event_authoring.cpp
-        src/mv/composition/mv_composition_event_authoring.h
-        src/mv/composition/mv_composition_event_evaluator.cpp
-        src/mv/composition/mv_composition_event_evaluator.h
         src/mv/composition/mv_composition_evaluator.cpp
         src/mv/composition/mv_composition_evaluator.h
-        src/mv/composition/mv_composition_presets.cpp
-        src/mv/composition/mv_composition_presets.h
         src/mv/composition/mv_composition_serializer.cpp
         src/mv/composition/mv_composition_serializer.h
         src/scenes/mv_editor_scene.cpp
@@ -585,6 +579,7 @@ add_executable(raythm WIN32 src/main.cpp
         src/ui/ui_text.h
         src/ui/ui_hit.h
         src/ui/ui_draw.h
+        src/ui/ui_inspector.h
         src/ui/ui_clip.cpp
         src/ui/ui_clip.h
         src/ui/ui_text_editor.cpp
@@ -1058,39 +1053,6 @@ add_executable(mv_composition_edit_history_smoke
         src/updater/update_verify.cpp
         src/updater/update_verify.h
         src/tests/mv_composition_edit_history_smoke.cpp)
-
-add_executable(mv_composition_presets_smoke
-        src/mv/composition/mv_composition.cpp
-        src/mv/composition/mv_composition.h
-        src/mv/composition/mv_composition_evaluator.cpp
-        src/mv/composition/mv_composition_evaluator.h
-        src/mv/composition/mv_composition_presets.cpp
-        src/mv/composition/mv_composition_presets.h
-        src/mv/composition/mv_composition_serializer.cpp
-        src/mv/composition/mv_composition_serializer.h
-        src/network/json_helpers.cpp
-        src/network/json_helpers.h
-        src/updater/update_verify.cpp
-        src/updater/update_verify.h
-        src/tests/mv_composition_presets_smoke.cpp)
-
-add_executable(mv_composition_event_evaluator_smoke
-        src/mv/composition/mv_composition.cpp
-        src/mv/composition/mv_composition.h
-        src/mv/composition/mv_composition_event_evaluator.cpp
-        src/mv/composition/mv_composition_event_evaluator.h
-        src/mv/composition/mv_composition_evaluator.cpp
-        src/mv/composition/mv_composition_evaluator.h
-        src/tests/mv_composition_event_evaluator_smoke.cpp)
-
-add_executable(mv_composition_event_authoring_smoke
-        src/mv/composition/mv_composition.cpp
-        src/mv/composition/mv_composition.h
-        src/mv/composition/mv_composition_event_authoring.cpp
-        src/mv/composition/mv_composition_event_authoring.h
-        src/mv/composition/mv_composition_event_evaluator.cpp
-        src/mv/composition/mv_composition_event_evaluator.h
-        src/tests/mv_composition_event_authoring_smoke.cpp)
 
 add_executable(mv_storage_smoke
         src/core/app_paths.cpp
@@ -1654,9 +1616,6 @@ set(RAYTHM_SMOKE_TARGETS
         local_content_index_smoke
         mv_composition_model_smoke
         mv_composition_edit_history_smoke
-        mv_composition_presets_smoke
-        mv_composition_event_evaluator_smoke
-        mv_composition_event_authoring_smoke
         mv_storage_smoke
         mv_managed_storage_smoke
         lane_input_tracker_smoke

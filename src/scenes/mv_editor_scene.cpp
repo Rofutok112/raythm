@@ -5,15 +5,15 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <string>
 
 #include "audio_manager.h"
 #include "managed_content_storage.h"
-#include "mv/composition/mv_composition_event_authoring.h"
 #include "mv/composition/mv_composition_evaluator.h"
-#include "mv/composition/mv_composition_presets.h"
 #include "mv/composition/mv_composition_serializer.h"
 #include "file_dialog.h"
 #include "path_utils.h"
@@ -24,25 +24,25 @@
 #include "tween.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_inspector.h"
 #include "ui_layout.h"
 #include "ui_text.h"
 #include "ui_text_input.h"
+#include "ui/icons/raythm_icons.h"
 #include "virtual_screen.h"
 
 namespace {
 
-constexpr float kHeaderHeight = 72.0f;
-constexpr float kPadding = 24.0f;
-constexpr float kPanelGap = 18.0f;
-constexpr float kBackButtonWidth = 150.0f;
-constexpr float kHeaderButtonHeight = 45.0f;
-constexpr float kHeaderButtonWidth = 150.0f;
-constexpr float kMetadataButtonWidth = 228.0f;
-constexpr float kLayerPanelWidth = 330.0f;
-constexpr float kInspectorWidth = 390.0f;
-constexpr float kTimelineHeight = 190.0f;
-constexpr float kWorkspaceTabHeight = 42.0f;
-constexpr float kWorkspaceTabGap = 8.0f;
+constexpr float kHeaderHeight = 58.0f;
+constexpr float kPadding = 16.0f;
+constexpr float kPanelGap = 10.0f;
+constexpr float kBackButtonWidth = 112.0f;
+constexpr float kHeaderButtonHeight = 34.0f;
+constexpr float kHeaderButtonWidth = 108.0f;
+constexpr float kMetadataButtonWidth = 170.0f;
+constexpr float kProjectPanelWidth = 300.0f;
+constexpr float kInspectorWidth = 350.0f;
+constexpr float kTimelineHeight = 314.0f;
 constexpr float kMetadataModalWidth = 540.0f;
 constexpr float kMetadataModalHeight = 312.0f;
 constexpr float kMetadataModalOffsetY = 27.0f;
@@ -59,12 +59,57 @@ constexpr float kMetadataModalOpenOffsetY = 27.0f;
 constexpr float kMetadataInputLabelWidth = 180.0f;
 constexpr double kKeyframeHitToleranceMs = 24.0;
 constexpr double kDefaultFallbackDurationMs = 8000.0;
+constexpr float kContextMenuWidth = 188.0f;
+constexpr float kContextMenuItemHeight = 24.0f;
+constexpr float kContextMenuItemSpacing = 3.0f;
+constexpr float kInspectorWheelStep = 48.0f;
+constexpr float kHierarchyRowHeight = 34.0f;
+constexpr float kTimelineRowHeight = 24.0f;
+constexpr float kTimelineWheelStep = 44.0f;
+constexpr float kTimelineHorizontalWheelMs = 700.0f;
+constexpr float kPreviewHandleSize = 10.0f;
+constexpr float kPreviewMinLayerSize = 8.0f;
 
 bool wide_text_filter(int codepoint, const std::string&) {
     return codepoint >= 32;
 }
 
 int hex_digit(char ch);
+
+bool signed_number_filter(int codepoint, const std::string& current_value) {
+    if (codepoint >= '0' && codepoint <= '9') {
+        return true;
+    }
+    if (codepoint == '.') {
+        return current_value.find('.') == std::string::npos;
+    }
+    if (codepoint == '-') {
+        return current_value.empty();
+    }
+    return false;
+}
+
+std::optional<float> parse_float_input(const std::string& value) {
+    if (value.empty() || value == "-" || value == "." || value == "-.") {
+        return std::nullopt;
+    }
+    char* end = nullptr;
+    const float parsed = std::strtof(value.c_str(), &end);
+    if (end == nullptr || *end != '\0' || !std::isfinite(parsed)) {
+        return std::nullopt;
+    }
+    return parsed;
+}
+
+std::string format_float_input(float value, int decimals) {
+    char buffer[64];
+    if (decimals <= 0) {
+        std::snprintf(buffer, sizeof(buffer), "%.0f", value);
+    } else {
+        std::snprintf(buffer, sizeof(buffer), "%.*f", decimals, value);
+    }
+    return buffer;
+}
 
 bool hex_color_filter(int codepoint, const std::string& current_value) {
     if (current_value.empty()) {
@@ -135,10 +180,14 @@ std::string ms_label(double value_ms) {
 }
 
 std::string layer_type_label(const mv::composition::layer& layer) {
-    if (layer.source_data.type == "shape" && !layer.source_data.shape.empty()) {
-        return layer.source_data.type + "/" + layer.source_data.shape;
+    const mv::composition::component* renderer = mv::composition::renderable_component(layer);
+    if (renderer == nullptr) {
+        return "Empty";
     }
-    return layer.source_data.type.empty() ? "unknown" : layer.source_data.type;
+    if (renderer->type == "shape" && !renderer->shape.empty()) {
+        return renderer->type + "/" + renderer->shape;
+    }
+    return renderer->type.empty() ? "unknown" : renderer->type;
 }
 
 std::string next_layer_id(const mv::composition::mv_composition& composition, const std::string& prefix) {
@@ -159,8 +208,30 @@ std::string next_effect_id(const mv::composition::mv_composition& composition, c
         const std::string id = prefix + "-" + std::to_string(index);
         bool exists = false;
         for (const mv::composition::layer& layer : composition.layers) {
-            exists = std::any_of(layer.effects.begin(), layer.effects.end(), [&](const auto& effect) {
-                return effect.id == id;
+            for (const mv::composition::component* effect : mv::composition::effect_components(layer)) {
+                exists = effect->id == id;
+                if (exists) {
+                    break;
+                }
+            }
+            if (exists) {
+                break;
+            }
+        }
+        if (!exists) {
+            return id;
+        }
+    }
+    return prefix + "-fallback";
+}
+
+std::string next_component_id(const mv::composition::mv_composition& composition, const std::string& prefix) {
+    for (int index = 1; index < 10000; ++index) {
+        const std::string id = prefix + "-" + std::to_string(index);
+        bool exists = false;
+        for (const mv::composition::layer& layer : composition.layers) {
+            exists = std::any_of(layer.components.begin(), layer.components.end(), [&](const auto& component) {
+                return component.id == id;
             });
             if (exists) {
                 break;
@@ -171,6 +242,99 @@ std::string next_effect_id(const mv::composition::mv_composition& composition, c
         }
     }
     return prefix + "-fallback";
+}
+
+mv::composition::component* find_effect_component(mv::composition::layer& layer, const std::string& type) {
+    for (mv::composition::component& component : layer.components) {
+        if ((component.type == "fade" || component.type == "pulse" ||
+             component.type == "flash" || component.type == "shake" ||
+             component.type == "beatPulse") && component.type == type) {
+            return &component;
+        }
+    }
+    return nullptr;
+}
+
+const mv::composition::component* renderer_or_null(const mv::composition::layer& layer) {
+    return mv::composition::renderable_component(layer);
+}
+
+mv::composition::component* renderer_or_null(mv::composition::layer& layer) {
+    return mv::composition::renderable_component(layer);
+}
+
+mv::composition::component* ensure_transform(mv::composition::layer& layer) {
+    if (mv::composition::component* transform = mv::composition::transform_component(layer)) {
+        return transform;
+    }
+    layer.components.insert(layer.components.begin(), mv::composition::make_transform_component());
+    return mv::composition::transform_component(layer);
+}
+
+mv::composition::transform transform_or_default(const mv::composition::layer& layer) {
+    const mv::composition::component* transform = mv::composition::transform_component(layer);
+    return transform == nullptr ? mv::composition::transform{} : mv::composition::transform_from_component(*transform);
+}
+
+void apply_evaluated_transform(mv::composition::layer& layer, const mv::composition::transform& transform) {
+    if (mv::composition::component* component = ensure_transform(layer)) {
+        mv::composition::apply_transform_to_component(*component, transform);
+    }
+}
+
+mv::composition::component make_effect_component(std::string id,
+                                                 std::string type,
+                                                 std::string target,
+                                                 float amount) {
+    mv::composition::component effect;
+    effect.id = std::move(id);
+    effect.kind = "component";
+    effect.type = std::move(type);
+    effect.target = std::move(target);
+    effect.amount = amount;
+    return effect;
+}
+
+std::string component_display_title(const mv::composition::component& component) {
+    std::string title = component.type;
+    if (title == "beatGrid") {
+        title = "Beat Grid";
+    } else if (!title.empty()) {
+        title[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(title[0])));
+    }
+    return title.empty() ? std::string{"Component"} : title;
+}
+
+float component_inspector_card_height(
+    const mv::composition::component& component,
+    const ui::inspector::color_picker_state* color_picker = nullptr) {
+    const float color_picker_extra =
+        color_picker != nullptr && color_picker->open
+            ? ui::inspector::color_picker_height() + ui::inspector::card_style{}.row_gap
+            : 0.0f;
+    if (component.type == "transform") {
+        return ui::inspector::component_card_height(4);
+    }
+    if (component.type == "text") {
+        return ui::inspector::component_card_height(2) + color_picker_extra;
+    }
+    if (component.type == "spectrum") {
+        return ui::inspector::component_card_height(2) + color_picker_extra;
+    }
+    if (component.type == "shape" ||
+        component.type == "background" ||
+        component.type == "beatGrid" ||
+        component.type == "waveform") {
+        return ui::inspector::component_card_height(1) + color_picker_extra;
+    }
+    if (component.type == "image" ||
+        component.type == "fade" ||
+        component.type == "pulse" ||
+        component.type == "flash" ||
+        component.type == "shake") {
+        return ui::inspector::component_card_height(1);
+    }
+    return ui::inspector::component_card_height(1);
 }
 
 const char* image_extension_for_asset(const mv::composition::asset_ref& asset) {
@@ -256,11 +420,85 @@ Color with_opacity(Color color, float opacity) {
     return color;
 }
 
+Color mix_color(Color from, Color to, float t) {
+    t = std::clamp(t, 0.0f, 1.0f);
+    return {
+        static_cast<unsigned char>(static_cast<float>(from.r) + (static_cast<float>(to.r) - static_cast<float>(from.r)) * t),
+        static_cast<unsigned char>(static_cast<float>(from.g) + (static_cast<float>(to.g) - static_cast<float>(from.g)) * t),
+        static_cast<unsigned char>(static_cast<float>(from.b) + (static_cast<float>(to.b) - static_cast<float>(from.b)) * t),
+        static_cast<unsigned char>(static_cast<float>(from.a) + (static_cast<float>(to.a) - static_cast<float>(from.a)) * t)
+    };
+}
+
+void draw_title_style_spectrum(Rectangle area, float opacity, double visual_time_ms,
+                               const std::array<float, 128>* spectrum) {
+    constexpr int kBars = 64;
+    const float alpha = std::clamp(opacity, 0.0f, 1.0f);
+    const float gap = 3.0f;
+    const float bar_w = std::max(2.0f, (area.width - gap * static_cast<float>(kBars - 1)) /
+                                           static_cast<float>(kBars));
+    const float baseline = area.y + area.height;
+    const float block_height = 8.0f;
+    const float block_gap = 4.0f;
+    const float block_step = block_height + block_gap;
+    const Color base_low = with_opacity({107, 33, 168, 255}, alpha * (128.0f / 255.0f));
+    const Color base_mid = with_opacity({168, 85, 247, 255}, alpha * (178.0f / 255.0f));
+    const Color base_top = with_opacity({216, 180, 254, 255}, alpha * (230.0f / 255.0f));
+    const Color peak_glow = with_opacity({216, 180, 254, 255}, alpha * (110.0f / 255.0f));
+    const Color peak_color = with_opacity({216, 180, 254, 255}, alpha * (166.0f / 255.0f));
+    const float phase = static_cast<float>(visual_time_ms / 260.0);
+
+    for (int i = 0; i < kBars; ++i) {
+        const float ratio = static_cast<float>(i) / static_cast<float>(kBars - 1);
+        float normalized = 0.0f;
+        if (spectrum != nullptr) {
+            const std::size_t start = static_cast<std::size_t>(i) * spectrum->size() / kBars;
+            const std::size_t end = std::max(start + 1, static_cast<std::size_t>(i + 1) * spectrum->size() / kBars);
+            float sum = 0.0f;
+            for (std::size_t j = start; j < end && j < spectrum->size(); ++j) {
+                sum += std::sqrt(std::max(0.0f, (*spectrum)[j])) * 8.0f;
+            }
+            normalized = std::clamp(sum / static_cast<float>(std::max<std::size_t>(1, end - start)), 0.0f, 1.0f);
+        } else {
+            const float bass_bias = 1.0f - ratio * 0.35f;
+            const float wave = 0.42f + 0.34f * std::sin(phase + ratio * 9.0f) +
+                               0.18f * std::sin(phase * 0.55f + ratio * 27.0f);
+            normalized = std::clamp(wave * bass_bias, 0.0f, 1.0f);
+        }
+
+        const float height = normalized * area.height;
+        const float x = area.x + static_cast<float>(i) * (bar_w + gap);
+        if (height > 0.5f) {
+            for (float block_bottom = baseline; block_bottom > baseline - height; block_bottom -= block_step) {
+                const float block_top = std::max(baseline - height, block_bottom - block_height);
+                const float segment_height = block_bottom - block_top;
+                if (segment_height > 0.5f) {
+                    const float color_t = std::clamp((baseline - block_top) / std::max(1.0f, area.height), 0.0f, 1.0f);
+                    const Color block_color =
+                        color_t < 0.6f
+                            ? mix_color(base_low, base_mid, color_t / 0.6f)
+                            : mix_color(base_mid, base_top, (color_t - 0.6f) / 0.4f);
+                    ui::draw_rect_f({x, block_top, bar_w, segment_height}, block_color);
+                }
+            }
+        }
+
+        const float peak_y = baseline - normalized * area.height - 2.0f;
+        ui::draw_rect_f({x, peak_y - 1.0f, bar_w, 4.0f}, peak_glow);
+        ui::draw_rect_f({x, peak_y, bar_w, 2.0f}, peak_color);
+    }
+}
+
 bool layer_active_at(const mv::composition::layer& layer, double time_ms) {
     if (!layer.visible || time_ms < layer.start_ms) {
         return false;
     }
     return layer.duration_ms <= 0.0 || time_ms <= layer.start_ms + layer.duration_ms;
+}
+
+bool preview_transformable(const mv::composition::layer& layer) {
+    const mv::composition::component* renderer = renderer_or_null(layer);
+    return renderer != nullptr && renderer->type != "background";
 }
 
 double song_duration_ms_for(const song_data& song) {
@@ -296,13 +534,186 @@ Vector2 preview_position(Rectangle preview, const mv::composition::mv_compositio
     };
 }
 
+Vector2 layer_base_size_canvas(const mv::composition::mv_composition& composition,
+                               const mv::composition::layer& layer,
+                               const Texture2D* texture) {
+    const mv::composition::component* source_ptr = renderer_or_null(layer);
+    if (source_ptr == nullptr) {
+        return {480.0f, 270.0f};
+    }
+    const auto& source = *source_ptr;
+    if (source.type == "background") {
+        return {static_cast<float>(std::max(1, composition.canvas_data.width)),
+                static_cast<float>(std::max(1, composition.canvas_data.height))};
+    }
+    if (source.type == "text") {
+        const std::string text = source.text.empty() ? "Text" : source.text;
+        const Vector2 measured = MeasureTextEx(GetFontDefault(), text.c_str(), 44.0f, 1.0f);
+        return {std::max(1.0f, measured.x), std::max(1.0f, measured.y)};
+    }
+    if (source.type == "shape" && (source.shape.empty() || source.shape == "rect")) {
+        return {480.0f, 270.0f};
+    }
+    if (source.type == "image" && texture != nullptr && texture->id != 0) {
+        return {static_cast<float>(std::max(1, texture->width)),
+                static_cast<float>(std::max(1, texture->height))};
+    }
+    if (source.type == "beatGrid") {
+        return {1280.0f, 720.0f};
+    }
+    if (source.type == "waveform") {
+        return {1280.0f, 280.0f};
+    }
+    if (source.type == "spectrum") {
+        return {1280.0f, 420.0f};
+    }
+    return {480.0f, 270.0f};
+}
+
+Rectangle layer_preview_bounds(Rectangle preview,
+                               const mv::composition::mv_composition& composition,
+                               const mv::composition::layer& layer,
+                               const Texture2D* texture) {
+    const mv::composition::transform transform = transform_or_default(layer);
+    const mv::composition::component* source = renderer_or_null(layer);
+    if (source != nullptr && source->type == "background") {
+        return preview;
+    }
+    const Vector2 position = preview_position(preview, composition, transform);
+    if (source != nullptr && source->type == "text") {
+        const std::string text = source->text.empty() ? "Text" : source->text;
+        const float font_size = std::clamp(44.0f * transform.scale_y * (preview.height / 1080.0f), 10.0f, 72.0f);
+        const Vector2 size = MeasureTextEx(GetFontDefault(), text.c_str(), font_size, 1.0f);
+        return {position.x - size.x * transform.anchor_x,
+                position.y - size.y * transform.anchor_y,
+                size.x,
+                size.y};
+    }
+
+    const float canvas_w = static_cast<float>(std::max(1, composition.canvas_data.width));
+    const float canvas_h = static_cast<float>(std::max(1, composition.canvas_data.height));
+    const Vector2 base_size = layer_base_size_canvas(composition, layer, texture);
+    const float width = base_size.x * transform.scale_x / canvas_w * preview.width;
+    const float height = base_size.y * transform.scale_y / canvas_h * preview.height;
+    return {position.x - width * transform.anchor_x,
+            position.y - height * transform.anchor_y,
+            width,
+            height};
+}
+
+std::array<Rectangle, 8> preview_transform_handles(Rectangle bounds) {
+    const float size = kPreviewHandleSize;
+    const float half = size * 0.5f;
+    const float cx = bounds.x + bounds.width * 0.5f;
+    const float cy = bounds.y + bounds.height * 0.5f;
+    const float right = bounds.x + bounds.width;
+    const float bottom = bounds.y + bounds.height;
+    return {{
+        {bounds.x - half, bounds.y - half, size, size},
+        {cx - half, bounds.y - half, size, size},
+        {right - half, bounds.y - half, size, size},
+        {bounds.x - half, cy - half, size, size},
+        {right - half, cy - half, size, size},
+        {bounds.x - half, bottom - half, size, size},
+        {cx - half, bottom - half, size, size},
+        {right - half, bottom - half, size, size},
+    }};
+}
+
+mv_preview_drag_mode preview_drag_mode_for_handle(int index) {
+    switch (index) {
+        case 0: return mv_preview_drag_mode::northwest;
+        case 1: return mv_preview_drag_mode::north;
+        case 2: return mv_preview_drag_mode::northeast;
+        case 3: return mv_preview_drag_mode::west;
+        case 4: return mv_preview_drag_mode::east;
+        case 5: return mv_preview_drag_mode::southwest;
+        case 6: return mv_preview_drag_mode::south;
+        case 7: return mv_preview_drag_mode::southeast;
+        default: return mv_preview_drag_mode::none;
+    }
+}
+
+void draw_preview_transform_overlay(Rectangle bounds, bool locked) {
+    const Color line = locked ? with_alpha(g_theme->text_muted, 170) : g_theme->border_active;
+    DrawRectangleLinesEx(bounds, 1.5f, line);
+    for (const Rectangle handle : preview_transform_handles(bounds)) {
+        ui::draw_rect_f(handle, locked ? with_alpha(g_theme->row, 180) : g_theme->accent);
+        ui::draw_rect_lines(handle, 1.0f, g_theme->bg);
+    }
+}
+
+Rectangle resized_preview_rect(Rectangle origin, Vector2 delta,
+                               mv_preview_drag_mode mode) {
+    Rectangle rect = origin;
+    const bool affects_left = mode == mv_preview_drag_mode::west ||
+                              mode == mv_preview_drag_mode::northwest ||
+                              mode == mv_preview_drag_mode::southwest;
+    const bool affects_right = mode == mv_preview_drag_mode::east ||
+                               mode == mv_preview_drag_mode::northeast ||
+                               mode == mv_preview_drag_mode::southeast;
+    const bool affects_top = mode == mv_preview_drag_mode::north ||
+                             mode == mv_preview_drag_mode::northwest ||
+                             mode == mv_preview_drag_mode::northeast;
+    const bool affects_bottom = mode == mv_preview_drag_mode::south ||
+                                mode == mv_preview_drag_mode::southwest ||
+                                mode == mv_preview_drag_mode::southeast;
+    if (affects_left) {
+        const float right = origin.x + origin.width;
+        rect.x = std::min(right - kPreviewMinLayerSize, origin.x + delta.x);
+        rect.width = right - rect.x;
+    } else if (affects_right) {
+        rect.width = std::max(kPreviewMinLayerSize, origin.width + delta.x);
+    }
+    if (affects_top) {
+        const float bottom = origin.y + origin.height;
+        rect.y = std::min(bottom - kPreviewMinLayerSize, origin.y + delta.y);
+        rect.height = bottom - rect.y;
+    } else if (affects_bottom) {
+        rect.height = std::max(kPreviewMinLayerSize, origin.height + delta.y);
+    }
+    return rect;
+}
+
+void apply_preview_rect_to_transform(Rectangle preview,
+                                     const mv::composition::mv_composition& composition,
+                                     const mv::composition::layer& layer,
+                                     const Texture2D* texture,
+                                     Rectangle bounds,
+                                     mv::composition::transform& transform) {
+    const float canvas_w = static_cast<float>(std::max(1, composition.canvas_data.width));
+    const float canvas_h = static_cast<float>(std::max(1, composition.canvas_data.height));
+    const Vector2 base_size = layer_base_size_canvas(composition, layer, texture);
+    transform.position_x = (bounds.x + bounds.width * transform.anchor_x - preview.x) / preview.width * canvas_w;
+    transform.position_y = (bounds.y + bounds.height * transform.anchor_y - preview.y) / preview.height * canvas_h;
+    const mv::composition::component* source = renderer_or_null(layer);
+    if (source != nullptr && source->type == "background") {
+        return;
+    }
+    if (source != nullptr && source->type == "text") {
+        const float scale_from_width = bounds.width / std::max(1.0f, base_size.x * (preview.height / 1080.0f));
+        const float scale_from_height = bounds.height / std::max(1.0f, base_size.y * (preview.height / 1080.0f));
+        const float scale = std::clamp((scale_from_width + scale_from_height) * 0.5f, 0.1f, 8.0f);
+        transform.scale_x = scale;
+        transform.scale_y = scale;
+        return;
+    }
+    transform.scale_x = std::clamp(bounds.width / preview.width * canvas_w / std::max(1.0f, base_size.x), 0.05f, 8.0f);
+    transform.scale_y = std::clamp(bounds.height / preview.height * canvas_h / std::max(1.0f, base_size.y), 0.05f, 8.0f);
+}
+
 void draw_preview_layer(Rectangle preview, const mv::composition::mv_composition& composition,
                         const mv::composition::layer& layer, bool selected, double visual_time_ms,
                         const Texture2D* texture = nullptr,
                         const std::array<float, 256>* waveform_samples = nullptr,
                         const std::array<float, 128>* spectrum = nullptr) {
-    const auto& source = layer.source_data;
-    const auto& transform = layer.transform_data;
+    const mv::composition::component* source_ptr = renderer_or_null(layer);
+    const mv::composition::component* transform_ptr = mv::composition::transform_component(layer);
+    if (source_ptr == nullptr || transform_ptr == nullptr) {
+        return;
+    }
+    const auto& source = *source_ptr;
+    const mv::composition::transform transform = mv::composition::transform_from_component(*transform_ptr);
     const Color fill = parse_color(source.fill.empty() ? composition.canvas_data.background : source.fill,
                                    transform.opacity);
     if (source.type == "background") {
@@ -438,6 +849,13 @@ void draw_preview_layer(Rectangle preview, const mv::composition::mv_composition
         const Rectangle area = {position.x - rect_w * transform.anchor_x,
                                 position.y - rect_h * transform.anchor_y,
                                 rect_w, rect_h};
+        if (source.shape == "title") {
+            draw_title_style_spectrum(area, transform.opacity, visual_time_ms - layer.start_ms, spectrum);
+            if (selected) {
+                DrawRectangleLinesEx(area, 1.5f, g_theme->border_active);
+            }
+            return;
+        }
         const Color base = parse_color(source.fill.empty() ? "#38bdf8" : source.fill);
         const Color bar = with_opacity(base, 0.72f * transform.opacity);
         const Color peak = with_opacity(base, 0.95f * transform.opacity);
@@ -484,15 +902,20 @@ void draw_section_title(Rectangle rect, const char* title, const char* subtitle 
     }
 }
 
-const char* workspace_label(mv_editor_scene::workspace value) {
-    switch (value) {
-        case mv_editor_scene::workspace::compose: return "Compose";
-        case mv_editor_scene::workspace::timeline: return "Timeline";
-        case mv_editor_scene::workspace::assets: return "Assets";
-        case mv_editor_scene::workspace::effects: return "Effects";
-        case mv_editor_scene::workspace::events: return "Events";
+using mv_icon_draw_fn = void (*)(Rectangle, Color, float);
+
+bool draw_timeline_icon_button(Rectangle rect, mv_icon_draw_fn icon, bool active,
+                               Color icon_color, float icon_inset = 4.0f) {
+    const ui::row_state state = ui::draw_row(rect,
+                                            active ? g_theme->row_selected : with_alpha(g_theme->row, 120),
+                                            g_theme->row_hover,
+                                            active ? g_theme->border_active : g_theme->border,
+                                            1.0f);
+    if (icon != nullptr) {
+        const Color color = active ? icon_color : with_alpha(icon_color, 150);
+        icon(ui::inset(state.visual, icon_inset), color, 2.0f);
     }
-    return "Compose";
+    return state.clicked;
 }
 
 }  // namespace
@@ -617,7 +1040,7 @@ void mv_editor_scene::draw() {
     ui::draw_rect_f(header, g_theme->section);
     ui::draw_rect_lines(header, 1.5f, g_theme->border_light);
 
-    if (ui::draw_button_colored(metadata_button_rect(), "Metadata", 14,
+    if (ui::draw_button_colored(metadata_button_rect(), "Metadata", 12,
                                 metadata_modal_open_ ? g_theme->row_selected : g_theme->row,
                                 metadata_modal_open_ ? g_theme->row_active : g_theme->row_hover,
                                 g_theme->text).clicked) {
@@ -636,23 +1059,23 @@ void mv_editor_scene::draw() {
     Rectangle undo_btn = {redo_btn.x - kHistoryButtonWidth - 8.0f, back_btn.y, kHistoryButtonWidth, kHeaderButtonHeight};
     Rectangle play_btn = {undo_btn.x - kHeaderButtonWidth - 12.0f, back_btn.y, kHeaderButtonWidth, kHeaderButtonHeight};
 
-    if (ui::draw_button(play_btn, preview_playing_ ? "Pause" : "Play", 14).clicked) {
+    if (ui::draw_button(play_btn, preview_playing_ ? "Pause" : "Play", 12).clicked) {
         set_preview_playing(!preview_playing_);
     }
-    if (ui::draw_button_colored(undo_btn, "Undo", 13,
+    if (ui::draw_button_colored(undo_btn, "Undo", 11,
                                 history_.can_undo() ? g_theme->row : with_alpha(g_theme->row, 110),
                                 g_theme->row_hover, g_theme->text, 1.5f).clicked) {
         undo_edit();
     }
-    if (ui::draw_button_colored(redo_btn, "Redo", 13,
+    if (ui::draw_button_colored(redo_btn, "Redo", 11,
                                 history_.can_redo() ? g_theme->row : with_alpha(g_theme->row, 110),
                                 g_theme->row_hover, g_theme->text, 1.5f).clicked) {
         redo_edit();
     }
-    if (ui::draw_button(save_btn, dirty_ ? "Save *" : "Saved", 14).clicked) {
+    if (ui::draw_button(save_btn, dirty_ ? "Save *" : "Saved", 12).clicked) {
         save_mv();
     }
-    if (ui::draw_button(back_btn, "Back", 14).clicked) {
+    if (ui::draw_button(back_btn, "Back", 12).clicked) {
         manager_.change_scene(song_select::make_seamless_create_scene(manager_, song_.meta.song_id));
         ui::flush_draw_queue();
         virtual_screen::end();
@@ -662,321 +1085,118 @@ void mv_editor_scene::draw() {
     }
 
     const std::string title = package_.meta.name.empty() ? song_.meta.title + " MV" : package_.meta.name;
-    ui::draw_text_in_rect(title.c_str(), 20,
-                          {metadata_button_rect().x + metadata_button_rect().width + 24.0f, 12.0f,
-                           play_btn.x - metadata_button_rect().x - metadata_button_rect().width - 48.0f, 28.0f},
+    ui::draw_text_in_rect(title.c_str(), 18,
+                          {metadata_button_rect().x + metadata_button_rect().width + 18.0f, 8.0f,
+                           play_btn.x - metadata_button_rect().x - metadata_button_rect().width - 36.0f, 24.0f},
                           g_theme->text, ui::text_align::left);
     const std::string subtitle = song_.meta.title + " / " + song_.meta.artist + "   " + ms_label(playhead_ms_);
-    ui::draw_text_in_rect(subtitle.c_str(), 13,
-                          {metadata_button_rect().x + metadata_button_rect().width + 24.0f, 38.0f,
-                           play_btn.x - metadata_button_rect().x - metadata_button_rect().width - 48.0f, 22.0f},
+    ui::draw_text_in_rect(subtitle.c_str(), 11,
+                          {metadata_button_rect().x + metadata_button_rect().width + 18.0f, 32.0f,
+                           play_btn.x - metadata_button_rect().x - metadata_button_rect().width - 36.0f, 18.0f},
                           g_theme->text_muted, ui::text_align::left);
 
-    const Rectangle tab_strip = {
-        kPadding,
-        kHeaderHeight + 12.0f,
-        static_cast<float>(kScreenWidth) - kPadding * 2.0f,
-        kWorkspaceTabHeight
-    };
-    constexpr float kTabWidth = 138.0f;
-    constexpr workspace kWorkspaces[] = {
-        workspace::compose,
-        workspace::timeline,
-        workspace::assets,
-        workspace::effects,
-        workspace::events,
-    };
-    float tab_x = tab_strip.x;
-    for (workspace item : kWorkspaces) {
-        const Rectangle tab_rect = {tab_x, tab_strip.y, kTabWidth, tab_strip.height};
-        const bool active = item == current_workspace_;
-        if (ui::draw_button_colored(tab_rect,
-                                    workspace_label(item),
-                                    13,
-                                    active ? g_theme->row_selected : g_theme->row,
-                                    active ? g_theme->row_active : g_theme->row_hover,
-                                    active ? g_theme->text : g_theme->text_muted,
-                                    active ? 2.0f : 1.5f).clicked) {
-            current_workspace_ = item;
-        }
-        tab_x += kTabWidth + kWorkspaceTabGap;
-    }
-
     const Rectangle content = {
-        kPadding, tab_strip.y + tab_strip.height + 12.0f,
+        kPadding, kHeaderHeight + kPanelGap,
         static_cast<float>(kScreenWidth) - kPadding * 2.0f,
-        static_cast<float>(kScreenHeight) - (tab_strip.y + tab_strip.height + 12.0f) - kPadding
+        static_cast<float>(kScreenHeight) - kHeaderHeight - kPanelGap - kPadding
     };
-    const auto left_split = ui::split_columns(content, kLayerPanelWidth, kPanelGap);
+    const auto main_rows = ui::split_rows(content, content.height - kTimelineHeight - kPanelGap, kPanelGap);
+    const Rectangle work_area = main_rows.first;
+    const Rectangle timeline_panel = main_rows.second;
+    const auto left_split = ui::split_columns(work_area, kProjectPanelWidth, kPanelGap);
     const auto right_split = ui::split_columns(left_split.second,
                                               left_split.second.width - kInspectorWidth - kPanelGap,
                                               kPanelGap);
     const Rectangle layers_panel = left_split.first;
-    const Rectangle center_area = right_split.first;
+    const Rectangle preview_panel = right_split.first;
     const Rectangle inspector_panel = right_split.second;
-    const float max_timeline_height = std::max(kTimelineHeight, center_area.height - 220.0f);
-    const float workspace_timeline_height = current_workspace_ == workspace::timeline
-        ? std::clamp(center_area.height * 0.68f, kTimelineHeight, max_timeline_height)
-        : kTimelineHeight;
-    const auto center_rows = ui::split_rows(center_area,
-                                            center_area.height - workspace_timeline_height - kPanelGap,
-                                            kPanelGap);
-    const Rectangle preview_panel = center_rows.first;
-    const Rectangle timeline_panel = center_rows.second;
-
-    ui::draw_panel(layers_panel);
-    if (current_workspace_ == workspace::assets) {
-        draw_section_title(layers_panel, "Assets", "Package media used by this MV");
-        const Rectangle import_btn = {layers_panel.x + 18.0f, layers_panel.y + 58.0f,
-                                      layers_panel.width - 36.0f, 40.0f};
-        if (ui::draw_button(import_btn, "+ Image Layer", 13).clicked) {
-            add_image_layer();
-        }
-        const Rectangle asset_view = {layers_panel.x + 14.0f, layers_panel.y + 116.0f,
-                                      layers_panel.width - 28.0f, layers_panel.height - 132.0f};
-        ui::scoped_clip_rect clip(asset_view);
-        float y = asset_view.y;
-        if (composition_.assets.empty()) {
-            ui::draw_text_in_rect("No assets", 14,
-                                  {asset_view.x + 10.0f, y, asset_view.width - 20.0f, 32.0f},
-                                  g_theme->text_muted, ui::text_align::left);
-        }
-        for (const mv::composition::asset_ref& asset : composition_.assets) {
-            const Rectangle row = {asset_view.x, y, asset_view.width, 58.0f};
-            ui::draw_rect_f(row, g_theme->section);
-            ui::draw_rect_lines(row, 1.0f, g_theme->border_light);
-            const int uses = static_cast<int>(std::count_if(
-                composition_.layers.begin(), composition_.layers.end(), [&](const mv::composition::layer& layer) {
-                    return layer.source_data.asset_id == asset.id;
-                }));
-            ui::draw_text_in_rect(asset.id.c_str(), 13,
-                                  {row.x + 12.0f, row.y + 6.0f, row.width - 24.0f, 22.0f},
-                                  g_theme->text, ui::text_align::left);
-            const std::string meta = asset.type + "   uses " + std::to_string(uses);
-            ui::draw_text_in_rect(meta.c_str(), 11,
-                                  {row.x + 12.0f, row.y + 29.0f, row.width - 24.0f, 20.0f},
-                                  g_theme->text_muted, ui::text_align::left);
-            y += 66.0f;
-        }
-    } else if (current_workspace_ == workspace::effects) {
-        draw_section_title(layers_panel, "Effects", "Selected layer effect chain");
-        mv::composition::layer* layer = selected_layer();
-        if (layer == nullptr) {
-            ui::draw_text_in_rect("No layer selected", 14,
-                                  {layers_panel.x + 18.0f, layers_panel.y + 62.0f,
-                                   layers_panel.width - 36.0f, 32.0f},
-                                  g_theme->text_muted, ui::text_align::left);
+    const Vector2 mouse = virtual_screen::get_virtual_mouse();
+    const float wheel = GetMouseWheelMove();
+    const bool shift_down = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    const bool ctrl_down = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    bool context_menu_opened_this_frame = false;
+    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+        context_menu_open_ = true;
+        context_menu_opened_this_frame = true;
+        context_menu_position_ = mouse;
+        if (CheckCollisionPointRec(mouse, timeline_panel)) {
+            context_menu_target_ = context_menu_target::timeline;
+        } else if (CheckCollisionPointRec(mouse, layers_panel)) {
+            context_menu_target_ = context_menu_target::project;
         } else {
-            const float button_w = (layers_panel.width - 36.0f - 8.0f) * 0.5f;
-            Rectangle fade_btn = {layers_panel.x + 18.0f, layers_panel.y + 58.0f, button_w, 36.0f};
-            Rectangle pulse_btn = {fade_btn.x + fade_btn.width + 8.0f, fade_btn.y, button_w, 36.0f};
-            Rectangle flash_btn = {fade_btn.x, fade_btn.y + 44.0f, button_w, 36.0f};
-            Rectangle shake_btn = {pulse_btn.x, flash_btn.y, button_w, 36.0f};
-            Rectangle clear_btn = {fade_btn.x, flash_btn.y + 44.0f, layers_panel.width - 36.0f, 34.0f};
-            if (ui::draw_button(fade_btn, "+ Fade", 12).clicked) {
-                add_fade_effect_to_selected_layer();
-                layer = selected_layer();
-            }
-            if (ui::draw_button(pulse_btn, "+ Pulse", 12).clicked) {
-                add_pulse_effect_to_selected_layer();
-                layer = selected_layer();
-            }
-            if (ui::draw_button(flash_btn, "+ Flash", 12).clicked) {
-                add_flash_effect_to_selected_layer();
-                layer = selected_layer();
-            }
-            if (ui::draw_button(shake_btn, "+ Shake", 12).clicked) {
-                add_shake_effect_to_selected_layer();
-                layer = selected_layer();
-            }
-            if (ui::draw_button_colored(clear_btn, "Clear Effects", 12,
-                                        layer != nullptr && !layer->effects.empty()
-                                            ? g_theme->row
-                                            : with_alpha(g_theme->row, 110),
-                                        g_theme->row_hover, g_theme->text, 1.5f).clicked &&
-                layer != nullptr && !layer->effects.empty()) {
-                clear_selected_layer_effects();
-                layer = selected_layer();
-            }
-            const Rectangle effect_view = {layers_panel.x + 14.0f, layers_panel.y + 186.0f,
-                                           layers_panel.width - 28.0f, layers_panel.height - 202.0f};
-            ui::scoped_clip_rect clip(effect_view);
-            float y = effect_view.y;
-            if (layer != nullptr && layer->effects.empty()) {
-                ui::draw_text_in_rect("No effects", 14,
-                                      {effect_view.x + 10.0f, y, effect_view.width - 20.0f, 32.0f},
-                                      g_theme->text_muted, ui::text_align::left);
-            }
-            if (layer != nullptr) {
-                for (const mv::composition::effect& effect : layer->effects) {
-                    const Rectangle row = {effect_view.x, y, effect_view.width, 54.0f};
-                    ui::draw_rect_f(row, g_theme->section);
-                    ui::draw_rect_lines(row, 1.0f, g_theme->border_light);
-                    ui::draw_text_in_rect(effect.type.c_str(), 14,
-                                          {row.x + 12.0f, row.y + 6.0f, row.width - 24.0f, 22.0f},
-                                          g_theme->text, ui::text_align::left);
-                    const std::string meta = effect.target + "   " + std::to_string(effect.amount).substr(0, 5);
-                    ui::draw_text_in_rect(meta.c_str(), 11,
-                                          {row.x + 12.0f, row.y + 29.0f, row.width - 24.0f, 19.0f},
-                                          g_theme->text_muted, ui::text_align::left);
-                    y += 62.0f;
-                }
-            }
-        }
-    } else if (current_workspace_ == workspace::events) {
-        draw_section_title(layers_panel, "Events", "Timeline cues for selected layer");
-        const float button_w = (layers_panel.width - 36.0f - 8.0f) * 0.5f;
-        Rectangle flash_btn = {layers_panel.x + 18.0f, layers_panel.y + 58.0f, button_w, 36.0f};
-        Rectangle show_btn = {flash_btn.x + flash_btn.width + 8.0f, flash_btn.y, button_w, 36.0f};
-        Rectangle text_btn = {flash_btn.x, flash_btn.y + 44.0f, button_w, 36.0f};
-        Rectangle clear_btn = {show_btn.x, text_btn.y, button_w, 36.0f};
-        if (ui::draw_button(flash_btn, "Cue Flash", 11).clicked) {
-            add_flash_event_trigger_at_playhead();
-        }
-        if (ui::draw_button(show_btn, "Cue Show", 11).clicked) {
-            add_show_event_trigger_at_playhead();
-        }
-        if (ui::draw_button(text_btn, "Cue Text", 11).clicked) {
-            add_text_event_trigger_at_playhead();
-        }
-        const int cues_at_playhead = event_trigger_count_at_playhead();
-        if (ui::draw_button_colored(clear_btn, "Clear Cue", 11,
-                                    cues_at_playhead > 0 ? g_theme->row : with_alpha(g_theme->row, 110),
-                                    g_theme->row_hover, g_theme->text, 1.5f).clicked &&
-            cues_at_playhead > 0) {
-            clear_event_triggers_at_playhead();
-        }
-        const Rectangle cue_view = {layers_panel.x + 14.0f, layers_panel.y + 156.0f,
-                                    layers_panel.width - 28.0f, layers_panel.height - 172.0f};
-        ui::scoped_clip_rect clip(cue_view);
-        float y = cue_view.y;
-        int cue_count = 0;
-        for (const mv::composition::layer& cue_layer : composition_.layers) {
-            for (const mv::composition::event_trigger& trigger : cue_layer.event_triggers) {
-                const Rectangle row = {cue_view.x, y, cue_view.width, 58.0f};
-                ui::draw_rect_f(row, cue_layer.id == selected_layer_id_ ? g_theme->row_selected : g_theme->section);
-                ui::draw_rect_lines(row, 1.0f, g_theme->border_light);
-                const std::string title = trigger.time_ms >= 0.0
-                    ? ms_label(trigger.time_ms)
-                    : (trigger.event.empty() ? "Event" : trigger.event);
-                ui::draw_text_in_rect(title.c_str(), 13,
-                                      {row.x + 12.0f, row.y + 6.0f, row.width - 24.0f, 22.0f},
-                                      g_theme->text, ui::text_align::left);
-                const std::string meta = cue_layer.name + "   actions " + std::to_string(trigger.actions.size());
-                ui::draw_text_in_rect(meta.c_str(), 11,
-                                      {row.x + 12.0f, row.y + 29.0f, row.width - 24.0f, 20.0f},
-                                      g_theme->text_muted, ui::text_align::left);
-                if (ui::is_hovered(row) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                    selected_layer_id_ = cue_layer.id;
-                    if (trigger.time_ms >= 0.0) {
-                        playhead_ms_ = std::clamp(trigger.time_ms, 0.0, composition_duration_ms());
-                        set_preview_playing(false);
-                        seek_preview_audio_to_playhead();
-                    }
-                }
-                y += 66.0f;
-                ++cue_count;
-            }
-        }
-        if (cue_count == 0) {
-            ui::draw_text_in_rect("No cues", 14,
-                                  {cue_view.x + 10.0f, cue_view.y, cue_view.width - 20.0f, 32.0f},
-                                  g_theme->text_muted, ui::text_align::left);
-        }
-    } else {
-        draw_section_title(layers_panel, "Layers", "Source stack for this song MV");
-        const float add_gap = 6.0f;
-        const float add_button_width = (layers_panel.width - 36.0f - add_gap * 4.0f) / 5.0f;
-        Rectangle add_text = {layers_panel.x + 18.0f, layers_panel.y + 56.0f, add_button_width, 38.0f};
-        Rectangle add_rect = {add_text.x + add_text.width + add_gap, add_text.y, add_button_width, 38.0f};
-        Rectangle add_image = {add_rect.x + add_rect.width + add_gap, add_text.y, add_button_width, 38.0f};
-        Rectangle add_grid = {add_image.x + add_image.width + add_gap, add_text.y, add_button_width, 38.0f};
-        Rectangle add_wave = {add_grid.x + add_grid.width + add_gap, add_text.y, add_button_width, 38.0f};
-        if (ui::draw_button(add_text, "+ Txt", 12).clicked) {
-            add_text_layer();
-        }
-        if (ui::draw_button(add_rect, "+ Rect", 12).clicked) {
-            add_rect_layer();
-        }
-        if (ui::draw_button(add_image, "+ Img", 12).clicked) {
-            add_image_layer();
-        }
-        if (ui::draw_button(add_grid, "+ Grid", 12).clicked) {
-            add_beat_grid_layer();
-        }
-        if (ui::draw_button(add_wave, "+ Wave", 12).clicked) {
-            add_waveform_layer();
-        }
-        const float preset_button_width = (layers_panel.width - 36.0f - add_gap * 2.0f) / 3.0f;
-        Rectangle preset_flash = {layers_panel.x + 18.0f, layers_panel.y + 100.0f, preset_button_width, 34.0f};
-        Rectangle preset_lyric = {preset_flash.x + preset_flash.width + add_gap, preset_flash.y,
-                                  preset_button_width, preset_flash.height};
-        Rectangle preset_bass = {preset_lyric.x + preset_lyric.width + add_gap, preset_flash.y,
-                                 preset_button_width, preset_flash.height};
-        if (ui::draw_button(preset_flash, "Flash", 11).clicked) {
-            apply_builtin_preset("chorusFlash");
-        }
-        if (ui::draw_button(preset_lyric, "Lyric", 11).clicked) {
-            apply_builtin_preset("lyricPop");
-        }
-        if (ui::draw_button(preset_bass, "Bass", 11).clicked) {
-            apply_builtin_preset("bassPulse");
-        }
-        Rectangle add_spectrum = {preset_bass.x - preset_button_width - add_gap, preset_bass.y + 40.0f,
-                                  preset_button_width, 30.0f};
-        if (ui::draw_button(add_spectrum, "+ Spec", 10).clicked) {
-            add_spectrum_layer();
-        }
-        Rectangle layer_view = {layers_panel.x + 14.0f, layers_panel.y + 178.0f,
-                                layers_panel.width - 28.0f, layers_panel.height - 192.0f};
-        {
-            ui::scoped_clip_rect clip(layer_view);
-            float y = layer_view.y;
-            for (const mv::composition::layer& layer : composition_.layers) {
-                const std::size_t layer_index = layer_index_by_id(composition_, layer.id);
-                const Rectangle row = {layer_view.x, y, layer_view.width, 54.0f};
-                const bool selected = layer.id == selected_layer_id_;
-                const auto state = ui::draw_selectable_row(row, selected, 1.5f);
-                if (state.clicked) {
-                    selected_layer_id_ = layer.id;
-                    sync_inspector_inputs(layer);
-                }
-                const float reorder_button_width = selected ? 34.0f : 0.0f;
-                const float reorder_gap = selected ? 6.0f : 0.0f;
-                const float text_width = row.width - 24.0f - reorder_button_width * 2.0f - reorder_gap * 2.0f;
-                ui::draw_text_in_rect(layer.name.c_str(), 14,
-                                      {row.x + 12.0f, row.y + 6.0f, text_width, 22.0f},
-                                      g_theme->text, ui::text_align::left);
-                const std::string meta = layer_type_label(layer) + "   z " + std::to_string(layer.z);
-                ui::draw_text_in_rect(meta.c_str(), 11,
-                                      {row.x + 12.0f, row.y + 28.0f, text_width, 20.0f},
-                                      g_theme->text_muted, ui::text_align::left);
-                if (selected) {
-                    const Rectangle up_btn = {row.x + row.width - 78.0f, row.y + 10.0f, 34.0f, 34.0f};
-                    const Rectangle down_btn = {up_btn.x + up_btn.width + 6.0f, up_btn.y, 34.0f, 34.0f};
-                    const bool can_move_up = layer_index != static_cast<std::size_t>(-1) &&
-                                             layer_index + 1 < composition_.layers.size();
-                    const bool can_move_down = layer_index != static_cast<std::size_t>(-1) && layer_index > 0;
-                    if (ui::draw_button_colored(up_btn, "Up", 10,
-                                                can_move_up ? g_theme->row : with_alpha(g_theme->row, 110),
-                                                g_theme->row_hover, g_theme->text, 1.5f).clicked &&
-                        can_move_up) {
-                        move_selected_layer(1);
-                    }
-                    if (ui::draw_button_colored(down_btn, "Dn", 10,
-                                                can_move_down ? g_theme->row : with_alpha(g_theme->row, 110),
-                                                g_theme->row_hover, g_theme->text, 1.5f).clicked &&
-                        can_move_down) {
-                        move_selected_layer(-1);
-                    }
-                }
-                y += 62.0f;
-            }
+            context_menu_open_ = false;
+            context_menu_target_ = context_menu_target::none;
         }
     }
 
+    ui::draw_panel(layers_panel);
+    draw_section_title(layers_panel, "Hierarchy", "Right-click to create");
+    const Rectangle layer_view = {layers_panel.x + 10.0f, layers_panel.y + 54.0f,
+                                  layers_panel.width - 32.0f, layers_panel.height - 64.0f};
+    const Rectangle hierarchy_scrollbar = {layer_view.x + layer_view.width + 8.0f,
+                                           layer_view.y, 8.0f, layer_view.height};
+    const float hierarchy_content_height =
+        static_cast<float>(composition_.layers.size()) * (kHierarchyRowHeight + 6.0f);
+    const float hierarchy_max_scroll = std::max(0.0f, hierarchy_content_height - layer_view.height);
+    hierarchy_scroll_offset_ = std::clamp(hierarchy_scroll_offset_, 0.0f, hierarchy_max_scroll);
+    if (CheckCollisionPointRec(mouse, layer_view) && wheel != 0.0f && !shift_down && !ctrl_down) {
+        hierarchy_scroll_offset_ = std::clamp(hierarchy_scroll_offset_ - wheel * kTimelineWheelStep,
+                                              0.0f, hierarchy_max_scroll);
+    }
+    const ui::scrollbar_interaction hierarchy_scrollbar_result =
+        ui::update_vertical_scrollbar(hierarchy_scrollbar, hierarchy_content_height, hierarchy_scroll_offset_,
+                                      hierarchy_scrollbar_dragging_, hierarchy_scrollbar_drag_offset_, 30.0f);
+    hierarchy_scroll_offset_ = hierarchy_scrollbar_result.scroll_offset;
+    hierarchy_scrollbar_dragging_ = hierarchy_scrollbar_result.dragging;
+    {
+        ui::scoped_clip_rect clip(layer_view);
+        float y = layer_view.y - hierarchy_scroll_offset_;
+        for (const mv::composition::layer& layer : composition_.layers) {
+            const std::size_t layer_index = layer_index_by_id(composition_, layer.id);
+            const Rectangle row = {layer_view.x, y, layer_view.width, kHierarchyRowHeight};
+            const bool selected = layer.id == selected_layer_id_;
+            const auto state = ui::draw_selectable_row(row, selected, 1.5f);
+            if (state.clicked) {
+                selected_layer_id_ = layer.id;
+                sync_inspector_inputs(layer);
+            }
+            const float reorder_button_width = selected ? 28.0f : 0.0f;
+            const float reorder_gap = selected ? 5.0f : 0.0f;
+            const float text_width = row.width - 20.0f - reorder_button_width * 2.0f - reorder_gap * 2.0f;
+            ui::draw_text_in_rect(layer.name.c_str(), 12,
+                                  {row.x + 10.0f, row.y + 2.0f, text_width, 17.0f},
+                                  g_theme->text, ui::text_align::left);
+            const std::string meta = layer_type_label(layer) + "   z " + std::to_string(layer.z);
+            ui::draw_text_in_rect(meta.c_str(), 10,
+                                  {row.x + 10.0f, row.y + 18.0f, text_width, 15.0f},
+                                  g_theme->text_muted, ui::text_align::left);
+            if (selected) {
+                const Rectangle up_btn = {row.x + row.width - 62.0f, row.y + 5.0f, 26.0f, 24.0f};
+                const Rectangle down_btn = {up_btn.x + up_btn.width + 5.0f, up_btn.y, 26.0f, 24.0f};
+                const bool can_move_up = layer_index != static_cast<std::size_t>(-1) &&
+                                         layer_index + 1 < composition_.layers.size();
+                const bool can_move_down = layer_index != static_cast<std::size_t>(-1) && layer_index > 0;
+                if (ui::draw_button_colored(up_btn, "Up", 9,
+                                            can_move_up ? g_theme->row : with_alpha(g_theme->row, 110),
+                                            g_theme->row_hover, g_theme->text, 1.5f).clicked &&
+                    can_move_up) {
+                    move_selected_layer(1);
+                }
+                if (ui::draw_button_colored(down_btn, "Dn", 9,
+                                            can_move_down ? g_theme->row : with_alpha(g_theme->row, 110),
+                                            g_theme->row_hover, g_theme->text, 1.5f).clicked &&
+                    can_move_down) {
+                    move_selected_layer(-1);
+                }
+            }
+            y += kHierarchyRowHeight + 6.0f;
+        }
+    }
+    ui::draw_scrollbar(hierarchy_scrollbar, hierarchy_content_height, hierarchy_scroll_offset_,
+                       with_alpha(g_theme->row, 120), g_theme->slider_fill, 30.0f);
+
     ui::draw_panel(preview_panel);
-    draw_section_title(preview_panel, "Preview", "Composition at the current song time");
+    draw_section_title(preview_panel, "Composition", "Active camera preview");
     const Rectangle preview_outer = {preview_panel.x + 18.0f, preview_panel.y + 58.0f,
                                      preview_panel.width - 36.0f, preview_panel.height - 76.0f};
     const float canvas_aspect = static_cast<float>(std::max(1, composition_.canvas_data.width)) /
@@ -1011,19 +1231,120 @@ void mv_editor_scene::draw() {
         });
         for (const auto* layer : draw_layers) {
             const Texture2D* texture = nullptr;
-            if (layer->source_data.type == "image") {
-                if (const mv::composition::asset_ref* asset = find_asset(layer->source_data.asset_id);
+            const mv::composition::component* renderer = renderer_or_null(*layer);
+            if (renderer != nullptr && renderer->type == "image") {
+                if (const mv::composition::asset_ref* asset = find_asset(renderer->asset_id);
                     asset != nullptr) {
                     texture = texture_for_asset(*asset);
                 }
             }
             mv::composition::layer evaluated_layer = *layer;
-            evaluated_layer.transform_data = mv::composition::evaluate_transform(*layer, playhead_ms_);
+            apply_evaluated_transform(evaluated_layer, mv::composition::evaluate_transform(*layer, playhead_ms_));
             draw_preview_layer(preview, composition_, evaluated_layer, layer->id == selected_layer_id_,
                                playhead_ms_,
                                texture,
                                has_waveform_samples ? &waveform_samples : nullptr,
                                has_spectrum ? &spectrum : nullptr);
+        }
+
+        auto texture_for_layer = [&](const mv::composition::layer& layer) -> const Texture2D* {
+            const mv::composition::component* renderer = renderer_or_null(layer);
+            if (renderer == nullptr || renderer->type != "image") {
+                return nullptr;
+            }
+            const mv::composition::asset_ref* asset = find_asset(renderer->asset_id);
+            return asset == nullptr ? nullptr : texture_for_asset(*asset);
+        };
+        auto evaluated_bounds_for_layer = [&](const mv::composition::layer& layer) {
+            mv::composition::layer evaluated_layer = layer;
+            apply_evaluated_transform(evaluated_layer, mv::composition::evaluate_transform(layer, playhead_ms_));
+            return layer_preview_bounds(preview, composition_, evaluated_layer, texture_for_layer(layer));
+        };
+
+        if (preview_drag_mode_ != mv_preview_drag_mode::none) {
+            if (mv::composition::layer* layer = selected_layer(); layer != nullptr && !layer->locked) {
+                if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                    const Vector2 delta = {
+                        mouse.x - preview_drag_origin_mouse_.x,
+                        mouse.y - preview_drag_origin_mouse_.y
+                    };
+                    Rectangle next_bounds = preview_drag_origin_rect_;
+                    if (preview_drag_mode_ == mv_preview_drag_mode::move) {
+                        next_bounds.x += delta.x;
+                        next_bounds.y += delta.y;
+                    } else {
+                        next_bounds = resized_preview_rect(preview_drag_origin_rect_, delta, preview_drag_mode_);
+                    }
+                    mv::composition::transform next_transform = preview_drag_origin_transform_;
+                    apply_preview_rect_to_transform(preview, composition_, *layer, texture_for_layer(*layer),
+                                                    next_bounds, next_transform);
+                    if (mv::composition::component* transform = ensure_transform(*layer)) {
+                        mv::composition::apply_transform_to_component(*transform, next_transform);
+                    }
+                    dirty_ = true;
+                }
+                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                    commit_history("Edit Transform");
+                    validate_composition();
+                    preview_drag_mode_ = mv_preview_drag_mode::none;
+                    preview_drag_layer_id_.clear();
+                }
+            } else {
+                preview_drag_mode_ = mv_preview_drag_mode::none;
+                preview_drag_layer_id_.clear();
+            }
+        }
+
+        if (CheckCollisionPointRec(mouse, preview) &&
+            IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+            preview_drag_mode_ == mv_preview_drag_mode::none &&
+            !context_menu_open_) {
+            bool started_drag = false;
+            if (mv::composition::layer* selected = selected_layer(); selected != nullptr) {
+                const Rectangle selected_bounds = evaluated_bounds_for_layer(*selected);
+                const std::array<Rectangle, 8> handles = preview_transform_handles(selected_bounds);
+                for (int i = 0; i < static_cast<int>(handles.size()); ++i) {
+                    if (preview_transformable(*selected) &&
+                        !selected->locked &&
+                        CheckCollisionPointRec(mouse, handles[static_cast<std::size_t>(i)])) {
+                        preview_drag_mode_ = preview_drag_mode_for_handle(i);
+                        preview_drag_layer_id_ = selected->id;
+                        preview_drag_origin_mouse_ = mouse;
+                        preview_drag_origin_rect_ = selected_bounds;
+                        preview_drag_origin_transform_ = transform_or_default(*selected);
+                        set_preview_playing(false);
+                        started_drag = true;
+                        break;
+                    }
+                }
+            }
+            if (!started_drag) {
+                for (auto it = draw_layers.rbegin(); it != draw_layers.rend(); ++it) {
+                    const mv::composition::layer& candidate = **it;
+                    if (!preview_transformable(candidate)) {
+                        continue;
+                    }
+                    const Rectangle bounds = evaluated_bounds_for_layer(candidate);
+                    if (CheckCollisionPointRec(mouse, bounds)) {
+                        selected_layer_id_ = candidate.id;
+                        sync_inspector_inputs(candidate);
+                        if (!candidate.locked) {
+                            preview_drag_mode_ = mv_preview_drag_mode::move;
+                            preview_drag_layer_id_ = candidate.id;
+                            preview_drag_origin_mouse_ = mouse;
+                            preview_drag_origin_rect_ = bounds;
+                            preview_drag_origin_transform_ = transform_or_default(candidate);
+                            set_preview_playing(false);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (const mv::composition::layer* selected = selected_layer();
+            selected != nullptr && preview_transformable(*selected)) {
+            draw_preview_transform_overlay(evaluated_bounds_for_layer(*selected), selected->locked);
         }
     }
     ui::draw_rect_lines(preview, 1.5f, g_theme->border_active);
@@ -1039,92 +1360,166 @@ void mv_editor_scene::draw() {
                                   timeline_panel.width - 36.0f, timeline_panel.height - 78.0f};
     ui::draw_rect_f(track_area, g_theme->section);
     ui::draw_rect_lines(track_area, 1.0f, g_theme->border_light);
-    for (int i = 0; i <= 8; ++i) {
-        const float x = track_area.x + track_area.width * (static_cast<float>(i) / 8.0f);
-        ui::draw_rect_f({x, track_area.y, 1.0f, track_area.height}, g_theme->editor_grid_minor);
+    const float layer_gutter_width = 260.0f;
+    const Rectangle layer_name_area = {track_area.x, track_area.y, layer_gutter_width, track_area.height};
+    const Rectangle lane_area = {track_area.x + layer_gutter_width, track_area.y,
+                                 track_area.width - layer_gutter_width, track_area.height};
+    ui::draw_rect_f(layer_name_area, with_alpha(g_theme->row, 145));
+    ui::draw_rect_lines(layer_name_area, 1.0f, g_theme->border_light);
+    const double safe_duration = std::max(1.0, duration);
+    const bool timeline_hovered = CheckCollisionPointRec(mouse, track_area);
+    if (timeline_hovered && wheel != 0.0f) {
+        if (ctrl_down) {
+            const double mouse_ratio = std::clamp((mouse.x - lane_area.x) / std::max(1.0f, lane_area.width),
+                                                  0.0f, 1.0f);
+            const double previous_visible_ms = safe_duration / std::max(1.0f, timeline_zoom_);
+            const double anchor_ms = timeline_horizontal_scroll_ms_ + previous_visible_ms * mouse_ratio;
+            timeline_zoom_ = std::clamp(timeline_zoom_ * (wheel > 0.0f ? 1.18f : 0.85f), 1.0f, 16.0f);
+            const double next_visible_ms = std::max(250.0, safe_duration / std::max(1.0f, timeline_zoom_));
+            timeline_horizontal_scroll_ms_ = anchor_ms - next_visible_ms * mouse_ratio;
+        } else if (shift_down) {
+            timeline_horizontal_scroll_ms_ -= static_cast<double>(wheel) * kTimelineHorizontalWheelMs / timeline_zoom_;
+        } else {
+            timeline_vertical_scroll_offset_ -= wheel * kTimelineWheelStep;
+        }
+    }
+    const double visible_duration_ms = std::max(250.0, safe_duration / std::max(1.0f, timeline_zoom_));
+    timeline_horizontal_scroll_ms_ = std::clamp(timeline_horizontal_scroll_ms_, 0.0,
+                                                std::max(0.0, safe_duration - visible_duration_ms));
+    const float timeline_content_height =
+        static_cast<float>(composition_.layers.size()) * kTimelineRowHeight + 20.0f;
+    timeline_vertical_scroll_offset_ = std::clamp(timeline_vertical_scroll_offset_,
+                                                  0.0f,
+                                                  std::max(0.0f, timeline_content_height - lane_area.height));
+    {
+        ui::scoped_clip_rect lane_grid_clip(lane_area);
+        for (int i = 0; i <= 8; ++i) {
+            const float x = lane_area.x + lane_area.width * (static_cast<float>(i) / 8.0f);
+            ui::draw_rect_f({x, lane_area.y, 1.0f, lane_area.height}, g_theme->editor_grid_minor);
+            const std::string tick = ms_label(timeline_horizontal_scroll_ms_ +
+                                              visible_duration_ms * static_cast<double>(i) / 8.0);
+            ui::draw_text_in_rect(tick.c_str(), 10,
+                                  {x + 4.0f, lane_area.y + 2.0f, 76.0f, 16.0f},
+                                  g_theme->text_muted, ui::text_align::left);
+        }
     }
     const Vector2 timeline_mouse = virtual_screen::get_virtual_mouse();
-    const double safe_duration = std::max(1.0, duration);
-    const double ms_per_pixel = safe_duration / std::max(1.0f, track_area.width);
+    const double ms_per_pixel = visible_duration_ms / std::max(1.0f, lane_area.width);
     bool timeline_span_hit = false;
     bool timeline_dragging = timeline_drag_mode_ != timeline_drag_mode::none &&
                              IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-    float row_y = track_area.y + 10.0f;
-    for (const auto& layer : composition_.layers) {
-        const float start_x = track_area.x + static_cast<float>(layer.start_ms / safe_duration) * track_area.width;
-        const double end_ms = layer.duration_ms <= 0.0 ? duration : std::min(duration, layer.start_ms + layer.duration_ms);
-        const float end_x = track_area.x + static_cast<float>(end_ms / safe_duration) * track_area.width;
-        const Rectangle span = {start_x, row_y, std::max(3.0f, end_x - start_x), 16.0f};
+    bool timeline_delete_requested = false;
+    std::string timeline_delete_layer_id;
+    float row_y = track_area.y + 10.0f - timeline_vertical_scroll_offset_;
+    for (auto& layer : composition_.layers) {
+        const Rectangle layer_row = {layer_name_area.x, row_y - 4.0f, layer_name_area.width, 24.0f};
         const bool selected = layer.id == selected_layer_id_;
+        {
+            ui::scoped_clip_rect layer_name_clip(layer_name_area);
+            ui::draw_rect_f(layer_row, selected ? g_theme->row_selected : with_alpha(g_theme->section, 145));
+            const Rectangle visible_btn = {layer_row.x + 6.0f, layer_row.y + 3.0f, 22.0f, 18.0f};
+            const Rectangle lock_btn = {visible_btn.x + visible_btn.width + 4.0f, visible_btn.y, 22.0f, 18.0f};
+            const Rectangle delete_btn = {layer_row.x + layer_row.width - 28.0f, visible_btn.y, 22.0f, 18.0f};
+            if (draw_timeline_icon_button(visible_btn, raythm_icons::draw_eye,
+                                          layer.visible, g_theme->text, 3.0f)) {
+                selected_layer_id_ = layer.id;
+                layer.visible = !layer.visible;
+                validate_composition();
+                commit_history("Toggle Visibility");
+            }
+            if (draw_timeline_icon_button(lock_btn,
+                                          layer.locked ? raythm_icons::draw_lock : raythm_icons::draw_unlock,
+                                          layer.locked, g_theme->text, 4.0f)) {
+                selected_layer_id_ = layer.id;
+                layer.locked = !layer.locked;
+                validate_composition();
+                commit_history("Toggle Lock");
+            }
+            if (draw_timeline_icon_button(delete_btn, raythm_icons::draw_trash_2,
+                                          false, g_theme->error, 4.0f)) {
+                timeline_delete_requested = true;
+                timeline_delete_layer_id = layer.id;
+            }
+            ui::draw_text_in_rect(layer.name.c_str(), 10,
+                                  {lock_btn.x + lock_btn.width + 8.0f, layer_row.y,
+                                   delete_btn.x - lock_btn.x - lock_btn.width - 12.0f, layer_row.height},
+                                  selected ? g_theme->text : g_theme->text_muted, ui::text_align::left);
+            if (ui::is_hovered(layer_row) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                selected_layer_id_ = layer.id;
+                sync_inspector_inputs(layer);
+            }
+        }
+        const float start_x = lane_area.x +
+            static_cast<float>((layer.start_ms - timeline_horizontal_scroll_ms_) / visible_duration_ms) * lane_area.width;
+        const double end_ms = layer.duration_ms <= 0.0 ? duration : std::min(duration, layer.start_ms + layer.duration_ms);
+        const float end_x = lane_area.x +
+            static_cast<float>((end_ms - timeline_horizontal_scroll_ms_) / visible_duration_ms) * lane_area.width;
+        const Rectangle span = {start_x, row_y, std::max(3.0f, end_x - start_x), 16.0f};
         const bool locked = layer.locked;
         const Color span_color = locked
             ? with_alpha(g_theme->slider_fill, 95)
             : selected ? g_theme->accent : g_theme->slider_fill;
-        ui::draw_rect_f(span, span_color);
-        const Rectangle left_handle = {span.x - 4.0f, span.y - 3.0f, 8.0f, span.height + 6.0f};
-        const Rectangle right_handle = {span.x + span.width - 4.0f, span.y - 3.0f, 8.0f, span.height + 6.0f};
-        if (selected && !locked) {
-            ui::draw_rect_f(left_handle, with_alpha(g_theme->border_active, 190));
-            ui::draw_rect_f(right_handle, with_alpha(g_theme->border_active, 190));
-        }
-        if (ui::is_hovered(span) || ui::is_hovered(left_handle) || ui::is_hovered(right_handle)) {
-            timeline_span_hit = true;
-        }
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !locked) {
-            timeline_drag_mode mode = timeline_drag_mode::none;
-            if (ui::is_hovered(left_handle)) {
-                mode = timeline_drag_mode::trim_start;
-            } else if (ui::is_hovered(right_handle)) {
-                mode = timeline_drag_mode::trim_end;
-            } else if (ui::is_hovered(span)) {
-                mode = timeline_drag_mode::move;
+        {
+            ui::scoped_clip_rect lane_clip(lane_area);
+            ui::draw_rect_f(span, span_color);
+            const Rectangle left_handle = {span.x - 4.0f, span.y - 3.0f, 8.0f, span.height + 6.0f};
+            const Rectangle right_handle = {span.x + span.width - 4.0f, span.y - 3.0f, 8.0f, span.height + 6.0f};
+            if (selected && !locked) {
+                ui::draw_rect_f(left_handle, with_alpha(g_theme->border_active, 190));
+                ui::draw_rect_f(right_handle, with_alpha(g_theme->border_active, 190));
             }
-            if (mode != timeline_drag_mode::none) {
-                selected_layer_id_ = layer.id;
-                timeline_drag_mode_ = mode;
-                timeline_drag_layer_id_ = layer.id;
-                timeline_drag_origin_mouse_x_ = timeline_mouse.x;
-                timeline_drag_origin_start_ms_ = layer.start_ms;
-                timeline_drag_origin_duration_ms_ = layer.duration_ms <= 0.0
-                    ? std::max(250.0, end_ms - layer.start_ms)
-                    : layer.duration_ms;
-                set_preview_playing(false);
-                timeline_dragging = true;
+            if (ui::is_hovered(span) || ui::is_hovered(left_handle) || ui::is_hovered(right_handle)) {
+                timeline_span_hit = true;
             }
-        }
-        for (const mv::composition::keyframe_track& track : layer.keyframes) {
-            if (!mv::composition::is_transform_keyframe_target(track.target)) {
-                continue;
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !locked) {
+                timeline_drag_mode mode = timeline_drag_mode::none;
+                if (ui::is_hovered(left_handle)) {
+                    mode = timeline_drag_mode::trim_start;
+                } else if (ui::is_hovered(right_handle)) {
+                    mode = timeline_drag_mode::trim_end;
+                } else if (ui::is_hovered(span)) {
+                    mode = timeline_drag_mode::move;
+                }
+                if (mode != timeline_drag_mode::none) {
+                    selected_layer_id_ = layer.id;
+                    timeline_drag_mode_ = mode;
+                    timeline_drag_layer_id_ = layer.id;
+                    timeline_drag_origin_mouse_x_ = timeline_mouse.x;
+                    timeline_drag_origin_start_ms_ = layer.start_ms;
+                    timeline_drag_origin_duration_ms_ = layer.duration_ms <= 0.0
+                        ? std::max(250.0, end_ms - layer.start_ms)
+                        : layer.duration_ms;
+                    set_preview_playing(false);
+                    timeline_dragging = true;
+                }
             }
-            for (const mv::composition::keyframe& point : track.points) {
-                if (point.time_ms < 0.0 || point.time_ms > duration) {
+            for (const mv::composition::keyframe_track& track : layer.keyframes) {
+                if (!mv::composition::is_transform_keyframe_target(track.target)) {
                     continue;
                 }
-                const float marker_x = track_area.x +
-                    static_cast<float>(point.time_ms / safe_duration) * track_area.width;
-                const Rectangle marker = {marker_x - 2.5f, row_y - 3.0f, 5.0f, 22.0f};
-                const Color marker_color = layer.id == selected_layer_id_
-                    ? g_theme->border_active
-                    : with_alpha(g_theme->text_muted, 170);
-                ui::draw_rect_f(marker, marker_color);
+                for (const mv::composition::keyframe& point : track.points) {
+                    if (point.time_ms < 0.0 || point.time_ms > duration) {
+                        continue;
+                    }
+                    const float marker_x = lane_area.x +
+                        static_cast<float>((point.time_ms - timeline_horizontal_scroll_ms_) / visible_duration_ms) *
+                        lane_area.width;
+                    const Rectangle marker = {marker_x - 2.5f, row_y - 3.0f, 5.0f, 22.0f};
+                    const Color marker_color = layer.id == selected_layer_id_
+                        ? g_theme->border_active
+                        : with_alpha(g_theme->text_muted, 170);
+                    ui::draw_rect_f(marker, marker_color);
+                }
             }
         }
-        for (const mv::composition::event_trigger& trigger : layer.event_triggers) {
-            if (trigger.time_ms < 0.0 || trigger.time_ms > duration) {
-                continue;
-            }
-            const float marker_x = track_area.x +
-                static_cast<float>(trigger.time_ms / safe_duration) * track_area.width;
-            const Rectangle marker = {marker_x - 1.5f, row_y - 5.0f, 3.0f, 26.0f};
-            const Color marker_color = layer.id == selected_layer_id_
-                ? g_theme->success
-                : with_alpha(g_theme->success, 135);
-            ui::draw_rect_f(marker, marker_color);
-        }
-        row_y += 24.0f;
-        if (row_y > track_area.y + track_area.height - 12.0f) {
+        row_y += kTimelineRowHeight;
+        if (row_y > lane_area.y + lane_area.height - 12.0f) {
             break;
         }
+    }
+    if (timeline_delete_requested) {
+        selected_layer_id_ = timeline_delete_layer_id;
+        delete_selected_layer();
     }
     if (timeline_dragging) {
         if (mv::composition::layer* layer = selected_layer()) {
@@ -1160,321 +1555,314 @@ void mv_editor_scene::draw() {
     }
     if (!timeline_dragging &&
         IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
-        ui::is_hovered(track_area) &&
+        ui::is_hovered(lane_area) &&
         !timeline_span_hit) {
-        playhead_ms_ = std::clamp((timeline_mouse.x - track_area.x) / std::max(1.0f, track_area.width),
-                                  0.0f, 1.0f) * duration;
+        playhead_ms_ = std::clamp(
+            timeline_horizontal_scroll_ms_ +
+                std::clamp((timeline_mouse.x - lane_area.x) / std::max(1.0f, lane_area.width), 0.0f, 1.0f) *
+                    visible_duration_ms,
+            0.0, duration);
         set_preview_playing(false);
         seek_preview_audio_to_playhead();
     }
-    const float playhead_x = track_area.x + static_cast<float>(playhead_ms_ / std::max(1.0, duration)) * track_area.width;
-    ui::draw_rect_f({playhead_x - 1.0f, track_area.y, 2.0f, track_area.height}, g_theme->border_active);
+    const float playhead_x = lane_area.x +
+        static_cast<float>((playhead_ms_ - timeline_horizontal_scroll_ms_) / std::max(1.0, visible_duration_ms)) *
+            lane_area.width;
+    {
+        ui::scoped_clip_rect lane_playhead_clip(lane_area);
+        ui::draw_rect_f({playhead_x - 1.0f, lane_area.y, 2.0f, lane_area.height}, g_theme->border_active);
+    }
 
     ui::draw_panel(inspector_panel);
-    draw_section_title(inspector_panel, "Inspector", "Selected layer properties");
+    draw_section_title(inspector_panel, "Inspector", "Selected object");
     mv::composition::layer* layer = selected_layer();
     if (layer == nullptr) {
-        ui::draw_text_in_rect("No layer selected", 16,
+        ui::draw_text_in_rect("No object selected", 16,
                               {inspector_panel.x + 18.0f, inspector_panel.y + 70.0f,
                                inspector_panel.width - 36.0f, 36.0f},
                               g_theme->text_muted, ui::text_align::left);
     } else {
         sync_inspector_inputs(*layer);
-        Rectangle body = {inspector_panel.x + 18.0f, inspector_panel.y + 62.0f,
-                          inspector_panel.width - 36.0f, inspector_panel.height - 80.0f};
+        const Rectangle inspector_view = {inspector_panel.x + 18.0f, inspector_panel.y + 58.0f,
+                                          inspector_panel.width - 50.0f, inspector_panel.height - 76.0f};
+        const Rectangle inspector_scrollbar = {inspector_view.x + inspector_view.width + 8.0f,
+                                               inspector_view.y, 8.0f, inspector_view.height};
+        mv::composition::component* transform = ensure_transform(*layer);
+        const auto color_picker_for = [&](const mv::composition::component& component)
+            -> const ui::inspector::color_picker_state* {
+            const auto picker_it = component_color_pickers_.find(component.id);
+            return picker_it == component_color_pickers_.end() ? nullptr : &picker_it->second;
+        };
+        float inspector_content_height = 58.0f + 38.0f + 10.0f + 28.0f + 18.0f;
+        for (const mv::composition::component& component : layer->components) {
+            inspector_content_height += component_inspector_card_height(component, color_picker_for(component)) + 10.0f;
+        }
+        const float inspector_max_scroll = std::max(0.0f, inspector_content_height - inspector_view.height);
+        inspector_scroll_offset_ = std::clamp(inspector_scroll_offset_, 0.0f, inspector_max_scroll);
+        if (CheckCollisionPointRec(mouse, inspector_view) && wheel != 0.0f && !shift_down && !ctrl_down) {
+            inspector_scroll_offset_ = std::clamp(
+                inspector_scroll_offset_ - wheel * kInspectorWheelStep,
+                0.0f, inspector_max_scroll);
+        }
+        const ui::scrollbar_interaction inspector_scrollbar_result =
+            ui::update_vertical_scrollbar(inspector_scrollbar,
+                                          inspector_content_height,
+                                          inspector_scroll_offset_,
+                                          inspector_scrollbar_dragging_,
+                                          inspector_scrollbar_drag_offset_,
+                                          30.0f);
+        inspector_scroll_offset_ = inspector_scrollbar_result.scroll_offset;
+        inspector_scrollbar_dragging_ = inspector_scrollbar_result.dragging;
+        Rectangle body = {inspector_view.x, inspector_view.y - inspector_scroll_offset_,
+                          inspector_view.width, inspector_content_height};
+        {
+            ui::scoped_clip_rect inspector_clip(inspector_view);
         const auto layer_name_result =
-            ui::draw_text_input({body.x, body.y, body.width, 40.0f}, layer_name_input_,
-                                "Name", "Layer name", nullptr, ui::draw_layer::base,
-                                14, 96, wide_text_filter, 78.0f);
+            ui::draw_text_input({body.x, body.y, body.width, 30.0f}, layer_name_input_,
+                                "Name", "Object name", nullptr, ui::draw_layer::base,
+                                12, 96, wide_text_filter, 72.0f);
         if (layer_name_result.changed) {
-            layer->name = layer_name_input_.value.empty() ? "Layer" : layer_name_input_.value;
+            layer->name = layer_name_input_.value.empty() ? "Object" : layer_name_input_.value;
             dirty_ = true;
             inspector_edit_pending_ = true;
         }
         if ((layer_name_result.deactivated || layer_name_result.submitted) && inspector_edit_pending_) {
-            commit_history("Edit Layer Name");
+            commit_history("Edit Object Name");
         }
         const std::string type = layer_type_label(*layer);
-        ui::draw_text_in_rect(type.c_str(), 12, {body.x, body.y + 42.0f, body.width, 22.0f},
+        ui::draw_text_in_rect(type.c_str(), 11, {body.x, body.y + 31.0f, body.width, 18.0f},
                               g_theme->text_muted, ui::text_align::left);
-        Rectangle delete_btn = {body.x, body.y + 72.0f, 132.0f, 36.0f};
-        if (ui::draw_button_colored(delete_btn, "Delete", 13, g_theme->row, g_theme->row_hover,
-                                    g_theme->error, 1.5f).clicked) {
-            delete_selected_layer();
-            layer = selected_layer();
-        }
         if (layer != nullptr) {
             bool inspector_changed = false;
-            Rectangle visible_btn = {body.x + 144.0f, body.y + 72.0f, 96.0f, 36.0f};
-            Rectangle lock_btn = {visible_btn.x + visible_btn.width + 10.0f, visible_btn.y, 96.0f, 36.0f};
-            Rectangle key_btn = {body.x, body.y + 114.0f, (body.width - 10.0f) * 0.5f, 34.0f};
-            Rectangle clear_key_btn = {key_btn.x + key_btn.width + 10.0f, key_btn.y, key_btn.width, key_btn.height};
-            if (ui::draw_button_colored(visible_btn, layer->visible ? "Visible" : "Hidden", 13,
-                                        layer->visible ? g_theme->row_selected : g_theme->row,
-                                        g_theme->row_hover, g_theme->text, 1.5f).clicked) {
-                layer->visible = !layer->visible;
-                validate_composition();
-                commit_history("Toggle Visibility");
-                inspector_changed = false;
+            float detail_y = body.y + 58.0f;
+            const float transform_card_h = component_inspector_card_height(*transform);
+            const ui::inspector::component_card_result transform_card =
+                ui::inspector::draw_component_card({body.x, detail_y, body.width, transform_card_h},
+                                                   "Transform",
+                                                   false);
+            ui::inspector::field_cursor field_cursor =
+                ui::inspector::make_field_cursor(transform_card.body);
+            if (!transform_x_input_.active) {
+                transform_x_input_.value = format_float_input(transform->position_x, 0);
             }
-            if (ui::draw_button_colored(lock_btn, layer->locked ? "Locked" : "Unlocked", 13,
-                                        layer->locked ? g_theme->row_selected : g_theme->row,
-                                        g_theme->row_hover, g_theme->text, 1.5f).clicked) {
-                layer->locked = !layer->locked;
-                validate_composition();
-                commit_history("Toggle Lock");
-                inspector_changed = false;
+            if (!transform_y_input_.active) {
+                transform_y_input_.value = format_float_input(transform->position_y, 0);
             }
-            if (ui::draw_button(key_btn, "Set Key", 12, 1.5f).clicked) {
-                key_selected_transform();
-                layer = selected_layer();
-                inspector_changed = false;
+            if (!transform_scale_input_.active) {
+                transform_scale_input_.value = format_float_input(transform->scale_x, 2);
             }
-            const int keys_at_playhead = transform_keyframe_count_at_playhead();
-            const std::string clear_label = keys_at_playhead > 0
-                ? "Clear Key (" + std::to_string(keys_at_playhead) + ")"
-                : "Clear Key";
-            if (ui::draw_button_colored(clear_key_btn, clear_label.c_str(), 12,
-                                        keys_at_playhead > 0 ? g_theme->row : with_alpha(g_theme->row, 110),
-                                        g_theme->row_hover, g_theme->text, 1.5f).clicked &&
-                keys_at_playhead > 0) {
-                delete_transform_keyframes_at_playhead();
-                layer = selected_layer();
-                inspector_changed = false;
-            }
-
-            const auto value_row = [&](float y, const char* label, const std::string& value) {
-                ui::draw_rect_f({body.x, y, body.width, 34.0f}, g_theme->section);
-                ui::draw_rect_lines({body.x, y, body.width, 34.0f}, 1.0f, g_theme->border_light);
-                ui::draw_text_in_rect(label, 12, {body.x + 12.0f, y, 120.0f, 34.0f},
-                                      g_theme->text_muted, ui::text_align::left);
-                ui::draw_text_in_rect(value.c_str(), 12, {body.x + 134.0f, y, body.width - 146.0f, 34.0f},
-                                      g_theme->text, ui::text_align::right);
-            };
-            const auto slider_value = [&](float y, const char* label, const std::string& value,
-                                          float ratio) {
-                return ui::draw_slider_relative({body.x, y, body.width, 38.0f},
-                                                label, value.c_str(), ratio,
-                                                120.0f, 80.0f, 12, 19.0f, 92.0f, 12.0f);
-            };
-            const double duration = composition_duration_ms();
-            float changed = slider_value(body.y + 158.0f, "X",
-                                         std::to_string(static_cast<int>(std::round(layer->transform_data.position_x))),
-                                         layer->transform_data.position_x /
-                                             static_cast<float>(std::max(1, composition_.canvas_data.width)));
-            if (changed >= 0.0f) {
-                layer->transform_data.position_x =
-                    changed * static_cast<float>(std::max(1, composition_.canvas_data.width));
-                dirty_ = true;
-                inspector_changed = true;
-            }
-            changed = slider_value(body.y + 202.0f, "Y",
-                                   std::to_string(static_cast<int>(std::round(layer->transform_data.position_y))),
-                                   layer->transform_data.position_y /
-                                       static_cast<float>(std::max(1, composition_.canvas_data.height)));
-            if (changed >= 0.0f) {
-                layer->transform_data.position_y =
-                    changed * static_cast<float>(std::max(1, composition_.canvas_data.height));
-                dirty_ = true;
-                inspector_changed = true;
-            }
-            changed = slider_value(body.y + 246.0f, "Scale",
-                                   std::to_string(layer->transform_data.scale_x).substr(0, 4),
-                                   std::clamp((layer->transform_data.scale_x - 0.1f) / 2.9f, 0.0f, 1.0f));
-            if (changed >= 0.0f) {
-                const float scale = 0.1f + changed * 2.9f;
-                layer->transform_data.scale_x = scale;
-                layer->transform_data.scale_y = scale;
-                dirty_ = true;
-                inspector_changed = true;
-            }
-            changed = slider_value(body.y + 290.0f, "Opacity",
-                                   std::to_string(static_cast<int>(std::round(layer->transform_data.opacity * 100.0f))) + "%",
-                                   layer->transform_data.opacity);
-            if (changed >= 0.0f) {
-                layer->transform_data.opacity = changed;
-                dirty_ = true;
-                inspector_changed = true;
-            }
-            changed = slider_value(body.y + 334.0f, "Start", ms_label(layer->start_ms),
-                                   static_cast<float>(layer->start_ms / duration));
-            if (changed >= 0.0f) {
-                layer->start_ms = changed * duration;
-                playhead_ms_ = layer->start_ms;
-                dirty_ = true;
-                inspector_changed = true;
-            }
-            changed = slider_value(body.y + 378.0f, "Duration",
-                                   layer->duration_ms <= 0.0 ? "Full" : ms_label(layer->duration_ms),
-                                   static_cast<float>((layer->duration_ms <= 0.0 ? duration : layer->duration_ms) / duration));
-            if (changed >= 0.0f) {
-                layer->duration_ms = std::max(250.0, static_cast<double>(changed) * duration);
-                dirty_ = true;
-                inspector_changed = true;
-            }
-            const std::string keyframe_count = std::to_string(layer->keyframes.size()) + " track(s)";
-            value_row(body.y + 428.0f, "Keyframes", keyframe_count);
-            const std::string motion_count = std::to_string(layer->effects.size()) + " FX / " +
-                                             std::to_string(layer->event_triggers.size()) + " cue(s)";
-            value_row(body.y + 470.0f, "Motion", motion_count);
-            const float fx_gap = 8.0f;
-            const float fx_btn_width = (body.width - fx_gap * 2.0f) / 3.0f;
-            Rectangle cue_flash_btn = {body.x, body.y + 512.0f, fx_btn_width, 30.0f};
-            Rectangle cue_show_btn = {cue_flash_btn.x + fx_btn_width + fx_gap,
-                                      cue_flash_btn.y, fx_btn_width, cue_flash_btn.height};
-            Rectangle clear_cue_btn = {cue_show_btn.x + fx_btn_width + fx_gap,
-                                       cue_flash_btn.y, fx_btn_width, cue_flash_btn.height};
-            if (ui::draw_button(cue_flash_btn, "Cue Flash", 12, 1.5f).clicked) {
-                add_flash_event_trigger_at_playhead();
-                layer = selected_layer();
-                inspector_changed = false;
-            }
-            const bool text_layer = layer->source_data.type == "text";
-            if (ui::draw_button(cue_show_btn, text_layer ? "Cue Text" : "Cue Show", 12, 1.5f).clicked) {
-                if (text_layer) {
-                    add_text_event_trigger_at_playhead();
-                } else {
-                    add_show_event_trigger_at_playhead();
+            auto draw_transform_input = [&](float y,
+                                            const char* label,
+                                            ui::text_input_state& input,
+                                            float& target,
+                                            int decimals,
+                                            float* mirrored_target = nullptr) {
+                const auto result =
+                    ui::inspector::draw_number_row(field_cursor.body,
+                                                   y,
+                                                   input,
+                                                   label,
+                                                   "0",
+                                                   signed_number_filter);
+                if (result.changed) {
+                    if (const std::optional<float> parsed = parse_float_input(input.value)) {
+                        target = decimals <= 0 ? std::round(*parsed) : *parsed;
+                        if (mirrored_target != nullptr) {
+                            target = std::clamp(target, 0.05f, 8.0f);
+                            *mirrored_target = target;
+                        }
+                        dirty_ = true;
+                        inspector_changed = true;
+                        inspector_edit_pending_ = true;
+                    }
                 }
-                layer = selected_layer();
-                inspector_changed = false;
+                if ((result.deactivated || result.submitted) && !input.value.empty()) {
+                    if (const std::optional<float> parsed = parse_float_input(input.value)) {
+                        target = decimals <= 0 ? std::round(*parsed) : *parsed;
+                        if (mirrored_target != nullptr) {
+                            target = std::clamp(target, 0.05f, 8.0f);
+                            *mirrored_target = target;
+                        }
+                    }
+                    input.value = format_float_input(target, decimals);
+                    if (inspector_edit_pending_) {
+                        commit_history("Edit Transform");
+                    }
+                }
+            };
+            draw_transform_input(field_cursor.y, "X", transform_x_input_, transform->position_x, 0);
+            field_cursor.advance();
+            draw_transform_input(field_cursor.y, "Y", transform_y_input_, transform->position_y, 0);
+            field_cursor.advance();
+            draw_transform_input(field_cursor.y, "Scale", transform_scale_input_,
+                                 transform->scale_x, 2, &transform->scale_y);
+            field_cursor.advance();
+            float changed = ui::inspector::draw_slider_row(
+                field_cursor.body, field_cursor.y, "Opacity",
+                std::to_string(static_cast<int>(std::round(transform->opacity * 100.0f))) + "%",
+                transform->opacity);
+            if (changed >= 0.0f) {
+                transform->opacity = changed;
+                dirty_ = true;
+                inspector_changed = true;
             }
-            const int cues_at_playhead = event_trigger_count_at_playhead();
-            const std::string clear_cue_label = cues_at_playhead > 0
-                ? "Clear Cue"
-                : "No Cue";
-            if (ui::draw_button_colored(clear_cue_btn, clear_cue_label.c_str(), 12,
-                                        cues_at_playhead > 0 ? g_theme->row : with_alpha(g_theme->row, 110),
-                                        g_theme->row_hover, g_theme->text, 1.5f).clicked &&
-                cues_at_playhead > 0) {
-                clear_event_triggers_at_playhead();
-                layer = selected_layer();
-                inspector_changed = false;
-            }
-            Rectangle fade_btn = {body.x, body.y + 548.0f, fx_btn_width, 30.0f};
-            Rectangle pulse_btn = {fade_btn.x + fx_btn_width + fx_gap, fade_btn.y, fx_btn_width, fade_btn.height};
-            Rectangle flash_btn = {pulse_btn.x + fx_btn_width + fx_gap, fade_btn.y, fx_btn_width, fade_btn.height};
-            Rectangle shake_btn = {body.x, body.y + 584.0f, fx_btn_width, 30.0f};
-            Rectangle clear_fx_btn = {shake_btn.x + fx_btn_width + fx_gap, shake_btn.y, fx_btn_width * 2.0f + fx_gap,
-                                      shake_btn.height};
-            if (ui::draw_button(fade_btn, "Fade", 12, 1.5f).clicked) {
-                add_fade_effect_to_selected_layer();
-                layer = selected_layer();
-                inspector_changed = false;
-            }
-            if (ui::draw_button(pulse_btn, "Pulse", 12, 1.5f).clicked) {
-                add_pulse_effect_to_selected_layer();
-                layer = selected_layer();
-                inspector_changed = false;
-            }
-            if (ui::draw_button(flash_btn, "Flash", 12, 1.5f).clicked) {
-                add_flash_effect_to_selected_layer();
-                layer = selected_layer();
-                inspector_changed = false;
-            }
-            if (ui::draw_button(shake_btn, "Shake", 12, 1.5f).clicked) {
-                add_shake_effect_to_selected_layer();
-                layer = selected_layer();
-                inspector_changed = false;
-            }
-            if (ui::draw_button_colored(clear_fx_btn, "Clear FX", 12,
-                                        layer != nullptr && !layer->effects.empty() ? g_theme->row : with_alpha(g_theme->row, 110),
-                                        g_theme->row_hover, g_theme->text, 1.5f).clicked) {
-                clear_selected_layer_effects();
-                layer = selected_layer();
-                inspector_changed = false;
-            }
+            detail_y += transform_card_h + 10.0f;
             if (layer != nullptr) {
-                float detail_y = body.y + 626.0f;
-                auto find_effect = [&](const std::string& type) -> mv::composition::effect* {
-                    auto it = std::find_if(layer->effects.begin(), layer->effects.end(), [&](const auto& effect) {
-                        return effect.type == type;
-                    });
-                    return it == layer->effects.end() ? nullptr : &*it;
-                };
-                if (mv::composition::effect* fade = find_effect("fade")) {
-                    const float amount = fade->amount <= 0.0f ? 650.0f : fade->amount;
-                    changed = slider_value(detail_y, "Fade", ms_label(amount),
-                                           std::clamp((amount - 100.0f) / 1900.0f, 0.0f, 1.0f));
-                    if (changed >= 0.0f) {
-                        fade->amount = 100.0f + changed * 1900.0f;
-                        dirty_ = true;
-                        inspector_changed = true;
+                std::string remove_component_id;
+                for (mv::composition::component& component : layer->components) {
+                    if (component.type == "transform") {
+                        continue;
                     }
-                    detail_y += 44.0f;
-                }
-                if (mv::composition::effect* pulse = find_effect("pulse")) {
-                    const float amount = std::clamp(pulse->amount <= 0.0f ? 0.08f : pulse->amount, 0.0f, 0.3f);
-                    const std::string pulse_label =
-                        std::to_string(static_cast<int>(std::round(amount * 100.0f))) + "%";
-                    changed = slider_value(detail_y, "Pulse", pulse_label,
-                                           std::clamp(amount / 0.3f, 0.0f, 1.0f));
-                    if (changed >= 0.0f) {
-                        pulse->amount = changed * 0.3f;
-                        dirty_ = true;
-                        inspector_changed = true;
+                    const float card_top = detail_y;
+                    const float card_h = component_inspector_card_height(component, color_picker_for(component));
+                    const ui::inspector::component_card_result component_card =
+                        ui::inspector::draw_component_card({body.x, card_top, body.width, card_h},
+                                                           component_display_title(component),
+                                                           true);
+                    if (component_card.remove_clicked) {
+                        remove_component_id = component.id;
                     }
-                    detail_y += 44.0f;
-                }
-                if (mv::composition::effect* flash = find_effect("flash")) {
-                    const float amount = std::clamp(flash->amount <= 0.0f ? 0.35f : flash->amount, 0.0f, 1.0f);
-                    const std::string flash_label =
-                        std::to_string(static_cast<int>(std::round(amount * 100.0f))) + "%";
-                    changed = slider_value(detail_y, "Flash", flash_label, amount);
-                    if (changed >= 0.0f) {
-                        flash->amount = changed;
-                        dirty_ = true;
-                        inspector_changed = true;
+                    field_cursor = ui::inspector::make_field_cursor(component_card.body);
+                    if (component.type == "text") {
+                        ui::text_input_state& text_input = component_text_inputs_[component.id];
+                        ui::text_input_state& fill_input = component_fill_inputs_[component.id];
+                        if (text_input.value.empty() && !component.text.empty()) {
+                            text_input.value = component.text;
+                        }
+                        if (fill_input.value.empty()) {
+                            fill_input.value = component.fill.empty() ? "#ffffff" : component.fill;
+                        }
+                        const auto text_result =
+                            ui::inspector::draw_text_row(field_cursor.body,
+                                                         field_cursor.y,
+                                                         text_input,
+                                                         "Text",
+                                                         "Text",
+                                                         "Text",
+                                                         wide_text_filter,
+                                                         {},
+                                                         ui::draw_layer::base,
+                                                         160);
+                        if (text_result.changed) {
+                            component.text = text_input.value;
+                            dirty_ = true;
+                            inspector_edit_pending_ = true;
+                        }
+                        field_cursor.advance();
+                        ui::inspector::color_picker_state& color_picker =
+                            component_color_pickers_[component.id];
+                        const auto color_result =
+                            ui::inspector::draw_color_row(field_cursor.body,
+                                                          field_cursor.y,
+                                                          fill_input,
+                                                          color_picker);
+                        if (color_result.changed && is_valid_hex_color(fill_input.value)) {
+                            fill_input.value = ui::inspector::normalize_hex_color(fill_input.value);
+                            component.fill = fill_input.value;
+                            dirty_ = true;
+                            inspector_edit_pending_ = true;
+                        }
+                        if ((text_result.deactivated || text_result.submitted ||
+                             color_result.input.deactivated || color_result.input.submitted) &&
+                            inspector_edit_pending_) {
+                            commit_history("Edit Text");
+                        }
+                    } else if (component.type == "shape" || component.type == "background" ||
+                               component.type == "beatGrid" || component.type == "waveform" ||
+                               component.type == "spectrum") {
+                        ui::text_input_state& fill_input = component_fill_inputs_[component.id];
+                        if (fill_input.value.empty()) {
+                            fill_input.value = component.fill.empty() ? "#ffffff" : component.fill;
+                        }
+                        ui::inspector::color_picker_state& color_picker =
+                            component_color_pickers_[component.id];
+                        const auto color_result =
+                            ui::inspector::draw_color_row(field_cursor.body,
+                                                          field_cursor.y,
+                                                          fill_input,
+                                                          color_picker);
+                        if (color_result.changed && is_valid_hex_color(fill_input.value)) {
+                            fill_input.value = ui::inspector::normalize_hex_color(fill_input.value);
+                            component.fill = fill_input.value;
+                            dirty_ = true;
+                            inspector_edit_pending_ = true;
+                        }
+                        if ((color_result.input.deactivated || color_result.input.submitted) && inspector_edit_pending_) {
+                            commit_history("Edit Color");
+                        }
+                        if (component.type == "spectrum") {
+                            field_cursor.advance();
+                            if (color_picker.open) {
+                                field_cursor.y += ui::inspector::color_picker_height() +
+                                                  ui::inspector::card_style{}.row_gap;
+                            }
+                            ui::inspector::draw_value_row(field_cursor.body, field_cursor.y, "Style",
+                                                          component.shape.empty() ? "bars" : component.shape);
+                        }
+                    } else if (component.type == "image") {
+                        ui::inspector::draw_value_row(field_cursor.body, field_cursor.y, "Asset", component.asset_id);
+                    } else if (component.type == "fade") {
+                        const float amount = component.amount <= 0.0f ? 650.0f : component.amount;
+                        changed = ui::inspector::draw_slider_row(
+                            field_cursor.body, field_cursor.y, "Amount", ms_label(amount),
+                            std::clamp((amount - 100.0f) / 1900.0f, 0.0f, 1.0f));
+                        if (changed >= 0.0f) {
+                            component.amount = 100.0f + changed * 1900.0f;
+                            dirty_ = true;
+                            inspector_changed = true;
+                        }
+                    } else if (component.type == "pulse") {
+                        const float amount = std::clamp(component.amount <= 0.0f ? 0.08f : component.amount, 0.0f, 0.3f);
+                        const std::string pulse_label =
+                            std::to_string(static_cast<int>(std::round(amount * 100.0f))) + "%";
+                        changed = ui::inspector::draw_slider_row(field_cursor.body, field_cursor.y, "Amount", pulse_label,
+                                                                 std::clamp(amount / 0.3f, 0.0f, 1.0f));
+                        if (changed >= 0.0f) {
+                            component.amount = changed * 0.3f;
+                            dirty_ = true;
+                            inspector_changed = true;
+                        }
+                    } else if (component.type == "flash") {
+                        const float amount = std::clamp(component.amount <= 0.0f ? 0.35f : component.amount, 0.0f, 1.0f);
+                        const std::string flash_label =
+                            std::to_string(static_cast<int>(std::round(amount * 100.0f))) + "%";
+                        changed = ui::inspector::draw_slider_row(field_cursor.body, field_cursor.y, "Amount", flash_label, amount);
+                        if (changed >= 0.0f) {
+                            component.amount = changed;
+                            dirty_ = true;
+                            inspector_changed = true;
+                        }
+                    } else if (component.type == "shake") {
+                        const float amount = std::clamp(component.amount <= 0.0f ? 18.0f : component.amount, 0.0f, 120.0f);
+                        const std::string shake_label =
+                            std::to_string(static_cast<int>(std::round(amount))) + "px";
+                        changed = ui::inspector::draw_slider_row(field_cursor.body, field_cursor.y, "Amount", shake_label, amount / 120.0f);
+                        if (changed >= 0.0f) {
+                            component.amount = changed * 120.0f;
+                            dirty_ = true;
+                            inspector_changed = true;
+                        }
                     }
-                    detail_y += 44.0f;
+                    detail_y = card_top + card_h + 10.0f;
                 }
-                if (mv::composition::effect* shake = find_effect("shake")) {
-                    const float amount = std::clamp(shake->amount <= 0.0f ? 18.0f : shake->amount, 0.0f, 120.0f);
-                    const std::string shake_label =
-                        std::to_string(static_cast<int>(std::round(amount))) + "px";
-                    changed = slider_value(detail_y, "Shake", shake_label, amount / 120.0f);
-                    if (changed >= 0.0f) {
-                        shake->amount = changed * 120.0f;
-                        dirty_ = true;
-                        inspector_changed = true;
-                    }
-                    detail_y += 44.0f;
+                if (!remove_component_id.empty()) {
+                    layer->components.erase(
+                        std::remove_if(layer->components.begin(), layer->components.end(), [&](const auto& component) {
+                            return component.type != "transform" && component.id == remove_component_id;
+                        }),
+                        layer->components.end());
+                    dirty_ = true;
+                    inspector_changed = true;
+                    commit_history("Remove Component");
                 }
-                const auto fill_result =
-                    ui::draw_text_input({body.x, detail_y, body.width, 38.0f}, layer_fill_input_,
-                                        "Fill", "#ffffff", "#ffffff", ui::draw_layer::base,
-                                        12, 7, hex_color_filter, 92.0f);
-                if (fill_result.changed) {
-                    if (is_valid_hex_color(layer_fill_input_.value)) {
-                        layer_fill_input_.value = normalize_hex_color(layer_fill_input_.value);
-                        layer->source_data.fill = layer_fill_input_.value;
-                        dirty_ = true;
-                        inspector_edit_pending_ = true;
-                    }
+                const Rectangle add_component_btn = {body.x, detail_y, body.width, 28.0f};
+                if (ui::draw_button(add_component_btn, "Add Component", 11, 1.5f).clicked) {
+                    context_menu_open_ = true;
+                    context_menu_opened_this_frame = true;
+                    context_menu_target_ = context_menu_target::components;
+                    context_menu_position_ = {add_component_btn.x, add_component_btn.y + add_component_btn.height + 4.0f};
                 }
-                if ((fill_result.deactivated || fill_result.submitted) && !is_valid_hex_color(layer_fill_input_.value)) {
-                    layer_fill_input_.value = layer->source_data.fill.empty() ? "#ffffff" : layer->source_data.fill;
-                }
-                if ((fill_result.deactivated || fill_result.submitted) && inspector_edit_pending_) {
-                    commit_history("Edit Fill");
-                }
-                detail_y += 44.0f;
-                if (layer->source_data.type == "text") {
-                    const auto text_result =
-                        ui::draw_text_input({body.x, detail_y, body.width, 38.0f}, layer_text_input_,
-                                            "Text", "Text", "Text", ui::draw_layer::base,
-                                            12, 160, wide_text_filter, 92.0f);
-                    if (text_result.changed) {
-                        layer->source_data.text = layer_text_input_.value;
-                        dirty_ = true;
-                        inspector_edit_pending_ = true;
-                    }
-                    if ((text_result.deactivated || text_result.submitted) && inspector_edit_pending_) {
-                        commit_history("Edit Text");
-                    }
-                } else if (layer->source_data.type == "image") {
-                    value_row(detail_y, "Asset", layer->source_data.asset_id);
-                }
+                detail_y += 36.0f;
             }
             if (inspector_changed) {
                 validate_composition();
@@ -1484,6 +1872,9 @@ void mv_editor_scene::draw() {
                 commit_history("Edit Layer");
             }
         }
+        }
+        ui::draw_scrollbar(inspector_scrollbar, inspector_content_height, inspector_scroll_offset_,
+                           with_alpha(g_theme->row, 120), g_theme->slider_fill, 30.0f);
     }
 
     if (!diagnostics_.empty()) {
@@ -1494,6 +1885,119 @@ void mv_editor_scene::draw() {
         ui::draw_rect_lines(diag, 1.0f, with_alpha(g_theme->error, 160));
         ui::draw_text_in_rect(diagnostics_.front().c_str(), 11, ui::inset(diag, 8.0f),
                               g_theme->text, ui::text_align::left);
+    }
+
+    if (metadata_modal_open_) {
+        context_menu_open_ = false;
+    }
+    if (context_menu_open_) {
+        auto menu_rect_for_count = [&](int item_count) {
+            const float menu_height = 12.0f +
+                static_cast<float>(item_count) * kContextMenuItemHeight +
+                static_cast<float>(std::max(0, item_count - 1)) * kContextMenuItemSpacing;
+            Rectangle rect = {context_menu_position_.x, context_menu_position_.y,
+                              kContextMenuWidth, menu_height};
+            rect.x = std::clamp(rect.x, kPadding, static_cast<float>(kScreenWidth) - rect.width - kPadding);
+            rect.y = std::clamp(rect.y, kPadding, static_cast<float>(kScreenHeight) - rect.height - kPadding);
+            return rect;
+        };
+        if (context_menu_target_ == context_menu_target::project) {
+            std::array<ui::context_menu_item, 8> items = {{
+                {"Create Object", false, ui::context_menu_item::kind::header},
+                {"Empty", true},
+                {"Text", true},
+                {"Rectangle", true},
+                {"Image", true},
+                {"Beat Grid", true},
+                {"Waveform", true},
+                {"Spectrum", true},
+            }};
+            const Rectangle menu_rect = menu_rect_for_count(static_cast<int>(items.size()));
+            const ui::context_menu_state menu =
+                ui::enqueue_context_menu(menu_rect, std::span<const ui::context_menu_item>(items),
+                                         ui::draw_layer::overlay, 11,
+                                         kContextMenuItemHeight, kContextMenuItemSpacing);
+            if (menu.clicked_index >= 0) {
+                switch (menu.clicked_index) {
+                    case 1: add_empty_layer(); break;
+                    case 2: add_text_layer(); break;
+                    case 3: add_rect_layer(); break;
+                    case 4: add_image_layer(); break;
+                    case 5: add_beat_grid_layer(); break;
+                    case 6: add_waveform_layer(); break;
+                    case 7: add_spectrum_layer(); break;
+                    default: break;
+                }
+                context_menu_open_ = false;
+            } else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !CheckCollisionPointRec(mouse, menu_rect)) {
+                context_menu_open_ = false;
+            }
+        } else if (context_menu_target_ == context_menu_target::components) {
+            const bool has_layer = selected_layer() != nullptr;
+            const bool has_effects = has_layer && !mv::composition::effect_components(*selected_layer()).empty();
+            std::array<ui::context_menu_item, 15> items = {{
+                {"Add Component", false, ui::context_menu_item::kind::header},
+                {"Text", has_layer},
+                {"Rectangle", has_layer},
+                {"Image", has_layer},
+                {"Beat Grid", has_layer},
+                {"Waveform", has_layer},
+                {"Spectrum", has_layer},
+                {"", false, ui::context_menu_item::kind::separator},
+                {"Fade", has_layer},
+                {"Pulse", has_layer},
+                {"Flash", has_layer},
+                {"Shake", has_layer},
+                {"", false, ui::context_menu_item::kind::separator},
+                {"Clear Effects", has_effects},
+            }};
+            const Rectangle menu_rect = menu_rect_for_count(static_cast<int>(items.size()));
+            const ui::context_menu_state menu =
+                ui::enqueue_context_menu(menu_rect, std::span<const ui::context_menu_item>(items),
+                                         ui::draw_layer::overlay, 11,
+                                         kContextMenuItemHeight, kContextMenuItemSpacing);
+            if (menu.clicked_index >= 0) {
+                switch (menu.clicked_index) {
+                    case 1: add_component_to_selected_layer("text"); break;
+                    case 2: add_component_to_selected_layer("shape"); break;
+                    case 3: add_component_to_selected_layer("image"); break;
+                    case 4: add_component_to_selected_layer("beatGrid"); break;
+                    case 5: add_component_to_selected_layer("waveform"); break;
+                    case 6: add_component_to_selected_layer("spectrum"); break;
+                    case 8: add_component_to_selected_layer("fade"); break;
+                    case 9: add_component_to_selected_layer("pulse"); break;
+                    case 10: add_component_to_selected_layer("flash"); break;
+                    case 11: add_component_to_selected_layer("shake"); break;
+                    case 13: clear_selected_layer_effects(); break;
+                    default: break;
+                }
+                context_menu_open_ = false;
+            } else if (!context_menu_opened_this_frame &&
+                       IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+                       !CheckCollisionPointRec(mouse, menu_rect)) {
+                context_menu_open_ = false;
+            }
+        } else if (context_menu_target_ == context_menu_target::timeline) {
+            const bool has_layer = selected_layer() != nullptr;
+            std::array<ui::context_menu_item, 2> items = {{
+                {"Timeline", false, ui::context_menu_item::kind::header},
+                {"Delete Layer", has_layer},
+            }};
+            const Rectangle menu_rect = menu_rect_for_count(static_cast<int>(items.size()));
+            const ui::context_menu_state menu =
+                ui::enqueue_context_menu(menu_rect, std::span<const ui::context_menu_item>(items),
+                                         ui::draw_layer::overlay, 11,
+                                         kContextMenuItemHeight, kContextMenuItemSpacing);
+            if (menu.clicked_index >= 0) {
+                switch (menu.clicked_index) {
+                    case 1: delete_selected_layer(); break;
+                    default: break;
+                }
+                context_menu_open_ = false;
+            } else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !CheckCollisionPointRec(mouse, menu_rect)) {
+                context_menu_open_ = false;
+            }
+        }
     }
 
     if (metadata_modal_open_) {
@@ -1556,7 +2060,7 @@ void mv_editor_scene::save_mv() {
     package_.meta.name = name_input_.value.empty() ? (song_.meta.title + " MV") : name_input_.value;
     package_.meta.author = author_input_.value;
     package_.meta.composition_file = "composition.rmvcomp";
-    package_.meta.format_version = 1;
+    package_.meta.format_version = 2;
     validate_composition();
     if (!diagnostics_.empty()) {
         return;
@@ -1626,6 +2130,12 @@ void mv_editor_scene::reset_inspector_inputs() {
     layer_name_input_ = {};
     layer_text_input_ = {};
     layer_fill_input_ = {};
+    transform_x_input_ = {};
+    transform_y_input_ = {};
+    transform_scale_input_ = {};
+    component_text_inputs_.clear();
+    component_fill_inputs_.clear();
+    component_color_pickers_.clear();
     inspector_input_layer_id_.clear();
 }
 
@@ -1634,16 +2144,76 @@ void mv_editor_scene::sync_inspector_inputs(const mv::composition::layer& layer)
         return;
     }
     inspector_input_layer_id_ = layer.id;
+    inspector_scroll_offset_ = 0.0f;
+    inspector_scrollbar_dragging_ = false;
+    inspector_scrollbar_drag_offset_ = 0.0f;
     layer_name_input_ = {};
     layer_text_input_ = {};
     layer_fill_input_ = {};
+    transform_x_input_ = {};
+    transform_y_input_ = {};
+    transform_scale_input_ = {};
+    component_text_inputs_.clear();
+    component_fill_inputs_.clear();
+    component_color_pickers_.clear();
     layer_name_input_.value = layer.name;
-    layer_text_input_.value = layer.source_data.text;
-    layer_fill_input_.value = layer.source_data.fill.empty() ? "#ffffff" : layer.source_data.fill;
+    for (const mv::composition::component& component : layer.components) {
+        if (!component.text.empty() || component.type == "text") {
+            component_text_inputs_[component.id].value = component.text;
+        }
+        if (!component.fill.empty() ||
+            component.type == "text" ||
+            component.type == "shape" ||
+            component.type == "background" ||
+            component.type == "beatGrid" ||
+            component.type == "waveform" ||
+            component.type == "spectrum") {
+            component_fill_inputs_[component.id].value =
+                component.fill.empty() ? "#ffffff" : component.fill;
+        }
+    }
+    if (const mv::composition::component* transform = mv::composition::transform_component(layer)) {
+        transform_x_input_.value = format_float_input(transform->position_x, 0);
+        transform_y_input_.value = format_float_input(transform->position_y, 0);
+        transform_scale_input_.value = format_float_input(transform->scale_x, 2);
+    }
 }
 
 bool mv_editor_scene::inspector_text_input_active() const {
-    return layer_name_input_.active || layer_text_input_.active || layer_fill_input_.active;
+    if (layer_name_input_.active || layer_text_input_.active || layer_fill_input_.active ||
+        transform_x_input_.active || transform_y_input_.active || transform_scale_input_.active) {
+        return true;
+    }
+    for (const auto& [_, state] : component_text_inputs_) {
+        if (state.active) {
+            return true;
+        }
+    }
+    for (const auto& [_, state] : component_fill_inputs_) {
+        if (state.active) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void mv_editor_scene::add_empty_layer() {
+    mv::composition::layer layer;
+    const int index = static_cast<int>(composition_.layers.size()) + 1;
+    layer.id = next_layer_id(composition_, "layer-object");
+    layer.name = "Object " + std::to_string(index);
+    layer.z = index * 10;
+    layer.start_ms = playhead_ms_;
+    layer.duration_ms = std::max(8000.0, composition_duration_ms() - playhead_ms_);
+    mv::composition::transform transform;
+    transform.position_x = static_cast<float>(composition_.canvas_data.width) * 0.5f;
+    transform.position_y = static_cast<float>(composition_.canvas_data.height) * 0.5f;
+    layer.components.push_back(mv::composition::make_transform_component(transform));
+    composition_.layers.push_back(layer);
+    selected_layer_id_ = layer.id;
+    normalize_layer_z_order();
+    validate_composition();
+    commit_history("Add Empty Object");
 }
 
 void mv_editor_scene::add_text_layer() {
@@ -1654,11 +2224,15 @@ void mv_editor_scene::add_text_layer() {
     layer.z = index * 10;
     layer.start_ms = playhead_ms_;
     layer.duration_ms = 8000.0;
-    layer.source_data.type = "text";
-    layer.source_data.text = "Text";
-    layer.source_data.fill = "#d8d4ff";
-    layer.transform_data.position_x = static_cast<float>(composition_.canvas_data.width) * 0.5f;
-    layer.transform_data.position_y = static_cast<float>(composition_.canvas_data.height) * 0.5f;
+    mv::composition::transform transform;
+    transform.position_x = static_cast<float>(composition_.canvas_data.width) * 0.5f;
+    transform.position_y = static_cast<float>(composition_.canvas_data.height) * 0.5f;
+    mv::composition::component renderer = mv::composition::make_component("text");
+    renderer.id = "renderer-text";
+    renderer.text = "Text";
+    renderer.fill = "#d8d4ff";
+    layer.components.push_back(mv::composition::make_transform_component(transform));
+    layer.components.push_back(std::move(renderer));
     composition_.layers.push_back(layer);
     selected_layer_id_ = layer.id;
     normalize_layer_z_order();
@@ -1674,14 +2248,16 @@ void mv_editor_scene::add_rect_layer() {
     layer.z = index * 10;
     layer.start_ms = playhead_ms_;
     layer.duration_ms = 8000.0;
-    layer.source_data.type = "shape";
-    layer.source_data.shape = "rect";
-    layer.source_data.fill = "#6ee7b7";
-    layer.transform_data.position_x = static_cast<float>(composition_.canvas_data.width) * 0.5f;
-    layer.transform_data.position_y = static_cast<float>(composition_.canvas_data.height) * 0.5f;
-    layer.transform_data.scale_x = 1.0f;
-    layer.transform_data.scale_y = 1.0f;
-    layer.transform_data.opacity = 0.75f;
+    mv::composition::transform transform;
+    transform.position_x = static_cast<float>(composition_.canvas_data.width) * 0.5f;
+    transform.position_y = static_cast<float>(composition_.canvas_data.height) * 0.5f;
+    transform.opacity = 0.75f;
+    mv::composition::component renderer = mv::composition::make_component("shape");
+    renderer.id = "renderer-shape";
+    renderer.shape = "rect";
+    renderer.fill = "#6ee7b7";
+    layer.components.push_back(mv::composition::make_transform_component(transform));
+    layer.components.push_back(std::move(renderer));
     composition_.layers.push_back(layer);
     selected_layer_id_ = layer.id;
     normalize_layer_z_order();
@@ -1717,13 +2293,15 @@ void mv_editor_scene::add_image_layer() {
     layer.z = index * 10;
     layer.start_ms = playhead_ms_;
     layer.duration_ms = 8000.0;
-    layer.source_data.type = "image";
-    layer.source_data.asset_id = imported->id;
-    layer.source_data.fill = "#ffffff";
-    layer.transform_data.position_x = static_cast<float>(composition_.canvas_data.width) * 0.5f;
-    layer.transform_data.position_y = static_cast<float>(composition_.canvas_data.height) * 0.5f;
-    layer.transform_data.scale_x = 1.0f;
-    layer.transform_data.scale_y = 1.0f;
+    mv::composition::transform transform;
+    transform.position_x = static_cast<float>(composition_.canvas_data.width) * 0.5f;
+    transform.position_y = static_cast<float>(composition_.canvas_data.height) * 0.5f;
+    mv::composition::component renderer = mv::composition::make_component("image");
+    renderer.id = "renderer-image";
+    renderer.asset_id = imported->id;
+    renderer.fill = "#ffffff";
+    layer.components.push_back(mv::composition::make_transform_component(transform));
+    layer.components.push_back(std::move(renderer));
     composition_.layers.push_back(layer);
     selected_layer_id_ = layer.id;
     normalize_layer_z_order();
@@ -1739,13 +2317,15 @@ void mv_editor_scene::add_beat_grid_layer() {
     layer.z = index * 10;
     layer.start_ms = playhead_ms_;
     layer.duration_ms = std::max(8000.0, composition_duration_ms() - playhead_ms_);
-    layer.source_data.type = "beatGrid";
-    layer.source_data.fill = "#8b7cf6";
-    layer.transform_data.position_x = static_cast<float>(composition_.canvas_data.width) * 0.5f;
-    layer.transform_data.position_y = static_cast<float>(composition_.canvas_data.height) * 0.5f;
-    layer.transform_data.scale_x = 1.0f;
-    layer.transform_data.scale_y = 1.0f;
-    layer.transform_data.opacity = 0.8f;
+    mv::composition::transform transform;
+    transform.position_x = static_cast<float>(composition_.canvas_data.width) * 0.5f;
+    transform.position_y = static_cast<float>(composition_.canvas_data.height) * 0.5f;
+    transform.opacity = 0.8f;
+    mv::composition::component renderer = mv::composition::make_component("beatGrid");
+    renderer.id = "renderer-beat-grid";
+    renderer.fill = "#8b7cf6";
+    layer.components.push_back(mv::composition::make_transform_component(transform));
+    layer.components.push_back(std::move(renderer));
     composition_.layers.push_back(layer);
     selected_layer_id_ = layer.id;
     normalize_layer_z_order();
@@ -1761,13 +2341,15 @@ void mv_editor_scene::add_waveform_layer() {
     layer.z = index * 10;
     layer.start_ms = playhead_ms_;
     layer.duration_ms = std::max(8000.0, composition_duration_ms() - playhead_ms_);
-    layer.source_data.type = "waveform";
-    layer.source_data.fill = "#6ee7b7";
-    layer.transform_data.position_x = static_cast<float>(composition_.canvas_data.width) * 0.5f;
-    layer.transform_data.position_y = static_cast<float>(composition_.canvas_data.height) * 0.72f;
-    layer.transform_data.scale_x = 1.0f;
-    layer.transform_data.scale_y = 1.0f;
-    layer.transform_data.opacity = 0.85f;
+    mv::composition::transform transform;
+    transform.position_x = static_cast<float>(composition_.canvas_data.width) * 0.5f;
+    transform.position_y = static_cast<float>(composition_.canvas_data.height) * 0.72f;
+    transform.opacity = 0.85f;
+    mv::composition::component renderer = mv::composition::make_component("waveform");
+    renderer.id = "renderer-waveform";
+    renderer.fill = "#6ee7b7";
+    layer.components.push_back(mv::composition::make_transform_component(transform));
+    layer.components.push_back(std::move(renderer));
     composition_.layers.push_back(layer);
     selected_layer_id_ = layer.id;
     normalize_layer_z_order();
@@ -1783,13 +2365,17 @@ void mv_editor_scene::add_spectrum_layer() {
     layer.z = index * 10;
     layer.start_ms = playhead_ms_;
     layer.duration_ms = std::max(8000.0, composition_duration_ms() - playhead_ms_);
-    layer.source_data.type = "spectrum";
-    layer.source_data.fill = "#38bdf8";
-    layer.transform_data.position_x = static_cast<float>(composition_.canvas_data.width) * 0.5f;
-    layer.transform_data.position_y = static_cast<float>(composition_.canvas_data.height) * 0.76f;
-    layer.transform_data.scale_x = 1.0f;
-    layer.transform_data.scale_y = 1.0f;
-    layer.transform_data.opacity = 0.82f;
+    mv::composition::transform transform;
+    transform.position_x = static_cast<float>(composition_.canvas_data.width) * 0.5f;
+    transform.position_y = static_cast<float>(composition_.canvas_data.height) - 249.0f;
+    transform.scale_x = 1.5f;
+    transform.scale_y = 498.0f / 420.0f;
+    mv::composition::component renderer = mv::composition::make_component("spectrum");
+    renderer.id = "renderer-spectrum";
+    renderer.shape = "title";
+    renderer.fill = "#a855f7";
+    layer.components.push_back(mv::composition::make_transform_component(transform));
+    layer.components.push_back(std::move(renderer));
     composition_.layers.push_back(layer);
     selected_layer_id_ = layer.id;
     normalize_layer_z_order();
@@ -1797,21 +2383,66 @@ void mv_editor_scene::add_spectrum_layer() {
     commit_history("Add Spectrum");
 }
 
-void mv_editor_scene::apply_builtin_preset(const std::string& preset_id) {
-    const double start_ms = playhead_ms_;
-    const mv::composition::preset_apply_result result =
-        mv::composition::apply_preset(composition_, preset_id, start_ms, 0.0);
-    if (!result.success) {
-        diagnostics_ = {result.message.empty() ? "Failed to apply MV preset." : result.message};
+void mv_editor_scene::add_component_to_selected_layer(const std::string& type) {
+    mv::composition::layer* layer = selected_layer();
+    if (layer == nullptr || type.empty()) {
         return;
     }
-    if (!result.selected_layer_id.empty()) {
-        selected_layer_id_ = result.selected_layer_id;
+    if (type == "image") {
+        const std::string source_path = file_dialog::open_image_file();
+        if (source_path.empty()) {
+            return;
+        }
+        std::vector<std::string> errors;
+        const std::optional<mv::composition::asset_ref> imported =
+            mv::import_image_asset(package_, source_path, &errors);
+        if (!imported.has_value()) {
+            diagnostics_ = errors.empty() ? std::vector<std::string>{"Failed to import MV image asset."} : errors;
+            return;
+        }
+        const auto existing = std::find_if(composition_.assets.begin(), composition_.assets.end(), [&](const auto& asset) {
+            return asset.id == imported->id;
+        });
+        if (existing == composition_.assets.end()) {
+            composition_.assets.push_back(*imported);
+        }
+        mv::composition::component image = mv::composition::make_component("image");
+        image.id = next_component_id(composition_, "image");
+        image.asset_id = imported->id;
+        image.fill = "#ffffff";
+        layer->components.push_back(std::move(image));
+        validate_composition();
+        commit_history("Add Image Component");
+        return;
     }
-    normalize_layer_z_order();
-    reset_inspector_inputs();
+    mv::composition::component component = mv::composition::make_component(type);
+    component.id = next_component_id(composition_, type);
+    if (type == "text") {
+        component.text = "Text";
+        component.fill = "#d8d4ff";
+    } else if (type == "shape") {
+        component.shape = "rect";
+        component.fill = "#6ee7b7";
+    } else if (type == "beatGrid") {
+        component.fill = "#8b7cf6";
+    } else if (type == "waveform") {
+        component.fill = "#6ee7b7";
+    } else if (type == "spectrum") {
+        component.shape = "title";
+        component.fill = "#a855f7";
+    } else {
+        component = make_effect_component(next_effect_id(composition_, "fx-" + type),
+                                          type,
+                                          type == "pulse" ? "transform.scale" :
+                                          type == "shake" ? "transform.position" : "transform.opacity",
+                                          type == "fade" ? 650.0f :
+                                          type == "pulse" ? 0.08f :
+                                          type == "shake" ? 18.0f : 0.35f);
+    }
+    layer->components.push_back(std::move(component));
     validate_composition();
-    commit_history("Apply Preset");
+    reset_inspector_inputs();
+    commit_history("Add Component");
 }
 
 void mv_editor_scene::key_selected_transform() {
@@ -1819,16 +2450,20 @@ void mv_editor_scene::key_selected_transform() {
     if (layer == nullptr) {
         return;
     }
+    const mv::composition::component* transform = mv::composition::transform_component(*layer);
+    if (transform == nullptr) {
+        return;
+    }
     const auto add_point = [&](const std::string& target, float value) {
         mv::composition::keyframe_track& track = mv::composition::ensure_keyframe_track(*layer, target);
         mv::composition::upsert_keyframe(track, {playhead_ms_, value, "linear"});
     };
-    add_point("transform.position.x", layer->transform_data.position_x);
-    add_point("transform.position.y", layer->transform_data.position_y);
-    add_point("transform.scale.x", layer->transform_data.scale_x);
-    add_point("transform.scale.y", layer->transform_data.scale_y);
-    add_point("transform.rotationDeg", layer->transform_data.rotation_deg);
-    add_point("transform.opacity", layer->transform_data.opacity);
+    add_point("transform.position.x", transform->position_x);
+    add_point("transform.position.y", transform->position_y);
+    add_point("transform.scale.x", transform->scale_x);
+    add_point("transform.scale.y", transform->scale_y);
+    add_point("transform.rotationDeg", transform->rotation_deg);
+    add_point("transform.opacity", transform->opacity);
     validate_composition();
     commit_history("Set Key");
 }
@@ -1857,78 +2492,17 @@ int mv_editor_scene::transform_keyframe_count_at_playhead() const {
         *layer, playhead_ms_, kKeyframeHitToleranceMs);
 }
 
-void mv_editor_scene::add_flash_event_trigger_at_playhead() {
-    mv::composition::layer* layer = selected_layer();
-    if (layer == nullptr) {
-        return;
-    }
-    mv::composition::add_flash_cue(*layer, composition_, playhead_ms_, kKeyframeHitToleranceMs);
-    validate_composition();
-    commit_history("Add Flash Cue");
-}
-
-void mv_editor_scene::add_show_event_trigger_at_playhead() {
-    mv::composition::layer* layer = selected_layer();
-    if (layer == nullptr) {
-        return;
-    }
-    mv::composition::add_show_cue(*layer, playhead_ms_, kKeyframeHitToleranceMs);
-    validate_composition();
-    commit_history("Add Show Cue");
-}
-
-void mv_editor_scene::add_text_event_trigger_at_playhead() {
-    mv::composition::layer* layer = selected_layer();
-    if (layer == nullptr || layer->source_data.type != "text") {
-        return;
-    }
-    const std::string cue_text =
-        layer_text_input_.value.empty() ? (layer->source_data.text.empty() ? "Text" : layer->source_data.text)
-                                        : layer_text_input_.value;
-    mv::composition::add_text_cue(*layer, playhead_ms_, kKeyframeHitToleranceMs, cue_text);
-    layer_text_input_.value = cue_text;
-    validate_composition();
-    commit_history("Add Text Cue");
-}
-
-void mv_editor_scene::clear_event_triggers_at_playhead() {
-    mv::composition::layer* layer = selected_layer();
-    if (layer == nullptr) {
-        return;
-    }
-    if (mv::composition::clear_timeline_cues_near(*layer, playhead_ms_, kKeyframeHitToleranceMs) <= 0) {
-        return;
-    }
-    validate_composition();
-    commit_history("Clear Cue");
-}
-
-int mv_editor_scene::event_trigger_count_at_playhead() const {
-    const mv::composition::layer* layer = selected_layer();
-    if (layer == nullptr) {
-        return 0;
-    }
-    return mv::composition::count_timeline_cues_near(*layer, playhead_ms_, kKeyframeHitToleranceMs);
-}
-
 void mv_editor_scene::add_fade_effect_to_selected_layer() {
     mv::composition::layer* layer = selected_layer();
     if (layer == nullptr) {
         return;
     }
-    auto it = std::find_if(layer->effects.begin(), layer->effects.end(), [](const auto& effect) {
-        return effect.type == "fade";
-    });
-    if (it == layer->effects.end()) {
-        mv::composition::effect effect;
-        effect.id = next_effect_id(composition_, "fx-fade");
-        effect.type = "fade";
-        effect.target = "transform.opacity";
-        effect.amount = 650.0f;
-        layer->effects.push_back(std::move(effect));
+    if (mv::composition::component* effect = find_effect_component(*layer, "fade"); effect == nullptr) {
+        layer->components.push_back(
+            make_effect_component(next_effect_id(composition_, "fx-fade"), "fade", "transform.opacity", 650.0f));
     } else {
-        it->target = "transform.opacity";
-        it->amount = it->amount <= 0.0f ? 650.0f : it->amount;
+        effect->target = "transform.opacity";
+        effect->amount = effect->amount <= 0.0f ? 650.0f : effect->amount;
     }
     validate_composition();
     commit_history("Add Fade");
@@ -1939,19 +2513,12 @@ void mv_editor_scene::add_pulse_effect_to_selected_layer() {
     if (layer == nullptr) {
         return;
     }
-    auto it = std::find_if(layer->effects.begin(), layer->effects.end(), [](const auto& effect) {
-        return effect.type == "pulse";
-    });
-    if (it == layer->effects.end()) {
-        mv::composition::effect effect;
-        effect.id = next_effect_id(composition_, "fx-pulse");
-        effect.type = "pulse";
-        effect.target = "transform.scale";
-        effect.amount = 0.08f;
-        layer->effects.push_back(std::move(effect));
+    if (mv::composition::component* effect = find_effect_component(*layer, "pulse"); effect == nullptr) {
+        layer->components.push_back(
+            make_effect_component(next_effect_id(composition_, "fx-pulse"), "pulse", "transform.scale", 0.08f));
     } else {
-        it->target = "transform.scale";
-        it->amount = it->amount <= 0.0f ? 0.08f : it->amount;
+        effect->target = "transform.scale";
+        effect->amount = effect->amount <= 0.0f ? 0.08f : effect->amount;
     }
     validate_composition();
     commit_history("Add Pulse");
@@ -1962,19 +2529,12 @@ void mv_editor_scene::add_flash_effect_to_selected_layer() {
     if (layer == nullptr) {
         return;
     }
-    auto it = std::find_if(layer->effects.begin(), layer->effects.end(), [](const auto& effect) {
-        return effect.type == "flash";
-    });
-    if (it == layer->effects.end()) {
-        mv::composition::effect effect;
-        effect.id = next_effect_id(composition_, "fx-flash");
-        effect.type = "flash";
-        effect.target = "transform.opacity";
-        effect.amount = 0.35f;
-        layer->effects.push_back(std::move(effect));
+    if (mv::composition::component* effect = find_effect_component(*layer, "flash"); effect == nullptr) {
+        layer->components.push_back(
+            make_effect_component(next_effect_id(composition_, "fx-flash"), "flash", "transform.opacity", 0.35f));
     } else {
-        it->target = "transform.opacity";
-        it->amount = it->amount <= 0.0f ? 0.35f : it->amount;
+        effect->target = "transform.opacity";
+        effect->amount = effect->amount <= 0.0f ? 0.35f : effect->amount;
     }
     validate_composition();
     commit_history("Add Flash");
@@ -1985,19 +2545,12 @@ void mv_editor_scene::add_shake_effect_to_selected_layer() {
     if (layer == nullptr) {
         return;
     }
-    auto it = std::find_if(layer->effects.begin(), layer->effects.end(), [](const auto& effect) {
-        return effect.type == "shake";
-    });
-    if (it == layer->effects.end()) {
-        mv::composition::effect effect;
-        effect.id = next_effect_id(composition_, "fx-shake");
-        effect.type = "shake";
-        effect.target = "transform.position";
-        effect.amount = 18.0f;
-        layer->effects.push_back(std::move(effect));
+    if (mv::composition::component* effect = find_effect_component(*layer, "shake"); effect == nullptr) {
+        layer->components.push_back(
+            make_effect_component(next_effect_id(composition_, "fx-shake"), "shake", "transform.position", 18.0f));
     } else {
-        it->target = "transform.position";
-        it->amount = it->amount <= 0.0f ? 18.0f : it->amount;
+        effect->target = "transform.position";
+        effect->amount = effect->amount <= 0.0f ? 18.0f : effect->amount;
     }
     validate_composition();
     commit_history("Add Shake");
@@ -2005,10 +2558,18 @@ void mv_editor_scene::add_shake_effect_to_selected_layer() {
 
 void mv_editor_scene::clear_selected_layer_effects() {
     mv::composition::layer* layer = selected_layer();
-    if (layer == nullptr || layer->effects.empty()) {
+    if (layer == nullptr || mv::composition::effect_components(*layer).empty()) {
         return;
     }
-    layer->effects.clear();
+    layer->components.erase(
+        std::remove_if(layer->components.begin(), layer->components.end(), [](const auto& component) {
+            return component.type == "fade" ||
+                   component.type == "pulse" ||
+                   component.type == "beatPulse" ||
+                   component.type == "flash" ||
+                   component.type == "shake";
+        }),
+        layer->components.end());
     validate_composition();
     commit_history("Clear FX");
 }

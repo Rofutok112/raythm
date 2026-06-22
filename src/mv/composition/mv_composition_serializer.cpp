@@ -15,7 +15,7 @@ namespace {
 using json = nlohmann::json;
 
 constexpr const char* kExpectedFormat = "raythm.mv.composition";
-constexpr int kSupportedFormatVersion = 1;
+constexpr int kSupportedFormatVersion = 2;
 
 double sane_number(double value, double fallback = 0.0) {
     return std::isfinite(value) ? value : fallback;
@@ -101,51 +101,31 @@ transform parse_transform(const json& object) {
     return result;
 }
 
-json source_to_json(const source& value) {
-    json result = {
-        {"type", value.type},
-    };
-    if (!value.shape.empty()) {
-        result["shape"] = value.shape;
-    }
-    if (!value.text.empty()) {
-        result["text"] = value.text;
-    }
-    if (!value.fill.empty()) {
-        result["fill"] = value.fill;
-    }
-    if (!value.asset_id.empty()) {
-        result["assetId"] = value.asset_id;
-    }
-    return result;
+bool is_effect_component_type(const std::string& type) {
+    return type == "fade" ||
+           type == "pulse" ||
+           type == "beatPulse" ||
+           type == "flash" ||
+           type == "shake";
 }
 
-source parse_source(const json& object) {
-    source result;
-    if (!object.is_object()) {
-        return result;
-    }
-    result.type = get_string(object, "type", result.type);
-    result.shape = get_string(object, "shape");
-    result.text = get_string(object, "text");
-    result.fill = get_string(object, "fill", result.fill);
-    result.asset_id = get_string(object, "assetId");
-    return result;
+bool is_transform_component_type(const std::string& type) {
+    return type == "transform";
 }
 
-json layer_to_json(const layer& value) {
-    json effects = json::array();
-    for (const effect& current : value.effects) {
-        effects.push_back({
-            {"id", current.id},
-            {"type", current.type},
-            {"target", current.target},
-            {"amount", current.amount},
-        });
-    }
+bool is_renderable_component_type(const std::string& type) {
+    return type == "background" ||
+           type == "text" ||
+           type == "shape" ||
+           type == "image" ||
+           type == "beatGrid" ||
+           type == "waveform" ||
+           type == "spectrum";
+}
 
+json keyframes_to_json(const std::vector<keyframe_track>& value) {
     json keyframes = json::array();
-    for (const keyframe_track& current : value.keyframes) {
+    for (const keyframe_track& current : value) {
         json points = json::array();
         for (const keyframe& point : current.points) {
             points.push_back({
@@ -159,34 +139,99 @@ json layer_to_json(const layer& value) {
             {"points", points},
         });
     }
+    return keyframes;
+}
 
-    json triggers = json::array();
-    for (const event_trigger& current : value.event_triggers) {
-        json actions = json::array();
-        for (const event_action& action : current.actions) {
-            json action_json = {{"type", action.type}};
-            if (!action.effect_id.empty()) {
-                action_json["effectId"] = action.effect_id;
-            }
-            if (!action.property.empty()) {
-                action_json["property"] = action.property;
-            }
-            if (!action.value.empty()) {
-                action_json["value"] = action.value;
-            }
-            actions.push_back(action_json);
+std::vector<keyframe_track> parse_keyframes(const json& value) {
+    std::vector<keyframe_track> result;
+    if (!value.is_array()) {
+        return result;
+    }
+    for (const json& item : value) {
+        if (!item.is_object()) {
+            continue;
         }
-        json trigger_json = {
-            {"event", current.event},
-            {"actions", actions},
-        };
-        if (current.time_ms >= 0.0) {
-            trigger_json["timeMs"] = current.time_ms;
+        keyframe_track track;
+        track.target = get_string(item, "target");
+        if (const auto points = item.find("points"); points != item.end() && points->is_array()) {
+            for (const json& point_json : *points) {
+                if (!point_json.is_object()) {
+                    continue;
+                }
+                track.points.push_back({
+                    get_number(point_json, "timeMs", 0.0),
+                    get_float(point_json, "value", 0.0f),
+                    get_string(point_json, "easing", "linear"),
+                });
+            }
         }
-        triggers.push_back(trigger_json);
+        result.push_back(std::move(track));
+    }
+    return result;
+}
+
+json component_to_json(const component& value) {
+    json result = {
+        {"type", value.type},
+        {"kind", value.kind.empty()
+            ? (is_transform_component_type(value.type) ? "transform" :
+               is_effect_component_type(value.type) ? "component" : "component")
+            : value.kind},
+    };
+    if (!value.id.empty()) {
+        result["id"] = value.id;
+    }
+    if (!value.shape.empty()) {
+        result["shape"] = value.shape;
+    }
+    if (!value.text.empty()) {
+        result["text"] = value.text;
+    }
+    if (!value.fill.empty()) {
+        result["fill"] = value.fill;
+    }
+    if (!value.asset_id.empty()) {
+        result["assetId"] = value.asset_id;
+    }
+    if (!value.target.empty()) {
+        result["target"] = value.target;
+    }
+    if (value.amount != 0.0f) {
+        result["amount"] = value.amount;
+    }
+    if (result["kind"] == "transform") {
+        result["transform"] = transform_to_json(transform_from_component(value));
+    }
+    return result;
+}
+
+component parse_component(const json& object) {
+    component result;
+    if (!object.is_object()) {
+        return result;
+    }
+    result.id = get_string(object, "id");
+    result.type = get_string(object, "type", result.type);
+    result.shape = get_string(object, "shape");
+    result.text = get_string(object, "text");
+    result.fill = get_string(object, "fill", result.fill);
+    result.asset_id = get_string(object, "assetId");
+    result.target = get_string(object, "target");
+    result.amount = get_float(object, "amount");
+    result.kind = get_string(object, "kind", result.kind);
+    if (const auto it = object.find("transform"); it != object.end()) {
+        apply_transform_to_component(result, parse_transform(*it));
+    }
+    return result;
+}
+
+json layer_to_json(const layer& value) {
+    json components = json::array();
+    for (const component& current : value.components) {
+        components.push_back(component_to_json(current));
     }
 
-    return {
+    json result = {
         {"id", value.id},
         {"name", value.name},
         {"visible", value.visible},
@@ -194,12 +239,12 @@ json layer_to_json(const layer& value) {
         {"z", value.z},
         {"startMs", value.start_ms},
         {"durationMs", value.duration_ms},
-        {"source", source_to_json(value.source_data)},
-        {"transform", transform_to_json(value.transform_data)},
-        {"effects", effects},
-        {"keyframes", keyframes},
-        {"eventTriggers", triggers},
+        {"components", components},
     };
+    if (!value.keyframes.empty()) {
+        result["keyframes"] = keyframes_to_json(value.keyframes);
+    }
+    return result;
 }
 
 layer parse_layer(const json& object) {
@@ -211,69 +256,17 @@ layer parse_layer(const json& object) {
     result.z = static_cast<int>(get_number(object, "z", 0.0));
     result.start_ms = get_number(object, "startMs", 0.0);
     result.duration_ms = get_number(object, "durationMs", 0.0);
-    if (const auto it = object.find("source"); it != object.end()) {
-        result.source_data = parse_source(*it);
-    }
-    if (const auto it = object.find("transform"); it != object.end()) {
-        result.transform_data = parse_transform(*it);
-    }
-    if (const auto it = object.find("effects"); it != object.end() && it->is_array()) {
+    if (const auto it = object.find("components"); it != object.end() && it->is_array()) {
         for (const json& item : *it) {
             if (!item.is_object()) {
                 continue;
             }
-            effect effect_item;
-            effect_item.id = get_string(item, "id");
-            effect_item.type = get_string(item, "type");
-            effect_item.target = get_string(item, "target");
-            effect_item.amount = get_float(item, "amount");
-            result.effects.push_back(std::move(effect_item));
+            component component_item = parse_component(item);
+            result.components.push_back(std::move(component_item));
         }
     }
-    if (const auto it = object.find("keyframes"); it != object.end() && it->is_array()) {
-        for (const json& item : *it) {
-            if (item.is_object()) {
-                keyframe_track track;
-                track.target = get_string(item, "target");
-                if (const auto points = item.find("points"); points != item.end() && points->is_array()) {
-                    for (const json& point_json : *points) {
-                        if (!point_json.is_object()) {
-                            continue;
-                        }
-                        track.points.push_back({
-                            get_number(point_json, "timeMs", 0.0),
-                            get_float(point_json, "value", 0.0f),
-                            get_string(point_json, "easing", "linear"),
-                        });
-                    }
-                }
-                result.keyframes.push_back(std::move(track));
-            }
-        }
-    }
-    if (const auto it = object.find("eventTriggers"); it != object.end() && it->is_array()) {
-        for (const json& item : *it) {
-            if (!item.is_object()) {
-                continue;
-            }
-            event_trigger trigger;
-            trigger.event = get_string(item, "event");
-            trigger.time_ms = get_number(item, "timeMs", -1.0);
-            if (const auto actions = item.find("actions"); actions != item.end() && actions->is_array()) {
-                for (const json& action_json : *actions) {
-                    if (!action_json.is_object()) {
-                        continue;
-                    }
-                    trigger.actions.push_back({
-                        get_string(action_json, "type"),
-                        get_string(action_json, "effectId"),
-                        get_string(action_json, "property"),
-                        get_string(action_json, "value"),
-                    });
-                }
-            }
-            result.event_triggers.push_back(std::move(trigger));
-        }
+    if (const auto it = object.find("keyframes"); it != object.end()) {
+        result.keyframes = parse_keyframes(*it);
     }
     return result;
 }
@@ -317,25 +310,37 @@ std::vector<std::string> validate(const mv_composition& value) {
         if (current.duration_ms < 0.0) {
             errors.push_back("Layer durationMs must not be negative.");
         }
-        if (current.source_data.type == "image") {
-            if (current.source_data.asset_id.empty()) {
-                errors.push_back("Image layer is missing assetId.");
-            } else if (asset_ids.find(current.source_data.asset_id) == asset_ids.end()) {
-                errors.push_back("Image layer references an unknown assetId.");
+        if (transform_component(current) == nullptr) {
+            errors.push_back("Object is missing Transform component.");
+        }
+        for (const component& component_item : current.components) {
+            if (component_item.type == "image") {
+                if (component_item.asset_id.empty()) {
+                    errors.push_back("Image component is missing assetId.");
+                } else if (asset_ids.find(component_item.asset_id) == asset_ids.end()) {
+                    errors.push_back("Image component references an unknown assetId.");
+                }
+            }
+            if (component_item.kind != "transform" &&
+                component_item.type != "transform" &&
+                !is_renderable_component_type(component_item.type) &&
+                !is_effect_component_type(component_item.type)) {
+                errors.push_back("Component has unknown type.");
             }
         }
         std::unordered_set<std::string> effect_ids;
-        for (const effect& current_effect : current.effects) {
+        for (const component* current_effect_ptr : effect_components(current)) {
+            const component& current_effect = *current_effect_ptr;
             if (current_effect.id.empty()) {
-                errors.push_back("Effect is missing id.");
+                errors.push_back("Effect component is missing id.");
             } else {
                 const auto [_, inserted] = effect_ids.insert(current_effect.id);
                 if (!inserted) {
-                    errors.push_back("Effect id must be unique within a layer.");
+                    errors.push_back("Effect component id must be unique within an object.");
                 }
             }
             if (current_effect.type.empty()) {
-                errors.push_back("Effect is missing type.");
+                errors.push_back("Effect component is missing type.");
             }
         }
         for (const keyframe_track& track : current.keyframes) {
@@ -351,29 +356,6 @@ std::vector<std::string> validate(const mv_composition& value) {
                     errors.push_back("Keyframe points must be sorted by timeMs.");
                 }
                 previous_time = point.time_ms;
-            }
-        }
-        for (const event_trigger& trigger : current.event_triggers) {
-            if (trigger.event.empty() && trigger.time_ms < 0.0) {
-                errors.push_back("EventTrigger must have event or timeMs.");
-            }
-            if (trigger.time_ms < 0.0 && trigger.time_ms != -1.0) {
-                errors.push_back("EventTrigger timeMs must be non-negative when present.");
-            }
-            for (const event_action& action : trigger.actions) {
-                if (action.type.empty()) {
-                    errors.push_back("EventTrigger action is missing type.");
-                }
-                if (action.type == "triggerEffect") {
-                    if (action.effect_id.empty()) {
-                        errors.push_back("triggerEffect action is missing effectId.");
-                    } else if (effect_ids.find(action.effect_id) == effect_ids.end()) {
-                        errors.push_back("triggerEffect action references an unknown effectId.");
-                    }
-                }
-                if (action.type == "setProperty" && action.property.empty()) {
-                    errors.push_back("setProperty action is missing property.");
-                }
             }
         }
     }

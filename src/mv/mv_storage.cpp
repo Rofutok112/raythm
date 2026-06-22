@@ -492,7 +492,7 @@ std::optional<mv::mv_package> load_managed_package_directory(const fs::path& dir
         meta.composition_file = "composition.rmvcomp";
     }
     if (meta.format_version <= 0) {
-        meta.format_version = 1;
+        meta.format_version = 2;
     }
     if (meta.mv_id.empty() || meta.song_id.empty()) {
         return std::nullopt;
@@ -565,7 +565,7 @@ mv_package make_default_package_for_song(const song_meta& song) {
     meta.name = song.title.empty() ? "New MV" : song.title + " MV";
     meta.author.clear();
     meta.composition_file = "composition.rmvcomp";
-    meta.format_version = 1;
+    meta.format_version = 2;
     mv_package package{meta, path_utils::to_utf8(app_paths::mv_dir(meta.mv_id))};
     package.song_duration_ms = song.duration_seconds > 0.0f
         ? static_cast<double>(song.duration_seconds) * 1000.0
@@ -662,8 +662,9 @@ composition::mv_composition make_default_composition_for_song(const mv_package& 
         composition::make_default_for_song(package.meta.mv_id, package.song_duration_ms);
     const std::string title = package.meta.name.empty() ? "New MV" : package.meta.name;
     for (composition::layer& current : composition.layers) {
-        if (current.source_data.type == "text" && current.source_data.text == "New MV") {
-            current.source_data.text = title;
+        if (composition::component* renderer = composition::renderable_component(current);
+            renderer != nullptr && renderer->type == "text" && renderer->text == "New MV") {
+            renderer->text = title;
         }
     }
     return composition;

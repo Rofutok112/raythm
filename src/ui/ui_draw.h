@@ -711,7 +711,7 @@ inline float draw_slider_relative(Rectangle row_rect, const char* label, const c
                 layout.track_rect.width * clamped, layout.track_rect.height, g_theme->slider_fill);
 
     const float knob_x = layout.track_rect.x + layout.track_rect.width * clamped;
-    draw_rect_f(knob_x - 6.0f, layout.track_rect.y - 8.0f, 12.0f, 22.0f, g_theme->slider_knob);
+    draw_rect_f(knob_x - 4.0f, layout.track_rect.y - 5.0f, 8.0f, 16.0f, g_theme->slider_knob);
     draw_text_in_rect(value_text, font_size, layout.value_rect, g_theme->text_dim, text_align::right);
 
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), row_rect)) {
@@ -741,7 +741,7 @@ inline float draw_slider_relative(Rectangle row_rect, const char* label, const c
                 layout.track_rect.width * clamped, layout.track_rect.height, g_theme->slider_fill);
 
     const float knob_x = layout.track_rect.x + layout.track_rect.width * clamped;
-    draw_rect_f(knob_x - 6.0f, layout.track_rect.y - 8.0f, 12.0f, 22.0f, g_theme->slider_knob);
+    draw_rect_f(knob_x - 4.0f, layout.track_rect.y - 5.0f, 8.0f, 16.0f, g_theme->slider_knob);
     draw_text_in_rect(value_text, font_size, layout.value_rect, g_theme->text_dim, text_align::right);
 
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && is_hovered(row_rect, layer)) {

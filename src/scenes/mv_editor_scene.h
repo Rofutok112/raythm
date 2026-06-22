@@ -10,19 +10,25 @@
 #include "mv/mv_storage.h"
 #include "raylib.h"
 #include "scene.h"
+#include "ui_inspector.h"
 #include "ui_text_input.h"
+
+enum class mv_preview_drag_mode {
+    none,
+    move,
+    north,
+    south,
+    west,
+    east,
+    northwest,
+    northeast,
+    southwest,
+    southeast,
+};
 
 // Song-scoped MV composition editor.
 class mv_editor_scene final : public scene {
 public:
-    enum class workspace {
-        compose,
-        timeline,
-        assets,
-        effects,
-        events,
-    };
-
     mv_editor_scene(scene_manager& manager, song_data song);
 
     void on_enter() override;
@@ -38,6 +44,13 @@ private:
         trim_end,
     };
 
+    enum class context_menu_target {
+        none,
+        project,
+        components,
+        timeline,
+    };
+
     void validate_composition();
     void save_mv();
     void commit_history(const std::string& label);
@@ -48,21 +61,17 @@ private:
     void reset_inspector_inputs();
     void sync_inspector_inputs(const mv::composition::layer& layer);
     bool inspector_text_input_active() const;
+    void add_empty_layer();
     void add_text_layer();
     void add_rect_layer();
     void add_image_layer();
     void add_beat_grid_layer();
     void add_waveform_layer();
     void add_spectrum_layer();
-    void apply_builtin_preset(const std::string& preset_id);
+    void add_component_to_selected_layer(const std::string& type);
     void key_selected_transform();
     void delete_transform_keyframes_at_playhead();
     int transform_keyframe_count_at_playhead() const;
-    void add_flash_event_trigger_at_playhead();
-    void add_show_event_trigger_at_playhead();
-    void add_text_event_trigger_at_playhead();
-    void clear_event_triggers_at_playhead();
-    int event_trigger_count_at_playhead() const;
     void add_fade_effect_to_selected_layer();
     void add_pulse_effect_to_selected_layer();
     void add_flash_effect_to_selected_layer();
@@ -94,6 +103,12 @@ private:
     ui::text_input_state layer_name_input_;
     ui::text_input_state layer_text_input_;
     ui::text_input_state layer_fill_input_;
+    ui::text_input_state transform_x_input_;
+    ui::text_input_state transform_y_input_;
+    ui::text_input_state transform_scale_input_;
+    std::unordered_map<std::string, ui::text_input_state> component_text_inputs_;
+    std::unordered_map<std::string, ui::text_input_state> component_fill_inputs_;
+    std::unordered_map<std::string, ui::inspector::color_picker_state> component_color_pickers_;
     std::string inspector_input_layer_id_;
     bool metadata_modal_open_ = false;
     float metadata_modal_open_anim_ = 0.0f;
@@ -102,8 +117,24 @@ private:
     bool preview_playing_ = false;
     bool preview_audio_loaded_ = false;
     bool inspector_edit_pending_ = false;
-    workspace current_workspace_ = workspace::compose;
+    bool context_menu_open_ = false;
+    context_menu_target context_menu_target_ = context_menu_target::none;
+    Vector2 context_menu_position_ = {0.0f, 0.0f};
+    float inspector_scroll_offset_ = 0.0f;
+    bool inspector_scrollbar_dragging_ = false;
+    float inspector_scrollbar_drag_offset_ = 0.0f;
+    float hierarchy_scroll_offset_ = 0.0f;
+    bool hierarchy_scrollbar_dragging_ = false;
+    float hierarchy_scrollbar_drag_offset_ = 0.0f;
+    float timeline_vertical_scroll_offset_ = 0.0f;
+    double timeline_horizontal_scroll_ms_ = 0.0;
+    float timeline_zoom_ = 1.0f;
     double playhead_ms_ = 0.0;
+    mv_preview_drag_mode preview_drag_mode_ = mv_preview_drag_mode::none;
+    std::string preview_drag_layer_id_;
+    Vector2 preview_drag_origin_mouse_ = {0.0f, 0.0f};
+    Rectangle preview_drag_origin_rect_ = {0.0f, 0.0f, 0.0f, 0.0f};
+    mv::composition::transform preview_drag_origin_transform_;
     timeline_drag_mode timeline_drag_mode_ = timeline_drag_mode::none;
     std::string timeline_drag_layer_id_;
     float timeline_drag_origin_mouse_x_ = 0.0f;

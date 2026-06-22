@@ -17,7 +17,7 @@ struct mv_metadata {
     std::string name;
     std::string author;
     std::string description;
-    int format_version = 1;
+    int format_version = 2;
     std::string composition_file = "composition.rmvcomp";
 };
 

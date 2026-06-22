@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <utility>
 
 #include "app_paths.h"
 #include "core/path_utils.h"
@@ -191,7 +192,9 @@ int main() {
         mv::composition::mv_composition imported = mv::make_default_composition_for_song(package);
         imported.composition_id = "foreign-composition-id";
         imported.canvas_data.background = "#112233";
-        imported.layers.front().source_data.fill = "#112233";
+        if (mv::composition::component* renderer = mv::composition::renderable_component(imported.layers.front())) {
+            renderer->fill = "#112233";
+        }
         expect(write_text_file(import_path, mv::composition::serialize(imported)),
                "Expected to write import composition.",
                ok);
@@ -240,8 +243,10 @@ int main() {
             mv::composition::layer image_layer;
             image_layer.id = "layer-package-image";
             image_layer.name = "Package Image";
-            image_layer.source_data.type = "image";
-            image_layer.source_data.asset_id = imported_asset->id;
+            image_layer.components.push_back(mv::composition::make_transform_component());
+            mv::composition::component image_renderer = mv::composition::make_component("image");
+            image_renderer.asset_id = imported_asset->id;
+            image_layer.components.push_back(std::move(image_renderer));
             image_layer.duration_ms = 1000.0;
             package_composition.layers.push_back(image_layer);
             expect(mv::save_composition(package, package_composition),
@@ -423,8 +428,11 @@ int main() {
                     mv::composition::layer managed_image_layer;
                     managed_image_layer.id = "layer-managed-image";
                     managed_image_layer.name = "Managed Image";
-                    managed_image_layer.source_data.type = "image";
-                    managed_image_layer.source_data.asset_id = managed_asset->id;
+                    managed_image_layer.components.push_back(mv::composition::make_transform_component());
+                    mv::composition::component managed_image_renderer =
+                        mv::composition::make_component("image");
+                    managed_image_renderer.asset_id = managed_asset->id;
+                    managed_image_layer.components.push_back(std::move(managed_image_renderer));
                     managed_image_layer.duration_ms = 1000.0;
                     managed_package_composition.layers.push_back(managed_image_layer);
                     expect(mv::save_composition(*found_managed, managed_package_composition),

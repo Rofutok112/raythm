@@ -19,7 +19,6 @@ public:
 
     void load_for_song(const std::optional<song_data>& song);
     void reset();
-    void notify_song_visual_event(const std::string& event_name, double event_time_ms);
     void draw(const play_session_state& state, double visual_time_ms);
 
 private:
@@ -29,6 +28,5 @@ private:
 
     std::optional<mv::mv_package> package_;
     std::optional<mv::composition::mv_composition> composition_;
-    std::optional<double> previous_visual_time_ms_;
     std::unordered_map<std::string, Texture2D> asset_textures_;
 };

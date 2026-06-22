@@ -202,7 +202,9 @@ int main() {
     }
 
     mv::composition::mv_composition edited = composition;
-    edited.layers.front().transform_data.position_x = 321.0f;
+    if (mv::composition::component* transform = mv::composition::transform_component(edited.layers.front())) {
+        transform->position_x = 321.0f;
+    }
     const std::string previous_remote_hash = manifest.mv.remote_mv_hash;
     const std::string previous_remote_fingerprint = manifest.mv.remote_mv_fingerprint;
     const std::string previous_local_hash = manifest.mv.mv_hash;

@@ -60,17 +60,22 @@ int main() {
     expect(history.can_undo(), "Expected undo after branch commit.", ok);
     expect(!history.can_redo(), "Expected branch commit to clear redo.", ok);
 
-    composition.layers.back().source_data.type = "text";
-    composition.layers.back().source_data.text = "Hello MV";
-    composition.layers.back().source_data.fill = "#6ee7b7";
+    composition.layers.back().components.push_back(mv::composition::make_transform_component());
+    mv::composition::component renderer = mv::composition::make_component("text");
+    renderer.text = "Hello MV";
+    renderer.fill = "#6ee7b7";
+    composition.layers.back().components.push_back(renderer);
     history.commit(composition, layer.id, "Edit Source");
     expect(history.undo(snapshot), "Expected undo of source edit to succeed.", ok);
-    expect(snapshot.composition.layers.back().source_data.text.empty(),
+    expect(mv::composition::renderable_component(snapshot.composition.layers.back()) == nullptr,
            "Expected source text to undo.",
            ok);
     expect(history.redo(snapshot), "Expected redo of source edit to succeed.", ok);
-    expect(snapshot.composition.layers.back().source_data.text == "Hello MV" &&
-               snapshot.composition.layers.back().source_data.fill == "#6ee7b7",
+    const mv::composition::component* redone_renderer =
+        mv::composition::renderable_component(snapshot.composition.layers.back());
+    expect(redone_renderer != nullptr &&
+               redone_renderer->text == "Hello MV" &&
+               redone_renderer->fill == "#6ee7b7",
            "Expected source text and fill to redo.",
            ok);
 

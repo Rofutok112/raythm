@@ -94,7 +94,8 @@ float evaluate_track(const keyframe_track& track, double time_ms, float fallback
 }
 
 transform evaluate_transform(const layer& layer, double time_ms) {
-    transform result = layer.transform_data;
+    const component* transform_data = transform_component(layer);
+    transform result = transform_data == nullptr ? transform{} : transform_from_component(*transform_data);
     for (const keyframe_track& track : layer.keyframes) {
         if (track.target == "transform.position.x") {
             result.position_x = evaluate_track(track, time_ms, result.position_x);
@@ -110,15 +111,15 @@ transform evaluate_transform(const layer& layer, double time_ms) {
             result.opacity = evaluate_track(track, time_ms, result.opacity);
         }
     }
-    for (const effect& current : layer.effects) {
-        if (current.type == "fade") {
-            apply_fade_effect(layer, current, time_ms, result);
-        } else if (current.type == "pulse" || current.type == "beatPulse") {
-            apply_pulse_effect(layer, current, time_ms, result);
-        } else if (current.type == "flash") {
-            apply_flash_effect(layer, current, time_ms, result);
-        } else if (current.type == "shake") {
-            apply_shake_effect(layer, current, time_ms, result);
+    for (const component* current : effect_components(layer)) {
+        if (current->type == "fade") {
+            apply_fade_effect(layer, *current, time_ms, result);
+        } else if (current->type == "pulse" || current->type == "beatPulse") {
+            apply_pulse_effect(layer, *current, time_ms, result);
+        } else if (current->type == "flash") {
+            apply_flash_effect(layer, *current, time_ms, result);
+        } else if (current->type == "shake") {
+            apply_shake_effect(layer, *current, time_ms, result);
         }
     }
     return result;

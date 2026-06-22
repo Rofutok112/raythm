@@ -61,6 +61,14 @@
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/lock.svg"
     },
     {
+      "name": "unlock",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/lock-open.svg"
+    },
+    {
+      "name": "eye",
+      "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/eye.svg"
+    },
+    {
       "name": "repeat_2",
       "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/repeat-2.svg"
     },
