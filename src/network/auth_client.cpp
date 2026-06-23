@@ -282,6 +282,13 @@ bool server_urls_match(const std::string& lhs, const std::string& rhs) {
     return auth::normalize_server_url(lhs) == auth::normalize_server_url(rhs);
 }
 
+bool should_clear_saved_session_after_refresh_failure(const http_response& response) {
+    return response.status_code == 400 ||
+           response.status_code == 401 ||
+           response.status_code == 403 ||
+           response.status_code == 410;
+}
+
 bool write_session_file(const auth::session& session_data) {
     app_paths::ensure_directories();
     std::ofstream output(app_paths::auth_session_path(), std::ios::binary | std::ios::trunc);
@@ -789,13 +796,14 @@ operation_result restore_saved_session() {
     }
 
     if (refresh_response.status_code < 200 || refresh_response.status_code >= 300) {
-        clear_saved_session();
+        if (should_clear_saved_session_after_refresh_failure(refresh_response)) {
+            clear_saved_session();
+        }
         return make_operation_http_error(refresh_response, "Saved session expired.");
     }
 
     const std::optional<session> refreshed = parse_auth_session_response(refresh_response.body, active_server_url);
     if (!refreshed.has_value()) {
-        clear_saved_session();
         return {
             .success = false,
             .message = "Server returned an unexpected refresh response.",
