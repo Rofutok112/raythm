@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "audio_manager.h"
+#include "bass_path.h"
 #include "bass.h"
 
 audio::audio() {
@@ -28,7 +29,7 @@ void audio::load(const std::string& file_path) {
         handle_ = 0;
     }
 
-    handle_ = BASS_StreamCreateFile(FALSE, file_path.c_str(), 0, 0, 0);
+    handle_ = bass_path::create_file_stream(file_path);
 }
 
 void audio::play(bool restart) const {

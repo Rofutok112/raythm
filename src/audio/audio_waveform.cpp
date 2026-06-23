@@ -4,6 +4,7 @@
 #include <cmath>
 #include <vector>
 
+#include "bass_path.h"
 #include "bass.h"
 
 namespace {
@@ -82,8 +83,7 @@ audio_waveform_summary audio_waveform::build(const std::string& file_path, std::
     if (file_path.empty()) {
         return {};
     }
-    return build_from_stream(BASS_StreamCreateFile(
-                                 FALSE, file_path.c_str(), 0, 0, BASS_STREAM_DECODE | BASS_SAMPLE_FLOAT),
+    return build_from_stream(bass_path::create_file_stream(file_path, BASS_STREAM_DECODE | BASS_SAMPLE_FLOAT),
                              segment_count);
 }
 

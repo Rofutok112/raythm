@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "bass_path.h"
 #include "bass.h"
 
 namespace {
@@ -16,7 +17,7 @@ constexpr double kSilencePower = 1.0e-12;
 constexpr DWORD kDecodeFlags = BASS_STREAM_DECODE | BASS_SAMPLE_FLOAT | BASS_STREAM_PRESCAN;
 
 unsigned long create_decode_stream(const std::string& file_path) {
-    return BASS_StreamCreateFile(FALSE, file_path.c_str(), 0, 0, kDecodeFlags);
+    return bass_path::create_file_stream(file_path, kDecodeFlags);
 }
 }  // namespace
 

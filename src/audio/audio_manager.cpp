@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "bass_path.h"
 #include "bass.h"
 
 namespace {
@@ -68,7 +69,7 @@ std::mutex& loudness_cache_mutex() {
 
 std::optional<loudness_cache_entry> make_loudness_cache_probe(const std::string& file_path) {
     std::error_code ec;
-    const std::filesystem::path path(file_path);
+    const std::filesystem::path path = bass_path::filesystem_path(file_path);
     if (!std::filesystem::is_regular_file(path, ec) || ec) {
         return std::nullopt;
     }
@@ -85,23 +86,11 @@ std::optional<loudness_cache_entry> make_loudness_cache_probe(const std::string&
     return entry;
 }
 
-std::string lowercase_ascii(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return value;
-}
-
-bool is_remote_stream_url(const std::string& file_path) {
-    const std::string lowered = lowercase_ascii(file_path);
-    return lowered.rfind("http://", 0) == 0 || lowered.rfind("https://", 0) == 0;
-}
-
 unsigned long create_stream_from_path(const std::string& file_path) {
-    if (is_remote_stream_url(file_path)) {
-        return BASS_StreamCreateURL(file_path.c_str(), 0, BASS_STREAM_PRESCAN, nullptr, nullptr);
+    if (bass_path::is_remote_stream_url(file_path)) {
+        return bass_path::create_url_stream(file_path, BASS_STREAM_PRESCAN);
     }
-    return BASS_StreamCreateFile(FALSE, file_path.c_str(), 0, 0, 0);
+    return bass_path::create_file_stream(file_path);
 }
 
 unsigned long create_stream_from_memory_bytes(const std::vector<unsigned char>& bytes, DWORD flags = 0) {
@@ -112,14 +101,14 @@ unsigned long create_stream_from_memory_bytes(const std::vector<unsigned char>& 
 }
 
 bool is_pinned_se_sample_path(const std::string& file_path) {
-    return lowercase_ascii(std::filesystem::path(file_path).filename().string()) == "hitsound.mp3";
+    return bass_path::lowercase_ascii(bass_path::filesystem_path(file_path).filename().string()) == "hitsound.mp3";
 }
 
 se_sample_entry* find_or_load_se_sample(const std::string& file_path) {
     auto sample_it = se_samples().find(file_path);
     if (sample_it == se_samples().end()) {
-        const unsigned long sample_handle = BASS_SampleLoad(
-            FALSE, file_path.c_str(), 0, 0, kSeSampleMaxVoices, BASS_SAMPLE_OVER_POS);
+        const unsigned long sample_handle =
+            bass_path::load_sample(file_path, kSeSampleMaxVoices, BASS_SAMPLE_OVER_POS);
         if (sample_handle == 0) {
             return nullptr;
         }

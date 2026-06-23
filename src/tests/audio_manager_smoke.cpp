@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "audio_manager.h"
+#include "path_utils.h"
 
 namespace {
 std::filesystem::path repo_root() {
@@ -48,6 +49,18 @@ int main() {
         return 1;
     }
 
+    const std::filesystem::path unicode_audio_dir =
+        std::filesystem::temp_directory_path() / "raythm-audio-smoke-日本語";
+    std::error_code cleanup_ec;
+    std::filesystem::remove_all(unicode_audio_dir, cleanup_ec);
+    std::filesystem::create_directories(unicode_audio_dir);
+    const std::filesystem::path unicode_audio_path = unicode_audio_dir / "音源テスト.mp3";
+    std::filesystem::copy_file(audio_path, unicode_audio_path, std::filesystem::copy_options::overwrite_existing);
+    const std::string unicode_audio_path_utf8 = path_utils::to_utf8(unicode_audio_path);
+    auto cleanup_unicode_audio = [&]() {
+        std::filesystem::remove_all(unicode_audio_dir, cleanup_ec);
+    };
+
     bool worker_preview_request_result = true;
     std::thread preview_worker([&]() {
         worker_preview_request_result = manager.request_preview_load_from_memory(preview_bytes);
@@ -72,15 +85,31 @@ int main() {
     }
     manager.unload_preview();
 
-    if (!manager.load_bgm(audio_path.string())) {
-        std::cerr << "BGM load failed\n";
+    if (!manager.load_bgm(unicode_audio_path_utf8)) {
+        std::cerr << "BGM load failed for Unicode path\n";
+        manager.shutdown();
+        cleanup_unicode_audio();
         return 1;
     }
     const audio_loudness_analysis bgm_loudness = manager.get_bgm_loudness_analysis();
     if (!bgm_loudness.valid || bgm_loudness.linear_gain <= 0.0f || bgm_loudness.peak <= 0.0f) {
         std::cerr << "BGM loudness analysis failed\n";
+        cleanup_unicode_audio();
         return 1;
     }
+    if (!manager.preload_se(unicode_audio_path_utf8)) {
+        std::cerr << "SE preload failed for Unicode path\n";
+        manager.shutdown();
+        cleanup_unicode_audio();
+        return 1;
+    }
+    if (!manager.load_preview(unicode_audio_path_utf8)) {
+        std::cerr << "Preview load failed for Unicode path\n";
+        manager.shutdown();
+        cleanup_unicode_audio();
+        return 1;
+    }
+    manager.unload_preview();
     manager.set_loudness_normalization_enabled(true);
     if (!manager.is_loudness_normalization_enabled()) {
         std::cerr << "Loudness normalization flag did not update\n";
@@ -103,6 +132,7 @@ int main() {
         std::cerr << "Skipping playback-dependent audio smoke checks because the BGM clock did not advance.\n";
         manager.stop_bgm();
         manager.shutdown();
+        cleanup_unicode_audio();
         return 77;
     }
 
@@ -111,24 +141,24 @@ int main() {
         return 1;
     }
 
-    if (!manager.preload_se(audio_path.string())) {
-        std::cerr << "SE preload failed\n";
+    if (!manager.preload_se(unicode_audio_path_utf8)) {
+        std::cerr << "SE preload failed for Unicode path\n";
         return 1;
     }
 
-    if (!manager.load_preview(audio_path.string())) {
-        std::cerr << "Preview load failed\n";
+    if (!manager.load_preview(unicode_audio_path_utf8)) {
+        std::cerr << "Preview load failed for Unicode path\n";
         return 1;
     }
     manager.seek_preview(1.0);
     manager.set_preview_volume(0.1f);
     manager.play_preview();
     std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-    const int se_voice_1 = manager.play_se(audio_path.string(), 0.5f);
+    const int se_voice_1 = manager.play_se(unicode_audio_path_utf8, 0.5f);
     std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-    const int se_voice_2 = manager.play_se(audio_path.string(), 0.5f);
+    const int se_voice_2 = manager.play_se(unicode_audio_path_utf8, 0.5f);
     std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-    const int se_voice_3 = manager.play_se(audio_path.string(), 0.5f);
+    const int se_voice_3 = manager.play_se(unicode_audio_path_utf8, 0.5f);
     if (se_voice_1 == 0 || se_voice_2 == 0 || se_voice_3 == 0) {
         std::cerr << "SE play failed\n";
         return 1;
@@ -163,6 +193,7 @@ int main() {
     manager.stop_bgm();
     manager.stop_all_se();
     manager.shutdown();
+    cleanup_unicode_audio();
 
     std::cout << "audio_manager smoke test passed\n";
     return 0;
