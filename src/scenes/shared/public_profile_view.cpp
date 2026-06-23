@@ -99,6 +99,23 @@ void draw_profile_body(const model& state, Rectangle modal) {
                           {content.x + 124.0f, content.y + 66.0f, content.width - 124.0f, 22.0f},
                           t.accent,
                           ui::text_align::left);
+    const Rectangle rating_panel = {content.x + 124.0f, content.y + 94.0f, 260.0f, 36.0f};
+    ui::draw_rect_f(rating_panel, with_alpha(t.row_soft, 226));
+    ui::draw_rect_lines(rating_panel, 1.0f, t.border_light);
+    ui::draw_text_in_rect("SEASON 0 RATING", 11,
+                          {rating_panel.x + 12.0f, rating_panel.y + 5.0f, 128.0f, 14.0f},
+                          t.text_muted,
+                          ui::text_align::left);
+    const std::string rating_text = TextFormat("%.2f", profile.rating.rating);
+    ui::draw_text_in_rect(rating_text.c_str(), 19,
+                          {rating_panel.x + 12.0f, rating_panel.y + 14.0f, 112.0f, 20.0f},
+                          t.accent,
+                          ui::text_align::left);
+    const std::string plays_text = TextFormat("%d plays", profile.rating.eligible_play_count);
+    ui::draw_text_in_rect(plays_text.c_str(), 12,
+                          {rating_panel.x + 142.0f, rating_panel.y + 13.0f, 104.0f, 18.0f},
+                          t.text_muted,
+                          ui::text_align::right);
     ui::detail::draw_button_visual(layout.relationship_button_rect,
                                    relationship_action.enabled &&
                                        ui::is_hovered(layout.relationship_button_rect, layout.layer),
@@ -111,7 +128,7 @@ void draw_profile_body(const model& state, Rectangle modal) {
                                    relationship_action.enabled ? t.accent : t.text_muted,
                                    1.5f);
 
-    const Rectangle links_area{content.x, content.y + 142.0f, content.width, content.height - 142.0f};
+    const Rectangle links_area{content.x, content.y + 152.0f, content.width, content.height - 152.0f};
     if (profile.external_links.empty()) {
         ui::draw_text_in_rect("No public profile links.", 18, links_area, t.text_muted, ui::text_align::left);
         return;

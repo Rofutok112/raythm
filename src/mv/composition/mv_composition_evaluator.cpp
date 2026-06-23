@@ -95,7 +95,7 @@ float evaluate_track(const keyframe_track& track, double time_ms, float fallback
 
 transform evaluate_transform(const layer& layer, double time_ms) {
     const component* transform_data = transform_component(layer);
-    transform result = transform_data == nullptr ? transform{} : transform_from_component(*transform_data);
+    transform result = transform_data == nullptr ? layer.transform_data : transform_from_component(*transform_data);
     for (const keyframe_track& track : layer.keyframes) {
         if (track.target == "transform.position.x") {
             result.position_x = evaluate_track(track, time_ms, result.position_x);
@@ -112,13 +112,14 @@ transform evaluate_transform(const layer& layer, double time_ms) {
         }
     }
     for (const component* current : effect_components(layer)) {
-        if (current->type == "fade") {
+        const std::string type = canonical_component_type(current->type);
+        if (type == "Fade") {
             apply_fade_effect(layer, *current, time_ms, result);
-        } else if (current->type == "pulse" || current->type == "beatPulse") {
+        } else if (type == "Pulse" || type == "BeatReactive") {
             apply_pulse_effect(layer, *current, time_ms, result);
-        } else if (current->type == "flash") {
+        } else if (type == "Flash") {
             apply_flash_effect(layer, *current, time_ms, result);
-        } else if (current->type == "shake") {
+        } else if (type == "Shake") {
             apply_shake_effect(layer, *current, time_ms, result);
         }
     }
@@ -147,7 +148,10 @@ keyframe_track& ensure_keyframe_track(layer& layer, const std::string& target) {
     if (it != layer.keyframes.end()) {
         return *it;
     }
-    layer.keyframes.push_back({target, {}});
+    keyframe_track track;
+    track.object_id = layer.id;
+    track.target = target;
+    layer.keyframes.push_back(std::move(track));
     return layer.keyframes.back();
 }
 

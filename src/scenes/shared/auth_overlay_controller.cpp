@@ -50,6 +50,7 @@ void refresh_auth_state(song_select::auth_state& auth_state) {
     auth_state.display_name = summary.display_name;
     auth_state.avatar_url = summary.avatar_url;
     auth_state.email_verified = summary.email_verified;
+    auth_state.rating = summary.rating;
     auth_state.external_links = summary.external_links;
 }
 

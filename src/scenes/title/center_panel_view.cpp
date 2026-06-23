@@ -9,6 +9,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_tooltip.h"
 #include "ui/icons/raythm_icons.h"
 #include "shared/content_status_badge.h"
 
@@ -120,6 +121,7 @@ void draw_status_side_icons(Rectangle first_icon_rect,
                             unsigned char alpha) {
     if (modified) {
         raythm_icons::draw_triangle_alert(first_icon_rect, with_alpha(g_theme->slow, alpha), 2.4f);
+        ui::enqueue_hover_tooltip(first_icon_rect, "変更されています", alpha);
     }
 }
 

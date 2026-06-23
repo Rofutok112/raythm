@@ -148,7 +148,7 @@ bool write_chart(std::ostream& output, const chart_data& data) {
     }
 
     std::vector<note_data> sorted_notes = data.notes;
-    std::sort(sorted_notes.begin(), sorted_notes.end(), [](const note_data& left, const note_data& right) {
+    std::stable_sort(sorted_notes.begin(), sorted_notes.end(), [](const note_data& left, const note_data& right) {
         if (left.tick != right.tick) {
             return left.tick < right.tick;
         }

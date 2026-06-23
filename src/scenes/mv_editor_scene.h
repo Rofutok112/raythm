@@ -46,12 +46,19 @@ private:
 
     enum class context_menu_target {
         none,
-        project,
+        hierarchy,
+        project_assets,
         components,
         timeline,
     };
 
+    enum class bottom_panel_tab {
+        timeline,
+        project,
+    };
+
     void validate_composition();
+    bool sync_script_assets_from_components();
     void save_mv();
     void commit_history(const std::string& label);
     void update_dirty_from_history();
@@ -68,6 +75,9 @@ private:
     void add_beat_grid_layer();
     void add_waveform_layer();
     void add_spectrum_layer();
+    void import_image_asset_to_project();
+    void create_script_asset();
+    bool assign_asset_to_selected_component(const mv::composition::asset_ref& asset);
     void add_component_to_selected_layer(const std::string& type);
     void key_selected_transform();
     void delete_transform_keyframes_at_playhead();
@@ -83,6 +93,7 @@ private:
     mv::composition::layer* selected_layer();
     const mv::composition::layer* selected_layer() const;
     const mv::composition::asset_ref* find_asset(const std::string& asset_id) const;
+    void hydrate_lua_script_sources(mv::composition::layer& layer) const;
     const Texture2D* texture_for_asset(const mv::composition::asset_ref& asset);
     void unload_asset_textures();
     bool load_preview_audio();
@@ -97,6 +108,7 @@ private:
     mv::composition::edit_history history_;
     std::vector<std::string> diagnostics_;
     std::string selected_layer_id_;
+    std::string selected_project_asset_id_;
     std::unordered_map<std::string, Texture2D> asset_textures_;
     ui::text_input_state name_input_;
     ui::text_input_state author_input_;
@@ -108,6 +120,8 @@ private:
     ui::text_input_state transform_scale_input_;
     std::unordered_map<std::string, ui::text_input_state> component_text_inputs_;
     std::unordered_map<std::string, ui::text_input_state> component_fill_inputs_;
+    std::unordered_map<std::string, ui::text_input_state> component_script_entry_inputs_;
+    std::unordered_map<std::string, ui::text_input_state> component_script_inputs_;
     std::unordered_map<std::string, ui::inspector::color_picker_state> component_color_pickers_;
     std::string inspector_input_layer_id_;
     bool metadata_modal_open_ = false;
@@ -119,6 +133,7 @@ private:
     bool inspector_edit_pending_ = false;
     bool context_menu_open_ = false;
     context_menu_target context_menu_target_ = context_menu_target::none;
+    bottom_panel_tab bottom_panel_tab_ = bottom_panel_tab::timeline;
     Vector2 context_menu_position_ = {0.0f, 0.0f};
     float inspector_scroll_offset_ = 0.0f;
     bool inspector_scrollbar_dragging_ = false;
@@ -126,6 +141,9 @@ private:
     float hierarchy_scroll_offset_ = 0.0f;
     bool hierarchy_scrollbar_dragging_ = false;
     float hierarchy_scrollbar_drag_offset_ = 0.0f;
+    float project_scroll_offset_ = 0.0f;
+    bool project_scrollbar_dragging_ = false;
+    float project_scrollbar_drag_offset_ = 0.0f;
     float timeline_vertical_scroll_offset_ = 0.0f;
     double timeline_horizontal_scroll_ms_ = 0.0;
     float timeline_zoom_ = 1.0f;

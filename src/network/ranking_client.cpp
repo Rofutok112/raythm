@@ -82,6 +82,20 @@ std::optional<ranking_service::entry> parse_ranking_entry(const std::string& con
     };
 }
 
+std::optional<auth::rating_summary> parse_rating_summary(const std::string& content) {
+    const std::optional<std::string> object = json::extract_object(content, "rating");
+    if (!object.has_value()) {
+        return std::nullopt;
+    }
+    return auth::rating_summary{
+        .rating = json::extract_float(*object, "rating").value_or(0.0f),
+        .rank = json::extract_int(*object, "rank").value_or(0),
+        .eligible_play_count = json::extract_int(*object, "eligiblePlayCount").value_or(0),
+        .best_play_count = json::extract_int(*object, "bestPlayCount").value_or(0),
+        .ruleset_version = json::extract_string(*object, "rulesetVersion").value_or(""),
+    };
+}
+
 std::optional<ranking_client::listing_response> parse_listing_response(const std::string& body) {
     const bool available = json::extract_bool(body, "available").value_or(false);
     const std::string message = json::extract_string(body, "message").value_or("");
@@ -188,6 +202,7 @@ std::optional<ranking_client::submit_response> parse_submit_response(const std::
     if (const auto previous_object = json::extract_object(body, "previousEntry"); previous_object.has_value()) {
         response.previous_entry = parse_ranking_entry(*previous_object);
     }
+    response.rating = parse_rating_summary(body);
 
     return response;
 }

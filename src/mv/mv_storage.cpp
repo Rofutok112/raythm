@@ -446,6 +446,30 @@ std::string asset_extension(const fs::path& path) {
     return ext.empty() ? ".png" : ext;
 }
 
+std::string sanitize_asset_stem(std::string value, const std::string& fallback) {
+    std::string result;
+    result.reserve(value.size());
+    for (char ch : value) {
+        const unsigned char uch = static_cast<unsigned char>(ch);
+        if ((uch >= 'a' && uch <= 'z') ||
+            (uch >= 'A' && uch <= 'Z') ||
+            (uch >= '0' && uch <= '9')) {
+            result.push_back(static_cast<char>(std::tolower(uch)));
+        } else if (ch == '-' || ch == '_') {
+            result.push_back(ch);
+        } else if (ch == ' ' || ch == '.') {
+            result.push_back('-');
+        }
+    }
+    while (!result.empty() && result.front() == '-') {
+        result.erase(result.begin());
+    }
+    while (!result.empty() && result.back() == '-') {
+        result.pop_back();
+    }
+    return result.empty() ? fallback : result;
+}
+
 std::optional<mv::mv_package> load_package_directory(const fs::path& directory) {
     const fs::path json_path = directory / "mv.json";
     const std::string content = read_file(json_path);
@@ -661,9 +685,9 @@ composition::mv_composition make_default_composition_for_song(const mv_package& 
     composition::mv_composition composition =
         composition::make_default_for_song(package.meta.mv_id, package.song_duration_ms);
     const std::string title = package.meta.name.empty() ? "New MV" : package.meta.name;
-    for (composition::layer& current : composition.layers) {
+    for (composition::layer& current : composition.objects) {
         if (composition::component* renderer = composition::renderable_component(current);
-            renderer != nullptr && renderer->type == "text" && renderer->text == "New MV") {
+            renderer != nullptr && renderer->type == "TextRenderer" && renderer->text == "New MV") {
             renderer->text = title;
         }
     }
@@ -975,6 +999,10 @@ bool ensure_composition_package(const mv_package& package) {
     if (ec) {
         return false;
     }
+    fs::create_directories(root / "assets" / "scripts", ec);
+    if (ec) {
+        return false;
+    }
     if (fs::exists(composition_path(package))) {
         return true;
     }
@@ -1077,6 +1105,140 @@ std::optional<composition::asset_ref> import_image_asset(const mv_package& packa
     return asset;
 }
 
+std::optional<composition::asset_ref> create_script_asset(const mv_package& package,
+                                                          const std::string& name,
+                                                          const std::string& source,
+                                                          std::vector<std::string>* errors) {
+    if (source.empty()) {
+        if (errors != nullptr) {
+            errors->push_back("MV script asset source must not be empty.");
+        }
+        return std::nullopt;
+    }
+
+    if (package.storage != storage_policy::managed_package && !ensure_composition_package(package)) {
+        if (errors != nullptr) {
+            errors->push_back("Failed to prepare MV package script directories.");
+        }
+        return std::nullopt;
+    }
+
+    const std::string stem = sanitize_asset_stem(name, "script");
+    const std::string sha256 = updater::compute_sha256_hex(std::string_view(source));
+    const std::string id = "asset-script-" + stem + "-" + sha256.substr(0, 8);
+    const std::string relative_path = "assets/scripts/" + id + ".lua";
+
+    if (package.storage == storage_policy::managed_package) {
+        std::optional<managed_storage::package_manifest> manifest =
+            managed_storage::read_manifest(path_utils::from_utf8(package.directory));
+        if (!manifest.has_value()) {
+            if (errors != nullptr) {
+                errors->push_back("Managed MV manifest not found.");
+            }
+            return std::nullopt;
+        }
+        const managed_storage::edit_access_result edit_access = managed_storage::can_edit(*manifest);
+        if (!edit_access.editable) {
+            if (errors != nullptr) {
+                errors->push_back(edit_access.reason.empty()
+                    ? "Managed MV package is not editable."
+                    : edit_access.reason);
+            }
+            return std::nullopt;
+        }
+        std::string error_message;
+        if (!managed_storage::write_asset_file(*manifest, id, relative_path, source, error_message)) {
+            if (errors != nullptr) {
+                errors->push_back(error_message.empty()
+                    ? "Failed to write encrypted managed MV script asset."
+                    : error_message);
+            }
+            return std::nullopt;
+        }
+        composition::asset_ref asset;
+        asset.id = id;
+        asset.type = "script";
+        asset.path = relative_path;
+        asset.sha256 = sha256;
+        return asset;
+    }
+
+    const fs::path destination = path_utils::from_utf8(package.directory) / path_utils::from_utf8(relative_path);
+    if (!write_file(destination, source)) {
+        if (errors != nullptr) {
+            errors->push_back("Failed to write MV script asset.");
+        }
+        return std::nullopt;
+    }
+
+    composition::asset_ref asset;
+    asset.id = id;
+    asset.type = "script";
+    asset.path = relative_path;
+    asset.sha256 = sha256;
+    return asset;
+}
+
+bool update_script_asset_source(const mv_package& package,
+                                composition::asset_ref& asset,
+                                const std::string& source,
+                                std::vector<std::string>* errors) {
+    if (asset.type != "script") {
+        if (errors != nullptr) {
+            errors->push_back("MV asset is not a script.");
+        }
+        return false;
+    }
+    if (!is_package_relative_path(asset.path)) {
+        if (errors != nullptr) {
+            errors->push_back("MV asset path must be package-relative.");
+        }
+        return false;
+    }
+
+    const std::string sha256 = updater::compute_sha256_hex(std::string_view(source));
+    if (package.storage == storage_policy::managed_package) {
+        std::optional<managed_storage::package_manifest> manifest =
+            managed_storage::read_manifest(path_utils::from_utf8(package.directory));
+        if (!manifest.has_value()) {
+            if (errors != nullptr) {
+                errors->push_back("Managed MV manifest not found.");
+            }
+            return false;
+        }
+        const managed_storage::edit_access_result edit_access = managed_storage::can_edit(*manifest);
+        if (!edit_access.editable) {
+            if (errors != nullptr) {
+                errors->push_back(edit_access.reason.empty()
+                    ? "Managed MV package is not editable."
+                    : edit_access.reason);
+            }
+            return false;
+        }
+        std::string error_message;
+        if (!managed_storage::write_asset_file(*manifest, asset.id, asset.path, source, error_message)) {
+            if (errors != nullptr) {
+                errors->push_back(error_message.empty()
+                    ? "Failed to update encrypted managed MV script asset."
+                    : error_message);
+            }
+            return false;
+        }
+        asset.sha256 = sha256;
+        return true;
+    }
+
+    const fs::path destination = path_utils::from_utf8(package.directory) / path_utils::from_utf8(asset.path);
+    if (!write_file(destination, source)) {
+        if (errors != nullptr) {
+            errors->push_back("Failed to update MV script asset.");
+        }
+        return false;
+    }
+    asset.sha256 = sha256;
+    return true;
+}
+
 std::filesystem::path resolve_asset_path(const mv_package& package, const composition::asset_ref& asset) {
     if (!is_package_relative_path(asset.path)) {
         return {};
@@ -1127,6 +1289,22 @@ std::optional<std::vector<unsigned char>> read_asset_bytes(const mv_package& pac
         return std::nullopt;
     }
     return std::vector<unsigned char>(bytes->begin(), bytes->end());
+}
+
+std::optional<std::string> read_script_asset_source(const mv_package& package,
+                                                    const composition::asset_ref& asset,
+                                                    std::vector<std::string>* errors) {
+    if (asset.type != "script") {
+        if (errors != nullptr) {
+            errors->push_back("MV asset is not a script.");
+        }
+        return std::nullopt;
+    }
+    const std::optional<std::vector<unsigned char>> bytes = read_asset_bytes(package, asset, errors);
+    if (!bytes.has_value()) {
+        return std::nullopt;
+    }
+    return std::string(bytes->begin(), bytes->end());
 }
 
 }  // namespace mv

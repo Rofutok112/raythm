@@ -64,6 +64,10 @@ void draw_profile_chevron(Rectangle rect, Color color, unsigned char alpha) {
     raythm_icons::draw_chevron_right(centered_icon_rect(rect, 5.0f), with_alpha(color, alpha), 3.0f);
 }
 
+std::string rating_value_text(const auth::rating_summary& rating) {
+    return TextFormat("%.2f", rating.rating);
+}
+
 void draw_top_bar_controls(const title_header_view::draw_config& config) {
     const auto& t = *g_theme;
     const float bar_t = std::max(config.menu_t, config.play_t);
@@ -126,16 +130,42 @@ void draw_top_bar_controls(const title_header_view::draw_config& config) {
         std::string(config.avatar_base_url));
     const Rectangle account_name_rect = {
         avatar_rect.x + avatar_rect.width + 14.0f, config.account_chip_rect.y + 8.0f,
-        config.account_chip_rect.width - 104.0f, 30.0f
+        config.account_chip_rect.width - 168.0f, 30.0f
     };
     ui::draw_text_in_rect(std::string(config.account_name).c_str(), 20, account_name_rect,
                           with_alpha(bar_text, account_alpha), ui::text_align::left);
-    ui::draw_text_in_rect(std::string(config.account_status).c_str(),
-                          13,
-                          {avatar_rect.x + avatar_rect.width + 14.0f, config.account_chip_rect.y + 41.0f,
-                           config.account_chip_rect.width - 104.0f, 20.0f},
-                          with_alpha(config.logged_in && !config.email_verified ? t.error : bar_muted, account_alpha),
-                          ui::text_align::left);
+    if (config.logged_in) {
+        const Rectangle rating_label_rect = {
+            config.account_chip_rect.x + config.account_chip_rect.width - 96.0f,
+            config.account_chip_rect.y + 9.0f,
+            58.0f,
+            18.0f
+        };
+        const Rectangle rating_value_rect = {
+            config.account_chip_rect.x + config.account_chip_rect.width - 114.0f,
+            config.account_chip_rect.y + 28.0f,
+            76.0f,
+            26.0f
+        };
+        ui::draw_text_in_rect("RATING", 10, rating_label_rect,
+                              with_alpha(t.accent, account_alpha), ui::text_align::right);
+        const std::string rating_value = rating_value_text(config.rating);
+        ui::draw_text_in_rect(rating_value.c_str(), 18, rating_value_rect,
+                              with_alpha(bar_text, account_alpha), ui::text_align::right);
+        ui::draw_text_in_rect(config.email_verified ? "Season 0" : "Verify email",
+                              12,
+                              {avatar_rect.x + avatar_rect.width + 14.0f, config.account_chip_rect.y + 41.0f,
+                               config.account_chip_rect.width - 160.0f, 20.0f},
+                              with_alpha(config.email_verified ? bar_muted : t.error, account_alpha),
+                              ui::text_align::left);
+    } else {
+        ui::draw_text_in_rect(std::string(config.account_status).c_str(),
+                              13,
+                              {avatar_rect.x + avatar_rect.width + 14.0f, config.account_chip_rect.y + 41.0f,
+                               config.account_chip_rect.width - 104.0f, 20.0f},
+                              with_alpha(bar_muted, account_alpha),
+                              ui::text_align::left);
+    }
     draw_profile_chevron({config.account_chip_rect.x + config.account_chip_rect.width - 28.0f,
                           config.account_chip_rect.y, 28.0f, config.account_chip_rect.height},
                          bar_muted, account_alpha);

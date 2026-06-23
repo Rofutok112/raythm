@@ -11,6 +11,7 @@
 
 #include "audio_manager.h"
 #include "mv/composition/mv_composition_evaluator.h"
+#include "mv/composition/mv_lua_runtime.h"
 #include "mv/mv_storage.h"
 #include "path_utils.h"
 #include "raylib.h"
@@ -189,13 +190,13 @@ void draw_composition_layer(const mv::composition::mv_composition& composition,
     const Color tint = parse_color(source.fill.empty() ? composition.canvas_data.background : source.fill,
                                    transform.opacity);
 
-    if (source.type == "background") {
+    if (source.type == "BackgroundRenderer") {
         DrawRectangle(0, 0, kScreenWidth, kScreenHeight, tint);
         return;
     }
 
     const Vector2 position = to_screen_position(composition, transform);
-    if (source.type == "text") {
+    if (source.type == "TextRenderer") {
         const std::string text = source.text.empty() ? "MV" : source.text;
         const float scale_y = static_cast<float>(kScreenHeight) /
                               static_cast<float>(std::max(1, composition.canvas_data.height));
@@ -206,7 +207,7 @@ void draw_composition_layer(const mv::composition::mv_composition& composition,
         return;
     }
 
-    if (source.type == "shape" && (source.shape.empty() || source.shape == "rect")) {
+    if (source.type == "ShapeRenderer" && (source.shape.empty() || source.shape == "rect")) {
         const float canvas_w = static_cast<float>(std::max(1, composition.canvas_data.width));
         const float canvas_h = static_cast<float>(std::max(1, composition.canvas_data.height));
         const float rect_w = 480.0f * transform.scale_x / canvas_w * static_cast<float>(kScreenWidth);
@@ -217,7 +218,7 @@ void draw_composition_layer(const mv::composition::mv_composition& composition,
         return;
     }
 
-    if (source.type == "image" && texture != nullptr && texture->id != 0) {
+    if (source.type == "ImageRenderer" && texture != nullptr && texture->id != 0) {
         const float canvas_w = static_cast<float>(std::max(1, composition.canvas_data.width));
         const float canvas_h = static_cast<float>(std::max(1, composition.canvas_data.height));
         const float rect_w = static_cast<float>(texture->width) * transform.scale_x / canvas_w *
@@ -231,7 +232,7 @@ void draw_composition_layer(const mv::composition::mv_composition& composition,
         return;
     }
 
-    if (source.type == "beatGrid") {
+    if (source.type == "BeatGridRenderer") {
         const float canvas_w = static_cast<float>(std::max(1, composition.canvas_data.width));
         const float canvas_h = static_cast<float>(std::max(1, composition.canvas_data.height));
         const float rect_w = 1280.0f * transform.scale_x / canvas_w * static_cast<float>(kScreenWidth);
@@ -259,7 +260,7 @@ void draw_composition_layer(const mv::composition::mv_composition& composition,
         return;
     }
 
-    if (source.type == "waveform") {
+    if (source.type == "WaveformRenderer") {
         const float canvas_w = static_cast<float>(std::max(1, composition.canvas_data.width));
         const float canvas_h = static_cast<float>(std::max(1, composition.canvas_data.height));
         const float rect_w = 1280.0f * transform.scale_x / canvas_w * static_cast<float>(kScreenWidth);
@@ -289,7 +290,7 @@ void draw_composition_layer(const mv::composition::mv_composition& composition,
         return;
     }
 
-    if (source.type == "spectrum") {
+    if (source.type == "SpectrumRenderer") {
         const float canvas_w = static_cast<float>(std::max(1, composition.canvas_data.width));
         const float canvas_h = static_cast<float>(std::max(1, composition.canvas_data.height));
         const float rect_w = 1280.0f * transform.scale_x / canvas_w * static_cast<float>(kScreenWidth);
@@ -359,8 +360,8 @@ void play_mv_controller::load_for_song(const std::optional<song_data>& song) {
     composition_ = mv::load_composition(*package, &errors);
     if (composition_.has_value()) {
         TraceLog(LOG_INFO,
-                 "MV: composition loaded OK (%d layer(s))",
-                 static_cast<int>(composition_->layers.size()));
+                 "MV: composition loaded OK (%d object(s))",
+                 static_cast<int>(composition_->objects.size()));
         return;
     }
 
@@ -374,6 +375,8 @@ void play_mv_controller::reset() {
     unload_asset_textures();
     package_.reset();
     composition_.reset();
+    lua_runtime_.reset();
+    previous_visual_time_ms_.reset();
 }
 
 void play_mv_controller::draw(const play_session_state& state, double visual_time_ms) {
@@ -383,31 +386,40 @@ void play_mv_controller::draw(const play_session_state& state, double visual_tim
     }
     std::array<float, 128> spectrum = {};
     const bool has_spectrum = audio_manager::instance().get_bgm_fft256(spectrum);
+    const double delta_ms = previous_visual_time_ms_.has_value()
+        ? std::max(0.0, visual_time_ms - *previous_visual_time_ms_)
+        : 0.0;
+    previous_visual_time_ms_ = visual_time_ms;
     std::vector<const mv::composition::layer*> layers;
-    layers.reserve(composition_->layers.size());
-    for (const mv::composition::layer& layer : composition_->layers) {
+    layers.reserve(composition_->objects.size());
+    for (const mv::composition::layer& layer : composition_->objects) {
         if (is_layer_active(layer, visual_time_ms)) {
             layers.push_back(&layer);
         }
     }
     std::sort(layers.begin(), layers.end(), [](const auto* left, const auto* right) {
-        return left->z < right->z;
+        return left->order < right->order;
     });
     for (const mv::composition::layer* layer : layers) {
         const Texture2D* texture = nullptr;
         const mv::composition::component* renderer = mv::composition::renderable_component(*layer);
-        if (renderer != nullptr && renderer->type == "image") {
+        if (renderer != nullptr && renderer->type == "ImageRenderer") {
             if (const mv::composition::asset_ref* asset = find_asset(renderer->asset_id);
                 asset != nullptr) {
                 texture = texture_for_asset(*asset);
             }
         }
         mv::composition::layer evaluated_layer = *layer;
-        if (mv::composition::component* transform = mv::composition::transform_component(evaluated_layer);
-            transform != nullptr) {
-            mv::composition::apply_transform_to_component(
-                *transform,
-                mv::composition::evaluate_transform(*layer, visual_time_ms));
+        mv::composition::apply_transform_to_object(
+            evaluated_layer,
+            mv::composition::evaluate_transform(*layer, visual_time_ms));
+        hydrate_lua_script_sources(evaluated_layer);
+        const mv::composition::lua_update_result lua_result =
+            lua_runtime_.apply_lua_behaviours(
+                evaluated_layer,
+                {.song_time_ms = visual_time_ms, .delta_ms = delta_ms});
+        for (const std::string& diagnostic : lua_result.diagnostics) {
+            TraceLog(LOG_WARNING, "MV LuaBehaviour: %s", diagnostic.c_str());
         }
         draw_composition_layer(*composition_, evaluated_layer, visual_time_ms, texture,
                                has_spectrum ? &spectrum : nullptr);
@@ -422,6 +434,26 @@ const mv::composition::asset_ref* play_mv_controller::find_asset(const std::stri
         return asset.id == asset_id;
     });
     return it == composition_->assets.end() ? nullptr : &*it;
+}
+
+void play_mv_controller::hydrate_lua_script_sources(mv::composition::layer& layer) const {
+    if (!package_.has_value()) {
+        return;
+    }
+    for (mv::composition::component& component : layer.components) {
+        if (component.type != "LuaBehaviour" ||
+            !component.script_source.empty() ||
+            component.script_asset_id.empty()) {
+            continue;
+        }
+        const mv::composition::asset_ref* asset = find_asset(component.script_asset_id);
+        if (asset == nullptr || asset->type != "script") {
+            continue;
+        }
+        if (const std::optional<std::string> source = mv::read_script_asset_source(*package_, *asset)) {
+            component.script_source = *source;
+        }
+    }
 }
 
 const Texture2D* play_mv_controller::texture_for_asset(const mv::composition::asset_ref& asset) {

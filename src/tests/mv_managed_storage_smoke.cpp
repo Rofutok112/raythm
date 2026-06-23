@@ -85,9 +85,9 @@ int main() {
     manifest.unlock = identity.unlock;
 
     mv::composition::mv_composition composition = mv::composition::make_default_for_song(local_id, 90000.0);
-    composition.layers.front().name = "Managed Background";
+    composition.objects.front().name = "Managed Background";
     mv::composition::keyframe_track& opacity =
-        mv::composition::ensure_keyframe_track(composition.layers.front(), "transform.opacity");
+        mv::composition::ensure_keyframe_track(composition.objects.front(), "transform.opacity");
     mv::composition::upsert_keyframe(opacity, {.time_ms = 0.0, .value = 0.25f, .easing = "linear"});
     mv::composition::upsert_keyframe(opacity, {.time_ms = 1000.0, .value = 1.0f, .easing = "linear"});
 
@@ -192,9 +192,9 @@ int main() {
             expect(read.composition.composition_id == local_id,
                    "Expected managed composition id to use local MV id.",
                    ok);
-            expect(!read.composition.layers.empty(), "Expected managed composition layers to round-trip.", ok);
+            expect(!read.composition.objects.empty(), "Expected managed composition layers to round-trip.", ok);
             const mv::composition::transform evaluated =
-                mv::composition::evaluate_transform(read.composition.layers.front(), 500.0);
+                mv::composition::evaluate_transform(read.composition.objects.front(), 500.0);
             expect(evaluated.opacity > 0.62f && evaluated.opacity < 0.63f,
                    "Expected keyframes to survive managed composition round-trip.",
                    ok);
@@ -202,7 +202,7 @@ int main() {
     }
 
     mv::composition::mv_composition edited = composition;
-    if (mv::composition::component* transform = mv::composition::transform_component(edited.layers.front())) {
+    if (mv::composition::component* transform = mv::composition::transform_component(edited.objects.front())) {
         transform->position_x = 321.0f;
     }
     const std::string previous_remote_hash = manifest.mv.remote_mv_hash;

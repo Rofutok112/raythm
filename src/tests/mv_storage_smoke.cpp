@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <cstdio>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -130,9 +131,9 @@ int main() {
                "Expected new MV composition duration to match song duration.",
                ok);
         expect(default_duration_composition.has_value() &&
-                   !default_duration_composition->layers.empty() &&
-                   default_duration_composition->layers.front().duration_ms == 123000.0,
-               "Expected new MV default layers to cover the song duration.",
+                   !default_duration_composition->objects.empty() &&
+                   default_duration_composition->objects.front().duration_ms == 123000.0,
+               "Expected new MV default objects to cover the song duration.",
                ok);
         mv::mv_package unsafe_composition_file_package = package;
         unsafe_composition_file_package.meta.composition_file = "../outside.rmvcomp";
@@ -159,6 +160,9 @@ int main() {
         expect(fs::is_directory(path_utils::from_utf8(package.directory) / "assets" / "generated"),
                "Expected MV generated asset directory to be created.",
                ok);
+        expect(fs::is_directory(path_utils::from_utf8(package.directory) / "assets" / "scripts"),
+               "Expected MV script asset directory to be created.",
+               ok);
         const fs::path image_source = temp_local_app_data / "asset-source.png";
         expect(write_text_file(image_source, "not-a-real-png-but-stable-bytes"),
                "Expected to write image asset source fixture.",
@@ -173,6 +177,36 @@ int main() {
                    ok);
             expect(fs::exists(mv::resolve_asset_path(package, *imported_asset)),
                    "Expected imported image asset file to exist inside the MV package.",
+               ok);
+        }
+        std::string script_source =
+            "function update(self, ctx)\n"
+            "  self.transform.position.x = self.transform.position.x + 12\n"
+            "end\n";
+        auto script_asset = mv::create_script_asset(package, "Title Motion", script_source, &asset_errors);
+        expect(script_asset.has_value(), "Expected script asset creation to succeed.", ok);
+        if (script_asset.has_value()) {
+            expect(script_asset->type == "script", "Expected script asset type.", ok);
+            expect(script_asset->path.rfind("assets/scripts/", 0) == 0,
+                   "Expected script asset to use package-relative assets/scripts path.",
+                   ok);
+            expect(fs::exists(mv::resolve_asset_path(package, *script_asset)),
+                   "Expected script asset file to exist inside the MV package.",
+                   ok);
+            const auto read_script = mv::read_script_asset_source(package, *script_asset, &asset_errors);
+            expect(read_script.has_value() && *read_script == script_source,
+                   "Expected script asset source to round-trip.",
+                   ok);
+            script_source =
+                "function update(self, ctx)\n"
+                "  self.transform.position.x = self.transform.position.x + 24\n"
+                "end\n";
+            expect(mv::update_script_asset_source(package, *script_asset, script_source, &asset_errors),
+                   "Expected script asset source update to succeed.",
+                   ok);
+            const auto updated_script = mv::read_script_asset_source(package, *script_asset, &asset_errors);
+            expect(updated_script.has_value() && *updated_script == script_source,
+                   "Expected updated script asset source to round-trip.",
                    ok);
         }
         const auto initial_composition = mv::load_composition(package);
@@ -181,7 +215,7 @@ int main() {
             expect(initial_composition->composition_id == package.meta.mv_id,
                    "Expected composition id to match package id.",
                    ok);
-            expect(!initial_composition->layers.empty(), "Expected default composition to contain layers.", ok);
+            expect(!initial_composition->objects.empty(), "Expected default composition to contain objects.", ok);
         }
 
         const std::string japanese_dir = "\xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E";
@@ -192,7 +226,7 @@ int main() {
         mv::composition::mv_composition imported = mv::make_default_composition_for_song(package);
         imported.composition_id = "foreign-composition-id";
         imported.canvas_data.background = "#112233";
-        if (mv::composition::component* renderer = mv::composition::renderable_component(imported.layers.front())) {
+        if (mv::composition::component* renderer = mv::composition::renderable_component(imported.objects.front())) {
             renderer->fill = "#112233";
         }
         expect(write_text_file(import_path, mv::composition::serialize(imported)),
@@ -237,9 +271,10 @@ int main() {
                "Expected composition export to succeed.",
                ok);
         expect(fs::exists(export_path), "Expected exported composition file to exist.", ok);
-        if (imported_asset.has_value()) {
+        if (imported_asset.has_value() && script_asset.has_value()) {
             mv::composition::mv_composition package_composition = *loaded_import;
             package_composition.assets.push_back(*imported_asset);
+            package_composition.assets.push_back(*script_asset);
             mv::composition::layer image_layer;
             image_layer.id = "layer-package-image";
             image_layer.name = "Package Image";
@@ -248,9 +283,20 @@ int main() {
             image_renderer.asset_id = imported_asset->id;
             image_layer.components.push_back(std::move(image_renderer));
             image_layer.duration_ms = 1000.0;
-            package_composition.layers.push_back(image_layer);
+            package_composition.objects.push_back(image_layer);
+            mv::composition::layer script_layer;
+            script_layer.id = "layer-package-script";
+            script_layer.name = "Package Script";
+            script_layer.components.push_back(mv::composition::make_transform_component());
+            mv::composition::component lua_behaviour = mv::composition::make_component("LuaBehaviour");
+            lua_behaviour.id = "lua-package-script";
+            lua_behaviour.script_asset_id = script_asset->id;
+            lua_behaviour.script_entry = "update";
+            script_layer.components.push_back(std::move(lua_behaviour));
+            script_layer.duration_ms = 1000.0;
+            package_composition.objects.push_back(script_layer);
             expect(mv::save_composition(package, package_composition),
-                   "Expected to save package composition with image asset.",
+                   "Expected to save package composition with image and script assets.",
                    ok);
             const fs::path stray_asset = path_utils::from_utf8(package.directory) /
                                          "assets" / "images" / "unreferenced-stray.png";
@@ -301,6 +347,22 @@ int main() {
                                            "assets" / "images" / "unreferenced-stray.png"),
                            "Expected unreferenced MV package files not to be imported.",
                            ok);
+                    const auto imported_script_it = std::find_if(imported_package_composition->assets.begin(),
+                                                                 imported_package_composition->assets.end(),
+                                                                 [](const auto& asset) {
+                                                                     return asset.type == "script";
+                                                                 });
+                    expect(imported_script_it != imported_package_composition->assets.end(),
+                           "Expected imported MV package script asset metadata.",
+                           ok);
+                    if (imported_script_it != imported_package_composition->assets.end()) {
+                        const auto imported_script_source = mv::read_script_asset_source(
+                            *imported_package, *imported_script_it);
+                        expect(imported_script_source.has_value() &&
+                                   *imported_script_source == script_source,
+                               "Expected imported MV package script source to round-trip.",
+                               ok);
+                    }
                 }
             }
 
@@ -405,9 +467,17 @@ int main() {
             expect(managed_asset.has_value(),
                    "Expected managed MV image asset import to encrypt through mv_storage.",
                    ok);
-            if (managed_asset.has_value()) {
+            auto managed_script_asset =
+                mv::create_script_asset(*found_managed, "Managed Script", script_source, &managed_asset_errors);
+            expect(managed_script_asset.has_value(),
+                   "Expected managed MV script asset creation to encrypt through mv_storage.",
+                   ok);
+            if (managed_asset.has_value() && managed_script_asset.has_value()) {
                 expect(mv::resolve_asset_path(*found_managed, *managed_asset).empty(),
                        "Expected managed MV image assets not to expose a plain package path.",
+                       ok);
+                expect(mv::resolve_asset_path(*found_managed, *managed_script_asset).empty(),
+                       "Expected managed MV script assets not to expose a plain package path.",
                        ok);
                 const auto managed_asset_bytes =
                     mv::read_asset_bytes(*found_managed, *managed_asset, &managed_asset_errors);
@@ -416,15 +486,35 @@ int main() {
                                "not-a-real-png-but-stable-bytes",
                        "Expected managed MV image asset bytes to decrypt through mv_storage.",
                        ok);
+                const auto managed_script_source =
+                    mv::read_script_asset_source(*found_managed, *managed_script_asset, &managed_asset_errors);
+                expect(managed_script_source.has_value() && *managed_script_source == script_source,
+                       "Expected managed MV script source to decrypt through mv_storage.",
+                       ok);
+                std::string managed_script_updated = script_source + "-- managed update\n";
+                expect(mv::update_script_asset_source(*found_managed,
+                                                      *managed_script_asset,
+                                                      managed_script_updated,
+                                                      &managed_asset_errors),
+                       "Expected managed MV script asset update to encrypt through mv_storage.",
+                       ok);
+                const auto managed_script_updated_source =
+                    mv::read_script_asset_source(*found_managed, *managed_script_asset, &managed_asset_errors);
+                expect(managed_script_updated_source.has_value() &&
+                           *managed_script_updated_source == managed_script_updated,
+                       "Expected managed MV updated script source to decrypt through mv_storage.",
+                       ok);
+                script_source = managed_script_updated;
                 const auto updated_asset_manifest =
                     mv::managed_storage::read_manifest(mv::managed_storage::package_directory(managed_identity));
                 expect(updated_asset_manifest.has_value() &&
-                           updated_asset_manifest->asset_files.size() == 1,
-                       "Expected managed MV image asset metadata in manifest.",
+                           updated_asset_manifest->asset_files.size() == 2,
+                       "Expected managed MV image and script asset metadata in manifest.",
                        ok);
                 if (loaded_managed.has_value()) {
                     mv::composition::mv_composition managed_package_composition = *loaded_managed;
                     managed_package_composition.assets.push_back(*managed_asset);
+                    managed_package_composition.assets.push_back(*managed_script_asset);
                     mv::composition::layer managed_image_layer;
                     managed_image_layer.id = "layer-managed-image";
                     managed_image_layer.name = "Managed Image";
@@ -434,9 +524,21 @@ int main() {
                     managed_image_renderer.asset_id = managed_asset->id;
                     managed_image_layer.components.push_back(std::move(managed_image_renderer));
                     managed_image_layer.duration_ms = 1000.0;
-                    managed_package_composition.layers.push_back(managed_image_layer);
+                    managed_package_composition.objects.push_back(managed_image_layer);
+                    mv::composition::layer managed_script_layer;
+                    managed_script_layer.id = "layer-managed-script";
+                    managed_script_layer.name = "Managed Script";
+                    managed_script_layer.components.push_back(mv::composition::make_transform_component());
+                    mv::composition::component managed_lua_behaviour =
+                        mv::composition::make_component("LuaBehaviour");
+                    managed_lua_behaviour.id = "lua-managed-script";
+                    managed_lua_behaviour.script_asset_id = managed_script_asset->id;
+                    managed_lua_behaviour.script_entry = "update";
+                    managed_script_layer.components.push_back(std::move(managed_lua_behaviour));
+                    managed_script_layer.duration_ms = 1000.0;
+                    managed_package_composition.objects.push_back(managed_script_layer);
                     expect(mv::save_composition(*found_managed, managed_package_composition),
-                           "Expected managed MV composition with image asset to save.",
+                           "Expected managed MV composition with image and script assets to save.",
                            ok);
                     const fs::path managed_package_export_path = import_dir / "managed-exported.rmvpack";
                     std::vector<std::string> managed_package_export_errors;

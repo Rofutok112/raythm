@@ -44,6 +44,15 @@ std::optional<auth::public_user> parse_user_object(const std::string& content) {
     }
 
     const bool email_verified = json::extract_bool(content, "emailVerified").value_or(false);
+    auth::rating_summary rating;
+    if (const std::optional<std::string> rating_object = json::extract_object(content, "rating");
+        rating_object.has_value()) {
+        rating.rating = json::extract_float(*rating_object, "rating").value_or(0.0f);
+        rating.rank = json::extract_int(*rating_object, "rank").value_or(0);
+        rating.eligible_play_count = json::extract_int(*rating_object, "eligiblePlayCount").value_or(0);
+        rating.best_play_count = json::extract_int(*rating_object, "bestPlayCount").value_or(0);
+        rating.ruleset_version = json::extract_string(*rating_object, "rulesetVersion").value_or("");
+    }
     std::vector<auth::external_link> external_links;
     if (const std::optional<std::string> links_array = json::extract_array(content, "externalLinks");
         links_array.has_value()) {
@@ -65,6 +74,7 @@ std::optional<auth::public_user> parse_user_object(const std::string& content) {
         .display_name = *display_name,
         .avatar_url = json::extract_string(content, "avatarUrl").value_or(""),
         .email_verified = email_verified,
+        .rating = rating,
         .external_links = std::move(external_links),
     };
 }
@@ -306,6 +316,13 @@ bool write_session_file(const auth::session& session_data) {
     output << "    \"displayName\": \"" << json::escape_string(session_data.user.display_name) << "\",\n";
     output << "    \"avatarUrl\": \"" << json::escape_string(session_data.user.avatar_url) << "\",\n";
     output << "    \"emailVerified\": " << (session_data.user.email_verified ? "true" : "false") << ",\n";
+    output << "    \"rating\": {";
+    output << "\"rating\": " << session_data.user.rating.rating << ", ";
+    output << "\"rank\": " << session_data.user.rating.rank << ", ";
+    output << "\"eligiblePlayCount\": " << session_data.user.rating.eligible_play_count << ", ";
+    output << "\"bestPlayCount\": " << session_data.user.rating.best_play_count << ", ";
+    output << "\"rulesetVersion\": \"" << json::escape_string(session_data.user.rating.ruleset_version) << "\"";
+    output << "},\n";
     output << "    \"externalLinks\": [";
     for (size_t i = 0; i < session_data.user.external_links.size(); ++i) {
         const auth::external_link& link = session_data.user.external_links[i];
@@ -515,6 +532,7 @@ session_summary load_session_summary() {
             .display_name = {},
             .avatar_url = {},
             .email_verified = false,
+            .rating = {},
             .external_links = {},
         };
     }
@@ -526,6 +544,7 @@ session_summary load_session_summary() {
         .display_name = stored->user.display_name,
         .avatar_url = stored->user.avatar_url,
         .email_verified = stored->user.email_verified,
+        .rating = stored->user.rating,
         .external_links = stored->user.external_links,
     };
 }
@@ -556,11 +575,21 @@ std::optional<auth::public_profile> parse_public_profile_response(const std::str
             });
         }
     }
+    auth::rating_summary rating;
+    if (const std::optional<std::string> rating_object = json::extract_object(*profile_object, "rating");
+        rating_object.has_value()) {
+        rating.rating = json::extract_float(*rating_object, "rating").value_or(0.0f);
+        rating.rank = json::extract_int(*rating_object, "rank").value_or(0);
+        rating.eligible_play_count = json::extract_int(*rating_object, "eligiblePlayCount").value_or(0);
+        rating.best_play_count = json::extract_int(*rating_object, "bestPlayCount").value_or(0);
+        rating.ruleset_version = json::extract_string(*rating_object, "rulesetVersion").value_or("");
+    }
 
     return auth::public_profile{
         .id = *id,
         .display_name = *display_name,
         .avatar_url = json::extract_string(*profile_object, "avatarUrl").value_or(""),
+        .rating = rating,
         .relationship_status = json::extract_string(*profile_object, "relationshipStatus").value_or("none"),
         .relationship_request_id = json::extract_string(*profile_object, "relationshipRequestId").value_or(""),
         .external_links = std::move(external_links),

@@ -17,12 +17,21 @@ struct external_link {
     std::string url;
 };
 
+struct rating_summary {
+    float rating = 0.0f;
+    int rank = 0;
+    int eligible_play_count = 0;
+    int best_play_count = 0;
+    std::string ruleset_version;
+};
+
 struct public_user {
     std::string id;
     std::string email;
     std::string display_name;
     std::string avatar_url;
     bool email_verified = false;
+    rating_summary rating;
     std::vector<external_link> external_links;
 };
 
@@ -40,6 +49,7 @@ struct session_summary {
     std::string display_name;
     std::string avatar_url;
     bool email_verified = false;
+    rating_summary rating;
     std::vector<external_link> external_links;
 };
 
@@ -47,6 +57,7 @@ struct public_profile {
     std::string id;
     std::string display_name;
     std::string avatar_url;
+    rating_summary rating;
     std::string relationship_status;
     std::string relationship_request_id;
     std::vector<external_link> external_links;

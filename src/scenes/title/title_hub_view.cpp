@@ -51,6 +51,7 @@ std::string make_avatar_label(const song_select::auth_state& auth_state) {
         .display_name = auth_state.display_name,
         .avatar_url = auth_state.avatar_url,
         .email_verified = auth_state.email_verified,
+        .rating = auth_state.rating,
         .external_links = auth_state.external_links,
     };
     return make_avatar_label(summary);
@@ -107,6 +108,7 @@ draw_result draw(draw_context context) {
         .avatar_base_url = play_state.auth.server_url,
         .logged_in = play_state.auth.logged_in,
         .email_verified = play_state.auth.email_verified,
+        .rating = play_state.auth.rating,
         .friends_badge_count = context.friends_controller.unread_badge_count(),
         .now = GetTime(),
     };

@@ -1379,6 +1379,12 @@ online_submit_result submit_online_result(const song_data& song,
         submission.updated = request.submission->updated;
         submission.entry = request.submission->entry;
         submission.previous_entry = request.submission->previous_entry;
+        if (request.submission->rating.has_value()) {
+            if (std::optional<auth::session> latest = auth::load_saved_session(); latest.has_value()) {
+                latest->user.rating = *request.submission->rating;
+                auth::save_session(*latest);
+            }
+        }
         if (submission.message.empty()) {
             submission.message = request.submission->message;
         }

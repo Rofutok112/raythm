@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 #include "mv/composition/mv_composition.h"
+#include "mv/composition/mv_lua_runtime.h"
 #include "mv/mv_storage.h"
 #include "play/play_session_types.h"
 #include "raylib.h"
@@ -23,10 +24,13 @@ public:
 
 private:
     const mv::composition::asset_ref* find_asset(const std::string& asset_id) const;
+    void hydrate_lua_script_sources(mv::composition::layer& layer) const;
     const Texture2D* texture_for_asset(const mv::composition::asset_ref& asset);
     void unload_asset_textures();
 
     std::optional<mv::mv_package> package_;
     std::optional<mv::composition::mv_composition> composition_;
+    mv::composition::lua_behaviour_runtime lua_runtime_;
+    std::optional<double> previous_visual_time_ms_;
     std::unordered_map<std::string, Texture2D> asset_textures_;
 };

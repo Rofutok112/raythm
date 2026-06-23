@@ -58,9 +58,20 @@ bool ensure_composition_package(const mv_package& package);
 std::optional<composition::asset_ref> import_image_asset(const mv_package& package,
                                                          const std::string& source_path_utf8,
                                                          std::vector<std::string>* errors = nullptr);
+std::optional<composition::asset_ref> create_script_asset(const mv_package& package,
+                                                          const std::string& name,
+                                                          const std::string& source,
+                                                          std::vector<std::string>* errors = nullptr);
+bool update_script_asset_source(const mv_package& package,
+                                composition::asset_ref& asset,
+                                const std::string& source,
+                                std::vector<std::string>* errors = nullptr);
 std::filesystem::path resolve_asset_path(const mv_package& package, const composition::asset_ref& asset);
 std::optional<std::vector<unsigned char>> read_asset_bytes(const mv_package& package,
                                                            const composition::asset_ref& asset,
                                                            std::vector<std::string>* errors = nullptr);
+std::optional<std::string> read_script_asset_source(const mv_package& package,
+                                                    const composition::asset_ref& asset,
+                                                    std::vector<std::string>* errors = nullptr);
 
 }  // namespace mv

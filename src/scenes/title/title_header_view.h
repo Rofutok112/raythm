@@ -2,6 +2,7 @@
 
 #include <string_view>
 
+#include "network/auth_client.h"
 #include "raylib.h"
 
 namespace title_header_view {
@@ -22,6 +23,7 @@ struct draw_config {
     std::string_view avatar_base_url;
     bool logged_in = false;
     bool email_verified = false;
+    auth::rating_summary rating;
     int friends_badge_count = 0;
     double now = 0.0;
 };

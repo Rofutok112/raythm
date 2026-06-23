@@ -6,6 +6,7 @@
 
 #include "scoring_ruleset_runtime.h"
 #include "ranking_service.h"
+#include "network/auth_client.h"
 
 namespace ranking_client {
 
@@ -39,6 +40,7 @@ struct submit_response {
     std::string message;
     std::optional<ranking_service::entry> entry;
     std::optional<ranking_service::entry> previous_entry;
+    std::optional<auth::rating_summary> rating;
 };
 
 struct submit_operation_result {

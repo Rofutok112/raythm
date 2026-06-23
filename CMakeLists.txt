@@ -57,6 +57,57 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(nlohmann_json)
 
 FetchContent_Declare(
+        lua
+        URL https://www.lua.org/ftp/lua-5.4.7.tar.gz
+        URL_HASH SHA256=9fbf5e28ef86c69858f6d3d34eccc32e911c1a28b4120ff3e84aaa70cfbf1e30
+)
+if(POLICY CMP0169)
+    cmake_policy(PUSH)
+    cmake_policy(SET CMP0169 OLD)
+endif()
+FetchContent_GetProperties(lua)
+if(NOT lua_POPULATED)
+    FetchContent_Populate(lua)
+endif()
+if(POLICY CMP0169)
+    cmake_policy(POP)
+endif()
+add_library(lua STATIC
+        "${lua_SOURCE_DIR}/src/lapi.c"
+        "${lua_SOURCE_DIR}/src/lauxlib.c"
+        "${lua_SOURCE_DIR}/src/lbaselib.c"
+        "${lua_SOURCE_DIR}/src/lcode.c"
+        "${lua_SOURCE_DIR}/src/lcorolib.c"
+        "${lua_SOURCE_DIR}/src/lctype.c"
+        "${lua_SOURCE_DIR}/src/ldblib.c"
+        "${lua_SOURCE_DIR}/src/ldebug.c"
+        "${lua_SOURCE_DIR}/src/ldo.c"
+        "${lua_SOURCE_DIR}/src/ldump.c"
+        "${lua_SOURCE_DIR}/src/lfunc.c"
+        "${lua_SOURCE_DIR}/src/lgc.c"
+        "${lua_SOURCE_DIR}/src/linit.c"
+        "${lua_SOURCE_DIR}/src/liolib.c"
+        "${lua_SOURCE_DIR}/src/llex.c"
+        "${lua_SOURCE_DIR}/src/lmathlib.c"
+        "${lua_SOURCE_DIR}/src/lmem.c"
+        "${lua_SOURCE_DIR}/src/loadlib.c"
+        "${lua_SOURCE_DIR}/src/lobject.c"
+        "${lua_SOURCE_DIR}/src/lopcodes.c"
+        "${lua_SOURCE_DIR}/src/loslib.c"
+        "${lua_SOURCE_DIR}/src/lparser.c"
+        "${lua_SOURCE_DIR}/src/lstate.c"
+        "${lua_SOURCE_DIR}/src/lstring.c"
+        "${lua_SOURCE_DIR}/src/lstrlib.c"
+        "${lua_SOURCE_DIR}/src/ltable.c"
+        "${lua_SOURCE_DIR}/src/ltablib.c"
+        "${lua_SOURCE_DIR}/src/ltm.c"
+        "${lua_SOURCE_DIR}/src/lundump.c"
+        "${lua_SOURCE_DIR}/src/lutf8lib.c"
+        "${lua_SOURCE_DIR}/src/lvm.c"
+        "${lua_SOURCE_DIR}/src/lzio.c")
+target_include_directories(lua PUBLIC "${lua_SOURCE_DIR}/src")
+
+FetchContent_Declare(
         sqlite3_amalgamation
         URL https://www.sqlite.org/2026/sqlite-amalgamation-3530000.zip
         URL_HASH SHA3_256=c2325c53b3b41761469f91cfb078e96882ac5d85bac10c11b0bd8f253b031e5b
@@ -415,6 +466,10 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/multiplayer_result_scene.h
         src/mv/composition/mv_composition.cpp
         src/mv/composition/mv_composition.h
+        src/mv/composition/mv_component_registry.cpp
+        src/mv/composition/mv_component_registry.h
+        src/mv/composition/mv_lua_runtime.cpp
+        src/mv/composition/mv_lua_runtime.h
         src/mv/composition/mv_composition_edit_history.cpp
         src/mv/composition/mv_composition_edit_history.h
         src/mv/composition/mv_composition_evaluator.cpp
@@ -1033,6 +1088,10 @@ add_executable(local_content_index_smoke
 add_executable(mv_composition_model_smoke
         src/mv/composition/mv_composition.cpp
         src/mv/composition/mv_composition.h
+        src/mv/composition/mv_component_registry.cpp
+        src/mv/composition/mv_component_registry.h
+        src/mv/composition/mv_lua_runtime.cpp
+        src/mv/composition/mv_lua_runtime.h
         src/mv/composition/mv_composition_evaluator.cpp
         src/mv/composition/mv_composition_evaluator.h
         src/mv/composition/mv_composition_serializer.cpp
@@ -1044,6 +1103,10 @@ add_executable(mv_composition_model_smoke
 add_executable(mv_composition_edit_history_smoke
         src/mv/composition/mv_composition.cpp
         src/mv/composition/mv_composition.h
+        src/mv/composition/mv_component_registry.cpp
+        src/mv/composition/mv_component_registry.h
+        src/mv/composition/mv_lua_runtime.cpp
+        src/mv/composition/mv_lua_runtime.h
         src/mv/composition/mv_composition_edit_history.cpp
         src/mv/composition/mv_composition_edit_history.h
         src/mv/composition/mv_composition_serializer.cpp
@@ -1063,6 +1126,10 @@ add_executable(mv_storage_smoke
         src/models/online_content_identity.h
         src/mv/composition/mv_composition.cpp
         src/mv/composition/mv_composition.h
+        src/mv/composition/mv_component_registry.cpp
+        src/mv/composition/mv_component_registry.h
+        src/mv/composition/mv_lua_runtime.cpp
+        src/mv/composition/mv_lua_runtime.h
         src/mv/composition/mv_composition_evaluator.cpp
         src/mv/composition/mv_composition_evaluator.h
         src/mv/composition/mv_composition_serializer.cpp
@@ -1088,6 +1155,10 @@ add_executable(mv_managed_storage_smoke
         src/models/online_content_identity.h
         src/mv/composition/mv_composition.cpp
         src/mv/composition/mv_composition.h
+        src/mv/composition/mv_component_registry.cpp
+        src/mv/composition/mv_component_registry.h
+        src/mv/composition/mv_lua_runtime.cpp
+        src/mv/composition/mv_lua_runtime.h
         src/mv/composition/mv_composition_evaluator.cpp
         src/mv/composition/mv_composition_evaluator.h
         src/mv/composition/mv_composition_serializer.cpp
@@ -1676,7 +1747,11 @@ endif()
 
 target_include_directories(raythm PRIVATE ${RAYTHM_BASS_DIR})
 target_include_directories(audio_manager_smoke PRIVATE ${RAYTHM_BASS_DIR})
-target_link_libraries(raythm PRIVATE raylib sqlite3 ${RAYTHM_BASS_IMPORT_LIB} comdlg32 crypt32 winhttp)
+target_link_libraries(raythm PRIVATE raylib sqlite3 lua ${RAYTHM_BASS_IMPORT_LIB} comdlg32 crypt32 winhttp)
+target_link_libraries(mv_composition_model_smoke PRIVATE lua)
+target_link_libraries(mv_composition_edit_history_smoke PRIVATE lua)
+target_link_libraries(mv_storage_smoke PRIVATE lua)
+target_link_libraries(mv_managed_storage_smoke PRIVATE lua)
 target_link_libraries(raythm_launcher PRIVATE winhttp)
 target_link_libraries(raythm_updater PRIVATE winhttp)
 target_link_libraries(font_atlas_generator PRIVATE raylib)

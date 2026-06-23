@@ -192,6 +192,7 @@ struct auth_state {
     std::string display_name;
     std::string avatar_url;
     bool email_verified = false;
+    auth::rating_summary rating;
     std::vector<auth::external_link> external_links;
 };
 

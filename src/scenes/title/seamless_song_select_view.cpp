@@ -28,6 +28,7 @@
 #include "tween.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_tooltip.h"
 #include "ui/icons/raythm_icons.h"
 #include "virtual_screen.h"
 
@@ -816,10 +817,22 @@ float status_badge_width(content_status status) {
 
 void draw_square_status_badge(Rectangle rect, content_status status, unsigned char alpha, int font_size = 10) {
     const Color color = content_status_badge::color(status);
+    if (status == content_status::modified) {
+        raythm_icons::draw_triangle_alert(centered_icon_rect(rect, 1.0f), with_alpha(color, alpha), 2.6f);
+        return;
+    }
+
     ui::draw_rect_f(rect, with_alpha(g_theme->row_soft, scaled_alpha(alpha, 0.27f)));
     ui::draw_rect_lines(rect, 1.0f, with_alpha(color, alpha));
     ui::draw_text_in_rect(content_status_badge::label(status), font_size, rect,
                           with_alpha(color, alpha), ui::text_align::center);
+}
+
+void enqueue_modified_status_tooltip(Rectangle badge_rect, content_status status, unsigned char alpha) {
+    if (status != content_status::modified) {
+        return;
+    }
+    ui::enqueue_hover_tooltip(centered_icon_rect(badge_rect, 1.0f), "変更されています", alpha);
 }
 
 std::optional<chart_difficulty::difficulty_breakdown> cached_difficulty_breakdown(const song_select::chart_option* chart) {
@@ -992,6 +1005,7 @@ void draw_chart_summary(Rectangle rect,
     ui::draw_text_in_rect(TextFormat("%dK", keys), 15, key_chip,
                           with_alpha(t.text, alpha), ui::text_align::center);
     draw_square_status_badge(source_rect, chart->source_status, alpha, 10);
+    enqueue_modified_status_tooltip(source_rect, chart->source_status, alpha);
     draw_marquee_text(chart->meta.difficulty.c_str(), difficulty_rect,
                       22, with_alpha(t.text, alpha), GetTime());
     draw_difficulty_level_badge(chart->meta.level, badge_rect, 15, alpha);
@@ -1059,6 +1073,7 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
             24.0f,
         };
         draw_square_status_badge(source_badge_rect, chart->source_status, alpha, 10);
+        enqueue_modified_status_tooltip(source_badge_rect, chart->source_status, alpha);
         if (play_locked) {
             ui::draw_rect_f(source_badge_rect, with_alpha(t.bg, scaled_alpha(alpha, 0.54f)));
             raythm_icons::draw_lock(centered_icon_rect(source_badge_rect, 3.0f),
