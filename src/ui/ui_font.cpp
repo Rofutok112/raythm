@@ -11,7 +11,9 @@
 #include <vector>
 
 #include "core/app_paths.h"
+#include "core/file_io.h"
 #include "core/path_utils.h"
+#include "raylib_file_io.h"
 #include "virtual_screen.h"
 
 namespace ui {
@@ -166,8 +168,10 @@ std::vector<int> loaded_codepoint_vector() {
 }
 
 bool load_regular_font(loaded_font& target, const std::vector<int>& codepoints) {
-    Font next_font = LoadFontEx(target.path.c_str(), kFontBaseSize,
-                                const_cast<int*>(codepoints.data()), static_cast<int>(codepoints.size()));
+    Font next_font = raylib_file_io::load_font_utf8(target.path,
+                                                    kFontBaseSize,
+                                                    const_cast<int*>(codepoints.data()),
+                                                    static_cast<int>(codepoints.size()));
     if (next_font.texture.id == 0) {
         return false;
     }
@@ -190,9 +194,8 @@ bool load_sdf_font(loaded_font& target, const std::vector<int>& codepoints) {
         return false;
     }
 
-    int file_size = 0;
-    unsigned char* file_data = LoadFileData(target.path.c_str(), &file_size);
-    if (file_data == nullptr || file_size <= 0) {
+    std::vector<unsigned char> file_data = file_io::read_binary_file(path_utils::from_utf8(target.path));
+    if (file_data.empty()) {
         return false;
     }
 
@@ -200,10 +203,9 @@ bool load_sdf_font(loaded_font& target, const std::vector<int>& codepoints) {
     next_font.baseSize = kFontBaseSize;
     next_font.glyphCount = static_cast<int>(codepoints.size());
     next_font.glyphPadding = 0;
-    next_font.glyphs = LoadFontData(file_data, file_size, kFontBaseSize,
+    next_font.glyphs = LoadFontData(file_data.data(), static_cast<int>(file_data.size()), kFontBaseSize,
                                     const_cast<int*>(codepoints.data()),
                                     static_cast<int>(codepoints.size()), FONT_SDF);
-    UnloadFileData(file_data);
 
     if (next_font.glyphs == nullptr) {
         return false;
@@ -305,7 +307,7 @@ bool load_prebuilt_sdf_font(loaded_font& target) {
     }
 
     const std::filesystem::path texture_path = metadata_path.parent_path() / path_utils::from_utf8(texture_filename);
-    Texture2D texture = LoadTexture(path_utils::to_utf8(texture_path).c_str());
+    Texture2D texture = raylib_file_io::load_texture(texture_path);
     if (texture.id == 0) {
         MemFree(glyphs);
         MemFree(recs);

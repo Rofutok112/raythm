@@ -3,6 +3,7 @@
 #include <filesystem>
 
 #include "app_paths.h"
+#include "path_utils.h"
 
 namespace local_sqlite {
 
@@ -29,7 +30,8 @@ database::database() : database(app_paths::local_content_db_path()) {
 
 database::database(const std::filesystem::path& db_path) {
     app_paths::ensure_directories();
-    if (sqlite3_open(db_path.string().c_str(), &database_) != SQLITE_OK) {
+    const std::string db_path_utf8 = path_utils::to_utf8(db_path);
+    if (sqlite3_open(db_path_utf8.c_str(), &database_) != SQLITE_OK) {
         close();
     }
     if (database_ != nullptr) {

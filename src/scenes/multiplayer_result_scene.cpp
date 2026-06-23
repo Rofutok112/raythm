@@ -9,6 +9,7 @@
 #include "audio_manager.h"
 #include "managed_content_storage.h"
 #include "path_utils.h"
+#include "raylib_file_io.h"
 #include "scene_common.h"
 #include "scene_manager.h"
 #include "shared/avatar_texture_cache.h"
@@ -478,7 +479,7 @@ void multiplayer_result_scene::load_jacket_texture() {
     if (song_.directory.empty() || song_.meta.jacket_file.empty()) {
         return;
     }
-    const std::filesystem::path jacket_path = std::filesystem::path(song_.directory) / song_.meta.jacket_file;
+    const std::filesystem::path jacket_path = path_utils::join_utf8(song_.directory, song_.meta.jacket_file);
     const managed_content_storage::managed_file_read_result managed =
         managed_content_storage::read_managed_file(jacket_path);
     if (managed.managed) {
@@ -494,10 +495,10 @@ void multiplayer_result_scene::load_jacket_texture() {
         jacket_texture_ = LoadTextureFromImage(image);
         UnloadImage(image);
     } else {
-        if (!std::filesystem::exists(jacket_path)) {
+        if (!std::filesystem::exists(jacket_path) || !std::filesystem::is_regular_file(jacket_path)) {
             return;
         }
-        jacket_texture_ = LoadTexture(path_utils::to_utf8(jacket_path).c_str());
+        jacket_texture_ = raylib_file_io::load_texture(jacket_path);
     }
     jacket_texture_loaded_ = jacket_texture_.id != 0;
 }

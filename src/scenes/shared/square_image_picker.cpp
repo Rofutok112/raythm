@@ -4,10 +4,10 @@
 #include <cmath>
 #include <filesystem>
 #include <string>
-#include <vector>
 
 #include "file_io.h"
 #include "path_utils.h"
+#include "raylib_file_io.h"
 #include "scene_common.h"
 #include "theme.h"
 #include "ui_draw.h"
@@ -26,30 +26,6 @@ constexpr Rectangle kCancelRect = {1067.0f, 918.0f, 132.0f, 48.0f};
 constexpr Rectangle kApplyRect = {1215.0f, 918.0f, 140.0f, 48.0f};
 constexpr float kMinZoom = 1.0f;
 constexpr float kMaxZoom = 4.0f;
-
-Image load_image_file(const std::string& source_path) {
-    const std::filesystem::path path = path_utils::from_utf8(source_path);
-    std::vector<unsigned char> bytes = file_io::read_binary_file(path);
-    if (bytes.empty()) {
-        return {};
-    }
-
-    const std::string extension = path.extension().string();
-    Image image = {};
-    if (!extension.empty()) {
-        image = LoadImageFromMemory(extension.c_str(), bytes.data(), static_cast<int>(bytes.size()));
-    }
-    if (image.data == nullptr) {
-        image = LoadImageFromMemory(".png", bytes.data(), static_cast<int>(bytes.size()));
-    }
-    if (image.data == nullptr) {
-        image = LoadImageFromMemory(".jpg", bytes.data(), static_cast<int>(bytes.size()));
-    }
-    if (image.data == nullptr) {
-        image = LoadImageFromMemory(".jpeg", bytes.data(), static_cast<int>(bytes.size()));
-    }
-    return image;
-}
 
 bool write_png_image_file(const Image& image, const std::filesystem::path& destination) {
     int output_size = 0;
@@ -121,7 +97,7 @@ state::~state() {
 
 bool state::open(const std::string& source_path, std::string& error_message) {
     unload();
-    Image image = load_image_file(source_path);
+    Image image = raylib_file_io::load_image_utf8(source_path);
     if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
         error_message = "Failed to load image: " + source_path;
         if (image.data != nullptr) {
@@ -312,7 +288,7 @@ export_result export_square_png(const std::string& source_path,
                                 const std::string& destination_path,
                                 Rectangle source_crop,
                                 export_options options) {
-    Image image = load_image_file(source_path);
+    Image image = raylib_file_io::load_image_utf8(source_path);
     if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
         if (image.data != nullptr) {
             UnloadImage(image);
@@ -339,7 +315,7 @@ export_result export_square_png(const std::string& source_path,
 export_result export_center_square_png(const std::string& source_path,
                                        const std::string& destination_path,
                                        export_options options) {
-    Image image = load_image_file(source_path);
+    Image image = raylib_file_io::load_image_utf8(source_path);
     if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
         if (image.data != nullptr) {
             UnloadImage(image);

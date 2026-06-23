@@ -11,6 +11,7 @@
 #include "path_utils.h"
 #include "play_scene.h"
 #include "raylib.h"
+#include "raylib_file_io.h"
 #include "result/result_scene_view.h"
 #include "scene_common.h"
 #include "scene_manager.h"
@@ -197,8 +198,7 @@ void result_scene::load_jacket_texture() {
         if (!std::filesystem::exists(jacket_path) || !std::filesystem::is_regular_file(jacket_path)) {
             return;
         }
-        const std::string jacket_path_utf8 = path_utils::to_utf8(jacket_path);
-        jacket_texture_ = LoadTexture(jacket_path_utf8.c_str());
+        jacket_texture_ = raylib_file_io::load_texture(jacket_path);
     }
     jacket_texture_loaded_ = jacket_texture_.id != 0;
     if (jacket_texture_loaded_) {

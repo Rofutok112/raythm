@@ -28,6 +28,7 @@
 #include "multiplayer/multiplayer_client.h"
 #include "multiplayer_result_scene.h"
 #include "network/json_helpers.h"
+#include "raylib_file_io.h"
 #include "song_select/song_select_navigation.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
@@ -521,8 +522,7 @@ void play_scene::load_jacket_texture() {
         if (!std::filesystem::exists(jacket_path) || !std::filesystem::is_regular_file(jacket_path)) {
             return;
         }
-        const std::string jacket_path_utf8 = path_utils::to_utf8(jacket_path);
-        jacket_texture_ = LoadTexture(jacket_path_utf8.c_str());
+        jacket_texture_ = raylib_file_io::load_texture(jacket_path);
     }
     jacket_texture_loaded_ = jacket_texture_.id != 0;
     if (jacket_texture_loaded_) {
