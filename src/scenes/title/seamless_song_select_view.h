@@ -3,6 +3,7 @@
 #include "raylib.h"
 #include "song_select/song_select_ranking_loader.h"
 #include "song_select/song_select_state.h"
+#include "title/seamless_song_select_layout.h"
 #include "title/title_selection_media_coordinator.h"
 
 namespace title_create_tools_model {
@@ -10,52 +11,6 @@ struct view_model;
 }
 
 namespace title_play_view {
-
-enum class mode {
-    play,
-    create,
-};
-
-namespace mod_layout {
-
-inline constexpr float kButtonLeftInset = 24.0f;
-inline constexpr float kButtonBottomInset = 78.0f;
-inline constexpr float kButtonWidth = 276.0f;
-inline constexpr float kButtonHeight = 58.0f;
-inline constexpr float kModalGapFromButton = 16.0f;
-inline constexpr float kModalSidePadding = 18.0f;
-inline constexpr float kModalTopPadding = 18.0f;
-inline constexpr float kModalBottomPadding = 18.0f;
-inline constexpr float kHeaderHeight = 18.0f;
-inline constexpr float kHeaderToDescriptionGap = 6.0f;
-inline constexpr float kDescriptionHeight = 26.0f;
-inline constexpr float kDescriptionToRowsGap = 10.0f;
-inline constexpr float kRowHeight = 54.0f;
-inline constexpr float kRowGap = 10.0f;
-inline constexpr int kRowCount = 2;
-inline constexpr float kModalWidth = kButtonWidth;
-inline constexpr float kModalHeight = kModalTopPadding + kHeaderHeight + kHeaderToDescriptionGap +
-                                      kDescriptionHeight + kDescriptionToRowsGap +
-                                      kRowHeight * kRowCount + kRowGap * (kRowCount - 1) +
-                                      kModalBottomPadding;
-
-}  // namespace mod_layout
-
-struct layout {
-    Rectangle back_rect;
-    Rectangle song_column;
-    Rectangle main_column;
-    Rectangle ranking_column;
-    Rectangle jacket_rect;
-    Rectangle meta_rect;
-    Rectangle chart_detail_rect;
-    Rectangle chart_buttons_rect;
-    Rectangle ranking_header_rect;
-    Rectangle ranking_source_friends_rect;
-    Rectangle ranking_source_local_rect;
-    Rectangle ranking_source_online_rect;
-    Rectangle ranking_list_rect;
-};
 
 struct update_result {
     bool back_requested = false;
@@ -87,8 +42,6 @@ struct update_result {
     std::string requested_profile_user_id;
 };
 
-layout make_layout(float anim_t, Rectangle origin_rect);
-layout make_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode);
 void draw(song_select::state& state,
           const title_selection_media_snapshot& media,
           mode view_mode,

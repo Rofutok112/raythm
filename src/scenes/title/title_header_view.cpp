@@ -27,6 +27,7 @@ constexpr float kPlaySubtitleOffsetY = 153.0f;
 constexpr float kPlaySubtitleHeight = 36.0f;
 constexpr float kTopBarHeight = 70.0f;
 constexpr float kAvatarSize = 42.0f;
+constexpr float kRatingPanelWidth = 176.0f;
 
 void draw_top_bar_item_background(Rectangle rect, Color bg, unsigned char alpha) {
     const bool hovered = ui::is_hovered(rect);
@@ -60,12 +61,59 @@ void draw_friends_icon(Rectangle rect, Color color, unsigned char alpha) {
     raythm_icons::draw_friends(centered_icon_rect(rect, 14.0f), with_alpha(color, alpha), 3.0f);
 }
 
+void draw_rating_rankings_icon(Rectangle rect, Color color, unsigned char alpha) {
+    raythm_icons::draw_trophy(centered_icon_rect(rect, 15.0f), with_alpha(color, alpha), 3.0f);
+}
+
 void draw_profile_chevron(Rectangle rect, Color color, unsigned char alpha) {
     raythm_icons::draw_chevron_right(centered_icon_rect(rect, 5.0f), with_alpha(color, alpha), 3.0f);
 }
 
 std::string rating_value_text(const auth::rating_summary& rating) {
     return TextFormat("%.2f", rating.rating);
+}
+
+std::string rating_subtitle_text(const auth::rating_summary& rating) {
+    if (rating.rank > 0) {
+        return TextFormat("GLOBAL #%d", rating.rank);
+    }
+    if (rating.best_play_count > 0) {
+        return TextFormat("BEST %d PLAYS", rating.best_play_count);
+    }
+    return "UNRATED";
+}
+
+void draw_rating_panel(Rectangle rect,
+                       const auth::rating_summary& rating,
+                       unsigned char alpha,
+                       Color bar_text,
+                       Color bar_muted) {
+    const auto& t = *g_theme;
+    const Color tone = t.accent;
+    const float alpha_t = static_cast<float>(alpha) / 255.0f;
+    const Color fill = with_alpha(lerp_color(t.panel, tone, 0.10f),
+                                  static_cast<unsigned char>(210.0f * alpha_t));
+    const Color border = with_alpha(lerp_color(t.border, tone, 0.42f),
+                                    static_cast<unsigned char>(190.0f * alpha_t));
+    const Color label_color = with_alpha(lerp_color(bar_text, tone, 0.26f), alpha);
+    const Color value_color = with_alpha(lerp_color(bar_text, WHITE, 0.55f), alpha);
+
+    ui::draw_rect_f(rect, fill);
+    ui::draw_rect_f({rect.x, rect.y, 4.0f, rect.height}, with_alpha(tone, alpha));
+    ui::draw_rect_f({rect.x + 4.0f, rect.y, rect.width - 4.0f, 1.0f},
+                    with_alpha(WHITE, static_cast<unsigned char>(26.0f * alpha_t)));
+    ui::draw_rect_lines(rect, 1.0f, border);
+
+    const Rectangle label_rect = {rect.x + 18.0f, rect.y + 5.0f, rect.width - 30.0f, 14.0f};
+    const Rectangle value_rect = {rect.x + 18.0f, rect.y + 18.0f, rect.width - 30.0f, 24.0f};
+    const Rectangle sub_rect = {rect.x + 18.0f, rect.y + 40.0f, rect.width - 30.0f, 14.0f};
+    ui::draw_text_in_rect("RATING", 11, label_rect, label_color, ui::text_align::left);
+    const std::string rating_value = rating_value_text(rating);
+    ui::draw_text_in_rect(rating_value.c_str(), 23, value_rect, value_color, ui::text_align::left);
+    const std::string subtitle = rating_subtitle_text(rating);
+    ui::draw_text_in_rect(subtitle.c_str(), 10, sub_rect,
+                          with_alpha(bar_muted, static_cast<unsigned char>((static_cast<int>(alpha) * 230) / 255)),
+                          ui::text_align::left);
 }
 
 void draw_top_bar_controls(const title_header_view::draw_config& config) {
@@ -95,6 +143,14 @@ void draw_top_bar_controls(const title_header_view::draw_config& config) {
         : config.refresh_chip_rect;
     draw_refresh_icon(refresh_visual,
                       ui::is_hovered(config.refresh_chip_rect) ? bar_text : bar_muted, account_alpha);
+
+    draw_top_bar_item_background(config.rating_rankings_chip_rect, t.row_hover, account_alpha);
+    const Rectangle ranking_visual = ui::is_pressed(config.rating_rankings_chip_rect)
+        ? ui::inset(config.rating_rankings_chip_rect, 1.5f)
+        : config.rating_rankings_chip_rect;
+    draw_rating_rankings_icon(ranking_visual,
+                              ui::is_hovered(config.rating_rankings_chip_rect) ? bar_text : bar_muted,
+                              account_alpha);
 
     draw_top_bar_item_background(config.friends_chip_rect, t.row_hover, account_alpha);
     const Rectangle friends_visual = ui::is_pressed(config.friends_chip_rect)
@@ -130,32 +186,22 @@ void draw_top_bar_controls(const title_header_view::draw_config& config) {
         std::string(config.avatar_base_url));
     const Rectangle account_name_rect = {
         avatar_rect.x + avatar_rect.width + 14.0f, config.account_chip_rect.y + 8.0f,
-        config.account_chip_rect.width - 168.0f, 30.0f
+        config.account_chip_rect.width - kRatingPanelWidth - 96.0f, 30.0f
     };
     ui::draw_text_in_rect(std::string(config.account_name).c_str(), 20, account_name_rect,
                           with_alpha(bar_text, account_alpha), ui::text_align::left);
     if (config.logged_in) {
-        const Rectangle rating_label_rect = {
-            config.account_chip_rect.x + config.account_chip_rect.width - 96.0f,
-            config.account_chip_rect.y + 9.0f,
-            58.0f,
-            18.0f
+        const Rectangle rating_panel_rect = {
+            config.account_chip_rect.x + config.account_chip_rect.width - kRatingPanelWidth - 34.0f,
+            config.account_chip_rect.y + 8.0f,
+            kRatingPanelWidth,
+            54.0f
         };
-        const Rectangle rating_value_rect = {
-            config.account_chip_rect.x + config.account_chip_rect.width - 114.0f,
-            config.account_chip_rect.y + 28.0f,
-            76.0f,
-            26.0f
-        };
-        ui::draw_text_in_rect("RATING", 10, rating_label_rect,
-                              with_alpha(t.accent, account_alpha), ui::text_align::right);
-        const std::string rating_value = rating_value_text(config.rating);
-        ui::draw_text_in_rect(rating_value.c_str(), 18, rating_value_rect,
-                              with_alpha(bar_text, account_alpha), ui::text_align::right);
+        draw_rating_panel(rating_panel_rect, config.rating, account_alpha, bar_text, bar_muted);
         ui::draw_text_in_rect(config.email_verified ? "Season 0" : "Verify email",
                               12,
                               {avatar_rect.x + avatar_rect.width + 14.0f, config.account_chip_rect.y + 41.0f,
-                               config.account_chip_rect.width - 160.0f, 20.0f},
+                               config.account_chip_rect.width - kRatingPanelWidth - 96.0f, 20.0f},
                               with_alpha(config.email_verified ? bar_muted : t.error, account_alpha),
                               ui::text_align::left);
     } else {

@@ -384,6 +384,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_multiplayer_content_resolver.h
         src/scenes/title/title_multiplayer_flow_controller.cpp
         src/scenes/title/title_multiplayer_flow_controller.h
+        src/scenes/title/title_modal_stack.cpp
+        src/scenes/title/title_modal_stack.h
         src/scenes/title/title_play_create_feature.cpp
         src/scenes/title/title_play_create_feature.h
         src/scenes/title/title_play_data_controller.cpp
@@ -400,6 +402,10 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_play_transfer_controller.h
         src/scenes/title/title_profile_controller.cpp
         src/scenes/title/title_profile_controller.h
+        src/scenes/title/title_rating_rankings_controller.cpp
+        src/scenes/title/title_rating_rankings_controller.h
+        src/scenes/title/title_rating_rankings_view.cpp
+        src/scenes/title/title_rating_rankings_view.h
         src/scenes/title/title_header_view.cpp
         src/scenes/title/title_header_view.h
         src/scenes/title/title_local_song_select_controller.cpp
@@ -446,6 +452,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/title_command.h
         src/scenes/title/title_command_dispatcher.cpp
         src/scenes/title/title_command_dispatcher.h
+        src/scenes/title/seamless_song_select_layout.cpp
+        src/scenes/title/seamless_song_select_layout.h
         src/scenes/title/seamless_song_select_view.cpp
         src/scenes/title/seamless_song_select_view.h
         src/scenes/title/title_spectrum_visualizer.cpp
@@ -935,6 +943,11 @@ add_executable(create_tools_model_smoke
         src/scenes/song_select/song_select_state.h
         src/tests/create_tools_model_smoke.cpp)
 
+add_executable(title_song_select_layout_smoke
+        src/scenes/title/seamless_song_select_layout.cpp
+        src/scenes/title/seamless_song_select_layout.h
+        src/tests/title_song_select_layout_smoke.cpp)
+
 add_executable(content_authorization_service_smoke
         src/services/content_authorization_service.cpp
         src/services/content_authorization_service.h
@@ -1352,6 +1365,21 @@ add_executable(friend_client_refresh_smoke
         src/gameplay/scoring_ruleset_runtime.h
         src/tests/friend_client_refresh_smoke.cpp)
 
+add_executable(auth_client_concurrent_restore_smoke
+        src/core/app_paths.cpp
+        src/core/app_paths.h
+        src/network/auth_client.cpp
+        src/network/auth_client.h
+        src/network/http_client.cpp
+        src/network/http_client.h
+        src/network/json_helpers.cpp
+        src/network/json_helpers.h
+        src/network/network_error.cpp
+        src/network/network_error.h
+        src/network/server_environment.cpp
+        src/network/server_environment.h
+        src/tests/auth_client_concurrent_restore_smoke.cpp)
+
 add_executable(title_friends_state_smoke
         src/network/friend_client.h
         src/scenes/title/title_friends_reducer.cpp
@@ -1677,6 +1705,7 @@ set(RAYTHM_SMOKE_TARGETS
         online_content_availability_smoke
         create_upload_permissions_smoke
         create_tools_model_smoke
+        title_song_select_layout_smoke
         content_authorization_service_smoke
         content_sync_service_smoke
         content_cache_paths_smoke
@@ -1703,6 +1732,7 @@ set(RAYTHM_SMOKE_TARGETS
         json_helpers_smoke
         friend_client_parser_smoke
         friend_client_refresh_smoke
+        auth_client_concurrent_restore_smoke
         title_friends_state_smoke
         public_profile_state_smoke
         multiplayer_state_smoke
@@ -1757,7 +1787,9 @@ target_link_libraries(raythm_updater PRIVATE winhttp)
 target_link_libraries(font_atlas_generator PRIVATE raylib)
 target_link_libraries(update_version_smoke PRIVATE winhttp)
 target_link_libraries(friend_client_refresh_smoke PRIVATE winhttp ws2_32)
+target_link_libraries(auth_client_concurrent_restore_smoke PRIVATE winhttp ws2_32)
 target_link_libraries(multiplayer_state_smoke PRIVATE raylib)
+target_link_libraries(title_song_select_layout_smoke PRIVATE raylib)
 target_link_libraries(ranking_panel_view_smoke PRIVATE raylib)
 target_link_libraries(song_loader_smoke PRIVATE sqlite3)
 target_link_libraries(local_catalog_database_smoke PRIVATE sqlite3 raylib)

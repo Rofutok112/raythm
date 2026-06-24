@@ -239,8 +239,9 @@ title_profile_controller::input_result title_profile_controller::handle_input(bo
 
 void title_profile_controller::draw(const song_select::auth_state& auth_state,
                                     bool auth_request_active,
-                                    ui::draw_layer layer) {
-    title_profile_view::draw(state_, auth_state, avatar_picker_, auth_request_active, layer);
+                                    ui::draw_layer layer,
+                                    bool draw_backdrop) {
+    title_profile_view::draw(state_, auth_state, avatar_picker_, auth_request_active, layer, draw_backdrop);
 }
 
 bool title_profile_controller::is_open() const {

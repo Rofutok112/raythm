@@ -17,6 +17,26 @@ constexpr float kCreatePanelSectionGap = 22.0f;
 constexpr float kCreatePanelSectionLabelHeight = 24.0f;
 constexpr int kCreateToolColumnCount = 2;
 
+Rectangle create_tools_header_rect(const title_play_view::layout& current) {
+    const Rectangle panel = title_play_view::right_bottom_pane_rect(current.ranking_column);
+    return {
+        panel.x + 28.0f,
+        panel.y + 24.0f,
+        panel.width - 56.0f,
+        30.0f,
+    };
+}
+
+Rectangle create_tools_content_rect(const title_play_view::layout& current) {
+    const Rectangle panel = title_play_view::right_bottom_pane_rect(current.ranking_column);
+    return {
+        panel.x + 28.0f,
+        panel.y + 72.0f,
+        panel.width - 56.0f,
+        panel.height - 96.0f,
+    };
+}
+
 Rectangle create_tool_rect(Rectangle section_rect, int index, bool primary) {
     if (primary) {
         return {
@@ -88,14 +108,15 @@ title_play_view::update_result update(const title_create_tools_model::view_model
         return result;
     }
 
-    float section_y = current.ranking_list_rect.y;
+    const Rectangle content_rect = create_tools_content_rect(current);
+    float section_y = content_rect.y;
     for (const title_create_tools_model::section& section : model.sections) {
         const float tools_y = section_y + kCreatePanelSectionLabelHeight;
         const Rectangle tools_rect{
-            current.ranking_list_rect.x,
+            content_rect.x,
             tools_y,
-            current.ranking_list_rect.width,
-            current.ranking_list_rect.height - (tools_y - current.ranking_list_rect.y),
+            content_rect.width,
+            content_rect.height - (tools_y - content_rect.y),
         };
         int primary_index = 0;
         int secondary_index = 0;
@@ -124,21 +145,23 @@ title_play_view::update_result update(const title_create_tools_model::view_model
 void draw(const title_create_tools_model::view_model& model, const draw_config& config) {
     const auto& t = *g_theme;
 
-    ui::draw_text_in_rect("CREATE", 22, config.current.ranking_header_rect,
+    const Rectangle header_rect = create_tools_header_rect(config.current);
+    const Rectangle content_rect = create_tools_content_rect(config.current);
+    ui::draw_text_in_rect("CREATE", 22, header_rect,
                           with_alpha(t.text, config.alpha), ui::text_align::left);
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    float section_y = config.current.ranking_list_rect.y;
+    float section_y = content_rect.y;
     for (const title_create_tools_model::section& section : model.sections) {
         ui::draw_text_in_rect(section.title.c_str(), 14,
-                              {config.current.ranking_list_rect.x, section_y,
-                               config.current.ranking_list_rect.width, kCreatePanelSectionLabelHeight},
+                              {content_rect.x, section_y,
+                               content_rect.width, kCreatePanelSectionLabelHeight},
                               with_alpha(t.text_secondary, config.alpha), ui::text_align::left);
         const float tools_y = section_y + kCreatePanelSectionLabelHeight;
         const Rectangle tools_rect{
-            config.current.ranking_list_rect.x,
+            content_rect.x,
             tools_y,
-            config.current.ranking_list_rect.width,
-            config.current.ranking_list_rect.height - (tools_y - config.current.ranking_list_rect.y),
+            content_rect.width,
+            content_rect.height - (tools_y - content_rect.y),
         };
         int primary_index = 0;
         int secondary_index = 0;

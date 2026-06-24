@@ -99,12 +99,12 @@ int main() {
         find_entry(denied_model, title_create_tools_model::action::upload_song);
     expect(denied_bindings.song.has_value() && denied_bindings.song->remote_song_id == "remote-song",
            "Expected live song identity to preserve the remote song mapping.", ok);
-    expect(denied_song_upload != nullptr && !denied_song_upload->enabled,
-           "Expected cached canEdit=false songs to disable the update action.", ok);
+    expect(denied_song_upload != nullptr && denied_song_upload->enabled,
+           "Expected cached canEdit=false songs to keep the update modal entry enabled.", ok);
     expect(denied_song_upload != nullptr && denied_song_upload->title == "UPDATE SONG",
            "Expected denied linked songs to still expose the update action.", ok);
-    expect(denied_song_upload != nullptr && denied_song_upload->detail == "Recheck edit permission",
-           "Expected cached denial to be shown as a recheck hint, not a final authorization result.", ok);
+    expect(denied_song_upload != nullptr && denied_song_upload->detail == "Verify on submit",
+           "Expected cached denial to be deferred until submit confirmation.", ok);
 
     song.online_identity = std::nullopt;
     title_create_tools_model::view_model cached_denial_model =
@@ -114,15 +114,14 @@ int main() {
             .server_url = "https://server.example",
             .online_status_checking = false,
             .upload_bindings = denied_bindings,
-            .song_permission_hint = false,
         });
     const title_create_tools_model::entry* cached_denial_upload =
         find_entry(cached_denial_model, title_create_tools_model::action::upload_song);
-    expect(cached_denial_upload != nullptr && !cached_denial_upload->enabled,
-           "Expected user-scoped cached denial hints to disable song updates.",
+    expect(cached_denial_upload != nullptr && cached_denial_upload->enabled,
+           "Expected user-scoped cached denial hints to keep song updates confirmable.",
            ok);
-    expect(cached_denial_upload != nullptr && cached_denial_upload->detail == "Recheck edit permission",
-           "Expected user-scoped cached denial hints to be displayed as recheck guidance.",
+    expect(cached_denial_upload != nullptr && cached_denial_upload->detail == "Verify on submit",
+           "Expected user-scoped cached denial hints to be deferred until submit confirmation.",
            ok);
 
     title_create_tools_model::view_model cached_allow_model =
@@ -132,15 +131,14 @@ int main() {
             .server_url = "https://server.example",
             .online_status_checking = false,
             .upload_bindings = denied_bindings,
-            .song_permission_hint = true,
         });
     const title_create_tools_model::entry* cached_allow_upload =
         find_entry(cached_allow_model, title_create_tools_model::action::upload_song);
     expect(cached_allow_upload != nullptr && cached_allow_upload->enabled,
            "Expected user-scoped cached allow hints to keep song updates enabled.",
            ok);
-    expect(cached_allow_upload != nullptr && cached_allow_upload->detail == "Server edit allowed",
-           "Expected user-scoped cached allow hints to be displayed as last-known server guidance.",
+    expect(cached_allow_upload != nullptr && cached_allow_upload->detail == "Verify on submit",
+           "Expected user-scoped cached allow hints to be deferred until submit confirmation.",
            ok);
 
     song.source = content_source::community;
@@ -154,7 +152,6 @@ int main() {
             .server_url = "https://server.example",
             .online_status_checking = false,
             .upload_bindings = denied_bindings,
-            .song_permission_hint = true,
         });
     const title_create_tools_model::entry* modified_song_update =
         find_entry(modified_song_model, title_create_tools_model::action::upload_song);

@@ -1,6 +1,7 @@
 #include "title/title_create_mode_controller.h"
 
 #include "song_select/song_select_navigation.h"
+#include "song_select/song_select_confirmation_dialog.h"
 #include "title/title_local_song_select_controller.h"
 #include "ui_notice.h"
 
@@ -77,9 +78,17 @@ void title_create_mode_controller::update(scene_manager& manager,
         if (song == nullptr) {
             song_select::queue_status_message(state, "Select a song to upload.", true);
         } else if (!create_tools_model.song_upload_enabled) {
-            ui::notify("This song cannot be edited by the current account.", ui::notice_tone::error, 2.8f);
+            ui::notify("This song cannot be submitted right now.", ui::notice_tone::error, 2.8f);
         } else {
-            callbacks.start_song_upload(*song);
+            song_select::open_confirmation_dialog(
+                state,
+                song_select::pending_confirmation_action::upload_song,
+                "Submit Song",
+                "The selected song will be checked and submitted.",
+                "Server edit permission is verified after this step.",
+                "SUBMIT",
+                state.selected_song_index,
+                state.difficulty_index);
         }
         return;
     }
@@ -111,9 +120,17 @@ void title_create_mode_controller::update(scene_manager& manager,
         if (song == nullptr || chart == nullptr) {
             song_select::queue_status_message(state, "Select a chart to upload.", true);
         } else if (!create_tools_model.chart_upload_enabled) {
-            ui::notify("This chart cannot be edited by the current account.", ui::notice_tone::error, 2.8f);
+            ui::notify("Upload the song before submitting this chart.", ui::notice_tone::error, 2.8f);
         } else {
-            callbacks.start_chart_upload(*song, *chart);
+            song_select::open_confirmation_dialog(
+                state,
+                song_select::pending_confirmation_action::upload_chart,
+                "Submit Chart",
+                "The selected chart will be checked and submitted.",
+                "Server edit permission is verified after this step.",
+                "SUBMIT",
+                state.selected_song_index,
+                state.difficulty_index);
         }
         return;
     }

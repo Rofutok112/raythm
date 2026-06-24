@@ -33,7 +33,7 @@ public:
     void tick(float dt);
     void poll();
     bool handle_input();
-    void draw(ui::draw_layer layer = ui::draw_layer::modal);
+    void draw(ui::draw_layer layer = ui::draw_layer::modal, bool draw_backdrop = true);
 
     [[nodiscard]] bool is_open() const;
     [[nodiscard]] Rectangle bounds() const;

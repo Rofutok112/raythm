@@ -83,7 +83,7 @@ bool controller::handle_input() {
     return true;
 }
 
-void controller::draw(ui::draw_layer layer) {
+void controller::draw(ui::draw_layer layer, bool draw_backdrop) {
     if (!state_.open) {
         return;
     }
@@ -94,7 +94,7 @@ void controller::draw(ui::draw_layer layer) {
         .open_anim = state_.open_anim,
         .avatar_base_url = auth::load_session_summary().server_url,
         .result = state_.result,
-    }, layer);
+    }, layer, draw_backdrop);
 }
 
 bool controller::is_open() const {

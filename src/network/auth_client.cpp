@@ -1,7 +1,9 @@
 #include "network/auth_client.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -299,7 +301,27 @@ bool should_clear_saved_session_after_refresh_failure(const http_response& respo
            response.status_code == 410;
 }
 
-bool write_session_file(const auth::session& session_data) {
+auth::rating_summary parse_rating_summary_object(const std::string& object) {
+    return {
+        .rating = json::extract_float(object, "rating").value_or(0.0f),
+        .rank = json::extract_int(object, "rank").value_or(0),
+        .eligible_play_count = json::extract_int(object, "eligiblePlayCount").value_or(0),
+        .best_play_count = json::extract_int(object, "bestPlayCount").value_or(0),
+        .ruleset_version = json::extract_string(object, "rulesetVersion").value_or(""),
+    };
+}
+
+std::mutex& session_file_mutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::mutex& session_refresh_mutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+bool write_session_file_unlocked(const auth::session& session_data) {
     app_paths::ensure_directories();
     std::ofstream output(app_paths::auth_session_path(), std::ios::binary | std::ios::trunc);
     if (!output.is_open()) {
@@ -336,6 +358,59 @@ bool write_session_file(const auth::session& session_data) {
     output << "  }\n";
     output << "}\n";
     return output.good();
+}
+
+bool write_session_file(const auth::session& session_data) {
+    std::lock_guard<std::mutex> lock(session_file_mutex());
+    return write_session_file_unlocked(session_data);
+}
+
+std::optional<auth::session> load_saved_session_unlocked() {
+    const std::string content = read_file(app_paths::auth_session_path());
+    if (content.empty()) {
+        return std::nullopt;
+    }
+
+    const std::optional<std::string> server_url = json::extract_string(content, "serverUrl");
+    const std::optional<std::string> access_token = json::extract_string(content, "accessToken");
+    const std::optional<std::string> refresh_token = json::extract_string(content, "refreshToken");
+    const std::optional<std::string> user_object = json::extract_object(content, "user");
+    if (!server_url.has_value() || !access_token.has_value() || !refresh_token.has_value() || !user_object.has_value()) {
+        return std::nullopt;
+    }
+
+    const std::optional<auth::public_user> user = parse_user_object(*user_object);
+    if (!user.has_value()) {
+        return std::nullopt;
+    }
+
+    auth::session loaded{
+        .server_url = auth::normalize_server_url(*server_url),
+        .access_token = *access_token,
+        .refresh_token = *refresh_token,
+        .user = *user,
+    };
+    if (loaded.server_url != auth::normalize_server_url(*server_url)) {
+        write_session_file_unlocked(loaded);
+    }
+    return loaded;
+}
+
+void clear_saved_session_unlocked() {
+    std::error_code ec;
+    fs::remove(app_paths::auth_session_path(), ec);
+}
+
+void clear_saved_session_if_refresh_token_matches_unlocked(const std::string& refresh_token) {
+    const std::optional<auth::session> current = load_saved_session_unlocked();
+    if (current.has_value() && current->refresh_token == refresh_token) {
+        clear_saved_session_unlocked();
+    }
+}
+
+void clear_saved_session_if_refresh_token_matches(const std::string& refresh_token) {
+    std::lock_guard<std::mutex> lock(session_file_mutex());
+    clear_saved_session_if_refresh_token_matches_unlocked(refresh_token);
 }
 
 std::optional<std::string> read_trusted_device_token(const std::string& server_url, const std::string& email) {
@@ -492,34 +567,8 @@ std::string normalize_server_url(const std::string& server_url) {
 }
 
 std::optional<session> load_saved_session() {
-    const std::string content = read_file(app_paths::auth_session_path());
-    if (content.empty()) {
-        return std::nullopt;
-    }
-
-    const std::optional<std::string> server_url = json::extract_string(content, "serverUrl");
-    const std::optional<std::string> access_token = json::extract_string(content, "accessToken");
-    const std::optional<std::string> refresh_token = json::extract_string(content, "refreshToken");
-    const std::optional<std::string> user_object = json::extract_object(content, "user");
-    if (!server_url.has_value() || !access_token.has_value() || !refresh_token.has_value() || !user_object.has_value()) {
-        return std::nullopt;
-    }
-
-    const std::optional<public_user> user = parse_user_object(*user_object);
-    if (!user.has_value()) {
-        return std::nullopt;
-    }
-
-    session loaded{
-        .server_url = normalize_server_url(*server_url),
-        .access_token = *access_token,
-        .refresh_token = *refresh_token,
-        .user = *user,
-    };
-    if (loaded.server_url != normalize_server_url(*server_url)) {
-        write_session_file(loaded);
-    }
-    return loaded;
+    std::lock_guard<std::mutex> lock(session_file_mutex());
+    return load_saved_session_unlocked();
 }
 
 session_summary load_session_summary() {
@@ -596,13 +645,42 @@ std::optional<auth::public_profile> parse_public_profile_response(const std::str
     };
 }
 
+std::optional<auth::global_rating_ranking_entry> parse_global_rating_ranking_entry(const std::string& object) {
+    const std::optional<std::string> user_id = json::extract_string(object, "userId");
+    const std::optional<std::string> display_name = json::extract_string(object, "displayName");
+    const std::optional<std::string> rating_object = json::extract_object(object, "rating");
+    if (!user_id.has_value() || !display_name.has_value() || !rating_object.has_value()) {
+        return std::nullopt;
+    }
+
+    return auth::global_rating_ranking_entry{
+        .user_id = *user_id,
+        .display_name = *display_name,
+        .avatar_url = json::extract_string(object, "avatarUrl").value_or(""),
+        .rating = parse_rating_summary_object(*rating_object),
+    };
+}
+
+void parse_global_rating_ranking_items(const std::string& body,
+                                       std::vector<auth::global_rating_ranking_entry>& output) {
+    const std::optional<std::string> items = json::extract_array(body, "items");
+    if (!items.has_value()) {
+        return;
+    }
+    for (const std::string& object : json::extract_objects_from_array(*items)) {
+        if (const auto entry = parse_global_rating_ranking_entry(object); entry.has_value()) {
+            output.push_back(*entry);
+        }
+    }
+}
+
 bool save_session(const session& session_data) {
     return write_session_file(session_data);
 }
 
 void clear_saved_session() {
-    std::error_code ec;
-    fs::remove(app_paths::auth_session_path(), ec);
+    std::lock_guard<std::mutex> lock(session_file_mutex());
+    clear_saved_session_unlocked();
 }
 
 void clear_trusted_device_file() {
@@ -747,7 +825,7 @@ operation_result resend_verification_code(const std::string& server_url,
 }
 
 operation_result restore_saved_session() {
-    const std::optional<session> stored = load_saved_session();
+    std::optional<session> stored = load_saved_session();
     if (!stored.has_value()) {
         return {
             .success = false,
@@ -801,6 +879,22 @@ operation_result restore_saved_session() {
         return make_operation_http_error(me_response, "Failed to restore session.");
     }
 
+    std::unique_lock<std::mutex> refresh_lock(session_refresh_mutex());
+    const std::optional<session> latest = load_saved_session();
+    if (!latest.has_value()) {
+        return {
+            .success = false,
+            .message = "No saved session was found.",
+            .session_data = std::nullopt,
+        };
+    }
+
+    if (latest->access_token != stored->access_token || latest->refresh_token != stored->refresh_token ||
+        !server_urls_match(latest->server_url, stored->server_url)) {
+        refresh_lock.unlock();
+        return restore_saved_session();
+    }
+
     const std::string refresh_body =
         "{"
         "\"refreshToken\":\"" + json::escape_string(stored->refresh_token) + "\""
@@ -826,7 +920,7 @@ operation_result restore_saved_session() {
 
     if (refresh_response.status_code < 200 || refresh_response.status_code >= 300) {
         if (should_clear_saved_session_after_refresh_failure(refresh_response)) {
-            clear_saved_session();
+            clear_saved_session_if_refresh_token_matches(stored->refresh_token);
         }
         return make_operation_http_error(refresh_response, "Saved session expired.");
     }
@@ -1394,6 +1488,65 @@ public_profile_result fetch_public_profile(const std::string& user_id) {
 
     result.success = true;
     result.message = "Profile loaded.";
+    return result;
+}
+
+global_rating_rankings_result fetch_global_rating_rankings(int page, int page_size) {
+    global_rating_rankings_result result;
+    result.page = std::max(1, page);
+    result.page_size = std::clamp(page_size, 1, 50);
+
+    std::optional<session> stored = load_saved_session();
+    if (!stored.has_value()) {
+        result.unauthorized = true;
+        result.message = "Login required.";
+        return result;
+    }
+
+    const std::string path =
+        "/users/rating-rankings?page=" + std::to_string(result.page) +
+        "&pageSize=" + std::to_string(result.page_size);
+    auto send_rankings_request = [&](const session& session_data) {
+        return send_authenticated_request(session_data, "GET", path);
+    };
+
+    http_response response = send_rankings_request(*stored);
+    if (response.error_message.empty() && response.status_code == 401) {
+        const operation_result restored = restore_saved_session();
+        if (restored.success && restored.session_data.has_value()) {
+            stored = restored.session_data;
+            response = send_rankings_request(*stored);
+        }
+    }
+
+    if (!response.error_message.empty()) {
+        result.message = response.error_message;
+        return result;
+    }
+    if (response.status_code == 401) {
+        result.unauthorized = true;
+        result.message = "Login required.";
+        return result;
+    }
+    if (response.status_code < 200 || response.status_code >= 300) {
+        apply_error_classification(
+            result,
+            classify_response_error(response, "Failed to load rating rankings."));
+        return result;
+    }
+
+    result.page = json::extract_int(response.body, "page").value_or(result.page);
+    result.page_size = json::extract_int(response.body, "pageSize").value_or(result.page_size);
+    result.total = json::extract_int(response.body, "total").value_or(0);
+    result.has_next_page = json::extract_bool(response.body, "hasNextPage").value_or(false);
+    const bool has_items_array = json::extract_array(response.body, "items").has_value();
+    parse_global_rating_ranking_items(response.body, result.items);
+    if (has_items_array) {
+        result.success = true;
+        result.message = "Rating rankings loaded.";
+    } else {
+        result.message = "Server returned an unexpected rating rankings response.";
+    }
     return result;
 }
 

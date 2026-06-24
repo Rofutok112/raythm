@@ -126,7 +126,8 @@ bool is_title_header_chrome(Rectangle rect) {
 bool is_background_close_exclusion() {
     return is_title_header_chrome(title_layout::account_chip_rect()) ||
            is_title_header_chrome(title_layout::settings_chip_rect()) ||
-           is_title_header_chrome(title_layout::refresh_chip_rect());
+           is_title_header_chrome(title_layout::refresh_chip_rect()) ||
+           is_title_header_chrome(title_layout::rating_rankings_chip_rect());
 }
 
 Rectangle overview_card_rect(Rectangle content, int index) {
@@ -585,13 +586,14 @@ void draw(state& profile,
           const song_select::auth_state& auth_state,
           square_image_picker::state& avatar_picker,
           bool request_active,
-          ui::draw_layer layer) {
+          ui::draw_layer layer,
+          bool draw_backdrop) {
     if (!profile.open) {
         return;
     }
     sync_settings_links(profile, auth_state);
 
-    ui::enqueue_draw_command(layer, [&profile, &avatar_picker, auth_state, request_active, layer]() {
+    ui::enqueue_draw_command(layer, [&profile, &avatar_picker, auth_state, request_active, layer, draw_backdrop]() {
         const auto& t = *g_theme;
         const Vector2 mouse = virtual_screen::get_virtual_mouse();
         const bool busy = profile.loading || profile.deleting || profile.saving_links ||
@@ -604,8 +606,10 @@ void draw(state& profile,
             kDialogRect.y + kDialogRect.height * 0.5f,
         };
 
-        DrawRectangle(0, 0, kScreenWidth, kScreenHeight,
-                      with_alpha(BLACK, static_cast<unsigned char>(160.0f * anim_t)));
+        if (draw_backdrop) {
+            DrawRectangle(0, 0, kScreenWidth, kScreenHeight,
+                          with_alpha(BLACK, static_cast<unsigned char>(160.0f * anim_t)));
+        }
         rlPushMatrix();
         rlTranslatef(center.x, center.y + offset_y, 0.0f);
         rlScalef(scale, scale, 1.0f);

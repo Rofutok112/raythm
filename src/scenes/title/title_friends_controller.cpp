@@ -80,7 +80,7 @@ bool title_friends_controller::handle_input() {
     return true;
 }
 
-void title_friends_controller::draw(ui::draw_layer layer) {
+void title_friends_controller::draw(ui::draw_layer layer, bool draw_backdrop) {
     if (!state_.open) {
         return;
     }
@@ -91,7 +91,7 @@ void title_friends_controller::draw(ui::draw_layer layer) {
         .operation_active = state_.operation_active,
         .selected_tab = state_.selected_tab,
         .social = state_.social,
-    }, layer);
+    }, layer, draw_backdrop);
 }
 
 bool title_friends_controller::is_open() const {
@@ -181,7 +181,6 @@ void title_friends_controller::apply_view_command(const title_friends_view::comm
         break;
     case title_friends_view::command_type::open_profile:
         state_.pending_effects.profile_user_id = command.id;
-        close();
         break;
     case title_friends_view::command_type::accept_request:
         start_accept_request(command.id);

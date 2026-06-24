@@ -98,6 +98,7 @@ void draw(state& profile,
           const song_select::auth_state& auth_state,
           square_image_picker::state& avatar_picker,
           bool request_active,
-          ui::draw_layer layer = ui::draw_layer::modal);
+          ui::draw_layer layer = ui::draw_layer::modal,
+          bool draw_backdrop = true);
 
 }  // namespace title_profile_view

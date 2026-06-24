@@ -185,8 +185,10 @@ void title_scene::enter_settings_mode() {
     home_status_message_.clear();
     play_create_feature_.state().login_dialog.open = false;
     friends_controller_.close();
+    rating_rankings_controller_.close();
     profile_controller_.close();
     public_profile_controller_.close();
+    modals_.clear();
     settings_overlay_.open();
     audio_controller_.update(current_audio_mode(), song_select::selected_song(play_create_feature_.state()), 0.0f);
 }
@@ -267,6 +269,44 @@ bool title_scene::handle_public_profile_input() {
 
 bool title_scene::handle_friends_input() {
     return friends_controller_.handle_input();
+}
+
+bool title_scene::handle_rating_rankings_input() {
+    return rating_rankings_controller_.handle_input();
+}
+
+bool title_scene::handle_modal_input() {
+    sync_modal_stack();
+    const std::optional<title::modal_id> top = modals_.top();
+    if (!top.has_value()) {
+        return false;
+    }
+    switch (*top) {
+    case title::modal_id::friends:
+        return handle_friends_input();
+    case title::modal_id::rating_rankings:
+        return handle_rating_rankings_input();
+    case title::modal_id::self_profile:
+        return handle_profile_input();
+    case title::modal_id::public_profile:
+        return handle_public_profile_input();
+    }
+    return false;
+}
+
+void title_scene::sync_modal_stack() {
+    if (!friends_controller_.is_open()) {
+        modals_.remove(title::modal_id::friends);
+    }
+    if (!rating_rankings_controller_.is_open()) {
+        modals_.remove(title::modal_id::rating_rankings);
+    }
+    if (!profile_controller_.is_open()) {
+        modals_.remove(title::modal_id::self_profile);
+    }
+    if (!public_profile_controller_.is_open()) {
+        modals_.remove(title::modal_id::public_profile);
+    }
 }
 
 title_play_create_feature::cross_callbacks title_scene::play_cross_callbacks() {
@@ -368,9 +408,11 @@ bool title_scene::apply_title_command(const title::command& command) {
             .open_self_profile = [this]() {
                 play_create_feature_.state().login_dialog.open = false;
                 profile_controller_.open();
+                modals_.bring_to_front(title::modal_id::self_profile);
             },
             .open_public_profile = [this](const std::string& user_id) {
                 public_profile_controller_.open(user_id);
+                modals_.bring_to_front(title::modal_id::public_profile);
             },
             .open_multiplayer_song_select = [this]() {
                 if (multiplayer_state_.current_room.has_value()) {
@@ -517,6 +559,8 @@ void title_scene::on_enter() {
     play_create_feature_.reset();
     catalog_reload_coordinator_.reset();
     auth_overlay::refresh_auth_state(play_create_feature_.state().auth);
+    modals_.clear();
+    rating_rankings_controller_.reset();
     profile_controller_.reset();
     public_profile_controller_.reset();
     play_create_feature_.state().recent_result_offset = recent_result_offset_;
@@ -556,6 +600,7 @@ void title_scene::on_enter() {
     settings_overlay_.open();
     play_create_feature_.state().login_dialog.open = false;
     title_startup_controller::reset(startup_);
+    modals_.clear();
     audio_controller_.update(current_audio_mode(), selected_audio_song(mode_, play_create_feature_.state(), browse_feature_.state()), 0.0f);
 }
 
@@ -564,8 +609,10 @@ void title_scene::on_exit() {
         settings_overlay_.save();
     }
     play_create_feature_.state().login_dialog.open = false;
+    rating_rankings_controller_.close();
     profile_controller_.close();
     public_profile_controller_.close();
+    modals_.clear();
     play_create_feature_.on_exit();
     browse_feature_.on_exit();
     audio_controller_.on_exit();
@@ -590,6 +637,9 @@ void title_scene::update(float dt) {
     if (profile_controller_.is_open()) {
         ui::register_hit_region(profile_controller_.bounds(), kTitleModalLayer);
     }
+    if (rating_rankings_controller_.is_open()) {
+        ui::register_hit_region(rating_rankings_controller_.bounds(), kTitleModalLayer);
+    }
     if (public_profile_controller_.is_open()) {
         ui::register_hit_region(public_profile_controller_.bounds(), kTitleModalLayer);
     }
@@ -598,6 +648,7 @@ void title_scene::update(float dt) {
     const title::shell_effect_context shell_effect_context{
         .open_public_profile = [this](const std::string& user_id) {
             public_profile_controller_.open(user_id);
+            modals_.bring_to_front(title::modal_id::public_profile);
         },
         .start_room_join = [this](const title_friends_effects::room_join_request& request) {
             enter_multiplayer_room_invite(request.room_id, request.invite_id);
@@ -654,20 +705,20 @@ void title_scene::update(float dt) {
 
     friends_controller_.tick(dt);
     friends_controller_.poll();
+    rating_rankings_controller_.tick(dt);
+    rating_rankings_controller_.poll();
+    if (const std::optional<std::string> user_id = rating_rankings_controller_.consume_profile_user_id();
+        user_id.has_value()) {
+        public_profile_controller_.open(*user_id);
+        modals_.bring_to_front(title::modal_id::public_profile);
+        return;
+    }
     if (title::apply_friends_effects(friends_controller_.consume_effects(),
                                      shell_effect_context).scene_flow_changed) {
         return;
     }
 
-    if (handle_friends_input()) {
-        return;
-    }
-
-    if (handle_profile_input()) {
-        return;
-    }
-
-    if (handle_public_profile_input()) {
+    if (handle_modal_input()) {
         return;
     }
 
@@ -681,6 +732,8 @@ void title_scene::update(float dt) {
         .browse_feature = browse_feature_,
         .catalog_reload_coordinator = catalog_reload_coordinator_,
         .friends_controller = friends_controller_,
+        .rating_rankings_controller = rating_rankings_controller_,
+        .modals = modals_,
         .auth_controller = auth_controller_,
     };
     const title::frame_input_result input_result = title::update_frame_input(input_context);
@@ -750,9 +803,11 @@ void title_scene::draw() {
         audio_controller_,
         settings_overlay_,
         friends_controller_,
+        rating_rankings_controller_,
         profile_controller_,
         public_profile_controller_,
         auth_controller_,
+        modals_,
         cross_callbacks,
         intro_fade_,
         transition_fade_,

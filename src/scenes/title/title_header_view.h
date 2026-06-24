@@ -11,6 +11,7 @@ struct draw_config {
     Rectangle closed_header_rect;
     Rectangle open_header_rect;
     Rectangle refresh_chip_rect;
+    Rectangle rating_rankings_chip_rect;
     Rectangle friends_chip_rect;
     Rectangle settings_chip_rect;
     Rectangle account_chip_rect;

@@ -46,7 +46,7 @@ struct model {
 };
 
 [[nodiscard]] command handle_input(const model& state, ui::draw_layer layer = ui::draw_layer::modal);
-void draw(const model& state, ui::draw_layer layer = ui::draw_layer::modal);
+void draw(const model& state, ui::draw_layer layer = ui::draw_layer::modal, bool draw_backdrop = true);
 [[nodiscard]] Rectangle modal_bounds(float open_anim);
 
 }  // namespace title_friends_view

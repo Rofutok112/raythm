@@ -18,7 +18,7 @@ constexpr float kPlayHeaderY = 78.0f;
 constexpr float kSpectrumHeight = 498.0f;
 constexpr float kTopBarHeight = 70.0f;
 constexpr float kTopBarButtonSize = 70.0f;
-constexpr float kAccountChipWidth = 292.0f;
+constexpr float kAccountChipWidth = 430.0f;
 
 }  // namespace
 
@@ -78,6 +78,16 @@ Rectangle friends_chip_rect() {
     const Rectangle visible = virtual_screen::visible_rect();
     return {
         visible.x + visible.width - kAccountChipWidth - kTopBarButtonSize,
+        visible.y,
+        kTopBarButtonSize,
+        kTopBarHeight
+    };
+}
+
+Rectangle rating_rankings_chip_rect() {
+    const Rectangle visible = virtual_screen::visible_rect();
+    return {
+        visible.x + visible.width - kAccountChipWidth - kTopBarButtonSize * 2.0f,
         visible.y,
         kTopBarButtonSize,
         kTopBarHeight

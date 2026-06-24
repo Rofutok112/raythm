@@ -35,44 +35,9 @@
 namespace title_play_view {
 namespace {
 
-constexpr Rectangle kPlayBackButtonRect = {39.0f, 983.0f, 480.0f, 58.0f};
-constexpr Rectangle kPlaySongColumnRect = {39.0f, 109.0f, 480.0f, 854.0f};
-constexpr Rectangle kPlayMainColumnRect = {541.0f, 109.0f, 665.0f, 932.0f};
-constexpr Rectangle kPlayRankingColumnRect = {1228.0f, 109.0f, 650.0f, 932.0f};
-constexpr Rectangle kPlayJacketRect = {1258.0f, 141.0f, 212.0f, 212.0f};
-constexpr Rectangle kPlayChartDetailRect = {1494.0f, 145.0f, 350.0f, 224.0f};
-constexpr Rectangle kPlayMetaRect = {860.0f, 347.0f, 286.0f, 10.0f};
-constexpr float kChartFilterMinLevel = 0.0f;
-constexpr float kChartFilterUsefulMaxLevel = 15.0f;
-constexpr float kChartFilterMaxLevel = 99.0f;
-constexpr float kChartFilterUsefulTrack = 0.97f;
-constexpr Rectangle kPlayChartButtonsRect = {565.0f, 542.0f, 617.0f, 444.0f};
-constexpr Rectangle kPlayRankingHeaderRect = {1256.0f, 466.0f, 596.0f, 38.0f};
-constexpr Rectangle kPlayRankingSourceFriendsRect = {1428.0f, 466.0f, 136.0f, 38.0f};
-constexpr Rectangle kPlayRankingSourceOnlineRect = {1572.0f, 466.0f, 136.0f, 38.0f};
-constexpr Rectangle kPlayRankingSourceLocalRect = {1716.0f, 466.0f, 136.0f, 38.0f};
-constexpr Rectangle kPlayRankingListRect = {1256.0f, 512.0f, 596.0f, 431.0f};
-constexpr Rectangle kCreateSongColumnRect = {99.0f, 162.0f, 507.0f, 756.0f};
-constexpr Rectangle kCreateMainColumnRect = {657.0f, 150.0f, 603.0f, 780.0f};
-constexpr Rectangle kCreateRankingColumnRect = {1317.0f, 153.0f, 507.0f, 774.0f};
-constexpr Rectangle kCreateJacketRect = {684.0f, 273.0f, 282.0f, 282.0f};
-constexpr Rectangle kCreateChartDetailRect = {1002.0f, 273.0f, 258.0f, 135.0f};
-constexpr Rectangle kCreateMetaRect = {684.0f, 582.0f, 576.0f, 90.0f};
-constexpr Rectangle kCreateChartButtonsRect = {684.0f, 600.0f, 576.0f, 327.0f};
-constexpr Rectangle kCreateRankingHeaderRect = {1317.0f, 153.0f, 507.0f, 54.0f};
-constexpr Rectangle kCreateRankingSourceFriendsRect = {1446.0f, 147.0f, 114.0f, 51.0f};
-constexpr Rectangle kCreateRankingSourceOnlineRect = {1568.0f, 147.0f, 114.0f, 51.0f};
-constexpr Rectangle kCreateRankingSourceLocalRect = {1690.0f, 147.0f, 114.0f, 51.0f};
-constexpr Rectangle kCreateRankingListRect = {1317.0f, 225.0f, 507.0f, 702.0f};
 constexpr float kContextMenuInnerPadding = 6.0f;
-constexpr Rectangle kFallbackOriginRect = {840.0f, 564.0f, 240.0f, 90.0f};
-constexpr Vector2 kSeedSongOffset = {-495.0f, 33.0f};
-constexpr Vector2 kSeedMainOffset = {0.0f, 9.0f};
-constexpr Vector2 kSeedRankingOffset = {495.0f, 39.0f};
-constexpr Vector2 kSeedBackOffset = {-642.0f, -291.0f};
-constexpr Vector2 kSeedJacketOffset = {-102.0f, -39.0f};
-constexpr Vector2 kSeedMetaOffset = {15.0f, 138.0f};
-constexpr Vector2 kSeedChartDetailOffset = {228.0f, -15.0f};
+constexpr int kPlaySongContextMenuItemCount = 1;
+constexpr int kPlayChartContextMenuItemCount = 1;
 
 Rectangle centered_icon_rect(Rectangle rect, float inset) {
     const float size = std::max(1.0f, std::min(rect.width, rect.height) - inset * 2.0f);
@@ -82,33 +47,6 @@ Rectangle centered_icon_rect(Rectangle rect, float inset) {
         size,
         size
     };
-}
-
-float level_filter_t(float level) {
-    const float clamped = std::clamp(level, kChartFilterMinLevel, kChartFilterMaxLevel);
-    if (clamped <= kChartFilterUsefulMaxLevel) {
-        return ((clamped - kChartFilterMinLevel) / (kChartFilterUsefulMaxLevel - kChartFilterMinLevel)) *
-               kChartFilterUsefulTrack;
-    }
-    return 1.0f;
-}
-
-float level_from_filter_t(float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    if (clamped > kChartFilterUsefulTrack) {
-        return kChartFilterMaxLevel;
-    }
-    const float level = kChartFilterMinLevel +
-                        (clamped / kChartFilterUsefulTrack) *
-                            (kChartFilterUsefulMaxLevel - kChartFilterMinLevel);
-    const float rounded = std::round(level * 10.0f) / 10.0f;
-    return rounded >= kChartFilterMaxLevel - 0.5f ? kChartFilterMaxLevel : rounded;
-}
-
-Rectangle level_filter_chip_rect(Rectangle range, float level) {
-    const float t = level_filter_t(level);
-    const float x = range.x + range.width * t;
-    return {x - 24.0f, range.y - 4.0f, 48.0f, 28.0f};
 }
 
 void draw_level_filter_gradient(Rectangle rect, unsigned char alpha) {
@@ -133,14 +71,6 @@ void draw_level_filter_gradient(Rectangle rect, unsigned char alpha) {
     ui::draw_rect_f({useful_end_x, rect.y, rect.x + rect.width - useful_end_x, rect.height},
                     with_alpha({34, 38, 46, 255}, alpha));
 }
-constexpr Vector2 kSeedChartButtonsOffset = {81.0f, 240.0f};
-constexpr Vector2 kSeedRankingHeaderOffset = {522.0f, -276.0f};
-constexpr Vector2 kSeedRankingSourceLocalOffset = {627.0f, -285.0f};
-constexpr Vector2 kSeedRankingSourceOnlineOffset = {768.0f, -285.0f};
-constexpr Vector2 kSeedRankingListOffset = {522.0f, 30.0f};
-constexpr float kWheelScrollStep = 63.0f;
-constexpr int kPlaySongContextMenuItemCount = 1;
-constexpr int kPlayChartContextMenuItemCount = 1;
 
 Rectangle context_menu_item_rect(Rectangle menu_rect, int index = 0) {
     return {
@@ -260,97 +190,30 @@ std::string format_bpm_range(float min_bpm, float max_bpm, float fallback_bpm) {
     return TextFormat("%.0f-%.0f", min_bpm, max_bpm);
 }
 
-Rectangle start_button_rect(Rectangle ranking_column) {
-    return {
-        ranking_column.x + 320.0f,
-        ranking_column.y + ranking_column.height - 78.0f,
-        ranking_column.width - 344.0f,
-        58.0f,
-    };
+unsigned char scaled_alpha(unsigned char alpha, float scale) {
+    return static_cast<unsigned char>(
+        std::clamp(static_cast<float>(alpha) * scale, 0.0f, 255.0f));
 }
 
-Rectangle best_score_rect(Rectangle ranking_column) {
-    using namespace title_play_view::mod_layout;
-    return {
-        ranking_column.x + kButtonLeftInset,
-        ranking_column.y + ranking_column.height - kButtonBottomInset,
-        kButtonWidth,
-        kButtonHeight,
-    };
+void draw_right_pane_frame(Rectangle rect, unsigned char alpha, unsigned char normal_row_alpha) {
+    const auto& t = *g_theme;
+    ui::draw_rect_f(rect, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha / 2)));
+    ui::draw_rect_lines(rect, 1.2f, with_alpha(t.border_light, alpha));
 }
 
-Rectangle mod_modal_rect(Rectangle ranking_column) {
-    using namespace title_play_view::mod_layout;
-    const Rectangle button = best_score_rect(ranking_column);
-    return {
-        button.x,
-        button.y - kModalGapFromButton - kModalHeight,
-        kModalWidth,
-        kModalHeight,
-    };
-}
-
-Rectangle auto_mod_toggle_rect(Rectangle modal) {
-    using namespace title_play_view::mod_layout;
-    const float row_y = modal.y + kModalTopPadding + kHeaderHeight + kHeaderToDescriptionGap +
-                        kDescriptionHeight + kDescriptionToRowsGap;
-    return {
-        modal.x + kModalSidePadding,
-        row_y,
-        modal.width - kModalSidePadding * 2.0f,
-        kRowHeight,
-    };
-}
-
-Rectangle no_fail_mod_toggle_rect(Rectangle modal) {
-    using namespace title_play_view::mod_layout;
-    const Rectangle auto_row = auto_mod_toggle_rect(modal);
-    return {
-        auto_row.x,
-        auto_row.y + kRowHeight + kRowGap,
-        auto_row.width,
-        kRowHeight,
-    };
-}
-
-Rectangle play_info_panel_rect(Rectangle ranking_column) {
-    return {ranking_column.x, ranking_column.y, ranking_column.width, 306.0f};
-}
-
-Rectangle play_ranking_panel_rect(Rectangle ranking_column) {
-    return {
-        ranking_column.x,
-        ranking_column.y + 337.0f,
-        ranking_column.width,
-        ranking_column.height - 337.0f,
-    };
-}
-
-Rectangle preview_prev_button_rect(const title_play_view::layout& current) {
-    return {
-        current.meta_rect.x,
-        current.meta_rect.y + 26.0f,
-        86.0f,
-        42.0f,
-    };
-}
-
-Rectangle preview_play_button_rect(const title_play_view::layout& current) {
-    return {
-        current.meta_rect.x + 100.0f,
-        current.meta_rect.y + 26.0f,
-        86.0f,
-        42.0f,
-    };
-}
-
-Rectangle preview_next_button_rect(const title_play_view::layout& current) {
-    return {
-        current.meta_rect.x + 200.0f,
-        current.meta_rect.y + 26.0f,
-        86.0f,
-        42.0f,
-    };
+void draw_chart_summary_pane_frame(Rectangle rect,
+                                   const song_select::chart_option* chart,
+                                   unsigned char alpha,
+                                   unsigned char normal_row_alpha) {
+    const auto& t = *g_theme;
+    const Color chart_tone = chart != nullptr ? difficulty_level_color(chart->meta.level) : t.border_light;
+    ui::draw_rect_f(rect, with_alpha(lerp_color(t.section, chart_tone, chart != nullptr ? 0.045f : 0.0f),
+                                     static_cast<unsigned char>(normal_row_alpha / 2)));
+    ui::draw_rect_f({rect.x, rect.y, 4.0f, rect.height},
+                    with_alpha(chart_tone, chart != nullptr ? scaled_alpha(alpha, 0.82f) : 0));
+    ui::draw_rect_f({rect.x + 4.0f, rect.y, rect.width - 4.0f, 2.0f},
+                    with_alpha(chart_tone, chart != nullptr ? scaled_alpha(alpha, 0.18f) : 0));
+    ui::draw_rect_lines(rect, 1.2f, with_alpha(t.border_light, scaled_alpha(alpha, 0.82f)));
 }
 
 void draw_play_search_input(Rectangle rect,
@@ -599,14 +462,6 @@ void draw_play_filter_panel(const title_play_view::layout& current,
     }
 }
 
-Rectangle play_filter_button_rect(Rectangle panel) {
-    return {panel.x + panel.width - 58.0f, panel.y + 62.0f, 40.0f, 46.0f};
-}
-
-Rectangle play_filter_modal_rect(const title_play_view::layout& current) {
-    return {current.song_column.x + 70.0f, current.song_column.y + 146.0f, 360.0f, 438.0f};
-}
-
 void draw_play_filter_modal(const title_play_view::layout& current,
                             const song_select::state& state,
                             unsigned char alpha,
@@ -654,17 +509,15 @@ void draw_play_filter_modal(const title_play_view::layout& current,
     ui::draw_text_in_rect("FILTER", 16, {panel.x + 18.0f, panel.y + 16.0f, panel.width - 36.0f, 24.0f},
                           with_alpha(t.text, alpha), ui::text_align::left);
     draw_heading("SOURCE", panel.y + 60.0f);
-    const float source_y = panel.y + 90.0f;
-    const float source_w = (panel.width - 48.0f) / 3.0f;
-    draw_button({panel.x + 18.0f, source_y, source_w, 36.0f}, "ALL",
+    draw_button(play_filter_source_button_rect(panel, 0), "ALL",
                 state.chart_source == song_select::chart_source_filter::all);
-    draw_button({panel.x + 24.0f + source_w, source_y, source_w, 36.0f}, "OFFICIAL",
+    draw_button(play_filter_source_button_rect(panel, 1), "OFFICIAL",
                 state.chart_source == song_select::chart_source_filter::official);
-    draw_button({panel.x + 30.0f + source_w * 2.0f, source_y, source_w, 36.0f}, "COMMUNITY",
+    draw_button(play_filter_source_button_rect(panel, 2), "COMMUNITY",
                 state.chart_source == song_select::chart_source_filter::community);
 
     draw_heading("LEVEL", panel.y + 164.0f);
-    const Rectangle range = {panel.x + 52.0f, panel.y + 206.0f, panel.width - 104.0f, 24.0f};
+    const Rectangle range = play_filter_level_slider_rect(panel);
     const Rectangle track = {range.x, range.y + 5.0f, range.width, 14.0f};
     ui::draw_rect_f(track, with_alpha(t.slider_track, alpha));
     draw_level_filter_gradient(track, static_cast<unsigned char>(alpha / 2));
@@ -673,12 +526,9 @@ void draw_play_filter_modal(const title_play_view::layout& current,
 
     draw_heading("KEYS", panel.y + 292.0f);
     const char* key_labels[] = {"ALL", "4K", "5K", "6K", "7K"};
-    const float key_w = 46.0f;
-    const float key_gap = 7.0f;
-    const float keys_x = panel.x + (panel.width - (key_w * 5.0f + key_gap * 4.0f)) * 0.5f;
     for (int i = 0; i < 5; ++i) {
-        draw_button({keys_x + static_cast<float>(i) * (key_w + key_gap), panel.y + 318.0f, key_w, 30.0f},
-                    key_labels[i], state.chart_key_filter == (i == 0 ? 0 : i + 3));
+        draw_button(play_filter_key_button_rect(panel, i), key_labels[i],
+                    state.chart_key_filter == (i == 0 ? 0 : i + 3));
     }
 
     const bool filters_active = state.chart_source != song_select::chart_source_filter::all ||
@@ -686,33 +536,7 @@ void draw_play_filter_modal(const title_play_view::layout& current,
                                 state.chart_key_filter != 0 ||
                                 std::fabs(state.chart_min_level - kChartFilterMinLevel) > 0.001f ||
                                 std::fabs(state.chart_max_level - kChartFilterMaxLevel) > 0.001f;
-    draw_button({panel.x + 18.0f, panel.y + 378.0f, panel.width - 36.0f, 42.0f}, "CLEAR FILTERS", filters_active);
-}
-
-Rectangle play_filter_source_button_rect(Rectangle panel, int index) {
-    const float source_y = panel.y + 90.0f;
-    const float source_w = (panel.width - 48.0f) / 3.0f;
-    return {
-        panel.x + 18.0f + static_cast<float>(index) * (source_w + 6.0f),
-        source_y,
-        source_w,
-        36.0f,
-    };
-}
-
-Rectangle play_filter_key_button_rect(Rectangle panel, int index) {
-    constexpr float key_w = 46.0f;
-    constexpr float key_gap = 7.0f;
-    const float keys_x = panel.x + (panel.width - (key_w * 5.0f + key_gap * 4.0f)) * 0.5f;
-    return {keys_x + static_cast<float>(index) * (key_w + key_gap), panel.y + 318.0f, key_w, 30.0f};
-}
-
-Rectangle play_filter_clear_button_rect(Rectangle panel) {
-    return {panel.x + 18.0f, panel.y + 378.0f, panel.width - 36.0f, 42.0f};
-}
-
-Rectangle play_filter_level_slider_rect(Rectangle panel) {
-    return {panel.x + 34.0f, panel.y + 208.0f, panel.width - 68.0f, 18.0f};
+    draw_button(play_filter_clear_button_rect(panel), "CLEAR FILTERS", filters_active);
 }
 
 const char* difficulty_factor_label(const std::string& name) {
@@ -796,11 +620,6 @@ Color difficulty_factor_color(const std::string& name) {
         return {96, 145, 238, 255};
     }
     return g_theme->accent;
-}
-
-unsigned char scaled_alpha(unsigned char alpha, float scale) {
-    return static_cast<unsigned char>(
-        std::clamp(static_cast<float>(alpha) * scale, 0.0f, 255.0f));
 }
 
 float status_badge_width(content_status status) {
@@ -1020,6 +839,7 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
                                   const title_preview_snapshot& preview,
                                   const song_select::song_entry* song,
                                   const song_select::chart_option* chart,
+                                  bool draw_play_actions,
                                   unsigned char alpha,
                                   Color button_base,
                                   Color button_hover,
@@ -1029,23 +849,17 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
                                   unsigned char selected_row_alpha) {
     const auto& t = *g_theme;
     const Rectangle panel = current.ranking_column;
-    const Rectangle info_panel = play_info_panel_rect(panel);
-    const Rectangle ranking_panel = play_ranking_panel_rect(panel);
-    const Color chart_tone = chart != nullptr ? difficulty_level_color(chart->meta.level) : t.border_light;
+    const Rectangle info_panel = right_top_pane_rect(panel);
+    const Rectangle ranking_panel = right_bottom_pane_rect(panel);
     const bool play_locked = song != nullptr && chart != nullptr &&
                              content_is_play_locked(song->song.meta, chart->meta);
     const std::string lock_reason = play_locked
         ? content_play_lock_reason(song->song.meta, chart->meta)
         : "";
-    ui::draw_rect_f(info_panel, with_alpha(lerp_color(t.section, chart_tone, chart != nullptr ? 0.045f : 0.0f),
-                                           static_cast<unsigned char>(normal_row_alpha / 2)));
-    ui::draw_rect_f({info_panel.x, info_panel.y, 4.0f, info_panel.height},
-                    with_alpha(chart_tone, chart != nullptr ? scaled_alpha(alpha, 0.82f) : 0));
-    ui::draw_rect_f({info_panel.x + 4.0f, info_panel.y, info_panel.width - 4.0f, 2.0f},
-                    with_alpha(chart_tone, chart != nullptr ? scaled_alpha(alpha, 0.18f) : 0));
-    ui::draw_rect_lines(info_panel, 1.2f, with_alpha(t.border_light, scaled_alpha(alpha, 0.82f)));
-    ui::draw_rect_f(ranking_panel, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha / 2)));
-    ui::draw_rect_lines(ranking_panel, 1.2f, with_alpha(t.border_light, alpha));
+    draw_chart_summary_pane_frame(info_panel, chart, alpha, normal_row_alpha);
+    if (draw_play_actions) {
+        draw_right_pane_frame(ranking_panel, alpha, normal_row_alpha);
+    }
 
     ui::draw_text_in_rect("選択中の譜面", 16,
                           {info_panel.x + 28.0f, info_panel.y + 24.0f, info_panel.width - 56.0f, 24.0f},
@@ -1126,7 +940,11 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
     draw_transport_toggle_button(play_button, preview.playing, alpha);
     draw_transport_skip_button(next_button, true, alpha);
 
-    const Rectangle mods = best_score_rect(panel);
+    if (!draw_play_actions) {
+        return;
+    }
+
+    const Rectangle mods = mod_button_rect(panel);
     const bool mods_hovered = ui::is_hovered(mods);
     const bool mods_pressed = ui::is_pressed(mods);
     const Rectangle mods_visual = mods_pressed ? ui::inset(mods, 1.5f) : mods;
@@ -1254,104 +1072,7 @@ void enqueue_delete_context_menu(Rectangle menu_rect, const char* label) {
     });
 }
 
-Rectangle centered_scaled_rect(Rectangle anchor, Rectangle target, float scale, Vector2 offset = {0.0f, 0.0f}) {
-    const Vector2 center = {
-        anchor.x + anchor.width * 0.5f + offset.x,
-        anchor.y + anchor.height * 0.5f + offset.y,
-    };
-    const float width = target.width * scale;
-    const float height = target.height * scale;
-    return {
-        center.x - width * 0.5f,
-        center.y - height * 0.5f,
-        width,
-        height,
-    };
-}
-
-Rectangle fallback_origin_rect() {
-    return kFallbackOriginRect;
-}
-
-Rectangle resolve_origin_rect(Rectangle origin_rect) {
-    return origin_rect.width > 0.0f && origin_rect.height > 0.0f ? origin_rect : fallback_origin_rect();
-}
-layout make_layout_for_targets(float anim_t,
-                               Rectangle origin_rect,
-                               Rectangle song_rect,
-                               Rectangle main_rect,
-                               Rectangle ranking_rect,
-                               Rectangle jacket_rect,
-                               Rectangle meta_rect,
-                               Rectangle chart_detail_rect,
-                               Rectangle chart_buttons_rect,
-                               Rectangle ranking_header_rect,
-                               Rectangle ranking_source_friends_rect,
-                               Rectangle ranking_source_local_rect,
-                               Rectangle ranking_source_online_rect,
-                               Rectangle ranking_list_rect) {
-    const float t = tween::ease_out_cubic(anim_t);
-    const Rectangle origin = resolve_origin_rect(origin_rect);
-
-    const Rectangle seed_song = centered_scaled_rect(origin, song_rect, 0.68f, kSeedSongOffset);
-    const Rectangle seed_main = centered_scaled_rect(origin, main_rect, 0.74f, kSeedMainOffset);
-    const Rectangle seed_ranking = centered_scaled_rect(origin, ranking_rect, 0.68f, kSeedRankingOffset);
-    const Rectangle seed_back = centered_scaled_rect(origin, kPlayBackButtonRect, 0.9f, kSeedBackOffset);
-    const Rectangle seed_jacket = centered_scaled_rect(origin, jacket_rect, 0.82f, kSeedJacketOffset);
-    const Rectangle seed_meta = centered_scaled_rect(origin, meta_rect, 0.8f, kSeedMetaOffset);
-    const Rectangle seed_chart_detail = centered_scaled_rect(origin, chart_detail_rect, 0.76f, kSeedChartDetailOffset);
-    const Rectangle seed_chart_buttons = centered_scaled_rect(origin, chart_buttons_rect, 0.88f, kSeedChartButtonsOffset);
-    const Rectangle seed_ranking_header = centered_scaled_rect(origin, ranking_header_rect, 0.7f, kSeedRankingHeaderOffset);
-    const Rectangle seed_ranking_source_friends = centered_scaled_rect(origin, ranking_source_friends_rect, 0.8f, kSeedRankingSourceOnlineOffset);
-    const Rectangle seed_ranking_source_local = centered_scaled_rect(origin, ranking_source_local_rect, 0.8f, kSeedRankingSourceLocalOffset);
-    const Rectangle seed_ranking_source_online = centered_scaled_rect(origin, ranking_source_online_rect, 0.8f, kSeedRankingSourceOnlineOffset);
-    const Rectangle seed_ranking_list = centered_scaled_rect(origin, ranking_list_rect, 0.7f, kSeedRankingListOffset);
-
-    return {
-        tween::lerp(seed_back, kPlayBackButtonRect, t),
-        tween::lerp(seed_song, song_rect, t),
-        tween::lerp(seed_main, main_rect, t),
-        tween::lerp(seed_ranking, ranking_rect, t),
-        tween::lerp(seed_jacket, jacket_rect, t),
-        tween::lerp(seed_meta, meta_rect, t),
-        tween::lerp(seed_chart_detail, chart_detail_rect, t),
-        tween::lerp(seed_chart_buttons, chart_buttons_rect, t),
-        tween::lerp(seed_ranking_header, ranking_header_rect, t),
-        tween::lerp(seed_ranking_source_friends, ranking_source_friends_rect, t),
-        tween::lerp(seed_ranking_source_local, ranking_source_local_rect, t),
-        tween::lerp(seed_ranking_source_online, ranking_source_online_rect, t),
-        tween::lerp(seed_ranking_list, ranking_list_rect, t),
-    };
-}
-
-layout build_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode) {
-    const bool play = view_mode == mode::play;
-    return make_layout_for_targets(
-        anim_t,
-        origin_rect,
-        play ? kPlaySongColumnRect : kCreateSongColumnRect,
-        play ? kPlayMainColumnRect : kCreateMainColumnRect,
-        play ? kPlayRankingColumnRect : kCreateRankingColumnRect,
-        play ? kPlayJacketRect : kCreateJacketRect,
-        play ? kPlayMetaRect : kCreateMetaRect,
-        play ? kPlayChartDetailRect : kCreateChartDetailRect,
-        play ? kPlayChartButtonsRect : kCreateChartButtonsRect,
-        play ? kPlayRankingHeaderRect : kCreateRankingHeaderRect,
-        play ? kPlayRankingSourceFriendsRect : kCreateRankingSourceFriendsRect,
-        play ? kPlayRankingSourceLocalRect : kCreateRankingSourceLocalRect,
-        play ? kPlayRankingSourceOnlineRect : kCreateRankingSourceOnlineRect,
-        play ? kPlayRankingListRect : kCreateRankingListRect);
-}
-
 }  // namespace
-
-layout make_layout(float anim_t, Rectangle origin_rect) {
-    return make_mode_layout(anim_t, origin_rect, mode::play);
-}
-
-layout make_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode) {
-    return build_mode_layout(anim_t, origin_rect, view_mode);
-}
 
 void draw(song_select::state& state,
           const title_selection_media_snapshot& media,
@@ -1386,27 +1107,13 @@ void draw(song_select::state& state,
     ui::draw_button_colored(current.back_rect, "戻る", 16,
                             with_alpha(button_base, normal_row_alpha), with_alpha(button_hover, hover_row_alpha), with_alpha(t.text, alpha), 1.5f);
 
-    if (view_mode == mode::play) {
-        draw_play_filter_panel(current, state, alpha, button_base, button_selected, normal_row_alpha, selected_row_alpha);
-        ui::draw_rect_f(current.main_column, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha / 2)));
-        ui::draw_rect_lines(current.main_column, 1.2f, with_alpha(t.border_light, alpha));
-    } else {
-        ui::draw_line_ex({current.song_column.x + current.song_column.width + 22.0f, current.song_column.y + 18.0f},
-                         {current.song_column.x + current.song_column.width + 22.0f, current.song_column.y + current.song_column.height - 18.0f},
-                         1.2f, with_alpha(t.border_light, static_cast<unsigned char>(170.0f * play_t)));
-        ui::draw_line_ex({current.ranking_column.x - 24.0f, current.ranking_column.y + 24.0f},
-                         {current.ranking_column.x - 24.0f, current.ranking_column.y + current.ranking_column.height - 20.0f},
-                         1.2f, with_alpha(t.border_light, static_cast<unsigned char>(170.0f * play_t)));
-    }
+    draw_play_filter_panel(current, state, alpha, button_base, button_selected, normal_row_alpha, selected_row_alpha);
+    ui::draw_rect_f(current.main_column, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha / 2)));
+    ui::draw_rect_lines(current.main_column, 1.2f, with_alpha(t.border_light, alpha));
 
     if (!hide_unloaded_content) {
-        const Rectangle song_list_rect =
-            view_mode == mode::play
-                ? Rectangle{current.song_column.x + 18.0f, current.song_column.y + 128.0f,
-                            current.song_column.width - 36.0f, current.song_column.height - 146.0f}
-                : current.song_column;
         title_song_list_view::draw(state, {
-            .column_rect = song_list_rect,
+            .column_rect = song_list_rect(current),
             .play_t = play_t,
             .alpha = alpha,
             .button_base = button_base,
@@ -1414,8 +1121,8 @@ void draw(song_select::state& state,
             .normal_row_alpha = normal_row_alpha,
             .hover_row_alpha = hover_row_alpha,
             .selected_row_alpha = selected_row_alpha,
-            .expanded_cards = view_mode == mode::play,
-            .show_header = view_mode != mode::play,
+            .expanded_cards = true,
+            .show_header = false,
             .embedded_chart_scroll_y = 0.0f,
             .now = now,
         });
@@ -1427,21 +1134,10 @@ void draw(song_select::state& state,
     const title_preview_snapshot& preview = media.preview;
 
     if (!hide_unloaded_content) {
-        const Rectangle center_jacket =
-            view_mode == mode::play
-                ? Rectangle{current.main_column.x + 28.0f, current.main_column.y + 58.0f, 248.0f, 248.0f}
-                : current.jacket_rect;
-        const Rectangle center_detail =
-            view_mode == mode::play
-                ? Rectangle{center_jacket.x + center_jacket.width + 34.0f, current.main_column.y + 54.0f,
-                            current.main_column.x + current.main_column.width - center_jacket.x -
-                                center_jacket.width - 62.0f,
-                            150.0f}
-                : current.chart_detail_rect;
         title_center_view::draw(state, preview, song, chart, filtered, {
             .main_column_rect = current.main_column,
-            .jacket_rect = center_jacket,
-            .chart_detail_rect = center_detail,
+            .jacket_rect = center_jacket_rect(current),
+            .chart_detail_rect = center_detail_rect(current),
             .chart_buttons_rect = current.chart_buttons_rect,
             .play_t = play_t,
             .alpha = alpha,
@@ -1450,21 +1146,21 @@ void draw(song_select::state& state,
             .normal_row_alpha = normal_row_alpha,
             .hover_row_alpha = hover_row_alpha,
             .selected_row_alpha = selected_row_alpha,
-            .compact_song_header = view_mode == mode::play,
+            .compact_song_header = true,
             .now = now,
         });
     }
 
+    if (hide_unloaded_content) {
+        return;
+    }
+    ui::draw_rect_f({current.main_column.x + 24.0f, current.main_column.y + 342.0f,
+                     current.main_column.width - 48.0f, 1.0f},
+                    with_alpha(t.border_light, alpha));
+    draw_preview_and_start_panel(current, state, preview, song, chart, view_mode == mode::play, alpha, button_base,
+                                 button_hover, button_selected, normal_row_alpha, hover_row_alpha,
+                                 selected_row_alpha);
     if (view_mode == mode::play) {
-        if (hide_unloaded_content) {
-            return;
-        }
-        ui::draw_rect_f({current.main_column.x + 24.0f, current.main_column.y + 342.0f,
-                         current.main_column.width - 48.0f, 1.0f},
-                        with_alpha(t.border_light, alpha));
-        draw_preview_and_start_panel(current, state, preview, song, chart, alpha, button_base,
-                                     button_hover, button_selected, normal_row_alpha, hover_row_alpha,
-                                     selected_row_alpha);
         title_ranking_view::draw(state.ranking_panel, {
             .header_rect = current.ranking_header_rect,
             .source_friends_rect = current.ranking_source_friends_rect,
@@ -1487,6 +1183,7 @@ void draw(song_select::state& state,
             .avatar_base_url = state.auth.server_url,
         });
     } else {
+        draw_right_pane_frame(right_bottom_pane_rect(current.ranking_column), alpha, normal_row_alpha);
         const title_create_tools_model::view_model empty_create_tools;
         title_create_tools_view::draw(create_tools_model != nullptr ? *create_tools_model : empty_create_tools, {
             .current = current,
@@ -1497,8 +1194,10 @@ void draw(song_select::state& state,
         });
     }
 
-    if (view_mode == mode::play) {
+    if (view_mode == mode::play || view_mode == mode::create) {
         draw_play_filter_modal(current, state, alpha, button_base, button_selected, normal_row_alpha, selected_row_alpha);
+    }
+    if (view_mode == mode::play) {
         draw_mod_modal(current, state, alpha, normal_row_alpha, hover_row_alpha);
     }
 

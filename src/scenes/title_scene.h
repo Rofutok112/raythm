@@ -14,8 +14,10 @@
 #include "title/title_command.h"
 #include "title/title_multiplayer_audio_controller.h"
 #include "title/title_friends_controller.h"
+#include "title/title_modal_stack.h"
 #include "title/title_play_create_feature.h"
 #include "title/title_profile_controller.h"
+#include "title/title_rating_rankings_controller.h"
 #include "title/title_settings_overlay.h"
 #include "title/title_startup_controller.h"
 #include <optional>
@@ -93,6 +95,9 @@ private:
     bool handle_profile_input();
     bool handle_public_profile_input();
     bool handle_friends_input();
+    bool handle_rating_rankings_input();
+    bool handle_modal_input();
+    void sync_modal_stack();
     void update_title_quit(float dt);
     [[nodiscard]] title_audio_policy::hub_mode current_audio_mode() const;
 
@@ -132,8 +137,10 @@ private:
     title_settings_overlay settings_overlay_;
     title_play_create_feature play_create_feature_;
     title_friends_controller friends_controller_;
+    title_rating_rankings_controller rating_rankings_controller_;
     title_profile_controller profile_controller_;
     public_profile::controller public_profile_controller_;
+    title::modal_stack modals_;
     multiplayer::state multiplayer_state_;
     title_browse_feature browse_feature_;
     title_audio_controller audio_controller_;

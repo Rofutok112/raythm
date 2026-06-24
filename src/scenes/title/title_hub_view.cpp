@@ -75,6 +75,31 @@ bool is_play_surface(title_hub_view::mode mode) {
     return mode == title_hub_view::mode::play || mode == title_hub_view::mode::create;
 }
 
+void draw_modal_stack(title_hub_view::draw_context& context,
+                      const song_select::auth_state& auth_state,
+                      ui::draw_layer layer) {
+    for (title::modal_id id : context.modals.order()) {
+        const bool draw_backdrop = context.modals.is_top(id);
+        switch (id) {
+        case title::modal_id::friends:
+            context.friends_controller.draw(layer, draw_backdrop);
+            break;
+        case title::modal_id::rating_rankings:
+            context.rating_rankings_controller.draw(layer, draw_backdrop);
+            break;
+        case title::modal_id::self_profile:
+            context.profile_controller.draw(auth_state,
+                                            context.auth_controller.request_active,
+                                            layer,
+                                            draw_backdrop);
+            break;
+        case title::modal_id::public_profile:
+            context.public_profile_controller.draw(layer, draw_backdrop);
+            break;
+        }
+    }
+}
+
 }  // namespace
 
 namespace title_hub_view {
@@ -89,6 +114,7 @@ draw_result draw(draw_context context) {
     const Rectangle spectrum_rect = title_layout::spectrum_rect();
     const Rectangle settings_chip_rect = title_layout::settings_chip_rect();
     const Rectangle refresh_chip_rect = title_layout::refresh_chip_rect();
+    const Rectangle rating_rankings_chip_rect = title_layout::rating_rankings_chip_rect();
     const Rectangle friends_chip_rect = title_layout::friends_chip_rect();
     const Rectangle account_chip_rect = title_layout::account_chip_rect();
     const bool draw_title_header = context.view.current_mode != mode::settings;
@@ -96,6 +122,7 @@ draw_result draw(draw_context context) {
         .closed_header_rect = title_layout::closed_header_rect(),
         .open_header_rect = title_layout::open_header_rect(),
         .refresh_chip_rect = refresh_chip_rect,
+        .rating_rankings_chip_rect = rating_rankings_chip_rect,
         .friends_chip_rect = friends_chip_rect,
         .settings_chip_rect = settings_chip_rect,
         .account_chip_rect = account_chip_rect,
@@ -165,9 +192,7 @@ draw_result draw(draw_context context) {
             context.audio_controller,
             context.play_cross_callbacks);
     }
-    context.friends_controller.draw(kTitleModalLayer);
-    context.profile_controller.draw(play_state.auth, context.auth_controller.request_active, kTitleModalLayer);
-    context.public_profile_controller.draw(kTitleModalLayer);
+    draw_modal_stack(context, play_state.auth, kTitleModalLayer);
     const song_select::login_dialog_layout login_layout = song_select::make_login_dialog_layout(
         play_state.auth,
         play_state.login_dialog,

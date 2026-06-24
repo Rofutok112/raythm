@@ -29,6 +29,6 @@ struct model {
 
 [[nodiscard]] Rectangle bounds(float open_anim);
 [[nodiscard]] command handle_input(const model& state, ui::draw_layer layer = ui::draw_layer::modal);
-void draw(const model& state, ui::draw_layer layer = ui::draw_layer::modal);
+void draw(const model& state, ui::draw_layer layer = ui::draw_layer::modal, bool draw_backdrop = true);
 
 }  // namespace public_profile_view

@@ -141,6 +141,8 @@ enum class pending_confirmation_action {
     delete_mv,
     overwrite_song_import,
     overwrite_chart_import,
+    upload_song,
+    upload_chart,
 };
 
 struct context_menu_state {

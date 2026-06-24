@@ -166,6 +166,26 @@ struct public_profile_result {
     std::optional<public_profile> profile;
 };
 
+struct global_rating_ranking_entry {
+    std::string user_id;
+    std::string display_name;
+    std::string avatar_url;
+    rating_summary rating;
+};
+
+struct global_rating_rankings_result {
+    bool success = false;
+    bool unauthorized = false;
+    bool maintenance = false;
+    std::string message;
+    std::string retry_after;
+    int page = 1;
+    int page_size = 50;
+    int total = 0;
+    bool has_next_page = false;
+    std::vector<global_rating_ranking_entry> items;
+};
+
 std::string normalize_server_url(const std::string& server_url);
 
 std::optional<session> load_saved_session();
@@ -198,6 +218,7 @@ operation_result delete_profile_avatar();
 my_uploads_result fetch_my_community_uploads();
 profile_rankings_result fetch_my_profile_rankings();
 public_profile_result fetch_public_profile(const std::string& user_id);
+global_rating_rankings_result fetch_global_rating_rankings(int page = 1, int page_size = 50);
 operation_result delete_community_song_upload(const std::string& song_id);
 operation_result delete_community_chart_upload(const std::string& chart_id);
 

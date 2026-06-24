@@ -9,7 +9,9 @@
 #include "title/title_browse_feature.h"
 #include "title/title_common_update_controller.h"
 #include "title/title_friends_controller.h"
+#include "title/title_modal_stack.h"
 #include "title/title_play_create_feature.h"
+#include "title/title_rating_rankings_controller.h"
 
 namespace title {
 
@@ -23,6 +25,8 @@ struct frame_input_context {
     title_browse_feature& browse_feature;
     title_catalog_reload_coordinator& catalog_reload_coordinator;
     title_friends_controller& friends_controller;
+    title_rating_rankings_controller& rating_rankings_controller;
+    modal_stack& modals;
     auth_overlay::controller& auth_controller;
 };
 

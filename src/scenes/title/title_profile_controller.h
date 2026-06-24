@@ -27,7 +27,10 @@ public:
     void tick(float dt);
     poll_result poll();
     input_result handle_input(bool auth_request_active);
-    void draw(const song_select::auth_state& auth_state, bool auth_request_active, ui::draw_layer layer);
+    void draw(const song_select::auth_state& auth_state,
+              bool auth_request_active,
+              ui::draw_layer layer,
+              bool draw_backdrop = true);
 
     [[nodiscard]] bool is_open() const;
     [[nodiscard]] Rectangle bounds() const;

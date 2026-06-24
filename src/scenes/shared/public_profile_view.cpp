@@ -192,9 +192,11 @@ command handle_input(const model& state, ui::draw_layer layer) {
     return {};
 }
 
-void draw(const model& state, ui::draw_layer layer) {
-    ui::enqueue_draw_command(layer, [state, layer]() {
-        ui::draw_fullscreen_overlay(with_alpha(BLACK, 132));
+void draw(const model& state, ui::draw_layer layer, bool draw_backdrop) {
+    ui::enqueue_draw_command(layer, [state, layer, draw_backdrop]() {
+        if (draw_backdrop) {
+            ui::draw_fullscreen_overlay(with_alpha(BLACK, 132));
+        }
         const modal_layout layout = make_layout(state.open_anim, layer);
         ui::draw_panel(layout.modal_rect);
         draw_close_button(layout.close_button_rect, layout.layer);

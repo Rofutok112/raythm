@@ -263,11 +263,13 @@ command handle_input(const model& state, ui::draw_layer layer) {
     return {};
 }
 
-void draw(const model& state, ui::draw_layer layer) {
-    ui::enqueue_draw_command(layer, [state, layer]() {
+void draw(const model& state, ui::draw_layer layer, bool draw_backdrop) {
+    ui::enqueue_draw_command(layer, [state, layer, draw_backdrop]() {
         const auto& t = *g_theme;
         const friends_layout layout = make_layout(state.open_anim);
-        ui::draw_fullscreen_overlay(with_alpha(BLACK, 132));
+        if (draw_backdrop) {
+            ui::draw_fullscreen_overlay(with_alpha(BLACK, 132));
+        }
         ui::draw_panel(layout.modal);
         const Rectangle content = ui::inset(layout.modal, ui::edge_insets::uniform(28.0f));
         ui::draw_text_in_rect("Friends", 32, {content.x, content.y, content.width - 240.0f, 44.0f}, t.text, ui::text_align::left);
