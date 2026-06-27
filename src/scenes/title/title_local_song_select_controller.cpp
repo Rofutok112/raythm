@@ -128,7 +128,7 @@ title_play_view::update_result update(song_select::state& state,
             song_select::close_context_menu(state);
             return result;
         }
-        if (left_pressed && CheckCollisionPointRec(mouse, context_menu_item_rect(state.context_menu.rect))) {
+        if (left_pressed && ui::contains_point(context_menu_item_rect(state.context_menu.rect), mouse)) {
             const bool deleting_chart = state.context_menu.target == song_select::context_menu_target::chart;
             song_select::open_confirmation_dialog(
                 state,
@@ -144,7 +144,7 @@ title_play_view::update_result update(song_select::state& state,
             }
             return result;
         }
-        if ((left_pressed || right_pressed) && !CheckCollisionPointRec(mouse, state.context_menu.rect)) {
+        if ((left_pressed || right_pressed) && !ui::contains_point(state.context_menu.rect, mouse)) {
             song_select::close_context_menu(state);
             return result;
         }
@@ -154,7 +154,7 @@ title_play_view::update_result update(song_select::state& state,
     if (song_select_mode && state.play_filter_modal_open) {
         const Rectangle modal = play_filter_modal_rect(current);
         if (IsKeyPressed(KEY_ESCAPE) ||
-            (left_pressed && !CheckCollisionPointRec(mouse, modal))) {
+            (left_pressed && !ui::contains_point(modal, mouse))) {
             state.play_filter_modal_open = false;
             state.chart_level_filter_dragging = false;
             return result;
@@ -165,20 +165,20 @@ title_play_view::update_result update(song_select::state& state,
         const Rectangle modal = mod_modal_rect(current.ranking_column);
         if (IsKeyPressed(KEY_ESCAPE) ||
             (left_pressed &&
-             !CheckCollisionPointRec(mouse, modal) &&
-             !CheckCollisionPointRec(mouse, mod_button_rect(current.ranking_column)))) {
+             !ui::contains_point(modal, mouse) &&
+             !ui::contains_point(mod_button_rect(current.ranking_column), mouse))) {
             state.play_mod_modal_open = false;
             return result;
         }
-        if (left_pressed && CheckCollisionPointRec(mouse, auto_mod_toggle_rect(modal))) {
+        if (left_pressed && ui::contains_point(auto_mod_toggle_rect(modal), mouse)) {
             state.mods.auto_play = !state.mods.auto_play;
             return result;
         }
-        if (left_pressed && CheckCollisionPointRec(mouse, no_fail_mod_toggle_rect(modal))) {
+        if (left_pressed && ui::contains_point(no_fail_mod_toggle_rect(modal), mouse)) {
             state.mods.no_fail = !state.mods.no_fail;
             return result;
         }
-        if (CheckCollisionPointRec(mouse, modal)) {
+        if (ui::contains_point(modal, mouse)) {
             return result;
         }
     }
@@ -200,7 +200,7 @@ title_play_view::update_result update(song_select::state& state,
     }
 
     if (song_select_mode && left_pressed &&
-        CheckCollisionPointRec(mouse, play_filter_button_rect(current.song_column))) {
+        ui::contains_point(play_filter_button_rect(current.song_column), mouse)) {
         state.play_filter_modal_open = !state.play_filter_modal_open;
         if (state.play_filter_modal_open) {
             state.play_mod_modal_open = false;
@@ -209,7 +209,7 @@ title_play_view::update_result update(song_select::state& state,
     }
 
     if (play_mode && left_pressed &&
-        CheckCollisionPointRec(mouse, mod_button_rect(current.ranking_column))) {
+        ui::contains_point(mod_button_rect(current.ranking_column), mouse)) {
         state.play_mod_modal_open = !state.play_mod_modal_open;
         if (state.play_mod_modal_open) {
             state.play_filter_modal_open = false;
@@ -226,7 +226,7 @@ title_play_view::update_result update(song_select::state& state,
             song_select::chart_source_filter::community,
         };
         for (int index = 0; index < 3; ++index) {
-            if (CheckCollisionPointRec(mouse, play_filter_source_button_rect(filter_panel, index))) {
+            if (ui::contains_point(play_filter_source_button_rect(filter_panel, index), mouse)) {
                 if (apply_play_filter_change(state, source_values[index],
                                              state.chart_key_filter, state.chart_min_level, state.chart_max_level, result)) {
                     return result;
@@ -236,7 +236,7 @@ title_play_view::update_result update(song_select::state& state,
 
         const int key_values[] = {0, 4, 5, 6, 7};
         for (int index = 0; index < 5; ++index) {
-            if (CheckCollisionPointRec(mouse, play_filter_key_button_rect(filter_panel, index))) {
+            if (ui::contains_point(play_filter_key_button_rect(filter_panel, index), mouse)) {
                 if (apply_play_filter_change(state, state.chart_source, key_values[index],
                                              state.chart_min_level, state.chart_max_level, result)) {
                     return result;
@@ -244,7 +244,7 @@ title_play_view::update_result update(song_select::state& state,
             }
         }
 
-        if (CheckCollisionPointRec(mouse, play_filter_clear_button_rect(filter_panel))) {
+        if (ui::contains_point(play_filter_clear_button_rect(filter_panel), mouse)) {
             const bool search_changed = !state.play_search_input.value.empty();
             if (search_changed) {
                 state.play_search_input = {};
@@ -275,10 +275,10 @@ title_play_view::update_result update(song_select::state& state,
         const Rectangle min_chip = level_filter_chip_rect(slider, state.chart_min_level);
         const Rectangle max_chip = level_filter_chip_rect(slider, state.chart_max_level);
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            if (CheckCollisionPointRec(mouse, max_chip)) {
+            if (ui::contains_point(max_chip, mouse)) {
                 state.chart_level_filter_dragging = true;
                 state.chart_level_filter_dragging_min = false;
-            } else if (CheckCollisionPointRec(mouse, min_chip)) {
+            } else if (ui::contains_point(min_chip, mouse)) {
                 state.chart_level_filter_dragging = true;
                 state.chart_level_filter_dragging_min = true;
             }
@@ -299,7 +299,7 @@ title_play_view::update_result update(song_select::state& state,
         state.chart_level_filter_dragging = false;
     }
     if (song_select_mode && state.play_filter_modal_open &&
-        CheckCollisionPointRec(mouse, play_filter_modal_rect(current))) {
+        ui::contains_point(play_filter_modal_rect(current), mouse)) {
         return result;
     }
 
@@ -307,7 +307,7 @@ title_play_view::update_result update(song_select::state& state,
         const song_select::song_entry* song = song_select::selected_song(state);
         const Rectangle progress = current.meta_rect;
         const Rectangle progress_hit = {progress.x, progress.y - 12.0f, progress.width, progress.height + 24.0f};
-        if (song != nullptr && left_pressed && CheckCollisionPointRec(mouse, progress_hit)) {
+        if (song != nullptr && left_pressed && ui::contains_point(progress_hit, mouse)) {
             state.preview_bar_dragging = true;
             state.preview_bar_resume_after_drag = preview.playing;
             state.preview_bar_drag_position_seconds = preview.position_seconds;
@@ -349,7 +349,7 @@ title_play_view::update_result update(song_select::state& state,
     if (play_mode) {
         const song_select::song_entry* song = song_select::selected_song(state);
         const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
-        if (left_pressed && has_selection && CheckCollisionPointRec(mouse, start_button_rect(current.ranking_column))) {
+        if (left_pressed && has_selection && ui::contains_point(start_button_rect(current.ranking_column), mouse)) {
             if (block_locked_play_if_needed(state, song, chart)) {
                 return result;
             }
@@ -360,12 +360,12 @@ title_play_view::update_result update(song_select::state& state,
             }
             return result;
         }
-        if (!preview_loading && left_pressed && CheckCollisionPointRec(mouse, preview_play_button_rect(current))) {
+        if (!preview_loading && left_pressed && ui::contains_point(preview_play_button_rect(current), mouse)) {
             result.preview_toggle_requested = true;
             return result;
         }
         if (left_pressed && !state.songs.empty() &&
-            CheckCollisionPointRec(mouse, preview_prev_button_rect(current))) {
+            ui::contains_point(preview_prev_button_rect(current), mouse)) {
             const std::vector<int> song_indices = song_select::filtered_song_indices(state);
             const auto current_it = std::find(song_indices.begin(), song_indices.end(), state.selected_song_index);
             if (current_it != song_indices.end() && current_it != song_indices.begin() &&
@@ -375,7 +375,7 @@ title_play_view::update_result update(song_select::state& state,
             return result;
         }
         if (left_pressed && !state.songs.empty() &&
-            CheckCollisionPointRec(mouse, preview_next_button_rect(current))) {
+            ui::contains_point(preview_next_button_rect(current), mouse)) {
             const std::vector<int> song_indices = song_select::filtered_song_indices(state);
             const auto current_it = std::find(song_indices.begin(), song_indices.end(), state.selected_song_index);
             if (current_it != song_indices.end() && std::next(current_it) != song_indices.end() &&
@@ -395,10 +395,10 @@ title_play_view::update_result update(song_select::state& state,
         if (left_pressed && (song_reinstall_available || chart_reinstall_available)) {
             const bool song_update_clicked =
                 song_reinstall_available &&
-                CheckCollisionPointRec(mouse, title_center_view::song_status_badge_rect(current.main_column));
+                ui::contains_point(title_center_view::song_status_badge_rect(current.main_column), mouse);
             const bool chart_update_clicked =
                 chart_reinstall_available &&
-                CheckCollisionPointRec(mouse, title_center_view::chart_status_badge_rect(current.chart_detail_rect));
+                ui::contains_point(title_center_view::chart_status_badge_rect(current.chart_detail_rect), mouse);
             if (song_update_clicked) {
                 result.update_song_requested = true;
                 return result;
@@ -563,11 +563,11 @@ title_play_view::update_result update(song_select::state& state,
     }
 
     const Rectangle song_scroll_area = song_select_mode ? song_list_rect(current) : current.song_column;
-    if (CheckCollisionPointRec(mouse, song_scroll_area) && wheel != 0.0f) {
+    if (ui::contains_point(song_scroll_area, mouse) && wheel != 0.0f) {
         state.scroll_y_target -= wheel * kWheelScrollStep;
-    } else if (CheckCollisionPointRec(mouse, current.chart_buttons_rect) && wheel != 0.0f) {
+    } else if (ui::contains_point(current.chart_buttons_rect, mouse) && wheel != 0.0f) {
         state.chart_scroll_y_target -= wheel * kWheelScrollStep;
-    } else if (play_mode && CheckCollisionPointRec(mouse, current.ranking_list_rect) && wheel != 0.0f) {
+    } else if (play_mode && ui::contains_point(current.ranking_list_rect, mouse) && wheel != 0.0f) {
         state.ranking_panel.scroll_y_target -= wheel * kWheelScrollStep;
     }
 

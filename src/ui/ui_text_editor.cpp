@@ -1089,8 +1089,10 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
 
     // Scrollbar interaction
     float content_height = static_cast<float>(state.lines.size()) * line_height;
-    auto sb = update_vertical_scrollbar(scrollbar_rect, content_height, state.scroll_offset,
-                                        state.scrollbar_dragging, state.scrollbar_drag_offset);
+    auto sb = vertical_scrollbar(scrollbar_rect, content_height, state.scroll_offset,
+                                 state.scrollbar_dragging, state.scrollbar_drag_offset, {
+        .drag_blocked_by_layer = false,
+    });
     if (sb.changed) {
         state.scroll_offset = sb.scroll_offset;
     }
@@ -1235,8 +1237,11 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
     }
 
     // Scrollbar
-    draw_scrollbar(scrollbar_rect, content_height, state.scroll_offset,
-                   g_theme->scrollbar_track, g_theme->scrollbar_thumb);
+    scrollbar(scrollbar_rect, content_height, state.scroll_offset, {
+        .track_color = g_theme->scrollbar_track,
+        .thumb_color = g_theme->scrollbar_thumb,
+        .custom_colors = true,
+    });
 
     EndScissorMode();
 

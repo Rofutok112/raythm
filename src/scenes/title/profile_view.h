@@ -16,6 +16,7 @@ namespace title_profile_view {
 enum class tab {
     overview,
     activity,
+    best_rc,
     songs,
     charts,
     settings,
@@ -31,6 +32,9 @@ enum class delete_target {
 enum class command_type {
     none,
     close,
+    select_tab,
+    begin_delete,
+    cancel_delete,
     delete_account,
     delete_song,
     delete_chart,
@@ -44,6 +48,23 @@ struct command {
     std::string id;
     std::string password;
     std::vector<auth::external_link> external_links;
+    tab selected_tab = tab::overview;
+    delete_target pending_delete = delete_target::none;
+    std::string delete_label;
+};
+
+struct scroll_offsets {
+    float activity = 0.0f;
+    float best_rating = 0.0f;
+    float songs = 0.0f;
+    float charts = 0.0f;
+};
+
+struct input_result {
+    command action;
+    bool scroll_changed = false;
+    scroll_offsets scroll;
+    bool release_background_close_suppression = false;
 };
 
 struct activity_item {
@@ -53,12 +74,16 @@ struct activity_item {
     std::string difficulty_name;
     std::string local_summary;
     std::string online_summary;
+    float play_rating = 0.0f;
+    float rating_contribution = 0.0f;
+    float rating_contribution_percent = 0.0f;
 };
 
 struct load_result {
     auth::my_uploads_result uploads;
     auth::profile_rankings_result rankings;
     std::vector<activity_item> activity;
+    std::vector<activity_item> best_rating_records;
     std::vector<activity_item> first_place_records;
 };
 
@@ -75,11 +100,13 @@ struct state {
     float open_anim = 0.0f;
     tab selected_tab = tab::overview;
     float activity_scroll = 0.0f;
+    float best_rating_scroll = 0.0f;
     float song_scroll = 0.0f;
     float chart_scroll = 0.0f;
     auth::my_uploads_result uploads;
     auth::profile_rankings_result rankings;
     std::vector<activity_item> activity;
+    std::vector<activity_item> best_rating_records;
     std::vector<activity_item> first_place_records;
     delete_target pending_delete = delete_target::none;
     std::string pending_id;
@@ -92,8 +119,8 @@ struct state {
 Rectangle bounds();
 void open(state& profile);
 void close(state& profile);
-void clamp_scroll(state& profile);
-command update(state& profile, bool request_active);
+[[nodiscard]] scroll_offsets clamped_scroll_offsets(const state& profile);
+[[nodiscard]] input_result update(const state& profile, bool request_active);
 void draw(state& profile,
           const song_select::auth_state& auth_state,
           square_image_picker::state& avatar_picker,

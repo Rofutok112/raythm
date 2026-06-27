@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <span>
 #include <vector>
 
 #include "raylib.h"
@@ -21,6 +23,19 @@ struct hit_region {
     int layer = 0;
 };
 
+inline constexpr int kNoActiveDragIndex = -1;
+
+struct indexed_drag_state {
+    int active_index = kNoActiveDragIndex;
+};
+
+struct indexed_drag_result {
+    int active_index = kNoActiveDragIndex;
+    bool started = false;
+    bool dragging = false;
+    bool released = false;
+};
+
 inline std::vector<hit_region>& hit_regions() {
     static std::vector<hit_region> regions;
     return regions;
@@ -30,13 +45,17 @@ inline void begin_hit_regions() {
     hit_regions().clear();
 }
 
+inline bool contains_point(Rectangle rect, Vector2 point) {
+    return CheckCollisionPointRec(point, rect);
+}
+
 inline void register_hit_region(Rectangle rect, draw_layer layer) {
     hit_regions().push_back({rect, static_cast<int>(layer)});
 }
 
 inline bool is_blocked_by_higher_layer(Rectangle rect, draw_layer layer) {
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    if (!CheckCollisionPointRec(mouse, rect)) {
+    if (!contains_point(rect, mouse)) {
         return false;
     }
 
@@ -45,7 +64,7 @@ inline bool is_blocked_by_higher_layer(Rectangle rect, draw_layer layer) {
         if (region.layer <= requested_layer) {
             continue;
         }
-        if (CheckCollisionPointRec(mouse, region.rect)) {
+        if (contains_point(region.rect, mouse)) {
             return true;
         }
     }
@@ -54,7 +73,7 @@ inline bool is_blocked_by_higher_layer(Rectangle rect, draw_layer layer) {
 
 // 仮想マウスが rect 内にあるか。
 inline bool is_hovered(Rectangle rect, draw_layer layer = draw_layer::base) {
-    return CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), rect) &&
+    return contains_point(rect, virtual_screen::get_virtual_mouse()) &&
            !is_blocked_by_higher_layer(rect, layer);
 }
 
@@ -78,6 +97,39 @@ inline bool is_pressed(Rectangle rect, draw_layer layer = draw_layer::base) {
 // ホバー中かつマウスボタンを離した瞬間か（クリック判定）。
 inline bool is_clicked(Rectangle rect, draw_layer layer = draw_layer::base) {
     return is_mouse_button_released(rect, MOUSE_BUTTON_LEFT, layer);
+}
+
+inline void reset_indexed_drag(indexed_drag_state& state) {
+    state.active_index = kNoActiveDragIndex;
+}
+
+inline indexed_drag_result update_indexed_drag(std::span<const Rectangle> hit_rects,
+                                               indexed_drag_state& state,
+                                               draw_layer layer = draw_layer::base,
+                                               int mouse_button = MOUSE_BUTTON_LEFT) {
+    bool released = false;
+    if (IsMouseButtonReleased(mouse_button)) {
+        released = state.active_index != kNoActiveDragIndex;
+        state.active_index = kNoActiveDragIndex;
+    }
+
+    bool started = false;
+    if (IsMouseButtonPressed(mouse_button)) {
+        for (int i = 0; i < static_cast<int>(hit_rects.size()); ++i) {
+            if (is_hovered(hit_rects[static_cast<std::size_t>(i)], layer)) {
+                state.active_index = i;
+                started = true;
+                break;
+            }
+        }
+    }
+
+    return {
+        state.active_index,
+        started,
+        state.active_index != kNoActiveDragIndex && IsMouseButtonDown(mouse_button),
+        released,
+    };
 }
 
 }  // namespace ui

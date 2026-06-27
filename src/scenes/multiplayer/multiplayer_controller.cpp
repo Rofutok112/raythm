@@ -652,6 +652,49 @@ update_result update(state& state, float dt) {
     return result;
 }
 
+void apply_view_result(state& state, const view::draw_result& result) {
+    if (result.room_selected) {
+        state.selected_room_id = result.selected_room_id;
+        state.join_password_input.value.clear();
+        if (result.selected_room_requires_password) {
+            state.join_password_input.cursor = 0;
+            state.join_password_input.active = true;
+            state.modal = modal_mode::password;
+        }
+    }
+    if (!result.selected_profile_user_id.empty()) {
+        state.selected_profile_user_id = result.selected_profile_user_id;
+    }
+    if (result.queue_scroll_changed) {
+        state.queue_scroll_y = result.queue_scroll_y;
+        state.queue_scroll_y_target = result.queue_scroll_y_target;
+    }
+    if (result.queue_preview_seek_requested) {
+        state.queue_preview_seek_seconds = result.queue_preview_seek_seconds;
+        state.queue_preview_seek_requested = true;
+    }
+    if (!result.selected_queue_item_id.empty()) {
+        state.selected_queue_item_id = result.selected_queue_item_id;
+    }
+    if (result.queue_download_requested) {
+        state.requested_download_song_id = result.download_song_id;
+        state.requested_download_chart_id = result.download_chart_id;
+        state.current_queue_download_requested = true;
+    }
+    if (result.create_max_players_changed) {
+        state.create_max_players = result.create_max_players;
+    }
+    if (result.toggle_create_host_only) {
+        state.create_host_only = !state.create_host_only;
+    }
+    if (!result.selected_invite_user_id.empty()) {
+        state.selected_invite_user_id = result.selected_invite_user_id;
+    }
+    if (result.command != ui_command::none) {
+        state.command = result.command;
+    }
+}
+
 void leave_current_room_best_effort(state& state) {
     const std::string room_id = state.current_room.has_value()
         ? state.current_room->id

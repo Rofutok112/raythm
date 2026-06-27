@@ -269,30 +269,15 @@ Rectangle play_filter_level_slider_rect(Rectangle panel) {
 }
 
 float level_filter_t(float level) {
-    const float clamped = std::clamp(level, kChartFilterMinLevel, kChartFilterMaxLevel);
-    if (clamped <= kChartFilterUsefulMaxLevel) {
-        return ((clamped - kChartFilterMinLevel) / (kChartFilterUsefulMaxLevel - kChartFilterMinLevel)) *
-               kChartFilterUsefulTrack;
-    }
-    return 1.0f;
+    return song_select::level_filter::t_for_level(level);
 }
 
 float level_from_filter_t(float t) {
-    const float clamped = std::clamp(t, 0.0f, 1.0f);
-    if (clamped > kChartFilterUsefulTrack) {
-        return kChartFilterMaxLevel;
-    }
-    const float level = kChartFilterMinLevel +
-                        (clamped / kChartFilterUsefulTrack) *
-                            (kChartFilterUsefulMaxLevel - kChartFilterMinLevel);
-    const float rounded = std::round(level * 10.0f) / 10.0f;
-    return rounded >= kChartFilterMaxLevel - 0.5f ? kChartFilterMaxLevel : rounded;
+    return song_select::level_filter::level_from_t(t);
 }
 
 Rectangle level_filter_chip_rect(Rectangle range, float level) {
-    const float t = level_filter_t(level);
-    const float x = range.x + range.width * t;
-    return {x - 24.0f, range.y - 4.0f, 48.0f, 28.0f};
+    return song_select::level_filter::chip_rect(range, level);
 }
 
 }  // namespace title_play_view

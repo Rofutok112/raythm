@@ -12,6 +12,10 @@
 #include "score_system.h"
 #include "shared/scene_fade.h"
 
+namespace result_scene_view {
+enum class action;
+}
+
 // リザルト画面。プレイ終了後のスコア・ランク・判定内訳を表示する。
 class result_scene final : public scene {
 public:
@@ -33,6 +37,7 @@ private:
 
     void return_to_song_select() const;
     void retry_chart();
+    bool apply_view_action(result_scene_view::action action);
     void poll_online_submit();
     void load_jacket_texture();
     void unload_jacket_texture();

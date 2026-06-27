@@ -128,17 +128,12 @@ void settings_gameplay_preview::prepare_frame() {
 }
 
 void settings_gameplay_preview::draw(Rectangle frame) const {
-    ui::draw_rect_f(frame, g_theme->panel);
+    ui::surface_fill(frame, g_theme->panel);
     if (scene_texture_loaded_) {
-        const Rectangle source = {
-            0.0f,
-            0.0f,
-            static_cast<float>(scene_texture_.texture.width),
-            -static_cast<float>(scene_texture_.texture.height)
-        };
-        DrawTexturePro(scene_texture_.texture, source, frame, {0.0f, 0.0f}, 0.0f, WHITE);
+        const Rectangle source = ui::texture_source_rect(scene_texture_.texture);
+        ui::draw_texture(scene_texture_.texture, {source.x, source.y, source.width, -source.height}, frame);
     }
-    ui::draw_rect_lines(frame, 2.0f, with_alpha(g_theme->border_light, 220));
+    ui::frame(frame, with_alpha(g_theme->border_light, 220), 2.0f);
 }
 
 bool settings_gameplay_preview::ensure_textures() {

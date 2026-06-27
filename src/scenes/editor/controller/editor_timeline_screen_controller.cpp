@@ -7,6 +7,7 @@
 #include "editor/daw/editor_daw_view.h"
 #include "editor/service/editor_note_placement_rules.h"
 #include "editor/view/editor_layout.h"
+#include "ui_hit.h"
 
 namespace {
 
@@ -168,7 +169,7 @@ editor_right_panel_view_result draw(const context& context) {
         preview_has_overlap,
         selection_rect,
         viewport_model(context),
-    }, snap_dropdown_menu_rect(), context.snap_dropdown_open);
+    }, snap_dropdown_menu_rect(), context.snap_dropdown_open, context.timing_panel);
 }
 
 int mouse_cursor(const cursor_context& context) {
@@ -187,7 +188,7 @@ int mouse_cursor(const cursor_context& context) {
         }
     }
 
-    if (!CheckCollisionPointRec(context.mouse, context.metrics.content_rect())) {
+    if (!ui::contains_point(context.metrics.content_rect(), context.mouse)) {
         return MOUSE_CURSOR_DEFAULT;
     }
 

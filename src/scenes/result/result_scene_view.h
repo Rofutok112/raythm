@@ -30,7 +30,11 @@ struct model {
     double now = 0.0;
 };
 
-action hit_test_action(Vector2 point);
-void draw(const model& data);
+struct draw_result {
+    action requested_action = action::none;
+};
+
+action shortcut_action();
+[[nodiscard]] draw_result draw(const model& data);
 
 }  // namespace result_scene_view

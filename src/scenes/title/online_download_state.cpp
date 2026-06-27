@@ -9,6 +9,7 @@
 #include "network/auth_client.h"
 #include "services/content_sync_service.h"
 #include "theme.h"
+#include "ui_hit.h"
 
 namespace title_online_view {
 namespace {
@@ -28,6 +29,16 @@ constexpr float kSidebarButtonGap = 8.0f;
 constexpr float kChartCardHeight = 64.0f;
 constexpr float kChartGridGapX = 22.0f;
 constexpr float kChartGridGapY = 10.0f;
+constexpr float kChartRowTextHeight = 18.0f;
+constexpr float kChartStatusBadgeTop = 8.0f;
+constexpr float kChartStatusBadgeHeight = 14.0f;
+constexpr float kChartStatusBadgeDownloadGap = 12.0f;
+constexpr float kChartStatusBadgeRightInset = 16.0f;
+constexpr float kChartSourceBadgeDownloadGap = 12.0f;
+constexpr float kChartSourceBadgeRightInset = 20.0f;
+constexpr float kChartSourceBadgeHeight = 24.0f;
+constexpr float kChartSourceBadgeBottomInset = 30.0f;
+constexpr float kChartSourceBadgeCenterOffsetY = -4.0f;
 
 std::string to_lower_ascii(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
@@ -458,6 +469,51 @@ Rectangle chart_download_icon_rect(Rectangle chart_card) {
     };
 }
 
+chart_row_layout chart_row_layout_for(Rectangle chart_card) {
+    const float row_mid_y = chart_card.y + (chart_card.height - kChartRowTextHeight) * 0.5f;
+    return {
+        .key_mode = {chart_card.x + 24.0f, row_mid_y, 44.0f, kChartRowTextHeight},
+        .difficulty = {chart_card.x + 72.0f, row_mid_y, 150.0f, kChartRowTextHeight},
+        .level_badge = {chart_card.x + 242.0f, row_mid_y - 2.0f, 70.0f, 22.0f},
+        .notes = {chart_card.x + 330.0f, row_mid_y + 1.0f, 110.0f, 16.0f},
+        .author = {chart_card.x + 456.0f, row_mid_y + 1.0f, 118.0f, 16.0f},
+        .download_icon = chart_download_icon_rect(chart_card),
+    };
+}
+
+Rectangle chart_status_badge_rect(Rectangle chart_card, float badge_width, bool reserves_download_button) {
+    const Rectangle download_icon = chart_download_icon_rect(chart_card);
+    const float right = reserves_download_button
+        ? download_icon.x - kChartStatusBadgeDownloadGap
+        : chart_card.x + chart_card.width - kChartStatusBadgeRightInset;
+    return {
+        right - badge_width,
+        chart_card.y + kChartStatusBadgeTop,
+        badge_width,
+        kChartStatusBadgeHeight,
+    };
+}
+
+Rectangle chart_source_badge_rect(Rectangle chart_card,
+                                  float badge_width,
+                                  bool reserves_download_button,
+                                  bool status_badge_visible) {
+    const Rectangle download_icon = chart_download_icon_rect(chart_card);
+    const float row_mid_y = chart_card.y + (chart_card.height - kChartRowTextHeight) * 0.5f;
+    const float right = reserves_download_button
+        ? download_icon.x - kChartSourceBadgeDownloadGap
+        : chart_card.x + chart_card.width - kChartSourceBadgeRightInset;
+    const float y = status_badge_visible
+        ? chart_card.y + chart_card.height - kChartSourceBadgeBottomInset
+        : row_mid_y + kChartSourceBadgeCenterOffsetY;
+    return {
+        right - badge_width,
+        y,
+        badge_width,
+        kChartSourceBadgeHeight,
+    };
+}
+
 Rectangle song_list_viewport(Rectangle content_rect) {
     return {
         content_rect.x + 12.0f,
@@ -469,12 +525,12 @@ Rectangle song_list_viewport(Rectangle content_rect) {
 
 int hit_test_song_list(const state& state, Rectangle area, Vector2 point) {
     const auto indices = filtered_indices(state);
-    if (!CheckCollisionPointRec(point, area)) {
+    if (!ui::contains_point(area, point)) {
         return -1;
     }
 
     for (int display_index = 0; display_index < static_cast<int>(indices.size()); ++display_index) {
-        if (CheckCollisionPointRec(point, song_row_rect(state, area, display_index, state.song_scroll_y))) {
+        if (ui::contains_point(song_row_rect(state, area, display_index, state.song_scroll_y), point)) {
             return indices[static_cast<size_t>(display_index)];
         }
     }
@@ -483,13 +539,13 @@ int hit_test_song_list(const state& state, Rectangle area, Vector2 point) {
 
 int hit_test_chart_list(const state& state, Rectangle area, Vector2 point) {
     const song_entry_state* song = selected_song(state);
-    if (song == nullptr || !CheckCollisionPointRec(point, area)) {
+    if (song == nullptr || !ui::contains_point(area, point)) {
         return -1;
     }
 
     const auto indices = filtered_chart_indices(state);
     for (int display_index = 0; display_index < static_cast<int>(indices.size()); ++display_index) {
-        if (CheckCollisionPointRec(point, chart_row_rect(area, display_index, state.chart_scroll_y))) {
+        if (ui::contains_point(chart_row_rect(area, display_index, state.chart_scroll_y), point)) {
             return indices[static_cast<size_t>(display_index)];
         }
     }

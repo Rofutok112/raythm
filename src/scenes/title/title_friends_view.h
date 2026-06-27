@@ -41,6 +41,7 @@ struct model {
     bool loading = false;
     bool loaded_once = false;
     bool operation_active = false;
+    std::string avatar_base_url;
     tab selected_tab = tab::friends;
     title_friends_state::social_state social;
 };

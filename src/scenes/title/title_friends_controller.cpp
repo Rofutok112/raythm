@@ -3,6 +3,7 @@
 #include <string>
 #include <utility>
 
+#include "network/auth_client.h"
 #include "title/title_friends_effects.h"
 #include "title/title_friends_reducer.h"
 #include "tween.h"
@@ -18,6 +19,7 @@ void title_friends_controller::open() {
     }
     state_.open = true;
     state_.closing = false;
+    state_.avatar_base_url = auth::load_session_summary().server_url;
     state_.suppress_background_close_until_release = true;
     request_reload();
 }
@@ -69,6 +71,7 @@ bool title_friends_controller::handle_input() {
         .loading = state_.loading,
         .loaded_once = state_.loaded_once,
         .operation_active = state_.operation_active,
+        .avatar_base_url = state_.avatar_base_url,
         .selected_tab = state_.selected_tab,
         .social = state_.social,
     };
@@ -89,6 +92,7 @@ void title_friends_controller::draw(ui::draw_layer layer, bool draw_backdrop) {
         .loading = state_.loading,
         .loaded_once = state_.loaded_once,
         .operation_active = state_.operation_active,
+        .avatar_base_url = state_.avatar_base_url,
         .selected_tab = state_.selected_tab,
         .social = state_.social,
     }, layer, draw_backdrop);

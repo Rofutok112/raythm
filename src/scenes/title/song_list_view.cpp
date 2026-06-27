@@ -11,6 +11,7 @@
 #include "tween.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_layout.h"
 #include "ui_tooltip.h"
 #include "ui/icons/raythm_icons.h"
 
@@ -34,8 +35,27 @@ constexpr float kArtistHeight = 27.0f;
 constexpr float kStatusBadgeWidth = 96.0f;
 constexpr float kStatusBadgeHeight = 24.0f;
 constexpr float kStatusBadgeInset = 15.0f;
+constexpr float kClassicArtistDurationReserveWidth = 62.0f;
+constexpr float kClassicDurationWidth = 58.0f;
+constexpr float kClassicDurationHeight = 18.0f;
+constexpr float kClassicDurationGap = 12.0f;
 constexpr float kJacketSize = 72.0f;
+constexpr float kExpandedJacketInsetX = 18.0f;
+constexpr float kExpandedJacketInsetY = 14.0f;
+constexpr float kExpandedTextGap = 20.0f;
+constexpr float kExpandedRightColumnWidth = 104.0f;
+constexpr float kExpandedRightInset = 26.0f;
+constexpr float kExpandedTitleOffsetY = 15.0f;
+constexpr float kExpandedTitleHeight = 24.0f;
+constexpr float kExpandedArtistOffsetY = 41.0f;
+constexpr float kExpandedArtistHeight = 18.0f;
+constexpr float kExpandedTagOffsetY = 62.0f;
+constexpr float kExpandedTagGap = 8.0f;
+constexpr float kExpandedTagRightPadding = 16.0f;
+constexpr float kExpandedStatusRightInset = 36.0f;
+constexpr float kExpandedStatusWidth = 88.0f;
 constexpr float kChartHeaderHeight = 24.0f;
+constexpr float kChartHeaderGap = 5.0f;
 constexpr float kChartRowHeight = 33.0f;
 constexpr float kChartRowGap = 4.0f;
 constexpr float kEmbeddedChartScrollPadding = 8.0f;
@@ -54,6 +74,94 @@ struct chart_columns {
     Rectangle rank;
 };
 
+struct song_list_header_layout {
+    Rectangle full;
+    Rectangle title;
+    Rectangle count;
+};
+
+struct compact_song_row_layout {
+    Rectangle title;
+    Rectangle artist;
+    Rectangle duration;
+    Rectangle status_badge;
+};
+
+struct expanded_song_row_layout {
+    Rectangle jacket;
+    Rectangle title;
+    Rectangle artist;
+    Rectangle tag_lane;
+    Rectangle bpm;
+    Rectangle plays;
+    Rectangle status_tags;
+};
+
+struct chart_list_layout {
+    Rectangle area;
+    Rectangle header_row;
+    Rectangle viewport;
+};
+
+song_list_header_layout make_song_list_header_layout(Rectangle column) {
+    const Rectangle full = {
+        column.x,
+        column.y - kSongCountOffsetY,
+        column.width,
+        kSongCountHeight,
+    };
+    const ui::rect_pair columns = ui::split_columns(full, full.width * 0.5f);
+    return {full, columns.first, columns.second};
+}
+
+compact_song_row_layout make_compact_song_row_layout(Rectangle row, float artist_reserved_width) {
+    const Rectangle badge = {
+        row.x + row.width - kStatusBadgeWidth - kStatusBadgeInset,
+        row.y + kStatusBadgeInset,
+        kStatusBadgeWidth,
+        kStatusBadgeHeight,
+    };
+    const float text_width = row.width - kTextPaddingX * 2.0f - kStatusBadgeWidth;
+    return {
+        {row.x + kTextPaddingX, row.y + kTitleOffsetY, text_width, kTitleHeight},
+        {row.x + kTextPaddingX, row.y + kArtistOffsetY, text_width - artist_reserved_width, kArtistHeight},
+        {badge.x - kClassicDurationWidth - kClassicDurationGap,
+         row.y + kArtistOffsetY + 2.0f,
+         kClassicDurationWidth,
+         kClassicDurationHeight},
+        badge,
+    };
+}
+
+expanded_song_row_layout make_expanded_song_row_layout(Rectangle row) {
+    const Rectangle jacket = {
+        row.x + kExpandedJacketInsetX,
+        row.y + kExpandedJacketInsetY,
+        kJacketSize,
+        kJacketSize,
+    };
+    const float text_x = jacket.x + jacket.width + kExpandedTextGap;
+    const float right_x = row.x + row.width - kExpandedRightColumnWidth - kExpandedRightInset;
+    const float text_width = std::max(120.0f, right_x - text_x - kExpandedTextGap);
+    const float tag_y = row.y + kExpandedTagOffsetY;
+    return {
+        jacket,
+        {text_x, row.y + kExpandedTitleOffsetY, text_width, kExpandedTitleHeight},
+        {text_x, row.y + kExpandedArtistOffsetY, text_width, kExpandedArtistHeight},
+        {text_x, tag_y, right_x - kExpandedTagRightPadding - text_x, kTagHeight},
+        {right_x, row.y + kExpandedTitleOffsetY, kExpandedRightColumnWidth, 18.0f},
+        {right_x, row.y + kExpandedArtistOffsetY, kExpandedRightColumnWidth, 18.0f},
+        {row.x + row.width - kExpandedStatusRightInset - kExpandedStatusWidth,
+         tag_y,
+         kExpandedStatusWidth,
+         kTagHeight},
+    };
+}
+
+Rectangle chart_header_row_rect(Rectangle charts) {
+    return {charts.x, charts.y - 3.0f, charts.width, kChartRowHeight};
+}
+
 chart_columns make_chart_columns(Rectangle row) {
     return {
         {row.x + 14.0f, row.y + 7.0f, 44.0f, 18.0f},
@@ -67,8 +175,7 @@ chart_columns make_chart_columns(Rectangle row) {
 }
 
 chart_columns make_chart_header_columns(Rectangle charts) {
-    Rectangle row = {charts.x, charts.y - 3.0f, charts.width, kChartRowHeight};
-    return make_chart_columns(row);
+    return make_chart_columns(chart_header_row_rect(charts));
 }
 
 float row_height(const song_select::state& state, int index) {
@@ -174,6 +281,23 @@ Rectangle chart_area_rect(Rectangle row) {
     return {row.x + 18.0f, row.y + 126.0f, row.width - 36.0f, row.height - 144.0f};
 }
 
+chart_list_layout make_chart_list_layout_for_area(Rectangle area) {
+    return {
+        area,
+        chart_header_row_rect(area),
+        {
+            area.x,
+            area.y + kChartHeaderHeight + kChartHeaderGap,
+            area.width,
+            area.height - kChartHeaderHeight - kChartHeaderGap,
+        },
+    };
+}
+
+chart_list_layout make_chart_list_layout(Rectangle row) {
+    return make_chart_list_layout_for_area(chart_area_rect(row));
+}
+
 Rectangle row_rect_at_y(Rectangle area, float y, float height) {
     return {
         area.x,
@@ -184,12 +308,7 @@ Rectangle row_rect_at_y(Rectangle area, float y, float height) {
 }
 
 Rectangle chart_list_viewport_rect(Rectangle chart_area) {
-    return {
-        chart_area.x,
-        chart_area.y + kChartHeaderHeight + 5.0f,
-        chart_area.width,
-        chart_area.height - kChartHeaderHeight - 5.0f,
-    };
+    return make_chart_list_layout_for_area(chart_area).viewport;
 }
 
 Rectangle chart_row_rect(Rectangle chart_area, int index, float scroll_y) {
@@ -202,10 +321,17 @@ Rectangle chart_row_rect(Rectangle chart_area, int index, float scroll_y) {
     };
 }
 
+bool rect_visible_in(Rectangle viewport, Rectangle rect) {
+    return rect.y + rect.height >= viewport.y - kClipSlack &&
+           rect.y <= viewport.y + viewport.height + kClipSlack;
+}
+
 void draw_tag(Rectangle rect, const std::string& label, unsigned char alpha) {
     const Color color = tag_color_for_label(label);
-    ui::draw_rect_f(rect, with_alpha(g_theme->row_soft, static_cast<unsigned char>(70.0f * (static_cast<float>(alpha) / 255.0f))));
-    ui::draw_rect_lines(rect, 1.0f, with_alpha(color, alpha));
+    ui::surface(rect,
+                with_alpha(g_theme->row_soft, static_cast<unsigned char>(70.0f * (static_cast<float>(alpha) / 255.0f))),
+                with_alpha(color, alpha),
+                1.0f);
     ui::draw_text_in_rect(label.c_str(), static_cast<int>(kTagFontSize), rect, with_alpha(color, alpha), ui::text_align::center);
 }
 
@@ -224,8 +350,10 @@ void draw_status_tag(Rectangle rect, content_status status, unsigned char alpha,
         return;
     }
 
-    ui::draw_rect_f(rect, with_alpha(g_theme->row_soft, static_cast<unsigned char>(70.0f * (static_cast<float>(alpha) / 255.0f))));
-    ui::draw_rect_lines(rect, 1.0f, with_alpha(color, alpha));
+    ui::surface(rect,
+                with_alpha(g_theme->row_soft, static_cast<unsigned char>(70.0f * (static_cast<float>(alpha) / 255.0f))),
+                with_alpha(color, alpha),
+                1.0f);
     ui::draw_text_in_rect(content_status_badge::label(status), font_size, rect,
                           with_alpha(color, alpha), ui::text_align::center);
 }
@@ -244,7 +372,7 @@ Rectangle centered_square(Rectangle rect, float size) {
 }
 
 void draw_locked_row_overlay(Rectangle row, unsigned char alpha) {
-    ui::draw_rect_f(row, with_alpha(g_theme->bg, static_cast<unsigned char>((static_cast<int>(alpha) * 120) / 255)));
+    ui::backdrop(row, with_alpha(g_theme->bg, static_cast<unsigned char>((static_cast<int>(alpha) * 120) / 255)));
     draw_lock_icon(centered_square(row, 24.0f), alpha);
 }
 
@@ -296,6 +424,161 @@ void draw_status_tags_fit(Rectangle bounds,
     draw_status_tag(status_rect, status, alpha, font_size);
 }
 
+void draw_song_list_header(Rectangle column, int song_count, bool split_title, unsigned char alpha) {
+    const auto& t = *g_theme;
+    const song_list_header_layout layout = make_song_list_header_layout(column);
+    if (!split_title) {
+        ui::draw_text_in_rect(TextFormat("%d songs", song_count), 16,
+                              layout.full,
+                              with_alpha(t.text_muted, alpha), ui::text_align::left);
+        return;
+    }
+
+    ui::draw_text_in_rect("ALL SONGS", 14,
+                          layout.title,
+                          with_alpha(t.text, alpha), ui::text_align::left);
+    ui::draw_text_in_rect(TextFormat("%d songs", song_count), 12,
+                          layout.count,
+                          with_alpha(t.text_muted, alpha), ui::text_align::right);
+}
+
+void draw_compact_song_row(const song_select::song_entry& song,
+                           Rectangle row,
+                           bool selected,
+                           const title_song_list_view::draw_config& config) {
+    const auto& t = *g_theme;
+    const bool hovered = ui::is_hovered(row);
+    const unsigned char row_alpha = selected ? config.selected_row_alpha
+        : hovered ? config.hover_row_alpha
+                  : config.normal_row_alpha;
+
+    ui::surface(row,
+                with_alpha(selected ? config.button_selected : config.button_base, row_alpha),
+                with_alpha(t.border_light, static_cast<unsigned char>(130.0f * config.play_t)),
+                kClassicRowBorderWidth);
+
+    const std::string duration_label = format_duration_label(song.song.meta.duration_seconds);
+    const float artist_reserved_width = duration_label.empty() ? 0.0f : kClassicArtistDurationReserveWidth;
+    const compact_song_row_layout layout = make_compact_song_row_layout(row, artist_reserved_width);
+    draw_marquee_text(song.song.meta.title.c_str(),
+                      layout.title,
+                      20, with_alpha(t.text, config.alpha), config.now);
+    draw_marquee_text(song.song.meta.artist.c_str(),
+                      layout.artist,
+                      14, with_alpha(t.text_muted, config.alpha), config.now);
+    if (!duration_label.empty()) {
+        ui::draw_text_in_rect(duration_label.c_str(),
+                              13,
+                              layout.duration,
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+    }
+    content_status_badge::draw_compound(layout.status_badge, song.source_status, song.status, config.alpha, 12);
+}
+
+void draw_song_jacket(const song_select::state& state,
+                      const song_select::song_entry& song,
+                      Rectangle jacket_rect,
+                      unsigned char row_alpha,
+                      const title_song_list_view::draw_config& config) {
+    const auto& t = *g_theme;
+    if (state.jackets) {
+        if (const Texture2D* jacket = state.jackets->get(song.song)) {
+            ui::draw_texture(*jacket, jacket_rect, with_alpha(WHITE, config.alpha));
+        } else {
+            ui::placeholder(jacket_rect, "JACKET", {
+                .font_size = 10,
+                .draw_border = false,
+                .fill = with_alpha(t.bg_alt, row_alpha),
+                .text_color = with_alpha(t.text_muted, config.alpha),
+                .custom_colors = true,
+            });
+        }
+    } else {
+        ui::placeholder(jacket_rect, "JACKET", {
+            .font_size = 10,
+            .draw_border = false,
+            .fill = with_alpha(t.bg_alt, row_alpha),
+            .text_color = with_alpha(t.text_muted, config.alpha),
+            .custom_colors = true,
+        });
+    }
+    ui::frame(jacket_rect, with_alpha(t.border_image, config.alpha), 1.0f);
+}
+
+void draw_expanded_song_row(const song_select::state& state,
+                            const song_select::song_entry& song,
+                            Rectangle row,
+                            bool selected,
+                            const title_song_list_view::draw_config& config) {
+    const auto& t = *g_theme;
+    const bool hovered = ui::is_hovered(row);
+    const unsigned char row_alpha = selected ? config.selected_row_alpha
+        : hovered ? config.hover_row_alpha
+                  : config.normal_row_alpha;
+
+    ui::surface(row,
+                with_alpha(selected ? config.button_selected : config.button_base, row_alpha),
+                with_alpha(selected ? t.border_active : t.border_light,
+                           static_cast<unsigned char>(selected ? config.alpha : 130.0f * config.play_t)),
+                selected ? 1.8f : kRowBorderWidth);
+
+    const expanded_song_row_layout layout = make_expanded_song_row_layout(row);
+    draw_song_jacket(state, song, layout.jacket, row_alpha, config);
+    draw_marquee_text(song.song.meta.title.c_str(),
+                      layout.title,
+                      selected ? 18 : 17, with_alpha(t.text, config.alpha), config.now);
+    draw_marquee_text(song.song.meta.artist.c_str(),
+                      layout.artist,
+                      12, with_alpha(t.text_secondary, config.alpha), config.now);
+
+    float tag_x = layout.tag_lane.x;
+    const float tag_end_x = layout.tag_lane.x + layout.tag_lane.width;
+    int tags_drawn = 0;
+    for (const std::string& label : genre_labels(song.song.meta)) {
+        if (label.empty() || tags_drawn >= 2) {
+            continue;
+        }
+        const float width = std::clamp(ui::measure_text_size(label.c_str(), kTagFontSize).x + 20.0f, 66.0f, 124.0f);
+        if (tag_x + width > tag_end_x) {
+            break;
+        }
+        draw_tag({tag_x, layout.tag_lane.y, width, layout.tag_lane.height}, label, config.alpha);
+        tag_x += width + kExpandedTagGap;
+        ++tags_drawn;
+    }
+
+    ui::draw_text_in_rect(TextFormat("BPM %.0f", song.song.meta.base_bpm), 11,
+                          layout.bpm,
+                          with_alpha(t.text_secondary, config.alpha), ui::text_align::right);
+    if (song.song.meta.has_play_count) {
+        ui::draw_text_in_rect((std::string("plays ") + format_count_label(song.song.meta.play_count)).c_str(), 11,
+                              layout.plays,
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+    }
+    draw_status_tags(layout.status_tags,
+                     song.source_status, song.status, config.alpha, 11);
+}
+
+void draw_chart_header(const chart_list_layout& layout, unsigned char alpha) {
+    const auto& t = *g_theme;
+    const chart_columns header_columns = make_chart_columns(layout.header_row);
+    ui::draw_text_in_rect("KEYS", 10,
+                          header_columns.key,
+                          with_alpha(t.text_muted, alpha), ui::text_align::left);
+    ui::draw_text_in_rect("LV", 10, header_columns.level,
+                          with_alpha(t.text_muted, alpha), ui::text_align::left);
+    ui::draw_text_in_rect("DIFF", 10, header_columns.difficulty,
+                          with_alpha(t.text_muted, alpha), ui::text_align::left);
+    ui::draw_text_in_rect("CREATOR", 10, header_columns.creator,
+                          with_alpha(t.text_muted, alpha), ui::text_align::left);
+    ui::draw_text_in_rect("NOTES", 10, header_columns.notes,
+                          with_alpha(t.text_muted, alpha), ui::text_align::right);
+    ui::draw_text_in_rect("SOURCE", 10, header_columns.status,
+                          with_alpha(t.text_muted, alpha), ui::text_align::center);
+    ui::draw_text_in_rect("RANK", 10, header_columns.rank,
+                          with_alpha(t.text_muted, alpha), ui::text_align::right);
+}
+
 void draw_chart_row(const song_select::song_entry& song,
                     const song_select::chart_option& chart,
                     Rectangle row,
@@ -310,11 +593,12 @@ void draw_chart_row(const song_select::song_entry& song,
     const Color row_fill = locked
         ? lerp_color(config.button_base, t.bg, selected ? 0.48f : 0.36f)
         : (selected ? config.button_selected : config.button_base);
-    ui::draw_rect_f(row, with_alpha(row_fill, row_alpha));
-    ui::draw_rect_lines(row, 1.0f,
-                        with_alpha(locked ? t.slow : selected ? t.border_active : t.border_light,
-                                   locked ? static_cast<unsigned char>((static_cast<int>(config.alpha) * 180) / 255)
-                                          : config.alpha));
+    ui::surface(row,
+                with_alpha(row_fill, row_alpha),
+                with_alpha(locked ? t.slow : selected ? t.border_active : t.border_light,
+                           locked ? static_cast<unsigned char>((static_cast<int>(config.alpha) * 180) / 255)
+                                  : config.alpha),
+                1.0f);
 
     const chart_columns columns = make_chart_columns(row);
     const Color key_color = key_mode_color(chart.meta.key_count);
@@ -348,6 +632,45 @@ void draw_chart_row(const song_select::song_entry& song,
     }
     if (locked) {
         draw_locked_row_overlay(row, config.alpha);
+    }
+}
+
+void draw_embedded_chart_list(const song_select::state& state,
+                              const song_select::song_entry& song,
+                              Rectangle row,
+                              const title_song_list_view::draw_config& config) {
+    if (state.selected_song_expand_t <= 0.02f) {
+        return;
+    }
+
+    const float chart_t = tween::ease_out_cubic(state.selected_song_expand_t);
+    const chart_list_layout chart_layout = make_chart_list_layout(row);
+    if (chart_layout.area.height < kChartMinDrawableHeight) {
+        return;
+    }
+    const unsigned char chart_alpha =
+        static_cast<unsigned char>(static_cast<float>(config.alpha) * chart_t);
+    const auto& t = *g_theme;
+    ui::surface(chart_layout.area,
+                with_alpha(t.panel, static_cast<unsigned char>(52.0f * chart_t * (static_cast<float>(config.alpha) / 255.0f))),
+                with_alpha(t.border_light, chart_alpha),
+                1.0f);
+    draw_chart_header(chart_layout, chart_alpha);
+
+    const auto filtered = song_select::filtered_charts_for_selected_song(state);
+    ui::scoped_clip_rect chart_clip(chart_layout.viewport);
+    title_song_list_view::draw_config chart_config = config;
+    chart_config.alpha = chart_alpha;
+    for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
+        const Rectangle chart_row = chart_row_rect(chart_layout.area, chart_index, config.embedded_chart_scroll_y);
+        if (!rect_visible_in(chart_layout.viewport, chart_row)) {
+            continue;
+        }
+        draw_chart_row(song,
+                       *filtered[static_cast<size_t>(chart_index)],
+                       chart_row,
+                       chart_index == state.difficulty_index,
+                       chart_config);
     }
 }
 
@@ -409,11 +732,11 @@ Rectangle row_rect(const song_select::state& state, Rectangle area, int index, f
 }
 
 int hit_test(Rectangle area, float scroll_y, Vector2 point, int count) {
-    if (!CheckCollisionPointRec(point, area)) {
+    if (!ui::contains_point(area, point)) {
         return -1;
     }
     for (int index = 0; index < count; ++index) {
-        if (CheckCollisionPointRec(point, row_rect(area, index, scroll_y))) {
+        if (ui::contains_point(row_rect(area, index, scroll_y), point)) {
             return index;
         }
     }
@@ -421,14 +744,14 @@ int hit_test(Rectangle area, float scroll_y, Vector2 point, int count) {
 }
 
 int hit_test(const song_select::state& state, Rectangle area, float scroll_y, Vector2 point) {
-    if (!CheckCollisionPointRec(point, area)) {
+    if (!ui::contains_point(area, point)) {
         return -1;
     }
     const std::vector<int> indices = song_select::filtered_song_indices(state);
     float y = area.y + kInitialRowOffsetY - scroll_y;
     for (const int song_index : indices) {
         const float height = row_height(state, song_index);
-        if (CheckCollisionPointRec(point, row_rect_at_y(area, y, height))) {
+        if (ui::contains_point(row_rect_at_y(area, y, height), point)) {
             return song_index;
         }
         y += height + kSongRowGap;
@@ -477,7 +800,7 @@ chart_hit hit_test_chart(const song_select::state& state,
                          float chart_scroll_y,
                          Vector2 point) {
     if (state.songs.empty() || !state.selected_song_expanded ||
-        state.selected_song_expand_t <= 0.05f || !CheckCollisionPointRec(point, area)) {
+        state.selected_song_expand_t <= 0.05f || !ui::contains_point(area, point)) {
         return {};
     }
     const int song_index = state.selected_song_index;
@@ -485,7 +808,7 @@ chart_hit hit_test_chart(const song_select::state& state,
         return {};
     }
     const Rectangle selected_row = row_rect(state, area, song_index, scroll_y);
-    if (!CheckCollisionPointRec(point, selected_row)) {
+    if (!ui::contains_point(selected_row, point)) {
         return {};
     }
     const Rectangle charts = chart_area_rect(selected_row);
@@ -493,12 +816,12 @@ chart_hit hit_test_chart(const song_select::state& state,
         return {};
     }
     const Rectangle viewport = chart_list_viewport_rect(charts);
-    if (!CheckCollisionPointRec(point, viewport)) {
+    if (!ui::contains_point(viewport, point)) {
         return {};
     }
     const auto filtered = song_select::filtered_charts_for_selected_song(state);
     for (int index = 0; index < static_cast<int>(filtered.size()); ++index) {
-        if (CheckCollisionPointRec(point, chart_row_rect(charts, index, chart_scroll_y))) {
+        if (ui::contains_point(chart_row_rect(charts, index, chart_scroll_y), point)) {
             return {song_index, index};
         }
     }
@@ -506,7 +829,6 @@ chart_hit hit_test_chart(const song_select::state& state,
 }
 
 void draw(const song_select::state& state, const draw_config& config) {
-    const auto& t = *g_theme;
     const bool hide_unloaded_content =
         state.catalog_loading && !state.catalog_loaded_once && state.songs.empty();
     if (hide_unloaded_content) {
@@ -518,69 +840,25 @@ void draw(const song_select::state& state, const draw_config& config) {
 
     if (!config.expanded_cards) {
         const std::vector<int> indices = song_select::filtered_song_indices(state);
-        ui::draw_text_in_rect(TextFormat("%d songs", static_cast<int>(indices.size())), 16,
-                              {config.column_rect.x, config.column_rect.y - kSongCountOffsetY,
-                               config.column_rect.width, kSongCountHeight},
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
+        draw_song_list_header(config.column_rect, static_cast<int>(indices.size()), false, config.alpha);
 
         ui::scoped_clip_rect clip(config.column_rect);
         for (int visible = 0; visible < static_cast<int>(indices.size()); ++visible) {
             const int i = indices[static_cast<size_t>(visible)];
             const song_select::song_entry& song = state.songs[static_cast<size_t>(i)];
             const Rectangle row = row_rect(config.column_rect, visible, state.scroll_y);
-            if (row.y + row.height < config.column_rect.y - kClipSlack ||
-                row.y > config.column_rect.y + config.column_rect.height + kClipSlack) {
+            if (!rect_visible_in(config.column_rect, row)) {
                 continue;
             }
 
-            const bool selected = i == state.selected_song_index;
-            const bool hovered = ui::is_hovered(row);
-            const unsigned char row_alpha = selected ? config.selected_row_alpha
-                : hovered ? config.hover_row_alpha
-                          : config.normal_row_alpha;
-
-            ui::draw_rect_f(row, with_alpha(selected ? config.button_selected : config.button_base, row_alpha));
-            ui::draw_rect_lines(
-                row, kClassicRowBorderWidth,
-                with_alpha(t.border_light, static_cast<unsigned char>(130.0f * config.play_t)));
-            const Rectangle badge_rect = {
-                row.x + row.width - kStatusBadgeWidth - kStatusBadgeInset,
-                row.y + kStatusBadgeInset,
-                kStatusBadgeWidth,
-                kStatusBadgeHeight,
-            };
-            draw_marquee_text(song.song.meta.title.c_str(),
-                              {row.x + kTextPaddingX, row.y + kTitleOffsetY,
-                               row.width - kTextPaddingX * 2.0f - kStatusBadgeWidth, kTitleHeight},
-                              20, with_alpha(t.text, config.alpha), config.now);
-            const std::string duration_label = format_duration_label(song.song.meta.duration_seconds);
-            const float artist_reserved_width = duration_label.empty() ? 0.0f : 62.0f;
-            draw_marquee_text(song.song.meta.artist.c_str(),
-                              {row.x + kTextPaddingX, row.y + kArtistOffsetY,
-                               row.width - kTextPaddingX * 2.0f - kStatusBadgeWidth - artist_reserved_width, kArtistHeight},
-                              14, with_alpha(t.text_muted, config.alpha), config.now);
-            if (!duration_label.empty()) {
-                ui::draw_text_in_rect(duration_label.c_str(),
-                                      13,
-                                      {badge_rect.x - 70.0f, row.y + kArtistOffsetY + 2.0f, 58.0f, 18.0f},
-                                      with_alpha(t.text_muted, config.alpha), ui::text_align::right);
-            }
-            content_status_badge::draw_compound(badge_rect, song.source_status, song.status, config.alpha, 12);
+            draw_compact_song_row(song, row, i == state.selected_song_index, config);
         }
         return;
     }
 
     const std::vector<int> indices = song_select::filtered_song_indices(state);
     if (config.show_header) {
-        ui::draw_text_in_rect("ALL SONGS", 14,
-                              {config.column_rect.x, config.column_rect.y - kSongCountOffsetY,
-                               config.column_rect.width * 0.5f, kSongCountHeight},
-                              with_alpha(t.text, config.alpha), ui::text_align::left);
-        ui::draw_text_in_rect(TextFormat("%d songs", static_cast<int>(indices.size())), 12,
-                              {config.column_rect.x + config.column_rect.width * 0.5f,
-                               config.column_rect.y - kSongCountOffsetY,
-                               config.column_rect.width * 0.5f, kSongCountHeight},
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+        draw_song_list_header(config.column_rect, static_cast<int>(indices.size()), true, config.alpha);
     }
 
     ui::scoped_clip_rect clip(config.column_rect);
@@ -593,123 +871,14 @@ void draw(const song_select::state& state, const draw_config& config) {
         if (row.width <= 0.0f || row.height <= 0.0f) {
             continue;
         }
-        if (row.y + row.height < config.column_rect.y - kClipSlack ||
-            row.y > config.column_rect.y + config.column_rect.height + kClipSlack) {
+        if (!rect_visible_in(config.column_rect, row)) {
             continue;
         }
 
         const bool selected = i == state.selected_song_index;
-        const bool hovered = ui::is_hovered(row);
-        const unsigned char row_alpha = selected ? config.selected_row_alpha
-            : hovered ? config.hover_row_alpha
-                      : config.normal_row_alpha;
-
-        ui::draw_rect_f(row, with_alpha(selected ? config.button_selected : config.button_base, row_alpha));
-        ui::draw_rect_lines(
-            row, selected ? 1.8f : kRowBorderWidth,
-            with_alpha(selected ? t.border_active : t.border_light,
-                       static_cast<unsigned char>(selected ? config.alpha : 130.0f * config.play_t)));
-
-        const Rectangle jacket_rect = {row.x + 18.0f, row.y + 14.0f, kJacketSize, kJacketSize};
-        if (state.jackets) {
-            if (const Texture2D* jacket = state.jackets->get(song.song)) {
-                DrawTexturePro(*jacket,
-                               {0.0f, 0.0f, static_cast<float>(jacket->width), static_cast<float>(jacket->height)},
-                               jacket_rect, {0.0f, 0.0f}, 0.0f, with_alpha(WHITE, config.alpha));
-            } else {
-                ui::draw_rect_f(jacket_rect, with_alpha(t.bg_alt, row_alpha));
-                ui::draw_text_in_rect("JACKET", 10, jacket_rect, with_alpha(t.text_muted, config.alpha));
-            }
-        } else {
-            ui::draw_rect_f(jacket_rect, with_alpha(t.bg_alt, row_alpha));
-            ui::draw_text_in_rect("JACKET", 10, jacket_rect, with_alpha(t.text_muted, config.alpha));
-        }
-        ui::draw_rect_lines(jacket_rect, 1.0f, with_alpha(t.border_image, config.alpha));
-
-        const float text_x = jacket_rect.x + jacket_rect.width + 20.0f;
-        const float right_x = row.x + row.width - 130.0f;
-        const float title_y = row.y + 15.0f;
-        const float artist_y = row.y + 41.0f;
-        const float tag_y = row.y + 62.0f;
-        draw_marquee_text(song.song.meta.title.c_str(),
-                          {text_x, title_y, std::max(120.0f, right_x - text_x - 20.0f), 24.0f},
-                          selected ? 18 : 17, with_alpha(t.text, config.alpha), config.now);
-        draw_marquee_text(song.song.meta.artist.c_str(),
-                          {text_x, artist_y, std::max(120.0f, right_x - text_x - 20.0f), 18.0f},
-                          12, with_alpha(t.text_secondary, config.alpha), config.now);
-
-        float tag_x = text_x;
-        int tags_drawn = 0;
-        for (const std::string& label : genre_labels(song.song.meta)) {
-            if (label.empty() || tags_drawn >= 2) {
-                continue;
-            }
-            const float width = std::clamp(ui::measure_text_size(label.c_str(), kTagFontSize).x + 20.0f, 66.0f, 124.0f);
-            if (tag_x + width > right_x - 16.0f) {
-                break;
-            }
-            draw_tag({tag_x, tag_y, width, kTagHeight}, label, config.alpha);
-            tag_x += width + 8.0f;
-            ++tags_drawn;
-        }
-
-        ui::draw_text_in_rect(TextFormat("BPM %.0f", song.song.meta.base_bpm), 11,
-                              {right_x, title_y, 104.0f, 18.0f},
-                              with_alpha(t.text_secondary, config.alpha), ui::text_align::right);
-        if (song.song.meta.has_play_count) {
-            ui::draw_text_in_rect((std::string("plays ") + format_count_label(song.song.meta.play_count)).c_str(), 11,
-                                  {right_x, artist_y, 104.0f, 18.0f},
-                                  with_alpha(t.text_muted, config.alpha), ui::text_align::right);
-        }
-        draw_status_tags({row.x + row.width - 124.0f, tag_y, 88.0f, kTagHeight},
-                         song.source_status, song.status, config.alpha, 11);
-
-        if (!selected || state.selected_song_expand_t <= 0.02f) {
-            continue;
-        }
-
-        const float chart_t = tween::ease_out_cubic(state.selected_song_expand_t);
-        const Rectangle charts = chart_area_rect(row);
-        if (charts.height < kChartMinDrawableHeight) {
-            continue;
-        }
-        const unsigned char chart_alpha =
-            static_cast<unsigned char>(static_cast<float>(config.alpha) * chart_t);
-        ui::draw_rect_f(charts, with_alpha(t.panel, static_cast<unsigned char>(52.0f * chart_t * (static_cast<float>(config.alpha) / 255.0f))));
-        ui::draw_rect_lines(charts, 1.0f, with_alpha(t.border_light, chart_alpha));
-        const chart_columns header_columns = make_chart_header_columns(charts);
-        ui::draw_text_in_rect("KEYS", 10,
-                              header_columns.key,
-                              with_alpha(t.text_muted, chart_alpha), ui::text_align::left);
-        ui::draw_text_in_rect("LV", 10, header_columns.level,
-                              with_alpha(t.text_muted, chart_alpha), ui::text_align::left);
-        ui::draw_text_in_rect("DIFF", 10, header_columns.difficulty,
-                              with_alpha(t.text_muted, chart_alpha), ui::text_align::left);
-        ui::draw_text_in_rect("CREATOR", 10, header_columns.creator,
-                              with_alpha(t.text_muted, chart_alpha), ui::text_align::left);
-        ui::draw_text_in_rect("NOTES", 10, header_columns.notes,
-                              with_alpha(t.text_muted, chart_alpha), ui::text_align::right);
-        ui::draw_text_in_rect("SOURCE", 10, header_columns.status,
-                              with_alpha(t.text_muted, chart_alpha), ui::text_align::center);
-        ui::draw_text_in_rect("RANK", 10, header_columns.rank,
-                              with_alpha(t.text_muted, chart_alpha), ui::text_align::right);
-
-        const auto filtered = song_select::filtered_charts_for_selected_song(state);
-        const Rectangle viewport = chart_list_viewport_rect(charts);
-        ui::scoped_clip_rect chart_clip(viewport);
-        title_song_list_view::draw_config chart_config = config;
-        chart_config.alpha = chart_alpha;
-        for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
-            const Rectangle chart_row = chart_row_rect(charts, chart_index, config.embedded_chart_scroll_y);
-            if (chart_row.y + chart_row.height < viewport.y - kClipSlack ||
-                chart_row.y > viewport.y + viewport.height + kClipSlack) {
-                continue;
-            }
-            draw_chart_row(song,
-                           *filtered[static_cast<size_t>(chart_index)],
-                           chart_row,
-                           chart_index == state.difficulty_index,
-                           chart_config);
+        draw_expanded_song_row(state, song, row, selected, config);
+        if (selected) {
+            draw_embedded_chart_list(state, song, row, config);
         }
     }
 }

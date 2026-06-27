@@ -31,6 +31,7 @@ private:
         bool loaded_once = false;
         bool suppress_background_close_until_release = false;
         float open_anim = 0.0f;
+        std::string avatar_base_url;
         title_friends_view::tab selected_tab = title_friends_view::tab::friends;
         title_friends_state::social_state social;
         title_friends_effects::feature_effects pending_effects;

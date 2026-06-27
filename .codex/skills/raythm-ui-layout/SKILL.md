@@ -68,11 +68,14 @@ Draw text inside rectangles:
 
 Use `ui_draw.h` helpers unless the surface truly needs custom rendering:
 
-- `draw_button` / `enqueue_button` for buttons.
-- `draw_row`, `draw_selectable_row`, or `enqueue_row` for list and setting rows.
-- `draw_panel` and `draw_section` for framed regions.
-- `draw_dropdown` / `enqueue_dropdown` and `enqueue_context_menu` for menus.
-- `draw_slider_relative`, `draw_value_selector`, and scrollbar helpers for controls.
+- `button` / `queued_button` for buttons.
+- `action_button` / `queued_action_button` for enabled or disabled commands.
+- `icon_button` for square icon-only controls.
+- `tab_button` / `queued_tab_button` for selected tabs.
+- `row`, `selectable_row`, or `queued_row` for list and setting rows.
+- `panel`, `section`, `queued_panel`, and `queued_section` for framed regions.
+- `dropdown`, `queued_dropdown`, and `context_menu` for menus.
+- `slider_relative`, `value_selector`, `scrollbar`, and `vertical_scrollbar` for controls.
 
 Keep drawing, hit testing, and returned commands tied to the same rectangle. Views may return commands or result structs; they should not apply unrelated state transitions just because a UI element was clicked.
 

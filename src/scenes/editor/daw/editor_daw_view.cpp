@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "editor/daw/editor_daw_automation_view.h"
 #include "editor/editor_timeline_types.h"
 #include "editor/view/editor_layout.h"
 #include "editor/viewport/editor_timeline_viewport.h"
@@ -25,8 +26,6 @@ namespace layout = editor::layout;
 
 constexpr float kPanelInset = 14.0f;
 constexpr float kAutomationWidth = 380.0f;
-constexpr std::size_t kAutomationSideGuideCount = 4;
-std::array<ui::text_input_state, kAutomationSideGuideCount> gAutomationGuideInputs;
 
 bool accepts_metadata_character(int codepoint, const std::string&) {
     return codepoint >= 32 && codepoint <= 126;
@@ -128,148 +127,160 @@ Rectangle row(Rectangle rect, float y, float height) {
     return {rect.x, rect.y + y, rect.width, height};
 }
 
-Rectangle centered_icon_rect(Rectangle rect, float inset) {
-    return {rect.x + inset, rect.y + inset, rect.width - inset * 2.0f, rect.height - inset * 2.0f};
-}
+struct daw_left_panel_layout {
+    Rectangle panel = {};
+    Rectangle content = {};
+    Rectangle title = {};
+    Rectangle status_badge = {};
+    Rectangle level_badge = {};
+    Rectangle palette = {};
+    Rectangle palette_title = {};
+    Rectangle palette_subtitle = {};
+    std::array<Rectangle, 5> note_pads = {};
+    Rectangle ray_row = {};
+    Rectangle load_error = {};
+};
 
-std::vector<float> automation_snap_candidates(const std::array<float, 5>& guides,
-                                              std::optional<float> pinned_multiplier = std::nullopt) {
-    std::vector<float> candidates(guides.begin(), guides.end());
-    if (pinned_multiplier.has_value() &&
-        std::isfinite(*pinned_multiplier) &&
-        *pinned_multiplier >= 0.0f) {
-        candidates.push_back(*pinned_multiplier);
-    }
-    return candidates;
-}
+struct daw_right_panel_layout {
+    Rectangle panel = {};
+    Rectangle content = {};
+    Rectangle title = {};
+    Rectangle graph_box = {};
+    Rectangle graph_title = {};
+    Rectangle graph = {};
+    Rectangle bar_axis_label = {};
+    std::array<Rectangle, 3> automation_buttons = {};
+    Rectangle inspector = {};
+    Rectangle inspector_title = {};
+    Rectangle inspector_bar = {};
+    Rectangle inspector_rate = {};
+    Rectangle inspector_curve = {};
+    Rectangle inspector_empty = {};
+};
 
-float snap_automation_multiplier(const std::vector<float>& candidates, float multiplier, bool free_drag) {
-    multiplier = std::max(0.0f, multiplier);
-    if (free_drag) {
-        return std::round(multiplier * 100.0f) / 100.0f;
-    }
-    if (candidates.empty()) {
-        return multiplier;
-    }
-    float best = candidates[0];
-    float best_distance = std::fabs(multiplier - best);
-    for (const float candidate : candidates) {
-        const float distance = std::fabs(multiplier - candidate);
-        if (distance < best_distance) {
-            best = candidate;
-            best_distance = distance;
-        }
-    }
-    return best;
-}
-
-void normalize_automation_guides(scroll_automation_guides& guides) {
-    for (float& guide : guides.values) {
-        if (!std::isfinite(guide)) {
-            guide = 1.0f;
-        }
-        guide = std::max(0.0f, guide);
-    }
-}
-
-void reset_automation_guide_input(ui::text_input_state& input, float value) {
-    input.value = TextFormat("%.1f", value);
-    input.cursor = input.value.size();
-    input.has_selection = false;
-}
-
-bool is_unity_automation_guide(float value) {
-    return std::fabs(value - 1.0f) < 0.0001f;
-}
-
-bool automation_guides_are_ordered(const scroll_automation_guides& guides) {
-    return guides.values[0] <= guides.values[1] &&
-           guides.values[1] <= 1.0f &&
-           1.0f <= guides.values[2] &&
-           guides.values[2] <= guides.values[3];
-}
-
-std::array<float, 5> automation_guides(scroll_automation_guides& guides) {
-    normalize_automation_guides(guides);
-    return {
-        guides.values[0],
-        guides.values[1],
-        1.0f,
-        guides.values[2],
-        guides.values[3],
+daw_left_panel_layout daw_left_panel_layout_for() {
+    daw_left_panel_layout layout_model;
+    layout_model.panel = layout::kLeftPanelRect;
+    layout_model.content = inset_rect(layout_model.panel, kPanelInset);
+    layout_model.title = {layout_model.content.x, layout_model.content.y, layout_model.content.width, 20.0f};
+    layout_model.status_badge = {layout_model.content.x, layout_model.content.y + 62.0f, 95.0f, 24.0f};
+    layout_model.level_badge = {layout_model.content.x + 103.0f, layout_model.content.y + 62.0f, 76.0f, 24.0f};
+    layout_model.palette = {
+        layout_model.content.x,
+        layout_model.content.y + 112.0f,
+        layout_model.content.width,
+        384.0f
     };
+    layout_model.palette_title = {
+        layout_model.palette.x + 12.0f,
+        layout_model.palette.y + 10.0f,
+        layout_model.palette.width - 24.0f,
+        24.0f
+    };
+    layout_model.palette_subtitle = {
+        layout_model.palette.x + 12.0f,
+        layout_model.palette.y + 36.0f,
+        layout_model.palette.width - 24.0f,
+        18.0f
+    };
+    constexpr float pad_height = 44.0f;
+    constexpr float pad_gap = 8.0f;
+    ui::vstack({
+        layout_model.palette.x + 12.0f,
+        layout_model.palette.y + 62.0f,
+        layout_model.palette.width - 24.0f,
+        pad_height * static_cast<float>(layout_model.note_pads.size()) +
+            pad_gap * static_cast<float>(layout_model.note_pads.size() - 1),
+    }, pad_height, pad_gap, layout_model.note_pads);
+    const Rectangle last_pad = layout_model.note_pads.back();
+    layout_model.ray_row = {
+        last_pad.x,
+        last_pad.y + last_pad.height + pad_gap + 8.0f,
+        last_pad.width,
+        pad_height
+    };
+    layout_model.load_error = {
+        layout_model.content.x,
+        layout_model.content.y + layout_model.content.height - 58.0f,
+        layout_model.content.width,
+        52.0f
+    };
+    return layout_model;
 }
 
-float automation_guide_t(std::size_t guide_index) {
-    return static_cast<float>(guide_index) / 4.0f;
-}
-
-float automation_multiplier_to_t(const std::array<float, 5>& guides, float multiplier) {
-    for (std::size_t index = 0; index + 1 < guides.size(); ++index) {
-        const float from = guides[index];
-        const float to = guides[index + 1];
-        const float low = std::min(from, to);
-        const float high = std::max(from, to);
-        if (multiplier < low || multiplier > high) {
-            continue;
-        }
-        if (std::fabs(to - from) < 0.0001f) {
-            return automation_guide_t(index);
-        }
-        const float segment_t = std::clamp((multiplier - from) / (to - from), 0.0f, 1.0f);
-        return (static_cast<float>(index) + segment_t) / 4.0f;
-    }
-
-    std::size_t nearest_index = 0;
-    float nearest_distance = std::fabs(multiplier - guides[0]);
-    for (std::size_t index = 1; index < guides.size(); ++index) {
-        const float distance = std::fabs(multiplier - guides[index]);
-        if (distance < nearest_distance) {
-            nearest_distance = distance;
-            nearest_index = index;
-        }
-    }
-    return automation_guide_t(nearest_index);
-}
-
-float automation_multiplier_at_t(const std::array<float, 5>& guides, float t) {
-    t = std::clamp(t, 0.0f, 1.0f);
-    const float scaled = t * 4.0f;
-    const std::size_t index = std::min<std::size_t>(3, static_cast<std::size_t>(std::floor(scaled)));
-    const float segment_t = std::clamp(scaled - static_cast<float>(index), 0.0f, 1.0f);
-    return guides[index] + (guides[index + 1] - guides[index]) * segment_t;
-}
-
-bool draw_automation_guide_input(std::size_t index, Rectangle rect, scroll_automation_guides& guides) {
-    if (index >= guides.values.size()) {
-        return false;
-    }
-    normalize_automation_guides(guides);
-    ui::text_input_state& input = gAutomationGuideInputs[index];
-    const bool hovered = CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), rect);
-    if (!input.active) {
-        reset_automation_guide_input(input, guides.values[index]);
-    }
-    const ui::text_input_result result = ui::draw_text_input(
-        rect, input, "", "x", nullptr, ui::draw_layer::base, 12, 8,
-        accepts_float_character, 0.0f, false, true, true);
-    if (result.submitted || result.deactivated) {
-        const scroll_automation_guides previous_guides = guides;
-        try {
-            const float parsed_value = std::max(0.0f, std::stof(input.value));
-            if (!is_unity_automation_guide(parsed_value)) {
-                guides.values[index] = parsed_value;
-            }
-        } catch (...) {
-        }
-        normalize_automation_guides(guides);
-        if (is_unity_automation_guide(guides.values[index]) ||
-            !automation_guides_are_ordered(guides)) {
-            guides = previous_guides;
-        }
-        reset_automation_guide_input(input, guides.values[index]);
-    }
-    return hovered || input.active || result.clicked;
+daw_right_panel_layout daw_right_panel_layout_for() {
+    daw_right_panel_layout layout_model;
+    layout_model.panel = layout::kRightPanelRect;
+    layout_model.content = inset_rect(layout_model.panel, kPanelInset);
+    layout_model.title = {layout_model.content.x, layout_model.content.y, layout_model.content.width, 20.0f};
+    layout_model.graph_box = {
+        layout_model.content.x,
+        layout_model.content.y + 42.0f,
+        layout_model.content.width,
+        454.0f
+    };
+    layout_model.graph_title = {
+        layout_model.graph_box.x + 12.0f,
+        layout_model.graph_box.y + 10.0f,
+        layout_model.graph_box.width - 24.0f,
+        24.0f
+    };
+    layout_model.graph = {
+        layout_model.graph_box.x + 12.0f,
+        layout_model.graph_box.y + 52.0f,
+        layout_model.graph_box.width - 24.0f,
+        layout_model.graph_box.height - 92.0f
+    };
+    layout_model.bar_axis_label = {
+        layout_model.graph_box.x + 8.0f,
+        layout_model.graph.y - 20.0f,
+        36.0f,
+        18.0f
+    };
+    ui::hstack_fill({
+        layout_model.graph_box.x + 12.0f,
+        layout_model.graph_box.y + layout_model.graph_box.height - 34.0f,
+        layout_model.graph_box.width - 24.0f,
+        26.0f,
+    }, 8.0f, layout_model.automation_buttons);
+    const float inspector_top = layout_model.graph_box.y + layout_model.graph_box.height + 14.0f;
+    layout_model.inspector = {
+        layout_model.content.x,
+        inspector_top,
+        layout_model.content.width,
+        layout_model.content.y + layout_model.content.height - inspector_top
+    };
+    layout_model.inspector_title = {
+        layout_model.inspector.x + 12.0f,
+        layout_model.inspector.y + 10.0f,
+        layout_model.inspector.width - 24.0f,
+        24.0f
+    };
+    layout_model.inspector_bar = {
+        layout_model.inspector.x + 12.0f,
+        layout_model.inspector.y + 48.0f,
+        layout_model.inspector.width - 24.0f,
+        22.0f
+    };
+    layout_model.inspector_rate = {
+        layout_model.inspector.x + 12.0f,
+        layout_model.inspector.y + 76.0f,
+        layout_model.inspector.width - 24.0f,
+        22.0f
+    };
+    layout_model.inspector_curve = {
+        layout_model.inspector.x + 12.0f,
+        layout_model.inspector.y + 104.0f,
+        layout_model.inspector.width - 24.0f,
+        22.0f
+    };
+    layout_model.inspector_empty = {
+        layout_model.inspector.x + 12.0f,
+        layout_model.inspector.y + 54.0f,
+        layout_model.inspector.width - 24.0f,
+        22.0f
+    };
+    return layout_model;
 }
 
 Vector2 rect_center(Rectangle rect) {
@@ -281,14 +292,16 @@ ui::button_state draw_icon_button(Rectangle rect,
                                   bool active,
                                   Color active_color) {
     const auto& t = *g_theme;
-    const ui::button_state button = ui::draw_button_colored(
-        rect, "", 16,
-        active ? panel_tint(t.row_selected, active_color, 0.14f) : t.row,
-        active ? panel_tint(t.row_active, active_color, 0.18f) : t.row_hover,
-        active ? t.text : t.text_secondary,
-        active ? 2.2f : 1.2f);
-    draw_icon(centered_icon_rect(rect, 9.0f), active ? active_color : t.text_secondary, 3.2f);
-    return button;
+    return ui::icon_button(rect, draw_icon, {
+        .border_width = active ? 2.2f : 1.2f,
+        .bg = active ? panel_tint(t.row_selected, active_color, 0.14f) : t.row,
+        .bg_hover = active ? panel_tint(t.row_active, active_color, 0.18f) : t.row_hover,
+        .icon_color = active ? active_color : t.text_secondary,
+        .icon_hover_color = active ? active_color : t.text_secondary,
+        .icon_inset = 9.0f,
+        .icon_stroke_width = 3.2f,
+        .icon_pressed_inset = 0.0f,
+    });
 }
 
 void draw_micro_label(Rectangle rect, const char* label, Color color) {
@@ -296,8 +309,7 @@ void draw_micro_label(Rectangle rect, const char* label, Color color) {
 }
 
 void draw_badge(Rectangle rect, const char* label, Color border, Color text) {
-    ui::draw_rect_f(rect, with_alpha(border, 28));
-    ui::draw_rect_lines(rect, 1.0f, with_alpha(border, 190));
+    ui::surface(rect, with_alpha(border, 28), with_alpha(border, 190), 1.0f);
     ui::draw_text_in_rect(label, 13, rect, text);
 }
 
@@ -309,14 +321,15 @@ ui::button_state draw_layer_button(Rectangle rect,
                                    Color bg_hover,
                                    Color text_color,
                                    float border_width = 1.5f) {
-    const bool hovered = ui::is_hovered(rect, layer);
-    const bool pressed = ui::is_pressed(rect, layer);
-    const bool clicked = ui::is_clicked(rect, layer);
-    const Rectangle visual = pressed ? ui::inset(rect, 1.5f) : rect;
-    ui::draw_rect_f(visual, lerp_color(bg, bg_hover, hovered ? 1.0f : 0.0f));
-    ui::draw_rect_lines(visual, border_width, g_theme->border_light);
-    ui::draw_text_in_rect(label, font_size, visual, text_color);
-    return {hovered, pressed, clicked};
+    return ui::button(rect, label, {
+        .layer = layer,
+        .font_size = font_size,
+        .border_width = border_width,
+        .bg = bg,
+        .bg_hover = bg_hover,
+        .text_color = text_color,
+        .custom_colors = true,
+    });
 }
 
 ui::row_state draw_layer_row(Rectangle rect,
@@ -324,15 +337,14 @@ ui::row_state draw_layer_row(Rectangle rect,
                              ui::draw_layer layer,
                              Color selected_tone) {
     const auto& t = *g_theme;
-    const bool hovered = ui::is_hovered(rect, layer);
-    const bool pressed = ui::is_pressed(rect, layer);
-    const bool clicked = ui::is_clicked(rect, layer);
-    const Rectangle visual = pressed ? ui::inset(rect, 1.5f) : rect;
-    ui::draw_rect_f(visual, selected
-        ? panel_tint(t.row_selected, selected_tone, 0.16f)
-        : lerp_color(t.row, t.row_hover, hovered ? 1.0f : 0.0f));
-    ui::draw_rect_lines(visual, selected ? 2.0f : 1.0f, selected ? selected_tone : t.border_light);
-    return {hovered, pressed, clicked, visual};
+    return ui::row(rect, {
+        .layer = layer,
+        .border_width = selected ? 2.0f : 1.0f,
+        .bg = selected ? panel_tint(t.row_selected, selected_tone, 0.16f) : t.row,
+        .bg_hover = selected ? panel_tint(t.row_selected, selected_tone, 0.16f) : t.row_hover,
+        .border_color = selected ? selected_tone : t.border_light,
+        .custom_colors = true,
+    });
 }
 
 void set_active_timing_input(editor_timing_panel_state& state, editor_timing_input_field field) {
@@ -374,12 +386,13 @@ void draw_palette_pad(Rectangle rect,
     const auto& t = *g_theme;
     const bool selected = selection.type == type;
     const Color tone = palette_tone(type);
-    const ui::row_state state = ui::draw_row(
-        rect,
-        selected ? panel_tint(t.row_selected, tone, 0.18f) : t.row,
-        selected ? panel_tint(t.row_active, tone, 0.2f) : t.row_hover,
-        selected ? tone : t.border_light,
-        selected ? 2.0f : 1.0f);
+    const ui::row_state state = ui::row(rect, {
+        .border_width = selected ? 2.0f : 1.0f,
+        .bg = selected ? panel_tint(t.row_selected, tone, 0.18f) : t.row,
+        .bg_hover = selected ? panel_tint(t.row_active, tone, 0.2f) : t.row_hover,
+        .border_color = selected ? tone : t.border_light,
+        .custom_colors = true,
+    });
     const Rectangle icon_rect = {state.visual.x + 10.0f, state.visual.y + 7.0f, 36.0f, state.visual.height - 14.0f};
     draw_palette_icon(icon_rect, type, selected ? tone : t.text_secondary);
     ui::draw_text_in_rect(palette_label(type), 15,
@@ -394,22 +407,25 @@ void draw_palette_pad(Rectangle rect,
 bool draw_ray_toggle(Rectangle rect, bool enabled) {
     const auto& t = *g_theme;
     const Color ray_tone = {176, 112, 255, 255};
-    const ui::row_state state = ui::draw_row(
-        rect,
-        enabled ? panel_tint(t.row_selected, ray_tone, 0.2f) : t.row,
-        enabled ? panel_tint(t.row_active, ray_tone, 0.24f) : t.row_hover,
-        enabled ? ray_tone : t.border_light,
-        enabled ? 2.0f : 1.0f);
+    const ui::row_state state = ui::row(rect, {
+        .border_width = enabled ? 2.0f : 1.0f,
+        .bg = enabled ? panel_tint(t.row_selected, ray_tone, 0.2f) : t.row,
+        .bg_hover = enabled ? panel_tint(t.row_active, ray_tone, 0.24f) : t.row_hover,
+        .border_color = enabled ? ray_tone : t.border_light,
+        .custom_colors = true,
+    });
     const Rectangle label_rect = {state.visual.x + 12.0f, state.visual.y, state.visual.width - 96.0f,
                                   state.visual.height};
     ui::draw_text_in_rect("Ray", 15, label_rect, enabled ? t.text : t.text_secondary, ui::text_align::left);
     const Rectangle track = {state.visual.x + state.visual.width - 78.0f,
                              state.visual.y + state.visual.height * 0.5f - 10.0f,
                              54.0f, 20.0f};
-    ui::draw_rect_f(track, enabled ? with_alpha(ray_tone, 165) : with_alpha(t.text_muted, 70));
-    ui::draw_rect_lines(track, 1.0f, enabled ? ray_tone : t.border_light);
+    ui::surface(track,
+                enabled ? with_alpha(ray_tone, 165) : with_alpha(t.text_muted, 70),
+                enabled ? ray_tone : t.border_light,
+                1.0f);
     const float knob_x = enabled ? track.x + track.width - 18.0f : track.x + 2.0f;
-    ui::draw_rect_f({knob_x, track.y + 2.0f, 16.0f, 16.0f}, enabled ? t.text : t.text_secondary);
+    ui::surface_fill({knob_x, track.y + 2.0f, 16.0f, 16.0f}, enabled ? t.text : t.text_secondary);
     ui::draw_text_in_rect(enabled ? "ON" : "OFF", 11,
                           {track.x - 32.0f, track.y, 28.0f, track.height},
                           enabled ? ray_tone : t.text_muted, ui::text_align::right);
@@ -649,7 +665,7 @@ void draw_horizontal_strip_gradient(Rectangle rect, int steps, Color (*color_at)
             i == steps - 1 ? rect.width - step_width * static_cast<float>(i) : step_width + 0.75f,
             rect.height
         };
-        ui::draw_rect_f(strip, color_at(base, t));
+        ui::surface_fill(strip, color_at(base, t));
     }
 }
 
@@ -668,20 +684,14 @@ void draw_editor_tap_slab(Rectangle rect, Color fill, bool release_style, bool r
     const Color frame_far = with_alpha(lerp_color(edge, BLACK, 0.12f), 210);
 
     draw_horizontal_strip_gradient(rect, 16, editor_tap_gradient_color, tap_base);
-    DrawRectangleGradientH(static_cast<int>(rect.x), static_cast<int>(rect.y),
-                           static_cast<int>(rect.width), static_cast<int>(rim_height),
-                           frame_left, frame_right);
-    DrawRectangleGradientH(static_cast<int>(rect.x), static_cast<int>(rect.y + rect.height - rim_height),
-                           static_cast<int>(rect.width), static_cast<int>(rim_height),
-                           frame_left, frame_right);
-    DrawRectangleGradientV(static_cast<int>(rect.x), static_cast<int>(rect.y),
-                           static_cast<int>(side_width), static_cast<int>(rect.height),
-                           frame_near, frame_far);
-    DrawRectangleGradientV(static_cast<int>(rect.x + rect.width - side_width), static_cast<int>(rect.y),
-                           static_cast<int>(side_width), static_cast<int>(rect.height),
-                           frame_near, frame_far);
+    ui::horizontal_gradient({rect.x, rect.y, rect.width, rim_height}, frame_left, frame_right);
+    ui::horizontal_gradient({rect.x, rect.y + rect.height - rim_height, rect.width, rim_height},
+                            frame_left, frame_right);
+    ui::vertical_gradient({rect.x, rect.y, side_width, rect.height}, frame_near, frame_far);
+    ui::vertical_gradient({rect.x + rect.width - side_width, rect.y, side_width, rect.height},
+                          frame_near, frame_far);
     if (selected) {
-        ui::draw_rect_lines(ui::inset(rect, -2.0f), 2.0f, g_theme->accent);
+        ui::frame(ui::inset(rect, -2.0f), g_theme->accent, 2.0f);
     }
 }
 
@@ -702,14 +712,11 @@ void draw_editor_hold_body(Rectangle rect, Color fill, bool ray_style, bool sele
     const Color cap_right = with_alpha(lerp_color(edge, BLACK, 0.10f), 214);
 
     draw_horizontal_strip_gradient(body, 24, editor_hold_gradient_color, hold_base);
-    DrawRectangleGradientH(static_cast<int>(rect.x), static_cast<int>(rect.y),
-                           static_cast<int>(rect.width), static_cast<int>(cap_height),
-                           cap_left, cap_right);
-    DrawRectangleGradientH(static_cast<int>(rect.x), static_cast<int>(rect.y + rect.height - cap_height),
-                           static_cast<int>(rect.width), static_cast<int>(cap_height),
-                           cap_left, cap_right);
+    ui::horizontal_gradient({rect.x, rect.y, rect.width, cap_height}, cap_left, cap_right);
+    ui::horizontal_gradient({rect.x, rect.y + rect.height - cap_height, rect.width, cap_height},
+                            cap_left, cap_right);
     if (selected) {
-        ui::draw_rect_lines(ui::inset(rect, -2.0f), 2.0f, g_theme->accent);
+        ui::frame(ui::inset(rect, -2.0f), g_theme->accent, 2.0f);
     }
 }
 
@@ -721,14 +728,11 @@ void draw_editor_decorative_hold_body(Rectangle rect, Color fill, bool ray_style
 
     const Color rail = with_alpha(lerp_color(decor_base, WHITE, 0.30f), 150);
     const float rail_width = std::clamp(rect.width * 0.035f, 1.5f, 4.0f);
-    DrawRectangleGradientV(static_cast<int>(rect.x), static_cast<int>(rect.y),
-                           static_cast<int>(rail_width), static_cast<int>(rect.height),
-                           rail, with_alpha(rail, 72));
-    DrawRectangleGradientV(static_cast<int>(rect.x + rect.width - rail_width), static_cast<int>(rect.y),
-                           static_cast<int>(rail_width), static_cast<int>(rect.height),
-                           rail, with_alpha(rail, 72));
+    ui::vertical_gradient({rect.x, rect.y, rail_width, rect.height}, rail, with_alpha(rail, 72));
+    ui::vertical_gradient({rect.x + rect.width - rail_width, rect.y, rail_width, rect.height},
+                          rail, with_alpha(rail, 72));
     if (selected) {
-        ui::draw_rect_lines(ui::inset(rect, -2.0f), 2.0f, g_theme->accent);
+        ui::frame(ui::inset(rect, -2.0f), g_theme->accent, 2.0f);
     }
 }
 
@@ -747,14 +751,10 @@ void draw_editor_stay_dot(Rectangle rect, Color fill, bool ray_style, bool selec
                                  cap_width, cap_height};
 
     draw_horizontal_strip_gradient(bar, 18, editor_stay_gradient_color, stay_base);
-    DrawRectangleGradientV(static_cast<int>(left_cap.x), static_cast<int>(left_cap.y),
-                           static_cast<int>(left_cap.width), static_cast<int>(left_cap.height),
-                           end_inner, end_edge);
-    DrawRectangleGradientV(static_cast<int>(right_cap.x), static_cast<int>(right_cap.y),
-                           static_cast<int>(right_cap.width), static_cast<int>(right_cap.height),
-                           end_inner, end_edge);
+    ui::vertical_gradient(left_cap, end_inner, end_edge);
+    ui::vertical_gradient(right_cap, end_inner, end_edge);
     if (selected) {
-        ui::draw_rect_lines(ui::inset(bar, -2.0f), 2.0f, g_theme->accent);
+        ui::frame(ui::inset(bar, -2.0f), g_theme->accent, 2.0f);
     }
 }
 
@@ -771,18 +771,18 @@ void draw_editor_release_chevron(Rectangle note_rect, Color marker, Color contou
     const Vector2 right_outer_top = {center.x + width * 0.50f, center.y + height * 0.02f};
     const Vector2 right_outer_bottom = {center.x + width * 0.50f, center.y + height * 0.26f};
 
-    DrawTriangle(left_outer_bottom, left_outer_top, center_top, marker);
-    DrawTriangle(left_outer_bottom, center_top, center_bottom, marker);
-    DrawTriangle(center_bottom, center_top, right_outer_top, marker);
-    DrawTriangle(center_bottom, right_outer_top, right_outer_bottom, marker);
+    ui::draw_triangle(left_outer_bottom, left_outer_top, center_top, marker);
+    ui::draw_triangle(left_outer_bottom, center_top, center_bottom, marker);
+    ui::draw_triangle(center_bottom, center_top, right_outer_top, marker);
+    ui::draw_triangle(center_bottom, right_outer_top, right_outer_bottom, marker);
 
     const float line_width = std::clamp(height * 0.10f, 1.6f, 2.8f);
-    DrawLineEx(left_outer_bottom, left_outer_top, line_width, contour);
-    DrawLineEx(left_outer_top, center_top, line_width, contour);
-    DrawLineEx(center_top, right_outer_top, line_width, contour);
-    DrawLineEx(right_outer_top, right_outer_bottom, line_width, contour);
-    DrawLineEx(right_outer_bottom, center_bottom, line_width, contour);
-    DrawLineEx(center_bottom, left_outer_bottom, line_width, contour);
+    ui::draw_line_ex(left_outer_bottom, left_outer_top, line_width, contour);
+    ui::draw_line_ex(left_outer_top, center_top, line_width, contour);
+    ui::draw_line_ex(center_top, right_outer_top, line_width, contour);
+    ui::draw_line_ex(right_outer_top, right_outer_bottom, line_width, contour);
+    ui::draw_line_ex(right_outer_bottom, center_bottom, line_width, contour);
+    ui::draw_line_ex(center_bottom, left_outer_bottom, line_width, contour);
 }
 
 void draw_simple_note_block(const editor_timeline_note& note,
@@ -794,10 +794,11 @@ void draw_simple_note_block(const editor_timeline_note& note,
     const Color fill = overlap ? t.error : editor_play_note_color(note.type, note.is_ray, t.note_color);
     const Color color = preview ? with_alpha(fill, 160) : with_alpha(fill, note.is_ray ? 235 : 205);
     const Rectangle rect = geometry.visual.has_body ? geometry.visual.body_rect : geometry.visual.head_rect;
-    ui::draw_rect_f(rect, color);
+    ui::surface_fill(rect, color);
     if (selected || preview) {
-        ui::draw_rect_lines(ui::inset(rect, selected ? -1.5f : 0.0f), selected ? 2.0f : 1.0f,
-                            overlap ? t.error : (selected ? t.accent : t.success));
+        ui::frame(ui::inset(rect, selected ? -1.5f : 0.0f),
+                  overlap ? t.error : (selected ? t.accent : t.success),
+                  selected ? 2.0f : 1.0f);
     }
 }
 
@@ -962,18 +963,17 @@ minimap_shape_cache& cached_minimap_shapes(const editor_timeline_view_model& mod
 
 void draw_chart_minimap(const editor_timeline_view_model& model, Rectangle minimap) {
     const auto& t = *g_theme;
-    ui::draw_rect_f(minimap, with_alpha(t.section, 235));
-    ui::draw_rect_lines(minimap, 1.0f, t.border_light);
+    ui::surface(minimap, with_alpha(t.section, 235), t.border_light, 1.0f);
 
     const Rectangle inner = ui::inset(minimap, 4.0f);
     {
         ui::scoped_clip_rect clip_scope(inner);
         const minimap_shape_cache& cache = cached_minimap_shapes(model, inner, t);
         for (const auto& body : cache.bodies) {
-            ui::draw_rect_f(body.first, body.second);
+            ui::surface_fill(body.first, body.second);
         }
         for (const auto& marker : cache.markers) {
-            ui::draw_rect_f(marker.first, marker.second);
+            ui::surface_fill(marker.first, marker.second);
         }
 
     }
@@ -991,8 +991,7 @@ void draw_chart_minimap(const editor_timeline_view_model& model, Rectangle minim
         inner.width,
         std::max(1.0f, box_bottom - box_top)
     };
-    ui::draw_rect_f(clipped_box, with_alpha(t.accent, 36));
-    ui::draw_rect_lines(clipped_box, 2.0f, with_alpha(t.accent, 220));
+    ui::surface(clipped_box, with_alpha(t.accent, 36), with_alpha(t.accent, 220), 2.0f);
 }
 
 }  // namespace
@@ -1002,54 +1001,44 @@ namespace editor::daw {
 editor_left_panel_view_result draw_left_panel(const editor_left_panel_view_model& model) {
     const auto& t = *g_theme;
     editor_left_panel_view_result result;
-    const Rectangle panel = layout::kLeftPanelRect;
-    const Rectangle content = {panel.x + kPanelInset, panel.y + kPanelInset,
-                               panel.width - kPanelInset * 2.0f, panel.height - kPanelInset * 2.0f};
+    const daw_left_panel_layout panel_layout = daw_left_panel_layout_for();
+    const Rectangle panel = panel_layout.panel;
+    const Rectangle content = panel_layout.content;
     const char* status_label = model.is_dirty ? "MODIFIED" : (model.has_file ? "SAVED" : "UNSAVED");
 
-    ui::draw_rect_f(panel, panel_tint(t.panel, t.bg_alt, 0.18f));
-    ui::draw_rect_lines(panel, 1.5f, t.border);
+    ui::surface(panel, panel_tint(t.panel, t.bg_alt, 0.18f), t.border, 1.5f);
 
-    ui::draw_text_in_rect("CHART", 15, row(content, 0.0f, 20.0f), t.text_muted, ui::text_align::left);
+    ui::draw_text_in_rect("CHART", 15, panel_layout.title, t.text_muted, ui::text_align::left);
     draw_marquee_text(model.song_title, content.x, content.y + 26.0f, 24, t.text, content.width, model.now);
-    draw_badge({content.x, content.y + 62.0f, 95.0f, 24.0f}, status_label,
+    draw_badge(panel_layout.status_badge, status_label,
                model.is_dirty ? t.slow : t.success, model.is_dirty ? t.slow : t.success);
     draw_difficulty_level_badge(model.level,
-                                {content.x + 103.0f, content.y + 62.0f, 76.0f, 24.0f},
+                                panel_layout.level_badge,
                                 13, 255);
 
-    const Rectangle palette = {content.x, content.y + 112.0f, content.width, 384.0f};
-    ui::draw_section(palette);
-    ui::draw_text_in_rect("Tool", 22,
-                          {palette.x + 12.0f, palette.y + 10.0f, palette.width - 24.0f, 24.0f},
-                          t.text, ui::text_align::left);
+    const Rectangle palette = panel_layout.palette;
+    ui::section(palette);
+    ui::draw_text_in_rect("Tool", 22, panel_layout.palette_title, t.text, ui::text_align::left);
     ui::draw_text_in_rect("Place notes and toggle ray notes.",
                           13,
-                          {palette.x + 12.0f, palette.y + 36.0f, palette.width - 24.0f, 18.0f},
+                          panel_layout.palette_subtitle,
                           t.text_muted, ui::text_align::left);
-    const float gap = 8.0f;
-    const float pad_height = 44.0f;
-    const float pad_width = palette.width - 24.0f;
-    const float note_row_y = palette.y + 62.0f;
-    draw_palette_pad({palette.x + 12.0f, note_row_y, pad_width, pad_height},
-                     note_type::tap, model.note_palette, result);
-    draw_palette_pad({palette.x + 12.0f, note_row_y + (pad_height + gap), pad_width, pad_height},
-                     note_type::hold, model.note_palette, result);
-    draw_palette_pad({palette.x + 12.0f, note_row_y + (pad_height + gap) * 2.0f, pad_width, pad_height},
-                     note_type::release, model.note_palette, result);
-    draw_palette_pad({palette.x + 12.0f, note_row_y + (pad_height + gap) * 3.0f, pad_width, pad_height},
-                     note_type::stay, model.note_palette, result);
-    draw_palette_pad({palette.x + 12.0f, note_row_y + (pad_height + gap) * 4.0f, pad_width, pad_height},
-                     note_type::decorative_hold, model.note_palette, result);
+    const std::array<note_type, 5> note_types{
+        note_type::tap,
+        note_type::hold,
+        note_type::release,
+        note_type::stay,
+        note_type::decorative_hold,
+    };
+    for (size_t i = 0; i < note_types.size(); ++i) {
+        draw_palette_pad(panel_layout.note_pads[i], note_types[i], model.note_palette, result);
+    }
 
     result.ray_toggled = draw_ray_toggle(
-        {palette.x + 12.0f, note_row_y + (pad_height + gap) * 5.0f + 8.0f,
-         palette.width - 24.0f, pad_height},
-        model.note_palette.is_ray);
+        panel_layout.ray_row, model.note_palette.is_ray);
 
     if (model.load_error != nullptr) {
-        ui::draw_text_in_rect(model.load_error->c_str(), 16,
-                              {content.x, content.y + content.height - 58.0f, content.width, 52.0f},
+        ui::draw_text_in_rect(model.load_error->c_str(), 16, panel_layout.load_error,
                               t.error, ui::text_align::left);
     }
 
@@ -1060,201 +1049,94 @@ editor_right_panel_view_result draw_right_panel(const editor_right_panel_view_mo
                                                 editor_timing_panel_state& timing_state) {
     const auto& t = *g_theme;
     editor_right_panel_view_result result;
-    const Rectangle panel = layout::kRightPanelRect;
-    const Rectangle content = inset_rect(panel, kPanelInset);
+    const daw_right_panel_layout panel_layout = daw_right_panel_layout_for();
+    const Rectangle panel = panel_layout.panel;
 
     const std::vector<scroll_automation_point> empty_points;
     const std::vector<scroll_automation_point>& points =
         model.scroll_automation != nullptr ? *model.scroll_automation : empty_points;
-    scroll_automation_guides editable_guides =
+    const scroll_automation_guides scroll_guides =
         model.scroll_guides != nullptr ? *model.scroll_guides : scroll_automation_guides{};
-    const std::array<float, 5> guides = automation_guides(editable_guides);
-    std::vector<std::pair<size_t, scroll_automation_point>> sorted_points;
-    sorted_points.reserve(points.size());
-    int max_tick = 1920;
-    for (size_t index = 0; index < points.size(); ++index) {
-        sorted_points.push_back({index, points[index]});
-        max_tick = std::max(max_tick, points[index].tick + 480);
-    }
-    std::stable_sort(sorted_points.begin(), sorted_points.end(), [](const auto& left, const auto& right) {
-        return left.second.tick < right.second.tick;
-    });
 
-    ui::draw_rect_f(panel, panel_tint(t.panel, t.bg_alt, 0.14f));
-    ui::draw_rect_lines(panel, 1.5f, t.border);
-    ui::draw_text_in_rect("SCROLL", 15, {content.x, content.y, content.width, 20.0f},
-                          t.text_muted, ui::text_align::left);
+    ui::surface(panel, panel_tint(t.panel, t.bg_alt, 0.14f), t.border, 1.5f);
+    ui::draw_text_in_rect("SCROLL", 15, panel_layout.title, t.text_muted, ui::text_align::left);
 
-    const Rectangle graph_box = {content.x, content.y + 42.0f, content.width, 454.0f};
-    ui::draw_section(graph_box);
-    ui::draw_text_in_rect("Velocity Curve", 20,
-                          {graph_box.x + 12.0f, graph_box.y + 10.0f, graph_box.width - 24.0f, 24.0f},
-                          t.text, ui::text_align::left);
-    const Rectangle graph = {graph_box.x + 12.0f, graph_box.y + 52.0f,
-                             graph_box.width - 24.0f, graph_box.height - 92.0f};
-    ui::draw_rect_f(graph, with_alpha(t.bg_alt, 120));
-    ui::draw_rect_lines(graph, 1.0f, t.border_light);
+    const Rectangle graph_box = panel_layout.graph_box;
+    ui::section(graph_box);
+    ui::draw_text_in_rect("Velocity Curve", 20, panel_layout.graph_title, t.text, ui::text_align::left);
+    const Rectangle graph = panel_layout.graph;
+    const right_panel_automation_graph_view_result graph_result = draw_right_panel_automation_graph_view({
+        .graph = graph,
+        .points = &points,
+        .scroll_guides = scroll_guides,
+        .selected_scroll_event_index = model.selected_scroll_event_index,
+        .mouse = model.mouse,
+    }, timing_state);
+    const int max_tick = graph_result.max_tick;
+    if (graph_result.actions.panel_result.selected_scroll_event_index.has_value()) {
+        result.panel_result.selected_scroll_event_index =
+            graph_result.actions.panel_result.selected_scroll_event_index;
+    }
+    if (graph_result.actions.scroll_automation_point_to_add.has_value()) {
+        result.scroll_automation_point_to_add = graph_result.actions.scroll_automation_point_to_add;
+    }
+    if (graph_result.actions.scroll_automation_point_to_modify.has_value()) {
+        result.scroll_automation_point_to_modify = graph_result.actions.scroll_automation_point_to_modify;
+    }
+    ui::draw_text_in_rect("BAR", 11, panel_layout.bar_axis_label, t.text_muted, ui::text_align::right);
 
-    auto point_to_pos = [&](const scroll_automation_point& point) {
-        const float tick_t = static_cast<float>(std::clamp(point.tick, 0, max_tick)) / static_cast<float>(max_tick);
-        const float mult_t = automation_multiplier_to_t(guides, point.multiplier);
-        return Vector2{graph.x + mult_t * graph.width, graph.y + tick_t * graph.height};
-    };
-    auto pos_to_point = [&](Vector2 pos,
-                            scroll_automation_curve curve,
-                            std::optional<float> pinned_multiplier = std::nullopt) {
-        const float tick_t = std::clamp((pos.y - graph.y) / graph.height, 0.0f, 1.0f);
-        const float mult_t = std::clamp((pos.x - graph.x) / graph.width, 0.0f, 1.0f);
-        scroll_automation_point point;
-        point.tick = static_cast<int>(std::round(tick_t * static_cast<float>(max_tick) / 10.0f)) * 10;
-        point.multiplier = snap_automation_multiplier(
-            automation_snap_candidates(guides, pinned_multiplier),
-            automation_multiplier_at_t(guides, mult_t),
-            IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
-        point.curve_to_next = curve;
-        return point;
-    };
-
-    for (std::size_t guide_index = 0; guide_index < guides.size(); ++guide_index) {
-        const float guide = guides[guide_index];
-        const float x = graph.x + graph.width * automation_guide_t(guide_index);
-        const bool unity = std::fabs(guide - 1.0f) < 0.001f;
-        ui::draw_line_f(x, graph.y, x, graph.y + graph.height,
-                        unity ? with_alpha(t.fast, 210) : with_alpha(t.border_light, 120));
-        ui::draw_text_in_rect(TextFormat("%.1fx", guide), 11,
-                              {x - 22.0f, graph.y + graph.height + 6.0f, 44.0f, 16.0f},
-                              unity ? t.fast : t.text_muted);
-    }
-    for (int i = 0; i <= 8; ++i) {
-        const float y = graph.y + graph.height * static_cast<float>(i) / 8.0f;
-        ui::draw_line_f(graph.x, y, graph.x + graph.width, y, with_alpha(t.editor_grid_minor, 120));
-    }
-    ui::draw_text_in_rect("BAR", 11, {graph_box.x + 8.0f, graph.y - 20.0f, 36.0f, 18.0f},
-                          t.text_muted, ui::text_align::right);
-
-    for (size_t i = 1; i < sorted_points.size(); ++i) {
-        const Vector2 from = point_to_pos(sorted_points[i - 1].second);
-        const Vector2 to = point_to_pos(sorted_points[i].second);
-        DrawLineEx(from, to, 2.2f, with_alpha(t.fast, 210));
-    }
-
-    std::optional<size_t> hovered_point;
-    for (size_t i = sorted_points.size(); i > 0; --i) {
-        const size_t sorted_index = i - 1;
-        const size_t point_index = sorted_points[sorted_index].first;
-        const scroll_automation_point& point = sorted_points[sorted_index].second;
-        const Vector2 p = point_to_pos(point);
-        const bool selected = model.selected_scroll_event_index.has_value() &&
-                              *model.selected_scroll_event_index == point_index;
-        const Rectangle hit = {p.x - 8.0f, p.y - 8.0f, 16.0f, 16.0f};
-        if (!hovered_point.has_value() && CheckCollisionPointRec(model.mouse, hit)) {
-            hovered_point = point_index;
-        }
-        if (timing_state.automation_drag_point_index.has_value() &&
-            *timing_state.automation_drag_point_index == point_index) {
-            hovered_point = point_index;
-        }
-        const float handle_size = selected ? 14.0f : 11.0f;
-        const Rectangle handle = {p.x - handle_size * 0.5f, p.y - handle_size * 0.5f,
-                                  handle_size, handle_size};
-        ui::draw_rect_f(handle, selected ? t.accent : t.fast);
-        ui::draw_rect_lines(handle, selected ? 2.0f : 1.4f,
-                            selected ? t.text : with_alpha(t.text, 170));
-    }
-
-    const bool graph_hovered = CheckCollisionPointRec(model.mouse, graph);
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && graph_hovered) {
-        if (hovered_point.has_value()) {
-            result.panel_result.selected_scroll_event_index = hovered_point;
-            timing_state.automation_drag_point_index = hovered_point;
-            timing_state.automation_pending_add = false;
-            result.scroll_automation_point_to_modify = std::make_pair(
-                *hovered_point,
-                pos_to_point(model.mouse,
-                             points[*hovered_point].curve_to_next,
-                             points[*hovered_point].multiplier));
-        } else {
-            timing_state.automation_drag_point_index.reset();
-            timing_state.automation_pending_add = true;
-        }
-    }
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        if (timing_state.automation_pending_add && graph_hovered &&
-            !timing_state.automation_drag_point_index.has_value()) {
-            result.scroll_automation_point_to_add = pos_to_point(model.mouse, scroll_automation_curve::linear);
-        }
-        timing_state.automation_drag_point_index.reset();
-        timing_state.automation_pending_add = false;
-    }
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
-        timing_state.automation_drag_point_index.has_value() &&
-        *timing_state.automation_drag_point_index < points.size()) {
-        const size_t point_index = *timing_state.automation_drag_point_index;
-        scroll_automation_point updated = pos_to_point(
-            model.mouse,
-            points[point_index].curve_to_next,
-            points[point_index].multiplier);
-        result.panel_result.selected_scroll_event_index = point_index;
-        result.scroll_automation_point_to_modify = std::make_pair(point_index, updated);
-    }
-
-    const float button_gap = 8.0f;
-    const float button_width = (graph_box.width - 24.0f - button_gap * 2.0f) / 3.0f;
-    const Rectangle add_button = {graph_box.x + 12.0f, graph_box.y + graph_box.height - 34.0f,
-                                  button_width, 26.0f};
-    const Rectangle curve_button = {add_button.x + button_width + button_gap, add_button.y, button_width, 26.0f};
-    const Rectangle delete_button = {curve_button.x + button_width + button_gap, add_button.y, button_width, 26.0f};
-    if (ui::draw_button(add_button, "Add Point", 13).clicked) {
+    const Rectangle add_button = panel_layout.automation_buttons[0];
+    const Rectangle curve_button = panel_layout.automation_buttons[1];
+    const Rectangle delete_button = panel_layout.automation_buttons[2];
+    if (ui::button(add_button, "Add Point", {.font_size = 13}).clicked) {
         result.scroll_automation_point_to_add =
             scroll_automation_point{std::clamp(max_tick / 2, 0, max_tick), 1.0f, scroll_automation_curve::linear};
     }
-    const ui::button_state curve_state = ui::draw_button_colored(
-        curve_button, "Curve", 13,
-        model.scroll_delete_enabled ? t.row : t.section,
-        model.scroll_delete_enabled ? t.row_hover : t.section,
-        model.scroll_delete_enabled ? t.text : t.text_hint,
-        1.4f);
+    const ui::button_state curve_state = ui::action_button(curve_button, "Curve", {
+        .font_size = 13,
+        .border_width = 1.4f,
+        .enabled = model.scroll_delete_enabled,
+        .disabled_text_color = t.text_hint,
+        .disabled_border_color = t.border,
+    });
     if (model.scroll_delete_enabled && curve_state.clicked) {
         result.panel_result.cycle_selected_scroll_curve = true;
     }
-    const ui::button_state delete_state = ui::draw_button_colored(
-        delete_button, "Delete", 13,
-        model.scroll_delete_enabled ? t.row : t.section,
-        model.scroll_delete_enabled ? t.row_hover : t.section,
-        model.scroll_delete_enabled ? t.text : t.text_hint,
-        1.4f);
+    const ui::button_state delete_state = ui::action_button(delete_button, "Delete", {
+        .font_size = 13,
+        .border_width = 1.4f,
+        .enabled = model.scroll_delete_enabled,
+        .disabled_text_color = t.text_hint,
+        .disabled_border_color = t.border,
+    });
     if (model.scroll_delete_enabled && delete_state.clicked) {
         result.panel_result.delete_selected_scroll = true;
     }
 
-    const Rectangle inspector = {content.x, graph_box.y + graph_box.height + 14.0f,
-                                 content.width, content.y + content.height - (graph_box.y + graph_box.height + 14.0f)};
-    ui::draw_section(inspector);
-    ui::draw_text_in_rect("Point", 20,
-                          {inspector.x + 12.0f, inspector.y + 10.0f, inspector.width - 24.0f, 24.0f},
-                          t.text, ui::text_align::left);
+    const Rectangle inspector = panel_layout.inspector;
+    ui::section(inspector);
+    ui::draw_text_in_rect("Point", 20, panel_layout.inspector_title, t.text, ui::text_align::left);
     if (model.selected_scroll_event_index.has_value() &&
         *model.selected_scroll_event_index < points.size()) {
         const scroll_automation_point& point = points[*model.selected_scroll_event_index];
-        ui::draw_label_value({inspector.x + 12.0f, inspector.y + 48.0f, inspector.width - 24.0f, 22.0f},
+        ui::draw_label_value(panel_layout.inspector_bar,
                              "Bar", model.meter_map->bar_beat_label(point.tick).c_str(), 15,
                              t.text_secondary, t.text, 72.0f);
-        ui::draw_label_value({inspector.x + 12.0f, inspector.y + 76.0f, inspector.width - 24.0f, 22.0f},
+        ui::draw_label_value(panel_layout.inspector_rate,
                              "Rate", TextFormat("%.2fx", point.multiplier), 15,
                              t.text_secondary, t.text, 72.0f);
-        ui::draw_label_value({inspector.x + 12.0f, inspector.y + 104.0f, inspector.width - 24.0f, 22.0f},
+        ui::draw_label_value(panel_layout.inspector_curve,
                              "Curve", scroll_curve_label(point.curve_to_next), 15,
                              t.text_secondary, t.text, 72.0f);
     } else {
         ui::draw_text_in_rect("Click the graph to create a point.", 15,
-                              {inspector.x + 12.0f, inspector.y + 54.0f,
-                               inspector.width - 24.0f, 22.0f},
+                              panel_layout.inspector_empty,
                               t.text_hint, ui::text_align::left);
     }
 
     result.clicked_outside_editor = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-                                    !CheckCollisionPointRec(model.mouse, graph_box) &&
-                                    !CheckCollisionPointRec(model.mouse, inspector);
+                                    !ui::contains_point(graph_box, model.mouse) &&
+                                    !ui::contains_point(inspector, model.mouse);
     return result;
 }
 
@@ -1264,20 +1146,35 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
     const Rectangle bar = layout::kHeaderRect;
     const Rectangle content = inset_rect(bar, 10.0f);
 
-    ui::draw_rect_f(bar, panel_tint(t.panel, t.bg_alt, 0.18f));
-    ui::draw_rect_lines(bar, 1.5f, t.border);
+    ui::surface(bar, panel_tint(t.panel, t.bg_alt, 0.18f), t.border, 1.5f);
     draw_icon_button(layout::kBackButtonRect, raythm_icons::draw_chevron_left, false, t.text);
     draw_icon_button(layout::kSettingsButtonRect, raythm_icons::draw_settings_gear, false, t.text);
 
-    const Rectangle meta_button = {content.x + 168.0f, content.y + 8.0f, 86.0f, 34.0f};
-    const Rectangle timing_button = {meta_button.x + meta_button.width + 8.0f, meta_button.y, 94.0f, 34.0f};
-    result.metadata_modal_requested = ui::draw_button_colored(
-        meta_button, "META", 13, t.row, t.row_hover, t.text_secondary, 1.2f).clicked;
-    result.timing_modal_requested = ui::draw_button_colored(
-        timing_button, "TIMING", 13, t.row, t.row_hover, t.text_secondary, 1.2f).clicked;
+    const ui::rect_pair header_modal_buttons = ui::split_columns(
+        {content.x + 168.0f, content.y + 8.0f, 188.0f, 34.0f},
+        86.0f,
+        8.0f);
+    const Rectangle meta_button = header_modal_buttons.first;
+    const Rectangle timing_button = header_modal_buttons.second;
+    result.metadata_modal_requested = ui::button(meta_button, "META", {
+        .font_size = 13,
+        .border_width = 1.2f,
+        .bg = t.row,
+        .bg_hover = t.row_hover,
+        .text_color = t.text_secondary,
+        .custom_colors = true,
+    }).clicked;
+    result.timing_modal_requested = ui::button(timing_button, "TIMING", {
+        .font_size = 13,
+        .border_width = 1.2f,
+        .bg = t.row,
+        .bg_hover = t.row_hover,
+        .text_color = t.text_secondary,
+        .custom_colors = true,
+    }).clicked;
 
     const Rectangle transport = layout::kHeaderTransportRect;
-    ui::draw_section(transport);
+    ui::section(transport);
     const Rectangle restart_rect = layout::kHeaderRestartButtonRect;
     draw_icon_button(restart_rect, raythm_icons::draw_skip_back, false, t.text);
     const Rectangle play_rect = layout::kHeaderPlayButtonRect;
@@ -1289,13 +1186,16 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
     const Rectangle playtest_rect = layout::kHeaderPlaytestButtonRect;
     draw_icon_button(playtest_rect, raythm_icons::draw_flask_conical, false, t.text);
     ui::enqueue_hover_tooltip(playtest_rect, "プレイテスト");
-    const ui::dropdown_state dropdown = ui::enqueue_dropdown(
+    const ui::dropdown_state dropdown = ui::queued_dropdown(
         layout::kSnapDropdownRect, snap_menu_rect,
         "Snap", model.snap_labels[model.snap_index],
         model.snap_labels,
-        model.snap_index, model.snap_dropdown_open,
-        ui::draw_layer::base, ui::draw_layer::overlay,
-        14, 58.0f);
+        model.snap_index, model.snap_dropdown_open, {
+            .trigger_layer = ui::draw_layer::base,
+            .menu_layer = ui::draw_layer::overlay,
+            .font_size = 14,
+            .label_width = 58.0f,
+        });
     result.snap_dropdown_toggled = dropdown.trigger.clicked;
     result.snap_index_clicked = dropdown.clicked_index;
     result.snap_dropdown_close_requested =
@@ -1307,10 +1207,8 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
 
 editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_model& presenter_model,
                                              Rectangle snap_menu_rect,
-                                             bool snap_dropdown_open) {
-    static std::optional<size_t> automation_drag_point_index;
-    static bool automation_pending_add = false;
-
+                                             bool snap_dropdown_open,
+                                             editor_timing_panel_state& timing_state) {
     const auto& t = *g_theme;
     editor_right_panel_view_result result;
     const editor_timeline_view_model model = make_timeline_model(presenter_model);
@@ -1321,8 +1219,7 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
         return std::binary_search(indices.begin(), indices.end(), index);
     };
 
-    ui::draw_rect_f(panel, panel_tint(t.panel, t.bg_alt, 0.12f));
-    ui::draw_rect_lines(panel, 1.5f, t.border);
+    ui::surface(panel, panel_tint(t.panel, t.bg_alt, 0.12f), t.border, 1.5f);
 
     const Rectangle arrange = content;
     const Rectangle minimap = track;
@@ -1336,8 +1233,10 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
             Rectangle lane_rect = model.metrics.lane_rect(lane);
             lane_rect.y = arrange.y;
             lane_rect.height = arrange.height;
-            ui::draw_rect_f(lane_rect, lane % 2 == 0 ? with_alpha(t.row, 28) : with_alpha(t.section, 36));
-            ui::draw_rect_lines(lane_rect, 1.0f, with_alpha(t.border_light, 150));
+            ui::surface(lane_rect,
+                        lane % 2 == 0 ? with_alpha(t.row, 28) : with_alpha(t.section, 36),
+                        with_alpha(t.border_light, 150),
+                        1.0f);
         }
 
         const int snap_interval = std::max(1, model.snap_interval);
@@ -1384,205 +1283,27 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
 
         if (model.selection_rect.has_value()) {
             const Rectangle rect = *model.selection_rect;
-            ui::draw_rect_f(rect, with_alpha(t.accent, 32));
-            ui::draw_rect_lines(rect, 1.5f, with_alpha(t.accent, 220));
+            ui::surface(rect, with_alpha(t.accent, 32), with_alpha(t.accent, 220), 1.5f);
         }
 
         if (model.playback_tick.has_value()) {
             const float y = model.metrics.tick_to_y(*model.playback_tick);
-            DrawLineEx({arrange.x, y}, {arrange.x + arrange.width, y}, 3.0f, t.accent);
+            ui::draw_line_ex({arrange.x, y}, {arrange.x + arrange.width, y}, 3.0f, t.accent);
         }
     }
 
     draw_chart_minimap(model, minimap);
 
-    ui::draw_rect_f(automation, with_alpha(t.section, 235));
-    ui::draw_rect_lines(automation, 1.0f, t.border_light);
-    const Rectangle automation_header = {automation.x, automation.y, 24.0f, automation.height};
-    const Rectangle automation_body = {automation_header.x + automation_header.width, automation.y,
-                                       automation.width - automation_header.width, automation.height};
-    ui::draw_rect_f(automation_header, with_alpha(t.panel, 235));
-    ui::draw_rect_lines(automation_header, 1.0f, with_alpha(t.border_light, 190));
-    ui::draw_text_in_rect("S", 13,
-                          {automation_header.x + 4.0f, automation_header.y + 8.0f,
-                           automation_header.width - 8.0f, 18.0f},
-                          t.text_secondary);
-    std::optional<float> selected_multiplier;
-    if (model.selected_scroll_event_index.has_value() &&
-        *model.selected_scroll_event_index < model.scroll_automation.size()) {
-        selected_multiplier = model.scroll_automation[*model.selected_scroll_event_index].multiplier;
-    }
-    ui::draw_text_in_rect(selected_multiplier.has_value()
-                              ? TextFormat("%.2fx", *selected_multiplier)
-                              : "Rate",
-                          11,
-                          {automation_header.x + 2.0f, automation_header.y + automation_header.height - 28.0f,
-                           automation_header.width - 4.0f, 18.0f},
-                          selected_multiplier.has_value() ? t.fast : t.text_muted, ui::text_align::left);
-    const Rectangle automation_graph = ui::inset(automation_body, ui::edge_insets{10.0f, 10.0f, 10.0f, 8.0f});
-    ui::draw_rect_f(automation_graph, with_alpha(t.bg_alt, 80));
-    scroll_automation_guides editable_guides = presenter_model.state.data().scroll_guides;
-    const scroll_automation_guides original_guides = editable_guides;
-    const std::array<float, 5> guides = automation_guides(editable_guides);
-    bool guide_input_interacting = false;
-    for (size_t guide_index = 0; guide_index < guides.size(); ++guide_index) {
-        const float guide = guides[guide_index];
-        const float x = automation_graph.x + automation_graph.width * automation_guide_t(guide_index);
-        const bool unity = std::fabs(guide - 1.0f) < 0.001f;
-        ui::draw_line_f(x, automation_graph.y, x, automation_graph.y + automation_graph.height,
-                        unity ? with_alpha(t.fast, 210) : with_alpha(t.border_light, 110));
-        Rectangle value_rect = {x - 34.0f, automation_graph.y + 4.0f, 68.0f, 24.0f};
-        value_rect.x = std::clamp(value_rect.x,
-                                  automation_graph.x + 2.0f,
-                                  automation_graph.x + automation_graph.width - value_rect.width - 2.0f);
-        if (unity) {
-            ui::draw_text_in_rect("1.0", 12, value_rect, t.fast);
-        } else {
-            const size_t side_index = guide_index < 2 ? guide_index : guide_index - 1;
-            guide_input_interacting = draw_automation_guide_input(side_index, value_rect, editable_guides) ||
-                                      guide_input_interacting;
-        }
-    }
-    if (editable_guides.values != original_guides.values) {
-        result.scroll_automation_guides_to_modify = editable_guides;
-    }
-    const int snap_interval = std::max(1, model.snap_interval);
-    const int first_snap_tick = std::max(0, (model.min_tick / snap_interval) * snap_interval);
-    for (int tick = first_snap_tick; tick <= model.max_tick; tick += snap_interval) {
-        const float y = model.metrics.tick_to_y(tick);
-        if (y >= automation_graph.y && y <= automation_graph.y + automation_graph.height) {
-            ui::draw_line_f(automation_graph.x, y, automation_graph.x + automation_graph.width, y,
-                            with_alpha(t.editor_grid_snap, 165));
-        }
-    }
-    for (const editor_meter_map::grid_line& line : model.grid_lines) {
-        const float y = model.metrics.tick_to_y(line.tick);
-        if (y < automation_graph.y || y > automation_graph.y + automation_graph.height) {
-            continue;
-        }
-        const Color color = line.major ? t.editor_grid_major : t.editor_grid_minor;
-        ui::draw_line_f(automation_graph.x, y, automation_graph.x + automation_graph.width, y, color);
-        if (line.major) {
-            ui::draw_line_f(automation_graph.x, y + 1.0f, automation_graph.x + automation_graph.width, y + 1.0f,
-                            t.editor_grid_major_glow);
-        }
-    }
-    std::vector<std::pair<size_t, editor_timeline_scroll_automation_point>> sorted_points;
-    sorted_points.reserve(model.scroll_automation.size());
-    for (size_t index = 0; index < model.scroll_automation.size(); ++index) {
-        sorted_points.push_back({index, model.scroll_automation[index]});
-    }
-    std::stable_sort(sorted_points.begin(), sorted_points.end(), [](const auto& left, const auto& right) {
-        return left.second.tick < right.second.tick;
-    });
-    auto point_x = [&](float multiplier) {
-        const float t_value = automation_multiplier_to_t(guides, multiplier);
-        return automation_graph.x + t_value * automation_graph.width;
-    };
-    const float unity_x = point_x(1.0f);
-    ui::draw_line_f(unity_x, automation_graph.y, unity_x, automation_graph.y + automation_graph.height,
-                    with_alpha(t.fast, 150));
-    auto point_at_mouse = [&](Vector2 mouse,
-                              scroll_automation_curve curve,
-                              std::optional<float> pinned_multiplier = std::nullopt) {
-        scroll_automation_point point;
-        const int raw_tick = std::max(0, model.metrics.y_to_tick(mouse.y));
-        point.tick = std::max(0, (raw_tick + snap_interval / 2) / snap_interval * snap_interval);
-        point.multiplier = snap_automation_multiplier(
-            automation_snap_candidates(guides, pinned_multiplier),
-            automation_multiplier_at_t(
-                guides,
-                std::clamp((mouse.x - automation_graph.x) / automation_graph.width, 0.0f, 1.0f)),
-            IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
-        point.curve_to_next = curve;
-        return point;
-    };
-    const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const bool snap_ui_hovered =
-        CheckCollisionPointRec(mouse, layout::kSnapDropdownRect) ||
-        (snap_dropdown_open && CheckCollisionPointRec(mouse, snap_menu_rect));
-    std::optional<size_t> hovered_point;
-    {
-        ui::scoped_clip_rect clip_scope(automation_graph);
-        for (size_t index = 1; index < sorted_points.size(); ++index) {
-            const auto& previous = sorted_points[index - 1].second;
-            const auto& current = sorted_points[index].second;
-            const Vector2 from = {point_x(previous.multiplier), model.metrics.tick_to_y(previous.tick)};
-            const Vector2 to = {point_x(current.multiplier), model.metrics.tick_to_y(current.tick)};
-            DrawLineEx(from, to, 2.0f, with_alpha(t.fast, 220));
-        }
-        for (size_t reverse = sorted_points.size(); reverse > 0; --reverse) {
-            const size_t sorted_index = reverse - 1;
-            const size_t point_index = sorted_points[sorted_index].first;
-            const auto& point = sorted_points[sorted_index].second;
-            const Vector2 pos = {point_x(point.multiplier), model.metrics.tick_to_y(point.tick)};
-            if (pos.y < automation_graph.y || pos.y > automation_graph.y + automation_graph.height) {
-                continue;
-            }
-            const Rectangle hit = {pos.x - 8.0f, pos.y - 8.0f, 16.0f, 16.0f};
-            if (!snap_ui_hovered && !hovered_point.has_value() && CheckCollisionPointRec(mouse, hit)) {
-                hovered_point = point_index;
-            }
-            if (automation_drag_point_index.has_value() && *automation_drag_point_index == point_index) {
-                hovered_point = point_index;
-            }
-            const bool hovered = hovered_point.has_value() && *hovered_point == point_index;
-            const float handle_size = hovered ? 13.0f : 11.0f;
-            const Rectangle handle = {pos.x - handle_size * 0.5f, pos.y - handle_size * 0.5f,
-                                      handle_size, handle_size};
-            ui::draw_rect_f(handle, hovered ? t.accent : t.fast);
-            ui::draw_rect_lines(handle, hovered ? 2.0f : 1.4f,
-                                hovered ? t.text : with_alpha(t.text, 170));
-        }
-    }
-    const bool automation_hovered =
-        CheckCollisionPointRec(mouse, automation_graph) && !guide_input_interacting && !snap_ui_hovered;
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && automation_hovered) {
-        if (hovered_point.has_value()) {
-            result.panel_result.selected_scroll_event_index = hovered_point;
-            automation_drag_point_index = hovered_point;
-            automation_pending_add = false;
-            result.scroll_automation_point_to_modify = std::make_pair(
-                *hovered_point,
-                point_at_mouse(mouse,
-                               model.scroll_automation[*hovered_point].curve_to_next,
-                               model.scroll_automation[*hovered_point].multiplier));
-        } else {
-            automation_drag_point_index.reset();
-            automation_pending_add = true;
-        }
-    } else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && guide_input_interacting) {
-        automation_drag_point_index.reset();
-        automation_pending_add = false;
-    } else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && snap_ui_hovered) {
-        automation_drag_point_index.reset();
-        automation_pending_add = false;
-    }
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        if (automation_pending_add && automation_hovered && !automation_drag_point_index.has_value()) {
-            result.scroll_automation_point_to_add = point_at_mouse(mouse, scroll_automation_curve::linear);
-        }
-        automation_drag_point_index.reset();
-        automation_pending_add = false;
-    }
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
-        !snap_ui_hovered &&
-        automation_drag_point_index.has_value() &&
-        *automation_drag_point_index < model.scroll_automation.size()) {
-        result.scroll_automation_point_to_modify = std::make_pair(
-            *automation_drag_point_index,
-            point_at_mouse(mouse,
-                           model.scroll_automation[*automation_drag_point_index].curve_to_next,
-                           model.scroll_automation[*automation_drag_point_index].multiplier));
-        result.panel_result.selected_scroll_event_index = automation_drag_point_index;
-    }
-    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && !snap_ui_hovered && hovered_point.has_value()) {
-        result.panel_result.selected_scroll_event_index = hovered_point;
-        result.panel_result.delete_selected_scroll = true;
-    }
+    result = draw_timeline_automation_view({
+        .panel = automation,
+        .timeline = &model,
+        .scroll_guides = presenter_model.state.data().scroll_guides,
+        .snap_menu_rect = snap_menu_rect,
+        .snap_dropdown_open = snap_dropdown_open,
+        .mouse = virtual_screen::get_virtual_mouse(),
+    }, timing_state);
 
-    ui::draw_rect_f(ruler, with_alpha(t.section, 235));
-    ui::draw_rect_lines(ruler, 1.0f, t.border_light);
+    ui::surface(ruler, with_alpha(t.section, 235), t.border_light, 1.0f);
     draw_waveform(model, ui::inset(ruler, 4.0f));
     ui::draw_text_in_rect("BAR", 11, {ruler.x, ruler.y + 8.0f, ruler.width, 16.0f},
                           t.text_muted);
@@ -1595,8 +1316,7 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
             continue;
         }
         const Rectangle tag = {ruler.x + 6.0f, y - 11.0f, ruler.width - 12.0f, 22.0f};
-        ui::draw_rect_f(tag, with_alpha(t.panel, 225));
-        ui::draw_rect_lines(tag, 1.0f, with_alpha(t.border_light, 190));
+        ui::surface(tag, with_alpha(t.panel, 225), with_alpha(t.border_light, 190), 1.0f);
         ui::draw_text_in_rect(TextFormat("%d:%d", line.measure, line.beat), 12, tag, t.text_secondary);
     }
     return result;
@@ -1609,8 +1329,8 @@ metadata_modal_result draw_metadata_modal(const editor_left_panel_view_model& mo
     const Rectangle modal = layout::kEditorMetadataModalRect;
     const Rectangle content = inset_rect(modal, 24.0f);
 
-    ui::draw_rect_f(layout::kScreenRect, g_theme->pause_overlay);
-    ui::draw_panel(modal);
+    ui::backdrop(layout::kScreenRect, g_theme->pause_overlay);
+    ui::panel(modal);
     ui::draw_text_in_rect("Chart Metadata", 28,
                           {content.x, content.y, content.width, 32.0f},
                           t.text, ui::text_align::left);
@@ -1620,7 +1340,7 @@ metadata_modal_result draw_metadata_modal(const editor_left_panel_view_model& mo
                           t.text_muted, ui::text_align::left);
 
     const Rectangle song_box = {content.x, content.y + 76.0f, content.width, 72.0f};
-    ui::draw_section(song_box);
+    ui::section(song_box);
     ui::draw_label_value({song_box.x + 14.0f, song_box.y + 13.0f, song_box.width - 28.0f, 22.0f},
                          "Song", model.song_title, 16, t.text_muted, t.text, 78.0f);
     ui::draw_label_value({song_box.x + 14.0f, song_box.y + 40.0f, song_box.width - 28.0f, 20.0f},
@@ -1628,19 +1348,36 @@ metadata_modal_result draw_metadata_modal(const editor_left_panel_view_model& mo
                          14, t.text_muted, model.is_dirty ? t.slow : t.success, 78.0f);
 
     const Rectangle form = {content.x, song_box.y + song_box.height + 16.0f, content.width, 148.0f};
-    ui::draw_section(form);
-    result.metadata_result.difficulty_result = ui::draw_text_input(
+    ui::section(form);
+    result.metadata_result.difficulty_result = ui::text_input(
         {form.x + 16.0f, form.y + 18.0f, form.width - 32.0f, 38.0f},
-        metadata_panel.difficulty_input, "Diff", "Difficulty", "New",
-        ui::draw_layer::modal, 16, 24, accepts_metadata_character, 74.0f);
-    result.metadata_result.author_result = ui::draw_text_input(
+        metadata_panel.difficulty_input, "Diff", "Difficulty", {
+            .default_value = "New",
+            .layer = ui::draw_layer::modal,
+            .font_size = 16,
+            .max_length = 24,
+            .filter = accepts_metadata_character,
+            .label_width = 74.0f,
+        });
+    result.metadata_result.author_result = ui::text_input(
         {form.x + 16.0f, form.y + 66.0f, form.width - 32.0f, 38.0f},
-        metadata_panel.chart_author_input, "Author", "Chart author", "Unknown",
-        ui::draw_layer::modal, 16, 32, accepts_metadata_character, 74.0f);
-    const ui::selector_state key_count_selector = ui::draw_value_selector(
+        metadata_panel.chart_author_input, "Author", "Chart author", {
+            .default_value = "Unknown",
+            .layer = ui::draw_layer::modal,
+            .font_size = 16,
+            .max_length = 32,
+            .filter = accepts_metadata_character,
+            .label_width = 74.0f,
+        });
+    const ui::selector_state key_count_selector = ui::value_selector(
         {form.x + 16.0f, form.y + 114.0f, form.width - 32.0f, 28.0f},
-        "Lanes", key_count_label(metadata_panel.key_count),
-        ui::draw_layer::modal, 14, 24.0f, 74.0f, 10.0f);
+        "Lanes", key_count_label(metadata_panel.key_count), {
+            .layer = ui::draw_layer::modal,
+            .font_size = 14,
+            .button_size = 24.0f,
+            .label_width = 74.0f,
+            .content_padding = 10.0f,
+        });
     result.metadata_result.key_count_left_clicked = key_count_selector.left.clicked;
     result.metadata_result.key_count_right_clicked = key_count_selector.right.clicked;
 
@@ -1651,8 +1388,12 @@ metadata_modal_result draw_metadata_modal(const editor_left_panel_view_model& mo
     }
 
     const Rectangle unlock_rect = {content.x, modal.y + modal.height - 58.0f, 168.0f, 34.0f};
-    const Rectangle apply_rect = {content.x + content.width - 260.0f, modal.y + modal.height - 58.0f, 116.0f, 34.0f};
-    const Rectangle close_rect = {content.x + content.width - 132.0f, apply_rect.y, 132.0f, 34.0f};
+    const ui::rect_pair footer_actions = ui::split_columns(
+        {content.x + content.width - 260.0f, modal.y + modal.height - 58.0f, 260.0f, 34.0f},
+        116.0f,
+        12.0f);
+    const Rectangle apply_rect = footer_actions.first;
+    const Rectangle close_rect = footer_actions.second;
     result.unlock_rules_requested = draw_layer_button(unlock_rect, "UNLOCK RULES", 14, ui::draw_layer::modal,
                                                       t.row, t.row_hover, t.text).clicked;
     result.apply_requested = draw_layer_button(apply_rect, "APPLY", 14, ui::draw_layer::modal,
@@ -1670,8 +1411,8 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
     const Rectangle modal = layout::kEditorTimingModalRect;
     const Rectangle content = inset_rect(modal, 22.0f);
 
-    ui::draw_rect_f(layout::kScreenRect, g_theme->pause_overlay);
-    ui::draw_panel(modal);
+    ui::backdrop(layout::kScreenRect, g_theme->pause_overlay);
+    ui::panel(modal);
     ui::draw_text_in_rect("Timing Map", 28,
                           {content.x, content.y, content.width, 32.0f},
                           t.text, ui::text_align::left);
@@ -1679,10 +1420,15 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
                           15,
                           {content.x, content.y + 34.0f, content.width, 22.0f},
                           t.text_muted, ui::text_align::left);
-    const ui::selector_state chart_offset = ui::draw_value_selector(
+    const ui::selector_state chart_offset = ui::value_selector(
         {content.x + content.width - 270.0f, content.y + 8.0f, 270.0f, 36.0f},
-        "Offset", offset_label,
-        ui::draw_layer::modal, 14, 24.0f, 54.0f, 10.0f);
+        "Offset", offset_label, {
+            .layer = ui::draw_layer::modal,
+            .font_size = 14,
+            .button_size = 24.0f,
+            .label_width = 54.0f,
+            .content_padding = 10.0f,
+        });
     result.offset_left_clicked = chart_offset.left.clicked;
     result.offset_right_clicked = chart_offset.right.clicked;
 
@@ -1705,10 +1451,13 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
         selected_event = (*model.timing_events)[*model.selected_event_index];
     }
 
-    const Rectangle list_box = {content.x, content.y + 74.0f, 390.0f, content.height - 142.0f};
-    const Rectangle editor_box = {list_box.x + list_box.width + 18.0f, list_box.y,
-                                  content.width - list_box.width - 18.0f, list_box.height};
-    ui::draw_section(list_box);
+    const ui::rect_pair timing_columns = ui::split_columns(
+        {content.x, content.y + 74.0f, content.width, content.height - 142.0f},
+        390.0f,
+        18.0f);
+    const Rectangle list_box = timing_columns.first;
+    const Rectangle editor_box = timing_columns.second;
+    ui::section(list_box);
     ui::draw_text_in_rect("Events", 20,
                           {list_box.x + 14.0f, list_box.y + 10.0f, list_box.width - 28.0f, 24.0f},
                           t.text, ui::text_align::left);
@@ -1723,17 +1472,20 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
               static_cast<float>(std::max<int>(0, static_cast<int>(items.size()) - 1)) * row_gap;
     const float max_scroll = std::max(0.0f, content_height - list_view.height);
     timing_state.list_scroll_offset = std::clamp(timing_state.list_scroll_offset, 0.0f, max_scroll);
-    const ui::scrollbar_interaction scrollbar_result = ui::update_vertical_scrollbar(
+    const ui::scrollbar_interaction scrollbar_result = ui::vertical_scrollbar(
         scrollbar,
         content_height,
         timing_state.list_scroll_offset,
         timing_state.list_scrollbar_dragging,
         timing_state.list_scrollbar_drag_offset,
-        28.0f);
+        {
+            .min_thumb_height = 28.0f,
+            .drag_blocked_by_layer = false,
+        });
     if (scrollbar_result.changed || scrollbar_result.dragging) {
         timing_state.list_scroll_offset = scrollbar_result.scroll_offset;
     }
-    if (CheckCollisionPointRec(model.mouse, list_view) && GetMouseWheelMove() != 0.0f) {
+    if (ui::contains_point(list_view, model.mouse) && GetMouseWheelMove() != 0.0f) {
         timing_state.list_scroll_offset = std::clamp(
             timing_state.list_scroll_offset - GetMouseWheelMove() * 42.0f, 0.0f, max_scroll);
     }
@@ -1753,14 +1505,23 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
             y += row_height + row_gap;
         }
     }
-    ui::draw_scrollbar(scrollbar, content_height, timing_state.list_scroll_offset,
-                       t.scrollbar_track, t.scrollbar_thumb, 28.0f);
+    ui::scrollbar(scrollbar, content_height, timing_state.list_scroll_offset, {
+        .track_color = t.scrollbar_track,
+        .thumb_color = t.scrollbar_thumb,
+        .min_thumb_height = 28.0f,
+        .custom_colors = true,
+    });
 
-    const float button_width = (list_box.width - 32.0f - 16.0f) / 3.0f;
-    const Rectangle bpm_button = {list_box.x + 12.0f, list_box.y + list_box.height - 42.0f,
-                                  button_width, 30.0f};
-    const Rectangle meter_button = {bpm_button.x + button_width + 8.0f, bpm_button.y, button_width, 30.0f};
-    const Rectangle delete_button = {meter_button.x + button_width + 8.0f, bpm_button.y, button_width, 30.0f};
+    std::array<Rectangle, 3> timing_buttons{};
+    ui::hstack_fill({
+        list_box.x + 12.0f,
+        list_box.y + list_box.height - 42.0f,
+        list_box.width - 32.0f,
+        30.0f,
+    }, 8.0f, timing_buttons);
+    const Rectangle bpm_button = timing_buttons[0];
+    const Rectangle meter_button = timing_buttons[1];
+    const Rectangle delete_button = timing_buttons[2];
     if (draw_layer_button(bpm_button, "Add BPM", 13, ui::draw_layer::modal,
                           t.row, t.row_hover, t.text).clicked) {
         result.panel_result.add_bpm = true;
@@ -1776,7 +1537,7 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
         result.panel_result.delete_selected = true;
     }
 
-    ui::draw_section(editor_box);
+    ui::section(editor_box);
     ui::draw_text_in_rect("Event Inspector", 20,
                           {editor_box.x + 14.0f, editor_box.y + 10.0f, editor_box.width - 28.0f, 24.0f},
                           t.text, ui::text_align::left);
@@ -1802,9 +1563,14 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
     auto draw_input_row = [&](Rectangle rect, const char* label, ui::text_input_state& input,
                               editor_timing_input_field field, ui::text_input_filter filter,
                               const char* placeholder, float label_width = 82.0f) {
-        const ui::text_input_result input_result = ui::draw_text_input(
-            rect, input, label, placeholder, nullptr,
-            ui::draw_layer::modal, 16, 16, filter, label_width);
+        const ui::text_input_result input_result = ui::text_input(
+            rect, input, label, placeholder, {
+                .layer = ui::draw_layer::modal,
+                .font_size = 16,
+                .max_length = 16,
+                .filter = filter,
+                .label_width = label_width,
+            });
         if (input_result.clicked) {
             result.panel_result.clicked_input_row = true;
             set_active_timing_input(timing_state, field);
@@ -1834,12 +1600,14 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
         } else {
             draw_pick_row({editor_box.x + 14.0f, editor_box.y + 90.0f, editor_box.width - 28.0f, 38.0f},
                           "Bar", timing_state.inputs.meter_bar.value, editor_timing_input_field::meter_measure);
-            const float half = (editor_box.width - 36.0f) * 0.5f;
-            draw_input_row({editor_box.x + 14.0f, editor_box.y + 138.0f, half, 38.0f},
+            const ui::rect_pair meter_inputs = ui::split_columns(
+                {editor_box.x + 14.0f, editor_box.y + 138.0f, editor_box.width - 28.0f, 38.0f},
+                (editor_box.width - 36.0f) * 0.5f, 8.0f);
+            draw_input_row(meter_inputs.first,
                            "Num", timing_state.inputs.meter_numerator,
                            editor_timing_input_field::meter_numerator,
                            accepts_int_character, "Num", 46.0f);
-            draw_input_row({editor_box.x + 22.0f + half, editor_box.y + 138.0f, half, 38.0f},
+            draw_input_row(meter_inputs.second,
                            "Den", timing_state.inputs.meter_denominator,
                            editor_timing_input_field::meter_denominator,
                            accepts_int_character, "Den", 46.0f);

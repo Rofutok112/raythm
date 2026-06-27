@@ -25,6 +25,9 @@ void controller::open(std::string user_id) {
     state_.requested_user_id = std::move(user_id);
     state_.result = {};
     state_.loaded_once = false;
+    state_.selected_tab = public_profile_view::tab::overview;
+    state_.link_scroll = 0.0f;
+    state_.best_rating_scroll = 0.0f;
     request_load();
 }
 
@@ -68,16 +71,23 @@ bool controller::handle_input() {
         close();
         return true;
     }
-    const public_profile_view::command command = public_profile_view::handle_input({
+    const public_profile_view::input_result input = public_profile_view::handle_input({
         .loading = state_.loading,
         .loaded_once = state_.loaded_once,
         .relationship_operation_active = state_.relationship_operation_active,
         .open_anim = state_.open_anim,
+        .link_scroll = state_.link_scroll,
+        .best_rating_scroll = state_.best_rating_scroll,
+        .selected_tab = state_.selected_tab,
         .avatar_base_url = auth::load_session_summary().server_url,
         .result = state_.result,
     });
-    if (command.type != public_profile_view::command_type::none) {
-        apply_view_command(command);
+    if (input.scroll_changed) {
+        state_.link_scroll = input.scroll.link_scroll;
+        state_.best_rating_scroll = input.scroll.best_rating_scroll;
+    }
+    if (input.action.type != public_profile_view::command_type::none) {
+        apply_view_command(input.action);
         return true;
     }
     return true;
@@ -92,6 +102,9 @@ void controller::draw(ui::draw_layer layer, bool draw_backdrop) {
         .loaded_once = state_.loaded_once,
         .relationship_operation_active = state_.relationship_operation_active,
         .open_anim = state_.open_anim,
+        .link_scroll = state_.link_scroll,
+        .best_rating_scroll = state_.best_rating_scroll,
+        .selected_tab = state_.selected_tab,
         .avatar_base_url = auth::load_session_summary().server_url,
         .result = state_.result,
     }, layer, draw_backdrop);
@@ -138,6 +151,15 @@ void controller::apply_view_command(const public_profile_view::command& command)
         break;
     case public_profile_view::command_type::start_relationship_action:
         start_relationship_action();
+        break;
+    case public_profile_view::command_type::select_tab:
+        state_.selected_tab = command.selected_tab;
+        if (state_.selected_tab != public_profile_view::tab::links) {
+            state_.link_scroll = 0.0f;
+        }
+        if (state_.selected_tab != public_profile_view::tab::best_rc) {
+            state_.best_rating_scroll = 0.0f;
+        }
         break;
     }
 }

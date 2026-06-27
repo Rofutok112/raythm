@@ -116,6 +116,160 @@ Rectangle sidebar_search_rect(Rectangle sidebar) {
 
 }  // namespace
 
+namespace detail {
+
+namespace {
+
+constexpr float kChartLevelWidth = 220.0f;
+constexpr float kChartKeyButtonWidth = 44.0f;
+constexpr float kChartKeyButtonStep = 50.0f;
+constexpr float kFilterInsetX = 20.0f;
+constexpr float kFilterTitleY = 22.0f;
+constexpr float kFilterSearchY = 56.0f;
+constexpr float kFilterSearchHeight = 42.0f;
+constexpr float kFilterSourceLabelY = 102.0f;
+constexpr float kFilterStatusLabelY = 240.0f;
+constexpr float kFilterLevelLabelY = 336.0f;
+constexpr float kFilterKeysLabelY = 448.0f;
+constexpr float kFilterTitleHeight = 24.0f;
+constexpr float kFilterLabelHeight = 18.0f;
+constexpr float kChartHeaderInsetX = 24.0f;
+constexpr float kChartHeaderTitleY = 22.0f;
+constexpr float kChartHeaderSubtitleY = 46.0f;
+constexpr float kChartHeaderTitleWidth = 120.0f;
+constexpr float kChartHeaderSubtitleWidth = 180.0f;
+constexpr float kChartHeaderCountWidth = 132.0f;
+constexpr float kChartHeaderCountRightInset = 28.0f;
+constexpr float kChartPlaceholderInsetX = 64.0f;
+constexpr float kChartPlaceholderHeight = 72.0f;
+
+}  // namespace
+
+chart_filter_layout chart_filter_layout_for(Rectangle filter_panel) {
+    const float content_width = filter_panel.width - kFilterInsetX * 2.0f;
+    return {
+        .title_label = {
+            filter_panel.x + kFilterInsetX,
+            filter_panel.y + kFilterTitleY,
+            content_width,
+            kFilterTitleHeight,
+        },
+        .search_input = {
+            filter_panel.x + kFilterInsetX,
+            filter_panel.y + kFilterSearchY,
+            content_width,
+            kFilterSearchHeight,
+        },
+        .source_label = {
+            filter_panel.x + kFilterInsetX,
+            filter_panel.y + kFilterSourceLabelY,
+            content_width,
+            kFilterLabelHeight,
+        },
+        .status_label = {
+            filter_panel.x + kFilterInsetX,
+            filter_panel.y + kFilterStatusLabelY,
+            content_width,
+            kFilterLabelHeight,
+        },
+        .level_label = {
+            filter_panel.x + kFilterInsetX,
+            filter_panel.y + kFilterLevelLabelY,
+            content_width,
+            kFilterLabelHeight,
+        },
+        .keys_label = {
+            filter_panel.x + kFilterInsetX,
+            filter_panel.y + kFilterKeysLabelY,
+            content_width,
+            kFilterLabelHeight,
+        },
+    };
+}
+
+chart_list_header_layout chart_list_header_layout_for(Rectangle detail_panel) {
+    return {
+        .title = {
+            detail_panel.x + kChartHeaderInsetX,
+            detail_panel.y + kChartHeaderTitleY,
+            kChartHeaderTitleWidth,
+            kFilterTitleHeight,
+        },
+        .subtitle = {
+            detail_panel.x + kChartHeaderInsetX,
+            detail_panel.y + kChartHeaderSubtitleY,
+            kChartHeaderSubtitleWidth,
+            kFilterLabelHeight,
+        },
+        .count = {
+            detail_panel.x + detail_panel.width - kChartHeaderCountRightInset - kChartHeaderCountWidth,
+            detail_panel.y + kChartHeaderSubtitleY,
+            kChartHeaderCountWidth,
+            16.0f,
+        },
+    };
+}
+
+Rectangle chart_empty_placeholder_rect(Rectangle chart_list) {
+    return {
+        chart_list.x + kChartPlaceholderInsetX,
+        chart_list.y + chart_list.height * 0.5f - kChartPlaceholderHeight * 0.5f,
+        chart_list.width - kChartPlaceholderInsetX * 2.0f,
+        kChartPlaceholderHeight,
+    };
+}
+
+Rectangle chart_source_button_rect(Rectangle chart_list, int index) {
+    const float button_width = (chart_list.width - 52.0f) * 0.5f;
+    const float x = chart_list.x + 20.0f + static_cast<float>(index % 2) * (button_width + 12.0f);
+    const float y = chart_list.y + 124.0f + static_cast<float>(index / 2) * 42.0f;
+    return {
+        x,
+        y,
+        button_width,
+        36.0f,
+    };
+}
+
+Rectangle chart_key_button_rect(Rectangle chart_list, int index) {
+    const float group_width = kChartKeyButtonWidth + kChartKeyButtonStep * 4.0f;
+    return {
+        chart_list.x + (chart_list.width - group_width) * 0.5f + static_cast<float>(index) * kChartKeyButtonStep,
+        chart_list.y + 470.0f,
+        kChartKeyButtonWidth,
+        30.0f,
+    };
+}
+
+Rectangle chart_status_button_rect(Rectangle chart_list, int index) {
+    return {
+        chart_list.x + 20.0f + static_cast<float>(index) * ((chart_list.width - 52.0f) / 3.0f + 6.0f),
+        chart_list.y + 262.0f,
+        (chart_list.width - 52.0f) / 3.0f,
+        36.0f,
+    };
+}
+
+Rectangle chart_clear_button_rect(Rectangle chart_list) {
+    return {
+        chart_list.x + 20.0f,
+        chart_list.y + chart_list.height - 64.0f,
+        chart_list.width - 40.0f,
+        42.0f,
+    };
+}
+
+Rectangle chart_level_slider_rect(Rectangle chart_list) {
+    return {
+        chart_list.x + (chart_list.width - kChartLevelWidth) * 0.5f,
+        chart_list.y + 372.0f,
+        kChartLevelWidth,
+        24.0f,
+    };
+}
+
+}  // namespace detail
+
 layout make_layout(float anim_t, Rectangle origin_rect) {
     const float t = tween::ease_out_cubic(anim_t);
     const Rectangle origin = resolve_origin_rect(origin_rect);

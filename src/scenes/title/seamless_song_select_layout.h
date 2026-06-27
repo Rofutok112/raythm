@@ -1,6 +1,7 @@
 #pragma once
 
 #include "raylib.h"
+#include "song_select/song_select_level_filter.h"
 
 namespace title_play_view {
 
@@ -50,10 +51,10 @@ struct layout {
     Rectangle ranking_list_rect;
 };
 
-inline constexpr float kChartFilterMinLevel = 0.0f;
-inline constexpr float kChartFilterUsefulMaxLevel = 15.0f;
-inline constexpr float kChartFilterMaxLevel = 99.0f;
-inline constexpr float kChartFilterUsefulTrack = 0.97f;
+inline constexpr float kChartFilterMinLevel = song_select::level_filter::kMinLevel;
+inline constexpr float kChartFilterUsefulMaxLevel = song_select::level_filter::kUsefulMaxLevel;
+inline constexpr float kChartFilterMaxLevel = song_select::level_filter::kMaxLevel;
+inline constexpr float kChartFilterUsefulTrack = song_select::level_filter::kUsefulTrack;
 
 layout make_layout(float anim_t, Rectangle origin_rect);
 layout make_mode_layout(float anim_t, Rectangle origin_rect, mode view_mode);

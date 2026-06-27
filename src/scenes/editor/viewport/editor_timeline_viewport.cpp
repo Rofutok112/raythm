@@ -101,15 +101,18 @@ editor_timeline_viewport_state editor_timeline_viewport::apply_scroll_and_zoom(c
     const editor_timeline_metrics viewport_metrics = metrics(model);
     const Rectangle content = viewport_metrics.content_rect();
     const Rectangle track = viewport_metrics.scrollbar_track_rect();
-    const ui::scrollbar_interaction scrollbar = ui::update_vertical_scrollbar(
+    const ui::scrollbar_interaction scrollbar = ui::vertical_scrollbar(
         track, content_height_pixels(model), scroll_offset_pixels(model),
-        next.scrollbar_dragging, next.scrollbar_drag_offset, 40.0f);
+        next.scrollbar_dragging, next.scrollbar_drag_offset, {
+            .min_thumb_height = 40.0f,
+            .drag_blocked_by_layer = false,
+        });
     next.bottom_tick_target = max_bottom_tick(model) - scrollbar.scroll_offset * next.ticks_per_pixel;
     if (scrollbar.changed || scrollbar.dragging) {
         next.bottom_tick = next.bottom_tick_target;
     }
 
-    if (input.wheel != 0.0f && CheckCollisionPointRec(input.mouse, content) && input.ctrl_down) {
+    if (input.wheel != 0.0f && ui::contains_point(content, input.mouse) && input.ctrl_down) {
         const int anchor_tick = viewport_metrics.y_to_tick(input.mouse.y);
         const float zoom_scale = input.wheel > 0.0f ? 0.85f : 1.15f;
         next.ticks_per_pixel = std::clamp(next.ticks_per_pixel * zoom_scale, kMinTicksPerPixel, kMaxTicksPerPixel);
@@ -117,7 +120,7 @@ editor_timeline_viewport_state editor_timeline_viewport::apply_scroll_and_zoom(c
                                   (content.y + content.height - input.mouse.y) * next.ticks_per_pixel;
         const editor_timeline_viewport_model updated_model = {model.state, model.audio_length_tick, next};
         next.bottom_tick_target = std::clamp(next.bottom_tick_target, min_bottom_tick(), max_bottom_tick(updated_model));
-    } else if (!input.audio_playing && input.wheel != 0.0f && CheckCollisionPointRec(input.mouse, content)) {
+    } else if (!input.audio_playing && input.wheel != 0.0f && ui::contains_point(content, input.mouse)) {
         const float wheel_direction = input.wheel > 0.0f ? 1.0f : -1.0f;
         next.bottom_tick_target = std::clamp(next.bottom_tick_target + wheel_direction * visible_tick_span(model) * kScrollWheelViewportRatio,
                                              min_bottom_tick(), max_bottom_tick(model));

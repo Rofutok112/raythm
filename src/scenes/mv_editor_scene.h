@@ -8,22 +8,34 @@
 #include "mv/composition/mv_composition.h"
 #include "mv/composition/mv_composition_edit_history.h"
 #include "mv/mv_storage.h"
+#include "mv_editor_context_menu_view.h"
+#include "mv_editor_inspector_view.h"
+#include "mv_editor_preview_view.h"
+#include "mv_editor_side_panel_view.h"
+#include "mv_editor_timeline_view.h"
 #include "raylib.h"
 #include "scene.h"
 #include "ui_inspector.h"
 #include "ui_text_input.h"
 
-enum class mv_preview_drag_mode {
+enum class mv_editor_header_action {
     none,
-    move,
-    north,
-    south,
-    west,
-    east,
-    northwest,
-    northeast,
-    southwest,
-    southeast,
+    open_metadata,
+    toggle_preview,
+    undo,
+    redo,
+    save,
+    back,
+};
+
+enum class mv_editor_bottom_tab_action {
+    none,
+    show_timeline,
+    show_project,
+};
+
+struct mv_editor_metadata_modal_result {
+    bool metadata_changed = false;
 };
 
 // Song-scoped MV composition editor.
@@ -44,13 +56,7 @@ private:
         trim_end,
     };
 
-    enum class context_menu_target {
-        none,
-        hierarchy,
-        project_assets,
-        components,
-        timeline,
-    };
+    using context_menu_target = mv_editor_context_menu_target;
 
     enum class bottom_panel_tab {
         timeline,
@@ -82,6 +88,35 @@ private:
     void key_selected_transform();
     void delete_transform_keyframes_at_playhead();
     int transform_keyframe_count_at_playhead() const;
+    void apply_bottom_tab_action(mv_editor_bottom_tab_action action);
+    void apply_metadata_modal_result(const mv_editor_metadata_modal_result& result);
+    void apply_hierarchy_result(const mv_editor_hierarchy_result& result);
+    void apply_context_menu_result(const mv_editor_context_menu_result& result);
+    void apply_project_panel_result(const mv_editor_project_panel_result& result);
+    void apply_timeline_layer_row_result(const mv_editor_timeline_layer_row_result& result);
+    void apply_timeline_scrub_result(const mv_editor_timeline_scrub_result& result);
+    void apply_timeline_drag_start_result(const mv_editor_timeline_drag_start_result& result);
+    void apply_timeline_drag_update_result(const mv_editor_timeline_drag_update_result& result);
+    void apply_timeline_drag_end_result(const mv_editor_timeline_drag_end_result& result);
+    void apply_preview_drag_start_result(const mv_editor_preview_drag_start_result& result);
+    void apply_preview_drag_update_result(const mv_editor_preview_drag_update_result& result, Rectangle preview);
+    void apply_preview_drag_end_result(const mv_editor_preview_drag_end_result& result);
+    bool apply_inspector_layer_name_result(const mv_editor_inspector_layer_name_result& result,
+                                           mv::composition::layer& layer);
+    bool apply_inspector_transform_input_result(const mv_editor_inspector_transform_input_result& result,
+                                                mv::composition::component& transform);
+    bool apply_inspector_transform_opacity_result(const mv_editor_inspector_transform_opacity_result& result,
+                                                  mv::composition::component& transform);
+    bool apply_inspector_transform_card_result(const mv_editor_inspector_transform_card_result& result,
+                                               mv::composition::component& transform);
+    bool apply_inspector_component_result(const mv_editor_inspector_component_result& result,
+                                          mv::composition::component& component);
+    bool apply_inspector_component_amount_result(const mv_editor_inspector_component_amount_result& result,
+                                                 mv::composition::component& component);
+    bool apply_inspector_component_remove_result(const mv_editor_inspector_component_remove_result& result,
+                                                 mv::composition::layer& layer);
+    bool apply_inspector_add_component_result(const mv_editor_inspector_add_component_result& result);
+    void close_metadata_modal();
     void add_fade_effect_to_selected_layer();
     void add_pulse_effect_to_selected_layer();
     void add_flash_effect_to_selected_layer();
@@ -101,6 +136,7 @@ private:
     void set_preview_playing(bool playing);
     void seek_preview_audio_to_playhead();
     double composition_duration_ms() const;
+    bool apply_header_action(mv_editor_header_action action);
 
     song_data song_;
     mv::mv_package package_;

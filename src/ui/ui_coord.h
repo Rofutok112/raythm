@@ -72,6 +72,32 @@ inline void draw_line_ex(Vector2 start, Vector2 end, float thick, Color color) {
                snap_stroke_width(thick), color);
 }
 
+inline void draw_triangle(Vector2 a, Vector2 b, Vector2 c, Color color) {
+    DrawTriangle({snap_pixel(a.x), snap_pixel(a.y)},
+                 {snap_pixel(b.x), snap_pixel(b.y)},
+                 {snap_pixel(c.x), snap_pixel(c.y)},
+                 color);
+}
+
+inline Rectangle texture_source_rect(const Texture2D& texture, bool flip_y = false) {
+    const float width = static_cast<float>(texture.width);
+    const float height = static_cast<float>(texture.height);
+    return {0.0f, flip_y ? height : 0.0f, width, flip_y ? -height : height};
+}
+
+inline void draw_texture(const Texture2D& texture, Rectangle source, Rectangle dest,
+                         Color tint = WHITE, Vector2 origin = {0.0f, 0.0f}, float rotation = 0.0f) {
+    if (texture.id == 0 || source.width == 0.0f || source.height == 0.0f ||
+        dest.width <= 0.0f || dest.height <= 0.0f) {
+        return;
+    }
+    DrawTexturePro(texture, source, dest, origin, rotation, tint);
+}
+
+inline void draw_texture(const Texture2D& texture, Rectangle dest, Color tint = WHITE) {
+    draw_texture(texture, texture_source_rect(texture), dest, tint);
+}
+
 // float 座標で DrawRectangle を呼び出す。
 inline void draw_rect_f(float x, float y, float w, float h, Color color) {
     const Rectangle rect = snap_rect({x, y, w, h});

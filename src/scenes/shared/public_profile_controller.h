@@ -20,6 +20,9 @@ struct state {
     bool loaded_once = false;
     bool suppress_background_close_until_release = false;
     float open_anim = 0.0f;
+    float link_scroll = 0.0f;
+    float best_rating_scroll = 0.0f;
+    public_profile_view::tab selected_tab = public_profile_view::tab::overview;
     std::string requested_user_id;
     auth::public_profile_result result;
     friend_client::operation_result relationship_result;

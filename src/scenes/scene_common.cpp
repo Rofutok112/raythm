@@ -7,6 +7,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_coord.h"
+#include "ui_draw.h"
 #include "ui/ui_font.h"
 
 namespace {
@@ -31,8 +32,7 @@ void draw_text_clipped(const char* text, float x, float y, int font_size, Color 
 
 void draw_scene_frame(const char* title, const char* subtitle, Color accent) {
     draw_scene_background(*g_theme);
-    DrawRectangleRounded({80.0f, 80.0f, 1120.0f, 560.0f}, 0.04f, 8, g_theme->panel);
-    DrawRectangleRoundedLinesEx({80.0f, 80.0f, 1120.0f, 560.0f}, 0.04f, 8, 3.0f, accent);
+    ui::rounded_surface({80.0f, 80.0f, 1120.0f, 560.0f}, 0.04f, 8, g_theme->panel, accent, 3.0f);
 
     ui::draw_text_f(title, 130.0f, 130.0f, 44, accent);
     ui::draw_text_f(subtitle, 130.0f, 190.0f, 24, g_theme->text_secondary);
@@ -40,7 +40,8 @@ void draw_scene_frame(const char* title, const char* subtitle, Color accent) {
 
 void draw_scene_background(const ui_theme& theme) {
     ClearBackground(theme.bg);
-    DrawRectangleGradientV(0, 0, kScreenWidth, kScreenHeight, theme.bg, theme.bg_alt);
+    ui::vertical_gradient({0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)},
+                          theme.bg, theme.bg_alt);
 }
 
 Color difficulty_level_color(float level) {
@@ -87,8 +88,7 @@ void draw_difficulty_level_badge(float level, Rectangle rect, int font_size, uns
     const Color border = with_alpha(accent, static_cast<unsigned char>((static_cast<int>(alpha) * 190) / 255));
     const Color text_color = with_alpha(accent, alpha);
 
-    ui::draw_rect_f(rect, fill);
-    ui::draw_rect_lines(rect, 1.2f, border);
+    ui::surface(rect, fill, border, 1.2f);
 
     const char* label = level <= 0.0f ? "Lv...." : TextFormat("Lv.%.1f", level);
     const Vector2 text_size = ui::measure_text_size(label, static_cast<float>(font_size), 0.0f);

@@ -42,6 +42,9 @@ private:
     void start_delete_avatar();
     void start_delete_song(std::string song_id);
     void start_delete_chart(std::string chart_id);
+    void begin_delete(title_profile_view::delete_target target, std::string id, std::string label);
+    void cancel_delete();
+    void ensure_settings_links_initialized(const song_select::auth_state& auth_state);
 
     title_profile_view::state state_;
     square_image_picker::state avatar_picker_;

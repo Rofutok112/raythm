@@ -5,6 +5,7 @@
 #include <thread>
 #include <utility>
 
+#include "localization/localization.h"
 #include "raylib.h"
 #include "tween.h"
 
@@ -77,11 +78,14 @@ bool title_rating_rankings_controller::handle_input() {
         close();
         return true;
     }
-    title_rating_rankings_view::clamp_scroll(state_);
-    const title_rating_rankings_view::command command =
+    state_.scroll_offset = title_rating_rankings_view::clamped_scroll_offset(state_);
+    const title_rating_rankings_view::input_result input =
         title_rating_rankings_view::handle_input(state_, ui::draw_layer::modal);
-    if (command.type != title_rating_rankings_view::command_type::none) {
-        apply_command(command);
+    if (input.scroll_offset_changed) {
+        state_.scroll_offset = input.scroll_offset;
+    }
+    if (input.action.type != title_rating_rankings_view::command_type::none) {
+        apply_command(input.action);
     }
     return true;
 }
@@ -112,7 +116,7 @@ void title_rating_rankings_controller::request_page(int page) {
         return;
     }
     state_.loading = true;
-    state_.message = "Loading...";
+    state_.message = localization::tr_literal("Loading...");
     state_.page = std::max(1, page);
     state_.scroll_offset = 0.0f;
     std::promise<auth::global_rating_rankings_result> promise;
@@ -126,7 +130,8 @@ void title_rating_rankings_controller::apply_result(auth::global_rating_rankings
     state_.loading = false;
     state_.loaded_once = true;
     if (!result.success) {
-        state_.message = result.message.empty() ? "Failed to load rating rankings." : result.message;
+        state_.message = result.message.empty() ? localization::tr_literal("Failed to load rating rankings.")
+                                                : result.message;
         ui::notify(state_.message, ui::notice_tone::error, 2.8f);
         return;
     }
@@ -135,8 +140,8 @@ void title_rating_rankings_controller::apply_result(auth::global_rating_rankings
     state_.total = result.total;
     state_.has_next_page = result.has_next_page;
     state_.items = std::move(result.items);
-    state_.message = state_.items.empty() ? "No rated players." : "Click a row to view profile.";
-    title_rating_rankings_view::clamp_scroll(state_);
+    state_.message = state_.items.empty() ? localization::tr_literal("No rated players.") : "";
+    state_.scroll_offset = title_rating_rankings_view::clamped_scroll_offset(state_);
 }
 
 void title_rating_rankings_controller::apply_command(const title_rating_rankings_view::command& command) {

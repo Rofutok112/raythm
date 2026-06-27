@@ -22,7 +22,7 @@ struct context {
     editor_timeline_viewport_state& viewport;
     bool snap_dropdown_open = false;
     const std::vector<size_t>& selected_note_indices;
-    const editor_timing_panel_state& timing_panel;
+    editor_timing_panel_state& timing_panel;
     const editor_timeline_note_drag_state& timeline_drag;
     const editor_note_palette_selection& note_palette;
 };

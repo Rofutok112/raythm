@@ -150,10 +150,12 @@ context_menu_command draw_context_menu(const state& state) {
         items.push_back(e.item);
     }
 
-    const auto [clicked_index] = ui::enqueue_context_menu(state.context_menu.rect, items,
-                                                          layout::kContextMenuLayer, 16,
-                                                          layout::kContextMenuItemHeight,
-                                                          layout::kContextMenuItemSpacing);
+    const auto [clicked_index] = ui::context_menu(state.context_menu.rect, items, {
+        .layer = layout::kContextMenuLayer,
+        .font_size = 16,
+        .item_height = layout::kContextMenuItemHeight,
+        .item_spacing = layout::kContextMenuItemSpacing,
+    });
 
     if (clicked_index >= 0 && clicked_index < static_cast<int>(entries.size())) {
         return entries[static_cast<size_t>(clicked_index)].command_on_click;

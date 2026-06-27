@@ -112,31 +112,28 @@ void result_scene::retry_chart() {
     manager_.change_scene(std::make_unique<play_scene>(manager_, song_, chart_path_, key_count_, chart_.level));
 }
 
+bool result_scene::apply_view_action(result_scene_view::action action) {
+    switch (action) {
+        case result_scene_view::action::retry:
+        case result_scene_view::action::replay:
+            retry_chart();
+            return true;
+        case result_scene_view::action::song_select:
+            return_to_song_select();
+            return true;
+        case result_scene_view::action::none:
+            return false;
+    }
+    return false;
+}
+
 void result_scene::update(float dt) {
     reveal_t_ = std::min(1.0f, reveal_t_ + dt * 1.7f);
     fade_in_.update(dt);
     poll_online_submit();
 
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_ESCAPE)) {
-        return_to_song_select();
+    if (apply_view_action(result_scene_view::shortcut_action())) {
         return;
-    }
-    if (IsKeyPressed(KEY_R)) {
-        retry_chart();
-        return;
-    }
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        switch (result_scene_view::hit_test_action(virtual_screen::get_virtual_mouse())) {
-            case result_scene_view::action::retry:
-            case result_scene_view::action::replay:
-                retry_chart();
-                return;
-            case result_scene_view::action::song_select:
-                return_to_song_select();
-                return;
-            case result_scene_view::action::none:
-                break;
-        }
     }
 }
 
@@ -218,7 +215,7 @@ void result_scene::unload_jacket_texture() {
 
 void result_scene::draw() {
     virtual_screen::begin_ui();
-    result_scene_view::draw({
+    const result_scene_view::draw_result view_result = result_scene_view::draw({
         .result = result_,
         .song = song_,
         .chart = chart_,
@@ -237,4 +234,5 @@ void result_scene::draw() {
     virtual_screen::end();
     ClearBackground(BLACK);
     virtual_screen::draw_to_screen();
+    (void)apply_view_action(view_result.requested_action);
 }

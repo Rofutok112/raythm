@@ -30,7 +30,7 @@
 #include "network/json_helpers.h"
 #include "raylib_file_io.h"
 #include "song_select/song_select_navigation.h"
-#include "ui_draw.h"
+#include "ui_frame.h"
 #include "virtual_screen.h"
 
 namespace {
@@ -453,7 +453,7 @@ void play_scene::draw_loading_status_frame() {
 }
 
 void play_scene::rebuild_hit_regions() const {
-    ui::begin_hit_regions();
+    ui::begin_input_frame();
     if (state_.paused) {
         ui::register_hit_region({0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)},
                                 ui::draw_layer::overlay);
@@ -616,9 +616,9 @@ void play_scene::draw() {
     virtual_screen::begin_ui();
     ClearBackground(BLANK);
     rebuild_hit_regions();
-    ui::begin_draw_queue();
+    ui::begin_render_frame();
     play_renderer::draw_overlay(state_, jacket_texture_loaded_ ? &jacket_texture_ : nullptr);
-    ui::flush_draw_queue();
+    ui::end_render_frame();
     virtual_screen::end();
 
     present_virtual_screen_overlay();

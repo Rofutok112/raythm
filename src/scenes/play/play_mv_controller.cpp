@@ -16,6 +16,7 @@
 #include "path_utils.h"
 #include "raylib.h"
 #include "scene_common.h"
+#include "ui_draw.h"
 
 namespace {
 
@@ -60,16 +61,6 @@ Color with_opacity(Color color, float opacity) {
     return color;
 }
 
-Color mix_color(Color from, Color to, float t) {
-    t = std::clamp(t, 0.0f, 1.0f);
-    return {
-        static_cast<unsigned char>(static_cast<float>(from.r) + (static_cast<float>(to.r) - static_cast<float>(from.r)) * t),
-        static_cast<unsigned char>(static_cast<float>(from.g) + (static_cast<float>(to.g) - static_cast<float>(from.g)) * t),
-        static_cast<unsigned char>(static_cast<float>(from.b) + (static_cast<float>(to.b) - static_cast<float>(from.b)) * t),
-        static_cast<unsigned char>(static_cast<float>(from.a) + (static_cast<float>(to.a) - static_cast<float>(from.a)) * t)
-    };
-}
-
 void draw_title_style_spectrum(Rectangle area, float opacity, double visual_time_ms,
                                const std::array<float, 128>* spectrum) {
     constexpr int kBars = 64;
@@ -80,7 +71,6 @@ void draw_title_style_spectrum(Rectangle area, float opacity, double visual_time
     const float baseline = area.y + area.height;
     const float block_height = 8.0f;
     const float block_gap = 4.0f;
-    const float block_step = block_height + block_gap;
     const Color base_low = with_opacity({107, 33, 168, 255}, alpha * (128.0f / 255.0f));
     const Color base_mid = with_opacity({168, 85, 247, 255}, alpha * (178.0f / 255.0f));
     const Color base_top = with_opacity({216, 180, 254, 255}, alpha * (230.0f / 255.0f));
@@ -108,24 +98,19 @@ void draw_title_style_spectrum(Rectangle area, float opacity, double visual_time
 
         const float height = normalized * area.height;
         const float x = area.x + static_cast<float>(i) * (bar_w + gap);
-        if (height > 0.5f) {
-            for (float block_bottom = baseline; block_bottom > baseline - height; block_bottom -= block_step) {
-                const float block_top = std::max(baseline - height, block_bottom - block_height);
-                const float segment_height = block_bottom - block_top;
-                if (segment_height > 0.5f) {
-                    const float color_t = std::clamp((baseline - block_top) / std::max(1.0f, area.height), 0.0f, 1.0f);
-                    const Color block_color =
-                        color_t < 0.6f
-                            ? mix_color(base_low, base_mid, color_t / 0.6f)
-                            : mix_color(base_mid, base_top, (color_t - 0.6f) / 0.4f);
-                    DrawRectangleRec({x, block_top, bar_w, segment_height}, block_color);
-                }
-            }
-        }
-
-        const float peak_y = baseline - normalized * area.height - 2.0f;
-        DrawRectangleRec({x, peak_y - 1.0f, bar_w, 4.0f}, peak_glow);
-        DrawRectangleRec({x, peak_y, bar_w, 2.0f}, peak_color);
+        ui::block_spectrum_bar(x,
+                               baseline,
+                               bar_w,
+                               height,
+                               area.height,
+                               normalized * area.height,
+                               block_height,
+                               block_gap,
+                               base_low,
+                               base_mid,
+                               base_top,
+                               peak_glow,
+                               peak_color);
     }
 }
 
@@ -191,7 +176,7 @@ void draw_composition_layer(const mv::composition::mv_composition& composition,
                                    transform.opacity);
 
     if (source.type == "BackgroundRenderer") {
-        DrawRectangle(0, 0, kScreenWidth, kScreenHeight, tint);
+        ui::backdrop({0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)}, tint);
         return;
     }
 
@@ -330,8 +315,7 @@ void draw_composition_layer(const mv::composition::mv_composition& composition,
             const float height = normalized * area.height;
             const float x = area.x + static_cast<float>(i) * (bar_w + gap);
             const Rectangle rect = {x, area.y + area.height - height, bar_w, height};
-            DrawRectangleRec(rect, bar);
-            DrawRectangleRec({rect.x, rect.y, rect.width, std::max(2.0f, rect.height * 0.08f)}, peak);
+            ui::solid_spectrum_bar(rect, bar, peak);
         }
         return;
     }

@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "editor_timeline_types.h"
+#include "ui_hit.h"
 
 namespace {
 
@@ -79,7 +80,7 @@ editor_timeline_note_geometry make_editor_timeline_note_geometry(editor_timeline
 
 bool editor_timeline_note_contains_point(const editor_timeline_note_geometry& geometry, Vector2 point) {
     for (size_t i = 0; i < geometry.selection.point_rect_count; ++i) {
-        if (CheckCollisionPointRec(point, geometry.selection.point_rects[i])) {
+        if (ui::contains_point(geometry.selection.point_rects[i], point)) {
             return true;
         }
     }
@@ -99,17 +100,17 @@ editor_timeline_note_resize_handle editor_timeline_note_resize_handle_at(
     const editor_timeline_note_geometry& geometry,
     Vector2 point) {
     if (geometry.resize.start_tick_rect.has_value() &&
-        CheckCollisionPointRec(point, *geometry.resize.start_tick_rect)) {
+        ui::contains_point(*geometry.resize.start_tick_rect, point)) {
         return editor_timeline_note_resize_handle::start_tick;
     }
     if (geometry.resize.end_tick_rect.has_value() &&
-        CheckCollisionPointRec(point, *geometry.resize.end_tick_rect)) {
+        ui::contains_point(*geometry.resize.end_tick_rect, point)) {
         return editor_timeline_note_resize_handle::end_tick;
     }
-    if (CheckCollisionPointRec(point, geometry.resize.left_lane_rect)) {
+    if (ui::contains_point(geometry.resize.left_lane_rect, point)) {
         return editor_timeline_note_resize_handle::lane_left;
     }
-    if (CheckCollisionPointRec(point, geometry.resize.right_lane_rect)) {
+    if (ui::contains_point(geometry.resize.right_lane_rect, point)) {
         return editor_timeline_note_resize_handle::lane_right;
     }
     return editor_timeline_note_resize_handle::none;

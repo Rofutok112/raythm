@@ -416,6 +416,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/create_tools_view.h
         src/scenes/title/create_unlock_rules_controller.cpp
         src/scenes/title/create_unlock_rules_controller.h
+        src/scenes/title/create_unlock_rules_view.cpp
+        src/scenes/title/create_unlock_rules_view.h
         src/scenes/title/create_upload_permissions.cpp
         src/scenes/title/create_upload_permissions.h
         src/scenes/title/create_upload_client.cpp
@@ -441,6 +443,7 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/title/online_download_layout.cpp
         src/scenes/title/online_download_state.cpp
         src/scenes/title/online_download_view.h
+        src/scenes/title/preview_transport_widget.h
         src/scenes/title/ranking_panel_view.cpp
         src/scenes/title/ranking_panel_view.h
         src/scenes/title/center_panel_view.cpp
@@ -470,6 +473,15 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/multiplayer/multiplayer_state.h
         src/scenes/multiplayer/multiplayer_view.cpp
         src/scenes/multiplayer/multiplayer_view.h
+        src/scenes/multiplayer/multiplayer_view_result.h
+        src/scenes/multiplayer_result/multiplayer_result_detail_view.cpp
+        src/scenes/multiplayer_result/multiplayer_result_detail_view.h
+        src/scenes/multiplayer_result/multiplayer_result_score_list_view.cpp
+        src/scenes/multiplayer_result/multiplayer_result_score_list_view.h
+        src/scenes/multiplayer_result/multiplayer_result_screen_view.cpp
+        src/scenes/multiplayer_result/multiplayer_result_screen_view.h
+        src/scenes/multiplayer_result/multiplayer_result_summary_view.cpp
+        src/scenes/multiplayer_result/multiplayer_result_summary_view.h
         src/scenes/multiplayer_result_scene.cpp
         src/scenes/multiplayer_result_scene.h
         src/mv/composition/mv_composition.cpp
@@ -484,8 +496,18 @@ add_executable(raythm WIN32 src/main.cpp
         src/mv/composition/mv_composition_evaluator.h
         src/mv/composition/mv_composition_serializer.cpp
         src/mv/composition/mv_composition_serializer.h
+        src/scenes/mv_editor_context_menu_view.cpp
+        src/scenes/mv_editor_context_menu_view.h
+        src/scenes/mv_editor_inspector_view.cpp
+        src/scenes/mv_editor_inspector_view.h
+        src/scenes/mv_editor_preview_view.cpp
+        src/scenes/mv_editor_preview_view.h
         src/scenes/mv_editor_scene.cpp
         src/scenes/mv_editor_scene.h
+        src/scenes/mv_editor_side_panel_view.cpp
+        src/scenes/mv_editor_side_panel_view.h
+        src/scenes/mv_editor_timeline_view.cpp
+        src/scenes/mv_editor_timeline_view.h
          src/scenes/song_create_scene.cpp
          src/scenes/song_create_scene.h
          src/scenes/song_create/song_create_form_panel.cpp
@@ -553,6 +575,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/editor/controller/editor_timeline_screen_controller.h
         src/scenes/editor/controller/editor_timing_action_controller.cpp
         src/scenes/editor/controller/editor_timing_action_controller.h
+        src/scenes/editor/daw/editor_daw_automation_view.cpp
+        src/scenes/editor/daw/editor_daw_automation_view.h
         src/scenes/editor/daw/editor_daw_view.cpp
         src/scenes/editor/daw/editor_daw_view.h
         src/scenes/editor/daw/editor_daw_types.h
@@ -642,6 +666,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/ui/ui_text.h
         src/ui/ui_hit.h
         src/ui/ui_draw.h
+        src/ui/ui_frame.h
+        src/ui/ui_modal.h
         src/ui/ui_inspector.h
         src/ui/ui_clip.cpp
         src/ui/ui_clip.h

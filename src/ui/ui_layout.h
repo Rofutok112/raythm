@@ -122,6 +122,14 @@ constexpr rect_pair split_columns(Rectangle parent, float first_width, float spa
     };
 }
 
+// parent を main + 右端固定領域に分割する。second_width が右端領域幅、spacing が列間。
+constexpr rect_pair split_trailing(Rectangle parent, float second_width, float spacing = 0.0f) {
+    return {
+        {parent.x, parent.y, parent.width - second_width - spacing, parent.height},
+        {parent.x + parent.width - second_width, parent.y, second_width, parent.height},
+    };
+}
+
 // parent を上下2行に分割する。first_height が上段高さ、spacing が行間。
 constexpr rect_pair split_rows(Rectangle parent, float first_height, float spacing = 0.0f) {
     return {
@@ -187,6 +195,19 @@ inline int hstack(Rectangle parent, float item_width, float spacing,
     for (int i = 0; i < count; ++i) {
         out[i] = {x, parent.y, item_width, parent.height};
         x += item_width + spacing;
+    }
+    return count;
+}
+
+// 水平スタック（可変幅）。item_widths の各幅を spacing 間隔で左から並べる。
+// 高さは parent に合わせる。
+inline int hstack_widths(Rectangle parent, std::span<const float> item_widths, float spacing,
+                         std::span<Rectangle> out) {
+    const int count = std::min(static_cast<int>(item_widths.size()), static_cast<int>(out.size()));
+    float x = parent.x;
+    for (int i = 0; i < count; ++i) {
+        out[i] = {x, parent.y, item_widths[i], parent.height};
+        x += item_widths[i] + spacing;
     }
     return count;
 }

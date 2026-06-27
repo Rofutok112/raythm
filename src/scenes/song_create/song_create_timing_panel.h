@@ -22,7 +22,6 @@ struct state_refs {
     std::vector<timing_event>& events;
     std::optional<size_t>& selected_event_index;
     bool& metronome_enabled;
-    bool& modal_open;
     float& event_scroll_offset;
     bool& event_scrollbar_dragging;
     float& event_scrollbar_drag_offset;
@@ -32,14 +31,6 @@ struct state_refs {
 
 struct callbacks {
     std::function<void()> ensure_initialized;
-    std::function<bool()> flush_selected_inputs;
-    std::function<void()> sync_selected_inputs;
-    std::function<void(timing_event_type)> add_event;
-    std::function<void()> delete_selected_event;
-    std::function<bool(const std::string&)> import_midi;
-    std::function<void()> close_modal;
-    std::function<bool()> start_preview;
-    std::function<void()> stop_preview;
 };
 
 struct config {
@@ -50,8 +41,37 @@ struct config {
     ui::draw_layer modal_layer = ui::draw_layer::modal;
 };
 
-void draw_summary(Rectangle rect, state_refs state, const callbacks& actions, const config& view_config);
-void draw_modal(state_refs state, const callbacks& actions, const config& view_config);
-void draw_editor(Rectangle rect, ui::draw_layer layer, state_refs state, const callbacks& actions);
+struct summary_result {
+    bool open_requested = false;
+};
+
+struct editor_result {
+    bool event_scroll_changed = false;
+    float event_scroll_offset = 0.0f;
+    bool event_scrollbar_drag_state_changed = false;
+    bool event_scrollbar_dragging = false;
+    float event_scrollbar_drag_offset = 0.0f;
+    std::optional<size_t> selected_event_index;
+    std::optional<timing_event_type> add_event_type;
+    bool delete_selected_event_requested = false;
+    bool start_metronome_requested = false;
+    bool stop_metronome_requested = false;
+};
+
+struct modal_result {
+    bool import_midi_requested = false;
+    bool close_requested = false;
+    editor_result editor;
+};
+
+[[nodiscard]] summary_result draw_summary(Rectangle rect,
+                                          state_refs state,
+                                          const callbacks& actions,
+                                          const config& view_config);
+[[nodiscard]] modal_result draw_modal(state_refs state, const callbacks& actions, const config& view_config);
+[[nodiscard]] editor_result draw_editor(Rectangle rect,
+                                        ui::draw_layer layer,
+                                        state_refs state,
+                                        const callbacks& actions);
 
 }  // namespace song_create::timing_panel

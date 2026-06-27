@@ -1,6 +1,7 @@
 #include "editor_timing_panel.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "theme.h"
@@ -41,19 +42,17 @@ void clear_active_inputs(editor_timing_panel_state& state) {
 
 void draw_inspector_tabs(Rectangle rect, const char* active_label) {
     const auto& t = *g_theme;
-    ui::draw_rect_f(rect, with_alpha(t.panel, 220));
-    ui::draw_rect_lines(rect, 1.2f, t.border_light);
+    ui::surface(rect, with_alpha(t.panel, 220), t.border_light, 1.2f);
 
-    const float gap = 4.0f;
-    const float tab_width = (rect.width - gap * 2.0f) / 3.0f;
+    std::array<Rectangle, 3> tabs{};
+    ui::hstack_fill(rect, 4.0f, tabs);
     const char* labels[] = {"Selection", "Timing", "Scroll"};
     for (int i = 0; i < 3; ++i) {
         const bool active = std::string(labels[i]) == active_label;
-        const Rectangle tab = {rect.x + (tab_width + gap) * static_cast<float>(i),
-                               rect.y, tab_width, rect.height};
-        ui::draw_rect_f(ui::inset(tab, 1.0f), active ? t.row_selected : t.row);
+        const Rectangle tab = tabs[static_cast<size_t>(i)];
+        ui::surface_fill(ui::inset(tab, 1.0f), active ? t.row_selected : t.row);
         if (active) {
-            ui::draw_rect_f({tab.x + 8.0f, tab.y + tab.height - 3.0f, tab.width - 16.0f, 2.0f}, t.accent);
+            ui::accent_bar({tab.x + 8.0f, tab.y + tab.height - 3.0f, tab.width - 16.0f, 2.0f}, t.accent);
         }
         ui::draw_text_in_rect(labels[i], 13, tab, active ? t.text : t.text_muted);
     }
@@ -65,16 +64,17 @@ void draw_section_heading(Rectangle box, const char* title, const char* tab_labe
                           {box.x + 12.0f, box.y + 10.0f, box.width - 24.0f, 24.0f},
                           t.text, ui::text_align::left);
     const Rectangle badge = {box.x + box.width - 88.0f, box.y + 12.0f, 74.0f, 20.0f};
-    ui::draw_rect_f(badge, with_alpha(t.row, 230));
-    ui::draw_rect_lines(badge, 1.0f, t.border_light);
+    ui::surface(badge, with_alpha(t.row, 230), t.border_light, 1.0f);
     ui::draw_text_in_rect(tab_label, 12, badge, t.text_muted);
-    ui::draw_rect_f({box.x + 12.0f, box.y + 38.0f, box.width - 24.0f, 1.5f}, t.border_light);
+    ui::divider({box.x + 12.0f, box.y + 38.0f, box.width - 24.0f, 1.5f}, t.border_light);
 }
 
 void draw_action_chip(Rectangle rect, const char* label, bool enabled) {
     const auto& t = *g_theme;
-    ui::draw_rect_f(rect, enabled ? with_alpha(t.row, 245) : with_alpha(t.section, 230));
-    ui::draw_rect_lines(rect, 1.0f, enabled ? t.border_light : with_alpha(t.border_light, 120));
+    ui::surface(rect,
+                enabled ? with_alpha(t.row, 245) : with_alpha(t.section, 230),
+                enabled ? t.border_light : with_alpha(t.border_light, 120),
+                1.0f);
     ui::draw_text_in_rect(label, 13, rect, enabled ? t.text_secondary : t.text_hint);
 }
 }
@@ -95,12 +95,13 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
     auto draw_bar_pick_row = [&](Rectangle rect, const char* label, const std::string& value,
                                  editor_timing_input_field field, float label_width = 84.0f) {
         const bool selected = state.active_input_field == field || state.bar_pick_mode;
-        const ui::row_state row = ui::draw_row(
-            rect,
-            selected ? t.row_selected : t.row,
-            selected ? t.row_selected_hover : t.row_hover,
-            state.bar_pick_mode ? t.accent : (selected ? t.border_active : t.border),
-            1.5f);
+        const ui::row_state row = ui::row(rect, {
+            .border_width = 1.5f,
+            .bg = selected ? t.row_selected : t.row,
+            .bg_hover = selected ? t.row_selected_hover : t.row_hover,
+            .border_color = state.bar_pick_mode ? t.accent : (selected ? t.border_active : t.border),
+            .custom_colors = true,
+        });
         if (row.clicked) {
             result.clicked_input_row = true;
             state.active_input_field = field;
@@ -122,8 +123,10 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
             content_rect.height - 8.0f
         };
 
-        ui::draw_rect_f(input_rect, with_alpha(t.section, 255));
-        ui::draw_rect_lines(input_rect, 1.5f, state.bar_pick_mode ? t.accent : t.border_light);
+        ui::surface(input_rect,
+                    with_alpha(t.section, 255),
+                    state.bar_pick_mode ? t.accent : t.border_light,
+                    1.5f);
         ui::draw_text_in_rect(label, 16, label_rect,
                               selected ? t.text : t.text_secondary, ui::text_align::left);
 
@@ -137,9 +140,13 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
     auto draw_input_row = [&](Rectangle rect, const char* label, ui::text_input_state& input_state,
                               editor_timing_input_field field, ui::text_input_filter filter,
                               const char* placeholder, float label_width = 84.0f) {
-        const ui::text_input_result input_result = ui::draw_text_input(
-            rect, input_state, label, placeholder, nullptr,
-            ui::draw_layer::base, 16, 16, filter, label_width);
+        const ui::text_input_result input_result = ui::text_input(
+            rect, input_state, label, placeholder, {
+                .font_size = 16,
+                .max_length = 16,
+                .filter = filter,
+                .label_width = label_width,
+            });
 
         if (input_result.clicked) {
             result.clicked_input_row = true;
@@ -169,7 +176,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
                                bool& scrollbar_dragging,
                                float& scrollbar_drag_offset,
                                bool automation_items) {
-        ui::draw_section(box);
+        ui::section(box);
         draw_section_heading(box, title, automation_items ? "Scroll" : "Timing");
 
         const Rectangle list_view_rect = {
@@ -193,13 +200,16 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         const float max_scroll = std::max(0.0f, content_height - list_view_rect.height);
         scroll_offset = std::clamp(scroll_offset, 0.0f, max_scroll);
 
-        const ui::scrollbar_interaction scrollbar = ui::update_vertical_scrollbar(
-            scrollbar_rect, content_height, scroll_offset, scrollbar_dragging, scrollbar_drag_offset, 28.0f);
+        const ui::scrollbar_interaction scrollbar = ui::vertical_scrollbar(
+            scrollbar_rect, content_height, scroll_offset, scrollbar_dragging, scrollbar_drag_offset, {
+                .min_thumb_height = 28.0f,
+                .drag_blocked_by_layer = false,
+            });
         if (scrollbar.changed || scrollbar.dragging) {
             scroll_offset = scrollbar.scroll_offset;
         }
 
-        if (CheckCollisionPointRec(model.mouse, list_view_rect) && GetMouseWheelMove() != 0.0f) {
+        if (ui::contains_point(list_view_rect, model.mouse) && GetMouseWheelMove() != 0.0f) {
             scroll_offset = std::clamp(scroll_offset - GetMouseWheelMove() * 42.0f, 0.0f, max_scroll);
         }
 
@@ -208,7 +218,7 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
             float row_y = list_view_rect.y - scroll_offset;
             for (const editor_timing_panel_item& item : items) {
                 const Rectangle row_rect = {list_view_rect.x, row_y, list_view_rect.width, row_height};
-                const ui::row_state row = ui::draw_selectable_row(row_rect, item.selected, 1.5f);
+                const ui::row_state row = ui::selectable_row(row_rect, item.selected, 1.5f);
                 if (row.clicked) {
                     if (automation_items) {
                         result.selected_scroll_event_index = item.event_index;
@@ -224,16 +234,22 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
                 row_y += row_height + row_gap;
             }
         }
-        ui::draw_scrollbar(scrollbar_rect, content_height, scroll_offset,
-                           t.scrollbar_track, t.scrollbar_thumb, 28.0f);
+        ui::scrollbar(scrollbar_rect, content_height, scroll_offset, {
+            .track_color = t.scrollbar_track,
+            .thumb_color = t.scrollbar_thumb,
+            .min_thumb_height = 28.0f,
+            .custom_colors = true,
+        });
     };
 
-    ui::draw_section(selection_box);
+    ui::section(selection_box);
     draw_section_heading(selection_box, "Selection", "Notes");
     const bool has_notes = model.selected_note_count > 0;
     const Rectangle count_rect = {selection_box.x + 12.0f, selection_box.y + 50.0f, 118.0f, 42.0f};
-    ui::draw_rect_f(count_rect, has_notes ? with_alpha(t.row_selected, 245) : with_alpha(t.row, 210));
-    ui::draw_rect_lines(count_rect, 1.5f, has_notes ? t.border_active : t.border_light);
+    ui::surface(count_rect,
+                has_notes ? with_alpha(t.row_selected, 245) : with_alpha(t.row, 210),
+                has_notes ? t.border_active : t.border_light,
+                1.5f);
     ui::draw_text_in_rect(has_notes ? TextFormat("%d", static_cast<int>(model.selected_note_count)) : "-",
                           26, count_rect, has_notes ? t.text : t.text_muted);
     ui::draw_text_in_rect(model.selected_note_summary.empty() ? "No notes selected" : model.selected_note_summary.c_str(),
@@ -246,47 +262,45 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
                           {selection_box.x + 142.0f, selection_box.y + 72.0f,
                            selection_box.width - 154.0f, 18.0f},
                           t.text_hint, ui::text_align::left);
-    const float chip_w = (selection_box.width - 24.0f - 12.0f) / 3.0f;
     const float chip_y = selection_box.y + selection_box.height - 30.0f;
-    draw_action_chip({selection_box.x + 12.0f, chip_y, chip_w, 22.0f}, "Copy", has_notes);
-    draw_action_chip({selection_box.x + 12.0f + chip_w + 6.0f, chip_y, chip_w, 22.0f}, "Duplicate", has_notes);
-    draw_action_chip({selection_box.x + 12.0f + (chip_w + 6.0f) * 2.0f, chip_y, chip_w, 22.0f}, "Delete", has_notes);
+    std::array<Rectangle, 3> action_chips{};
+    ui::hstack_fill({
+        selection_box.x + 12.0f,
+        chip_y,
+        selection_box.width - 24.0f,
+        22.0f,
+    }, 6.0f, action_chips);
+    draw_action_chip(action_chips[0], "Copy", has_notes);
+    draw_action_chip(action_chips[1], "Duplicate", has_notes);
+    draw_action_chip(action_chips[2], "Delete", has_notes);
 
     draw_event_list(timing_box, "Timing Map", model.items,
                     state.list_scroll_offset, state.list_scrollbar_dragging,
                     state.list_scrollbar_drag_offset, false);
 
-    const float timing_button_gap = 8.0f;
-    const float timing_button_width = (timing_box.width - 24.0f - timing_button_gap * 2.0f) / 3.0f;
-    const Rectangle add_bpm_rect = {
+    std::array<Rectangle, 3> timing_buttons{};
+    ui::hstack_fill({
         timing_box.x + 12.0f,
         timing_box.y + timing_box.height - 42.0f,
-        timing_button_width,
-        28.0f
-    };
-    const Rectangle add_meter_rect = {
-        add_bpm_rect.x + timing_button_width + timing_button_gap,
-        add_bpm_rect.y,
-        timing_button_width,
-        28.0f
-    };
-    const Rectangle delete_rect = {
-        add_meter_rect.x + timing_button_width + timing_button_gap,
-        add_bpm_rect.y,
-        timing_button_width,
-        28.0f
-    };
-    if (ui::draw_button(add_bpm_rect, "Add BPM", 14).clicked) {
+        timing_box.width - 24.0f,
+        28.0f,
+    }, 8.0f, timing_buttons);
+    const Rectangle add_bpm_rect = timing_buttons[0];
+    const Rectangle add_meter_rect = timing_buttons[1];
+    const Rectangle delete_rect = timing_buttons[2];
+    if (ui::button(add_bpm_rect, "Add BPM", {.font_size = 14}).clicked) {
         result.add_bpm = true;
     }
-    if (ui::draw_button(add_meter_rect, "Add Time Sig", 14).clicked) {
+    if (ui::button(add_meter_rect, "Add Time Sig", {.font_size = 14}).clicked) {
         result.add_meter = true;
     }
-    const ui::button_state delete_button = ui::draw_button_colored(
-        delete_rect, "Delete", 14,
-        model.delete_enabled ? t.row : t.section,
-        model.delete_enabled ? t.row_hover : t.section,
-        model.delete_enabled ? t.text : t.text_hint, 1.5f);
+    const ui::button_state delete_button = ui::action_button(delete_rect, "Delete", {
+        .font_size = 14,
+        .border_width = 1.5f,
+        .enabled = model.delete_enabled,
+        .disabled_text_color = t.text_hint,
+        .disabled_border_color = t.border,
+    });
     if (model.delete_enabled && delete_button.clicked) {
         result.delete_selected = true;
     }
@@ -295,42 +309,34 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
                     state.scroll_list_scroll_offset, state.scroll_list_scrollbar_dragging,
                     state.scroll_list_scrollbar_drag_offset, true);
 
-    const float scroll_button_gap = 8.0f;
-    const float scroll_button_width = (scroll_box.width - 24.0f - scroll_button_gap * 2.0f) / 3.0f;
-    const Rectangle add_speed_rect = {
+    std::array<Rectangle, 3> scroll_buttons{};
+    ui::hstack_fill({
         scroll_box.x + 12.0f,
         scroll_box.y + scroll_box.height - 42.0f,
-        scroll_button_width,
-        28.0f
-    };
-    const Rectangle add_stop_rect = {
-        add_speed_rect.x + scroll_button_width + scroll_button_gap,
-        add_speed_rect.y,
-        scroll_button_width,
-        28.0f
-    };
-    const Rectangle delete_scroll_rect = {
-        add_stop_rect.x + scroll_button_width + scroll_button_gap,
-        add_speed_rect.y,
-        scroll_button_width,
-        28.0f
-    };
-    if (ui::draw_button(add_speed_rect, "Add Point", 14).clicked) {
+        scroll_box.width - 24.0f,
+        28.0f,
+    }, 8.0f, scroll_buttons);
+    const Rectangle add_speed_rect = scroll_buttons[0];
+    const Rectangle add_stop_rect = scroll_buttons[1];
+    const Rectangle delete_scroll_rect = scroll_buttons[2];
+    if (ui::button(add_speed_rect, "Add Point", {.font_size = 14}).clicked) {
         result.add_speed = true;
     }
-    if (ui::draw_button(add_stop_rect, "Curve", 14).clicked) {
+    if (ui::button(add_stop_rect, "Curve", {.font_size = 14}).clicked) {
         result.cycle_selected_scroll_curve = true;
     }
-    const ui::button_state delete_scroll_button = ui::draw_button_colored(
-        delete_scroll_rect, "Delete", 14,
-        model.scroll_delete_enabled ? t.row : t.section,
-        model.scroll_delete_enabled ? t.row_hover : t.section,
-        model.scroll_delete_enabled ? t.text : t.text_hint, 1.5f);
+    const ui::button_state delete_scroll_button = ui::action_button(delete_scroll_rect, "Delete", {
+        .font_size = 14,
+        .border_width = 1.5f,
+        .enabled = model.scroll_delete_enabled,
+        .disabled_text_color = t.text_hint,
+        .disabled_border_color = t.border,
+    });
     if (model.scroll_delete_enabled && delete_scroll_button.clicked) {
         result.delete_selected_scroll = true;
     }
 
-    ui::draw_section(editor_box);
+    ui::section(editor_box);
     const char* active_tab = model.selected_scroll_event.has_value()
         ? "Scroll"
         : (model.selected_event.has_value() ? "Timing" : "Selection");

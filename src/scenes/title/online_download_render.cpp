@@ -8,35 +8,166 @@
 
 #include "content_lifecycle.h"
 #include "localization/localization.h"
-#include "platform/windows_input_source.h"
 #include "scene_common.h"
 #include "services/content_sync_service.h"
+#include "song_select/song_select_filter_widget.h"
+#include "song_select/song_select_level_filter_widget.h"
 #include "tween.h"
+#include "title/preview_transport_widget.h"
 #include "title/title_layout.h"
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_text_input.h"
 #include "ui/icons/raythm_icons.h"
 #include "virtual_screen.h"
 
 namespace title_online_view {
 namespace {
 
-constexpr float kChartLevelWidth = 220.0f;
-constexpr float kChartKeyButtonWidth = 44.0f;
-constexpr float kChartKeyButtonStep = 50.0f;
-constexpr float kChartFilterMinLevel = 0.0f;
-constexpr float kChartFilterUsefulMaxLevel = 15.0f;
-constexpr float kChartFilterMaxLevel = 99.0f;
-constexpr float kChartFilterUsefulTrack = 0.97f;
+constexpr float kChartFilterMinLevel = song_select::level_filter::kMinLevel;
+constexpr float kChartFilterMaxLevel = song_select::level_filter::kMaxLevel;
+constexpr float kRankingPanelInsetX = 28.0f;
+constexpr float kRankingHeaderY = 452.0f;
+constexpr float kRankingTableY = 486.0f;
+constexpr float kRankingTableHeight = 244.0f;
+constexpr float kRankingRowTop = 34.0f;
+constexpr float kRankingRowHeight = 27.0f;
+constexpr float kRankingRowStep = 30.0f;
+constexpr float kDetailTitleGap = 24.0f;
+constexpr float kDetailTitleRightInset = 30.0f;
+constexpr float kDetailTitleTopOffset = 4.0f;
+constexpr float kDetailTitleHeight = 38.0f;
+constexpr float kDetailArtistTopOffset = 40.0f;
+constexpr float kDetailArtistHeight = 24.0f;
+constexpr float kDetailChartTopOffset = 82.0f;
+constexpr float kDetailGenreTopOffset = 118.0f;
+constexpr float kDetailKeywordTopOffset = 170.0f;
+constexpr float kDetailTagHeadingHeight = 16.0f;
+constexpr float kDetailTagTopGap = 20.0f;
+constexpr float kDetailTagHeight = 26.0f;
+constexpr float kDetailProgressTimeTopGap = 14.0f;
+constexpr float kDetailDownloadProgressTopOffset = 18.0f;
+constexpr float kDetailDownloadProgressHeight = 8.0f;
+constexpr float kDetailLockReasonTopOffset = 24.0f;
+constexpr float kDetailLockReasonHeight = 18.0f;
 
-float level_filter_t(float level) {
-    const float clamped = std::clamp(level, kChartFilterMinLevel, kChartFilterMaxLevel);
-    if (clamped <= kChartFilterUsefulMaxLevel) {
-        return ((clamped - kChartFilterMinLevel) / (kChartFilterUsefulMaxLevel - kChartFilterMinLevel)) *
-               kChartFilterUsefulTrack;
-    }
-    return 1.0f;
+struct compact_tag_row_layout {
+    Rectangle heading = {};
+    Rectangle tag_area = {};
+};
+
+struct detail_preview_layout {
+    Rectangle title = {};
+    Rectangle artist = {};
+    Rectangle chart_summary = {};
+    Rectangle chart_level_badge = {};
+    Rectangle chart_author = {};
+    compact_tag_row_layout genres = {};
+    compact_tag_row_layout keywords = {};
+    Rectangle preview_time = {};
+    Rectangle download_progress = {};
+    Rectangle lock_reason = {};
+};
+
+struct preview_ranking_layout {
+    Rectangle header = {};
+    Rectangle table = {};
+    Rectangle placement_header = {};
+    Rectangle player_header = {};
+    Rectangle score_header = {};
+    Rectangle accuracy_header = {};
+    Rectangle clear_header = {};
+    Rectangle empty_message = {};
+};
+
+struct preview_ranking_row_layout {
+    Rectangle row = {};
+    Rectangle placement = {};
+    Rectangle player = {};
+    Rectangle score = {};
+    Rectangle accuracy = {};
+    Rectangle clear = {};
+};
+
+compact_tag_row_layout compact_tag_row_layout_for(Rectangle title_rect, float y) {
+    return {
+        .heading = {title_rect.x, y, title_rect.width, kDetailTagHeadingHeight},
+        .tag_area = {title_rect.x, y + kDetailTagTopGap, title_rect.width, kDetailTagHeight},
+    };
+}
+
+detail_preview_layout detail_preview_layout_for(Rectangle hero_jacket_rect,
+                                                Rectangle preview_panel,
+                                                Rectangle preview_bar,
+                                                Rectangle primary_action) {
+    const Rectangle title = {
+        hero_jacket_rect.x + hero_jacket_rect.width + kDetailTitleGap,
+        hero_jacket_rect.y + kDetailTitleTopOffset,
+        preview_panel.x + preview_panel.width - hero_jacket_rect.x - hero_jacket_rect.width -
+            kDetailTitleGap - kDetailTitleRightInset,
+        kDetailTitleHeight,
+    };
+    return {
+        .title = title,
+        .artist = {title.x, title.y + kDetailArtistTopOffset, title.width, kDetailArtistHeight},
+        .chart_summary = {title.x, title.y + kDetailChartTopOffset, title.width * 0.42f, 24.0f},
+        .chart_level_badge = {title.x + title.width * 0.43f, title.y + kDetailChartTopOffset, 70.0f, 21.0f},
+        .chart_author = {title.x + title.width * 0.58f, title.y + kDetailChartTopOffset,
+                         title.width * 0.42f, 24.0f},
+        .genres = compact_tag_row_layout_for(title, title.y + kDetailGenreTopOffset),
+        .keywords = compact_tag_row_layout_for(title, title.y + kDetailKeywordTopOffset),
+        .preview_time = {preview_bar.x, preview_bar.y + kDetailProgressTimeTopGap, preview_bar.width, 16.0f},
+        .download_progress = {primary_action.x,
+                              primary_action.y - kDetailDownloadProgressTopOffset,
+                              primary_action.width,
+                              kDetailDownloadProgressHeight},
+        .lock_reason = {primary_action.x,
+                        primary_action.y - kDetailLockReasonTopOffset,
+                        primary_action.width,
+                        kDetailLockReasonHeight},
+    };
+}
+
+preview_ranking_layout preview_ranking_layout_for(Rectangle preview_panel) {
+    const Rectangle table = {
+        preview_panel.x + kRankingPanelInsetX,
+        preview_panel.y + kRankingTableY,
+        preview_panel.width - kRankingPanelInsetX * 2.0f,
+        kRankingTableHeight,
+    };
+    return {
+        .header = {
+            preview_panel.x + kRankingPanelInsetX,
+            preview_panel.y + kRankingHeaderY,
+            preview_panel.width - kRankingPanelInsetX * 2.0f,
+            26.0f,
+        },
+        .table = table,
+        .placement_header = {table.x + 12.0f, table.y + 10.0f, 32.0f, 16.0f},
+        .player_header = {table.x + 58.0f, table.y + 10.0f, 180.0f, 16.0f},
+        .score_header = {table.x + 300.0f, table.y + 10.0f, 116.0f, 16.0f},
+        .accuracy_header = {table.x + 444.0f, table.y + 10.0f, 80.0f, 16.0f},
+        .clear_header = {table.x + table.width - 76.0f, table.y + 10.0f, 60.0f, 16.0f},
+        .empty_message = {table.x + 20.0f, table.y + 70.0f, table.width - 40.0f, 28.0f},
+    };
+}
+
+preview_ranking_row_layout preview_ranking_row_layout_for(Rectangle table, int index) {
+    const Rectangle row = {
+        table.x + 10.0f,
+        table.y + kRankingRowTop + static_cast<float>(index) * kRankingRowStep,
+        table.width - 20.0f,
+        kRankingRowHeight,
+    };
+    return {
+        .row = row,
+        .placement = {row.x + 4.0f, row.y + 5.0f, 34.0f, 16.0f},
+        .player = {row.x + 48.0f, row.y + 5.0f, 190.0f, 16.0f},
+        .score = {row.x + 270.0f, row.y + 5.0f, 128.0f, 16.0f},
+        .accuracy = {row.x + 424.0f, row.y + 5.0f, 78.0f, 16.0f},
+        .clear = {row.x + row.width - 54.0f, row.y + 4.0f, 44.0f, 18.0f},
+    };
 }
 
 Rectangle centered_icon_rect(Rectangle rect, float inset) {
@@ -47,41 +178,6 @@ Rectangle centered_icon_rect(Rectangle rect, float inset) {
         size,
         size
     };
-}
-
-Rectangle level_filter_chip_rect(Rectangle range, float level) {
-    const float x = range.x + range.width * level_filter_t(level);
-    return {x - 24.0f, range.y - 4.0f, 48.0f, 28.0f};
-}
-
-std::string level_filter_label(float level) {
-    if (level >= kChartFilterMaxLevel - 0.05f) {
-        return "\xE2\x88\x9E";
-    }
-    return TextFormat("%.1f", level);
-}
-
-void draw_level_filter_gradient(Rectangle rect, unsigned char alpha) {
-    constexpr int kSegments = 48;
-    for (int i = 0; i < kSegments; ++i) {
-        const float from_level = kChartFilterUsefulMaxLevel * (static_cast<float>(i) / kSegments);
-        const float to_level = kChartFilterUsefulMaxLevel * (static_cast<float>(i + 1) / kSegments);
-        const float from_t = level_filter_t(from_level);
-        const float to_t = level_filter_t(to_level);
-        const Rectangle segment = {
-            rect.x + rect.width * from_t,
-            rect.y,
-            std::max(1.0f, rect.width * (to_t - from_t)),
-            rect.height,
-        };
-        DrawRectangleGradientH(static_cast<int>(segment.x), static_cast<int>(segment.y),
-                               static_cast<int>(std::ceil(segment.width)), static_cast<int>(segment.height),
-                               with_alpha(difficulty_level_color(from_level), alpha),
-                               with_alpha(difficulty_level_color(to_level), alpha));
-    }
-    const float useful_end_x = rect.x + rect.width * level_filter_t(kChartFilterUsefulMaxLevel);
-    ui::draw_rect_f({useful_end_x, rect.y, rect.x + rect.width - useful_end_x, rect.height},
-                    with_alpha({34, 38, 46, 255}, alpha));
 }
 
 Rectangle song_card_jacket_rect(Rectangle card) {
@@ -292,131 +388,6 @@ const char* source_label(source_filter source) {
     return "";
 }
 
-Rectangle preview_open_button_rect(Rectangle panel) {
-    constexpr float kPreviewPanelInset = 24.0f;
-    constexpr float kPreviewOpenButtonBottom = 28.0f;
-    constexpr float kPreviewOpenButtonHeight = 58.0f;
-    return {
-        panel.x + kPreviewPanelInset,
-        panel.y + panel.height - kPreviewOpenButtonBottom - kPreviewOpenButtonHeight,
-        panel.width - kPreviewPanelInset * 2.0f,
-        kPreviewOpenButtonHeight,
-    };
-}
-
-Rectangle preview_play_button_rect(Rectangle panel) {
-    constexpr float kPreviewPlayY = 400.0f;
-    constexpr float kPreviewPlayWidth = 116.0f;
-    constexpr float kPreviewPlayHeight = 54.0f;
-    return {
-        panel.x + panel.width * 0.5f - kPreviewPlayWidth * 0.5f,
-        panel.y + kPreviewPlayY,
-        kPreviewPlayWidth,
-        kPreviewPlayHeight,
-    };
-}
-
-Rectangle preview_prev_button_rect(Rectangle panel) {
-    constexpr float kPreviewPlayY = 400.0f;
-    constexpr float kPreviewButtonWidth = 90.0f;
-    constexpr float kPreviewButtonHeight = 54.0f;
-    constexpr float kPreviewButtonGap = 8.0f;
-    return {
-        panel.x + panel.width * 0.5f - 58.0f - kPreviewButtonGap - kPreviewButtonWidth,
-        panel.y + kPreviewPlayY,
-        kPreviewButtonWidth,
-        kPreviewButtonHeight,
-    };
-}
-
-Rectangle preview_next_button_rect(Rectangle panel) {
-    constexpr float kPreviewPlayY = 400.0f;
-    constexpr float kPreviewButtonWidth = 90.0f;
-    constexpr float kPreviewButtonHeight = 54.0f;
-    constexpr float kPreviewButtonGap = 8.0f;
-    return {
-        panel.x + panel.width * 0.5f + 58.0f + kPreviewButtonGap,
-        panel.y + kPreviewPlayY,
-        kPreviewButtonWidth,
-        kPreviewButtonHeight,
-    };
-}
-
-Rectangle preview_progress_rect(Rectangle panel) {
-    constexpr float kPreviewPanelInset = 24.0f;
-    constexpr float kPreviewBarY = 468.0f;
-    constexpr float kPreviewBarHeight = 12.0f;
-    return {
-        panel.x + kPreviewPanelInset,
-        panel.y + kPreviewBarY,
-        panel.width - kPreviewPanelInset * 2.0f,
-        kPreviewBarHeight,
-    };
-}
-
-Rectangle chart_filter_button_rect(Rectangle chart_list, int index) {
-    return {
-        chart_list.x + static_cast<float>(index) * 74.0f,
-        chart_list.y - 78.0f,
-        66.0f,
-        28.0f,
-    };
-}
-
-Rectangle chart_source_button_rect(Rectangle chart_list, int index) {
-    const float button_width = (chart_list.width - 52.0f) * 0.5f;
-    const float x = chart_list.x + 20.0f + static_cast<float>(index % 2) * (button_width + 12.0f);
-    const float y = chart_list.y + 124.0f + static_cast<float>(index / 2) * 42.0f;
-    return {
-        x,
-        y,
-        button_width,
-        36.0f,
-    };
-}
-
-Rectangle chart_key_button_rect(Rectangle chart_list, int index) {
-    const float group_width = kChartKeyButtonWidth + kChartKeyButtonStep * 4.0f;
-    return {
-        chart_list.x + (chart_list.width - group_width) * 0.5f + static_cast<float>(index) * kChartKeyButtonStep,
-        chart_list.y + 470.0f,
-        kChartKeyButtonWidth,
-        30.0f,
-    };
-}
-
-Rectangle chart_status_button_rect(Rectangle chart_list, int index) {
-    return {
-        chart_list.x + 20.0f + static_cast<float>(index) * ((chart_list.width - 52.0f) / 3.0f + 6.0f),
-        chart_list.y + 262.0f,
-        (chart_list.width - 52.0f) / 3.0f,
-        36.0f,
-    };
-}
-
-Rectangle chart_clear_button_rect(Rectangle chart_list) {
-    return {
-        chart_list.x + 20.0f,
-        chart_list.y + chart_list.height - 64.0f,
-        chart_list.width - 40.0f,
-        42.0f,
-    };
-}
-
-Rectangle chart_level_min_input_rect(Rectangle chart_list) {
-    const float group_x = chart_list.x + (chart_list.width - 188.0f) * 0.5f;
-    return {group_x, chart_list.y + 358.0f, 66.0f, 30.0f};
-}
-
-Rectangle chart_level_max_input_rect(Rectangle chart_list) {
-    const float group_x = chart_list.x + (chart_list.width - 188.0f) * 0.5f;
-    return {group_x + 122.0f, chart_list.y + 358.0f, 66.0f, 30.0f};
-}
-
-Rectangle chart_level_slider_rect(Rectangle chart_list) {
-    return {chart_list.x + (chart_list.width - kChartLevelWidth) * 0.5f, chart_list.y + 372.0f, kChartLevelWidth, 24.0f};
-}
-
 float chart_level_value(const std::string& value, float fallback);
 
 bool chart_filters_active(const state& state) {
@@ -469,26 +440,10 @@ float chart_level_value(const std::string& value, float fallback) {
 void draw_level_range_slider(Rectangle chart_list, const state& state, unsigned char alpha) {
     float min_level = chart_level_value(state.min_level_input.value, kChartFilterMinLevel);
     float max_level = chart_level_value(state.max_level_input.value, kChartFilterMaxLevel);
-    if (min_level > max_level) {
-        std::swap(min_level, max_level);
-    }
-    const Rectangle range = chart_level_slider_rect(chart_list);
-    const Rectangle track = {range.x, range.y + 5.0f, range.width, 14.0f};
-    ui::draw_rect_f(track, with_alpha(g_theme->slider_track, alpha));
-    draw_level_filter_gradient(track, static_cast<unsigned char>(alpha / 2));
-
-    const auto draw_chip = [&](float level, bool max_chip) {
-        const Rectangle rect = level_filter_chip_rect(range, level);
-        const Color tone = max_chip && level >= kChartFilterMaxLevel - 0.05f
-                               ? g_theme->text_muted
-                               : difficulty_level_color(level);
-        const std::string label = level_filter_label(level);
-        ui::draw_rect_f(rect, with_alpha(lerp_color(g_theme->bg_alt, tone, 0.18f), alpha));
-        ui::draw_rect_lines(rect, 1.1f, with_alpha(tone, alpha));
-        ui::draw_body_text_in_rect(label.c_str(), 11, rect, with_alpha(tone, alpha));
-    };
-    draw_chip(min_level, false);
-    draw_chip(max_level, true);
+    const Rectangle range = detail::chart_level_slider_rect(chart_list);
+    song_select::level_filter::draw_range_slider(range, min_level, max_level, alpha, {
+        .body_text = true,
+    });
 }
 
 void draw_browse_body_text_in_rect(const char* text,
@@ -566,283 +521,36 @@ ui::text_input_result draw_song_search_input(Rectangle rect, ui::text_input_stat
                                              unsigned char hover_row_alpha,
                                              unsigned char selected_row_alpha,
                                              unsigned char alpha) {
-    ui::text_input_result result;
-    ui::clamp_text_input_state(state);
-    const auto& t = *g_theme;
-
-    const bool hovered = ui::is_hovered(rect);
-    const bool pressed = ui::is_pressed(rect);
-    const bool clicked = ui::is_clicked(rect);
-    const Rectangle visual = pressed ? ui::inset(rect, 1.5f) : rect;
-    const unsigned char row_alpha = state.active ? selected_row_alpha
-        : hovered ? hover_row_alpha
-                  : normal_row_alpha;
-    ui::draw_rect_f(visual, with_alpha(state.active ? button_selected : button_base, row_alpha));
-    const Rectangle border_rect = ui::inset(visual, 1.0f);
-    ui::draw_rect_lines(border_rect, 1.2f,
-                        with_alpha(state.active ? t.border_active : t.border_light, alpha));
-
-    const Rectangle content_rect = ui::inset(visual, ui::edge_insets::symmetric(0.0f, 14.0f));
-    constexpr float kLabelWidth = 108.0f;
-    constexpr float kLabelGap = 14.0f;
-    const bool show_label = label != nullptr && *label != '\0' && !state.active && state.value.empty();
-    const bool show_search_icon = max_length > 16;
-    constexpr float kSearchIconWidth = 28.0f;
-    constexpr float kSearchIconGap = 8.0f;
-    const float leading_width = show_search_icon ? kSearchIconWidth + kSearchIconGap : 0.0f;
-    const Rectangle icon_rect = {content_rect.x, content_rect.y, kSearchIconWidth, content_rect.height};
-    const Rectangle label_rect = {content_rect.x, content_rect.y, kLabelWidth, content_rect.height};
-    const Rectangle text_rect = {
-        (show_label ? content_rect.x + kLabelWidth + kLabelGap : content_rect.x) + leading_width,
-        content_rect.y,
-        std::max(0.0f, (show_label ? content_rect.width - kLabelWidth - kLabelGap : content_rect.width) - leading_width),
-        content_rect.height,
-    };
-
-    if (clicked) {
-        result.clicked = true;
-        if (!state.active) {
-            result.activated = true;
-        }
-        state.active = true;
-
-        const Vector2 mouse = virtual_screen::get_virtual_mouse();
-        if (CheckCollisionPointRec(mouse, text_rect)) {
-            const float local_x = mouse.x - text_rect.x + state.scroll_x;
-            state.cursor = ui::text_input_cursor_from_mouse(state.value, local_x, font_size);
-            ui::clear_text_input_selection(state);
-            state.mouse_selecting = true;
-        } else {
-            state.cursor = ui::utf8_codepoint_count(state.value);
-            ui::clear_text_input_selection(state);
-        }
-    } else if (state.active && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !hovered) {
-        state.active = false;
-        state.mouse_selecting = false;
-        ui::clear_text_input_selection(state);
-        result.deactivated = true;
-    }
-
-    if (state.active && state.mouse_selecting && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        const Vector2 mouse = virtual_screen::get_virtual_mouse();
-        const float local_x = mouse.x - text_rect.x + state.scroll_x;
-        const size_t mouse_cursor = ui::text_input_cursor_from_mouse(state.value, local_x, font_size);
-        state.cursor = mouse_cursor;
-        state.has_selection = state.cursor != state.selection_anchor;
-    }
-
-    if (state.mouse_selecting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        state.mouse_selecting = false;
-    }
-
-    if (state.active) {
-        windows_input_source::instance().request_text_input();
-
-        const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-        const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-
-        if (ctrl && IsKeyPressed(KEY_A)) {
-            state.selection_anchor = 0;
-            state.cursor = ui::utf8_codepoint_count(state.value);
-            state.has_selection = state.cursor > 0;
-        }
-
-        if (ctrl && IsKeyPressed(KEY_C) && state.has_selection) {
-            SetClipboardText(ui::selected_text_input_text(state).c_str());
-        }
-
-        if (ctrl && IsKeyPressed(KEY_X) && state.has_selection) {
-            SetClipboardText(ui::selected_text_input_text(state).c_str());
-            result.changed = ui::delete_text_input_selection(state) || result.changed;
-        }
-
-        if (ctrl && IsKeyPressed(KEY_V)) {
-            const char* clipboard = GetClipboardText();
-            if (clipboard != nullptr) {
-                result.changed =
-                    ui::paste_text_input_at_cursor(state, clipboard, max_length, ui::default_text_input_filter) ||
-                    result.changed;
-            }
-        }
-
-        int codepoint = GetCharPressed();
-        while (codepoint > 0) {
-            if (state.has_selection) {
-                result.changed = ui::delete_text_input_selection(state) || result.changed;
-            }
-            if (ui::utf8_codepoint_count(state.value) < max_length &&
-                ui::default_text_input_filter(codepoint, state.value)) {
-                result.changed = ui::insert_codepoint_at_cursor(state, codepoint) || result.changed;
-            }
-            codepoint = GetCharPressed();
-        }
-
-        if (ui::text_input_key_action(KEY_BACKSPACE)) {
-            if (state.has_selection) {
-                result.changed = ui::delete_text_input_selection(state) || result.changed;
-            } else if (state.cursor > 0) {
-                const size_t end_byte = ui::utf8_codepoint_to_byte_index(state.value, state.cursor);
-                const size_t start_byte = ui::utf8_codepoint_to_byte_index(state.value, state.cursor - 1);
-                state.value.erase(start_byte, end_byte - start_byte);
-                --state.cursor;
-                ui::clear_text_input_selection(state);
-                result.changed = true;
-            }
-        }
-
-        if (ui::text_input_key_action(KEY_DELETE)) {
-            if (state.has_selection) {
-                result.changed = ui::delete_text_input_selection(state) || result.changed;
-            } else if (state.cursor < ui::utf8_codepoint_count(state.value)) {
-                const size_t start_byte = ui::utf8_codepoint_to_byte_index(state.value, state.cursor);
-                const size_t end_byte = ui::utf8_codepoint_to_byte_index(state.value, state.cursor + 1);
-                state.value.erase(start_byte, end_byte - start_byte);
-                result.changed = true;
-            }
-        }
-
-        if (ui::text_input_key_action(KEY_LEFT)) {
-            if (state.has_selection && !shift) {
-                ui::move_text_input_cursor(state, ui::text_input_selection_range(state).first, false);
-            } else if (state.cursor > 0) {
-                ui::move_text_input_cursor(state, state.cursor - 1, shift);
-            }
-        }
-
-        if (ui::text_input_key_action(KEY_RIGHT)) {
-            if (state.has_selection && !shift) {
-                ui::move_text_input_cursor(state, ui::text_input_selection_range(state).second, false);
-            } else if (state.cursor < ui::utf8_codepoint_count(state.value)) {
-                ui::move_text_input_cursor(state, state.cursor + 1, shift);
-            }
-        }
-
-        if (ui::text_input_key_action(KEY_HOME)) {
-            ui::move_text_input_cursor(state, 0, shift);
-        }
-
-        if (ui::text_input_key_action(KEY_END)) {
-            ui::move_text_input_cursor(state, ui::utf8_codepoint_count(state.value), shift);
-        }
-
-        if (IsKeyPressed(KEY_ENTER)) {
-            result.submitted = true;
-            state.active = false;
-            state.mouse_selecting = false;
-            ui::clear_text_input_selection(state);
-            result.deactivated = true;
-        }
-    }
-
-    ui::update_text_input_scroll(state, text_rect.width - 8.0f, font_size);
-
-    if (show_search_icon) {
-        draw_browse_body_text_in_rect("Q", 18, icon_rect,
-                              with_alpha(t.text_secondary, alpha), ui::text_align::center);
-    }
-
-    if (show_label) {
-        draw_browse_body_text_in_rect(label, font_size, label_rect,
-                              with_alpha(t.text_secondary, alpha), ui::text_align::left);
-    }
-
-    std::string display_value = state.value;
-    if (display_value.empty() && !state.active && placeholder != nullptr) {
-        display_value = placeholder;
-    }
-
-    const Color text_color = with_alpha(state.value.empty() && !state.active ? t.text_hint : t.text, alpha);
-    const float layout_font_size = ui::text_layout_font_size(static_cast<float>(font_size));
-    const float text_y = text_rect.y + (text_rect.height - layout_font_size) * 0.5f + 2.0f;
-    const float selection_y = text_rect.y + 7.0f;
-    const float selection_height = text_rect.height - 14.0f;
-    const float cursor_y = text_rect.y + 8.0f;
-    const float cursor_height = text_rect.height - 16.0f;
-
-    if (!state.active && !state.value.empty()) {
-        draw_body_marquee_text(display_value.c_str(), text_rect.x, text_y, font_size, text_color,
-                          text_rect.width, GetTime());
-    } else if (!state.active) {
-        draw_browse_body_text_f(display_value.c_str(), text_rect.x, text_y, font_size, text_color);
-    } else {
-        ui::scoped_clip_rect clip_scope(text_rect);
-
-        if (state.has_selection) {
-            const auto [selection_start, selection_end] = ui::text_input_selection_range(state);
-            const float selection_x = text_rect.x +
-                                      ui::text_input_prefix_width(state.value, selection_start, font_size) -
-                                      state.scroll_x;
-            const float selection_end_x = text_rect.x +
-                                          ui::text_input_prefix_width(state.value, selection_end, font_size) -
-                                          state.scroll_x;
-            ui::draw_rect_span({selection_x, selection_y,
-                                selection_end_x - selection_x, selection_height},
-                               with_alpha(t.row_selected, alpha));
-        }
-
-        draw_browse_body_text_f(state.value.c_str(), text_rect.x - state.scroll_x, text_y, font_size, with_alpha(t.text, alpha));
-
-        const double blink = GetTime() * 1.6;
-        if (std::fmod(blink, 1.0) < 0.6) {
-            const float cursor_x = text_rect.x +
-                                   ui::text_input_prefix_width(state.value, state.cursor, font_size) -
-                                   state.scroll_x;
-            ui::draw_rect_span({cursor_x, cursor_y, 1.5f, cursor_height},
-                               with_alpha(t.text, alpha));
-        }
-
-    }
-
-    return result;
-}
-
-void draw_transport_toggle_button(Rectangle rect, bool playing, unsigned char alpha) {
-    const auto& t = *g_theme;
-    const bool hovered = ui::is_hovered(rect);
-    const bool pressed = ui::is_pressed(rect);
-    const Rectangle visual = pressed ? ui::inset(rect, 1.5f) : rect;
-    const Color border = with_alpha(playing ? t.accent : t.border_light, alpha);
-    const Color fill = with_alpha(playing ? lerp_color(t.section, t.accent, 0.34f) : t.section,
-                                  static_cast<unsigned char>(hovered ? alpha : alpha * 0.72f));
-    ui::draw_rect_f(visual, fill);
-    ui::draw_rect_lines(visual, 1.3f, border);
-    const Color icon = with_alpha(playing ? t.text : (hovered ? t.text : t.text_secondary), alpha);
-    if (playing) {
-        raythm_icons::draw_pause(centered_icon_rect(visual, 13.0f), icon, 3.0f);
-    } else {
-        raythm_icons::draw_play(centered_icon_rect(visual, 13.0f), icon, 3.0f);
-    }
-}
-
-void draw_transport_skip_button(Rectangle rect, bool next, unsigned char alpha) {
-    const auto& t = *g_theme;
-    const bool hovered = ui::is_hovered(rect);
-    const bool pressed = ui::is_pressed(rect);
-    const Rectangle visual = pressed ? ui::inset(rect, 1.5f) : rect;
-    ui::draw_rect_f(visual, with_alpha(t.section, static_cast<unsigned char>(hovered ? alpha : alpha * 0.64f)));
-    ui::draw_rect_lines(visual, 1.2f, with_alpha(t.border_light, alpha));
-
-    const Color icon = with_alpha(hovered ? t.text : t.text_secondary, alpha);
-    if (next) {
-        raythm_icons::draw_skip_forward(centered_icon_rect(visual, 13.0f), icon, 3.0f);
-    } else {
-        raythm_icons::draw_skip_back(centered_icon_rect(visual, 13.0f), icon, 3.0f);
-    }
+    (void)button_hover;
+    return ui::search_text_input(rect, state, label, placeholder, {
+        .font_size = font_size,
+        .max_length = max_length,
+        .content_padding_x = 14.0f,
+        .button_base = button_base,
+        .button_selected = button_selected,
+        .normal_row_alpha = normal_row_alpha,
+        .hover_row_alpha = hover_row_alpha,
+        .selected_row_alpha = selected_row_alpha,
+        .alpha = alpha,
+    });
 }
 
 void draw_download_icon_button(Rectangle rect, bool update, unsigned char alpha) {
     const auto& t = *g_theme;
-    const bool hovered = ui::is_hovered(rect);
-    const bool pressed = ui::is_pressed(rect);
-    const Rectangle visual = pressed ? ui::inset(rect, 1.2f) : rect;
     const Color tone = update ? t.accent : t.success;
-    const Color fill = with_alpha(lerp_color(t.section, tone, hovered ? 0.18f : 0.10f),
-                                  static_cast<unsigned char>(hovered ? alpha : alpha * 0.82f));
     const Color stroke = with_alpha(tone, alpha);
-    ui::draw_rect_f(visual, fill);
-    ui::draw_rect_lines(visual, 1.2f, stroke);
-
-    raythm_icons::draw_download(centered_icon_rect(visual, 7.0f), stroke, 2.8f);
+    ui::icon_button(rect, raythm_icons::draw_download, {
+        .border_width = 1.2f,
+        .bg = with_alpha(lerp_color(t.section, tone, 0.10f), static_cast<unsigned char>(alpha * 0.82f)),
+        .bg_hover = with_alpha(lerp_color(t.section, tone, 0.18f), alpha),
+        .icon_color = stroke,
+        .icon_hover_color = stroke,
+        .border_color = stroke,
+        .icon_inset = 7.0f,
+        .icon_stroke_width = 2.8f,
+        .pressed_inset = 1.2f,
+        .border_alpha_tracks_fill = false,
+    });
 }
 
 Color action_tone_for_state(bool update_available, bool installed, bool downloading) {
@@ -874,7 +582,14 @@ void draw_toned_button(Rectangle rect,
     const auto& t = *g_theme;
     const Color base = with_alpha(lerp_color(t.section, tone, 0.14f), base_alpha);
     const Color hover = with_alpha(lerp_color(t.section, tone, 0.28f), hover_alpha);
-    ui::draw_button_colored(rect, label, font_size, base, hover, with_alpha(t.text, alpha), 1.4f);
+    ui::button(rect, label, {
+        .font_size = font_size,
+        .border_width = 1.4f,
+        .bg = base,
+        .bg_hover = hover,
+        .text_color = with_alpha(t.text, alpha),
+        .custom_colors = true,
+    });
 }
 
 }  // namespace
@@ -889,7 +604,6 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
     const layout current = make_layout(anim_t, origin_rect);
     const float content_fade_t = std::clamp((play_t - 0.16f) / 0.66f, 0.0f, 1.0f);
     const unsigned char alpha = static_cast<unsigned char>(255.0f * content_fade_t);
-    state.jackets.poll();
     const double now = GetTime();
     const Color button_base = t.row_soft;
     const Color button_hover = t.row_soft_hover;
@@ -916,13 +630,19 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
     const unsigned char detail_alpha =
         static_cast<unsigned char>(static_cast<float>(alpha) * detail_content_t);
 
-    ui::draw_button_colored(current.back_rect, "戻る", 16,
-                            with_alpha(button_base, normal_row_alpha),
-                            with_alpha(button_hover, hover_row_alpha),
-                            with_alpha(t.text, alpha), 1.5f);
+    ui::button(current.back_rect, "戻る", {
+        .font_size = 16,
+        .border_width = 1.5f,
+        .bg = with_alpha(button_base, normal_row_alpha),
+        .bg_hover = with_alpha(button_hover, hover_row_alpha),
+        .text_color = with_alpha(t.text, alpha),
+        .custom_colors = true,
+    });
 
-    ui::draw_rect_f(current.sidebar_rect, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * grid_fade_t / 2.0f)));
-    ui::draw_rect_lines(current.sidebar_rect, 1.2f, with_alpha(t.border_light, grid_alpha));
+    ui::surface(current.sidebar_rect,
+                with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * grid_fade_t / 2.0f)),
+                with_alpha(t.border_light, grid_alpha),
+                1.2f);
     const unsigned char faded_normal_row_alpha = static_cast<unsigned char>(normal_row_alpha * grid_fade_t);
     const unsigned char faded_hover_row_alpha = static_cast<unsigned char>(hover_row_alpha * grid_fade_t);
     const unsigned char faded_selected_row_alpha = static_cast<unsigned char>(selected_row_alpha * grid_fade_t);
@@ -938,23 +658,19 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                           {current.sidebar_rect.x + 24.0f, current.sidebar_rect.y + kSidebarTitleY,
                            current.sidebar_rect.width - 48.0f, 20.0f},
                           with_alpha(t.accent, grid_alpha), ui::text_align::left);
-    const discovery_view views[] = {
-        discovery_view::overview,
-        discovery_view::new_arrivals,
-        discovery_view::rising,
-        discovery_view::hidden_gems,
-        discovery_view::recommended,
-        discovery_view::needs_charts,
-    };
-    for (int index = 0; index < 6; ++index) {
-        const bool active = state.view == views[index];
-        ui::draw_button_colored(detail::sidebar_button_rect(current.sidebar_rect, index),
-                                view_label(views[index]), 14,
-                                with_alpha(active ? button_selected : button_base,
-                                           static_cast<unsigned char>((active ? selected_row_alpha : normal_row_alpha) * grid_fade_t)),
-                                with_alpha(active ? button_selected : button_hover,
-                                           static_cast<unsigned char>((active ? selected_row_alpha : hover_row_alpha) * grid_fade_t)),
-                                with_alpha(active ? t.text : t.text_secondary, grid_alpha), 1.2f);
+    for (int index = 0; index < static_cast<int>(detail::kDiscoveryViews.size()); ++index) {
+        const discovery_view view = detail::kDiscoveryViews[static_cast<size_t>(index)];
+        const bool active = state.view == view;
+        ui::button(detail::sidebar_button_rect(current.sidebar_rect, index), view_label(view), {
+            .font_size = 14,
+            .border_width = 1.2f,
+            .bg = with_alpha(active ? button_selected : button_base,
+                             static_cast<unsigned char>((active ? selected_row_alpha : normal_row_alpha) * grid_fade_t)),
+            .bg_hover = with_alpha(active ? button_selected : button_hover,
+                                   static_cast<unsigned char>((active ? selected_row_alpha : hover_row_alpha) * grid_fade_t)),
+            .text_color = with_alpha(active ? t.text : t.text_secondary, grid_alpha),
+            .custom_colors = true,
+        });
     }
     ui::draw_line_ex({current.sidebar_rect.x + 24.0f, current.sidebar_rect.y + kSidebarDividerY},
                      {current.sidebar_rect.x + current.sidebar_rect.width - 24.0f, current.sidebar_rect.y + kSidebarDividerY},
@@ -963,24 +679,25 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                           {current.sidebar_rect.x + 24.0f, current.sidebar_rect.y + kSourceTitleY,
                            current.sidebar_rect.width - 48.0f, 20.0f},
                           with_alpha(t.accent, grid_alpha), ui::text_align::left);
-    const source_filter sources[] = {
-        source_filter::all,
-        source_filter::official,
-        source_filter::community,
-    };
-    for (int index = 0; index < 3; ++index) {
-        const bool active = state.source == sources[index];
-        ui::draw_button_colored(detail::source_button_rect(current.sidebar_rect, index),
-                                source_label(sources[index]), 14,
-                                with_alpha(active ? button_selected : button_base,
-                                           static_cast<unsigned char>((active ? selected_row_alpha : normal_row_alpha) * grid_fade_t)),
-                                with_alpha(active ? button_selected : button_hover,
-                                           static_cast<unsigned char>((active ? selected_row_alpha : hover_row_alpha) * grid_fade_t)),
-                                with_alpha(active ? t.text : t.text_secondary, grid_alpha), 1.2f);
+    for (int index = 0; index < static_cast<int>(detail::kSourceFilters.size()); ++index) {
+        const source_filter source = detail::kSourceFilters[static_cast<size_t>(index)];
+        const bool active = state.source == source;
+        ui::button(detail::source_button_rect(current.sidebar_rect, index), source_label(source), {
+            .font_size = 14,
+            .border_width = 1.2f,
+            .bg = with_alpha(active ? button_selected : button_base,
+                             static_cast<unsigned char>((active ? selected_row_alpha : normal_row_alpha) * grid_fade_t)),
+            .bg_hover = with_alpha(active ? button_selected : button_hover,
+                                   static_cast<unsigned char>((active ? selected_row_alpha : hover_row_alpha) * grid_fade_t)),
+            .text_color = with_alpha(active ? t.text : t.text_secondary, grid_alpha),
+            .custom_colors = true,
+        });
     }
 
-    ui::draw_rect_f(current.content_rect, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * grid_fade_t / 2.0f)));
-    ui::draw_rect_lines(current.content_rect, 1.2f, with_alpha(t.border_light, grid_alpha));
+    ui::surface(current.content_rect,
+                with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * grid_fade_t / 2.0f)),
+                with_alpha(t.border_light, grid_alpha),
+                1.2f);
     const std::string content_caption = state.view == discovery_view::overview
         ? "Overview"
         : view_label(state.view);
@@ -1010,8 +727,10 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                 current.song_grid_rect.width - 192.0f,
                 84.0f,
             };
-            ui::draw_rect_f(placeholder, with_alpha(button_base, static_cast<unsigned char>(selected_row_alpha * grid_fade_t)));
-            ui::draw_rect_lines(placeholder, 1.5f, with_alpha(t.border_light, grid_alpha));
+            ui::surface(placeholder,
+                        with_alpha(button_base, static_cast<unsigned char>(selected_row_alpha * grid_fade_t)),
+                        with_alpha(t.border_light, grid_alpha),
+                        1.5f);
             const char* empty_title = loading
                 ? localization::tr_literal("Loading...")
                 : (state.mode == catalog_mode::owned && state.owned_loading)
@@ -1073,9 +792,11 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                     const bool hovered = enabled && ui::is_hovered(rect);
                     const unsigned char arrow_alpha = static_cast<unsigned char>(
                         (enabled ? (hovered ? hover_row_alpha : normal_row_alpha) : normal_row_alpha / 3) * grid_fade_t);
-                    ui::draw_rect_f(rect, with_alpha(hovered ? button_hover : button_base, arrow_alpha));
-                    ui::draw_rect_lines(rect, 1.15f, with_alpha(hovered ? t.border_active : t.border_light,
-                                                               enabled ? grid_alpha : static_cast<unsigned char>(grid_alpha / 3)));
+                    ui::surface(rect,
+                                with_alpha(hovered ? button_hover : button_base, arrow_alpha),
+                                with_alpha(hovered ? t.border_active : t.border_light,
+                                           enabled ? grid_alpha : static_cast<unsigned char>(grid_alpha / 3)),
+                                1.15f);
                     const Color icon = with_alpha(enabled ? t.text : t.text_muted,
                                                   enabled ? grid_alpha : static_cast<unsigned char>(grid_alpha / 3));
                     if (next) {
@@ -1113,9 +834,10 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
             const unsigned char row_alpha = static_cast<unsigned char>((selected ? selected_row_alpha
                 : hovered ? hover_row_alpha
                           : normal_row_alpha) * grid_fade_t);
-            ui::draw_rect_f(card, with_alpha(selected ? button_selected : button_base, row_alpha));
-            ui::draw_rect_lines(card, 1.15f,
-                                with_alpha(selected ? t.border_active : t.border_light, grid_alpha));
+            ui::surface(card,
+                        with_alpha(selected ? button_selected : button_base, row_alpha),
+                        with_alpha(selected ? t.border_active : t.border_light, grid_alpha),
+                        1.15f);
 
             const Rectangle jacket_rect = song_card_jacket_rect(card);
             if (selected) {
@@ -1125,20 +847,23 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
             const bool hide_selected_jacket = selected && detail_t > 0.001f;
             if (!hide_selected_jacket) {
                 if (const Texture2D* jacket = state.jackets.get(song.song.song)) {
-                    DrawTexturePro(*jacket,
-                                   {0.0f, 0.0f, static_cast<float>(jacket->width), static_cast<float>(jacket->height)},
-                                   jacket_rect, {0.0f, 0.0f}, 0.0f, with_alpha(WHITE, grid_alpha));
+                    ui::draw_texture(*jacket, jacket_rect, with_alpha(WHITE, grid_alpha));
                 } else {
                     const float selected_placeholder_t = selected
                         ? tween::smoothstep(tween::remap_clamped(detail_t, 0.12f, 0.0f))
                         : 1.0f;
                     const unsigned char placeholder_alpha =
                         static_cast<unsigned char>(static_cast<float>(grid_alpha) * selected_placeholder_t);
-                    ui::draw_rect_f(jacket_rect, with_alpha(t.bg_alt, row_alpha));
-                    draw_browse_body_text_in_rect("JACKET", 18, jacket_rect, with_alpha(t.text_muted, placeholder_alpha),
-                                          ui::text_align::center);
+                    ui::placeholder(jacket_rect, "JACKET", {
+                        .font_size = 18,
+                        .body_text = true,
+                        .draw_border = false,
+                        .fill = with_alpha(t.bg_alt, row_alpha),
+                        .text_color = with_alpha(t.text_muted, placeholder_alpha),
+                        .custom_colors = true,
+                    });
                 }
-                ui::draw_rect_lines(jacket_rect, 1.0f, with_alpha(t.border_image, grid_alpha));
+                ui::frame(jacket_rect, with_alpha(t.border_image, grid_alpha), 1.0f);
             }
 
             const std::string badge_label = detail::song_status_label(song);
@@ -1175,8 +900,7 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                         break;
                     }
                     const Rectangle tag_rect = {tag_x, y, width, 20.0f};
-                    ui::draw_rect_f(tag_rect, with_alpha(button_base, row_alpha));
-                    ui::draw_rect_lines(tag_rect, 1.0f, with_alpha(tag_color, grid_alpha));
+                    ui::surface(tag_rect, with_alpha(button_base, row_alpha), with_alpha(tag_color, grid_alpha), 1.0f);
                     draw_browse_body_text_in_rect(label.c_str(), 11, tag_rect,
                                           with_alpha(tag_color, grid_alpha), ui::text_align::center);
                     tag_x += width + 7.0f;
@@ -1216,8 +940,10 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
     }
 
     if (!state.detail_open) {
-        ui::draw_rect_f(current.preview_panel_rect, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha / 2)));
-        ui::draw_rect_lines(current.preview_panel_rect, 1.2f, with_alpha(t.border_light, alpha));
+        ui::surface(current.preview_panel_rect,
+                    with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha / 2)),
+                    with_alpha(t.border_light, alpha),
+                    1.2f);
 
         const Rectangle jacket_rect = {
             current.preview_panel_rect.x + (current.preview_panel_rect.width - 260.0f) * 0.5f,
@@ -1226,14 +952,18 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
             260.0f,
         };
         if (const Texture2D* jacket = state.jackets.get(song->song.song)) {
-            DrawTexturePro(*jacket,
-                           {0.0f, 0.0f, static_cast<float>(jacket->width), static_cast<float>(jacket->height)},
-                           jacket_rect, {0.0f, 0.0f}, 0.0f, with_alpha(WHITE, alpha));
+            ui::draw_texture(*jacket, jacket_rect, with_alpha(WHITE, alpha));
         } else {
-            ui::draw_rect_f(jacket_rect, with_alpha(t.bg_alt, selected_row_alpha));
-            draw_browse_body_text_in_rect("JACKET", 24, jacket_rect, with_alpha(t.text_muted, alpha), ui::text_align::center);
+            ui::placeholder(jacket_rect, "JACKET", {
+                .font_size = 24,
+                .body_text = true,
+                .draw_border = false,
+                .fill = with_alpha(t.bg_alt, selected_row_alpha),
+                .text_color = with_alpha(t.text_muted, alpha),
+                .custom_colors = true,
+            });
         }
-        ui::draw_rect_lines(jacket_rect, 1.4f, with_alpha(t.border_image, alpha));
+        ui::frame(jacket_rect, with_alpha(t.border_image, alpha), 1.4f);
 
         draw_body_marquee_text(song->song.song.meta.title.c_str(),
                           {current.preview_panel_rect.x + 26.0f, jacket_rect.y + jacket_rect.height + 24.0f,
@@ -1245,20 +975,24 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                           17, with_alpha(t.text_secondary, alpha), now, ui::text_align::center);
 
         const title_preview_snapshot preview = audio_controller.preview_snapshot(&song->song);
-        draw_transport_skip_button(preview_prev_button_rect(current.preview_panel_rect), false, alpha);
-        draw_transport_toggle_button(preview_play_button_rect(current.preview_panel_rect),
-                                     preview.playing, alpha);
-        draw_transport_skip_button(preview_next_button_rect(current.preview_panel_rect), true, alpha);
-        const Rectangle bar = preview_progress_rect(current.preview_panel_rect);
+        title_preview_transport::skip_button(detail::preview_panel_prev_button_rect(current.preview_panel_rect), false, alpha);
+        title_preview_transport::toggle_button(detail::preview_panel_play_button_rect(current.preview_panel_rect),
+                                               preview.playing, alpha);
+        title_preview_transport::skip_button(detail::preview_panel_next_button_rect(current.preview_panel_rect), true, alpha);
+        const Rectangle bar = detail::preview_panel_progress_rect(current.preview_panel_rect);
         const double preview_length = detail::preview_display_length_seconds(*song, preview);
         const double preview_position = state.preview_bar_dragging
             ? state.preview_bar_drag_position_seconds
             : preview.position_seconds;
         const float preview_ratio =
             preview_length > 0.0 ? std::clamp(static_cast<float>(preview_position / preview_length), 0.0f, 1.0f) : 0.0f;
-        ui::draw_rect_f(bar, with_alpha(t.bg_alt, normal_row_alpha));
-        ui::draw_rect_f({bar.x, bar.y, bar.width * preview_ratio, bar.height}, with_alpha(t.accent, alpha));
-        ui::draw_rect_lines(bar, 1.0f, with_alpha(t.border_light, alpha));
+        ui::progress_bar(bar, preview_ratio, {
+            .bg = with_alpha(t.bg_alt, normal_row_alpha),
+            .fill = with_alpha(t.accent, alpha),
+            .border_color = with_alpha(t.border_light, alpha),
+            .border_width = 1.0f,
+            .custom_colors = true,
+        });
         draw_browse_body_text_in_rect(
             TextFormat("%s / %s",
                        detail::format_time_label(preview_position).c_str(),
@@ -1296,8 +1030,7 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                     row_y += 38.0f;
                 }
                 const Rectangle tag_rect = {x, row_y, width, 30.0f};
-                ui::draw_rect_f(tag_rect, with_alpha(button_base, normal_row_alpha));
-                ui::draw_rect_lines(tag_rect, 1.0f, with_alpha(color, alpha));
+                ui::surface(tag_rect, with_alpha(button_base, normal_row_alpha), with_alpha(color, alpha), 1.0f);
                 draw_browse_body_text_in_rect(label.c_str(), 13, tag_rect,
                                       with_alpha(color, alpha), ui::text_align::center);
                 x += width + 8.0f;
@@ -1309,8 +1042,7 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                               with_alpha(t.accent, alpha), ui::text_align::left);
         draw_preview_tag_row(song->song.song.meta.keywords, bar.y + 174.0f, t.fast, 2, 2);
         const auto draw_preview_stat = [&](Rectangle rect, const char* label, const char* value, Color accent) {
-            ui::draw_rect_f(rect, with_alpha(button_base, normal_row_alpha));
-            ui::draw_rect_lines(rect, 1.0f, with_alpha(accent, alpha));
+            ui::surface(rect, with_alpha(button_base, normal_row_alpha), with_alpha(accent, alpha), 1.0f);
             draw_browse_body_text_in_rect(label, 11,
                                   {rect.x + 10.0f, rect.y + 7.0f, rect.width - 20.0f, 14.0f},
                                   with_alpha(t.text_muted, alpha), ui::text_align::left);
@@ -1327,19 +1059,25 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                           TextFormat("%d", std::max(song->song.song.meta.chart_count,
                                                     static_cast<int>(song->charts.size()))),
                           t.fast);
-        draw_toned_button(preview_open_button_rect(current.preview_panel_rect), "OPEN SONG", 16,
+        draw_toned_button(detail::preview_panel_open_button_rect(current.preview_panel_rect), "OPEN SONG", 16,
                           t.accent, alpha, selected_row_alpha, hover_row_alpha);
         return;
     }
 
     const Rectangle animated_jacket_rect = tween::lerp(source_jacket_rect, current.hero_jacket_rect, jacket_t);
 
-    ui::draw_rect_f(current.detail_left_rect, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * detail_content_t / 2.0f)));
-    ui::draw_rect_lines(current.detail_left_rect, 1.2f, with_alpha(t.border_light, detail_alpha));
-    ui::draw_rect_f(current.detail_right_rect, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * detail_content_t / 2.0f)));
-    ui::draw_rect_lines(current.detail_right_rect, 1.2f, with_alpha(t.border_light, detail_alpha));
-    ui::draw_rect_f(current.detail_preview_rect, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * detail_content_t / 2.0f)));
-    ui::draw_rect_lines(current.detail_preview_rect, 1.2f, with_alpha(t.border_light, detail_alpha));
+    ui::surface(current.detail_left_rect,
+                with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * detail_content_t / 2.0f)),
+                with_alpha(t.border_light, detail_alpha),
+                1.2f);
+    ui::surface(current.detail_right_rect,
+                with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * detail_content_t / 2.0f)),
+                with_alpha(t.border_light, detail_alpha),
+                1.2f);
+    ui::surface(current.detail_preview_rect,
+                with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * detail_content_t / 2.0f)),
+                with_alpha(t.border_light, detail_alpha),
+                1.2f);
 
     if (detail_alpha == 0) {
         return;
@@ -1348,36 +1086,39 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
     const Rectangle preview_panel = current.detail_preview_rect;
     if (detail_t > 0.001f) {
         if (const Texture2D* hero_jacket = state.jackets.get(song->song.song)) {
-            DrawTexturePro(*hero_jacket,
-                           {0.0f, 0.0f, static_cast<float>(hero_jacket->width), static_cast<float>(hero_jacket->height)},
-                           animated_jacket_rect, {0.0f, 0.0f}, 0.0f, with_alpha(WHITE, alpha));
+            ui::draw_texture(*hero_jacket, animated_jacket_rect, with_alpha(WHITE, alpha));
         } else {
-            ui::draw_rect_f(animated_jacket_rect, with_alpha(t.bg_alt, selected_row_alpha));
-            draw_browse_body_text_in_rect("JACKET", 22, animated_jacket_rect,
-                                  with_alpha(t.text_muted, detail_alpha), ui::text_align::center);
+            ui::placeholder(animated_jacket_rect, "JACKET", {
+                .font_size = 22,
+                .body_text = true,
+                .draw_border = false,
+                .fill = with_alpha(t.bg_alt, selected_row_alpha),
+                .text_color = with_alpha(t.text_muted, detail_alpha),
+                .custom_colors = true,
+            });
         }
-        ui::draw_rect_lines(animated_jacket_rect, 1.5f, with_alpha(t.border_image, alpha));
+        ui::frame(animated_jacket_rect, with_alpha(t.border_image, alpha), 1.5f);
     }
 
-    const Rectangle detail_title_rect = {
-        current.hero_jacket_rect.x + current.hero_jacket_rect.width + 24.0f,
-        current.hero_jacket_rect.y + 4.0f,
-        preview_panel.x + preview_panel.width - current.hero_jacket_rect.x - current.hero_jacket_rect.width - 54.0f,
-        38.0f,
-    };
-    draw_body_marquee_text(song->song.song.meta.title.c_str(), detail_title_rect, 24, with_alpha(t.text, detail_alpha), now);
+    const detail_preview_layout detail_layout =
+        detail_preview_layout_for(current.hero_jacket_rect,
+                                  preview_panel,
+                                  current.preview_bar_rect,
+                                  current.primary_action_rect);
+    draw_body_marquee_text(song->song.song.meta.title.c_str(), detail_layout.title, 24,
+                           with_alpha(t.text, detail_alpha), now);
     draw_body_marquee_text(song->song.song.meta.artist.c_str(),
-                      {detail_title_rect.x, detail_title_rect.y + 40.0f, detail_title_rect.width, 24.0f},
+                      detail_layout.artist,
                       15, with_alpha(t.text_secondary, detail_alpha), now);
     const auto draw_compact_preview_tags = [&](const char* heading,
                                                const std::vector<std::string>& labels,
-                                               float y,
+                                               compact_tag_row_layout tag_layout,
                                                int color_mode) {
         draw_browse_body_text_in_rect(localization::tr_literal(heading), 11,
-                              {detail_title_rect.x, y, detail_title_rect.width, 16.0f},
+                              tag_layout.heading,
                               with_alpha(t.accent, detail_alpha), ui::text_align::left);
-        float x = detail_title_rect.x;
-        const float max_x = detail_title_rect.x + detail_title_rect.width;
+        float x = tag_layout.tag_area.x;
+        const float max_x = tag_layout.tag_area.x + tag_layout.tag_area.width;
         int drawn = 0;
         for (const std::string& label : labels) {
             if (label.empty() || drawn >= 3) {
@@ -1388,34 +1129,31 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
             if (x + width > max_x) {
                 break;
             }
-            const Rectangle tag_rect = {x, y + 20.0f, width, 26.0f};
-            ui::draw_rect_f(tag_rect, with_alpha(button_base, normal_row_alpha));
-            ui::draw_rect_lines(tag_rect, 1.0f, with_alpha(color, detail_alpha));
+            const Rectangle tag_rect = {x, tag_layout.tag_area.y, width, tag_layout.tag_area.height};
+            ui::surface(tag_rect, with_alpha(button_base, normal_row_alpha), with_alpha(color, detail_alpha), 1.0f);
             draw_browse_body_text_in_rect(label.c_str(), 12, tag_rect,
                                   with_alpha(color, detail_alpha), ui::text_align::center);
             x += width + 8.0f;
             ++drawn;
         }
     };
-    draw_compact_preview_tags("GENRES", genre_labels(song->song.song.meta), detail_title_rect.y + 118.0f, 1);
-    draw_compact_preview_tags("KEYWORDS", song->song.song.meta.keywords, detail_title_rect.y + 170.0f, 2);
+    draw_compact_preview_tags("GENRES", genre_labels(song->song.song.meta), detail_layout.genres, 1);
+    draw_compact_preview_tags("KEYWORDS", song->song.song.meta.keywords, detail_layout.keywords, 2);
     if (chart != nullptr) {
         draw_browse_body_text_in_rect(
             TextFormat("%s  %s",
                        detail::key_mode_label(chart->chart.meta.key_count).c_str(),
                        chart->chart.meta.difficulty.c_str()),
             13,
-            {detail_title_rect.x, detail_title_rect.y + 82.0f, detail_title_rect.width * 0.42f, 24.0f},
+            detail_layout.chart_summary,
             with_alpha(t.text, detail_alpha), ui::text_align::left);
         draw_difficulty_level_badge(chart->chart.meta.level,
-                                    {detail_title_rect.x + detail_title_rect.width * 0.43f,
-                                     detail_title_rect.y + 82.0f, 70.0f, 21.0f},
+                                    detail_layout.chart_level_badge,
                                     12, detail_alpha);
         draw_browse_body_text_in_rect(
             TextFormat("by %s", chart->chart.meta.chart_author.empty() ? "Unknown" : chart->chart.meta.chart_author.c_str()),
             12,
-            {detail_title_rect.x + detail_title_rect.width * 0.58f, detail_title_rect.y + 82.0f,
-             detail_title_rect.width * 0.42f, 24.0f},
+            detail_layout.chart_author,
             with_alpha(t.text_muted, detail_alpha), ui::text_align::right);
     }
 
@@ -1426,65 +1164,66 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
         : preview.position_seconds;
     const float preview_ratio =
         preview_length > 0.0 ? std::clamp(static_cast<float>(preview_position / preview_length), 0.0f, 1.0f) : 0.0f;
-    ui::draw_rect_f(current.preview_bar_rect, with_alpha(t.bg_alt, static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
-    ui::draw_rect_f({current.preview_bar_rect.x, current.preview_bar_rect.y,
-                     current.preview_bar_rect.width * preview_ratio, current.preview_bar_rect.height},
-                    with_alpha(t.accent, detail_alpha));
-    ui::draw_rect_lines(current.preview_bar_rect, 1.0f, with_alpha(t.border_light, detail_alpha));
+    ui::progress_bar(current.preview_bar_rect, preview_ratio, {
+        .bg = with_alpha(t.bg_alt, static_cast<unsigned char>(normal_row_alpha * detail_content_t)),
+        .fill = with_alpha(t.accent, detail_alpha),
+        .border_color = with_alpha(t.border_light, detail_alpha),
+        .border_width = 1.0f,
+        .custom_colors = true,
+    });
     draw_browse_body_text_in_rect(
         TextFormat("%s / %s",
                    detail::format_time_label(preview_position).c_str(),
                    preview_length > 0.0 ? detail::format_time_label(preview_length).c_str() : "--:--"),
         12,
-        {current.preview_bar_rect.x, current.preview_bar_rect.y + 14.0f, current.preview_bar_rect.width, 16.0f},
+        detail_layout.preview_time,
         with_alpha(t.text_muted, detail_alpha), ui::text_align::right);
-    draw_transport_toggle_button(current.preview_play_rect, preview.playing, detail_alpha);
+    title_preview_transport::toggle_button(current.preview_play_rect, preview.playing, detail_alpha);
 
-    const Rectangle ranking_header = {preview_panel.x + 28.0f, preview_panel.y + 452.0f, preview_panel.width - 56.0f, 26.0f};
-    draw_browse_body_text_in_rect(localization::tr_literal("GLOBAL RANKING"), 14, ranking_header,
+    const preview_ranking_layout ranking_layout = preview_ranking_layout_for(preview_panel);
+    draw_browse_body_text_in_rect(localization::tr_literal("GLOBAL RANKING"), 14, ranking_layout.header,
                           with_alpha(t.accent, detail_alpha), ui::text_align::left);
-    const Rectangle ranking_rect = {preview_panel.x + 28.0f, preview_panel.y + 486.0f,
-                                    preview_panel.width - 56.0f, 244.0f};
-    ui::draw_rect_f(ranking_rect, with_alpha(button_base, static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
-    ui::draw_rect_lines(ranking_rect, 1.0f, with_alpha(t.border_light, detail_alpha));
-    draw_browse_body_text_in_rect("#", 10, {ranking_rect.x + 12.0f, ranking_rect.y + 10.0f, 32.0f, 16.0f},
+    ui::surface(ranking_layout.table,
+                with_alpha(button_base, static_cast<unsigned char>(normal_row_alpha * detail_content_t)),
+                with_alpha(t.border_light, detail_alpha),
+                1.0f);
+    draw_browse_body_text_in_rect("#", 10, ranking_layout.placement_header,
                           with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
-    draw_browse_body_text_in_rect("PLAYER", 10, {ranking_rect.x + 58.0f, ranking_rect.y + 10.0f, 180.0f, 16.0f},
+    draw_browse_body_text_in_rect("PLAYER", 10, ranking_layout.player_header,
                           with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
-    draw_browse_body_text_in_rect("SCORE", 10, {ranking_rect.x + 300.0f, ranking_rect.y + 10.0f, 116.0f, 16.0f},
+    draw_browse_body_text_in_rect("SCORE", 10, ranking_layout.score_header,
                           with_alpha(t.text_muted, detail_alpha), ui::text_align::right);
-    draw_browse_body_text_in_rect("ACC", 10, {ranking_rect.x + 444.0f, ranking_rect.y + 10.0f, 80.0f, 16.0f},
+    draw_browse_body_text_in_rect("ACC", 10, ranking_layout.accuracy_header,
                           with_alpha(t.text_muted, detail_alpha), ui::text_align::right);
-    draw_browse_body_text_in_rect("CLEAR", 10, {ranking_rect.x + ranking_rect.width - 76.0f, ranking_rect.y + 10.0f, 60.0f, 16.0f},
+    draw_browse_body_text_in_rect("CLEAR", 10, ranking_layout.clear_header,
                           with_alpha(t.text_muted, detail_alpha), ui::text_align::right);
     if (!state.ranking_listing.available || state.ranking_listing.entries.empty()) {
         const std::string message = state.ranking_loading ? "Loading global ranking..."
             : (state.ranking_listing.message.empty() ? "No global entries yet." : state.ranking_listing.message);
-        draw_browse_body_text_in_rect(message.c_str(), 13,
-                              {ranking_rect.x + 20.0f, ranking_rect.y + 70.0f, ranking_rect.width - 40.0f, 28.0f},
+        draw_browse_body_text_in_rect(message.c_str(), 13, ranking_layout.empty_message,
                               with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
     } else {
         const int row_count = std::min(6, static_cast<int>(state.ranking_listing.entries.size()));
         for (int i = 0; i < row_count; ++i) {
             const ranking_service::entry& entry = state.ranking_listing.entries[static_cast<size_t>(i)];
-            const Rectangle row = {ranking_rect.x + 10.0f, ranking_rect.y + 34.0f + static_cast<float>(i) * 30.0f,
-                                   ranking_rect.width - 20.0f, 27.0f};
-            ui::draw_rect_f(row, with_alpha(i % 2 == 0 ? t.section : button_base,
-                                            static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
+            const preview_ranking_row_layout row_layout =
+                preview_ranking_row_layout_for(ranking_layout.table, i);
+            ui::surface_fill(row_layout.row, with_alpha(i % 2 == 0 ? t.section : button_base,
+                                             static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
             draw_browse_body_text_in_rect(TextFormat("%d", entry.placement), 12,
-                                  {row.x + 4.0f, row.y + 5.0f, 34.0f, 16.0f},
+                                  row_layout.placement,
                                   with_alpha(t.text, detail_alpha), ui::text_align::left);
             draw_body_marquee_text(entry.player_display_name.c_str(),
-                              {row.x + 48.0f, row.y + 5.0f, 190.0f, 16.0f},
+                              row_layout.player,
                               12, with_alpha(t.text, detail_alpha), now);
             draw_browse_body_text_in_rect(format_score(entry.score).c_str(), 12,
-                                  {row.x + 270.0f, row.y + 5.0f, 128.0f, 16.0f},
+                                  row_layout.score,
                                   with_alpha(t.text_secondary, detail_alpha), ui::text_align::right);
             draw_browse_body_text_in_rect(TextFormat("%.2f%%", entry.accuracy), 12,
-                                  {row.x + 424.0f, row.y + 5.0f, 78.0f, 16.0f},
+                                  row_layout.accuracy,
                                   with_alpha(t.text_secondary, detail_alpha), ui::text_align::right);
             draw_browse_body_text_in_rect(rank_label(entry.clear_rank()), 13,
-                                  {row.x + row.width - 54.0f, row.y + 4.0f, 44.0f, 18.0f},
+                                  row_layout.clear,
                                   with_alpha(rank_color(entry.clear_rank()), detail_alpha), ui::text_align::right);
         }
     }
@@ -1527,24 +1266,17 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
             std::clamp((static_cast<float>(completed_steps) + current_ratio) /
                            static_cast<float>(total_steps),
                        0.0f, 1.0f);
-        const Rectangle progress_rect = {
-            current.primary_action_rect.x,
-            current.primary_action_rect.y - 18.0f,
-            current.primary_action_rect.width,
-            8.0f,
-        };
-        ui::draw_rect_f(progress_rect,
-                        with_alpha(t.bg_alt, static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
-        ui::draw_rect_f({progress_rect.x, progress_rect.y, progress_rect.width * progress_ratio, progress_rect.height},
-                        with_alpha(t.accent, detail_alpha));
-        ui::draw_rect_lines(progress_rect, 1.0f, with_alpha(t.border_light, detail_alpha));
+        ui::progress_bar(detail_layout.download_progress, progress_ratio, {
+            .bg = with_alpha(t.bg_alt, static_cast<unsigned char>(normal_row_alpha * detail_content_t)),
+            .fill = with_alpha(t.accent, detail_alpha),
+            .border_color = with_alpha(t.border_light, detail_alpha),
+            .border_width = 1.0f,
+            .custom_colors = true,
+        });
     }
     if (selected_play_locked && !selected_lock_reason.empty() && !needs_download(*song)) {
         draw_browse_body_text_in_rect(selected_lock_reason.c_str(), 12,
-                              {current.primary_action_rect.x,
-                               current.primary_action_rect.y - 24.0f,
-                               current.primary_action_rect.width,
-                               18.0f},
+                              detail_layout.lock_reason,
                               with_alpha(t.slow, detail_alpha),
                               ui::text_align::center);
     }
@@ -1560,115 +1292,114 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                       hover_row_alpha);
 
     const Rectangle filter_panel = current.detail_left_rect;
+    const detail::chart_filter_layout filter_layout = detail::chart_filter_layout_for(filter_panel);
     draw_browse_body_text_in_rect(localization::tr_literal("FILTER"), 15,
-                          {filter_panel.x + 20.0f, filter_panel.y + 22.0f, filter_panel.width - 40.0f, 24.0f},
+                          filter_layout.title_label,
                           with_alpha(t.accent, detail_alpha), ui::text_align::left);
-    const Rectangle chart_search_rect = {
-        filter_panel.x + 20.0f,
-        filter_panel.y + 56.0f,
-        filter_panel.width - 40.0f,
-        42.0f,
-    };
-    draw_song_search_input(chart_search_rect, state.chart_search_input,
+    draw_song_search_input(filter_layout.search_input, state.chart_search_input,
                            "", localization::tr_literal("Search"),
                            13, 80,
                            button_base, button_hover, button_selected,
                            normal_row_alpha, hover_row_alpha, selected_row_alpha,
                            detail_alpha);
     draw_browse_body_text_in_rect(localization::tr_literal("SOURCE"), 12,
-                          {filter_panel.x + 20.0f, filter_panel.y + 102.0f, filter_panel.width - 40.0f, 18.0f},
+                          filter_layout.source_label,
                           with_alpha(t.accent, detail_alpha), ui::text_align::left);
-    const char* source_labels[] = {"ALL", "OFFICIAL", "COMMUNITY", "MINE"};
-    const chart_source_filter source_values[] = {
-        chart_source_filter::all,
-        chart_source_filter::official,
-        chart_source_filter::community,
-        chart_source_filter::mine,
+    const auto draw_filter_button = [&](Rectangle rect, const char* label, bool active) {
+        song_select::filter_widget::option_button(rect, label, {
+            .font_size = 11,
+            .border_width = 1.0f,
+            .selected = active,
+            .base = button_base,
+            .hover = button_hover,
+            .selected_base = button_selected,
+            .selected_hover = button_selected,
+            .text = t.text_secondary,
+            .selected_text = t.text,
+            .normal_alpha = normal_row_alpha,
+            .hover_alpha = hover_row_alpha,
+            .selected_alpha = selected_row_alpha,
+            .selected_hover_alpha = selected_row_alpha,
+            .text_alpha = detail_alpha,
+        });
     };
-    for (int index = 0; index < 4; ++index) {
-        const bool active = state.chart_source == source_values[index];
-        ui::draw_button_colored(chart_source_button_rect(filter_panel, index),
-                                source_labels[index], 11,
-                                with_alpha(active ? button_selected : button_base,
-                                           active ? selected_row_alpha : normal_row_alpha),
-                                with_alpha(active ? button_selected : button_hover,
-                                           active ? selected_row_alpha : hover_row_alpha),
-                                with_alpha(active ? t.text : t.text_secondary, detail_alpha), 1.0f);
+    for (int index = 0; index < static_cast<int>(detail::kChartSourceFilters.size()); ++index) {
+        const detail::chart_source_filter_option& option =
+            detail::kChartSourceFilters[static_cast<size_t>(index)];
+        const bool active = state.chart_source == option.value;
+        draw_filter_button(detail::chart_source_button_rect(filter_panel, index), option.label, active);
     }
 
     draw_browse_body_text_in_rect(localization::tr_literal("STATUS"), 12,
-                          {filter_panel.x + 20.0f, filter_panel.y + 240.0f, filter_panel.width - 40.0f, 18.0f},
+                          filter_layout.status_label,
                           with_alpha(t.accent, detail_alpha), ui::text_align::left);
-    const char* status_labels[] = {"ANY", "LOCAL", "GET"};
-    for (int index = 0; index < 3; ++index) {
-        const bool active = state.chart_download_filter == index;
-        ui::draw_button_colored(chart_status_button_rect(filter_panel, index),
-                                status_labels[index], 11,
-                                with_alpha(active ? button_selected : button_base,
-                                           active ? selected_row_alpha : normal_row_alpha),
-                                with_alpha(active ? button_selected : button_hover,
-                                           active ? selected_row_alpha : hover_row_alpha),
-                                with_alpha(active ? t.text : t.text_secondary, detail_alpha), 1.0f);
+    for (int index = 0; index < static_cast<int>(detail::kChartStatusFilters.size()); ++index) {
+        const detail::chart_status_filter_option& option =
+            detail::kChartStatusFilters[static_cast<size_t>(index)];
+        const bool active = state.chart_download_filter == option.value;
+        draw_filter_button(detail::chart_status_button_rect(filter_panel, index), option.label, active);
     }
 
     draw_browse_body_text_in_rect(localization::tr_literal("LEVEL"), 12,
-                          {filter_panel.x + 20.0f, filter_panel.y + 336.0f, filter_panel.width - 40.0f, 18.0f},
+                          filter_layout.level_label,
                           with_alpha(t.accent, detail_alpha), ui::text_align::left);
     draw_level_range_slider(filter_panel, state, detail_alpha);
 
     draw_browse_body_text_in_rect(localization::tr_literal("KEYS"), 12,
-                          {filter_panel.x + 20.0f, filter_panel.y + 448.0f, filter_panel.width - 40.0f, 18.0f},
+                          filter_layout.keys_label,
                           with_alpha(t.accent, detail_alpha), ui::text_align::left);
-    const char* key_labels[] = {"ALL", "4K", "5K", "6K", "7K"};
-    const int key_values[] = {0, 4, 5, 6, 7};
-    for (int index = 0; index < 5; ++index) {
-        const bool active = state.chart_key_filter == key_values[index];
-        ui::draw_button_colored(chart_key_button_rect(filter_panel, index),
-                                key_labels[index], 11,
-                                with_alpha(active ? button_selected : button_base,
-                                           active ? selected_row_alpha : normal_row_alpha),
-                                with_alpha(active ? button_selected : button_hover,
-                                           active ? selected_row_alpha : hover_row_alpha),
-                                with_alpha(active ? t.text : t.text_secondary, detail_alpha), 1.0f);
+    for (int index = 0; index < static_cast<int>(detail::kChartKeyFilters.size()); ++index) {
+        const detail::chart_key_filter_option& option =
+            detail::kChartKeyFilters[static_cast<size_t>(index)];
+        const bool active = state.chart_key_filter == option.value;
+        draw_filter_button(detail::chart_key_button_rect(filter_panel, index), option.label, active);
     }
 
-    ui::draw_button_colored(chart_clear_button_rect(filter_panel), localization::tr_literal("CLEAR FILTERS"), 12,
-                            with_alpha(chart_filters_active(state) ? button_base : t.section, normal_row_alpha),
-                            with_alpha(button_hover, hover_row_alpha),
-                            with_alpha(chart_filters_active(state) ? t.text_secondary : t.text_muted, detail_alpha),
-                            1.0f);
+    const bool filters_active = chart_filters_active(state);
+    song_select::filter_widget::option_button(detail::chart_clear_button_rect(filter_panel), localization::tr_literal("CLEAR FILTERS"), {
+        .font_size = 12,
+        .border_width = 1.0f,
+        .selected = filters_active,
+        .base = t.section,
+        .hover = button_hover,
+        .selected_base = button_base,
+        .selected_hover = button_hover,
+        .text = t.text_muted,
+        .selected_text = t.text_secondary,
+        .normal_alpha = normal_row_alpha,
+        .hover_alpha = hover_row_alpha,
+        .selected_alpha = normal_row_alpha,
+        .selected_hover_alpha = hover_row_alpha,
+        .text_alpha = detail_alpha,
+    });
     const auto chart_indices = detail::filtered_chart_indices(state);
     const int visible_chart_count = song->song.song.meta.chart_count > 0
         ? std::max(song->song.song.meta.chart_count, static_cast<int>(song->charts.size()))
         : static_cast<int>(song->charts.size());
     const int filtered_chart_count = static_cast<int>(chart_indices.size());
+    const detail::chart_list_header_layout chart_header =
+        detail::chart_list_header_layout_for(current.detail_right_rect);
     draw_browse_body_text_in_rect("CHARTS", 15,
-                          {current.detail_right_rect.x + 24.0f, current.detail_right_rect.y + 22.0f,
-                           120.0f, 24.0f},
+                          chart_header.title,
                           with_alpha(t.text, detail_alpha), ui::text_align::left);
     draw_browse_body_text_in_rect("Find charts to download", 12,
-                          {current.detail_right_rect.x + 24.0f, current.detail_right_rect.y + 46.0f,
-                           180.0f, 18.0f},
+                          chart_header.subtitle,
                           with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
     draw_browse_body_text_in_rect(
         !chart_filters_active(state)
             ? TextFormat("%d items", visible_chart_count)
             : TextFormat("%d / %d items", filtered_chart_count, visible_chart_count),
         14,
-                          {current.detail_right_rect.x + current.detail_right_rect.width - 160.0f,
-                           current.detail_right_rect.y + 46.0f, 132.0f, 16.0f},
+                          chart_header.count,
                           with_alpha(t.text_muted, detail_alpha), ui::text_align::right);
 
     ui::scoped_clip_rect chart_clip(current.chart_list_rect);
     if (song->charts.empty() || chart_indices.empty()) {
-        const Rectangle placeholder = {
-            current.chart_list_rect.x + 64.0f,
-            current.chart_list_rect.y + current.chart_list_rect.height * 0.5f - 36.0f,
-            current.chart_list_rect.width - 128.0f,
-            72.0f,
-        };
-        ui::draw_rect_f(placeholder, with_alpha(button_base, static_cast<unsigned char>(selected_row_alpha * detail_content_t)));
-        ui::draw_rect_lines(placeholder, 1.5f, with_alpha(t.border_light, detail_alpha));
+        const Rectangle placeholder = detail::chart_empty_placeholder_rect(current.chart_list_rect);
+        ui::surface(placeholder,
+                    with_alpha(button_base, static_cast<unsigned char>(selected_row_alpha * detail_content_t)),
+                    with_alpha(t.border_light, detail_alpha),
+                    1.5f);
         const char* chart_empty = song->charts_loading ? "Loading charts..."
             : (song->charts_failed ? "Could not load charts."
                                    : (song->charts.empty() ? "No charts found."
@@ -1690,25 +1421,26 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
         const unsigned char row_alpha = static_cast<unsigned char>((selected ? selected_row_alpha
             : hovered ? hover_row_alpha
                       : normal_row_alpha) * detail_content_t);
-        ui::draw_rect_f(card, with_alpha(selected ? button_selected : button_base, row_alpha));
-        ui::draw_rect_lines(card, 1.0f,
-                            with_alpha(selected ? t.border_active : t.border_light, detail_alpha));
+        ui::surface(card,
+                    with_alpha(selected ? button_selected : button_base, row_alpha),
+                    with_alpha(selected ? t.border_active : t.border_light, detail_alpha),
+                    1.0f);
 
-        const float row_mid_y = card.y + (card.height - 18.0f) * 0.5f;
+        const detail::chart_row_layout row_layout = detail::chart_row_layout_for(card);
         draw_browse_body_text_in_rect(detail::key_mode_label(item.chart.meta.key_count).c_str(),
                               15,
-                              {card.x + 24.0f, row_mid_y, 44.0f, 18.0f},
+                              row_layout.key_mode,
                               with_alpha(detail::key_mode_color(item.chart.meta.key_count), detail_alpha),
                               ui::text_align::left);
         draw_browse_body_text_in_rect(item.chart.meta.difficulty.c_str(),
                               15,
-                              {card.x + 72.0f, row_mid_y, 150.0f, 18.0f},
+                              row_layout.difficulty,
                               with_alpha(t.text, detail_alpha),
                               ui::text_align::left);
         const bool can_download_chart = !state.download_in_progress && detail::can_download_chart(*song, item);
         const bool chart_locked = content_is_play_locked(song->song.song.meta, item.chart.meta);
         const std::string chart_badge = chart_locked ? "LOCKED" : detail::chart_status_label(item);
-        const Rectangle download_icon_rect = detail::chart_download_icon_rect(card);
+        const Rectangle download_icon_rect = row_layout.download_icon;
         const bool has_review_badge =
             item.chart.online_identity.has_value() &&
             !content_lifecycle::display_label(item.chart.online_identity->review_status,
@@ -1716,8 +1448,8 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
         const bool show_chart_badge = !chart_badge.empty() && (!can_download_chart || has_review_badge || chart_locked);
         if (show_chart_badge) {
             const float badge_width = chart_badge.size() > 8 ? 122.0f : 62.0f;
-            const float badge_right = can_download_chart ? download_icon_rect.x - 12.0f
-                                                         : card.x + card.width - 16.0f;
+            const Rectangle badge_rect =
+                detail::chart_status_badge_rect(card, badge_width, can_download_chart);
             const bool chart_modified = content_sync_service::is_modified(item.chart.sync_state);
             Color badge_color = chart_modified ? t.slow
                 : item.update_available ? t.accent
@@ -1732,7 +1464,7 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                     : t.slow;
             }
             draw_browse_body_text_in_rect(chart_badge.c_str(), 12,
-                                  {badge_right - badge_width, card.y + 8.0f, badge_width, 14.0f},
+                                  badge_rect,
                                   with_alpha(badge_color, detail_alpha),
                                   ui::text_align::right);
         }
@@ -1743,34 +1475,28 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                                       detail_alpha);
         }
         draw_difficulty_level_badge(item.chart.meta.level,
-                                    {card.x + 242.0f, row_mid_y - 2.0f, 70.0f, 22.0f},
+                                    row_layout.level_badge,
                                     12, detail_alpha);
         draw_browse_body_text_in_rect(TextFormat("%d notes", item.chart.note_count), 13,
-                              {card.x + 330.0f, row_mid_y + 1.0f, 110.0f, 16.0f},
+                              row_layout.notes,
                               with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
         draw_browse_body_text_in_rect(TextFormat("by %s", item.chart.meta.chart_author.empty()
                                                    ? "Unknown"
                                                    : item.chart.meta.chart_author.c_str()),
                               13,
-                              {card.x + 456.0f, row_mid_y + 1.0f, 118.0f, 16.0f},
+                              row_layout.author,
                               with_alpha(t.text_muted, detail_alpha), ui::text_align::left);
         const char* source_label = chart_source_label(item.chart.source_status);
         const float source_badge_width = item.chart.source_status == content_status::community ? 104.0f
             : item.chart.source_status == content_status::official ? 84.0f
                                                                     : 58.0f;
-        const float source_badge_right = can_download_chart ? download_icon_rect.x - 12.0f
-                                                            : card.x + card.width - 20.0f;
-        const float source_badge_y = show_chart_badge ? card.y + card.height - 30.0f
-                                                      : row_mid_y - 4.0f;
-        const Rectangle source_badge = {
-            source_badge_right - source_badge_width,
-            source_badge_y,
-            source_badge_width,
-            24.0f,
-        };
+        const Rectangle source_badge =
+            detail::chart_source_badge_rect(card, source_badge_width, can_download_chart, show_chart_badge);
         const Color source_color = chart_source_status_color(item);
-        ui::draw_rect_f(source_badge, with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * detail_content_t)));
-        ui::draw_rect_lines(source_badge, 1.0f, with_alpha(source_color, detail_alpha));
+        ui::surface(source_badge,
+                    with_alpha(t.section, static_cast<unsigned char>(normal_row_alpha * detail_content_t)),
+                    with_alpha(source_color, detail_alpha),
+                    1.0f);
         draw_browse_body_text_in_rect(source_label, 13, source_badge, with_alpha(source_color, detail_alpha),
                               ui::text_align::center);
     }

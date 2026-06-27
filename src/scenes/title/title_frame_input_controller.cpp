@@ -77,7 +77,7 @@ bool handle_login_dialog_input(title::frame_input_context& context) {
         title_layout::screen_rect(),
         ui::draw_layer::modal);
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
-        !CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), login_layout.dialog_rect)) {
+        !ui::contains_point(login_layout.dialog_rect, virtual_screen::get_virtual_mouse())) {
         play_state.login_dialog.open = false;
         return true;
     }

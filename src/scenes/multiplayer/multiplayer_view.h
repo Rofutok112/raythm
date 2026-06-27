@@ -1,9 +1,10 @@
 #pragma once
 
 #include "multiplayer/multiplayer_state.h"
+#include "multiplayer/multiplayer_view_result.h"
 
 namespace multiplayer::view {
 
-void draw(state& state);
+[[nodiscard]] draw_result draw(state& state);
 
 }  // namespace multiplayer::view

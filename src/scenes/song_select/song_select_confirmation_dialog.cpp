@@ -4,6 +4,61 @@
 #include "theme.h"
 #include "ui_draw.h"
 
+namespace {
+
+constexpr float kDialogButtonWidth = 168.0f;
+constexpr float kDialogButtonHeight = 40.0f;
+constexpr float kDialogButtonGap = 24.0f;
+constexpr float kDialogButtonBottomPadding = 34.0f;
+
+struct confirmation_dialog_layout {
+    Rectangle panel;
+    Rectangle title;
+    Rectangle message;
+    Rectangle hint;
+    Rectangle confirm_button;
+    Rectangle cancel_button;
+};
+
+confirmation_dialog_layout make_confirmation_dialog_layout(Rectangle panel) {
+    const float buttons_left =
+        panel.x + (panel.width - (kDialogButtonWidth * 2.0f + kDialogButtonGap)) * 0.5f;
+    const float buttons_y = panel.y + panel.height - kDialogButtonHeight - kDialogButtonBottomPadding;
+    return {
+        panel,
+        {panel.x + 20.0f, panel.y + 22.0f, panel.width - 40.0f, 30.0f},
+        {panel.x + 28.0f, panel.y + 76.0f, panel.width - 56.0f, 40.0f},
+        {panel.x + 28.0f, panel.y + 104.0f, panel.width - 56.0f, 22.0f},
+        {buttons_left, buttons_y, kDialogButtonWidth, kDialogButtonHeight},
+        {buttons_left + kDialogButtonWidth + kDialogButtonGap, buttons_y,
+         kDialogButtonWidth, kDialogButtonHeight},
+    };
+}
+
+ui::button_state enqueue_confirmation_button(Rectangle rect, const std::string& label, Color tone) {
+    return ui::queued_toned_action_button(rect, label.c_str(), tone, {
+        .layer = song_select::layout::kModalLayer,
+        .font_size = 16,
+        .border_width = 1.5f,
+        .bg_alpha = 228,
+        .bg_hover_alpha = 228,
+    });
+}
+
+void enqueue_confirmation_panel(Rectangle rect, bool danger_action) {
+    if (danger_action) {
+        ui::queued_panel(rect, song_select::layout::kModalLayer, {
+            .fill = with_alpha(g_theme->panel, 248),
+            .border_color = with_alpha(g_theme->error, 220),
+            .custom_colors = true,
+        });
+    } else {
+        ui::queued_panel(rect, song_select::layout::kModalLayer);
+    }
+}
+
+}  // namespace
+
 namespace song_select {
 
 void open_confirmation_dialog(state& state, pending_confirmation_action action,
@@ -44,67 +99,26 @@ confirmation_command draw_confirmation_dialog(const state& state) {
     const std::string confirm_label = state.confirmation_dialog.confirm_label.empty()
         ? (danger_action ? "DELETE" : "CONFIRM")
         : state.confirmation_dialog.confirm_label;
-    constexpr float kDialogButtonWidth = 168.0f;
-    constexpr float kDialogButtonHeight = 40.0f;
-    constexpr float kDialogButtonGap = 24.0f;
-    const float buttons_left =
-        layout::kConfirmDialogRect.x +
-        (layout::kConfirmDialogRect.width - (kDialogButtonWidth * 2.0f + kDialogButtonGap)) * 0.5f;
-    const float buttons_y =
-        layout::kConfirmDialogRect.y + layout::kConfirmDialogRect.height - kDialogButtonHeight - 34.0f;
-    const Rectangle confirm_button = {buttons_left, buttons_y, kDialogButtonWidth, kDialogButtonHeight};
-    const Rectangle cancel_button = {
-        buttons_left + kDialogButtonWidth + kDialogButtonGap,
-        buttons_y,
-        kDialogButtonWidth,
-        kDialogButtonHeight
-    };
-
-    auto enqueue_dialog_button = [&](Rectangle rect, const std::string& label, Color tone) {
-        const bool hovered = ui::is_hovered(rect, layout::kModalLayer);
-        const bool pressed = ui::is_pressed(rect, layout::kModalLayer);
-        const bool clicked = ui::is_clicked(rect, layout::kModalLayer);
-        const Rectangle visual = pressed ? ui::inset(rect, 1.5f) : rect;
-        const Color bg = hovered ? g_theme->row_hover : g_theme->row;
-        const Color fill = with_alpha(lerp_color(bg, tone, hovered ? 0.16f : 0.08f), 228);
-        const Color border = with_alpha(lerp_color(g_theme->border, tone, 0.35f), 220);
-        ui::enqueue_draw_command(layout::kModalLayer,
-                                 [visual, fill, border, label_copy = label]() {
-            ui::draw_rect_f(visual, fill);
-            ui::draw_rect_lines(visual, 1.5f, border);
-            ui::draw_text_in_rect(label_copy.c_str(), 16, visual, g_theme->text);
-        });
-        return ui::button_state{hovered, pressed, clicked};
-    };
+    const confirmation_dialog_layout dialog_layout = make_confirmation_dialog_layout(layout::kConfirmDialogRect);
 
     ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
-    if (danger_action) {
-        ui::enqueue_draw_command(layout::kModalLayer, []() {
-            ui::draw_rect_f(layout::kConfirmDialogRect, with_alpha(g_theme->panel, 248));
-            ui::draw_rect_lines(layout::kConfirmDialogRect, 2.0f, with_alpha(g_theme->error, 220));
-        });
-    } else {
-        ui::enqueue_panel(layout::kConfirmDialogRect, layout::kModalLayer);
-    }
+    enqueue_confirmation_panel(dialog_layout.panel, danger_action);
     ui::enqueue_text_in_rect(title.c_str(), 28,
-                             {layout::kConfirmDialogRect.x + 20.0f, layout::kConfirmDialogRect.y + 22.0f,
-                              layout::kConfirmDialogRect.width - 40.0f, 30.0f},
+                             dialog_layout.title,
                              g_theme->text, ui::text_align::center, layout::kModalLayer);
     ui::enqueue_text_in_rect(message.c_str(), 18,
-                             {layout::kConfirmDialogRect.x + 28.0f, layout::kConfirmDialogRect.y + 76.0f,
-                              layout::kConfirmDialogRect.width - 56.0f, 40.0f},
+                             dialog_layout.message,
                              g_theme->text_secondary, ui::text_align::center, layout::kModalLayer);
     if (!hint.empty()) {
         ui::enqueue_text_in_rect(hint.c_str(), 16,
-                                 {layout::kConfirmDialogRect.x + 28.0f, layout::kConfirmDialogRect.y + 104.0f,
-                                  layout::kConfirmDialogRect.width - 56.0f, 22.0f},
+                                 dialog_layout.hint,
                                  danger_action ? g_theme->text_secondary : g_theme->text_hint,
                                  ui::text_align::center, layout::kModalLayer);
     }
     const ui::button_state confirm =
-        enqueue_dialog_button(confirm_button, confirm_label, danger_action ? g_theme->error : g_theme->accent);
+        enqueue_confirmation_button(dialog_layout.confirm_button, confirm_label, danger_action ? g_theme->error : g_theme->accent);
     const ui::button_state cancel =
-        enqueue_dialog_button(cancel_button, "CANCEL", g_theme->text_muted);
+        enqueue_confirmation_button(dialog_layout.cancel_button, "CANCEL", g_theme->text_muted);
 
     if (confirm.clicked) {
         return confirmation_command::confirm;

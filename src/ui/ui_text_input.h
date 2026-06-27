@@ -43,6 +43,42 @@ inline bool default_text_input_filter(int codepoint, const std::string&) {
     return codepoint >= 32 && codepoint != 127;
 }
 
+struct text_input_options {
+    const char* default_value = nullptr;
+    draw_layer layer = draw_layer::base;
+    int font_size = 16;
+    size_t max_length = 32;
+    text_input_filter filter = default_text_input_filter;
+    float label_width = 84.0f;
+    bool obscure_value = false;
+    bool single_rect = false;
+    bool plain_when_inactive = false;
+    bool submit_deactivates = true;
+    text_align single_rect_align = text_align::center;
+};
+
+struct search_text_input_options {
+    draw_layer layer = draw_layer::base;
+    int font_size = 13;
+    size_t max_length = 80;
+    text_input_filter filter = default_text_input_filter;
+    float content_padding_x = 14.0f;
+    float label_width = 108.0f;
+    float label_gap = 14.0f;
+    bool show_search_icon = true;
+    float search_icon_width = 28.0f;
+    float search_icon_gap = 8.0f;
+    const char* search_icon_label = "Q";
+    Color button_base = {};
+    Color button_selected = {};
+    unsigned char normal_row_alpha = 255;
+    unsigned char hover_row_alpha = 255;
+    unsigned char selected_row_alpha = 255;
+    unsigned char alpha = 255;
+    text_role role = text_role::ui_body;
+    bool submit_deactivates = true;
+};
+
 inline void append_codepoint_utf8(std::string& value, int codepoint) {
     int codepoint_size = 0;
     const char* encoded = CodepointToUTF8(codepoint, &codepoint_size);
@@ -295,18 +331,72 @@ inline bool text_input_key_action(int key) {
     return IsKeyPressed(key) || IsKeyPressedRepeat(key);
 }
 
-inline text_input_result draw_text_input(Rectangle rect, text_input_state& state,
+inline void draw_text_role_f(text_role role, const char* text, float x, float y, int font_size, Color color) {
+    draw_text(role, text != nullptr ? text : "", {x, y}, static_cast<float>(font_size), 0.0f, color);
+}
+
+inline void draw_text_role_in_rect(text_role role, const char* text, int font_size, Rectangle rect,
+                                   Color color, text_align align = text_align::center) {
+    const char* resolved_text = text != nullptr ? text : "";
+    const Vector2 pos = text_position(role, resolved_text, font_size, rect, align);
+    draw_text_role_f(role, resolved_text, pos.x, pos.y, font_size, color);
+}
+
+inline void draw_marquee_text_role(const char* text,
+                                   Rectangle clip_rect,
+                                   int font_size,
+                                   Color color,
+                                   double time,
+                                   text_role role = text_role::ui_body,
+                                   text_align align = text_align::left) {
+    if (text == nullptr || *text == '\0' || clip_rect.width <= 0.0f || clip_rect.height <= 0.0f) {
+        return;
+    }
+
+    const float text_width = measure_text_size(role, text, static_cast<float>(font_size), 0.0f).x;
+    const float draw_y = clip_rect.y + (clip_rect.height - text_layout_font_size(static_cast<float>(font_size))) * 0.5f;
+    if (text_width <= clip_rect.width) {
+        float draw_x = clip_rect.x;
+        if (align == text_align::center) {
+            draw_x = clip_rect.x + (clip_rect.width - text_width) * 0.5f;
+        } else if (align == text_align::right) {
+            draw_x = clip_rect.x + clip_rect.width - text_width;
+        }
+        begin_scissor_rect(clip_rect);
+        draw_text_role_f(role, text, draw_x, draw_y, font_size, color);
+        EndScissorMode();
+        return;
+    }
+
+    constexpr float kScrollSpeed = 42.0f;
+    constexpr float kPauseSeconds = 1.0f;
+    const float overflow = text_width - clip_rect.width;
+    const float travel_time = overflow / kScrollSpeed;
+    const float cycle = travel_time + kPauseSeconds * 2.0f;
+    const float cycle_t = static_cast<float>(std::fmod(time, static_cast<double>(std::max(cycle, 0.001f))));
+    float offset = 0.0f;
+    if (cycle_t > kPauseSeconds && cycle_t < kPauseSeconds + travel_time) {
+        offset = (cycle_t - kPauseSeconds) * kScrollSpeed;
+    } else if (cycle_t >= kPauseSeconds + travel_time) {
+        offset = overflow;
+    }
+    begin_scissor_rect(clip_rect);
+    draw_text_role_f(role, text, clip_rect.x - offset, draw_y, font_size, color);
+    EndScissorMode();
+}
+
+inline text_input_result text_input_core(Rectangle rect, text_input_state& state,
                                          const char* label, const char* placeholder,
-                                         const char* default_value = nullptr,
-                                         draw_layer layer = draw_layer::base,
-                                         int font_size = 16, size_t max_length = 32,
-                                         text_input_filter filter = default_text_input_filter,
-                                         float label_width = 84.0f,
-                                         bool obscure_value = false,
-                                         bool single_rect = false,
-                                         bool plain_when_inactive = false,
-                                         bool submit_deactivates = true,
-                                         text_align single_rect_align = text_align::center) {
+                                         const char* default_value,
+                                         draw_layer layer,
+                                         int font_size, size_t max_length,
+                                         text_input_filter filter,
+                                         float label_width,
+                                         bool obscure_value,
+                                         bool single_rect,
+                                         bool plain_when_inactive,
+                                         bool submit_deactivates,
+                                         text_align single_rect_align) {
     text_input_result result;
     clamp_text_input_state(state);
     const auto visual_value_for_state = [&]() {
@@ -618,6 +708,322 @@ inline text_input_result draw_text_input(Rectangle rect, text_input_state& state
             draw_rect_span({cursor_x, input_rect.y + kTextInputSelectionInsetY, kTextInputCursorWidth,
                             input_rect.height - kTextInputSelectionInsetTotalY},
                            g_theme->text);
+        }
+
+        EndScissorMode();
+    }
+
+    return result;
+}
+
+inline text_input_result text_input(Rectangle rect, text_input_state& state,
+                                    const char* label, const char* placeholder,
+                                    text_input_options options = {}) {
+    return text_input_core(rect, state, label, placeholder,
+                           options.default_value,
+                           options.layer,
+                           options.font_size,
+                           options.max_length,
+                           options.filter,
+                           options.label_width,
+                           options.obscure_value,
+                           options.single_rect,
+                           options.plain_when_inactive,
+                           options.submit_deactivates,
+                           options.single_rect_align);
+}
+
+inline text_input_result search_text_input(Rectangle rect,
+                                           text_input_state& state,
+                                           const char* label,
+                                           const char* placeholder,
+                                           search_text_input_options options = {}) {
+    text_input_result result;
+    clamp_text_input_state(state);
+    const auto insert_text_at_cursor_for_display = [](const std::string& value,
+                                                      size_t cursor,
+                                                      const std::string& text) {
+        if (text.empty()) {
+            return value;
+        }
+        const size_t byte_index = utf8_codepoint_to_byte_index(value, cursor);
+        return value.substr(0, byte_index) + text + value.substr(byte_index);
+    };
+
+    const bool hovered = is_hovered(rect, options.layer);
+    const bool pressed = is_pressed(rect, options.layer);
+    const bool clicked = is_clicked(rect, options.layer);
+    const Rectangle visual = pressed ? inset(rect, 1.5f) : rect;
+    const unsigned char row_alpha = state.active ? options.selected_row_alpha
+        : hovered ? options.hover_row_alpha
+                  : options.normal_row_alpha;
+    const Color base = options.button_base.a > 0 ? options.button_base : g_theme->row;
+    const Color selected = options.button_selected.a > 0 ? options.button_selected : g_theme->row_selected;
+    surface_fill(visual, with_alpha(state.active ? selected : base, row_alpha));
+    frame(inset(visual, 1.0f),
+          with_alpha(state.active ? g_theme->border_active : g_theme->border_light, options.alpha),
+          1.2f);
+
+    const Rectangle content_rect = inset(visual, edge_insets::symmetric(0.0f, options.content_padding_x));
+    const bool show_label = label != nullptr && *label != '\0' && !state.active && state.value.empty();
+    const bool show_search_icon = options.show_search_icon;
+    const float leading_width = show_search_icon
+        ? options.search_icon_width + options.search_icon_gap
+        : 0.0f;
+    const Rectangle icon_rect = {
+        content_rect.x,
+        content_rect.y,
+        options.search_icon_width,
+        content_rect.height,
+    };
+    const Rectangle label_rect = {content_rect.x, content_rect.y, options.label_width, content_rect.height};
+    const float text_x = (show_label ? content_rect.x + options.label_width + options.label_gap : content_rect.x) +
+                         leading_width;
+    const float text_width = std::max(
+        0.0f,
+        (show_label ? content_rect.width - options.label_width - options.label_gap : content_rect.width) -
+            leading_width);
+    const Rectangle text_rect = {text_x, content_rect.y, text_width, content_rect.height};
+
+    if (clicked) {
+        result.clicked = true;
+        if (!state.active) {
+            result.activated = true;
+        }
+        state.active = true;
+
+        const Vector2 mouse = virtual_screen::get_virtual_mouse();
+        if (contains_point(text_rect, mouse)) {
+            const float local_x = mouse.x - text_rect.x + state.scroll_x;
+            state.cursor = text_input_cursor_from_mouse(state.value, local_x, options.font_size);
+            clear_text_input_selection(state);
+            state.mouse_selecting = true;
+        } else {
+            state.cursor = utf8_codepoint_count(state.value);
+            clear_text_input_selection(state);
+        }
+    } else if (state.active && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !hovered) {
+        state.active = false;
+        state.mouse_selecting = false;
+        clear_text_input_selection(state);
+        result.deactivated = true;
+    }
+
+    if (state.active && state.mouse_selecting && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        const Vector2 mouse = virtual_screen::get_virtual_mouse();
+        const float local_x = mouse.x - text_rect.x + state.scroll_x;
+        const size_t mouse_cursor = text_input_cursor_from_mouse(state.value, local_x, options.font_size);
+        state.cursor = mouse_cursor;
+        state.has_selection = state.cursor != state.selection_anchor;
+    }
+
+    if (state.mouse_selecting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        state.mouse_selecting = false;
+    }
+
+    std::string composition_text;
+    if (state.active) {
+        windows_input_source::instance().request_text_input();
+        const native_text_input_update text_update = windows_input_source::instance().drain_text_input();
+        composition_text = text_update.composition_text;
+        if (!text_update.committed_text.empty()) {
+            if (state.has_selection) {
+                result.changed = delete_text_input_selection(state) || result.changed;
+            }
+            result.changed = paste_text_input_at_cursor(state, text_update.committed_text, options.max_length,
+                                                        options.filter) ||
+                             result.changed;
+        }
+
+        const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+        const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+
+        if (ctrl && IsKeyPressed(KEY_A)) {
+            state.selection_anchor = 0;
+            state.cursor = utf8_codepoint_count(state.value);
+            state.has_selection = state.cursor > 0;
+        }
+
+        if (ctrl && IsKeyPressed(KEY_C) && state.has_selection) {
+            SetClipboardText(selected_text_input_text(state).c_str());
+        }
+
+        if (ctrl && IsKeyPressed(KEY_X) && state.has_selection) {
+            SetClipboardText(selected_text_input_text(state).c_str());
+            result.changed = delete_text_input_selection(state) || result.changed;
+        }
+
+        if (ctrl && IsKeyPressed(KEY_V)) {
+            const char* clipboard = GetClipboardText();
+            if (clipboard != nullptr) {
+                result.changed = paste_text_input_at_cursor(state, clipboard, options.max_length, options.filter) ||
+                                 result.changed;
+            }
+        }
+
+        int codepoint = GetCharPressed();
+        while (codepoint > 0) {
+            if (state.has_selection) {
+                result.changed = delete_text_input_selection(state) || result.changed;
+            }
+            if (utf8_codepoint_count(state.value) < options.max_length &&
+                (options.filter == nullptr || options.filter(codepoint, state.value))) {
+                result.changed = insert_codepoint_at_cursor(state, codepoint) || result.changed;
+            }
+            codepoint = GetCharPressed();
+        }
+
+        if (text_input_key_action(KEY_BACKSPACE)) {
+            if (state.has_selection) {
+                result.changed = delete_text_input_selection(state) || result.changed;
+            } else if (state.cursor > 0) {
+                const size_t end_byte = utf8_codepoint_to_byte_index(state.value, state.cursor);
+                const size_t start_byte = utf8_codepoint_to_byte_index(state.value, state.cursor - 1);
+                state.value.erase(start_byte, end_byte - start_byte);
+                --state.cursor;
+                clear_text_input_selection(state);
+                result.changed = true;
+            }
+        }
+
+        if (text_input_key_action(KEY_DELETE)) {
+            if (state.has_selection) {
+                result.changed = delete_text_input_selection(state) || result.changed;
+            } else if (state.cursor < utf8_codepoint_count(state.value)) {
+                const size_t start_byte = utf8_codepoint_to_byte_index(state.value, state.cursor);
+                const size_t end_byte = utf8_codepoint_to_byte_index(state.value, state.cursor + 1);
+                state.value.erase(start_byte, end_byte - start_byte);
+                result.changed = true;
+            }
+        }
+
+        if (text_input_key_action(KEY_LEFT)) {
+            if (state.has_selection && !shift) {
+                move_text_input_cursor(state, text_input_selection_range(state).first, false);
+            } else if (state.cursor > 0) {
+                move_text_input_cursor(state, state.cursor - 1, shift);
+            }
+        }
+
+        if (text_input_key_action(KEY_RIGHT)) {
+            if (state.has_selection && !shift) {
+                move_text_input_cursor(state, text_input_selection_range(state).second, false);
+            } else if (state.cursor < utf8_codepoint_count(state.value)) {
+                move_text_input_cursor(state, state.cursor + 1, shift);
+            }
+        }
+
+        if (text_input_key_action(KEY_HOME)) {
+            move_text_input_cursor(state, 0, shift);
+        }
+
+        if (text_input_key_action(KEY_END)) {
+            move_text_input_cursor(state, utf8_codepoint_count(state.value), shift);
+        }
+
+        if (IsKeyPressed(KEY_ENTER)) {
+            result.submitted = true;
+            state.mouse_selecting = false;
+            clear_text_input_selection(state);
+            if (options.submit_deactivates) {
+                state.active = false;
+                result.deactivated = true;
+            }
+        }
+    }
+
+    std::string display_value = state.value;
+    const size_t composition_codepoints = utf8_codepoint_count(composition_text);
+    const size_t display_cursor = state.active ? state.cursor + composition_codepoints : state.cursor;
+    if (state.active && !composition_text.empty()) {
+        display_value = insert_text_at_cursor_for_display(display_value, state.cursor, composition_text);
+    }
+    const std::string scroll_display_value = display_value;
+    update_text_input_scroll(state,
+                             text_rect.width - 8.0f,
+                             options.font_size,
+                             state.active && !composition_text.empty() ? &scroll_display_value : nullptr,
+                             display_cursor);
+
+    if (show_search_icon) {
+        draw_text_role_in_rect(options.role,
+                               options.search_icon_label,
+                               18,
+                               icon_rect,
+                               with_alpha(g_theme->text_secondary, options.alpha));
+    }
+
+    if (show_label) {
+        draw_text_role_in_rect(options.role,
+                               label,
+                               options.font_size,
+                               label_rect,
+                               with_alpha(g_theme->text_secondary, options.alpha),
+                               text_align::left);
+    }
+
+    if (display_value.empty() && !state.active && placeholder != nullptr) {
+        display_value = placeholder;
+    }
+
+    const Color text_color = with_alpha(state.value.empty() && !state.active ? g_theme->text_hint : g_theme->text,
+                                        options.alpha);
+    const float layout_font_size = text_layout_font_size(static_cast<float>(options.font_size));
+    const float text_y = text_rect.y + (text_rect.height - layout_font_size) * 0.5f + 2.0f;
+
+    if (!state.active && !state.value.empty()) {
+        draw_marquee_text_role(display_value.c_str(), text_rect, options.font_size, text_color, GetTime(), options.role);
+    } else if (!state.active) {
+        draw_text_role_f(options.role, display_value.c_str(), text_rect.x, text_y, options.font_size, text_color);
+    } else {
+        begin_scissor_rect(text_rect);
+
+        if (state.has_selection) {
+            const auto [selection_start, selection_end] = text_input_selection_range(state);
+            const float selection_x = text_rect.x +
+                                      text_input_prefix_width(display_value, selection_start, options.font_size) -
+                                      state.scroll_x;
+            const float selection_end_x = text_rect.x +
+                                          text_input_prefix_width(display_value, selection_end, options.font_size) -
+                                          state.scroll_x;
+            draw_rect_span({selection_x, text_rect.y + 7.0f, selection_end_x - selection_x, text_rect.height - 14.0f},
+                           with_alpha(g_theme->row_selected, options.alpha));
+        }
+
+        draw_text_role_f(options.role,
+                         display_value.c_str(),
+                         text_rect.x - state.scroll_x,
+                         text_y,
+                         options.font_size,
+                         with_alpha(g_theme->text, options.alpha));
+
+        if (!composition_text.empty()) {
+            const float composition_x = text_rect.x +
+                                        text_input_prefix_width(display_value, state.cursor, options.font_size) -
+                                        state.scroll_x;
+            const float composition_end_x =
+                text_rect.x + text_input_prefix_width(display_value, display_cursor, options.font_size) -
+                state.scroll_x;
+            draw_line_ex({composition_x, text_y + layout_font_size + 2.0f},
+                         {composition_end_x, text_y + layout_font_size + 2.0f},
+                         1.5f, with_alpha(g_theme->border_active, options.alpha));
+        }
+
+        const float cursor_x = text_rect.x +
+                               text_input_prefix_width(display_value, display_cursor, options.font_size) -
+                               state.scroll_x;
+        const Vector2 screen_pos = virtual_screen::virtual_to_screen({cursor_x, text_y + layout_font_size + 6.0f});
+        const Vector2 input_top = virtual_screen::virtual_to_screen({text_rect.x, text_rect.y});
+        const Vector2 input_bottom = virtual_screen::virtual_to_screen({text_rect.x, text_rect.y + text_rect.height});
+        windows_input_source::instance().set_text_input_screen_position(static_cast<int>(std::round(screen_pos.x)),
+                                                                        static_cast<int>(std::round(screen_pos.y)),
+                                                                        static_cast<int>(std::round(input_top.y)),
+                                                                        static_cast<int>(std::round(input_bottom.y)));
+
+        const double blink = GetTime() * 1.6;
+        if (std::fmod(blink, 1.0) < 0.6) {
+            draw_rect_span({cursor_x, text_rect.y + 8.0f, 1.5f, text_rect.height - 16.0f},
+                           with_alpha(g_theme->text, options.alpha));
         }
 
         EndScissorMode();

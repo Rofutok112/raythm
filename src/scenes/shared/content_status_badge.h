@@ -51,8 +51,7 @@ inline void draw(Rectangle rect, content_status status, unsigned char alpha, int
     const Color fill = with_alpha(accent, static_cast<unsigned char>((static_cast<int>(alpha) * 28) / 255));
     const Color border = with_alpha(accent, static_cast<unsigned char>((static_cast<int>(alpha) * 190) / 255));
     const Color text = with_alpha(accent, alpha);
-    DrawRectangleRounded(rect, 0.35f, 6, fill);
-    DrawRectangleRoundedLinesEx(rect, 0.35f, 6, 1.2f, border);
+    ui::rounded_surface(rect, 0.35f, 6, fill, border, 1.2f);
     ui::draw_text_in_rect(label(status), font_size, rect, text, ui::text_align::center);
 }
 

@@ -27,7 +27,8 @@
 #include "song_select/song_catalog_service.h"
 #include "song_select/song_select_navigation.h"
 #include "theme.h"
-#include "ui_draw.h"
+#include "ui_frame.h"
+#include "ui_hit.h"
 #include "virtual_screen.h"
 
 namespace {
@@ -331,7 +332,7 @@ void editor_scene::update(float dt) {
 }
 
 void editor_scene::rebuild_hit_regions() const {
-    ui::begin_hit_regions();
+    ui::begin_input_frame();
     if (snap_dropdown_open_) {
         ui::register_hit_region(snap_dropdown_menu_rect(), ui::draw_layer::overlay);
     }
@@ -362,10 +363,11 @@ void editor_scene::draw() {
         settings_overlay_.prepare_current_page();
         virtual_screen::begin_ui();
         draw_scene_background(*g_theme);
-        settings_overlay_.draw();
+        const settings::shell_draw_result settings_result = settings_overlay_.draw();
         virtual_screen::end();
         ClearBackground(BLACK);
         virtual_screen::draw_to_screen();
+        settings_overlay_.apply_draw_result(settings_result);
         return;
     }
 
@@ -588,7 +590,7 @@ void editor_scene::apply_scroll_and_zoom(float dt) {
     const editor_timeline_metrics metrics = timeline_metrics();
     const Rectangle content = metrics.content_rect();
     const Rectangle automation = {content.x + content.width + 8.0f, content.y, 380.0f, content.height};
-    if (CheckCollisionPointRec(mouse, automation)) {
+    if (ui::contains_point(automation, mouse)) {
         mouse = {content.x + content.width * 0.5f, std::clamp(mouse.y, content.y, content.y + content.height)};
     }
     viewport_ = editor_timeline_viewport::apply_scroll_and_zoom(viewport_model(), {

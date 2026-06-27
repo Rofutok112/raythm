@@ -246,6 +246,10 @@ std::optional<auth::profile_ranking_record> parse_profile_ranking_record(const s
         .placement = *placement,
         .max_combo = json::extract_int(object, "maxCombo").value_or(0),
         .accuracy = json::extract_float(object, "accuracy").value_or(0.0f),
+        .play_rating = json::extract_float(object, "playRating").value_or(0.0f),
+        .rating_contribution = json::extract_float(object, "ratingContribution").value_or(0.0f),
+        .rating_contribution_percent =
+            json::extract_float(object, "ratingContributionPercent").value_or(0.0f),
         .is_full_combo = json::extract_bool(object, "isFullCombo").value_or(false),
     };
 }
@@ -633,6 +637,8 @@ std::optional<auth::public_profile> parse_public_profile_response(const std::str
         rating.best_play_count = json::extract_int(*rating_object, "bestPlayCount").value_or(0);
         rating.ruleset_version = json::extract_string(*rating_object, "rulesetVersion").value_or("");
     }
+    std::vector<auth::profile_ranking_record> best_rating_records;
+    parse_profile_ranking_array(*profile_object, "bestRatingRecords", best_rating_records);
 
     return auth::public_profile{
         .id = *id,
@@ -642,6 +648,7 @@ std::optional<auth::public_profile> parse_public_profile_response(const std::str
         .relationship_status = json::extract_string(*profile_object, "relationshipStatus").value_or("none"),
         .relationship_request_id = json::extract_string(*profile_object, "relationshipRequestId").value_or(""),
         .external_links = std::move(external_links),
+        .best_rating_records = std::move(best_rating_records),
     };
 }
 
@@ -1429,6 +1436,7 @@ profile_rankings_result fetch_my_profile_rankings() {
         return result;
     }
 
+    parse_profile_ranking_array(response.body, "bestRatingRecords", result.best_rating_records);
     parse_profile_ranking_array(response.body, "recentRecords", result.recent_records);
     parse_profile_ranking_array(response.body, "firstPlaceRecords", result.first_place_records);
     result.success = true;

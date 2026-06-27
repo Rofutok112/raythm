@@ -22,6 +22,20 @@ struct page_descriptor {
     localization::text_key subtitle;
 };
 
+struct offset_stepper_layout {
+    Rectangle label_rect;
+    Rectangle value_rect;
+    Rectangle double_left_rect;
+    Rectangle single_left_rect;
+    Rectangle single_right_rect;
+    Rectangle double_right_rect;
+};
+
+struct key_slot_layout {
+    Rectangle label_rect;
+    Rectangle value_rect;
+};
+
 inline constexpr ui::draw_layer kLayer = ui::draw_layer::base;
 inline constexpr int kPageCount = 5;
 inline constexpr float kSliderLeftInset = 327.0f;
@@ -51,10 +65,8 @@ inline constexpr float kRowHeight = 72.0f;
 inline constexpr float kRowOffsetX = 45.0f;
 inline constexpr float kKeyModeHeight = 96.0f;
 inline constexpr float kSliderLabelWidth = 300.0f;
-inline constexpr float kSliderThickness = 27.0f;
 inline constexpr float kRowContentPaddingX = 27.0f;
 inline constexpr float kArrowGap = 15.0f;
-inline constexpr float kDoubleArrowExtraGap = 45.0f;
 inline constexpr float kKeySlotWidth = 840.0f;
 inline constexpr float kKeySlotHeight = 72.0f;
 inline constexpr float kKeySlotStartY = 321.0f;
@@ -129,44 +141,68 @@ inline const page_descriptor& page_descriptor_for(page_id page) {
     return kPageDescriptors[static_cast<std::size_t>(page)];
 }
 
-inline Rectangle slider_track_rect(const Rectangle& row_rect) {
-    return ui::make_slider_layout(row_rect, kSliderLeftInset, kSliderRightInset, kSliderLabelWidth, kSliderThickness, kSliderTopOffset).track_rect;
+inline ui::value_selector_options value_selector_options() {
+    return {
+        .layer = kLayer,
+    };
 }
 
 inline Rectangle arrow_left_rect(const Rectangle& row_rect) {
-    const Rectangle content = ui::inset(row_rect, ui::edge_insets::symmetric(0.0f, kRowContentPaddingX));
-    const ui::rect_pair columns = ui::split_columns(content, kSliderLabelWidth);
-    const Rectangle button_pair_area = ui::place(columns.second, kArrowButtonSize * 2.0f + kArrowGap, kArrowButtonSize,
-                                                 ui::anchor::center_right, ui::anchor::center_right);
-    return {button_pair_area.x, button_pair_area.y, kArrowButtonSize, kArrowButtonSize};
+    return ui::make_value_selector_layout(row_rect, value_selector_options()).left_button_rect;
 }
 
 inline Rectangle arrow_right_rect(const Rectangle& row_rect) {
-    const Rectangle left = arrow_left_rect(row_rect);
-    return {left.x + kArrowButtonSize + kArrowGap, left.y, kArrowButtonSize, kArrowButtonSize};
+    return ui::make_value_selector_layout(row_rect, value_selector_options()).right_button_rect;
+}
+
+inline offset_stepper_layout global_offset_stepper_layout(const Rectangle& row_rect) {
+    constexpr float kOffsetLabelWidth = 200.0f;
+    constexpr float kOffsetContentPadding = 18.0f;
+    const Rectangle content = ui::inset(row_rect, ui::edge_insets::symmetric(0.0f, kOffsetContentPadding));
+    const ui::rect_pair columns = ui::split_columns(content, kOffsetLabelWidth);
+    const float button_group_right = row_rect.x + row_rect.width - kRowContentPaddingX;
+    const Rectangle button_group_area = {
+        columns.second.x,
+        columns.second.y,
+        std::max(0.0f, button_group_right - columns.second.x),
+        columns.second.height
+    };
+    const Rectangle button_group = ui::place(button_group_area,
+                                             kArrowButtonSize * 4.0f + kArrowGap * 3.0f,
+                                             kArrowButtonSize,
+                                             ui::anchor::center_right,
+                                             ui::anchor::center_right);
+    Rectangle buttons[4];
+    ui::hstack(button_group, kArrowButtonSize, kArrowGap, buttons);
+    return {
+        columns.first,
+        {
+            columns.second.x,
+            columns.second.y,
+            buttons[0].x - columns.second.x - 16.0f,
+            columns.second.height
+        },
+        buttons[0],
+        buttons[1],
+        buttons[2],
+        buttons[3],
+    };
 }
 
 inline Rectangle double_arrow_left_rect(const Rectangle& row_rect) {
-    const Rectangle content = ui::inset(row_rect, ui::edge_insets::symmetric(0.0f, kRowContentPaddingX));
-    const ui::rect_pair columns = ui::split_columns(content, kSliderLabelWidth);
-    const Rectangle button_pair_area = ui::place(columns.second, kArrowButtonSize * 4.0f + kDoubleArrowExtraGap, kArrowButtonSize,
-                                                 ui::anchor::center_right, ui::anchor::center_right);
-    return {button_pair_area.x, button_pair_area.y, kArrowButtonSize, kArrowButtonSize};
+    return global_offset_stepper_layout(row_rect).double_left_rect;
 }
 
 inline Rectangle single_arrow_left_rect(const Rectangle& row_rect) {
-    const Rectangle left = double_arrow_left_rect(row_rect);
-    return {left.x + kArrowButtonSize + kArrowGap, left.y, kArrowButtonSize, kArrowButtonSize};
+    return global_offset_stepper_layout(row_rect).single_left_rect;
 }
 
 inline Rectangle single_arrow_right_rect(const Rectangle& row_rect) {
-    const Rectangle left = single_arrow_left_rect(row_rect);
-    return {left.x + kArrowButtonSize + kArrowGap, left.y, kArrowButtonSize, kArrowButtonSize};
+    return global_offset_stepper_layout(row_rect).single_right_rect;
 }
 
 inline Rectangle double_arrow_right_rect(const Rectangle& row_rect) {
-    const Rectangle left = single_arrow_right_rect(row_rect);
-    return {left.x + kArrowButtonSize + kArrowGap, left.y, kArrowButtonSize, kArrowButtonSize};
+    return global_offset_stepper_layout(row_rect).double_right_rect;
 }
 
 inline Rectangle key_slot_rect(int index) {
@@ -175,14 +211,31 @@ inline Rectangle key_slot_rect(int index) {
                      Vector2{kRowOffsetX, kKeySlotStartY + static_cast<float>(index) * kKeySlotStepY});
 }
 
+inline key_slot_layout key_slot_layout_for(const Rectangle& row_rect) {
+    constexpr float kKeySlotPadding = 18.0f;
+    constexpr float kKeySlotLabelWidth = 160.0f;
+    const ui::rect_pair columns = ui::split_columns(ui::inset(row_rect, kKeySlotPadding),
+                                                    kKeySlotLabelWidth);
+    return {columns.first, columns.second};
+}
+
+inline Rectangle key_config_error_rect(int visible_key_count) {
+    return ui::place(kContentRect, 560.0f, 28.0f,
+                     ui::anchor::top_left, ui::anchor::top_left,
+                     {30.0f, 214.0f + static_cast<float>(visible_key_count) * 62.0f + 8.0f});
+}
+
 inline void build_tab_rects(std::span<Rectangle> out) {
     ui::vstack(kTabArea, kTabRowHeight, kTabRowGap, out);
 }
 
 inline float slider_ratio_from_mouse(const Rectangle& row_rect) {
-    const Rectangle track = slider_track_rect(row_rect);
-    const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    return clamp01((mouse.x - track.x) / track.width);
+    return ui::slider_ratio_from_mouse(row_rect, kSliderLeftInset, kSliderRightInset, {
+        .layer = kLayer,
+        .track_top_offset = kSliderTopOffset,
+        .label_width = kSliderLabelWidth,
+        .content_padding = kRowContentPaddingX,
+    });
 }
 
 inline int fps_option_index(int target_fps) {

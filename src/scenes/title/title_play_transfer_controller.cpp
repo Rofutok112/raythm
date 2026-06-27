@@ -19,7 +19,7 @@ void draw_busy_overlay(const std::string& message) {
     ui::draw_fullscreen_overlay(Color{0, 0, 0, 120});
     const Rectangle panel = ui::place(song_select::layout::kScreenRect, 420.0f, 96.0f,
                                       ui::anchor::center, ui::anchor::center);
-    ui::draw_panel(panel);
+    ui::panel(panel);
     ui::draw_text_in_rect(message.c_str(), 22,
                           {panel.x + 24.0f, panel.y + 18.0f, panel.width - 48.0f, panel.height - 36.0f},
                           theme.text, ui::text_align::center);

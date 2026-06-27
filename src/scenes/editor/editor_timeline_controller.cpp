@@ -4,6 +4,8 @@
 #include <cstdlib>
 #include <cmath>
 
+#include "ui_hit.h"
+
 namespace {
 
 int snap_tick(const editor_timeline_context& context, int raw_tick) {
@@ -19,12 +21,12 @@ int seek_tick(int raw_tick) {
 
 std::optional<int> lane_at_position(const editor_timeline_context& context, Vector2 point) {
     const Rectangle content = context.metrics.content_rect();
-    if (!CheckCollisionPointRec(point, content) || context.state == nullptr) {
+    if (!ui::contains_point(content, point) || context.state == nullptr) {
         return std::nullopt;
     }
 
     for (int lane = 0; lane < context.state->data().meta.key_count; ++lane) {
-        if (CheckCollisionPointRec(point, context.metrics.lane_rect(lane))) {
+        if (ui::contains_point(context.metrics.lane_rect(lane), point)) {
             return lane;
         }
     }
@@ -67,7 +69,7 @@ bool note_intersects_tick_range(const note_data& note, int min_tick, int max_tic
 
 std::optional<size_t> note_at_position(const editor_timeline_context& context, Vector2 point) {
     const Rectangle content = context.metrics.content_rect();
-    if (!CheckCollisionPointRec(point, content) || context.state == nullptr) {
+    if (!ui::contains_point(content, point) || context.state == nullptr) {
         return std::nullopt;
     }
 

@@ -2,6 +2,7 @@
 
 #include "game_settings.h"
 #include "settings/settings_page_stack.h"
+#include "settings/settings_shell_view.h"
 
 class title_settings_overlay {
 public:
@@ -13,7 +14,8 @@ public:
     void prepare_current_page();
     void update_animation(bool active, float dt);
     void update(float dt);
-    void draw() const;
+    [[nodiscard]] settings::shell_draw_result draw() const;
+    void apply_draw_result(const settings::shell_draw_result& result);
 
     [[nodiscard]] bool closing() const;
     [[nodiscard]] bool closed() const;

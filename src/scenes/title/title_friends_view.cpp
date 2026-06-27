@@ -6,9 +6,9 @@
 
 #include "shared/avatar_texture_cache.h"
 #include "theme.h"
-#include "tween.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_modal.h"
 #include "virtual_screen.h"
 
 namespace title_friends_view {
@@ -17,42 +17,110 @@ namespace {
 constexpr Rectangle kModalRect{470.0f, 170.0f, 980.0f, 720.0f};
 constexpr float kRowHeight = 72.0f;
 constexpr float kRowGap = 10.0f;
+constexpr float kModalPadding = 28.0f;
+constexpr float kHeaderButtonHeight = 42.0f;
+constexpr float kHeaderButtonGap = 14.0f;
+constexpr float kCloseButtonWidth = 92.0f;
+constexpr float kRefreshButtonWidth = 96.0f;
+constexpr float kHeaderActionReservedWidth = 240.0f;
+constexpr float kTabTopOffset = 76.0f;
+constexpr float kTabHeight = 44.0f;
+constexpr float kTabGap = 14.0f;
+constexpr float kFriendsTabWidth = 150.0f;
+constexpr float kRequestsTabWidth = 164.0f;
+constexpr float kInvitesTabWidth = 150.0f;
+constexpr float kListTopGap = 62.0f;
+constexpr float kListBottomInset = 138.0f;
+constexpr float kListViewportPadding = 14.0f;
+constexpr float kUserAvatarSize = 48.0f;
+constexpr float kUserAvatarInsetX = 14.0f;
+constexpr float kUserAvatarInsetY = 12.0f;
+constexpr float kUserTextInsetX = 78.0f;
+constexpr float kUserActionReservedWidth = 420.0f;
+constexpr float kUserNameTop = 11.0f;
+constexpr float kUserNameHeight = 28.0f;
+constexpr float kUserDetailTop = 41.0f;
+constexpr float kUserDetailHeight = 20.0f;
+constexpr float kRequestHeaderHeight = 22.0f;
+constexpr float kRequestHeaderAdvance = 30.0f;
+constexpr float kRequestSectionGap = 8.0f;
+
+enum class row_action_slot {
+    right = 0,
+    middle = 1,
+    left = 2,
+};
 
 struct friends_layout {
     Rectangle modal{};
     Rectangle close_button{};
     Rectangle refresh_button{};
+    Rectangle header_title{};
+    Rectangle header_subtitle{};
     Rectangle friends_tab{};
     Rectangle requests_tab{};
     Rectangle invites_tab{};
     Rectangle list{};
+    Rectangle list_viewport{};
 };
 
-Rectangle animated_bounds(float open_anim) {
-    const float t = tween::ease_out_cubic(std::clamp(open_anim, 0.0f, 1.0f));
-    const float scale = 0.94f + 0.06f * t;
-    const Vector2 center{kModalRect.x + kModalRect.width * 0.5f,
-                         kModalRect.y + kModalRect.height * 0.5f};
+struct user_row_layout {
+    Rectangle avatar{};
+    Rectangle name{};
+    Rectangle detail{};
+};
+
+constexpr Rectangle list_viewport_for(Rectangle list) {
+    return ui::inset(list, ui::edge_insets::uniform(kListViewportPadding));
+}
+
+constexpr user_row_layout user_row_layout_for(Rectangle row) {
     return {
-        center.x - kModalRect.width * scale * 0.5f,
-        center.y - kModalRect.height * scale * 0.5f,
-        kModalRect.width * scale,
-        kModalRect.height * scale,
+        {row.x + kUserAvatarInsetX, row.y + kUserAvatarInsetY, kUserAvatarSize, kUserAvatarSize},
+        {row.x + kUserTextInsetX, row.y + kUserNameTop, row.width - kUserActionReservedWidth, kUserNameHeight},
+        {row.x + kUserTextInsetX, row.y + kUserDetailTop, row.width - kUserActionReservedWidth, kUserDetailHeight},
     };
 }
 
+constexpr Rectangle list_row_rect_for(Rectangle viewport, float y) {
+    return {viewport.x, y, viewport.width, kRowHeight};
+}
+
+constexpr Rectangle request_section_header_rect_for(Rectangle viewport, float y) {
+    return {viewport.x, y, viewport.width, kRequestHeaderHeight};
+}
+
+constexpr bool row_fits(Rectangle viewport, float y) {
+    return y + kRowHeight <= viewport.y + viewport.height;
+}
+
 friends_layout make_layout(float open_anim) {
-    const Rectangle modal = animated_bounds(open_anim);
-    const Rectangle content = ui::inset(modal, ui::edge_insets::uniform(28.0f));
-    const float tab_y = content.y + 76.0f;
+    const Rectangle modal = ui::animated_modal_rect(kModalRect, open_anim);
+    const Rectangle content = ui::inset(modal, ui::edge_insets::uniform(kModalPadding));
+    const Rectangle header_actions{content.x, content.y, content.width, kHeaderButtonHeight};
+    const ui::rect_pair close_split = ui::split_trailing(header_actions, kCloseButtonWidth, kHeaderButtonGap);
+    const ui::rect_pair refresh_split = ui::split_trailing(close_split.first, kRefreshButtonWidth, kHeaderButtonGap);
+    const float tab_widths[] = {kFriendsTabWidth, kRequestsTabWidth, kInvitesTabWidth};
+    Rectangle tab_rects[3]{};
+    ui::hstack_widths({content.x, content.y + kTabTopOffset, content.width, kTabHeight},
+                      tab_widths,
+                      kTabGap,
+                      tab_rects);
+    const Rectangle list{content.x,
+                         tab_rects[0].y + kListTopGap,
+                         content.width,
+                         content.height - kListBottomInset};
     return {
         .modal = modal,
-        .close_button = {content.x + content.width - 92.0f, content.y, 92.0f, 42.0f},
-        .refresh_button = {content.x + content.width - 202.0f, content.y, 96.0f, 42.0f},
-        .friends_tab = {content.x, tab_y, 150.0f, 44.0f},
-        .requests_tab = {content.x + 164.0f, tab_y, 164.0f, 44.0f},
-        .invites_tab = {content.x + 342.0f, tab_y, 150.0f, 44.0f},
-        .list = {content.x, tab_y + 62.0f, content.width, content.height - 138.0f},
+        .close_button = close_split.second,
+        .refresh_button = refresh_split.second,
+        .header_title = {content.x, content.y, content.width - kHeaderActionReservedWidth, 44.0f},
+        .header_subtitle = {content.x, content.y + 42.0f, content.width - kHeaderActionReservedWidth, 24.0f},
+        .friends_tab = tab_rects[0],
+        .requests_tab = tab_rects[1],
+        .invites_tab = tab_rects[2],
+        .list = list,
+        .list_viewport = list_viewport_for(list),
     };
 }
 
@@ -73,18 +141,72 @@ std::string avatar_label(const friend_client::social_user& user) {
 
 void draw_tab(Rectangle rect, const char* label, bool selected, ui::draw_layer layer) {
     const auto& t = *g_theme;
-    const bool hovered = ui::is_hovered(rect, layer);
-    const bool pressed = ui::is_pressed(rect, layer);
-    ui::detail::draw_button_visual(
-        rect,
-        hovered || selected,
-        pressed,
-        label,
-        16,
-        selected ? t.row_selected : t.row,
-        selected ? t.row_active : t.row_hover,
-        selected ? t.accent : t.text,
-        selected ? 2.4f : 1.5f);
+    ui::tab_button(rect, label, {
+        .layer = layer,
+        .font_size = 16,
+        .selected = selected,
+        .style = ui::tab_button_style::raised,
+        .border_width = selected ? 2.4f : 1.5f,
+        .selected_border_width = 2.4f,
+        .bg = t.row,
+        .bg_hover = t.row_hover,
+        .bg_selected = t.row_active,
+        .bg_selected_hover = t.row_active,
+        .border = t.border,
+        .border_selected = t.border,
+        .text_color = t.text,
+        .selected_text_color = t.accent,
+        .custom_colors = true,
+    });
+}
+
+void draw_themed_button(Rectangle rect,
+                        const char* label,
+                        int font_size,
+                        ui::draw_layer layer,
+                        Color bg,
+                        Color bg_hover,
+                        Color text_color,
+                        float border_width = 1.5f,
+                        bool interactive = true) {
+    ui::button(rect, label, {
+        .layer = layer,
+        .font_size = font_size,
+        .border_width = border_width,
+        .bg = bg,
+        .bg_hover = bg_hover,
+        .text_color = text_color,
+        .custom_colors = true,
+        .interactive = interactive,
+    });
+}
+
+int row_action_slot_index(row_action_slot slot) {
+    return static_cast<int>(slot);
+}
+
+bool row_action_clicked(Rectangle row, row_action_slot slot, ui::draw_layer layer) {
+    return ui::is_clicked(ui::row_action_rect(row, row_action_slot_index(slot)), layer);
+}
+
+void draw_row_action_button(Rectangle row,
+                            row_action_slot slot,
+                            const char* label,
+                            int font_size,
+                            ui::draw_layer layer,
+                            Color bg,
+                            Color bg_hover,
+                            Color text_color) {
+    ui::row_action_button(row, row_action_slot_index(slot), label, {
+        .layer = layer,
+        .font_size = font_size,
+        .border_width = 1.5f,
+        .bg = bg,
+        .bg_hover = bg_hover,
+        .text_color = text_color,
+        .custom_colors = true,
+        .interactive = false,
+    });
 }
 
 std::string presence_label(const friend_client::social_user& user) {
@@ -110,20 +232,31 @@ bool presence_active(const std::string& label) {
     return label != "offline" && !label.empty();
 }
 
-void draw_user_row(Rectangle row, const friend_client::social_user& user, ui::draw_layer layer) {
+void draw_user_row(Rectangle row,
+                   const friend_client::social_user& user,
+                   const std::string& avatar_base_url,
+                   ui::draw_layer layer) {
     const auto& t = *g_theme;
-    const ui::row_state row_state = ui::draw_row(row, t.row, t.row_hover, t.border_light, 1.5f);
-    const Rectangle avatar_rect{row.x + 14.0f, row.y + 12.0f, 48.0f, 48.0f};
-    avatar_texture_cache::draw_avatar(avatar_rect, user.avatar_url, avatar_label(user), t.row_soft_selected, t.text, 16);
+    const ui::row_state row_state = ui::row(row, {
+        .layer = layer,
+        .border_width = 1.5f,
+        .bg = t.row,
+        .bg_hover = t.row_hover,
+        .border_color = t.border_light,
+        .custom_colors = true,
+    });
+    const user_row_layout row_layout = user_row_layout_for(row);
+    avatar_texture_cache::draw_avatar(
+        row_layout.avatar, user.avatar_url, avatar_label(user), t.row_soft_selected, t.text, 16, avatar_base_url);
     ui::draw_text_in_rect(user.display_name.empty() ? "Unknown Player" : user.display_name.c_str(),
                           20,
-                          {row.x + 78.0f, row.y + 11.0f, row.width - 420.0f, 28.0f},
+                          row_layout.name,
                           t.text,
                           ui::text_align::left);
     const std::string detail = presence_label(user);
     ui::draw_text_in_rect(detail.c_str(),
                           14,
-                          {row.x + 78.0f, row.y + 41.0f, row.width - 420.0f, 20.0f},
+                          row_layout.detail,
                           presence_active(detail) ? t.success : t.text_muted,
                           ui::text_align::left);
     (void)row_state;
@@ -133,8 +266,8 @@ void draw_user_row(Rectangle row, const friend_client::social_user& user, ui::dr
 template <typename Items, typename DrawRow>
 void draw_list(Rectangle list, const Items& items, const char* empty_text, DrawRow draw_row) {
     const auto& t = *g_theme;
-    ui::draw_section(list);
-    const Rectangle viewport = ui::inset(list, ui::edge_insets::uniform(14.0f));
+    ui::section(list);
+    const Rectangle viewport = list_viewport_for(list);
     if (items.empty()) {
         ui::draw_text_in_rect(empty_text, 18, viewport, t.text_muted, ui::text_align::center);
         return;
@@ -145,7 +278,7 @@ void draw_list(Rectangle list, const Items& items, const char* empty_text, DrawR
         if (y + kRowHeight > viewport.y + viewport.height) {
             break;
         }
-        draw_row({viewport.x, y, viewport.width, kRowHeight}, item);
+        draw_row(list_row_rect_for(viewport, y), item);
         y += kRowHeight + kRowGap;
     }
 }
@@ -166,7 +299,7 @@ command make_tab_command(tab selected_tab) {
 }  // namespace
 
 Rectangle modal_bounds(float open_anim) {
-    return animated_bounds(open_anim);
+    return ui::animated_modal_rect(kModalRect, open_anim);
 }
 
 command handle_input(const model& state, ui::draw_layer layer) {
@@ -187,51 +320,46 @@ command handle_input(const model& state, ui::draw_layer layer) {
         return make_tab_command(tab::invites);
     }
 
-    const Rectangle viewport = ui::inset(layout.list, ui::edge_insets::uniform(14.0f));
+    const Rectangle viewport = layout.list_viewport;
     float y = viewport.y;
     if (state.selected_tab == tab::friends && !state.operation_active) {
         for (const friend_client::social_user& user : state.social.friends.friends) {
-            const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
-            const Rectangle profile_button{row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f};
-            const Rectangle remove_button{row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f};
-            const Rectangle block_button{row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f};
-            if (ui::is_clicked(profile_button, layer)) {
+            const Rectangle row = list_row_rect_for(viewport, y);
+            if (row_action_clicked(row, row_action_slot::left, layer)) {
                 return make_command(command_type::open_profile, user.id);
             }
-            if (ui::is_clicked(remove_button, layer)) {
+            if (row_action_clicked(row, row_action_slot::middle, layer)) {
                 return make_command(command_type::remove_friend, user.id);
             }
-            if (ui::is_clicked(block_button, layer)) {
+            if (row_action_clicked(row, row_action_slot::right, layer)) {
                 return make_command(command_type::block_user, user.id);
             }
             y += kRowHeight + kRowGap;
         }
     } else if (state.selected_tab == tab::requests && !state.operation_active) {
         if (!state.social.requests.incoming.empty()) {
-            y += 30.0f;
+            y += kRequestHeaderAdvance;
             for (const friend_client::friend_request& request : state.social.requests.incoming) {
-                const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
-                const Rectangle profile_button{row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f};
-                const Rectangle accept_button{row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f};
-                const Rectangle decline_button{row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f};
-                if (ui::is_clicked(profile_button, layer)) {
+                const Rectangle row = list_row_rect_for(viewport, y);
+                if (row_action_clicked(row, row_action_slot::left, layer)) {
                     return make_command(command_type::open_profile, request.requester.id);
                 }
-                if (ui::is_clicked(accept_button, layer)) {
+                if (row_action_clicked(row, row_action_slot::middle, layer)) {
                     return make_command(command_type::accept_request, request.id);
                 }
-                if (ui::is_clicked(decline_button, layer)) {
+                if (row_action_clicked(row, row_action_slot::right, layer)) {
                     return make_command(command_type::decline_request, request.id);
                 }
                 y += kRowHeight + kRowGap;
             }
         }
         if (!state.social.requests.outgoing.empty()) {
-            y += state.social.requests.incoming.empty() ? 30.0f : 38.0f;
+            y += state.social.requests.incoming.empty()
+                ? kRequestHeaderAdvance
+                : kRequestHeaderAdvance + kRequestSectionGap;
             for (const friend_client::friend_request& request : state.social.requests.outgoing) {
-                const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
-                const Rectangle profile_button{row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f};
-                if (ui::is_clicked(profile_button, layer)) {
+                const Rectangle row = list_row_rect_for(viewport, y);
+                if (row_action_clicked(row, row_action_slot::right, layer)) {
                     return make_command(command_type::open_profile, request.addressee.id);
                 }
                 y += kRowHeight + kRowGap;
@@ -239,25 +367,21 @@ command handle_input(const model& state, ui::draw_layer layer) {
         }
     } else if (state.selected_tab == tab::invites && !state.operation_active) {
         for (const friend_client::room_invite& invite : state.social.invites.invites) {
-            const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
-            const Rectangle accept_button{row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f};
-            const Rectangle read_button{row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f};
-            const Rectangle decline_button{row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f};
-            if (ui::is_clicked(accept_button, layer)) {
+            const Rectangle row = list_row_rect_for(viewport, y);
+            if (row_action_clicked(row, row_action_slot::left, layer)) {
                 return make_command(command_type::accept_invite, invite.id);
             }
-            if (!invite.read && ui::is_clicked(read_button, layer)) {
+            if (!invite.read && row_action_clicked(row, row_action_slot::middle, layer)) {
                 return make_command(command_type::mark_invite_read, invite.id);
             }
-            if (ui::is_clicked(decline_button, layer)) {
+            if (row_action_clicked(row, row_action_slot::right, layer)) {
                 return make_command(command_type::decline_invite, invite.id);
             }
             y += kRowHeight + kRowGap;
         }
     }
 
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
-        !CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), layout.modal)) {
+    if (ui::modal_outside_released(layout.modal, virtual_screen::get_virtual_mouse())) {
         return make_command(command_type::close);
     }
     return {};
@@ -270,44 +394,39 @@ void draw(const model& state, ui::draw_layer layer, bool draw_backdrop) {
         if (draw_backdrop) {
             ui::draw_fullscreen_overlay(with_alpha(BLACK, 132));
         }
-        ui::draw_panel(layout.modal);
-        const Rectangle content = ui::inset(layout.modal, ui::edge_insets::uniform(28.0f));
-        ui::draw_text_in_rect("Friends", 32, {content.x, content.y, content.width - 240.0f, 44.0f}, t.text, ui::text_align::left);
+        ui::panel(layout.modal);
+        ui::draw_text_in_rect("Friends", 32, layout.header_title, t.text, ui::text_align::left);
         ui::draw_text_in_rect(state.loading ? "Loading social data..." : "Social", 14,
-                              {content.x, content.y + 42.0f, content.width - 240.0f, 24.0f},
+                              layout.header_subtitle,
                               t.text_muted,
                               ui::text_align::left);
-        ui::detail::draw_button_visual(layout.refresh_button, ui::is_hovered(layout.refresh_button, layer),
-                                       ui::is_pressed(layout.refresh_button, layer), "REFRESH", 13,
-                                       t.row, t.row_hover, t.text_muted, 1.5f);
-        ui::detail::draw_button_visual(layout.close_button, ui::is_hovered(layout.close_button, layer),
-                                       ui::is_pressed(layout.close_button, layer), "CLOSE", 13,
-                                       t.row, t.row_hover, t.text_muted, 1.5f);
+        draw_themed_button(layout.refresh_button, "REFRESH", 13, layer, t.row, t.row_hover, t.text_muted);
+        draw_themed_button(layout.close_button, "CLOSE", 13, layer, t.row, t.row_hover, t.text_muted);
         draw_tab(layout.friends_tab, "Friends", state.selected_tab == tab::friends, layer);
         draw_tab(layout.requests_tab, "Requests", state.selected_tab == tab::requests, layer);
         draw_tab(layout.invites_tab, "Invites", state.selected_tab == tab::invites, layer);
 
         if (state.loading && !state.loaded_once) {
-            ui::draw_section(layout.list);
-            ui::draw_text_in_rect("Loading friends...", 18, layout.list, t.text_muted, ui::text_align::center);
+            ui::section(layout.list);
+            ui::draw_text_in_rect("Loading friends...", 18, layout.list_viewport, t.text_muted, ui::text_align::center);
             return;
         }
 
         if (state.selected_tab == tab::friends) {
             draw_list(layout.list, state.social.friends.friends, "No friends yet.", [&](Rectangle row, const friend_client::social_user& user) {
-                draw_user_row(row, user, layer);
-                ui::detail::draw_button_visual({row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f},
-                                               false, false, "PROFILE", 12, t.row, t.row_hover, t.text_muted, 1.5f);
-                ui::detail::draw_button_visual({row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f},
-                                               false, false, "REMOVE", 12, t.row, t.row_hover, t.text_muted, 1.5f);
-                ui::detail::draw_button_visual({row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f},
-                                               false, false, "BLOCK", 12, t.row, t.row_hover, t.error, 1.5f);
+                draw_user_row(row, user, state.avatar_base_url, layer);
+                draw_row_action_button(row, row_action_slot::left,
+                                       "PROFILE", 12, layer, t.row, t.row_hover, t.text_muted);
+                draw_row_action_button(row, row_action_slot::middle,
+                                       "REMOVE", 12, layer, t.row, t.row_hover, t.text_muted);
+                draw_row_action_button(row, row_action_slot::right,
+                                       "BLOCK", 12, layer, t.row, t.row_hover, t.error);
             });
             return;
         }
         if (state.selected_tab == tab::requests) {
-            ui::draw_section(layout.list);
-            const Rectangle viewport = ui::inset(layout.list, ui::edge_insets::uniform(14.0f));
+            ui::section(layout.list);
+            const Rectangle viewport = layout.list_viewport;
             if (state.social.requests.incoming.empty() && state.social.requests.outgoing.empty()) {
                 ui::draw_text_in_rect("No friend requests.", 18, viewport, t.text_muted, ui::text_align::center);
                 return;
@@ -315,56 +434,57 @@ void draw(const model& state, ui::draw_layer layer, bool draw_backdrop) {
             ui::scoped_clip_rect clip(viewport);
             float y = viewport.y;
             if (!state.social.requests.incoming.empty()) {
-                draw_request_section_header({viewport.x, y, viewport.width, 22.0f}, "INCOMING");
-                y += 30.0f;
+                draw_request_section_header(request_section_header_rect_for(viewport, y), "INCOMING");
+                y += kRequestHeaderAdvance;
                 for (const friend_client::friend_request& request : state.social.requests.incoming) {
-                    if (y + kRowHeight > viewport.y + viewport.height) {
+                    if (!row_fits(viewport, y)) {
                         break;
                     }
-                    const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
-                    draw_user_row(row, request.requester, layer);
-                    ui::detail::draw_button_visual({row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f},
-                                                   false, false, "PROFILE", 12, t.row, t.row_hover, t.text_muted, 1.5f);
-                    ui::detail::draw_button_visual({row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f},
-                                                   false, false, "ACCEPT", 13, t.row_selected, t.row_active, t.accent, 1.5f);
-                    ui::detail::draw_button_visual({row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f},
-                                                   false, false, "DECLINE", 13, t.row, t.row_hover, t.text_muted, 1.5f);
+                    const Rectangle row = list_row_rect_for(viewport, y);
+                    draw_user_row(row, request.requester, state.avatar_base_url, layer);
+                    draw_row_action_button(row, row_action_slot::left,
+                                           "PROFILE", 12, layer, t.row, t.row_hover, t.text_muted);
+                    draw_row_action_button(row, row_action_slot::middle,
+                                           "ACCEPT", 13, layer, t.row_selected, t.row_active, t.accent);
+                    draw_row_action_button(row, row_action_slot::right,
+                                           "DECLINE", 13, layer, t.row, t.row_hover, t.text_muted);
                     y += kRowHeight + kRowGap;
                 }
             }
-            if (!state.social.requests.outgoing.empty() && y + 30.0f <= viewport.y + viewport.height) {
-                y += state.social.requests.incoming.empty() ? 0.0f : 8.0f;
-                draw_request_section_header({viewport.x, y, viewport.width, 22.0f}, "OUTGOING");
-                y += 30.0f;
+            if (!state.social.requests.outgoing.empty() &&
+                y + kRequestHeaderAdvance <= viewport.y + viewport.height) {
+                y += state.social.requests.incoming.empty() ? 0.0f : kRequestSectionGap;
+                draw_request_section_header(request_section_header_rect_for(viewport, y), "OUTGOING");
+                y += kRequestHeaderAdvance;
                 for (const friend_client::friend_request& request : state.social.requests.outgoing) {
-                    if (y + kRowHeight > viewport.y + viewport.height) {
+                    if (!row_fits(viewport, y)) {
                         break;
                     }
-                    const Rectangle row{viewport.x, y, viewport.width, kRowHeight};
-                    draw_user_row(row, request.addressee, layer);
-                    ui::detail::draw_button_visual({row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f},
-                                                   false, false, "PENDING", 12, t.row, t.row_hover, t.text_muted, 1.5f);
-                    ui::detail::draw_button_visual({row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f},
-                                                   false, false, "PROFILE", 12, t.row, t.row_hover, t.text_muted, 1.5f);
+                    const Rectangle row = list_row_rect_for(viewport, y);
+                    draw_user_row(row, request.addressee, state.avatar_base_url, layer);
+                    draw_row_action_button(row, row_action_slot::middle,
+                                           "PENDING", 12, layer, t.row, t.row_hover, t.text_muted);
+                    draw_row_action_button(row, row_action_slot::right,
+                                           "PROFILE", 12, layer, t.row, t.row_hover, t.text_muted);
                     y += kRowHeight + kRowGap;
                 }
             }
             return;
         }
         draw_list(layout.list, state.social.invites.invites, "No room invites.", [&](Rectangle row, const friend_client::room_invite& invite) {
-            draw_user_row(row, invite.sender, layer);
+            draw_user_row(row, invite.sender, state.avatar_base_url, layer);
             ui::draw_text_in_rect(invite.room_name.empty() ? "Room invite" : invite.room_name.c_str(),
                                   14,
-                                  {row.x + 78.0f, row.y + 41.0f, row.width - 420.0f, 20.0f},
+                                  user_row_layout_for(row).detail,
                                   t.text_muted,
                                   ui::text_align::left);
-            ui::detail::draw_button_visual({row.x + row.width - 314.0f, row.y + 17.0f, 92.0f, 38.0f},
-                                           false, false, "JOIN", 13, t.row_selected, t.row_active, t.accent, 1.5f);
-            ui::detail::draw_button_visual({row.x + row.width - 210.0f, row.y + 17.0f, 92.0f, 38.0f},
-                                           false, false, invite.read ? "SEEN" : "READ", 12, t.row, t.row_hover,
-                                           invite.read ? t.text_muted : t.accent, 1.5f);
-            ui::detail::draw_button_visual({row.x + row.width - 106.0f, row.y + 17.0f, 92.0f, 38.0f},
-                                           false, false, "DECLINE", 13, t.row, t.row_hover, t.text_muted, 1.5f);
+            draw_row_action_button(row, row_action_slot::left,
+                                   "JOIN", 13, layer, t.row_selected, t.row_active, t.accent);
+            draw_row_action_button(row, row_action_slot::middle,
+                                   invite.read ? "SEEN" : "READ", 12, layer, t.row, t.row_hover,
+                                   invite.read ? t.text_muted : t.accent);
+            draw_row_action_button(row, row_action_slot::right,
+                                   "DECLINE", 13, layer, t.row, t.row_hover, t.text_muted);
         });
     });
 }

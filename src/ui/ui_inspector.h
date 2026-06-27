@@ -176,7 +176,10 @@ inline component_card_result draw_component_card(Rectangle rect,
             style.remove_width,
             style.remove_height,
         };
-        result.remove_clicked = draw_button(remove_btn, "Remove", 10, 1.5f).clicked;
+        result.remove_clicked = button(remove_btn, "Remove", {
+            .font_size = 10,
+            .border_width = 1.5f,
+        }).clicked;
     }
     return result;
 }
@@ -210,16 +213,14 @@ inline text_input_result draw_text_row(Rectangle body, float y,
                                        const row_style& style = {},
                                        draw_layer layer = draw_layer::base,
                                        size_t max_length = 64) {
-    return draw_text_input({body.x, y, body.width, style.row_height},
-                           state,
-                           label,
-                           placeholder,
-                           default_value,
-                           layer,
-                           static_cast<int>(style.font_size),
-                           max_length,
-                           filter,
-                           style.slider_label_width);
+    return text_input({body.x, y, body.width, style.row_height}, state, label, placeholder, {
+        .default_value = default_value,
+        .layer = layer,
+        .font_size = static_cast<int>(style.font_size),
+        .max_length = max_length,
+        .filter = filter,
+        .label_width = style.slider_label_width,
+    });
 }
 
 inline text_input_result draw_number_row(Rectangle body, float y,
@@ -276,8 +277,8 @@ inline color_row_result draw_color_row(Rectangle body, float y,
         color_picker_height(style) - 4.0f
     };
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-        !CheckCollisionPointRec(GetMousePosition(), picker) &&
-        !CheckCollisionPointRec(GetMousePosition(), row)) {
+        !ui::contains_point(picker, GetMousePosition()) &&
+        !ui::contains_point(row, GetMousePosition())) {
         picker_state.open = false;
         picker_state.active_channel = -1;
         return result;
@@ -325,7 +326,7 @@ inline color_row_result draw_color_row(Rectangle body, float y,
                           static_cast<int>(style.font_size),
                           {track.x + track.width + 8.0f, row_y, 30.0f, style.row_height},
                           g_theme->text, text_align::right);
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(), track)) {
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && ui::contains_point(track, GetMousePosition())) {
             picker_state.active_channel = channel;
             picker_state.edit_started = false;
         }
@@ -347,14 +348,15 @@ inline float draw_slider_row(Rectangle body, float y, const char* label,
                              const std::string& value, float ratio,
                              const row_style& style = {},
                              draw_layer layer = draw_layer::base) {
-    return draw_slider_relative({body.x, y, body.width, style.slider_row_height},
-                                label, value.c_str(), ratio,
-                                style.track_margin_left, style.track_margin_right,
-                                layer,
-                                static_cast<int>(style.font_size),
-                                style.slider_row_height * 0.5f,
-                                style.slider_label_width,
-                                style.content_padding);
+    return slider_relative({body.x, y, body.width, style.slider_row_height},
+                           label, value.c_str(), ratio,
+                           style.track_margin_left, style.track_margin_right, {
+        .layer = layer,
+        .font_size = static_cast<int>(style.font_size),
+        .track_top_offset = style.slider_row_height * 0.5f,
+        .label_width = style.slider_label_width,
+        .content_padding = style.content_padding,
+    });
 }
 
 }  // namespace ui::inspector

@@ -160,21 +160,21 @@ void draw_avatar(Rectangle rect,
                  Color background,
                  Color text_color,
                  int font_size,
-                 const std::string& base_url) {
+    const std::string& base_url) {
     shared().poll();
     if (const Texture2D* texture = shared().get(avatar_url, base_url); texture != nullptr) {
-        DrawTexturePro(*texture,
-                       {0.0f, 0.0f, static_cast<float>(texture->width), static_cast<float>(texture->height)},
-                       rect,
-                       {0.0f, 0.0f},
-                       0.0f,
-                       WHITE);
-        ui::draw_rect_lines(rect, 1.5f, with_alpha(g_theme->border_light, 220));
+        ui::draw_texture(*texture, rect);
+        ui::frame(rect, with_alpha(g_theme->border_light, 220), 1.5f);
         return;
     }
 
-    ui::draw_rect_f(rect, background);
-    ui::draw_text_in_rect(fallback_label.c_str(), font_size, rect, text_color, ui::text_align::center);
+    ui::placeholder(rect, fallback_label.c_str(), {
+        .font_size = font_size,
+        .draw_border = false,
+        .fill = background,
+        .text_color = text_color,
+        .custom_colors = true,
+    });
 }
 
 }  // namespace avatar_texture_cache

@@ -24,7 +24,7 @@ bool accepts_chart_file_character(int codepoint, const std::string&) {
 
 void editor_modal_view::draw_unsaved_changes_dialog() {
     ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
-    ui::enqueue_panel(layout::kUnsavedChangesRect, ui::draw_layer::modal);
+    ui::queued_panel(layout::kUnsavedChangesRect, ui::draw_layer::modal);
     ui::enqueue_text_in_rect("Unsaved Changes", 28,
                              {layout::kUnsavedChangesRect.x + 20.0f, layout::kUnsavedChangesRect.y + 20.0f,
                               layout::kUnsavedChangesRect.width - 40.0f, 30.0f},
@@ -38,15 +38,27 @@ void editor_modal_view::draw_unsaved_changes_dialog() {
                               layout::kUnsavedChangesRect.width - 56.0f, 24.0f},
                              g_theme->text, ui::text_align::center, ui::draw_layer::modal);
 
-    ui::enqueue_button(layout::unsaved_save_button_rect(), "SAVE", 16, ui::draw_layer::modal, 1.5f);
-    ui::enqueue_button(layout::unsaved_discard_button_rect(), "DISCARD", 16, ui::draw_layer::modal, 1.5f);
-    ui::enqueue_button(layout::unsaved_cancel_button_rect(), "CANCEL", 16, ui::draw_layer::modal, 1.5f);
+    ui::queued_button(layout::unsaved_save_button_rect(), "SAVE", {
+        .layer = ui::draw_layer::modal,
+        .font_size = 16,
+        .border_width = 1.5f,
+    });
+    ui::queued_button(layout::unsaved_discard_button_rect(), "DISCARD", {
+        .layer = ui::draw_layer::modal,
+        .font_size = 16,
+        .border_width = 1.5f,
+    });
+    ui::queued_button(layout::unsaved_cancel_button_rect(), "CANCEL", {
+        .layer = ui::draw_layer::modal,
+        .font_size = 16,
+        .border_width = 1.5f,
+    });
 }
 
 editor_modal_view_result editor_modal_view::draw_save_dialog(save_dialog_state& state) {
     editor_modal_view_result result;
     ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
-    ui::enqueue_panel(layout::kSaveDialogRect, ui::draw_layer::modal);
+    ui::queued_panel(layout::kSaveDialogRect, ui::draw_layer::modal);
     ui::enqueue_text_in_rect("Save Chart", 28,
                              {layout::kSaveDialogRect.x + 20.0f, layout::kSaveDialogRect.y + 18.0f,
                               layout::kSaveDialogRect.width - 40.0f, 30.0f},
@@ -56,10 +68,16 @@ editor_modal_view_result editor_modal_view::draw_save_dialog(save_dialog_state& 
                               layout::kSaveDialogRect.width - 48.0f, 22.0f},
                              g_theme->text_secondary, ui::text_align::center, ui::draw_layer::modal);
 
-    const ui::text_input_result file_name_result = ui::draw_text_input(
+    const ui::text_input_result file_name_result = ui::text_input(
         {layout::kSaveDialogRect.x + 20.0f, layout::kSaveDialogRect.y + 88.0f, layout::kSaveDialogRect.width - 40.0f, 38.0f},
-        state.file_name_input, "File", "normal.rchart", "new-chart.rchart",
-        ui::draw_layer::modal, 16, 48, accepts_chart_file_character, 64.0f);
+        state.file_name_input, "File", "normal.rchart", {
+            .default_value = "new-chart.rchart",
+            .layer = ui::draw_layer::modal,
+            .font_size = 16,
+            .max_length = 48,
+            .filter = accepts_chart_file_character,
+            .label_width = 64.0f,
+        });
     result.save_dialog_submit_requested = file_name_result.submitted;
 
     if (!state.error.empty()) {
@@ -69,14 +87,22 @@ editor_modal_view_result editor_modal_view::draw_save_dialog(save_dialog_state& 
                               g_theme->error, ui::text_align::left);
     }
 
-    ui::enqueue_button(layout::save_submit_button_rect(), "SAVE", 16, ui::draw_layer::modal, 1.5f);
-    ui::enqueue_button(layout::save_cancel_button_rect(), "CANCEL", 16, ui::draw_layer::modal, 1.5f);
+    ui::queued_button(layout::save_submit_button_rect(), "SAVE", {
+        .layer = ui::draw_layer::modal,
+        .font_size = 16,
+        .border_width = 1.5f,
+    });
+    ui::queued_button(layout::save_cancel_button_rect(), "CANCEL", {
+        .layer = ui::draw_layer::modal,
+        .font_size = 16,
+        .border_width = 1.5f,
+    });
     return result;
 }
 
 void editor_modal_view::draw_key_count_confirmation(int pending_key_count) {
     ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
-    ui::enqueue_panel(layout::kMetadataConfirmRect, ui::draw_layer::modal);
+    ui::queued_panel(layout::kMetadataConfirmRect, ui::draw_layer::modal);
     ui::enqueue_text_in_rect("Change Key Mode", 28,
                              {layout::kMetadataConfirmRect.x + 20.0f, layout::kMetadataConfirmRect.y + 18.0f,
                               layout::kMetadataConfirmRect.width - 40.0f, 30.0f},
@@ -90,6 +116,14 @@ void editor_modal_view::draw_key_count_confirmation(int pending_key_count) {
                               layout::kMetadataConfirmRect.width - 56.0f, 24.0f},
                              g_theme->text, ui::text_align::center, ui::draw_layer::modal);
 
-    ui::enqueue_button(layout::key_count_confirm_button_rect(), "CONFIRM", 16, ui::draw_layer::modal, 1.5f);
-    ui::enqueue_button(layout::key_count_cancel_button_rect(), "CANCEL", 16, ui::draw_layer::modal, 1.5f);
+    ui::queued_button(layout::key_count_confirm_button_rect(), "CONFIRM", {
+        .layer = ui::draw_layer::modal,
+        .font_size = 16,
+        .border_width = 1.5f,
+    });
+    ui::queued_button(layout::key_count_cancel_button_rect(), "CANCEL", {
+        .layer = ui::draw_layer::modal,
+        .font_size = 16,
+        .border_width = 1.5f,
+    });
 }

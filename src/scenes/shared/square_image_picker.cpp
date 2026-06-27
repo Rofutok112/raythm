@@ -12,6 +12,7 @@
 #include "theme.h"
 #include "ui_draw.h"
 #include "ui_hit.h"
+#include "ui_layout.h"
 #include "virtual_screen.h"
 
 namespace square_image_picker {
@@ -19,13 +20,117 @@ namespace {
 
 constexpr Rectangle kOverlayRect = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
 constexpr Rectangle kDialogRect = {455.0f, 86.0f, 1010.0f, 908.0f};
-constexpr Rectangle kTitleRect = {501.0f, 126.0f, 540.0f, 40.0f};
-constexpr Rectangle kPreviewRect = {565.0f, 188.0f, 790.0f, 630.0f};
-constexpr Rectangle kZoomRowRect = {565.0f, 842.0f, 790.0f, 54.0f};
-constexpr Rectangle kCancelRect = {1067.0f, 918.0f, 132.0f, 48.0f};
-constexpr Rectangle kApplyRect = {1215.0f, 918.0f, 140.0f, 48.0f};
+constexpr float kTitleWidth = 540.0f;
+constexpr float kTitleHeight = 40.0f;
+constexpr Vector2 kTitleOffset = {46.0f, 40.0f};
+constexpr float kPreviewWidth = 790.0f;
+constexpr float kPreviewHeight = 630.0f;
+constexpr Vector2 kPreviewOffset = {110.0f, 102.0f};
+constexpr float kZoomTopGap = 24.0f;
+constexpr float kZoomRowHeight = 54.0f;
+constexpr float kZoomTrackLeftInset = 160.0f;
+constexpr float kZoomTrackRightInset = 32.0f;
+constexpr float kZoomTrackTopOffset = 26.0f;
+constexpr float kZoomLabelWidth = 96.0f;
+constexpr float kActionButtonHeight = 48.0f;
+constexpr float kActionButtonGap = 16.0f;
+constexpr float kCancelButtonWidth = 132.0f;
+constexpr float kApplyButtonWidth = 140.0f;
+constexpr float kActionBottomInset = 28.0f;
 constexpr float kMinZoom = 1.0f;
 constexpr float kMaxZoom = 4.0f;
+
+enum class picker_action {
+    none,
+    cancel,
+    apply,
+};
+
+struct picker_layout {
+    Rectangle overlay;
+    Rectangle dialog;
+    Rectangle title;
+    Rectangle preview;
+    Rectangle zoom_row;
+    Rectangle cancel_button;
+    Rectangle apply_button;
+};
+
+constexpr picker_layout picker_layout_for(Rectangle dialog) {
+    const Rectangle title = ui::place(dialog, kTitleWidth, kTitleHeight,
+                                      ui::anchor::top_left, ui::anchor::top_left,
+                                      kTitleOffset);
+    const Rectangle preview = ui::place(dialog, kPreviewWidth, kPreviewHeight,
+                                        ui::anchor::top_left, ui::anchor::top_left,
+                                        kPreviewOffset);
+    const Rectangle zoom_row = {preview.x, preview.y + preview.height + kZoomTopGap,
+                                preview.width, kZoomRowHeight};
+    const float actions_width = kCancelButtonWidth + kActionButtonGap + kApplyButtonWidth;
+    const Rectangle actions = {
+        preview.x + preview.width - actions_width,
+        dialog.y + dialog.height - kActionBottomInset - kActionButtonHeight,
+        actions_width,
+        kActionButtonHeight,
+    };
+    const ui::rect_pair action_buttons =
+        ui::split_trailing(actions, kApplyButtonWidth, kActionButtonGap);
+    return {
+        kOverlayRect,
+        dialog,
+        title,
+        preview,
+        zoom_row,
+        action_buttons.first,
+        action_buttons.second,
+    };
+}
+
+constexpr picker_layout kLayout = picker_layout_for(kDialogRect);
+
+struct picker_action_button {
+    picker_action action;
+    Rectangle rect;
+    const char* label;
+    bool primary = false;
+};
+
+constexpr picker_action_button kActionButtons[] = {
+    {picker_action::cancel, kLayout.cancel_button, "CANCEL", false},
+    {picker_action::apply, kLayout.apply_button, "APPLY", true},
+};
+
+constexpr Rectangle zoom_track_rect(Rectangle zoom_row) {
+    return {
+        zoom_row.x + kZoomTrackLeftInset,
+        zoom_row.y,
+        zoom_row.width - kZoomTrackLeftInset - kZoomTrackRightInset,
+        zoom_row.height,
+    };
+}
+
+float zoom_for_mouse_x(Rectangle zoom_row, float mouse_x) {
+    const Rectangle track = zoom_track_rect(zoom_row);
+    const float ratio = std::clamp((mouse_x - track.x) / track.width, 0.0f, 1.0f);
+    return kMinZoom + ratio * (kMaxZoom - kMinZoom);
+}
+
+picker_action clicked_picker_action() {
+    for (const picker_action_button& button : kActionButtons) {
+        if (ui::is_clicked(button.rect, ui::draw_layer::modal)) {
+            return button.action;
+        }
+    }
+    return picker_action::none;
+}
+
+ui::slider_options zoom_slider_options() {
+    return {
+        .layer = ui::draw_layer::modal,
+        .font_size = 18,
+        .track_top_offset = kZoomTrackTopOffset,
+        .label_width = kZoomLabelWidth,
+    };
+}
 
 bool write_png_image_file(const Image& image, const std::filesystem::path& destination) {
     int output_size = 0;
@@ -89,6 +194,27 @@ Rectangle clamped_crop_rect(Rectangle crop, int width, int height) {
     return crop;
 }
 
+void draw_picker_action_buttons(const ui_theme& theme) {
+    for (const picker_action_button& button : kActionButtons) {
+        if (button.primary) {
+            ui::button(button.rect, button.label, {
+                .layer = ui::draw_layer::modal,
+                .font_size = 14,
+                .border_width = 2.0f,
+                .bg = theme.row_active,
+                .bg_hover = theme.row_hover,
+                .text_color = theme.text,
+                .custom_colors = true,
+            });
+        } else {
+            ui::button(button.rect, button.label, {
+                .layer = ui::draw_layer::modal,
+                .font_size = 14,
+            });
+        }
+    }
+}
+
 }  // namespace
 
 state::~state() {
@@ -143,26 +269,27 @@ void state::update() {
         return;
     }
 
-    ui::register_hit_region(kOverlayRect, ui::draw_layer::overlay);
-    ui::register_hit_region(kDialogRect, ui::draw_layer::modal);
+    ui::register_hit_region(kLayout.overlay, ui::draw_layer::overlay);
+    ui::register_hit_region(kLayout.dialog, ui::draw_layer::modal);
 
-    if (IsKeyPressed(KEY_ESCAPE) || ui::is_clicked(kCancelRect, ui::draw_layer::modal)) {
+    const picker_action action = clicked_picker_action();
+    if (IsKeyPressed(KEY_ESCAPE) || action == picker_action::cancel) {
         canceled_ = true;
         close();
         return;
     }
-    if (ui::is_clicked(kApplyRect, ui::draw_layer::modal)) {
+    if (action == picker_action::apply) {
         accepted_ = true;
         close();
         return;
     }
 
-    const Rectangle image_dest = fit_rect(kPreviewRect, image_width_, image_height_);
+    const Rectangle image_dest = fit_rect(kLayout.preview, image_width_, image_height_);
     const Rectangle crop_dest = map_source_to_dest(source_crop_rect(), image_dest, image_width_, image_height_);
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-        CheckCollisionPointRec(mouse, crop_dest) &&
+        ui::contains_point(crop_dest, mouse) &&
         !ui::is_blocked_by_higher_layer(crop_dest, ui::draw_layer::modal)) {
         dragging_ = true;
         drag_offset_ = {
@@ -184,13 +311,8 @@ void state::update() {
     }
 
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
-        ui::is_hovered(kZoomRowRect, ui::draw_layer::modal)) {
-        constexpr float kTrackLeftInset = 160.0f;
-        constexpr float kTrackRightInset = 32.0f;
-        const float track_x = kZoomRowRect.x + kTrackLeftInset;
-        const float track_w = kZoomRowRect.width - kTrackLeftInset - kTrackRightInset;
-        const float ratio = std::clamp((mouse.x - track_x) / track_w, 0.0f, 1.0f);
-        set_zoom(kMinZoom + ratio * (kMaxZoom - kMinZoom));
+        ui::is_hovered(kLayout.zoom_row, ui::draw_layer::modal)) {
+        set_zoom(zoom_for_mouse_x(kLayout.zoom_row, mouse.x));
     }
 }
 
@@ -201,39 +323,25 @@ void state::draw() const {
 
     const auto& t = *g_theme;
     ui::draw_fullscreen_overlay(with_alpha(BLACK, 145));
-    ui::draw_section(kDialogRect);
-    ui::draw_text_in_rect("Crop Image", 28, kTitleRect, t.text, ui::text_align::left);
+    ui::section(kLayout.dialog);
+    ui::draw_text_in_rect("Crop Image", 28, kLayout.title, t.text, ui::text_align::left);
 
-    ui::draw_rect_f(kPreviewRect, with_alpha(t.panel, 235));
-    ui::draw_rect_lines(kPreviewRect, 1.5f, t.border_light);
+    ui::surface(kLayout.preview, with_alpha(t.panel, 235), t.border_light, 1.5f);
 
     if (texture_loaded_ && texture_.id != 0) {
-        const Rectangle image_dest = fit_rect(kPreviewRect, image_width_, image_height_);
-        DrawTexturePro(texture_,
-                       {0.0f, 0.0f, static_cast<float>(texture_.width), static_cast<float>(texture_.height)},
-                       image_dest, {0.0f, 0.0f}, 0.0f, WHITE);
+        const Rectangle image_dest = fit_rect(kLayout.preview, image_width_, image_height_);
+        ui::draw_texture(texture_, image_dest);
 
         const Rectangle crop_dest = map_source_to_dest(source_crop_rect(), image_dest, image_width_, image_height_);
-        DrawRectangleRec({image_dest.x, image_dest.y, image_dest.width, crop_dest.y - image_dest.y},
-                         with_alpha(BLACK, 105));
-        DrawRectangleRec({image_dest.x, crop_dest.y + crop_dest.height, image_dest.width,
-                          image_dest.y + image_dest.height - crop_dest.y - crop_dest.height},
-                         with_alpha(BLACK, 105));
-        DrawRectangleRec({image_dest.x, crop_dest.y, crop_dest.x - image_dest.x, crop_dest.height},
-                         with_alpha(BLACK, 105));
-        DrawRectangleRec({crop_dest.x + crop_dest.width, crop_dest.y,
-                          image_dest.x + image_dest.width - crop_dest.x - crop_dest.width, crop_dest.height},
-                         with_alpha(BLACK, 105));
-        ui::draw_rect_lines(crop_dest, 3.0f, t.accent);
-        ui::draw_rect_lines(ui::inset(crop_dest, -4.0f), 1.5f, with_alpha(t.bg, 210));
+        ui::dim_outside_rect(image_dest, crop_dest, with_alpha(BLACK, 105));
+        ui::frame(crop_dest, t.accent, 3.0f);
+        ui::frame(ui::inset(crop_dest, -4.0f), with_alpha(t.bg, 210), 1.5f);
     }
 
-    ui::draw_slider_relative(kZoomRowRect, "Zoom", TextFormat("%.1fx", zoom_),
-                             (zoom_ - kMinZoom) / (kMaxZoom - kMinZoom),
-                             160.0f, 32.0f, ui::draw_layer::modal,
-                             18, 26.0f, 96.0f);
-    ui::draw_button(kCancelRect, "CANCEL", 14);
-    ui::draw_button_colored(kApplyRect, "APPLY", 14, t.row_active, t.row_hover, t.text);
+    ui::slider_relative(kLayout.zoom_row, "Zoom", TextFormat("%.1fx", zoom_),
+                        (zoom_ - kMinZoom) / (kMaxZoom - kMinZoom),
+                        kZoomTrackLeftInset, kZoomTrackRightInset, zoom_slider_options());
+    draw_picker_action_buttons(t);
 }
 
 bool state::consume_accept() {

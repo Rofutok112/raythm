@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <string>
 
+#include "localization/localization.h"
 #include "title/title_layout.h"
 #include "shared/avatar_texture_cache.h"
 #include "theme.h"
@@ -28,6 +29,149 @@ constexpr float kPlaySubtitleHeight = 36.0f;
 constexpr float kTopBarHeight = 70.0f;
 constexpr float kAvatarSize = 42.0f;
 constexpr float kRatingPanelWidth = 176.0f;
+constexpr const char* kTitleText = "raythm";
+constexpr const char* kSubtitleText = "trace the line before the beat disappears";
+
+struct rating_panel_layout {
+    Rectangle label{};
+    Rectangle value{};
+    Rectangle subtitle{};
+};
+
+struct account_chip_layout {
+    Rectangle avatar{};
+    Rectangle name{};
+    Rectangle logged_in_status{};
+    Rectangle logged_out_status{};
+    Rectangle rating_panel{};
+    Rectangle chevron{};
+};
+
+struct top_bar_chip_layout {
+    Rectangle badge{};
+};
+
+struct header_copy_keyframe {
+    Rectangle title{};
+    Rectangle subtitle{};
+    float title_font_size = 124.0f;
+    float subtitle_font_size = 30.0f;
+    ui::text_align align = ui::text_align::left;
+};
+
+struct header_copy_layout {
+    Vector2 title_pos{};
+    Vector2 subtitle_pos{};
+    float title_font_size = 124.0f;
+    float subtitle_font_size = 30.0f;
+};
+
+constexpr rating_panel_layout rating_panel_layout_for(Rectangle rect) {
+    return {
+        .label = {rect.x + 18.0f, rect.y + 5.0f, rect.width - 30.0f, 14.0f},
+        .value = {rect.x + 18.0f, rect.y + 18.0f, rect.width - 30.0f, 24.0f},
+        .subtitle = {rect.x + 18.0f, rect.y + 40.0f, rect.width - 30.0f, 14.0f},
+    };
+}
+
+constexpr account_chip_layout account_chip_layout_for(Rectangle chip) {
+    const Rectangle avatar = {chip.x + 16.0f, chip.y + 14.0f, kAvatarSize, kAvatarSize};
+    const float text_x = avatar.x + avatar.width + 14.0f;
+    return {
+        .avatar = avatar,
+        .name = {text_x, chip.y + 8.0f, chip.width - kRatingPanelWidth - 96.0f, 30.0f},
+        .logged_in_status = {text_x, chip.y + 41.0f, chip.width - kRatingPanelWidth - 96.0f, 20.0f},
+        .logged_out_status = {text_x, chip.y + 41.0f, chip.width - 104.0f, 20.0f},
+        .rating_panel = {chip.x + chip.width - kRatingPanelWidth - 34.0f, chip.y + 8.0f,
+                         kRatingPanelWidth, 54.0f},
+        .chevron = {chip.x + chip.width - 28.0f, chip.y, 28.0f, chip.height},
+    };
+}
+
+constexpr top_bar_chip_layout friends_chip_layout_for(Rectangle chip) {
+    return {
+        .badge = {chip.x + chip.width - 26.0f, chip.y + 12.0f, 18.0f, 18.0f},
+    };
+}
+
+constexpr Rectangle top_bar_rect_for_visible(Rectangle visible) {
+    return {visible.x, visible.y, visible.width, kTopBarHeight};
+}
+
+constexpr header_copy_keyframe closed_header_copy_keyframe(Rectangle header) {
+    return {
+        .title = {header.x, header.y, header.width, kClosedTitleHeight},
+        .subtitle = {
+            header.x + kSubtitleInsetX,
+            header.y + kClosedSubtitleOffsetY,
+            header.width - kSubtitleInsetX,
+            kSubtitleHeight,
+        },
+        .title_font_size = 124.0f,
+        .subtitle_font_size = 30.0f,
+        .align = ui::text_align::center,
+    };
+}
+
+constexpr header_copy_keyframe home_header_copy_keyframe(Rectangle header) {
+    return {
+        .title = {header.x, header.y, header.width, kOpenTitleHeight},
+        .subtitle = {
+            header.x + kSubtitleInsetX,
+            header.y + kOpenSubtitleOffsetY,
+            header.width - kSubtitleInsetX,
+            kSubtitleHeight,
+        },
+        .title_font_size = 124.0f,
+        .subtitle_font_size = 30.0f,
+        .align = ui::text_align::left,
+    };
+}
+
+constexpr header_copy_keyframe play_header_copy_keyframe(Rectangle header) {
+    return {
+        .title = {header.x, header.y, header.width, kPlayTitleHeight},
+        .subtitle = {
+            header.x + kPlaySubtitleInsetX,
+            header.y + kPlaySubtitleOffsetY,
+            header.width - kPlaySubtitleInsetX,
+            kPlaySubtitleHeight,
+        },
+        .title_font_size = 108.0f,
+        .subtitle_font_size = 24.0f,
+        .align = ui::text_align::left,
+    };
+}
+
+Vector2 title_text_position(const header_copy_keyframe& keyframe) {
+    return ui::display_text_position(kTitleText, keyframe.title_font_size,
+                                     keyframe.title, keyframe.align);
+}
+
+Vector2 subtitle_text_position(const header_copy_keyframe& keyframe) {
+    return ui::display_text_position(kSubtitleText, keyframe.subtitle_font_size,
+                                     keyframe.subtitle, keyframe.align);
+}
+
+header_copy_layout header_copy_layout_for(const title_header_view::draw_config& config) {
+    const header_copy_keyframe closed = closed_header_copy_keyframe(config.closed_header_rect);
+    const header_copy_keyframe home = home_header_copy_keyframe(config.open_header_rect);
+    const header_copy_keyframe play = play_header_copy_keyframe(title_layout::play_header_rect());
+    return {
+        .title_pos = tween::lerp(tween::lerp(title_text_position(closed),
+                                             title_text_position(home),
+                                             config.menu_t),
+                                 title_text_position(play),
+                                 config.play_t),
+        .subtitle_pos = tween::lerp(tween::lerp(subtitle_text_position(closed),
+                                                subtitle_text_position(home),
+                                                config.menu_t),
+                                    subtitle_text_position(play),
+                                    config.play_t),
+        .title_font_size = std::lerp(home.title_font_size, play.title_font_size, config.play_t),
+        .subtitle_font_size = std::lerp(home.subtitle_font_size, play.subtitle_font_size, config.play_t),
+    };
+}
 
 void draw_top_bar_item_background(Rectangle rect, Color bg, unsigned char alpha) {
     const bool hovered = ui::is_hovered(rect);
@@ -35,52 +179,50 @@ void draw_top_bar_item_background(Rectangle rect, Color bg, unsigned char alpha)
     const Rectangle visual = pressed ? ui::inset(rect, 1.5f) : rect;
     if (hovered || pressed) {
         const float intensity = pressed ? 0.52f : 0.38f;
-        ui::draw_rect_f(visual, with_alpha(bg, static_cast<unsigned char>(static_cast<float>(alpha) * intensity)));
+        ui::surface_fill(visual, with_alpha(bg, static_cast<unsigned char>(static_cast<float>(alpha) * intensity)));
     }
 }
 
-Rectangle centered_icon_rect(Rectangle rect, float inset) {
-    const float size = std::max(1.0f, std::min(rect.width, rect.height) - inset * 2.0f);
-    return {
-        rect.x + (rect.width - size) * 0.5f,
-        rect.y + (rect.height - size) * 0.5f,
-        size,
-        size
-    };
-}
-
-void draw_refresh_icon(Rectangle rect, Color color, unsigned char alpha) {
-    raythm_icons::draw_refresh(ui::inset(rect, 17.0f), with_alpha(color, alpha), 3.0f);
-}
-
-void draw_settings_icon(Rectangle rect, Color color, unsigned char alpha) {
-    raythm_icons::draw_settings_gear(ui::inset(rect, 17.0f), with_alpha(color, alpha), 3.0f);
-}
-
-void draw_friends_icon(Rectangle rect, Color color, unsigned char alpha) {
-    raythm_icons::draw_friends(centered_icon_rect(rect, 14.0f), with_alpha(color, alpha), 3.0f);
-}
-
-void draw_rating_rankings_icon(Rectangle rect, Color color, unsigned char alpha) {
-    raythm_icons::draw_trophy(centered_icon_rect(rect, 15.0f), with_alpha(color, alpha), 3.0f);
+void draw_top_bar_icon_button(Rectangle rect,
+                              ui::icon_draw_fn draw_icon,
+                              float icon_inset,
+                              Color icon_color,
+                              Color icon_hover_color,
+                              unsigned char alpha) {
+    const auto& t = *g_theme;
+    draw_top_bar_item_background(rect, t.row_hover, alpha);
+    ui::icon_button(rect, draw_icon, {
+        .border_width = 0.0f,
+        .bg = {0, 0, 0, 1},
+        .bg_hover = {0, 0, 0, 1},
+        .icon_color = with_alpha(icon_color, alpha),
+        .icon_hover_color = with_alpha(icon_hover_color, alpha),
+        .border_color = {0, 0, 0, 1},
+        .icon_inset = icon_inset,
+        .icon_stroke_width = 3.0f,
+        .border_alpha_tracks_fill = false,
+    });
 }
 
 void draw_profile_chevron(Rectangle rect, Color color, unsigned char alpha) {
-    raythm_icons::draw_chevron_right(centered_icon_rect(rect, 5.0f), with_alpha(color, alpha), 3.0f);
+    raythm_icons::draw_chevron_right(ui::icon_rect(rect, 5.0f), with_alpha(color, alpha), 3.0f);
 }
 
 std::string rating_value_text(const auth::rating_summary& rating) {
-    return TextFormat("%.2f", rating.rating);
+    return TextFormat("%.0f", rating.rating);
 }
 
 std::string rating_subtitle_text(const auth::rating_summary& rating) {
     if (rating.rank > 0) {
-        return TextFormat("GLOBAL #%d", rating.rank);
+        return TextFormat("%s #%d", localization::tr_literal("GLOBAL"), rating.rank);
     }
     if (rating.best_play_count > 0) {
+        if (localization::current_locale() == localization::locale::japanese) {
+            return TextFormat("%s %d", localization::tr_literal("BEST PLAYS"), rating.best_play_count);
+        }
         return TextFormat("BEST %d PLAYS", rating.best_play_count);
     }
-    return "UNRATED";
+    return localization::tr_literal("UNRATED");
 }
 
 void draw_rating_panel(Rectangle rect,
@@ -98,20 +240,18 @@ void draw_rating_panel(Rectangle rect,
     const Color label_color = with_alpha(lerp_color(bar_text, tone, 0.26f), alpha);
     const Color value_color = with_alpha(lerp_color(bar_text, WHITE, 0.55f), alpha);
 
-    ui::draw_rect_f(rect, fill);
-    ui::draw_rect_f({rect.x, rect.y, 4.0f, rect.height}, with_alpha(tone, alpha));
-    ui::draw_rect_f({rect.x + 4.0f, rect.y, rect.width - 4.0f, 1.0f},
-                    with_alpha(WHITE, static_cast<unsigned char>(26.0f * alpha_t)));
-    ui::draw_rect_lines(rect, 1.0f, border);
+    ui::surface_fill(rect, fill);
+    ui::accent_bar({rect.x, rect.y, 4.0f, rect.height}, with_alpha(tone, alpha));
+    ui::divider({rect.x + 4.0f, rect.y, rect.width - 4.0f, 1.0f},
+                with_alpha(WHITE, static_cast<unsigned char>(26.0f * alpha_t)));
+    ui::frame(rect, border, 1.0f);
 
-    const Rectangle label_rect = {rect.x + 18.0f, rect.y + 5.0f, rect.width - 30.0f, 14.0f};
-    const Rectangle value_rect = {rect.x + 18.0f, rect.y + 18.0f, rect.width - 30.0f, 24.0f};
-    const Rectangle sub_rect = {rect.x + 18.0f, rect.y + 40.0f, rect.width - 30.0f, 14.0f};
-    ui::draw_text_in_rect("RATING", 11, label_rect, label_color, ui::text_align::left);
+    const rating_panel_layout layout = rating_panel_layout_for(rect);
+    ui::draw_text_in_rect(localization::tr_literal("RATING"), 11, layout.label, label_color, ui::text_align::left);
     const std::string rating_value = rating_value_text(rating);
-    ui::draw_text_in_rect(rating_value.c_str(), 23, value_rect, value_color, ui::text_align::left);
+    ui::draw_text_in_rect(rating_value.c_str(), 23, layout.value, value_color, ui::text_align::left);
     const std::string subtitle = rating_subtitle_text(rating);
-    ui::draw_text_in_rect(subtitle.c_str(), 10, sub_rect,
+    ui::draw_text_in_rect(subtitle.c_str(), 10, layout.subtitle,
                           with_alpha(bar_muted, static_cast<unsigned char>((static_cast<int>(alpha) * 230) / 255)),
                           ui::text_align::left);
 }
@@ -121,100 +261,60 @@ void draw_top_bar_controls(const title_header_view::draw_config& config) {
     const float bar_t = std::max(config.menu_t, config.play_t);
     const unsigned char account_alpha = static_cast<unsigned char>(255.0f * bar_t);
     const Rectangle visible = virtual_screen::visible_rect();
-    const Rectangle top_bar = {visible.x, visible.y, visible.width, kTopBarHeight};
+    const Rectangle top_bar = top_bar_rect_for_visible(visible);
     const Color bar_color = lerp_color(t.panel, BLACK, 0.58f);
     const Color bar_text = lerp_color(t.text, WHITE, 0.76f);
     const Color bar_muted = lerp_color(t.text_muted, WHITE, 0.54f);
-    ui::draw_rect_f(top_bar, with_alpha(bar_color, static_cast<unsigned char>(235.0f * bar_t)));
-    ui::draw_rect_f({top_bar.x, top_bar.y + top_bar.height - 2.0f, top_bar.width, 2.0f},
-                    with_alpha(t.border, static_cast<unsigned char>(150.0f * bar_t)));
+    ui::bar_surface(top_bar,
+                    with_alpha(bar_color, static_cast<unsigned char>(235.0f * bar_t)),
+                    with_alpha(t.border, static_cast<unsigned char>(150.0f * bar_t)),
+                    2.0f);
 
-    draw_top_bar_item_background(config.settings_chip_rect, t.row_hover, account_alpha);
-    const Rectangle settings_visual = ui::is_pressed(config.settings_chip_rect)
-        ? ui::inset(config.settings_chip_rect, 1.5f)
-        : config.settings_chip_rect;
-    draw_settings_icon(settings_visual,
-                       ui::is_hovered(config.settings_chip_rect) ? bar_text : bar_muted,
-                       account_alpha);
-
-    draw_top_bar_item_background(config.refresh_chip_rect, t.row_hover, account_alpha);
-    const Rectangle refresh_visual = ui::is_pressed(config.refresh_chip_rect)
-        ? ui::inset(config.refresh_chip_rect, 1.5f)
-        : config.refresh_chip_rect;
-    draw_refresh_icon(refresh_visual,
-                      ui::is_hovered(config.refresh_chip_rect) ? bar_text : bar_muted, account_alpha);
-
-    draw_top_bar_item_background(config.rating_rankings_chip_rect, t.row_hover, account_alpha);
-    const Rectangle ranking_visual = ui::is_pressed(config.rating_rankings_chip_rect)
-        ? ui::inset(config.rating_rankings_chip_rect, 1.5f)
-        : config.rating_rankings_chip_rect;
-    draw_rating_rankings_icon(ranking_visual,
-                              ui::is_hovered(config.rating_rankings_chip_rect) ? bar_text : bar_muted,
-                              account_alpha);
-
-    draw_top_bar_item_background(config.friends_chip_rect, t.row_hover, account_alpha);
-    const Rectangle friends_visual = ui::is_pressed(config.friends_chip_rect)
-        ? ui::inset(config.friends_chip_rect, 1.5f)
-        : config.friends_chip_rect;
-    draw_friends_icon(friends_visual,
-                      ui::is_hovered(config.friends_chip_rect) ? bar_text : bar_muted,
-                      account_alpha);
+    draw_top_bar_icon_button(config.settings_chip_rect, raythm_icons::draw_settings_gear,
+                             17.0f, bar_muted, bar_text, account_alpha);
+    draw_top_bar_icon_button(config.refresh_chip_rect, raythm_icons::draw_refresh,
+                             17.0f, bar_muted, bar_text, account_alpha);
+    draw_top_bar_icon_button(config.rating_rankings_chip_rect, raythm_icons::draw_trophy,
+                             17.0f, bar_muted, bar_text, account_alpha);
+    draw_top_bar_icon_button(config.friends_chip_rect, raythm_icons::draw_friends,
+                             17.0f, bar_muted, bar_text, account_alpha);
     if (config.friends_badge_count > 0) {
-        const Rectangle badge_rect = {config.friends_chip_rect.x + config.friends_chip_rect.width - 26.0f,
-                                      config.friends_chip_rect.y + 12.0f,
-                                      18.0f,
-                                      18.0f};
-        ui::draw_rect_f(badge_rect, with_alpha(t.error, account_alpha));
+        const top_bar_chip_layout friends_layout = friends_chip_layout_for(config.friends_chip_rect);
+        ui::surface_fill(friends_layout.badge, with_alpha(t.error, account_alpha));
         ui::draw_text_in_rect(std::to_string(std::min(config.friends_badge_count, 9)).c_str(),
                               12,
-                              badge_rect,
+                              friends_layout.badge,
                               with_alpha(WHITE, account_alpha),
                               ui::text_align::center);
     }
 
     draw_top_bar_item_background(config.account_chip_rect, t.row_hover, account_alpha);
-    const Rectangle avatar_rect = {config.account_chip_rect.x + 16.0f,
-                                   config.account_chip_rect.y + 14.0f,
-                                   kAvatarSize, kAvatarSize};
+    const account_chip_layout account_layout = account_chip_layout_for(config.account_chip_rect);
     avatar_texture_cache::draw_avatar(
-        avatar_rect,
+        account_layout.avatar,
         std::string(config.avatar_url),
         std::string(config.avatar_label),
         with_alpha(config.logged_in ? t.accent : t.row_selected, account_alpha),
         with_alpha(config.logged_in ? t.panel : bar_text, account_alpha),
         14,
         std::string(config.avatar_base_url));
-    const Rectangle account_name_rect = {
-        avatar_rect.x + avatar_rect.width + 14.0f, config.account_chip_rect.y + 8.0f,
-        config.account_chip_rect.width - kRatingPanelWidth - 96.0f, 30.0f
-    };
-    ui::draw_text_in_rect(std::string(config.account_name).c_str(), 20, account_name_rect,
+    ui::draw_text_in_rect(std::string(config.account_name).c_str(), 20, account_layout.name,
                           with_alpha(bar_text, account_alpha), ui::text_align::left);
     if (config.logged_in) {
-        const Rectangle rating_panel_rect = {
-            config.account_chip_rect.x + config.account_chip_rect.width - kRatingPanelWidth - 34.0f,
-            config.account_chip_rect.y + 8.0f,
-            kRatingPanelWidth,
-            54.0f
-        };
-        draw_rating_panel(rating_panel_rect, config.rating, account_alpha, bar_text, bar_muted);
+        draw_rating_panel(account_layout.rating_panel, config.rating, account_alpha, bar_text, bar_muted);
         ui::draw_text_in_rect(config.email_verified ? "Season 0" : "Verify email",
                               12,
-                              {avatar_rect.x + avatar_rect.width + 14.0f, config.account_chip_rect.y + 41.0f,
-                               config.account_chip_rect.width - kRatingPanelWidth - 96.0f, 20.0f},
+                              account_layout.logged_in_status,
                               with_alpha(config.email_verified ? bar_muted : t.error, account_alpha),
                               ui::text_align::left);
     } else {
         ui::draw_text_in_rect(std::string(config.account_status).c_str(),
                               13,
-                              {avatar_rect.x + avatar_rect.width + 14.0f, config.account_chip_rect.y + 41.0f,
-                               config.account_chip_rect.width - 104.0f, 20.0f},
+                              account_layout.logged_out_status,
                               with_alpha(bar_muted, account_alpha),
                               ui::text_align::left);
     }
-    draw_profile_chevron({config.account_chip_rect.x + config.account_chip_rect.width - 28.0f,
-                          config.account_chip_rect.y, 28.0f, config.account_chip_rect.height},
-                         bar_muted, account_alpha);
+    draw_profile_chevron(account_layout.chevron, bar_muted, account_alpha);
 }
 
 }  // namespace
@@ -224,52 +324,15 @@ namespace title_header_view {
 void draw(const draw_config& config) {
     const auto& t = *g_theme;
 
-    const Vector2 closed_title_pos = ui::display_text_position("raythm", 124,
-                                                               {config.closed_header_rect.x, config.closed_header_rect.y,
-                                                                config.closed_header_rect.width, kClosedTitleHeight},
-                                                               ui::text_align::center);
-    const Rectangle title_play_header_rect = title_layout::play_header_rect();
-    const Vector2 home_title_pos = ui::display_text_position("raythm", 124,
-                                                             {config.open_header_rect.x, config.open_header_rect.y,
-                                                              config.open_header_rect.width, kOpenTitleHeight},
-                                                             ui::text_align::left);
-    const Vector2 play_title_pos = ui::display_text_position("raythm", 108,
-                                                             {title_play_header_rect.x, title_play_header_rect.y,
-                                                              title_play_header_rect.width, kPlayTitleHeight},
-                                                             ui::text_align::left);
-    const Vector2 title_pos =
-        tween::lerp(tween::lerp(closed_title_pos, home_title_pos, config.menu_t), play_title_pos, config.play_t);
-
-    const Vector2 closed_subtitle_pos = ui::display_text_position("trace the line before the beat disappears", 30,
-                                                                  {config.closed_header_rect.x + kSubtitleInsetX,
-                                                                   config.closed_header_rect.y + kClosedSubtitleOffsetY,
-                                                                   config.closed_header_rect.width - kSubtitleInsetX,
-                                                                   kSubtitleHeight},
-                                                                  ui::text_align::center);
-    const Vector2 home_subtitle_pos = ui::display_text_position("trace the line before the beat disappears", 30,
-                                                                {config.open_header_rect.x + kSubtitleInsetX,
-                                                                 config.open_header_rect.y + kOpenSubtitleOffsetY,
-                                                                 config.open_header_rect.width - kSubtitleInsetX,
-                                                                 kSubtitleHeight},
-                                                                ui::text_align::left);
-    const Vector2 play_subtitle_pos = ui::display_text_position("trace the line before the beat disappears", 24,
-                                                                {title_play_header_rect.x + kPlaySubtitleInsetX,
-                                                                 title_play_header_rect.y + kPlaySubtitleOffsetY,
-                                                                 title_play_header_rect.width - kPlaySubtitleInsetX,
-                                                                 kPlaySubtitleHeight},
-                                                                ui::text_align::left);
-    const Vector2 subtitle_pos =
-        tween::lerp(tween::lerp(closed_subtitle_pos, home_subtitle_pos, config.menu_t), play_subtitle_pos, config.play_t);
-    const float title_font_size = std::lerp(124.0f, 108.0f, config.play_t);
-    const float subtitle_font_size = std::lerp(30.0f, 24.0f, config.play_t);
+    const header_copy_layout copy = header_copy_layout_for(config);
 
     const float title_visibility = std::clamp(1.0f - config.play_t * 1.35f, 0.0f, 1.0f);
     const Color title_color = with_alpha(t.text, static_cast<unsigned char>(255.0f * title_visibility));
     const Color subtitle_color = with_alpha(t.text_dim, static_cast<unsigned char>(255.0f * title_visibility));
     if (title_visibility > 0.01f) {
-        ui::draw_text_display("raythm", title_pos, title_font_size, 0.0f, title_color);
-        ui::draw_text_display("trace the line before the beat disappears",
-                              subtitle_pos, subtitle_font_size, 0.0f, subtitle_color);
+        ui::draw_text_display(kTitleText, copy.title_pos, copy.title_font_size, 0.0f, title_color);
+        ui::draw_text_display(kSubtitleText,
+                              copy.subtitle_pos, copy.subtitle_font_size, 0.0f, subtitle_color);
     }
 
 }

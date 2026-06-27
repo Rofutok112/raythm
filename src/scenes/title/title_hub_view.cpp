@@ -15,7 +15,7 @@
 #include "title/seamless_song_select_view.h"
 #include "tween.h"
 #include "ui_clip.h"
-#include "ui_draw.h"
+#include "ui_frame.h"
 #include "virtual_screen.h"
 
 namespace {
@@ -73,6 +73,15 @@ const char* account_status_for(const song_select::auth_state& auth_state) {
 
 bool is_play_surface(title_hub_view::mode mode) {
     return mode == title_hub_view::mode::play || mode == title_hub_view::mode::create;
+}
+
+Rectangle account_dialog_anchor_rect(Rectangle account_chip_rect) {
+    return {
+        account_chip_rect.x,
+        account_chip_rect.y + 12.0f,
+        account_chip_rect.width,
+        account_chip_rect.height,
+    };
 }
 
 void draw_modal_stack(title_hub_view::draw_context& context,
@@ -146,7 +155,7 @@ draw_result draw(draw_context context) {
 
     virtual_screen::begin_ui();
     draw_scene_background(t);
-    ui::begin_draw_queue();
+    ui::begin_render_frame();
     context.audio_controller.draw_spectrum(spectrum_rect, tween::lerp(1.0f, 0.5f, play_t));
     if (draw_title_header) {
         title_header_view::draw(header_config);
@@ -164,7 +173,7 @@ draw_result draw(draw_context context) {
     } else if (context.startup.load_failed && context.view.current_mode == mode::title) {
         title_startup_controller::draw_status(context.startup);
     } else if (context.view.current_mode == mode::settings) {
-        context.settings_overlay.draw();
+        result.settings_result = context.settings_overlay.draw();
     } else if (is_play_surface(context.view.current_mode)) {
         const title_selection_media_snapshot media =
             context.play_create_feature.media_snapshot(context.audio_controller);
@@ -178,15 +187,10 @@ draw_result draw(draw_context context) {
     } else if (context.view.current_mode == mode::online) {
         context.browse_feature.draw(context.audio_controller, context.view.play_view_anim, context.view.play_entry_origin_rect);
     } else if (context.view.current_mode == mode::multiplayer) {
-        multiplayer::view::draw(context.multiplayer_state);
+        result.multiplayer_result = multiplayer::view::draw(context.multiplayer_state);
     }
 
-    const Rectangle account_dialog_anchor = {
-        account_chip_rect.x,
-        account_chip_rect.y + 12.0f,
-        account_chip_rect.width,
-        account_chip_rect.height
-    };
+    const Rectangle account_dialog_anchor = account_dialog_anchor_rect(account_chip_rect);
     if (is_play_surface(context.view.current_mode)) {
         context.play_create_feature.draw_or_apply_confirmation(
             context.audio_controller,
@@ -199,17 +203,18 @@ draw_result draw(draw_context context) {
         account_dialog_anchor,
         screen_rect,
         kTitleModalLayer);
-    result.login_command = song_select::draw_login_dialog(
+    result.login_result = song_select::draw_login_dialog_result(
         play_state.auth,
         play_state.login_dialog,
         login_layout,
         context.auth_controller.request_active);
+    result.login_command = result.login_result.command;
     result.close_login_dialog = result.login_command == song_select::login_dialog_command::close;
     if (result.login_command == song_select::login_dialog_command::request_profile) {
         result.title_command = title::command::open_self_profile();
     }
 
-    ui::flush_draw_queue();
+    ui::end_render_frame();
 
     if (!context.startup.loading) {
         if (context.view.intro_hold_active) {

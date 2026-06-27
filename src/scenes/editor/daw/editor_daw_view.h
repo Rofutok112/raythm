@@ -24,7 +24,8 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
 
 editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_model& model,
                                              Rectangle snap_menu_rect,
-                                             bool snap_dropdown_open);
+                                             bool snap_dropdown_open,
+                                             editor_timing_panel_state& timing_state);
 
 metadata_modal_result draw_metadata_modal(const editor_left_panel_view_model& model);
 

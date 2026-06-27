@@ -33,7 +33,7 @@
 #include "title/title_startup_controller.h"
 #include "theme.h"
 #include "ui_clip.h"
-#include "ui_draw.h"
+#include "ui_frame.h"
 #include "virtual_screen.h"
 
 namespace {
@@ -627,7 +627,7 @@ void title_scene::on_app_exit() {
 
 // Title 上で Home 展開、Play/Create への遷移、Account 導線を扱う。
 void title_scene::update(float dt) {
-    ui::begin_hit_regions();
+    ui::begin_input_frame();
     if (play_create_feature_.state().context_menu.open) {
         ui::register_hit_region(play_create_feature_.state().context_menu.rect, song_select::layout::kContextMenuLayer);
     }
@@ -813,6 +813,9 @@ void title_scene::draw() {
         transition_fade_,
         quit_fade_,
     });
+    multiplayer::apply_view_result(multiplayer_state_, result.multiplayer_result);
+    settings_overlay_.apply_draw_result(result.settings_result);
+    song_select::apply_login_dialog_result(play_create_feature_.state().login_dialog, result.login_result);
     if (result.close_login_dialog) {
         play_create_feature_.state().login_dialog.open = false;
     } else if (apply_title_command(result.title_command)) {

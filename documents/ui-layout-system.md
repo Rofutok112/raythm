@@ -21,7 +21,7 @@
 | `src/ui/ui_layout.h` | コア型（anchor, edge_insets）とレイアウト関数（place, inset, vstack, hstack, grid 等） |
 | `src/ui/ui_text.h` | テキスト配置ユーティリティ（text_position, draw_text_in_rect） |
 | `src/ui/ui_hit.h` | ヒットテスト（is_hovered, is_pressed, is_clicked） |
-| `src/ui/ui_draw.h` | 描画ユーティリティ（draw_button, draw_panel, draw_section, draw_progress_bar 等） |
+| `src/ui/ui_draw.h` | 描画ユーティリティ（button, icon_button, row, panel, section, value_selector, slider_relative 等） |
 
 ---
 
@@ -405,15 +405,15 @@ DrawRectangleRec(visual, color);
 
 頻出する描画パターンをまとめた関数群。`g_theme` を参照する。
 
-#### `draw_button`
+#### `button`
 
 ```cpp
-inline button_state draw_button(Rectangle rect, const char* label, int font_size,
-                                float border_width = 2.0f);
+inline button_state button(Rectangle rect, const char* label,
+                           button_options options = {});
 ```
 
 標準ボタンを描画する。hover で `row` → `row_hover` に色変化、press で 1.5px 押し込み、テキスト中央揃え。
-戻り値 `button_state` の `clicked` フィールドでアクション判定できる。
+戻り値 `button_state` の `clicked` フィールドでアクション判定できる。色や layer は `button_options` で指定する。
 
 ```cpp
 struct button_state {
@@ -425,32 +425,72 @@ struct button_state {
 
 ```cpp
 Rectangle btn = {100, 100, 200, 40};
-if (ui::draw_button(btn, "RESUME", 24).clicked) {
+if (ui::button(btn, "RESUME", {.font_size = 24}).clicked) {
     // ボタンがクリックされた
 }
 ```
 
-#### `draw_button_colored`
-
-```cpp
-inline button_state draw_button_colored(Rectangle rect, const char* label, int font_size,
-                                        Color bg, Color bg_hover, Color text_color,
-                                        float border_width = 2.0f);
-```
-
-カスタム色のボタン。選択状態やアクティブ状態の表現に使用する。
+カスタム色のボタンは `custom_colors` を有効にして表現する。
 
 ```cpp
 // 選択中のタブ
-ui::draw_button_colored(tab_rect, "Gameplay", 22,
-                        g_theme->row_active, g_theme->row_active, g_theme->text);
+ui::button(tab_rect, "Gameplay", {
+    .font_size = 22,
+    .bg = g_theme->row_active,
+    .bg_hover = g_theme->row_active,
+    .text_color = g_theme->text,
+    .custom_colors = true,
+});
 
 // 非選択のタブ
-ui::draw_button_colored(tab_rect, "Audio", 22,
-                        g_theme->row, g_theme->row_hover, g_theme->text_secondary);
+ui::button(tab_rect, "Audio", {
+    .font_size = 22,
+    .bg = g_theme->row,
+    .bg_hover = g_theme->row_hover,
+    .text_color = g_theme->text_secondary,
+    .custom_colors = true,
+});
 ```
 
-#### `draw_row`
+#### `action_button`
+
+```cpp
+inline button_state action_button(Rectangle rect, const char* label,
+                                  action_button_options options = {});
+inline button_state queued_action_button(Rectangle rect, const char* label,
+                                         action_button_options options = {});
+```
+
+enabled/disabled を持つアクションボタン。無効時はクリックを返さず、既定では `section` / `border_light` / `text_muted` で描画する。
+
+```cpp
+const ui::button_state remove = ui::action_button(remove_rect, "DELETE", {
+    .font_size = 14,
+    .enabled = can_delete,
+    .disabled_text_color = g_theme->text_hint,
+});
+```
+
+#### `icon_button`
+
+```cpp
+inline button_state icon_button(Rectangle rect, icon_draw_fn draw_icon,
+                                icon_button_options options = {});
+```
+
+アイコンのみの正方形ボタン。背景、hover、disabled、アイコン色、アイコン inset、線幅を `icon_button_options` で指定する。`draw_icon` は `raythm_icons` と同じ `void(Rectangle, Color, float)` 形式の関数を渡す。フェード中の transport ボタンのように枠線 alpha を fill alpha から独立させたい場合は `border_alpha_tracks_fill = false` を使う。背景だけを press で押し込み、アイコン位置を固定したい場合は `icon_pressed_inset = 0.0f` を指定する。
+
+```cpp
+const ui::button_state refresh = ui::icon_button(refresh_rect, raythm_icons::draw_refresh, {
+    .bg = g_theme->row_soft,
+    .bg_hover = g_theme->row_soft_hover,
+    .icon_color = g_theme->text_muted,
+    .icon_hover_color = g_theme->text,
+    .icon_inset = 13.0f,
+});
+```
+
+#### `row`
 
 ```cpp
 struct row_state {
@@ -460,55 +500,79 @@ struct row_state {
     Rectangle visual;
 };
 
-inline row_state draw_row(Rectangle rect, Color bg, Color bg_hover,
-                          Color border_color, float border_width = 2.0f);
+inline row_state row(Rectangle rect, row_options options = {});
 ```
 
 行背景とボーダーだけを描画する汎用 helper。中のテキストやアイコンは呼び出し側が自由に載せる。
 
 ```cpp
-const ui::row_state row = ui::draw_row(item_rect, g_theme->row, g_theme->row_hover, g_theme->border);
+const ui::row_state row = ui::row(item_rect, {
+    .bg = g_theme->row,
+    .bg_hover = g_theme->row_hover,
+    .border_color = g_theme->border,
+    .custom_colors = true,
+});
 ui::draw_text_in_rect("Lane 1", 24, ui::inset(row.visual, 18.0f), g_theme->text, ui::text_align::left);
 ```
 
-#### `draw_selectable_row`
+#### `selectable_row`
 
 ```cpp
-inline row_state draw_selectable_row(Rectangle rect, bool selected,
-                                     float border_width = 2.0f);
+inline row_state selectable_row(Rectangle rect, bool selected,
+                                float border_width = 2.0f);
 ```
 
 選択状態付きの行UI。`settings_scene` のキー割当行や `song_select_scene` のリスト行に向く。
 
 ```cpp
-const ui::row_state row = ui::draw_selectable_row(chart_rect, chart_index == difficulty_index_);
+const ui::row_state row = ui::selectable_row(chart_rect, chart_index == difficulty_index_);
 ```
 
-#### `draw_panel`
+#### `tab_button`
 
 ```cpp
-inline void draw_panel(Rectangle rect);
+inline button_state tab_button(Rectangle rect, const char* label,
+                               tab_button_options options = {});
+inline button_state queued_tab_button(Rectangle rect, const char* label,
+                                      tab_button_options options = {});
+```
+
+選択状態を持つタブ用ボタン。通常のボタン型タブは `tab_button_style::raised`、profile 画面のような下線付きタブは `tab_button_style::underline` を使う。
+
+```cpp
+ui::tab_button(tab_rect, "OVERVIEW", {
+    .layer = ui::draw_layer::modal,
+    .font_size = 14,
+    .selected = current_tab == tab::overview,
+    .style = ui::tab_button_style::underline,
+});
+```
+
+#### `panel`
+
+```cpp
+inline void panel(Rectangle rect, surface_options options = {});
 ```
 
 メインパネルを描画する（`panel` 背景 + `border` ボーダー 2px）。
 
 ```cpp
-ui::draw_panel(kMainPanel);
+ui::panel(kMainPanel);
 // 以下と同等:
 // DrawRectangleRec(kMainPanel, g_theme->panel);
 // DrawRectangleLinesEx(kMainPanel, 2.0f, g_theme->border);
 ```
 
-#### `draw_section`
+#### `section`
 
 ```cpp
-inline void draw_section(Rectangle rect);
+inline void section(Rectangle rect, surface_options options = {});
 ```
 
 セクションパネルを描画する（`section` 背景 + `border_light` ボーダー 1.5px）。
 
 ```cpp
-ui::draw_section(kSongInfoRect);
+ui::section(kSongInfoRect);
 // 以下と同等:
 // DrawRectangleRec(kSongInfoRect, g_theme->section);
 // DrawRectangleLinesEx(kSongInfoRect, 1.5f, g_theme->border_light);
@@ -529,7 +593,7 @@ Rectangle row = {100, 100, 500, 40};
 ui::draw_label_value(row, "Max Combo", "342", 24, g_theme->text_dim, g_theme->text);
 ```
 
-#### `draw_value_selector`
+#### `value_selector`
 
 ```cpp
 struct selector_state {
@@ -538,16 +602,14 @@ struct selector_state {
     button_state right;
 };
 
-inline selector_state draw_value_selector(Rectangle rect, const char* label, const char* value,
-                                          int font_size = 24, float button_size = 34.0f,
-                                          float label_width = 200.0f,
-                                          float content_padding = 18.0f);
+inline selector_state value_selector(Rectangle rect, const char* label, const char* value,
+                                     value_selector_options options = {});
 ```
 
 `< value >` 型の選択行を描画する。解像度、テーマ、4K/6K 切り替えのようなUI向け。
 
 ```cpp
-const ui::selector_state selector = ui::draw_value_selector(row, "Theme",
+const ui::selector_state selector = ui::value_selector(row, "Theme",
     g_settings.dark_mode ? "Dark" : "Light");
 if (selector.left.clicked || selector.right.clicked) {
     g_settings.dark_mode = !g_settings.dark_mode;
@@ -571,64 +633,36 @@ ui::draw_progress_bar(kHealthBarRect, gauge_.get_value() / 100.0f,
                       g_theme->hud_health_border);
 ```
 
-#### `draw_slider`
+#### `slider_relative`
 
 ```cpp
-inline float draw_slider(Rectangle row_rect, const char* label, const char* value_text,
-                         float ratio, float track_left, float track_width,
-                         int font_size = 22, float track_top_offset = 26.0f);
-```
-
-スライダー行を一括描画する。行背景 + ラベル + トラック + 塗り + つまみ + 値テキスト。
-
-- `ratio`: 0.0〜1.0 の現在値
-- `track_left`: トラック開始X座標（絶対座標）
-- `track_width`: トラックの幅
-- 戻り値: マウスがドラッグ中の場合は新しい ratio（0.0〜1.0）。ドラッグ中でなければ `-1.0f`
-
-```cpp
-// 設定画面での使用例
-Rectangle rows[3];
-ui::vstack(row_area, 48.0f, 12.0f, rows);
-
-const float drag = ui::draw_slider(rows[0], "Note Speed",
-    TextFormat("%.3f", g_settings.note_speed),
-    (g_settings.note_speed - 0.020f) / (0.090f - 0.020f),
-    548.0f, 630.0f);
-if (drag >= 0.0f) {
-    g_settings.note_speed = 0.020f + drag * (0.090f - 0.020f);
-}
-```
-
-#### `draw_slider_relative`
-
-```cpp
-inline float draw_slider_relative(Rectangle row_rect, const char* label, const char* value_text,
-                                  float ratio, float track_left_inset, float track_right_inset,
-                                  int font_size = 22, float track_top_offset = 26.0f,
-                                  float label_width = 200.0f, float content_padding = 18.0f);
+inline float slider_relative(Rectangle row_rect, const char* label, const char* value_text,
+                             float ratio, float track_left_inset, float track_right_inset,
+                             slider_options options = {});
 ```
 
 `row_rect` を基準にトラックの左右インセットを相対指定するスライダー。設定画面のように同一レイアウトを複数行に並べる場合はこちらを推奨。
 
 ```cpp
-ui::draw_slider_relative(row, "Note Speed", TextFormat("%.3f", g_settings.note_speed),
-                         ratio, 218.0f, 42.0f);
+const float drag = ui::slider_relative(row, "Note Speed", TextFormat("%.3f", g_settings.note_speed),
+                                       ratio, 218.0f, 42.0f);
 ```
 
-#### `draw_scrollbar`
+#### `scrollbar`
 
 ```cpp
-inline void draw_scrollbar(Rectangle track_rect, float content_height, float scroll_offset,
-                           Color track_color, Color thumb_color,
-                           float min_thumb_height = 36.0f);
+inline void scrollbar(Rectangle track_rect, float content_height, float scroll_offset,
+                      scrollbar_options options = {});
 ```
 
 縦スクロールバーを描画する。サム位置計算は `vertical_scroll_metrics()` を内部で使用する。
 
 ```cpp
-ui::draw_scrollbar(kScrollbarTrack, compute_content_height(), scroll_y_,
-                   g_theme->scrollbar_track, g_theme->scrollbar_thumb);
+ui::scrollbar(kScrollbarTrack, compute_content_height(), scroll_y_, {
+    .track_color = g_theme->scrollbar_track,
+    .thumb_color = g_theme->scrollbar_thumb,
+    .custom_colors = true,
+});
 ```
 
 #### `draw_header_block`
@@ -667,9 +701,9 @@ ui::draw_fullscreen_overlay(g_theme->pause_overlay);
 2. **ハードコード座標をレイアウト関数で置換**: constexpr Rectangle の定義を `ui::place`, `ui::center`, `ui::inset` 等で書き換える
 3. **手動テキスト中央揃えを `draw_text_in_rect` で置換**: `MeasureText` + 座標計算のパターンを除去
 4. **手動ヒットテストを `ui::is_hovered` / `ui::is_clicked` で置換**: `CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), ...)` のパターンを除去
-5. **描画パターンをユーティリティで置換**: ボタン・パネル・セクションの描画を `draw_button` / `draw_panel` / `draw_section` に集約
-6. **中間粒度のUIを helper 化する**: 選択行や値セレクタを `draw_selectable_row` / `draw_value_selector` に寄せる
-7. **スクロールやスライダーも親矩形基準で扱う**: `draw_slider_relative` と `scroll_view` / `draw_scrollbar` を優先する
+5. **描画パターンをユーティリティで置換**: ボタン・パネル・セクションの描画を `button` / `panel` / `section` に集約
+6. **中間粒度のUIを helper 化する**: 選択行や値セレクタを `selectable_row` / `value_selector` に寄せる
+7. **スクロールやスライダーも親矩形基準で扱う**: `slider_relative` と `scroll_view` / `scrollbar` を優先する
 
 ### 移行の優先順序
 
@@ -765,7 +799,7 @@ void play_scene::draw_pause_overlay() const {
     ui::draw_fullscreen_overlay(g_theme->pause_overlay);
 
     // パネル
-    ui::draw_panel(kPausePanel);
+    ui::panel(kPausePanel);
 
     // タイトル（中央揃え）
     ui::draw_text_in_rect("PAUSED", 42, kPauseTitleRect, g_theme->text);
@@ -776,7 +810,7 @@ void play_scene::draw_pause_overlay() const {
 
     const char* labels[] = {"RESUME", "RESTART", "SONG SELECT"};
     for (int i = 0; i < 3; ++i) {
-        ui::draw_button(buttons[i], labels[i], 24);
+        ui::button(buttons[i], labels[i], {.font_size = 24});
     }
 
     // ヒント（左揃え）
@@ -794,9 +828,9 @@ void play_scene::draw_pause_overlay() const {
 | `MeasureText` + 手動計算 | `ui::draw_text_in_rect()` |
 | `CheckCollisionPointRec(mouse, ...)` | `ui::is_hovered()` / `ui::is_pressed()` |
 | 手動座標計算 `{x+1.5, y+1.5, w-3, h-3}` | `ui::inset(rect, 1.5f)` |
-| ボタン描画（hover/press/border/text の6行） | `ui::draw_button(rect, label, size)` 1行 |
-| パネル描画 `DrawRectangleRec` + `DrawRectangleLinesEx` | `ui::draw_panel(rect)` |
-| セクション描画（section背景 + border_light） | `ui::draw_section(rect)` |
+| ボタン描画（hover/press/border/text の6行） | `ui::button(rect, label, {.font_size = size})` 1行 |
+| パネル描画 `DrawRectangleRec` + `DrawRectangleLinesEx` | `ui::panel(rect)` |
+| セクション描画（section背景 + border_light） | `ui::section(rect)` |
 | ヘルスゲージ描画（背景+ボーダー+塗り） | `ui::draw_progress_bar(rect, ratio, ...)` |
 
 #### play_scene.cpp: HUD
@@ -942,9 +976,9 @@ constexpr Rectangle kRankRect = {kRightCol.x, kRightCol.y, 200.0f, 168.0f};
 constexpr Rectangle kStatsRect = {kRightCol.x, kRightCol.y + 192.0f, kRightCol.width, 332.0f};
 
 // draw() 内での使用例:
-// ui::draw_panel(kMainPanel);                     // パネル描画 (2行→1行)
-// ui::draw_section(kSongInfoRect);                // セクション描画 (2行→1行)
-// ui::draw_section(kRankRect);
+// ui::panel(kMainPanel);                          // パネル描画 (2行→1行)
+// ui::section(kSongInfoRect);                     // セクション描画 (2行→1行)
+// ui::section(kRankRect);
 // ui::draw_text_in_rect(rlabel, 96, kRankRect, rcolor);  // ランク文字の中央揃え
 //
 // // 統計行の描画 (vstack + draw_label_value)
@@ -1003,16 +1037,21 @@ void settings_scene::draw_tabs() {
     for (int i = 0; i < kPageCount; ++i) {
         // 選択中/非選択でボタン色を分ける
         if (i == current_page_) {
-            ui::draw_button_colored(tabs[i], kPageNames[i], 22,
-                                    g_theme->row_active, g_theme->row_active, g_theme->text);
+            ui::button(tabs[i], kPageNames[i], {
+                .font_size = 22,
+                .bg = g_theme->row_active,
+                .bg_hover = g_theme->row_active,
+                .text_color = g_theme->text,
+                .custom_colors = true,
+            });
         } else {
-            if (ui::draw_button(tabs[i], kPageNames[i], 22).clicked) {
+            if (ui::button(tabs[i], kPageNames[i], {.font_size = 22}).clicked) {
                 current_page_ = i;
             }
         }
     }
     // BACK ボタン
-    if (ui::draw_button(kBackRect, "BACK", 22).clicked) {
+    if (ui::button(kBackRect, "BACK", {.font_size = 22}).clicked) {
         // シーン遷移
     }
 }
@@ -1067,11 +1106,11 @@ void settings_scene::draw_general_page() {
 | 1行をラベル列 + 値列に分ける手計算 | `ui::split_columns(rect, width, spacing)` |
 | タイトル + サブタイトルの上下分割 | `ui::split_rows(rect, height, spacing)` |
 | `x + col * (w + gap)` 的なグリッド計算 | `ui::grid(parent, cols, w, h, hgap, vgap, out)` |
-| スライダー行（行背景+ラベル+トラック+つまみ+値の15行超） | `ui::draw_slider(row, label, value, ratio, ...)` |
-| スライダーのトラック位置を絶対座標で持つ | `ui::draw_slider_relative(row, label, value, ratio, left_inset, right_inset)` |
-| `< value >` 型の設定行 | `ui::draw_value_selector(rect, label, value)` |
-| hover / selected / pressed を持つ行背景 | `ui::draw_row(...)` / `ui::draw_selectable_row(...)` |
-| スクロール表示領域とスクロールバーの手計算 | `ui::scroll_view(...)` / `ui::vertical_scroll_metrics(...)` / `ui::draw_scrollbar(...)` |
+| スライダー行（行背景+ラベル+トラック+つまみ+値の15行超） | `ui::slider_relative(row, label, value, ratio, left_inset, right_inset)` |
+| スライダーのトラック位置を絶対座標で持つ | 親行基準の `ui::slider_relative(...)` に置き換える |
+| `< value >` 型の設定行 | `ui::value_selector(rect, label, value)` |
+| hover / selected / pressed を持つ行背景 | `ui::row(...)` / `ui::selectable_row(...)` |
+| スクロール表示領域とスクロールバーの手計算 | `ui::scroll_view(...)` / `ui::vertical_scroll_metrics(...)` / `ui::scrollbar(...)` |
 | `DrawRectangle(0, 0, kScreenWidth, kScreenHeight, overlay_color)` | `ui::draw_fullscreen_overlay(color)` |
 
 ### update() 内のヒットテスト移行

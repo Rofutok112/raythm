@@ -637,7 +637,7 @@ float lane_cover_fade_height() {
 void draw_lane_layer_texture(const Texture2D& texture, Color tint) {
     const Rectangle source = {0.0f, 0.0f, static_cast<float>(texture.width), -static_cast<float>(texture.height)};
     const Rectangle dest = {0.0f, 0.0f, static_cast<float>(kScreenWidth), static_cast<float>(kScreenHeight)};
-    DrawTexturePro(texture, source, dest, {0.0f, 0.0f}, 0.0f, tint);
+    ui::draw_texture(texture, source, dest, tint);
 }
 
 void draw_lane_layer_texture_scissor_fade(const Texture2D& texture, float hidden_end_y, float fade_end_y) {
@@ -712,22 +712,20 @@ void draw_song_info_panel(const play_session_state& state, const Texture2D* jack
     const std::string difficulty = difficulty_text(state);
 
     ui::enqueue_draw_command(ui::draw_layer::base, [title, difficulty, jacket_texture]() {
-        ui::draw_rect_f(kSongInfoRect, with_alpha(g_theme->panel, 212));
-        ui::draw_rect_lines(kSongInfoRect, 2.0f, with_alpha(g_theme->border, 214));
+        ui::surface(kSongInfoRect, with_alpha(g_theme->panel, 212), with_alpha(g_theme->border, 214), 2.0f);
 
         if (jacket_texture != nullptr && jacket_texture->id != 0) {
-            const Rectangle source = {
-                0.0f,
-                0.0f,
-                static_cast<float>(jacket_texture->width),
-                static_cast<float>(jacket_texture->height)
-            };
-            DrawTexturePro(*jacket_texture, source, kSongInfoJacketRect, {0.0f, 0.0f}, 0.0f, WHITE);
+            ui::draw_texture(*jacket_texture, kSongInfoJacketRect);
         } else {
-            ui::draw_rect_f(kSongInfoJacketRect, with_alpha(g_theme->section, 235));
-            ui::draw_rect_lines(kSongInfoJacketRect, 2.0f, with_alpha(g_theme->border_light, 220));
-            ui::draw_body_text_in_rect("NO JACKET", 16, kSongInfoJacketRect,
-                                       g_theme->text_muted, ui::text_align::center);
+            ui::placeholder(kSongInfoJacketRect, "NO JACKET", {
+                .font_size = 16,
+                .body_text = true,
+                .border_width = 2.0f,
+                .fill = with_alpha(g_theme->section, 235),
+                .border_color = with_alpha(g_theme->border_light, 220),
+                .text_color = g_theme->text_muted,
+                .custom_colors = true,
+            });
         }
 
         draw_play_marquee_text(title.c_str(), kSongInfoTitleRect, 25, g_theme->text, GetTime());
@@ -874,32 +872,34 @@ void draw_low_health_vignette(const play_session_state& state) {
     ui::enqueue_draw_command(ui::draw_layer::overlay, [alpha]() {
         const Color edge = with_alpha(g_theme->health_low, alpha);
         constexpr Color transparent = {0, 0, 0, 0};
-        DrawRectangleGradientV(0, 0, kScreenWidth, static_cast<int>(kDamageVignetteEdgeWidth),
-                               edge, transparent);
-        DrawRectangleGradientV(0, kScreenHeight - static_cast<int>(kDamageVignetteEdgeWidth),
-                               kScreenWidth, static_cast<int>(kDamageVignetteEdgeWidth),
-                               transparent, edge);
-        DrawRectangleGradientH(0, 0, static_cast<int>(kDamageVignetteEdgeWidth), kScreenHeight,
-                               edge, transparent);
-        DrawRectangleGradientH(kScreenWidth - static_cast<int>(kDamageVignetteEdgeWidth), 0,
-                               static_cast<int>(kDamageVignetteEdgeWidth), kScreenHeight,
-                               transparent, edge);
+        ui::vertical_gradient({0.0f, 0.0f, static_cast<float>(kScreenWidth), kDamageVignetteEdgeWidth},
+                              edge, transparent);
+        ui::vertical_gradient({0.0f, kScreenHeight - kDamageVignetteEdgeWidth,
+                               static_cast<float>(kScreenWidth), kDamageVignetteEdgeWidth},
+                              transparent, edge);
+        ui::horizontal_gradient({0.0f, 0.0f, kDamageVignetteEdgeWidth, static_cast<float>(kScreenHeight)},
+                                edge, transparent);
+        ui::horizontal_gradient({kScreenWidth - kDamageVignetteEdgeWidth, 0.0f,
+                                 kDamageVignetteEdgeWidth, static_cast<float>(kScreenHeight)},
+                                transparent, edge);
 
         const Color corner = with_alpha(g_theme->health_low, static_cast<unsigned char>(alpha * 0.55f));
         const float corner_size = kDamageVignetteEdgeWidth * 1.2f;
-        DrawRectangleGradientEx({0.0f, 0.0f, corner_size, corner_size}, corner, transparent, transparent, transparent);
-        DrawRectangleGradientEx({kScreenWidth - corner_size, 0.0f, corner_size, corner_size},
-                                transparent, corner, transparent, transparent);
-        DrawRectangleGradientEx({0.0f, kScreenHeight - corner_size, corner_size, corner_size},
-                                transparent, transparent, corner, transparent);
-        DrawRectangleGradientEx({kScreenWidth - corner_size, kScreenHeight - corner_size, corner_size, corner_size},
-                                transparent, transparent, transparent, corner);
+        ui::rectangle_gradient({0.0f, 0.0f, corner_size, corner_size},
+                               corner, transparent, transparent, transparent);
+        ui::rectangle_gradient({kScreenWidth - corner_size, 0.0f, corner_size, corner_size},
+                               transparent, corner, transparent, transparent);
+        ui::rectangle_gradient({0.0f, kScreenHeight - corner_size, corner_size, corner_size},
+                               transparent, transparent, corner, transparent);
+        ui::rectangle_gradient({kScreenWidth - corner_size, kScreenHeight - corner_size,
+                                corner_size, corner_size},
+                               transparent, transparent, transparent, corner);
     });
 }
 
 void draw_pause_overlay() {
     ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
-    ui::enqueue_panel(kPausePanelRect, ui::draw_layer::modal);
+    ui::queued_panel(kPausePanelRect, ui::draw_layer::modal);
     ui::enqueue_body_text_in_rect("PAUSED", 42, kPauseTitleRect, g_theme->text,
                                   ui::text_align::center, ui::draw_layer::modal);
 
@@ -912,8 +912,8 @@ void draw_pause_overlay() {
         const bool pressed = ui::is_pressed(button, ui::draw_layer::modal);
         ui::enqueue_draw_command(ui::draw_layer::modal, [button, label, hovered, pressed]() {
             const Rectangle visual = pressed ? ui::inset(button, 1.5f) : button;
-            ui::draw_rect_f(visual, lerp_color(g_theme->row, g_theme->row_hover, hovered ? 1.0f : 0.0f));
-            ui::draw_rect_lines(visual, 2.0f, g_theme->border);
+            ui::surface(visual, lerp_color(g_theme->row, g_theme->row_hover, hovered ? 1.0f : 0.0f),
+                        g_theme->border, 2.0f);
             ui::draw_body_text_in_rect(label, 24, visual, g_theme->text);
         });
     }
@@ -1116,8 +1116,7 @@ void draw_overlay(const play_session_state& state, const Texture2D* jacket_textu
     if (!state.multiplayer_room_id.empty()) {
         const Rectangle panel{32.0f, kMultiplayerScoreboardY, 330.0f,
                               42.0f + 30.0f * static_cast<float>(state.multiplayer_scores.size())};
-        ui::draw_rect_f(panel, with_alpha(g_theme->panel, 185));
-        ui::draw_rect_lines(panel, 2.0f, g_theme->border);
+        ui::surface(panel, with_alpha(g_theme->panel, 185), g_theme->border, 2.0f);
         ui::draw_text_in_rect("MULTIPLAY", 18, {panel.x + 16.0f, panel.y + 10.0f, panel.width - 32.0f, 24.0f},
                               g_theme->text_muted, ui::text_align::left);
         for (int i = 0; i < static_cast<int>(state.multiplayer_scores.size()); ++i) {

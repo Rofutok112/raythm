@@ -26,6 +26,11 @@ constexpr float kDetailHeight = 27.0f;
 constexpr float kStatusOffsetY = 33.0f;
 constexpr float kStatusHeight = 27.0f;
 
+struct home_entry_card_layout {
+    Rectangle title;
+    Rectangle detail;
+};
+
 constexpr std::array<title_home_view::entry, 4> kHomeEntries = {{
     {"PLAY", "Solo song select.", true, title_home_view::action::play},
     {"MULTIPLAY", "Room battles.", true, title_home_view::action::multiplayer},
@@ -33,10 +38,65 @@ constexpr std::array<title_home_view::entry, 4> kHomeEntries = {{
     {"CREATE", "Create, import, export.", true, title_home_view::action::create},
 }};
 
+float home_button_row_width() {
+    return static_cast<float>(kHomeEntries.size()) * kHomeButtonWidth +
+           static_cast<float>(kHomeEntries.size() - 1) * kHomeButtonGap;
+}
+
+home_entry_card_layout make_home_entry_card_layout(Rectangle rect) {
+    return {
+        {
+            rect.x + kTitlePaddingX,
+            rect.y + kTitleOffsetY,
+            rect.width - kTitlePaddingX * 2.0f,
+            kTitleHeight,
+        },
+        {
+            rect.x + kDetailPaddingX,
+            rect.y + kDetailOffsetY,
+            rect.width - kDetailPaddingX * 2.0f,
+            kDetailHeight,
+        },
+    };
+}
+
+Rectangle status_message_rect() {
+    return {
+        0.0f,
+        kHomeButtonRowY + kHomeButtonHeight + kStatusOffsetY,
+        static_cast<float>(kScreenWidth),
+        kStatusHeight,
+    };
+}
+
 Rectangle translate_rect(Rectangle rect, float dx, float dy) {
     rect.x += dx;
     rect.y += dy;
     return rect;
+}
+
+void draw_home_entry_card(Rectangle rect,
+                          const title_home_view::entry& current,
+                          Color bg,
+                          Color border,
+                          float button_fade) {
+    const auto& t = *g_theme;
+    const home_entry_card_layout layout = make_home_entry_card_layout(rect);
+    ui::surface(rect, bg, border, kButtonBorderWidth, {
+        .fill = bg,
+        .border_color = border,
+        .custom_colors = true,
+    });
+    ui::draw_text_in_rect(current.label, 24,
+                          layout.title,
+                          with_alpha(current.enabled ? t.text : t.text_muted,
+                                     static_cast<unsigned char>(255.0f * button_fade)),
+                          ui::text_align::center);
+    ui::draw_text_in_rect(current.detail, 13,
+                          layout.detail,
+                          with_alpha(current.enabled ? t.text_muted : t.text_hint,
+                                     static_cast<unsigned char>(220.0f * button_fade)),
+                          ui::text_align::center);
 }
 
 }  // namespace
@@ -53,9 +113,7 @@ const entry& entry_at(std::size_t index) {
 
 Rectangle button_rect(int index, float anim_t) {
     const float eased = tween::ease_out_cubic(anim_t);
-    const float total_width =
-        static_cast<float>(kHomeEntries.size()) * kHomeButtonWidth +
-        static_cast<float>(kHomeEntries.size() - 1) * kHomeButtonGap;
+    const float total_width = home_button_row_width();
     return {
         (static_cast<float>(kScreenWidth) - total_width) * 0.5f +
             static_cast<float>(index) * (kHomeButtonWidth + kHomeButtonGap),
@@ -95,24 +153,11 @@ void draw(float menu_anim_t, float play_anim_t, int selected_index, std::string_
         if (button_fade <= 0.01f) {
             continue;
         }
-        ui::draw_rect_f(rect, bg);
-        ui::draw_rect_lines(rect, kButtonBorderWidth, border);
-        ui::draw_text_in_rect(current.label, 24,
-                              {rect.x + kTitlePaddingX, rect.y + kTitleOffsetY,
-                               rect.width - kTitlePaddingX * 2.0f, kTitleHeight},
-                              with_alpha(current.enabled ? t.text : t.text_muted, static_cast<unsigned char>(255.0f * button_fade)),
-                              ui::text_align::center);
-        ui::draw_text_in_rect(current.detail, 13,
-                              {rect.x + kDetailPaddingX, rect.y + kDetailOffsetY,
-                               rect.width - kDetailPaddingX * 2.0f, kDetailHeight},
-                              with_alpha(current.enabled ? t.text_muted : t.text_hint, static_cast<unsigned char>(220.0f * button_fade)),
-                              ui::text_align::center);
+        draw_home_entry_card(rect, current, bg, border, button_fade);
     }
 
     if (!status_message.empty() && (1.0f - play_anim_t) > 0.01f) {
-        ui::draw_text_in_rect(status_message.data(), 16,
-                              {0.0f, kHomeButtonRowY + kHomeButtonHeight + kStatusOffsetY,
-                               static_cast<float>(kScreenWidth), kStatusHeight},
+        ui::draw_text_in_rect(status_message.data(), 16, status_message_rect(),
                               with_alpha(t.text_muted, static_cast<unsigned char>(230.0f * menu_t * (1.0f - play_anim_t))),
                               ui::text_align::center);
     }

@@ -9,6 +9,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_layout.h"
 #include "ui_tooltip.h"
 #include "ui/icons/raythm_icons.h"
 #include "shared/content_status_badge.h"
@@ -53,6 +54,235 @@ constexpr float kChartRankHeight = 21.0f;
 constexpr float kStatusBadgeWidth = 108.0f;
 constexpr float kStatusBadgeHeight = 24.0f;
 constexpr float kChartStatusWidth = 96.0f;
+
+struct jacket_layout {
+    Rectangle frame;
+    Rectangle inner;
+};
+
+struct compact_song_info_layout {
+    Rectangle heading;
+    Rectangle title;
+    Rectangle artist;
+    Rectangle bpm_label;
+    Rectangle bpm_value;
+    Rectangle genre_label;
+    Rectangle genre_lane;
+    Rectangle keyword_label;
+    Rectangle keyword_lane;
+};
+
+struct normal_song_header_layout {
+    Rectangle title;
+    Rectangle title_text;
+    Rectangle status_badge;
+    Rectangle artist;
+};
+
+struct chart_detail_layout {
+    Rectangle difficulty;
+    Rectangle level_badge;
+    Rectangle status_badge;
+    Rectangle status_icon;
+    Rectangle notes;
+    Rectangle bpm;
+    Rectangle author;
+    Rectangle lock;
+};
+
+struct compact_chart_header_layout {
+    Rectangle title;
+    Rectangle divider;
+    Rectangle row;
+    Rectangle key;
+    Rectangle level;
+    Rectangle difficulty;
+    Rectangle source;
+    Rectangle best;
+    Rectangle grade;
+};
+
+struct compact_chart_row_layout {
+    Rectangle accent;
+    Rectangle key;
+    Rectangle level_badge;
+    Rectangle difficulty;
+    Rectangle source;
+    Rectangle status_icon;
+    Rectangle best_score;
+    Rectangle best_rank;
+    Rectangle missing_rank;
+};
+
+struct classic_chart_row_layout {
+    Rectangle difficulty;
+    Rectangle status;
+    Rectangle status_icon;
+    Rectangle level_badge;
+    Rectangle key_mode;
+    Rectangle rank;
+};
+
+jacket_layout make_jacket_layout(Rectangle jacket_rect) {
+    return {
+        {
+            jacket_rect.x - kJacketFramePadding,
+            jacket_rect.y - kJacketFramePadding,
+            jacket_rect.width + kJacketFramePadding * 2.0f,
+            jacket_rect.height + kJacketFramePadding * 2.0f,
+        },
+        ui::inset(jacket_rect, kJacketInnerPadding),
+    };
+}
+
+Rectangle make_song_status_badge_rect(Rectangle main_column_rect) {
+    return {
+        main_column_rect.x + main_column_rect.width - kHeaderPaddingX - kStatusBadgeWidth,
+        main_column_rect.y + kTitleOffsetY + 8.0f,
+        kStatusBadgeWidth,
+        kStatusBadgeHeight,
+    };
+}
+
+Rectangle make_chart_status_badge_rect(Rectangle chart_detail_rect) {
+    return {
+        chart_detail_rect.x,
+        chart_detail_rect.y + kChartStatusOffsetY,
+        kStatusBadgeWidth,
+        kStatusBadgeHeight,
+    };
+}
+
+compact_song_info_layout make_compact_song_info_layout(Rectangle main_column_rect, Rectangle chart_detail_rect) {
+    const Rectangle title = {
+        chart_detail_rect.x,
+        chart_detail_rect.y,
+        chart_detail_rect.width,
+        42.0f,
+    };
+    return {
+        {
+            main_column_rect.x + 28.0f,
+            main_column_rect.y + 20.0f,
+            main_column_rect.width - 56.0f,
+            24.0f,
+        },
+        title,
+        {title.x, title.y + 34.0f, title.width, 22.0f},
+        {title.x, title.y + 70.0f, 56.0f, 18.0f},
+        {title.x, title.y + 90.0f, 86.0f, 24.0f},
+        {title.x + 118.0f, title.y + 70.0f, 160.0f, 18.0f},
+        {title.x + 118.0f, title.y + 92.0f, title.width - 118.0f, 26.0f},
+        {title.x, title.y + 120.0f, title.width, 18.0f},
+        {title.x, title.y + 140.0f, title.width, 26.0f},
+    };
+}
+
+normal_song_header_layout make_normal_song_header_layout(Rectangle main_column_rect) {
+    const Rectangle title = {
+        main_column_rect.x + kHeaderPaddingX,
+        main_column_rect.y + kTitleOffsetY,
+        main_column_rect.width - kHeaderPaddingX * 2.0f,
+        kTitleHeight,
+    };
+    return {
+        title,
+        {title.x, title.y, title.width - kStatusBadgeWidth - 8.0f, title.height},
+        make_song_status_badge_rect(main_column_rect),
+        {
+            main_column_rect.x + kHeaderPaddingX,
+            main_column_rect.y + kArtistOffsetY,
+            main_column_rect.width - kHeaderPaddingX * 2.0f,
+            kArtistHeight,
+        },
+    };
+}
+
+chart_detail_layout make_chart_detail_layout(Rectangle chart_detail_rect) {
+    const Rectangle difficulty = {
+        chart_detail_rect.x,
+        chart_detail_rect.y + kChartDifficultyOffsetY,
+        chart_detail_rect.width - 78.0f,
+        kChartDifficultyHeight,
+    };
+    const Rectangle status = make_chart_status_badge_rect(chart_detail_rect);
+    return {
+        difficulty,
+        {difficulty.x + difficulty.width + 8.0f, difficulty.y + 1.0f, 70.0f, 22.0f},
+        status,
+        {chart_detail_rect.x + kStatusBadgeWidth + 10.0f,
+         chart_detail_rect.y + kChartStatusOffsetY + 2.0f,
+         20.0f,
+         20.0f},
+        {chart_detail_rect.x, chart_detail_rect.y + kChartNotesOffsetY,
+         chart_detail_rect.width, kChartNotesHeight},
+        {chart_detail_rect.x, chart_detail_rect.y + kChartBpmOffsetY,
+         chart_detail_rect.width, kChartBpmHeight},
+        {chart_detail_rect.x, chart_detail_rect.y + kChartAuthorOffsetY,
+         chart_detail_rect.width, kChartAuthorHeight},
+        {chart_detail_rect.x, chart_detail_rect.y,
+         chart_detail_rect.width, kChartAuthorOffsetY + kChartAuthorHeight},
+    };
+}
+
+compact_chart_header_layout make_compact_chart_header_layout(Rectangle chart_buttons_rect) {
+    const Rectangle header = {
+        chart_buttons_rect.x,
+        chart_buttons_rect.y - 40.0f,
+        chart_buttons_rect.width,
+        22.0f,
+    };
+    return {
+        {chart_buttons_rect.x, chart_buttons_rect.y - 72.0f, chart_buttons_rect.width, 24.0f},
+        {chart_buttons_rect.x, chart_buttons_rect.y - 8.0f, chart_buttons_rect.width, 1.0f},
+        header,
+        {header.x + 16.0f, header.y, 54.0f, header.height},
+        {header.x + 86.0f, header.y, 80.0f, header.height},
+        {header.x + 184.0f, header.y, 120.0f, header.height},
+        {header.x + 330.0f, header.y, 76.0f, header.height},
+        {header.x + 430.0f, header.y, 116.0f, header.height},
+        {header.x + header.width - 58.0f, header.y, 44.0f, header.height},
+    };
+}
+
+compact_chart_row_layout make_compact_chart_row_layout(Rectangle row) {
+    return {
+        {row.x + 2.0f, row.y + 2.0f, 3.0f, row.height - 4.0f},
+        {row.x + 16.0f, row.y + 13.0f, 54.0f, 26.0f},
+        {row.x + 86.0f, row.y + 16.0f, 72.0f, 22.0f},
+        {row.x + 184.0f, row.y + 12.0f, 110.0f, 28.0f},
+        {row.x + 332.0f, row.y + 17.0f, 72.0f, 20.0f},
+        {row.x + 410.0f, row.y + 18.0f, 18.0f, 18.0f},
+        {row.x + 430.0f, row.y + 14.0f, 116.0f, 28.0f},
+        {row.x + row.width - 58.0f, row.y + 13.0f, 42.0f, 28.0f},
+        {row.x + row.width - 58.0f, row.y + 14.0f, 42.0f, 28.0f},
+    };
+}
+
+classic_chart_row_layout make_classic_chart_row_layout(Rectangle row) {
+    const Rectangle status = {
+        row.x + row.width - kChartRightReserved - kChartStatusWidth,
+        row.y + kChartTitleOffsetY + 1.0f,
+        kChartStatusWidth,
+        kStatusBadgeHeight,
+    };
+    return {
+        {row.x + kChartTextPaddingX, row.y + kChartTitleOffsetY,
+         row.width - kChartRightReserved - kChartStatusWidth, kChartTitleHeight},
+        status,
+        {status.x + status.width + 8.0f, status.y + 3.0f, 18.0f, 18.0f},
+        {row.x + kChartTextPaddingX, row.y + kChartLevelOffsetY - 1.0f, 64.0f, 19.0f},
+        {row.x + row.width - kChartBadgeRightInset, row.y + kChartBadgeOffsetY,
+         kChartBadgeWidth, kChartBadgeHeight},
+        {row.x + row.width - kChartBadgeRightInset, row.y + kChartRankOffsetY,
+         kChartBadgeWidth, kChartRankHeight},
+    };
+}
+
+bool rect_visible_in(Rectangle viewport, Rectangle rect) {
+    return rect.y + rect.height >= viewport.y - kClipSlack &&
+           rect.y <= viewport.y + viewport.height + kClipSlack;
+}
 
 const char* rank_label(rank value) {
     switch (value) {
@@ -110,8 +340,10 @@ std::string format_score(int value) {
 
 void draw_source_tag(Rectangle rect, content_status status, unsigned char alpha) {
     const Color color = content_status_badge::color(status);
-    ui::draw_rect_f(rect, with_alpha(g_theme->row_soft, static_cast<unsigned char>(70.0f * (static_cast<float>(alpha) / 255.0f))));
-    ui::draw_rect_lines(rect, 1.0f, with_alpha(color, alpha));
+    ui::surface(rect,
+                with_alpha(g_theme->row_soft, static_cast<unsigned char>(70.0f * (static_cast<float>(alpha) / 255.0f))),
+                with_alpha(color, alpha),
+                1.0f);
     ui::draw_text_in_rect(content_status_badge::label(status), 9, rect,
                           with_alpha(color, alpha), ui::text_align::center);
 }
@@ -139,8 +371,268 @@ Rectangle centered_square(Rectangle rect, float size) {
 }
 
 void draw_locked_overlay(Rectangle rect, unsigned char alpha, float icon_size) {
-    ui::draw_rect_f(rect, with_alpha(g_theme->bg, scale_alpha(alpha, 0.48f)));
+    ui::backdrop(rect, with_alpha(g_theme->bg, scale_alpha(alpha, 0.48f)));
     raythm_icons::draw_lock(centered_square(rect, icon_size), with_alpha(g_theme->slow, alpha), 3.0f);
+}
+
+void draw_preview_jacket(const title_preview_snapshot& preview,
+                         const title_center_view::draw_config& config) {
+    const auto& t = *g_theme;
+    const jacket_layout layout = make_jacket_layout(config.jacket_rect);
+    ui::frame(layout.frame,
+              with_alpha(t.border_image, static_cast<unsigned char>(190.0f * config.play_t)),
+              kJacketBorderWidth);
+    if (preview.jacket.status == song_select::jacket_loader::load_status::ready &&
+        preview.jacket_texture != nullptr) {
+        const Texture2D& jacket = *preview.jacket_texture;
+        ui::draw_texture(jacket, layout.inner, with_alpha(WHITE, config.alpha));
+    } else if (preview.jacket.status == song_select::jacket_loader::load_status::loading) {
+        ui::draw_text_in_rect("読み込み中", 22, layout.inner, with_alpha(t.text_muted, config.alpha));
+    } else {
+        ui::draw_text_in_rect("JACKET", 26, layout.inner, with_alpha(t.text_muted, config.alpha));
+    }
+}
+
+void draw_compact_song_chip(Rectangle rect,
+                            const char* label,
+                            Color fill,
+                            Color border,
+                            Color text) {
+    ui::surface(rect, fill, border, 1.0f);
+    ui::draw_text_in_rect(label, 12, rect, text, ui::text_align::center);
+}
+
+void draw_compact_song_info(const song_select::song_entry& song,
+                            const title_center_view::draw_config& config) {
+    const auto& t = *g_theme;
+    const compact_song_info_layout layout =
+        make_compact_song_info_layout(config.main_column_rect, config.chart_detail_rect);
+    ui::draw_text_in_rect("曲情報", 16,
+                          layout.heading,
+                          with_alpha(t.text, config.alpha), ui::text_align::left);
+    draw_marquee_text(song.song.meta.title.c_str(), layout.title,
+                      27, with_alpha(t.text, config.alpha), config.now);
+    draw_marquee_text(song.song.meta.artist.c_str(),
+                      layout.artist,
+                      16, with_alpha(t.text_secondary, config.alpha), config.now);
+    ui::draw_text_in_rect("BPM", 12,
+                          layout.bpm_label,
+                          with_alpha(t.accent, config.alpha), ui::text_align::left);
+    ui::draw_text_in_rect(TextFormat("%.0f", song.song.meta.base_bpm), 18,
+                          layout.bpm_value,
+                          with_alpha(t.text, config.alpha), ui::text_align::left);
+    ui::draw_text_in_rect("ジャンル", 12,
+                          layout.genre_label,
+                          with_alpha(t.accent, config.alpha), ui::text_align::left);
+
+    float tag_x = layout.genre_lane.x;
+    int drawn = 0;
+    const auto draw_genre_tag = [&](const std::string& label) {
+        if (label.empty() || drawn >= 3) {
+            return;
+        }
+        const float width = std::clamp(ui::measure_text_size(label.c_str(), 12.0f).x + 20.0f, 70.0f, 132.0f);
+        if (tag_x + width > layout.genre_lane.x + layout.genre_lane.width) {
+            return;
+        }
+        draw_compact_song_chip({tag_x, layout.genre_lane.y, width, layout.genre_lane.height},
+                               label.c_str(),
+                               with_alpha(t.row_soft, static_cast<unsigned char>(config.normal_row_alpha * 0.85f)),
+                               with_alpha(t.accent, config.alpha),
+                               with_alpha(t.accent, config.alpha));
+        tag_x += width + 8.0f;
+        ++drawn;
+    };
+    for (const std::string& label : song.song.meta.genres) {
+        draw_genre_tag(label);
+    }
+    if (song.song.meta.genres.empty()) {
+        draw_genre_tag(song.song.meta.genre);
+    }
+
+    ui::draw_text_in_rect("キーワード", 12,
+                          layout.keyword_label,
+                          with_alpha(t.accent, config.alpha), ui::text_align::left);
+    float keyword_x = layout.keyword_lane.x;
+    int keywords = 0;
+    for (const std::string& keyword : song.song.meta.keywords) {
+        if (keyword.empty() || keywords >= 3) {
+            continue;
+        }
+        const float width = std::clamp(ui::measure_text_size(keyword.c_str(), 12.0f).x + 20.0f, 76.0f, 132.0f);
+        if (keyword_x + width > layout.keyword_lane.x + layout.keyword_lane.width) {
+            break;
+        }
+        draw_compact_song_chip({keyword_x, layout.keyword_lane.y, width, layout.keyword_lane.height},
+                               keyword.c_str(),
+                               with_alpha(t.row_soft, static_cast<unsigned char>(config.normal_row_alpha * 0.65f)),
+                               with_alpha(t.border_light, config.alpha),
+                               with_alpha(t.text_secondary, config.alpha));
+        keyword_x += width + 8.0f;
+        ++keywords;
+    }
+    if (keywords == 0) {
+        ui::draw_text_in_rect("-", 14,
+                              {keyword_x, layout.keyword_lane.y + 2.0f, 40.0f, 22.0f},
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
+    }
+}
+
+void draw_normal_song_header(const song_select::song_entry& song,
+                             const title_center_view::draw_config& config) {
+    const auto& t = *g_theme;
+    const normal_song_header_layout layout = make_normal_song_header_layout(config.main_column_rect);
+    draw_marquee_text(song.song.meta.title.c_str(),
+                      layout.title_text,
+                      28, with_alpha(t.text, config.alpha), config.now);
+    content_status_badge::draw_compound(
+        layout.status_badge,
+        song.source_status, song.status, config.alpha, 12);
+    draw_marquee_text(song.song.meta.artist.c_str(),
+                      layout.artist,
+                      18, with_alpha(t.text_secondary, config.alpha), config.now);
+}
+
+void draw_chart_detail(const song_select::song_entry& song,
+                       const song_select::chart_option& chart,
+                       const title_center_view::draw_config& config) {
+    const auto& t = *g_theme;
+    const chart_detail_layout layout = make_chart_detail_layout(config.chart_detail_rect);
+    ui::draw_text_in_rect(chart.meta.difficulty.c_str(),
+                          18,
+                          layout.difficulty,
+                          with_alpha(t.text, config.alpha), ui::text_align::left);
+    draw_difficulty_level_badge(chart.meta.level, layout.level_badge, 13, config.alpha);
+    content_status_badge::draw_compound(
+        layout.status_badge,
+        chart.source_status, chart.status, config.alpha, 12);
+    draw_status_side_icons(layout.status_icon,
+                           chart.status == content_status::modified,
+                           config.alpha);
+    ui::draw_text_in_rect(TextFormat("%s   %d Notes", key_mode_label(chart.meta.key_count).c_str(),
+                                     chart.note_count),
+                          14,
+                          layout.notes,
+                          with_alpha(t.text_secondary, config.alpha), ui::text_align::left);
+    ui::draw_text_in_rect(TextFormat("BPM %s", format_bpm_range(chart.min_bpm, chart.max_bpm).c_str()),
+                          14,
+                          layout.bpm,
+                          with_alpha(t.text_muted, config.alpha), ui::text_align::left);
+    draw_marquee_text(chart.meta.chart_author.c_str(),
+                      layout.author,
+                      14, with_alpha(t.text_muted, config.alpha), config.now);
+    if (content_is_play_locked(song.song.meta, chart.meta)) {
+        draw_locked_overlay(layout.lock, config.alpha, 34.0f);
+    }
+}
+
+void draw_compact_chart_header(Rectangle chart_buttons_rect, unsigned char alpha) {
+    const auto& t = *g_theme;
+    const compact_chart_header_layout layout = make_compact_chart_header_layout(chart_buttons_rect);
+    ui::draw_text_in_rect("譜面", 16,
+                          layout.title,
+                          with_alpha(t.text, alpha), ui::text_align::left);
+    ui::divider(layout.divider, with_alpha(t.border_light, alpha));
+    ui::draw_text_in_rect("キー", 10, layout.key,
+                          with_alpha(t.text_muted, alpha), ui::text_align::left);
+    ui::draw_text_in_rect("レベル", 10, layout.level,
+                          with_alpha(t.text_muted, alpha), ui::text_align::center);
+    ui::draw_text_in_rect("難易度", 10, layout.difficulty,
+                          with_alpha(t.text_muted, alpha), ui::text_align::left);
+    ui::draw_text_in_rect("SOURCE", 10, layout.source,
+                          with_alpha(t.text_muted, alpha), ui::text_align::center);
+    ui::draw_text_in_rect("BEST", 10, layout.best,
+                          with_alpha(t.text_muted, alpha), ui::text_align::right);
+    ui::draw_text_in_rect("GRADE", 10, layout.grade,
+                          with_alpha(t.text_muted, alpha), ui::text_align::right);
+}
+
+void draw_compact_chart_row(const song_select::chart_option& item,
+                            Rectangle row,
+                            bool selected,
+                            bool locked,
+                            unsigned char row_alpha,
+                            const title_center_view::draw_config& config) {
+    const auto& t = *g_theme;
+    const compact_chart_row_layout layout = make_compact_chart_row_layout(row);
+    const Color level_color = difficulty_level_color(item.meta.level);
+    const Color row_fill = locked
+        ? lerp_color(config.button_base, t.bg, selected ? 0.48f : 0.36f)
+        : (selected ? config.button_selected : config.button_base);
+    ui::surface(row,
+                with_alpha(row_fill, row_alpha),
+                with_alpha(locked ? t.slow : selected ? t.border_active : t.border_light,
+                           locked ? scale_alpha(config.alpha, 0.72f) : config.alpha),
+                selected ? 1.5f : 1.0f);
+    ui::accent_bar(layout.accent, with_alpha(level_color, scale_alpha(config.alpha, 0.72f)));
+    ui::draw_text_in_rect(key_mode_label(item.meta.key_count).c_str(), 18,
+                          layout.key,
+                          with_alpha(t.text_secondary, config.alpha), ui::text_align::left);
+    draw_difficulty_level_badge(item.meta.level, layout.level_badge, 12, config.alpha);
+    ui::draw_text_in_rect(item.meta.difficulty.c_str(), 18,
+                          layout.difficulty,
+                          with_alpha(t.text, config.alpha), ui::text_align::left);
+    draw_source_tag(layout.source, item.source_status, config.alpha);
+    draw_status_side_icons(layout.status_icon,
+                           item.status == content_status::modified,
+                           config.alpha);
+    const std::string score_label = item.best_local_score.has_value()
+        ? format_score(*item.best_local_score)
+        : "--";
+    ui::draw_text_in_rect(score_label.c_str(),
+                          16, layout.best_score,
+                          with_alpha(t.text, config.alpha), ui::text_align::right);
+    if (item.best_local_rank.has_value()) {
+        ui::draw_text_in_rect(rank_label(*item.best_local_rank), 19,
+                              layout.best_rank,
+                              with_alpha(rank_color(*item.best_local_rank), config.alpha), ui::text_align::right);
+    } else {
+        ui::draw_text_in_rect("-", 16,
+                              layout.missing_rank,
+                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+    }
+    if (locked) {
+        draw_locked_overlay(row, config.alpha, 26.0f);
+    }
+}
+
+void draw_classic_chart_row(const song_select::chart_option& item,
+                            Rectangle row,
+                            bool selected,
+                            bool locked,
+                            unsigned char row_alpha,
+                            const title_center_view::draw_config& config) {
+    const auto& t = *g_theme;
+    const classic_chart_row_layout layout = make_classic_chart_row_layout(row);
+    const Color row_fill = locked
+        ? lerp_color(config.button_base, t.bg, selected ? 0.48f : 0.36f)
+        : (selected ? config.button_selected : config.button_base);
+    ui::surface(row,
+                with_alpha(row_fill, row_alpha),
+                with_alpha(locked ? t.slow : t.border_light,
+                           static_cast<unsigned char>((locked ? 170.0f : 130.0f) * config.play_t)),
+                kChartRowBorderWidth);
+    ui::draw_text_in_rect(item.meta.difficulty.c_str(), 16,
+                          layout.difficulty,
+                          with_alpha(t.text, config.alpha), ui::text_align::left);
+    content_status_badge::draw_compound(
+        layout.status,
+        item.source_status, item.status, config.alpha, 10);
+    draw_status_side_icons(layout.status_icon,
+                           item.status == content_status::modified,
+                           config.alpha);
+    draw_difficulty_level_badge(item.meta.level, layout.level_badge, 11, config.alpha);
+    ui::draw_text_in_rect(key_mode_label(item.meta.key_count).c_str(), 13,
+                          layout.key_mode,
+                          with_alpha(key_mode_color(item.meta.key_count), config.alpha), ui::text_align::right);
+    if (item.best_local_rank.has_value()) {
+        ui::draw_text_in_rect(rank_label(*item.best_local_rank), 12,
+                              layout.rank,
+                              with_alpha(rank_color(*item.best_local_rank), config.alpha), ui::text_align::right);
+    }
+    if (locked) {
+        draw_locked_overlay(row, config.alpha, 26.0f);
+    }
 }
 
 }  // namespace
@@ -168,11 +660,11 @@ Rectangle chart_button_rect(Rectangle area, int index, float scroll_y) {
 }
 
 int hit_test_chart(Rectangle area, float scroll_y, Vector2 point, int count) {
-    if (!CheckCollisionPointRec(point, area)) {
+    if (!ui::contains_point(area, point)) {
         return -1;
     }
     for (int index = 0; index < count; ++index) {
-        if (CheckCollisionPointRec(point, chart_button_rect(area, index, scroll_y))) {
+        if (ui::contains_point(chart_button_rect(area, index, scroll_y), point)) {
             return index;
         }
     }
@@ -180,21 +672,11 @@ int hit_test_chart(Rectangle area, float scroll_y, Vector2 point, int count) {
 }
 
 Rectangle song_status_badge_rect(Rectangle main_column_rect) {
-    return {
-        main_column_rect.x + main_column_rect.width - kHeaderPaddingX - kStatusBadgeWidth,
-        main_column_rect.y + kTitleOffsetY + 8.0f,
-        kStatusBadgeWidth,
-        kStatusBadgeHeight,
-    };
+    return make_song_status_badge_rect(main_column_rect);
 }
 
 Rectangle chart_status_badge_rect(Rectangle chart_detail_rect) {
-    return {
-        chart_detail_rect.x,
-        chart_detail_rect.y + kChartStatusOffsetY,
-        kStatusBadgeWidth,
-        kStatusBadgeHeight,
-    };
+    return make_chart_status_badge_rect(chart_detail_rect);
 }
 
 void draw(const song_select::state& state,
@@ -216,212 +698,26 @@ void draw(const song_select::state& state,
         return;
     }
 
-    const Rectangle jacket_frame = {
-        config.jacket_rect.x - kJacketFramePadding,
-        config.jacket_rect.y - kJacketFramePadding,
-        config.jacket_rect.width + kJacketFramePadding * 2.0f,
-        config.jacket_rect.height + kJacketFramePadding * 2.0f
-    };
-    const Rectangle jacket_inner = {
-        config.jacket_rect.x + kJacketInnerPadding,
-        config.jacket_rect.y + kJacketInnerPadding,
-        config.jacket_rect.width - kJacketInnerPadding * 2.0f,
-        config.jacket_rect.height - kJacketInnerPadding * 2.0f
-    };
-
-    ui::draw_rect_lines(jacket_frame, kJacketBorderWidth,
-                        with_alpha(t.border_image, static_cast<unsigned char>(190.0f * config.play_t)));
-    if (preview.jacket.status == song_select::jacket_loader::load_status::ready &&
-        preview.jacket_texture != nullptr) {
-        const Texture2D& jacket = *preview.jacket_texture;
-        DrawTexturePro(jacket,
-                       {0.0f, 0.0f, static_cast<float>(jacket.width), static_cast<float>(jacket.height)},
-                       jacket_inner, {0.0f, 0.0f}, 0.0f,
-                       with_alpha(WHITE, config.alpha));
-    } else if (preview.jacket.status == song_select::jacket_loader::load_status::loading) {
-        ui::draw_text_in_rect("読み込み中", 22, jacket_inner, with_alpha(t.text_muted, config.alpha));
-    } else {
-        ui::draw_text_in_rect("JACKET", 26, jacket_inner, with_alpha(t.text_muted, config.alpha));
-    }
+    draw_preview_jacket(preview, config);
 
     if (config.compact_song_header) {
-        ui::draw_text_in_rect("曲情報", 16,
-                              {config.main_column_rect.x + 28.0f, config.main_column_rect.y + 20.0f,
-                               config.main_column_rect.width - 56.0f, 24.0f},
-                              with_alpha(t.text, config.alpha), ui::text_align::left);
-        const Rectangle title_rect = {
-            config.chart_detail_rect.x,
-            config.chart_detail_rect.y,
-            config.chart_detail_rect.width,
-            42.0f,
-        };
-        draw_marquee_text(song->song.meta.title.c_str(), title_rect,
-                          27, with_alpha(t.text, config.alpha), config.now);
-        draw_marquee_text(song->song.meta.artist.c_str(),
-                          {title_rect.x, title_rect.y + 34.0f, title_rect.width, 22.0f},
-                          16, with_alpha(t.text_secondary, config.alpha), config.now);
-        ui::draw_text_in_rect("BPM", 12,
-                              {title_rect.x, title_rect.y + 70.0f, 56.0f, 18.0f},
-                              with_alpha(t.accent, config.alpha), ui::text_align::left);
-        ui::draw_text_in_rect(TextFormat("%.0f", song->song.meta.base_bpm), 18,
-                              {title_rect.x, title_rect.y + 90.0f, 86.0f, 24.0f},
-                              with_alpha(t.text, config.alpha), ui::text_align::left);
-        ui::draw_text_in_rect("ジャンル", 12,
-                              {title_rect.x + 118.0f, title_rect.y + 70.0f, 160.0f, 18.0f},
-                              with_alpha(t.accent, config.alpha), ui::text_align::left);
-        float tag_x = title_rect.x + 118.0f;
-        const float tag_y = title_rect.y + 92.0f;
-        int drawn = 0;
-        const auto draw_tag = [&](const std::string& label) {
-            if (label.empty() || drawn >= 3) {
-                return;
-            }
-            const float width = std::clamp(ui::measure_text_size(label.c_str(), 12.0f).x + 20.0f, 70.0f, 132.0f);
-            if (tag_x + width > title_rect.x + title_rect.width) {
-                return;
-            }
-            const Rectangle rect = {tag_x, tag_y, width, 26.0f};
-            ui::draw_rect_f(rect, with_alpha(t.row_soft, static_cast<unsigned char>(config.normal_row_alpha * 0.85f)));
-            ui::draw_rect_lines(rect, 1.0f, with_alpha(t.accent, config.alpha));
-            ui::draw_text_in_rect(label.c_str(), 12, rect, with_alpha(t.accent, config.alpha), ui::text_align::center);
-            tag_x += width + 8.0f;
-            ++drawn;
-        };
-        for (const std::string& label : song->song.meta.genres) {
-            draw_tag(label);
-        }
-        if (song->song.meta.genres.empty()) {
-            draw_tag(song->song.meta.genre);
-        }
-        ui::draw_text_in_rect("キーワード", 12,
-                              {title_rect.x, title_rect.y + 120.0f, title_rect.width, 18.0f},
-                              with_alpha(t.accent, config.alpha), ui::text_align::left);
-        float keyword_x = title_rect.x;
-        const float keyword_y = title_rect.y + 140.0f;
-        int keywords = 0;
-        for (const std::string& keyword : song->song.meta.keywords) {
-            if (keyword.empty() || keywords >= 3) {
-                continue;
-            }
-            const float width = std::clamp(ui::measure_text_size(keyword.c_str(), 12.0f).x + 20.0f, 76.0f, 132.0f);
-            if (keyword_x + width > title_rect.x + title_rect.width) {
-                break;
-            }
-            const Rectangle rect = {keyword_x, keyword_y, width, 26.0f};
-            ui::draw_rect_f(rect, with_alpha(t.row_soft, static_cast<unsigned char>(config.normal_row_alpha * 0.65f)));
-            ui::draw_rect_lines(rect, 1.0f, with_alpha(t.border_light, config.alpha));
-            ui::draw_text_in_rect(keyword.c_str(), 12, rect, with_alpha(t.text_secondary, config.alpha), ui::text_align::center);
-            keyword_x += width + 8.0f;
-            ++keywords;
-        }
-        if (keywords == 0) {
-            ui::draw_text_in_rect("-", 14,
-                                  {keyword_x, keyword_y + 2.0f, 40.0f, 22.0f},
-                                  with_alpha(t.text_muted, config.alpha), ui::text_align::left);
-        }
+        draw_compact_song_info(*song, config);
     } else {
-        const Rectangle title_rect = {
-            config.main_column_rect.x + kHeaderPaddingX,
-            config.main_column_rect.y + kTitleOffsetY,
-            config.main_column_rect.width - kHeaderPaddingX * 2.0f,
-            kTitleHeight
-        };
-        const Rectangle song_title_text_rect = {
-            title_rect.x,
-            title_rect.y,
-            title_rect.width - kStatusBadgeWidth - 8.0f,
-            title_rect.height,
-        };
-        const Rectangle artist_rect = {
-            config.main_column_rect.x + kHeaderPaddingX,
-            config.main_column_rect.y + kArtistOffsetY,
-            config.main_column_rect.width - kHeaderPaddingX * 2.0f,
-            kArtistHeight
-        };
-        draw_marquee_text(song->song.meta.title.c_str(),
-                          song_title_text_rect,
-                          28, with_alpha(t.text, config.alpha), config.now);
-        content_status_badge::draw_compound(
-            song_status_badge_rect(config.main_column_rect),
-            song->source_status, song->status, config.alpha, 12);
-        draw_marquee_text(song->song.meta.artist.c_str(),
-                          artist_rect,
-                          18, with_alpha(t.text_secondary, config.alpha), config.now);
+        draw_normal_song_header(*song, config);
     }
     if (chart != nullptr && !config.compact_song_header) {
-        const Rectangle difficulty_rect = {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartDifficultyOffsetY,
-                                           config.chart_detail_rect.width - 78.0f, kChartDifficultyHeight};
-        ui::draw_text_in_rect(chart->meta.difficulty.c_str(),
-                              18,
-                              difficulty_rect,
-                              with_alpha(t.text, config.alpha), ui::text_align::left);
-        draw_difficulty_level_badge(
-            chart->meta.level,
-            {difficulty_rect.x + difficulty_rect.width + 8.0f, difficulty_rect.y + 1.0f, 70.0f, 22.0f},
-            13, config.alpha);
-        content_status_badge::draw_compound(
-            chart_status_badge_rect(config.chart_detail_rect),
-            chart->source_status, chart->status, config.alpha, 12);
-        draw_status_side_icons({config.chart_detail_rect.x + kStatusBadgeWidth + 10.0f,
-                                config.chart_detail_rect.y + kChartStatusOffsetY + 2.0f,
-                                20.0f,
-                                20.0f},
-                               chart->status == content_status::modified,
-                               config.alpha);
-        ui::draw_text_in_rect(TextFormat("%s   %d Notes", key_mode_label(chart->meta.key_count).c_str(),
-                                         chart->note_count),
-                              14,
-                              {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartNotesOffsetY,
-                               config.chart_detail_rect.width, kChartNotesHeight},
-                              with_alpha(t.text_secondary, config.alpha), ui::text_align::left);
-        ui::draw_text_in_rect(TextFormat("BPM %s", format_bpm_range(chart->min_bpm, chart->max_bpm).c_str()),
-                              14,
-                              {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartBpmOffsetY,
-                               config.chart_detail_rect.width, kChartBpmHeight},
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
-        draw_marquee_text(chart->meta.chart_author.c_str(),
-                          {config.chart_detail_rect.x, config.chart_detail_rect.y + kChartAuthorOffsetY,
-                           config.chart_detail_rect.width, kChartAuthorHeight},
-                          14, with_alpha(t.text_muted, config.alpha), config.now);
-        if (content_is_play_locked(song->song.meta, chart->meta)) {
-            const Rectangle lock_rect = {config.chart_detail_rect.x,
-                                         config.chart_detail_rect.y,
-                                         config.chart_detail_rect.width,
-                                         kChartAuthorOffsetY + kChartAuthorHeight};
-            draw_locked_overlay(lock_rect, config.alpha, 34.0f);
-        }
+        draw_chart_detail(*song, *chart, config);
     }
 
     if (config.compact_song_header) {
-        ui::draw_text_in_rect("譜面", 16,
-                              {config.chart_buttons_rect.x, config.chart_buttons_rect.y - 72.0f,
-                               config.chart_buttons_rect.width, 24.0f},
-                              with_alpha(t.text, config.alpha), ui::text_align::left);
-        ui::draw_rect_f({config.chart_buttons_rect.x, config.chart_buttons_rect.y - 8.0f,
-                         config.chart_buttons_rect.width, 1.0f},
-                        with_alpha(t.border_light, config.alpha));
-        const Rectangle header = {config.chart_buttons_rect.x, config.chart_buttons_rect.y - 40.0f,
-                                  config.chart_buttons_rect.width, 22.0f};
-        ui::draw_text_in_rect("キー", 10, {header.x + 16.0f, header.y, 54.0f, header.height},
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
-        ui::draw_text_in_rect("レベル", 10, {header.x + 86.0f, header.y, 80.0f, header.height},
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::center);
-        ui::draw_text_in_rect("難易度", 10, {header.x + 184.0f, header.y, 120.0f, header.height},
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
-        ui::draw_text_in_rect("SOURCE", 10, {header.x + 330.0f, header.y, 76.0f, header.height},
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::center);
-        ui::draw_text_in_rect("BEST", 10, {header.x + 430.0f, header.y, 116.0f, header.height},
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
-        ui::draw_text_in_rect("GRADE", 10, {header.x + header.width - 58.0f, header.y, 44.0f, header.height},
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
+        draw_compact_chart_header(config.chart_buttons_rect, config.alpha);
     }
 
     ui::scoped_clip_rect clip(config.chart_buttons_rect);
     for (int i = 0; i < static_cast<int>(filtered.size()); ++i) {
         const song_select::chart_option& item = *filtered[static_cast<size_t>(i)];
         const Rectangle row = chart_button_rect(config.chart_buttons_rect, i, state.chart_scroll_y);
-        if (row.y + row.height < config.chart_buttons_rect.y - kClipSlack ||
-            row.y > config.chart_buttons_rect.y + config.chart_buttons_rect.height + kClipSlack) {
+        if (!rect_visible_in(config.chart_buttons_rect, row)) {
             continue;
         }
 
@@ -432,88 +728,10 @@ void draw(const song_select::state& state,
             : hovered ? config.hover_row_alpha
                       : config.normal_row_alpha;
         if (config.compact_song_header) {
-            const Color level_color = difficulty_level_color(item.meta.level);
-            const Color row_fill = locked
-                ? lerp_color(config.button_base, t.bg, selected ? 0.48f : 0.36f)
-                : (selected ? config.button_selected : config.button_base);
-            ui::draw_rect_f(row, with_alpha(row_fill, row_alpha));
-            ui::draw_rect_lines(row, selected ? 1.5f : 1.0f,
-                                with_alpha(locked ? t.slow : selected ? t.border_active : t.border_light,
-                                           locked ? scale_alpha(config.alpha, 0.72f) : config.alpha));
-            ui::draw_rect_f({row.x + 2.0f, row.y + 2.0f, 3.0f, row.height - 4.0f},
-                            with_alpha(level_color, scale_alpha(config.alpha, 0.72f)));
-            ui::draw_text_in_rect(key_mode_label(item.meta.key_count).c_str(), 18,
-                                  {row.x + 16.0f, row.y + 13.0f, 54.0f, 26.0f},
-                                  with_alpha(t.text_secondary, config.alpha), ui::text_align::left);
-            draw_difficulty_level_badge(item.meta.level,
-                                        {row.x + 86.0f, row.y + 16.0f, 72.0f, 22.0f},
-                                        12, config.alpha);
-            ui::draw_text_in_rect(item.meta.difficulty.c_str(), 18,
-                                  {row.x + 184.0f, row.y + 12.0f, 110.0f, 28.0f},
-                                  with_alpha(t.text, config.alpha), ui::text_align::left);
-            draw_source_tag({row.x + 332.0f, row.y + 17.0f, 72.0f, 20.0f},
-                            item.source_status, config.alpha);
-            draw_status_side_icons({row.x + 410.0f, row.y + 18.0f, 18.0f, 18.0f},
-                                   item.status == content_status::modified,
-                                   config.alpha);
-            ui::draw_text_in_rect(item.best_local_score.has_value() ? format_score(*item.best_local_score).c_str() : "--",
-                                  16, {row.x + 430.0f, row.y + 14.0f, 116.0f, 28.0f},
-                                  with_alpha(t.text, config.alpha), ui::text_align::right);
-            if (item.best_local_rank.has_value()) {
-                ui::draw_text_in_rect(rank_label(*item.best_local_rank), 19,
-                                      {row.x + row.width - 58.0f, row.y + 13.0f, 42.0f, 28.0f},
-                                      with_alpha(rank_color(*item.best_local_rank), config.alpha), ui::text_align::right);
-            } else {
-                ui::draw_text_in_rect("-", 16,
-                                      {row.x + row.width - 58.0f, row.y + 14.0f, 42.0f, 28.0f},
-                                      with_alpha(t.text_muted, config.alpha), ui::text_align::right);
-            }
-            if (locked) {
-                draw_locked_overlay(row, config.alpha, 26.0f);
-            }
+            draw_compact_chart_row(item, row, selected, locked, row_alpha, config);
             continue;
         }
-        const Color row_fill = locked
-            ? lerp_color(config.button_base, t.bg, selected ? 0.48f : 0.36f)
-            : (selected ? config.button_selected : config.button_base);
-        ui::draw_rect_f(row, with_alpha(row_fill, row_alpha));
-        ui::draw_rect_lines(
-            row, kChartRowBorderWidth,
-            with_alpha(locked ? t.slow : t.border_light,
-                       static_cast<unsigned char>((locked ? 170.0f : 130.0f) * config.play_t)));
-        ui::draw_text_in_rect(item.meta.difficulty.c_str(), 16,
-                              {row.x + kChartTextPaddingX, row.y + kChartTitleOffsetY,
-                               row.width - kChartRightReserved - kChartStatusWidth, kChartTitleHeight},
-                              with_alpha(t.text, config.alpha), ui::text_align::left);
-        const Rectangle status_rect = {row.x + row.width - kChartRightReserved - kChartStatusWidth,
-                                       row.y + kChartTitleOffsetY + 1.0f,
-                                       kChartStatusWidth, kStatusBadgeHeight};
-        content_status_badge::draw_compound(
-                              status_rect,
-                              item.source_status, item.status, config.alpha, 10);
-        draw_status_side_icons({status_rect.x + status_rect.width + 8.0f,
-                                status_rect.y + 3.0f,
-                                18.0f,
-                                18.0f},
-                               item.status == content_status::modified,
-                               config.alpha);
-        draw_difficulty_level_badge(item.meta.level,
-                                    {row.x + kChartTextPaddingX, row.y + kChartLevelOffsetY - 1.0f,
-                                     64.0f, 19.0f},
-                                    11, config.alpha);
-        ui::draw_text_in_rect(key_mode_label(item.meta.key_count).c_str(), 13,
-                              {row.x + row.width - kChartBadgeRightInset, row.y + kChartBadgeOffsetY,
-                               kChartBadgeWidth, kChartBadgeHeight},
-                              with_alpha(key_mode_color(item.meta.key_count), config.alpha), ui::text_align::right);
-        if (item.best_local_rank.has_value()) {
-            ui::draw_text_in_rect(rank_label(*item.best_local_rank), 12,
-                                  {row.x + row.width - kChartBadgeRightInset, row.y + kChartRankOffsetY,
-                                   kChartBadgeWidth, kChartRankHeight},
-                                  with_alpha(rank_color(*item.best_local_rank), config.alpha), ui::text_align::right);
-        }
-        if (locked) {
-            draw_locked_overlay(row, config.alpha, 26.0f);
-        }
+        draw_classic_chart_row(item, row, selected, locked, row_alpha, config);
     }
 }
 

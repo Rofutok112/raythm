@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "title/online_download_internal.h"
+#include "ui_hit.h"
 
 namespace title_online_view::preview_controller {
 
@@ -14,7 +15,7 @@ bool update_scrub(state& state,
                   bool left_pressed) {
     const title_preview_snapshot preview = audio_controller.preview_snapshot(
         song != nullptr ? &song->song : nullptr);
-    if (song != nullptr && left_pressed && CheckCollisionPointRec(mouse, bar_rect)) {
+    if (song != nullptr && left_pressed && ui::contains_point(bar_rect, mouse)) {
         state.preview_bar_dragging = true;
         state.preview_bar_resume_after_drag = preview.playing;
         state.preview_bar_drag_position_seconds = preview.position_seconds;

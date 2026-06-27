@@ -23,6 +23,12 @@ struct command {
     std::string user_id;
 };
 
+struct input_result {
+    command action;
+    bool scroll_offset_changed = false;
+    float scroll_offset = 0.0f;
+};
+
 struct model {
     float open_anim = 0.0f;
     bool loading = false;
@@ -37,9 +43,9 @@ struct model {
     std::vector<auth::global_rating_ranking_entry> items;
 };
 
-[[nodiscard]] command handle_input(model& state, ui::draw_layer layer = ui::draw_layer::modal);
+[[nodiscard]] input_result handle_input(const model& state, ui::draw_layer layer = ui::draw_layer::modal);
 void draw(const model& state, ui::draw_layer layer = ui::draw_layer::modal, bool draw_backdrop = true);
 [[nodiscard]] Rectangle modal_bounds(float open_anim);
-void clamp_scroll(model& state);
+[[nodiscard]] float clamped_scroll_offset(const model& state);
 
 }  // namespace title_rating_rankings_view

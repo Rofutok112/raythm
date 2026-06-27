@@ -53,6 +53,27 @@ struct session_summary {
     std::vector<external_link> external_links;
 };
 
+struct profile_ranking_record {
+    std::string chart_id;
+    std::string song_id;
+    std::string song_title;
+    std::string artist;
+    std::string genre;
+    std::string difficulty_name;
+    std::string chart_author;
+    std::string clear_rank;
+    std::string recorded_at;
+    std::string submitted_at;
+    int score = 0;
+    int placement = 0;
+    int max_combo = 0;
+    float accuracy = 0.0f;
+    float play_rating = 0.0f;
+    float rating_contribution = 0.0f;
+    float rating_contribution_percent = 0.0f;
+    bool is_full_combo = false;
+};
+
 struct public_profile {
     std::string id;
     std::string display_name;
@@ -61,6 +82,7 @@ struct public_profile {
     std::string relationship_status;
     std::string relationship_request_id;
     std::vector<external_link> external_links;
+    std::vector<profile_ranking_record> best_rating_records;
 };
 
 enum class verification_purpose {
@@ -130,29 +152,12 @@ struct my_uploads_result {
     std::vector<community_chart_upload> charts;
 };
 
-struct profile_ranking_record {
-    std::string chart_id;
-    std::string song_id;
-    std::string song_title;
-    std::string artist;
-    std::string genre;
-    std::string difficulty_name;
-    std::string chart_author;
-    std::string clear_rank;
-    std::string recorded_at;
-    std::string submitted_at;
-    int score = 0;
-    int placement = 0;
-    int max_combo = 0;
-    float accuracy = 0.0f;
-    bool is_full_combo = false;
-};
-
 struct profile_rankings_result {
     bool success = false;
     bool maintenance = false;
     std::string message;
     std::string retry_after;
+    std::vector<profile_ranking_record> best_rating_records;
     std::vector<profile_ranking_record> recent_records;
     std::vector<profile_ranking_record> first_place_records;
 };

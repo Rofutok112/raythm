@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "network/unlock_rule_client.h"
-#include "raylib.h"
 
 namespace title_create_unlock_rules {
 
@@ -55,6 +54,9 @@ private:
     std::vector<unlock_rule_client::rule> rules_;
     std::vector<unlock_rule_client::validation> validations_;
     int selected_rule_ = 0;
+    float rule_list_scroll_y_ = 0.0f;
+    bool rule_list_scrollbar_dragging_ = false;
+    float rule_list_scrollbar_drag_offset_ = 0.0f;
     std::future<unlock_rule_client::operation_result> load_future_;
     std::future<unlock_rule_client::operation_result> save_future_;
     std::future<unlock_rule_client::operation_result> validate_future_;

@@ -6,23 +6,13 @@
 #include <cmath>
 
 #include "audio_manager.h"
-#include "ui_coord.h"
+#include "ui_draw.h"
 
 namespace {
 
 Color with_alpha_scale(Color color, float alpha_scale) {
     color.a = static_cast<unsigned char>(std::clamp(alpha_scale, 0.0f, 1.0f) * 255.0f);
     return color;
-}
-
-Color lerp_color(Color from, Color to, float t) {
-    t = std::clamp(t, 0.0f, 1.0f);
-    return {
-        static_cast<unsigned char>(static_cast<float>(from.r) + (static_cast<float>(to.r) - static_cast<float>(from.r)) * t),
-        static_cast<unsigned char>(static_cast<float>(from.g) + (static_cast<float>(to.g) - static_cast<float>(from.g)) * t),
-        static_cast<unsigned char>(static_cast<float>(from.b) + (static_cast<float>(to.b) - static_cast<float>(from.b)) * t),
-        static_cast<unsigned char>(static_cast<float>(from.a) + (static_cast<float>(to.a) - static_cast<float>(from.a)) * t)
-    };
 }
 
 template <std::size_t N>
@@ -204,7 +194,6 @@ void title_spectrum_visualizer::draw(const Rectangle& rect, float alpha_scale) c
     const float max_height = rect.height * 1.0f;
     const float block_height = 8.0f;
     const float block_gap = 4.0f;
-    const float block_step = block_height + block_gap;
     const Color base_low = with_alpha_scale({107, 33, 168, 255}, clamped_alpha * (128.0f / 255.0f));
     const Color base_mid = with_alpha_scale({168, 85, 247, 255}, clamped_alpha * (178.0f / 255.0f));
     const Color base_top = with_alpha_scale({216, 180, 254, 255}, clamped_alpha * (230.0f / 255.0f));
@@ -215,23 +204,18 @@ void title_spectrum_visualizer::draw(const Rectangle& rect, float alpha_scale) c
         const float value = std::clamp(bars_[static_cast<size_t>(i)], 0.0f, 1.0f);
         const float height = value * max_height;
         const float x = rect.x + static_cast<float>(i) * (bar_width + gap);
-        if (height > 0.5f) {
-            for (float block_bottom = baseline; block_bottom > baseline - height; block_bottom -= block_step) {
-                const float block_top = std::max(baseline - height, block_bottom - block_height);
-                const float segment_height = block_bottom - block_top;
-                if (segment_height > 0.5f) {
-                    const float color_t = std::clamp((baseline - block_top) / max_height, 0.0f, 1.0f);
-                    const Color block_color =
-                        color_t < 0.6f
-                            ? lerp_color(base_low, base_mid, color_t / 0.6f)
-                            : lerp_color(base_mid, base_top, (color_t - 0.6f) / 0.4f);
-                    ui::draw_rect_f({x, block_top, bar_width, segment_height}, block_color);
-                }
-            }
-        }
-
-        const float peak_y = baseline - std::clamp(peaks_[static_cast<size_t>(i)], 0.0f, 1.0f) * max_height - 2.0f;
-        ui::draw_rect_f({x, peak_y - 1.0f, bar_width, 4.0f}, peak_glow);
-        ui::draw_rect_f({x, peak_y, bar_width, 2.0f}, peak_color);
+        ui::block_spectrum_bar(x,
+                               baseline,
+                               bar_width,
+                               height,
+                               max_height,
+                               std::clamp(peaks_[static_cast<size_t>(i)], 0.0f, 1.0f) * max_height,
+                               block_height,
+                               block_gap,
+                               base_low,
+                               base_mid,
+                               base_top,
+                               peak_glow,
+                               peak_color);
     }
 }

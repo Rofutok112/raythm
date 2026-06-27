@@ -11,7 +11,8 @@ public:
     void reset();
     void tick(float dt);
     void prepare_current_page();
-    void update_current_page();
+    [[nodiscard]] settings_page_update_result update_current_page();
+    void apply_update_result(const settings_page_update_result& result);
     void draw_current_page() const;
     void change_page(settings::page_id next_page);
     void clear_key_config_selection();
@@ -22,6 +23,7 @@ public:
 private:
     void reset_interactions();
 
+    game_settings& settings_;
     settings_runtime_applier runtime_applier_;
     settings_gameplay_page gameplay_page_;
     settings_audio_page audio_page_;

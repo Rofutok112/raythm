@@ -2,9 +2,12 @@
 
 #include "shared/auth_overlay_controller.h"
 #include "multiplayer/multiplayer_state.h"
+#include "multiplayer/multiplayer_view_result.h"
 #include "shared/public_profile_controller.h"
 #include "shared/scene_fade.h"
+#include "song_select/song_select_login_dialog.h"
 #include "song_select/song_select_state.h"
+#include "settings/settings_shell_view.h"
 #include "title/title_browse_feature.h"
 #include "title/title_audio_controller.h"
 #include "title/title_command.h"
@@ -61,8 +64,11 @@ struct draw_context {
 };
 
 struct draw_result {
+    song_select::login_dialog_result login_result;
     song_select::login_dialog_command login_command = song_select::login_dialog_command::none;
     title::command title_command;
+    multiplayer::view::draw_result multiplayer_result;
+    settings::shell_draw_result settings_result;
     bool close_login_dialog = false;
 };
 

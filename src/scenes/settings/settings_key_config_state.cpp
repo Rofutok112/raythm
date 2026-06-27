@@ -10,6 +10,38 @@
 #include "theme.h"
 #include "ui_draw.h"
 
+namespace {
+
+void draw_key_slot_row(Rectangle row_rect, int index, const char* key_label, bool selected, bool listening) {
+    const auto& theme = *g_theme;
+    const ui::row_state row_state = ui::row(row_rect, {
+        .layer = settings::kLayer,
+        .border_width = 2.0f,
+        .bg = selected ? theme.row_selected : theme.row,
+        .bg_hover = selected ? theme.row_active : theme.row_hover,
+        .border_color = selected ? theme.border_active : theme.border,
+        .custom_colors = true,
+    });
+    const settings::key_slot_layout layout = settings::key_slot_layout_for(row_state.visual);
+    ui::draw_text_in_rect(TextFormat("%s %d", localization::tr(localization::text_key::lane), index + 1),
+                          24, layout.label_rect, theme.text, ui::text_align::left);
+    ui::draw_text_in_rect(key_label, 24, layout.value_rect,
+                          listening ? theme.error : theme.text_dim, ui::text_align::right);
+}
+
+void draw_key_config_error(const std::string& message, float timer, int visible_key_count) {
+    if (timer <= 0.0f || message.empty()) {
+        return;
+    }
+    const auto& theme = *g_theme;
+    const unsigned char alpha = static_cast<unsigned char>(std::min(timer / 0.3f, 1.0f) * 255.0f);
+    ui::draw_text_in_rect(message.c_str(), 22,
+                          settings::key_config_error_rect(visible_key_count),
+                          with_alpha(theme.error, alpha), ui::text_align::left);
+}
+
+}  // namespace
+
 bool settings_key_config_state::is_valid_play_key(int key) {
     return key != KEY_ESCAPE && key != KEY_ENTER && key != KEY_UP && key != KEY_DOWN &&
            key != KEY_LEFT && key != KEY_RIGHT && key != KEY_BACKSPACE && key != KEY_NULL;
@@ -106,9 +138,8 @@ void settings_key_config_state::update(game_settings& settings) {
 }
 
 void settings_key_config_state::draw(const game_settings& settings) const {
-    const auto& theme = *g_theme;
-    ui::draw_value_selector(settings::kKeyModeRect, localization::tr(localization::text_key::mode),
-                            mode_ == 0 ? "4K" : "6K", settings::kLayer);
+    ui::value_selector(settings::kKeyModeRect, localization::tr(localization::text_key::mode),
+                       mode_ == 0 ? "4K" : "6K", settings::value_selector_options());
 
     const std::span<const KeyboardKey> keys = mode_ == 0
         ? std::span<const KeyboardKey>(settings.keys.keys_4)
@@ -118,24 +149,9 @@ void settings_key_config_state::draw(const game_settings& settings) const {
         const bool selected = slot_ == i;
         const bool is_listening = selected && listening_;
         const Rectangle row_rect = settings::key_slot_rect(i);
-        const ui::row_state row_state = ui::draw_row(row_rect,
-                                                     selected ? theme.row_selected : theme.row,
-                                                     selected ? theme.row_active : theme.row_hover,
-                                                     selected ? theme.border_active : theme.border);
         const char* key_label = is_listening ? localization::tr(localization::text_key::press_a_key)
                                              : get_key_name(keys[static_cast<std::size_t>(i)]);
-        const ui::rect_pair columns = ui::split_columns(ui::inset(row_state.visual, 18.0f), 160.0f);
-        ui::draw_text_in_rect(TextFormat("%s %d", localization::tr(localization::text_key::lane), i + 1),
-                              24, columns.first, theme.text, ui::text_align::left);
-        ui::draw_text_in_rect(key_label, 24, columns.second, is_listening ? theme.error : theme.text_dim, ui::text_align::right);
+        draw_key_slot_row(row_rect, i, key_label, selected, is_listening);
     }
-
-    if (error_timer_ > 0.0f && !error_.empty()) {
-        const unsigned char alpha = static_cast<unsigned char>(std::min(error_timer_ / 0.3f, 1.0f) * 255.0f);
-        ui::draw_text_in_rect(error_.c_str(), 22,
-                              ui::place(settings::kContentRect, 560.0f, 28.0f,
-                                        ui::anchor::top_left, ui::anchor::top_left,
-                                        {30.0f, 214.0f + static_cast<float>(count) * 62.0f + 8.0f}),
-                              with_alpha(theme.error, alpha), ui::text_align::left);
-    }
+    draw_key_config_error(error_, error_timer_, count);
 }

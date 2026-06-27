@@ -6,7 +6,7 @@
 #include "scene_common.h"
 #include "theme.h"
 #include "ui_clip.h"
-#include "ui_draw.h"
+#include "ui_frame.h"
 #include "virtual_screen.h"
 
 namespace {
@@ -32,7 +32,7 @@ namespace editor_screen_view {
 void begin_frame(const frame_context& context) {
     virtual_screen::begin_ui();
     context.rebuild_hit_regions();
-    ui::begin_draw_queue();
+    ui::begin_render_frame();
     draw_scene_background(*g_theme);
 }
 
@@ -106,7 +106,7 @@ void draw_key_count_confirmation(int pending_key_count) {
 }
 
 void end_frame() {
-    ui::flush_draw_queue();
+    ui::end_render_frame();
     virtual_screen::end();
     ClearBackground(BLACK);
     virtual_screen::draw_to_screen();

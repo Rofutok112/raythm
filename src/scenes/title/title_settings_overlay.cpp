@@ -24,6 +24,24 @@ constexpr unsigned char kRowHoverAlpha = 212;
 constexpr unsigned char kRowSelectedAlpha = 218;
 constexpr unsigned char kBorderAlpha = 210;
 
+class scoped_theme_override {
+public:
+    explicit scoped_theme_override(const ui_theme& theme)
+        : previous_(g_theme) {
+        g_theme = &theme;
+    }
+
+    ~scoped_theme_override() {
+        g_theme = previous_;
+    }
+
+    scoped_theme_override(const scoped_theme_override&) = delete;
+    scoped_theme_override& operator=(const scoped_theme_override&) = delete;
+
+private:
+    const ui_theme* previous_ = nullptr;
+};
+
 Color fade_alpha(Color color, float fade) {
     const float alpha = static_cast<float>(color.a) * std::clamp(fade, 0.0f, 1.0f);
     return with_alpha(color, static_cast<unsigned char>(std::clamp(alpha, 0.0f, 255.0f)));
@@ -64,6 +82,11 @@ ui_theme make_overlay_theme(const ui_theme& source, float fade) {
     return theme;
 }
 
+float overlay_slide_y(float animation) {
+    const float eased = tween::ease_out_cubic(animation);
+    return (1.0f - eased) * kViewSlideOffsetY;
+}
+
 }  // namespace
 
 title_settings_overlay::title_settings_overlay(game_settings& settings)
@@ -91,11 +114,9 @@ void title_settings_overlay::request_close() {
 }
 
 void title_settings_overlay::prepare_current_page() {
-    const ui_theme* previous_theme = g_theme;
-    ui_theme overlay_theme = make_overlay_theme(*previous_theme, tween::ease_out_cubic(animation_));
-    g_theme = &overlay_theme;
+    ui_theme overlay_theme = make_overlay_theme(*g_theme, tween::ease_out_cubic(animation_));
+    const scoped_theme_override theme_override(overlay_theme);
     pages_.prepare_current_page();
-    g_theme = previous_theme;
 }
 
 void title_settings_overlay::update_animation(bool active, float dt) {
@@ -120,48 +141,48 @@ void title_settings_overlay::update(float dt) {
     }
 
     if (pages_.current_page_blocks_navigation()) {
-        pages_.update_current_page();
+        const settings_page_update_result page_result = pages_.update_current_page();
+        pages_.apply_update_result(page_result);
         return;
     }
 
-    if (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) ||
-        ui::is_clicked(settings::kBackRect, settings::kLayer)) {
+    if (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
         request_close();
         return;
     }
 
-    if (const std::optional<settings::page_id> next_page = settings::clicked_tab_page()) {
-        pages_.change_page(*next_page);
-    }
-
-    pages_.update_current_page();
+    const settings_page_update_result page_result = pages_.update_current_page();
+    pages_.apply_update_result(page_result);
 }
 
-void title_settings_overlay::draw() const {
+settings::shell_draw_result title_settings_overlay::draw() const {
     const float eased = tween::ease_out_cubic(animation_);
-    const float slide_y = (1.0f - eased) * kViewSlideOffsetY;
-    const ui_theme* previous_theme = g_theme;
-    ui_theme overlay_theme = make_overlay_theme(*previous_theme, eased);
-    g_theme = &overlay_theme;
+    const float slide_y = overlay_slide_y(animation_);
+    ui_theme overlay_theme = make_overlay_theme(*g_theme, eased);
+    const scoped_theme_override theme_override(overlay_theme);
+    settings::shell_draw_result result;
 
     rlPushMatrix();
     rlTranslatef(0.0f, slide_y, 0.0f);
 
-    ui::draw_panel(settings::kSidebarRect);
-    ui::draw_panel(settings::kContentRect);
-
-    ui::draw_header_block(settings::kSidebarHeaderRect, localization::tr(localization::text_key::settings),
-                          localization::tr(localization::text_key::saved_on_back));
-
-    settings::draw_tab_buttons(pages_.current_page());
-
-    ui::draw_button(settings::kBackRect, localization::tr(localization::text_key::back), 22);
-
-    settings::draw_content_header(pages_.current_page());
+    result = settings::draw_shell(pages_.current_page());
     pages_.draw_current_page();
 
     rlPopMatrix();
-    g_theme = previous_theme;
+    return result;
+}
+
+void title_settings_overlay::apply_draw_result(const settings::shell_draw_result& result) {
+    if (closing_ || animation_ < 0.95f || pages_.current_page_blocks_navigation()) {
+        return;
+    }
+    if (result.back_requested) {
+        request_close();
+        return;
+    }
+    if (result.selected_page.has_value()) {
+        pages_.change_page(*result.selected_page);
+    }
 }
 
 bool title_settings_overlay::closing() const {
