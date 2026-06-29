@@ -13,6 +13,7 @@
 #include "game_settings.h"
 #include "managed_content_storage.h"
 #include "path_utils.h"
+#include "ui_scroll.h"
 
 namespace {
 
@@ -55,7 +56,7 @@ void scroll_timing_list_to_bottom(editor_timing_panel_state& timing_panel, size_
         ? kTimingListViewportHeight
         : static_cast<float>(count) * kTimingRowHeight +
             static_cast<float>(std::max<int>(0, static_cast<int>(count) - 1)) * kTimingRowGap;
-    timing_panel.list_scroll_offset = std::max(0.0f, content_height - kTimingListViewportHeight);
+    timing_panel.list_scroll_offset = ui::max_scroll_offset(content_height, kTimingListViewportHeight);
 }
 
 std::string first_existing_audio_asset(std::initializer_list<const char*> file_names) {

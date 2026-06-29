@@ -482,6 +482,8 @@ add_executable(raythm WIN32 src/main.cpp
         src/scenes/multiplayer_result/multiplayer_result_screen_view.h
         src/scenes/multiplayer_result/multiplayer_result_summary_view.cpp
         src/scenes/multiplayer_result/multiplayer_result_summary_view.h
+        src/scenes/multiplayer_result/multiplayer_result_widgets.cpp
+        src/scenes/multiplayer_result/multiplayer_result_widgets.h
         src/scenes/multiplayer_result_scene.cpp
         src/scenes/multiplayer_result_scene.h
         src/mv/composition/mv_composition.cpp
@@ -1430,6 +1432,15 @@ add_executable(ranking_panel_view_smoke
         src/scenes/title/ranking_panel_view.h
         src/tests/ranking_panel_view_smoke.cpp)
 
+add_executable(ui_scroll_smoke
+        src/tests/ui_scroll_smoke.cpp)
+
+add_executable(ui_layout_smoke
+        src/tests/ui_layout_smoke.cpp)
+
+add_executable(ui_draw_smoke
+        src/tests/ui_draw_smoke.cpp)
+
 add_executable(play_note_draw_queue_smoke
         src/models/data_models.h
         src/scenes/play/play_note_draw_queue.cpp
@@ -1763,6 +1774,9 @@ set(RAYTHM_SMOKE_TARGETS
         public_profile_state_smoke
         multiplayer_state_smoke
         ranking_panel_view_smoke
+        ui_scroll_smoke
+        ui_layout_smoke
+        ui_draw_smoke
         play_note_draw_queue_smoke
         play_chart_filter_smoke
         play_flow_controller_smoke
@@ -1817,6 +1831,9 @@ target_link_libraries(auth_client_concurrent_restore_smoke PRIVATE winhttp ws2_3
 target_link_libraries(multiplayer_state_smoke PRIVATE raylib)
 target_link_libraries(title_song_select_layout_smoke PRIVATE raylib)
 target_link_libraries(ranking_panel_view_smoke PRIVATE raylib)
+target_link_libraries(ui_scroll_smoke PRIVATE raylib)
+target_link_libraries(ui_layout_smoke PRIVATE raylib)
+target_link_libraries(ui_draw_smoke PRIVATE raylib)
 target_link_libraries(song_loader_smoke PRIVATE sqlite3)
 target_link_libraries(local_catalog_database_smoke PRIVATE sqlite3 raylib)
 target_link_libraries(local_content_index_smoke PRIVATE sqlite3)

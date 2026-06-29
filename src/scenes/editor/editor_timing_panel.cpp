@@ -3,10 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <span>
 
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_hit.h"
+#include "ui_scroll.h"
 
 namespace {
 const char* timing_event_type_label(timing_event_type type) {
@@ -76,6 +79,72 @@ void draw_action_chip(Rectangle rect, const char* label, bool enabled) {
                 enabled ? t.border_light : with_alpha(t.border_light, 120),
                 1.0f);
     ui::draw_text_in_rect(label, 13, rect, enabled ? t.text_secondary : t.text_hint);
+}
+
+enum class timing_panel_action {
+    add_bpm,
+    add_meter,
+    delete_timing,
+    add_speed,
+    cycle_scroll_curve,
+    delete_scroll,
+};
+
+std::array<ui::action_button_definition<timing_panel_action>, 3> timing_action_buttons_for(
+    std::span<const Rectangle, 3> rects,
+    bool delete_enabled) {
+    return {{
+        {rects[0], "Add BPM", timing_panel_action::add_bpm, true},
+        {rects[1], "Add Time Sig", timing_panel_action::add_meter, true},
+        {rects[2], "Delete", timing_panel_action::delete_timing, delete_enabled},
+    }};
+}
+
+std::array<ui::action_button_definition<timing_panel_action>, 3> scroll_action_buttons_for(
+    std::span<const Rectangle, 3> rects,
+    bool delete_enabled) {
+    return {{
+        {rects[0], "Add Point", timing_panel_action::add_speed, true},
+        {rects[1], "Curve", timing_panel_action::cycle_scroll_curve, true},
+        {rects[2], "Delete", timing_panel_action::delete_scroll, delete_enabled},
+    }};
+}
+
+void apply_timing_panel_action(editor_timing_panel_result& result, timing_panel_action action) {
+    switch (action) {
+        case timing_panel_action::add_bpm:
+            result.add_bpm = true;
+            break;
+        case timing_panel_action::add_meter:
+            result.add_meter = true;
+            break;
+        case timing_panel_action::delete_timing:
+            result.delete_selected = true;
+            break;
+        case timing_panel_action::add_speed:
+            result.add_speed = true;
+            break;
+        case timing_panel_action::cycle_scroll_curve:
+            result.cycle_selected_scroll_curve = true;
+            break;
+        case timing_panel_action::delete_scroll:
+            result.delete_selected_scroll = true;
+            break;
+    }
+}
+
+void draw_timing_panel_action_buttons(const std::array<ui::action_button_definition<timing_panel_action>, 3>& buttons,
+                                      editor_timing_panel_result& result) {
+    const auto& t = *g_theme;
+    const auto action = ui::draw_action_buttons<timing_panel_action>(buttons, {
+        .font_size = 14,
+        .border_width = 1.5f,
+        .disabled_text_color = t.text_hint,
+        .disabled_border_color = t.border,
+    });
+    if (action.has_value()) {
+        apply_timing_panel_action(result, *action);
+    }
 }
 }
 
@@ -193,12 +262,11 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         };
         const float row_height = 30.0f;
         const float row_gap = 4.0f;
-        const float content_height = items.empty()
-            ? list_view_rect.height
-            : static_cast<float>(items.size()) * row_height +
-                  static_cast<float>(std::max<int>(0, static_cast<int>(items.size()) - 1)) * row_gap;
-        const float max_scroll = std::max(0.0f, content_height - list_view_rect.height);
-        scroll_offset = std::clamp(scroll_offset, 0.0f, max_scroll);
+        const float content_height =
+            ui::vertical_list_content_height(items.size(), row_height, row_gap, list_view_rect.height);
+        ui::scroll_offset_state scroll_state =
+            ui::scroll_offset_state_for(list_view_rect, content_height, scroll_offset);
+        scroll_offset = scroll_state.offset;
 
         const ui::scrollbar_interaction scrollbar = ui::vertical_scrollbar(
             scrollbar_rect, content_height, scroll_offset, scrollbar_dragging, scrollbar_drag_offset, {
@@ -209,15 +277,19 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
             scroll_offset = scrollbar.scroll_offset;
         }
 
-        if (ui::contains_point(list_view_rect, model.mouse) && GetMouseWheelMove() != 0.0f) {
-            scroll_offset = std::clamp(scroll_offset - GetMouseWheelMove() * 42.0f, 0.0f, max_scroll);
-        }
+        const float wheel = ui::mouse_wheel_move();
+        scroll_state = ui::wheel_scrolled_offset_state(
+            list_view_rect, model.mouse, wheel, content_height, scroll_offset, 42.0f);
+        scroll_offset = scroll_state.offset;
 
         {
             ui::scoped_clip_rect clip_scope(list_view_rect);
-            float row_y = list_view_rect.y - scroll_offset;
-            for (const editor_timing_panel_item& item : items) {
-                const Rectangle row_rect = {list_view_rect.x, row_y, list_view_rect.width, row_height};
+            const ui::index_range visible_rows = ui::vertical_list_visible_range(
+                items.size(), list_view_rect, row_height, row_gap, scroll_offset);
+            for (int row_index = visible_rows.begin; row_index < visible_rows.end; ++row_index) {
+                const editor_timing_panel_item& item = items[static_cast<std::size_t>(row_index)];
+                const Rectangle row_rect =
+                    ui::vertical_list_row_rect(list_view_rect, row_index, row_height, row_gap, scroll_offset);
                 const ui::row_state row = ui::selectable_row(row_rect, item.selected, 1.5f);
                 if (row.clicked) {
                     if (automation_items) {
@@ -231,7 +303,6 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
                                      item.label.c_str(), item.value.c_str(), 15,
                                      item.selected ? t.text : t.text_secondary,
                                      item.selected ? t.text : t.text_muted, 118.0f);
-                row_y += row_height + row_gap;
             }
         }
         ui::scrollbar(scrollbar_rect, content_height, scroll_offset, {
@@ -285,25 +356,9 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         timing_box.width - 24.0f,
         28.0f,
     }, 8.0f, timing_buttons);
-    const Rectangle add_bpm_rect = timing_buttons[0];
-    const Rectangle add_meter_rect = timing_buttons[1];
-    const Rectangle delete_rect = timing_buttons[2];
-    if (ui::button(add_bpm_rect, "Add BPM", {.font_size = 14}).clicked) {
-        result.add_bpm = true;
-    }
-    if (ui::button(add_meter_rect, "Add Time Sig", {.font_size = 14}).clicked) {
-        result.add_meter = true;
-    }
-    const ui::button_state delete_button = ui::action_button(delete_rect, "Delete", {
-        .font_size = 14,
-        .border_width = 1.5f,
-        .enabled = model.delete_enabled,
-        .disabled_text_color = t.text_hint,
-        .disabled_border_color = t.border,
-    });
-    if (model.delete_enabled && delete_button.clicked) {
-        result.delete_selected = true;
-    }
+    draw_timing_panel_action_buttons(
+        timing_action_buttons_for(timing_buttons, model.delete_enabled),
+        result);
 
     draw_event_list(scroll_box, "Automation", model.scroll_items,
                     state.scroll_list_scroll_offset, state.scroll_list_scrollbar_dragging,
@@ -316,25 +371,9 @@ editor_timing_panel_result editor_timing_panel::draw(const editor_timing_panel_m
         scroll_box.width - 24.0f,
         28.0f,
     }, 8.0f, scroll_buttons);
-    const Rectangle add_speed_rect = scroll_buttons[0];
-    const Rectangle add_stop_rect = scroll_buttons[1];
-    const Rectangle delete_scroll_rect = scroll_buttons[2];
-    if (ui::button(add_speed_rect, "Add Point", {.font_size = 14}).clicked) {
-        result.add_speed = true;
-    }
-    if (ui::button(add_stop_rect, "Curve", {.font_size = 14}).clicked) {
-        result.cycle_selected_scroll_curve = true;
-    }
-    const ui::button_state delete_scroll_button = ui::action_button(delete_scroll_rect, "Delete", {
-        .font_size = 14,
-        .border_width = 1.5f,
-        .enabled = model.scroll_delete_enabled,
-        .disabled_text_color = t.text_hint,
-        .disabled_border_color = t.border,
-    });
-    if (model.scroll_delete_enabled && delete_scroll_button.clicked) {
-        result.delete_selected_scroll = true;
-    }
+    draw_timing_panel_action_buttons(
+        scroll_action_buttons_for(scroll_buttons, model.scroll_delete_enabled),
+        result);
 
     ui::section(editor_box);
     const char* active_tab = model.selected_scroll_event.has_value()

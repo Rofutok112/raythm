@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,8 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_hit.h"
+#include "ui_scroll.h"
 #include "ui_text_input.h"
 #include "ui/icons/raythm_icons.h"
 #include "ui_layout.h"
@@ -347,6 +350,101 @@ ui::row_state draw_layer_row(Rectangle rect,
     });
 }
 
+enum class timing_modal_action {
+    add_bpm,
+    add_meter,
+    delete_selected,
+};
+
+std::array<ui::action_button_definition<timing_modal_action>, 3> timing_modal_action_buttons_for(
+    std::span<const Rectangle, 3> rects,
+    bool delete_enabled) {
+    return {{
+        {rects[0], "Add BPM", timing_modal_action::add_bpm, true},
+        {rects[1], "Add Meter", timing_modal_action::add_meter, true},
+        {rects[2], "Delete", timing_modal_action::delete_selected, delete_enabled},
+    }};
+}
+
+void apply_timing_modal_action(editor_timing_panel_result& result, timing_modal_action action) {
+    switch (action) {
+        case timing_modal_action::add_bpm:
+            result.add_bpm = true;
+            break;
+        case timing_modal_action::add_meter:
+            result.add_meter = true;
+            break;
+        case timing_modal_action::delete_selected:
+            result.delete_selected = true;
+            break;
+    }
+}
+
+void draw_timing_modal_action_buttons(const std::array<ui::action_button_definition<timing_modal_action>, 3>& buttons,
+                                      editor_timing_panel_result& result) {
+    const auto& t = *g_theme;
+    const auto action = ui::draw_action_buttons<timing_modal_action>(buttons, {
+        .layer = ui::draw_layer::modal,
+        .font_size = 13,
+        .border_width = 1.5f,
+        .disabled_bg = t.section,
+        .disabled_bg_hover = t.section,
+        .disabled_text_color = t.text_hint,
+        .disabled_border_color = t.border,
+    });
+    if (action.has_value()) {
+        apply_timing_modal_action(result, *action);
+    }
+}
+
+enum class scroll_panel_action {
+    add_point,
+    cycle_curve,
+    delete_selected,
+};
+
+std::array<ui::action_button_definition<scroll_panel_action>, 3> scroll_panel_action_buttons_for(
+    std::span<const Rectangle, 3> rects,
+    bool selection_actions_enabled) {
+    return {{
+        {rects[0], "Add Point", scroll_panel_action::add_point, true},
+        {rects[1], "Curve", scroll_panel_action::cycle_curve, selection_actions_enabled},
+        {rects[2], "Delete", scroll_panel_action::delete_selected, selection_actions_enabled},
+    }};
+}
+
+void apply_scroll_panel_action(editor_right_panel_view_result& result,
+                               scroll_panel_action action,
+                               int max_tick) {
+    switch (action) {
+        case scroll_panel_action::add_point:
+            result.scroll_automation_point_to_add =
+                scroll_automation_point{std::clamp(max_tick / 2, 0, max_tick), 1.0f, scroll_automation_curve::linear};
+            break;
+        case scroll_panel_action::cycle_curve:
+            result.panel_result.cycle_selected_scroll_curve = true;
+            break;
+        case scroll_panel_action::delete_selected:
+            result.panel_result.delete_selected_scroll = true;
+            break;
+    }
+}
+
+void draw_scroll_panel_action_buttons(const std::array<ui::action_button_definition<scroll_panel_action>, 3>& buttons,
+                                      int max_tick,
+                                      editor_right_panel_view_result& result) {
+    const auto& t = *g_theme;
+    const auto action = ui::draw_action_buttons<scroll_panel_action>(buttons, {
+        .font_size = 13,
+        .border_width = 1.4f,
+        .disabled_text_color = t.text_hint,
+        .disabled_border_color = t.border,
+    });
+    if (action.has_value()) {
+        apply_scroll_panel_action(result, *action, max_tick);
+    }
+}
+
 void set_active_timing_input(editor_timing_panel_state& state, editor_timing_input_field field) {
     state.active_input_field = field;
     state.inputs.bpm_value.active = field == editor_timing_input_field::bpm_value;
@@ -357,6 +455,62 @@ void set_active_timing_input(editor_timing_panel_state& state, editor_timing_inp
     state.inputs.bpm_bar.active = false;
     state.inputs.meter_bar.active = false;
     state.inputs.scroll_start_bar.active = false;
+}
+
+void draw_timing_modal_pick_row(Rectangle rect,
+                                const char* label,
+                                const std::string& value,
+                                editor_timing_input_field field,
+                                editor_timing_panel_state& state,
+                                editor_timing_panel_result& result) {
+    const auto& t = *g_theme;
+    const bool selected = state.active_input_field == field || state.bar_pick_mode;
+    const ui::row_state row_state = draw_layer_row(rect, selected, ui::draw_layer::modal, t.accent);
+    if (row_state.clicked) {
+        result.clicked_input_row = true;
+        state.active_input_field = field;
+        state.bar_pick_mode = true;
+        state.input_error.clear();
+        state.inputs.bpm_value.active = false;
+        state.inputs.meter_numerator.active = false;
+        state.inputs.meter_denominator.active = false;
+    }
+    ui::draw_label_value(ui::inset(row_state.visual, ui::edge_insets::symmetric(0.0f, 12.0f)),
+                         label, state.bar_pick_mode ? "Pick timeline" : value.c_str(),
+                         16, selected ? t.text : t.text_secondary,
+                         state.bar_pick_mode ? t.accent : t.text, 82.0f);
+}
+
+void draw_timing_modal_input_row(Rectangle rect,
+                                 const char* label,
+                                 ui::text_input_state& input,
+                                 editor_timing_input_field field,
+                                 ui::text_input_filter filter,
+                                 const char* placeholder,
+                                 float label_width,
+                                 editor_timing_panel_state& state,
+                                 editor_timing_panel_result& result) {
+    const ui::text_input_result input_result = ui::text_input(
+        rect, input, label, placeholder, {
+            .layer = ui::draw_layer::modal,
+            .font_size = 16,
+            .max_length = 16,
+            .filter = filter,
+            .label_width = label_width,
+        });
+    if (input_result.clicked) {
+        result.clicked_input_row = true;
+        set_active_timing_input(state, field);
+        state.bar_pick_mode = false;
+        state.input_error.clear();
+    }
+    if (input_result.submitted) {
+        result.apply_selected = true;
+        set_active_timing_input(state, editor_timing_input_field::none);
+        state.bar_pick_mode = false;
+    } else if (input_result.deactivated && state.active_input_field == field) {
+        set_active_timing_input(state, editor_timing_input_field::none);
+    }
 }
 
 void draw_palette_icon(Rectangle rect, note_type type, Color color) {
@@ -847,8 +1001,7 @@ float minimap_y_for_tick(const editor_timeline_view_model& model, Rectangle mini
     const float max_bottom_tick = model.metrics.bottom_tick +
         model.scroll_offset_pixels * model.metrics.ticks_per_pixel;
     const float min_bottom_tick = max_bottom_tick -
-        std::max(0.0f, model.content_height_pixels - model.metrics.content_rect().height) *
-            model.metrics.ticks_per_pixel;
+        ui::max_scroll_offset(model.content_height_pixels, model.metrics.content_rect()) * model.metrics.ticks_per_pixel;
     const float ratio = std::clamp((tick - min_bottom_tick) / full_tick_span, 0.0f, 1.0f);
     return minimap.y + minimap.height - ratio * minimap.height;
 }
@@ -884,8 +1037,7 @@ minimap_shape_cache& cached_minimap_shapes(const editor_timeline_view_model& mod
     const float max_bottom_tick = model.metrics.bottom_tick +
         model.scroll_offset_pixels * model.metrics.ticks_per_pixel;
     const float min_bottom_tick = max_bottom_tick -
-        std::max(0.0f, model.content_height_pixels - model.metrics.content_rect().height) *
-            model.metrics.ticks_per_pixel;
+        ui::max_scroll_offset(model.content_height_pixels, model.metrics.content_rect()) * model.metrics.ticks_per_pixel;
 
     if (cache.notes == model.minimap_notes &&
         cache.generation == model.minimap_generation &&
@@ -1085,33 +1237,10 @@ editor_right_panel_view_result draw_right_panel(const editor_right_panel_view_mo
     }
     ui::draw_text_in_rect("BAR", 11, panel_layout.bar_axis_label, t.text_muted, ui::text_align::right);
 
-    const Rectangle add_button = panel_layout.automation_buttons[0];
-    const Rectangle curve_button = panel_layout.automation_buttons[1];
-    const Rectangle delete_button = panel_layout.automation_buttons[2];
-    if (ui::button(add_button, "Add Point", {.font_size = 13}).clicked) {
-        result.scroll_automation_point_to_add =
-            scroll_automation_point{std::clamp(max_tick / 2, 0, max_tick), 1.0f, scroll_automation_curve::linear};
-    }
-    const ui::button_state curve_state = ui::action_button(curve_button, "Curve", {
-        .font_size = 13,
-        .border_width = 1.4f,
-        .enabled = model.scroll_delete_enabled,
-        .disabled_text_color = t.text_hint,
-        .disabled_border_color = t.border,
-    });
-    if (model.scroll_delete_enabled && curve_state.clicked) {
-        result.panel_result.cycle_selected_scroll_curve = true;
-    }
-    const ui::button_state delete_state = ui::action_button(delete_button, "Delete", {
-        .font_size = 13,
-        .border_width = 1.4f,
-        .enabled = model.scroll_delete_enabled,
-        .disabled_text_color = t.text_hint,
-        .disabled_border_color = t.border,
-    });
-    if (model.scroll_delete_enabled && delete_state.clicked) {
-        result.panel_result.delete_selected_scroll = true;
-    }
+    draw_scroll_panel_action_buttons(
+        scroll_panel_action_buttons_for(panel_layout.automation_buttons, model.scroll_delete_enabled),
+        max_tick,
+        result);
 
     const Rectangle inspector = panel_layout.inspector;
     ui::section(inspector);
@@ -1134,9 +1263,12 @@ editor_right_panel_view_result draw_right_panel(const editor_right_panel_view_mo
                               t.text_hint, ui::text_align::left);
     }
 
-    result.clicked_outside_editor = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-                                    !ui::contains_point(graph_box, model.mouse) &&
-                                    !ui::contains_point(inspector, model.mouse);
+    const std::array<Rectangle, 2> editor_regions = {{
+        graph_box,
+        inspector,
+    }};
+    result.clicked_outside_editor =
+        ui::is_mouse_button_pressed_outside(std::span<const Rectangle>(editor_regions), model.mouse);
     return result;
 }
 
@@ -1199,7 +1331,7 @@ editor_header_view_result draw_header(const editor_header_view_model& model, Rec
     result.snap_dropdown_toggled = dropdown.trigger.clicked;
     result.snap_index_clicked = dropdown.clicked_index;
     result.snap_dropdown_close_requested =
-        model.snap_dropdown_open && IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
+        model.snap_dropdown_open && ui::is_mouse_button_released() &&
         !ui::is_hovered(layout::kSnapDropdownRect, ui::draw_layer::base) &&
         !ui::is_hovered(snap_menu_rect, ui::draw_layer::overlay);
     return result;
@@ -1243,14 +1375,14 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
         const int first_snap_tick = std::max(0, (model.min_tick / snap_interval) * snap_interval);
         for (int tick = first_snap_tick; tick <= model.max_tick; tick += snap_interval) {
             const float y = model.metrics.tick_to_y(tick);
-            if (y >= arrange.y && y <= arrange.y + arrange.height) {
+            if (ui::y_visible_in_viewport(y, arrange)) {
                 ui::draw_line_f(arrange.x, y, arrange.x + arrange.width, y, with_alpha(t.editor_grid_snap, 165));
             }
         }
 
         for (const editor_meter_map::grid_line& line : model.grid_lines) {
             const float y = model.metrics.tick_to_y(line.tick);
-            if (y < arrange.y || y > arrange.y + arrange.height) {
+            if (!ui::y_visible_in_viewport(y, arrange)) {
                 continue;
             }
             ui::draw_line_f(arrange.x, y, arrange.x + arrange.width, y,
@@ -1312,7 +1444,7 @@ editor_right_panel_view_result draw_timeline(const editor_timeline_presenter_mod
             continue;
         }
         const float y = model.metrics.tick_to_y(line.tick);
-        if (y < ruler_labels.y || y > ruler_labels.y + ruler_labels.height) {
+        if (!ui::y_visible_in_viewport(y, ruler_labels)) {
             continue;
         }
         const Rectangle tag = {ruler.x + 6.0f, y - 11.0f, ruler.width - 12.0f, 22.0f};
@@ -1466,12 +1598,11 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
     const Rectangle scrollbar = {list_view.x + list_view.width + 6.0f, list_view.y, 6.0f, list_view.height};
     const float row_height = 34.0f;
     const float row_gap = 5.0f;
-    const float content_height = items.empty()
-        ? list_view.height
-        : static_cast<float>(items.size()) * row_height +
-              static_cast<float>(std::max<int>(0, static_cast<int>(items.size()) - 1)) * row_gap;
-    const float max_scroll = std::max(0.0f, content_height - list_view.height);
-    timing_state.list_scroll_offset = std::clamp(timing_state.list_scroll_offset, 0.0f, max_scroll);
+    const float content_height =
+        ui::vertical_list_content_height(items.size(), row_height, row_gap, list_view.height);
+    ui::scroll_offset_state scroll_state =
+        ui::scroll_offset_state_for(list_view, content_height, timing_state.list_scroll_offset);
+    timing_state.list_scroll_offset = scroll_state.offset;
     const ui::scrollbar_interaction scrollbar_result = ui::vertical_scrollbar(
         scrollbar,
         content_height,
@@ -1485,15 +1616,18 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
     if (scrollbar_result.changed || scrollbar_result.dragging) {
         timing_state.list_scroll_offset = scrollbar_result.scroll_offset;
     }
-    if (ui::contains_point(list_view, model.mouse) && GetMouseWheelMove() != 0.0f) {
-        timing_state.list_scroll_offset = std::clamp(
-            timing_state.list_scroll_offset - GetMouseWheelMove() * 42.0f, 0.0f, max_scroll);
-    }
+    const float wheel = ui::mouse_wheel_move();
+    scroll_state = ui::wheel_scrolled_offset_state(
+        list_view, model.mouse, wheel, content_height, timing_state.list_scroll_offset, 42.0f);
+    timing_state.list_scroll_offset = scroll_state.offset;
     {
         ui::scoped_clip_rect clip_scope(list_view);
-        float y = list_view.y - timing_state.list_scroll_offset;
-        for (const editor_timing_panel_item& item : items) {
-            const Rectangle item_rect = {list_view.x, y, list_view.width, row_height};
+        const ui::index_range visible_rows = ui::vertical_list_visible_range(
+            items.size(), list_view, row_height, row_gap, timing_state.list_scroll_offset);
+        for (int row_index = visible_rows.begin; row_index < visible_rows.end; ++row_index) {
+            const editor_timing_panel_item& item = items[static_cast<std::size_t>(row_index)];
+            const Rectangle item_rect =
+                ui::vertical_list_row_rect(list_view, row_index, row_height, row_gap, timing_state.list_scroll_offset);
             const ui::row_state row_state = draw_layer_row(item_rect, item.selected, ui::draw_layer::modal, t.accent);
             if (row_state.clicked) {
                 result.panel_result.selected_event_index = item.event_index;
@@ -1502,7 +1636,6 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
                                  item.label.c_str(), item.value.c_str(), 14,
                                  item.selected ? t.text : t.text_secondary,
                                  item.selected ? t.text : t.text_muted, 126.0f);
-            y += row_height + row_gap;
         }
     }
     ui::scrollbar(scrollbar, content_height, timing_state.list_scroll_offset, {
@@ -1519,72 +1652,14 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
         list_box.width - 32.0f,
         30.0f,
     }, 8.0f, timing_buttons);
-    const Rectangle bpm_button = timing_buttons[0];
-    const Rectangle meter_button = timing_buttons[1];
-    const Rectangle delete_button = timing_buttons[2];
-    if (draw_layer_button(bpm_button, "Add BPM", 13, ui::draw_layer::modal,
-                          t.row, t.row_hover, t.text).clicked) {
-        result.panel_result.add_bpm = true;
-    }
-    if (draw_layer_button(meter_button, "Add Meter", 13, ui::draw_layer::modal,
-                          t.row, t.row_hover, t.text).clicked) {
-        result.panel_result.add_meter = true;
-    }
-    if (draw_layer_button(delete_button, "Delete", 13, ui::draw_layer::modal,
-                          model.delete_enabled ? t.row : t.section,
-                          model.delete_enabled ? t.row_hover : t.section,
-                          model.delete_enabled ? t.text : t.text_hint).clicked && model.delete_enabled) {
-        result.panel_result.delete_selected = true;
-    }
+    draw_timing_modal_action_buttons(
+        timing_modal_action_buttons_for(timing_buttons, model.delete_enabled),
+        result.panel_result);
 
     ui::section(editor_box);
     ui::draw_text_in_rect("Event Inspector", 20,
                           {editor_box.x + 14.0f, editor_box.y + 10.0f, editor_box.width - 28.0f, 24.0f},
                           t.text, ui::text_align::left);
-
-    auto draw_pick_row = [&](Rectangle rect, const char* label, const std::string& value,
-                             editor_timing_input_field field) {
-        const bool selected = timing_state.active_input_field == field || timing_state.bar_pick_mode;
-        const ui::row_state row_state = draw_layer_row(rect, selected, ui::draw_layer::modal, t.accent);
-        if (row_state.clicked) {
-            result.panel_result.clicked_input_row = true;
-            timing_state.active_input_field = field;
-            timing_state.bar_pick_mode = true;
-            timing_state.input_error.clear();
-            timing_state.inputs.bpm_value.active = false;
-            timing_state.inputs.meter_numerator.active = false;
-            timing_state.inputs.meter_denominator.active = false;
-        }
-        ui::draw_label_value(ui::inset(row_state.visual, ui::edge_insets::symmetric(0.0f, 12.0f)),
-                             label, timing_state.bar_pick_mode ? "Pick timeline" : value.c_str(),
-                             16, selected ? t.text : t.text_secondary,
-                             timing_state.bar_pick_mode ? t.accent : t.text, 82.0f);
-    };
-    auto draw_input_row = [&](Rectangle rect, const char* label, ui::text_input_state& input,
-                              editor_timing_input_field field, ui::text_input_filter filter,
-                              const char* placeholder, float label_width = 82.0f) {
-        const ui::text_input_result input_result = ui::text_input(
-            rect, input, label, placeholder, {
-                .layer = ui::draw_layer::modal,
-                .font_size = 16,
-                .max_length = 16,
-                .filter = filter,
-                .label_width = label_width,
-            });
-        if (input_result.clicked) {
-            result.panel_result.clicked_input_row = true;
-            set_active_timing_input(timing_state, field);
-            timing_state.bar_pick_mode = false;
-            timing_state.input_error.clear();
-        }
-        if (input_result.submitted) {
-            result.panel_result.apply_selected = true;
-            set_active_timing_input(timing_state, editor_timing_input_field::none);
-            timing_state.bar_pick_mode = false;
-        } else if (input_result.deactivated && timing_state.active_input_field == field) {
-            set_active_timing_input(timing_state, editor_timing_input_field::none);
-        }
-    };
 
     if (selected_event.has_value()) {
         const timing_event& event = *selected_event;
@@ -1592,25 +1667,32 @@ timing_modal_result draw_timing_modal(const editor_right_panel_view_model& model
                              "Type", timing_event_type_label(event.type), 16,
                              t.text_secondary, t.text, 82.0f);
         if (event.type == timing_event_type::bpm) {
-            draw_pick_row({editor_box.x + 14.0f, editor_box.y + 90.0f, editor_box.width - 28.0f, 38.0f},
-                          "Bar", timing_state.inputs.bpm_bar.value, editor_timing_input_field::bpm_measure);
-            draw_input_row({editor_box.x + 14.0f, editor_box.y + 138.0f, editor_box.width - 28.0f, 38.0f},
-                           "BPM", timing_state.inputs.bpm_value, editor_timing_input_field::bpm_value,
-                           accepts_float_character, "BPM");
+            draw_timing_modal_pick_row(
+                {editor_box.x + 14.0f, editor_box.y + 90.0f, editor_box.width - 28.0f, 38.0f},
+                "Bar", timing_state.inputs.bpm_bar.value, editor_timing_input_field::bpm_measure,
+                timing_state, result.panel_result);
+            draw_timing_modal_input_row(
+                {editor_box.x + 14.0f, editor_box.y + 138.0f, editor_box.width - 28.0f, 38.0f},
+                "BPM", timing_state.inputs.bpm_value, editor_timing_input_field::bpm_value,
+                accepts_float_character, "BPM", 82.0f, timing_state, result.panel_result);
         } else {
-            draw_pick_row({editor_box.x + 14.0f, editor_box.y + 90.0f, editor_box.width - 28.0f, 38.0f},
-                          "Bar", timing_state.inputs.meter_bar.value, editor_timing_input_field::meter_measure);
+            draw_timing_modal_pick_row(
+                {editor_box.x + 14.0f, editor_box.y + 90.0f, editor_box.width - 28.0f, 38.0f},
+                "Bar", timing_state.inputs.meter_bar.value, editor_timing_input_field::meter_measure,
+                timing_state, result.panel_result);
             const ui::rect_pair meter_inputs = ui::split_columns(
                 {editor_box.x + 14.0f, editor_box.y + 138.0f, editor_box.width - 28.0f, 38.0f},
                 (editor_box.width - 36.0f) * 0.5f, 8.0f);
-            draw_input_row(meter_inputs.first,
-                           "Num", timing_state.inputs.meter_numerator,
-                           editor_timing_input_field::meter_numerator,
-                           accepts_int_character, "Num", 46.0f);
-            draw_input_row(meter_inputs.second,
-                           "Den", timing_state.inputs.meter_denominator,
-                           editor_timing_input_field::meter_denominator,
-                           accepts_int_character, "Den", 46.0f);
+            draw_timing_modal_input_row(
+                meter_inputs.first,
+                "Num", timing_state.inputs.meter_numerator,
+                editor_timing_input_field::meter_numerator,
+                accepts_int_character, "Num", 46.0f, timing_state, result.panel_result);
+            draw_timing_modal_input_row(
+                meter_inputs.second,
+                "Den", timing_state.inputs.meter_denominator,
+                editor_timing_input_field::meter_denominator,
+                accepts_int_character, "Den", 46.0f, timing_state, result.panel_result);
         }
         const Rectangle apply_button = {editor_box.x + 14.0f, editor_box.y + editor_box.height - 48.0f,
                                         editor_box.width - 28.0f, 34.0f};

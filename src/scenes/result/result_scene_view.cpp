@@ -1,6 +1,8 @@
 #include "result/result_scene_view.h"
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cmath>
 #include <string>
 
@@ -9,6 +11,8 @@
 #include "scene_common.h"
 #include "theme.h"
 #include "ui_draw.h"
+#include "ui_hit.h"
+#include "ui_layout.h"
 #include "ui/ui_font.h"
 
 namespace result_scene_view {
@@ -33,11 +37,19 @@ constexpr Rectangle kMetricOffsetRect = kMetricMidColumns.first;
 constexpr Rectangle kOffsetRect = kMetricMidColumns.second;
 constexpr Rectangle kJudgementRect = {kMetricTopRowRect.x, 470.0f, kMetricTopRowRect.width, 428.0f};
 constexpr Rectangle kActionBarRect = {50.0f, 928.0f, 1820.0f, 92.0f};
-constexpr ui::rect_pair kActionLead = ui::split_columns(kActionBarRect, 520.0f, 56.0f);
-constexpr ui::rect_pair kActionTail = ui::split_columns(kActionLead.second, 668.0f, 56.0f);
-constexpr Rectangle kRetryRect = kActionLead.first;
-constexpr Rectangle kSongSelectRect = kActionTail.first;
-constexpr Rectangle kReplayRect = kActionTail.second;
+constexpr float kActionButtonGap = 56.0f;
+constexpr std::array<float, 3> kActionButtonWidths = {520.0f, 668.0f, 520.0f};
+
+struct action_button_definition {
+    action value;
+    const char* label;
+};
+
+constexpr std::array<action_button_definition, 3> kActionButtons = {{
+    {action::retry, "Retry"},
+    {action::song_select, "Song Select"},
+    {action::replay, "Replay"},
+}};
 
 struct action_button_layout {
     action value;
@@ -45,10 +57,48 @@ struct action_button_layout {
     const char* label;
 };
 
-constexpr action_button_layout kActionButtons[] = {
-    {action::retry, kRetryRect, "Retry"},
-    {action::song_select, kSongSelectRect, "Song Select"},
-    {action::replay, kReplayRect, "Replay"},
+struct result_metric_descriptor {
+    Rectangle rect;
+    const char* label;
+    std::string value;
+    Color tone;
+    float reveal_t;
+};
+
+struct achievement_chip_descriptor {
+    Rectangle rect;
+    const char* label;
+    std::string value;
+    Color tone;
+};
+
+struct song_text_descriptor {
+    Rectangle rect;
+    const char* text;
+    int font_size;
+    Color color;
+};
+
+struct song_badge_descriptor {
+    Rectangle rect;
+    std::string text;
+    Color text_color;
+    Color border_color;
+    float horizontal_inset;
+};
+
+struct song_value_descriptor {
+    Rectangle rect;
+    std::string text;
+    int font_size;
+    Color color;
+    ui::text_align align;
+};
+
+struct result_title_layout {
+    Rectangle accent;
+    Rectangle title;
+    Rectangle rule;
 };
 
 const char* rank_label(rank value) {
@@ -139,6 +189,34 @@ Rectangle reveal_rect(Rectangle rect, float t, float offset_x = 0.0f, float offs
     return {rect.x + offset_x * (1.0f - t), rect.y + offset_y * (1.0f - t), rect.width, rect.height};
 }
 
+result_title_layout result_title_layout_for(float reveal_t) {
+    const float t = delayed(reveal_t, 0.0f);
+    return {
+        {36.0f, 31.0f, 6.0f, 56.0f},
+        reveal_rect(kTitleRect, t, -12.0f, 0.0f),
+        {378.0f, 77.0f, 435.0f, 2.0f},
+    };
+}
+
+std::array<Rectangle, kActionButtons.size()> action_button_rects() {
+    std::array<Rectangle, kActionButtons.size()> rects{};
+    ui::hstack_widths(kActionBarRect, kActionButtonWidths, kActionButtonGap, rects);
+    return rects;
+}
+
+std::array<action_button_layout, kActionButtons.size()> action_button_layouts() {
+    const std::array<Rectangle, kActionButtons.size()> rects = action_button_rects();
+    std::array<action_button_layout, kActionButtons.size()> layouts{};
+    for (std::size_t i = 0; i < kActionButtons.size(); ++i) {
+        layouts[i] = {
+            .value = kActionButtons[i].value,
+            .rect = rects[i],
+            .label = kActionButtons[i].label,
+        };
+    }
+    return layouts;
+}
+
 void draw_panel_rect(Rectangle rect, float reveal_t, Color fill, Color border) {
     const Rectangle visual = reveal_rect(rect, reveal_t);
     ui::surface(visual, alpha(fill, 0.92f * reveal_t), alpha(border, reveal_t), 1.5f);
@@ -188,6 +266,34 @@ song_info_layout song_info_layout_for(Rectangle visual, const chart_meta& chart,
     };
 }
 
+std::array<song_text_descriptor, 2> song_text_descriptors_for(const song_info_layout& layout,
+                                                              const song_data& song,
+                                                              float reveal_t) {
+    return {{
+        {layout.title, song.meta.title.c_str(), 44, alpha(g_theme->text, reveal_t)},
+        {layout.artist, song.meta.artist.c_str(), 26, alpha(g_theme->text_secondary, reveal_t)},
+    }};
+}
+
+std::array<song_badge_descriptor, 2> song_badge_descriptors_for(const song_info_layout& layout,
+                                                                const chart_meta& chart,
+                                                                const std::string& level_text) {
+    return {{
+        {layout.difficulty, chart.difficulty, g_theme->error, g_theme->border_active, 14.0f},
+        {layout.level, level_text, g_theme->text_secondary, g_theme->border, 10.0f},
+    }};
+}
+
+std::array<song_value_descriptor, 2> song_value_descriptors_for(const song_info_layout& layout,
+                                                                int key_count,
+                                                                float rc_value,
+                                                                float reveal_t) {
+    return {{
+        {layout.key_mode, key_mode_label(key_count), 18, alpha(g_theme->accent, reveal_t), ui::text_align::left},
+        {layout.rc, TextFormat("RC %.0f", rc_value), 32, alpha(g_theme->text, reveal_t), ui::text_align::left},
+    }};
+}
+
 struct result_status_layout {
     const char* label = nullptr;
     int font_size = 24;
@@ -216,6 +322,16 @@ struct rank_score_layout {
     result_status_layout status;
 };
 
+struct rank_score_text_descriptor {
+    Rectangle rect;
+    std::string text;
+    int font_size;
+    Color color;
+    ui::text_align align;
+    int min_font_size;
+    bool fit;
+};
+
 rank_score_layout rank_score_layout_for(const result_data& result, float reveal_t) {
     return {
         .rank = reveal_rect(kRankRect, reveal_t, -28.0f, 0.0f),
@@ -224,6 +340,28 @@ rank_score_layout rank_score_layout_for(const result_data& result, float reveal_
         .score_rule = {476.0f, 700.0f, 590.0f, 3.0f},
         .status = status_layout_for(result),
     };
+}
+
+std::array<rank_score_text_descriptor, 2> rank_score_text_descriptors_for(const rank_score_layout& layout,
+                                                                          const result_data& result,
+                                                                          float reveal_t) {
+    const Color rcolor = rank_color(result.clear_rank);
+    return {{
+        {layout.rank,
+         rank_label(result.clear_rank),
+         result.clear_rank == rank::aa ? 118 : 150,
+         alpha(rcolor, reveal_t),
+         ui::text_align::center,
+         66,
+         false},
+        {layout.score,
+         format_score(result.score),
+         96,
+         alpha(g_theme->text, reveal_t),
+         ui::text_align::right,
+         66,
+         true},
+    }};
 }
 
 struct metric_layout {
@@ -244,6 +382,13 @@ struct offset_count_layout {
     Rectangle label;
     Rectangle accent;
     Rectangle value;
+};
+
+struct offset_count_descriptor {
+    offset_count_layout layout;
+    const char* label;
+    std::string value;
+    Color tone;
 };
 
 offset_count_layout offset_count_layout_for(Rectangle column) {
@@ -273,11 +418,32 @@ offsets_layout offsets_layout_for(Rectangle visual) {
     };
 }
 
+std::array<offset_count_descriptor, 2> offset_count_descriptors_for(const offsets_layout& layout,
+                                                                    const result_data& result) {
+    return {{
+        {layout.fast, "FAST", std::to_string(result.fast_count), g_theme->fast},
+        {layout.slow, "SLOW", std::to_string(result.slow_count), g_theme->slow},
+    }};
+}
+
 struct judgement_row_layout {
     Rectangle label;
     Rectangle count;
     line_segment divider;
 };
+
+struct judgement_definition {
+    const char* label;
+    std::size_t count_index;
+};
+
+constexpr std::array<judgement_definition, 5> kJudgements = {{
+    {"Perfect", 0},
+    {"Great", 1},
+    {"Good", 2},
+    {"Bad", 3},
+    {"Miss", 4},
+}};
 
 judgement_row_layout judgement_row_layout_for(Rectangle row_rect) {
     const ui::rect_pair columns = ui::split_columns(row_rect, 190.0f, 20.0f);
@@ -287,6 +453,29 @@ judgement_row_layout judgement_row_layout_for(Rectangle row_rect) {
         .divider = {{row_rect.x, row_rect.y + row_rect.height},
                     {row_rect.x + row_rect.width, row_rect.y + row_rect.height}},
     };
+}
+
+std::array<judgement_row_layout, kJudgements.size()> judgement_layouts_for(Rectangle visual) {
+    const Rectangle content = ui::inset(visual, ui::edge_insets::symmetric(30.0f, 28.0f));
+    std::array<Rectangle, kJudgements.size()> rows{};
+    ui::vstack_fill(content, 8.0f, rows);
+
+    std::array<judgement_row_layout, kJudgements.size()> layouts{};
+    for (std::size_t i = 0; i < layouts.size(); ++i) {
+        layouts[i] = judgement_row_layout_for(rows[i]);
+    }
+    return layouts;
+}
+
+Color judgement_color(std::size_t index) {
+    switch (index) {
+        case 0: return g_theme->judge_perfect;
+        case 1: return g_theme->judge_great;
+        case 2: return g_theme->judge_good;
+        case 3: return g_theme->judge_bad;
+        case 4: return g_theme->judge_miss;
+        default: return g_theme->text_muted;
+    }
 }
 
 void draw_badge(Rectangle rect, const std::string& text, Color text_color, Color border_color, float reveal_t,
@@ -320,10 +509,10 @@ void draw_background(const model& data) {
 
 void draw_title(float reveal_t) {
     const float t = delayed(reveal_t, 0.0f);
-    ui::accent_bar({36.0f, 31.0f, 6.0f, 56.0f}, alpha(g_theme->fast, t));
-    ui::draw_text_in_rect("RESULT", 58, reveal_rect(kTitleRect, t, -12.0f, 0.0f), alpha(g_theme->text, t),
-                          ui::text_align::left);
-    draw_accent_rule({378.0f, 77.0f, 435.0f, 2.0f}, with_alpha(g_theme->border, 160), t);
+    const result_title_layout layout = result_title_layout_for(reveal_t);
+    ui::accent_bar(layout.accent, alpha(g_theme->fast, t));
+    ui::draw_text_in_rect("RESULT", 58, layout.title, alpha(g_theme->text, t), ui::text_align::left);
+    draw_accent_rule(layout.rule, with_alpha(g_theme->border, 160), t);
 }
 
 void draw_jacket(const Texture2D* jacket, float reveal_t) {
@@ -348,30 +537,40 @@ void draw_song_info(const song_data& song, const chart_meta& chart, int key_coun
     const Rectangle visual = reveal_rect(kSongInfoRect, reveal_t, 18.0f, 0.0f);
     const std::string level_text = TextFormat("Lv. %.1f", chart.level);
     const song_info_layout layout = song_info_layout_for(visual, chart, level_text);
-    draw_marquee_text(song.meta.title.c_str(), layout.title, 44, alpha(g_theme->text, reveal_t), now);
-    draw_marquee_text(song.meta.artist.c_str(), layout.artist, 26, alpha(g_theme->text_secondary, reveal_t), now);
-    draw_badge(layout.difficulty, chart.difficulty, g_theme->error, g_theme->border_active, reveal_t, 14.0f);
-    draw_badge(layout.level, level_text, g_theme->text_secondary, g_theme->border, reveal_t, 10.0f);
-    ui::draw_text_in_rect(key_mode_label(key_count), 18, layout.key_mode, alpha(g_theme->accent, reveal_t));
-    ui::draw_text_in_rect(TextFormat("RC %.0f", rc_value), 32, layout.rc,
-                          alpha(g_theme->text, reveal_t), ui::text_align::left);
+    for (const song_text_descriptor& text : song_text_descriptors_for(layout, song, reveal_t)) {
+        draw_marquee_text(text.text, text.rect, text.font_size, text.color, now);
+    }
+    for (const song_badge_descriptor& badge : song_badge_descriptors_for(layout, chart, level_text)) {
+        draw_badge(badge.rect, badge.text, badge.text_color, badge.border_color, reveal_t, badge.horizontal_inset);
+    }
+    for (const song_value_descriptor& value : song_value_descriptors_for(layout, key_count, rc_value, reveal_t)) {
+        ui::draw_text_in_rect(value.text.c_str(), value.font_size, value.rect, value.color, value.align);
+    }
+}
+
+void draw_result_status(const result_status_layout& status, float reveal_t) {
+    if (status.label == nullptr) {
+        return;
+    }
+    ui::draw_text_in_rect(status.label, status.font_size, status.rect,
+                          alpha(status.color, reveal_t));
 }
 
 void draw_rank_score(const result_data& result, float reveal_t) {
     const rank_score_layout layout = rank_score_layout_for(result, reveal_t);
     const Color rcolor = rank_color(result.clear_rank);
-    ui::draw_text_in_rect(rank_label(result.clear_rank), result.clear_rank == rank::aa ? 118 : 150,
-                          layout.rank, alpha(rcolor, reveal_t));
+    for (const rank_score_text_descriptor& text : rank_score_text_descriptors_for(layout, result, reveal_t)) {
+        if (text.fit) {
+            draw_fit_text(text.text, text.font_size, text.rect, text.color, text.align, text.min_font_size);
+        } else {
+            ui::draw_text_in_rect(text.text.c_str(), text.font_size, text.rect, text.color, text.align);
+        }
+    }
     ui::draw_line_ex(layout.divider.start, layout.divider.end, 1.5f, alpha(g_theme->border, reveal_t));
 
-    draw_fit_text(format_score(result.score), 96, layout.score, alpha(g_theme->text, reveal_t),
-                  ui::text_align::right, 66);
     draw_accent_rule(layout.score_rule, rcolor, reveal_t);
 
-    if (layout.status.label != nullptr) {
-        ui::draw_text_in_rect(layout.status.label, layout.status.font_size, layout.status.rect,
-                              alpha(layout.status.color, reveal_t));
-    }
+    draw_result_status(layout.status, reveal_t);
 }
 
 void draw_chip(Rectangle rect, const char* label, const std::string& value, Color tone, float reveal_t) {
@@ -438,9 +637,14 @@ void draw_achievements(const model& data, float reveal_t) {
         rank_value = localized_text("LOCAL") + " #" + std::to_string(data.local_submit->submitted_entry->placement);
     }
 
-    draw_chip(reveal_rect(chips[0], reveal_t, -10.0f, 14.0f), "LOCAL BEST", local_value, local_color, reveal_t);
-    draw_chip(reveal_rect(chips[1], reveal_t, 0.0f, 14.0f), "ONLINE BEST", online_value, online_color, reveal_t);
-    draw_chip(reveal_rect(chips[2], reveal_t, 10.0f, 14.0f), "RANK", rank_value, g_theme->fast, reveal_t);
+    const std::array<achievement_chip_descriptor, 3> achievements{{
+        {reveal_rect(chips[0], reveal_t, -10.0f, 14.0f), "LOCAL BEST", local_value, local_color},
+        {reveal_rect(chips[1], reveal_t, 0.0f, 14.0f), "ONLINE BEST", online_value, online_color},
+        {reveal_rect(chips[2], reveal_t, 10.0f, 14.0f), "RANK", rank_value, g_theme->fast},
+    }};
+    for (const achievement_chip_descriptor& achievement : achievements) {
+        draw_chip(achievement.rect, achievement.label, achievement.value, achievement.tone, reveal_t);
+    }
 }
 
 void draw_metric(Rectangle rect, const char* label, const std::string& value, Color tone, float reveal_t) {
@@ -458,50 +662,44 @@ void draw_offsets(const result_data& result, float reveal_t) {
     draw_panel_rect(kOffsetRect, reveal_t, with_alpha(g_theme->panel, 218), g_theme->border);
     const Rectangle visual = reveal_rect(kOffsetRect, reveal_t);
     const offsets_layout layout = offsets_layout_for(visual);
-    ui::draw_text_in_rect("FAST", 20, layout.fast.label, alpha(g_theme->fast, reveal_t),
-                          ui::text_align::left);
-    draw_accent_rule(layout.fast.accent, g_theme->fast, reveal_t);
-    ui::draw_text_in_rect(std::to_string(result.fast_count).c_str(), 38, layout.fast.value,
-                          alpha(g_theme->fast, reveal_t), ui::text_align::left);
+    for (const offset_count_descriptor& count : offset_count_descriptors_for(layout, result)) {
+        ui::draw_text_in_rect(count.label, 20, count.layout.label, alpha(count.tone, reveal_t),
+                              ui::text_align::left);
+        draw_accent_rule(count.layout.accent, count.tone, reveal_t);
+        ui::draw_text_in_rect(count.value.c_str(), 38, count.layout.value,
+                              alpha(count.tone, reveal_t), ui::text_align::left);
+    }
     ui::draw_line_ex(layout.divider.start, layout.divider.end, 1.0f, alpha(g_theme->border, reveal_t));
-    ui::draw_text_in_rect("SLOW", 20, layout.slow.label, alpha(g_theme->slow, reveal_t),
-                          ui::text_align::left);
-    draw_accent_rule(layout.slow.accent, g_theme->slow, reveal_t);
-    ui::draw_text_in_rect(std::to_string(result.slow_count).c_str(), 38,
-                          layout.slow.value, alpha(g_theme->slow, reveal_t),
-                          ui::text_align::left);
 }
 
 void draw_judgements(const result_data& result, float reveal_t) {
     draw_panel_rect(kJudgementRect, reveal_t, with_alpha(g_theme->panel, 218), g_theme->border);
-    const Rectangle content = ui::inset(reveal_rect(kJudgementRect, reveal_t), ui::edge_insets::symmetric(30.0f, 28.0f));
-    struct row {
-        const char* label;
-        int count;
-        Color color;
-    };
-    const row rows[] = {
-        {"Perfect", result.judge_counts[0], g_theme->judge_perfect},
-        {"Great", result.judge_counts[1], g_theme->judge_great},
-        {"Good", result.judge_counts[2], g_theme->judge_good},
-        {"Bad", result.judge_counts[3], g_theme->judge_bad},
-        {"Miss", result.judge_counts[4], g_theme->judge_miss},
-    };
-    Rectangle rects[5];
-    ui::vstack_fill(content, 8.0f, rects);
-    for (int i = 0; i < 5; ++i) {
-        const judgement_row_layout layout = judgement_row_layout_for(rects[i]);
-        ui::draw_text_in_rect(rows[i].label, 23, layout.label,
-                              alpha(rows[i].color, reveal_t), ui::text_align::left);
-        ui::draw_text_in_rect(std::to_string(rows[i].count).c_str(), 26,
+    const std::array<judgement_row_layout, kJudgements.size()> layouts =
+        judgement_layouts_for(reveal_rect(kJudgementRect, reveal_t));
+    for (std::size_t i = 0; i < kJudgements.size(); ++i) {
+        const judgement_definition& judgement = kJudgements[i];
+        const judgement_row_layout& layout = layouts[i];
+        ui::draw_text_in_rect(judgement.label, 23, layout.label,
+                              alpha(judgement_color(judgement.count_index), reveal_t), ui::text_align::left);
+        ui::draw_text_in_rect(std::to_string(result.judge_counts[judgement.count_index]).c_str(), 26,
                               layout.count,
                               alpha(g_theme->text, reveal_t), ui::text_align::right);
-        if (i < 4) {
+        if (i + 1 < kJudgements.size()) {
             ui::draw_line_ex(layout.divider.start,
                              layout.divider.end,
                              1.0f, alpha(g_theme->border_light, reveal_t * 0.75f));
         }
     }
+}
+
+std::array<result_metric_descriptor, 3> result_metric_descriptors_for(const result_data& result,
+                                                                      float metric_t,
+                                                                      float detail_t) {
+    return {{
+        {kMetricAccuracyRect, "Accuracy", TextFormat("%.2f%%", result.accuracy), g_theme->fast, metric_t},
+        {kMetricComboRect, "Max Combo", std::to_string(result.max_combo), g_theme->accent, metric_t},
+        {kMetricOffsetRect, "Avg Offset", TextFormat("%+.1fms", result.avg_offset), g_theme->text_secondary, detail_t},
+    }};
 }
 
 action draw_action_button(const action_button_layout& button, float reveal_t) {
@@ -531,10 +729,10 @@ action draw_action_button(const action_button_layout& button, float reveal_t) {
 }  // namespace
 
 action shortcut_action() {
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_ESCAPE)) {
+    if (ui::is_enter_pressed() || ui::is_escape_pressed()) {
         return action::song_select;
     }
-    if (IsKeyPressed(KEY_R)) {
+    if (ui::is_key_pressed(KEY_R)) {
         return action::retry;
     }
     return action::none;
@@ -556,14 +754,14 @@ draw_result draw(const model& data) {
     draw_rank_score(data.result, main_t);
     draw_achievements(data, delayed(data.reveal_t, 0.20f));
 
-    draw_metric(kMetricAccuracyRect, "Accuracy", TextFormat("%.2f%%", data.result.accuracy), g_theme->fast, metric_t);
-    draw_metric(kMetricComboRect, "Max Combo", std::to_string(data.result.max_combo), g_theme->accent, metric_t);
-    draw_metric(kMetricOffsetRect, "Avg Offset", TextFormat("%+.1fms", data.result.avg_offset), g_theme->text_secondary,
-                detail_t);
+    for (const result_metric_descriptor& metric : result_metric_descriptors_for(data.result, metric_t, detail_t)) {
+        draw_metric(metric.rect, metric.label, metric.value, metric.tone, metric.reveal_t);
+    }
     draw_offsets(data.result, detail_t);
     draw_judgements(data.result, detail_t);
 
-    for (const action_button_layout& button : kActionButtons) {
+    const std::array<action_button_layout, kActionButtons.size()> action_layouts = action_button_layouts();
+    for (const action_button_layout& button : action_layouts) {
         const action clicked = draw_action_button(button, action_t);
         if (clicked != action::none) {
             result.requested_action = clicked;

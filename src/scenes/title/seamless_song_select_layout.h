@@ -1,6 +1,9 @@
 #pragma once
 
+#include <array>
+
 #include "raylib.h"
+#include "song_select/song_select_state.h"
 #include "song_select/song_select_level_filter.h"
 
 namespace title_play_view {
@@ -51,6 +54,23 @@ struct layout {
     Rectangle ranking_list_rect;
 };
 
+struct play_filter_source_option {
+    Rectangle rect{};
+    const char* label = "";
+    song_select::chart_source_filter value = song_select::chart_source_filter::all;
+};
+
+struct play_filter_key_option {
+    Rectangle rect{};
+    const char* label = "";
+    int value = 0;
+};
+
+struct play_filter_clear_option {
+    Rectangle rect{};
+    const char* label = "";
+};
+
 inline constexpr float kChartFilterMinLevel = song_select::level_filter::kMinLevel;
 inline constexpr float kChartFilterUsefulMaxLevel = song_select::level_filter::kUsefulMaxLevel;
 inline constexpr float kChartFilterMaxLevel = song_select::level_filter::kMaxLevel;
@@ -79,7 +99,10 @@ Rectangle play_filter_button_rect(Rectangle panel);
 Rectangle play_filter_modal_rect(const layout& current);
 Rectangle play_filter_source_button_rect(Rectangle panel, int index);
 Rectangle play_filter_key_button_rect(Rectangle panel, int index);
+std::array<play_filter_source_option, 3> play_filter_source_options(Rectangle panel);
+std::array<play_filter_key_option, 5> play_filter_key_options(Rectangle panel);
 Rectangle play_filter_clear_button_rect(Rectangle panel);
+play_filter_clear_option play_filter_clear_option_for(Rectangle panel);
 Rectangle play_filter_level_slider_rect(Rectangle panel);
 
 float level_filter_t(float level);

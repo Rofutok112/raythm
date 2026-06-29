@@ -10,6 +10,7 @@
 #include "localization/localization.h"
 #include "scene_common.h"
 #include "ui_draw.h"
+#include "ui_scroll.h"
 #include "virtual_screen.h"
 
 namespace settings {
@@ -30,6 +31,9 @@ struct offset_stepper_layout {
     Rectangle single_right_rect;
     Rectangle double_right_rect;
 };
+
+inline constexpr std::array<int, 4> kOffsetStepperDeltas = {-5, -1, 1, 5};
+inline constexpr std::array<const char*, 4> kOffsetStepperLabels = {"<<", "<", ">", ">>"};
 
 struct key_slot_layout {
     Rectangle label_rect;
@@ -108,9 +112,16 @@ inline Rectangle setting_row_rect(float y_offset) {
 
 template <std::size_t Count>
 inline std::array<Rectangle, Count> build_setting_row_stack(float start_y, float step_y) {
+    const Rectangle stack = {
+        kContentRect.x + kRowOffsetX,
+        kContentRect.y + start_y,
+        kRowWidth,
+        kContentRect.height - start_y,
+    };
+    const float row_gap = step_y - kRowHeight;
     std::array<Rectangle, Count> rows{};
     for (std::size_t i = 0; i < Count; ++i) {
-        rows[i] = setting_row_rect(start_y + static_cast<float>(i) * step_y);
+        rows[i] = ui::vertical_list_row_rect(stack, static_cast<int>(i), kRowHeight, row_gap, 0.0f);
     }
     return rows;
 }
@@ -189,6 +200,13 @@ inline offset_stepper_layout global_offset_stepper_layout(const Rectangle& row_r
     };
 }
 
+inline std::array<Rectangle, 4> offset_stepper_button_rects(const offset_stepper_layout& layout) {
+    return {layout.double_left_rect,
+            layout.single_left_rect,
+            layout.single_right_rect,
+            layout.double_right_rect};
+}
+
 inline Rectangle double_arrow_left_rect(const Rectangle& row_rect) {
     return global_offset_stepper_layout(row_rect).double_left_rect;
 }
@@ -206,9 +224,14 @@ inline Rectangle double_arrow_right_rect(const Rectangle& row_rect) {
 }
 
 inline Rectangle key_slot_rect(int index) {
-    return ui::place(kContentRect, kKeySlotWidth, kKeySlotHeight,
-                     ui::anchor::top_left, ui::anchor::top_left,
-                     Vector2{kRowOffsetX, kKeySlotStartY + static_cast<float>(index) * kKeySlotStepY});
+    constexpr float row_gap = kKeySlotStepY - kKeySlotHeight;
+    const Rectangle stack = {
+        kContentRect.x + kRowOffsetX,
+        kContentRect.y + kKeySlotStartY,
+        kKeySlotWidth,
+        kContentRect.height - kKeySlotStartY,
+    };
+    return ui::vertical_list_row_rect(stack, index, kKeySlotHeight, row_gap, 0.0f);
 }
 
 inline key_slot_layout key_slot_layout_for(const Rectangle& row_rect) {

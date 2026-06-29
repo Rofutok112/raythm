@@ -1,8 +1,10 @@
 #include "title/title_local_song_select_controller.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iterator>
+#include <span>
 #include <vector>
 
 #include "services/content_sync_service.h"
@@ -15,6 +17,8 @@
 #include "title/song_list_view.h"
 #include "tween.h"
 #include "ui_draw.h"
+#include "ui_hit.h"
+#include "ui_scroll.h"
 #include "virtual_screen.h"
 
 namespace title_local_song_select_controller {
@@ -32,11 +36,11 @@ using title_play_view::mod_button_rect;
 using title_play_view::mod_modal_rect;
 using title_play_view::no_fail_mod_toggle_rect;
 using title_play_view::play_filter_button_rect;
-using title_play_view::play_filter_clear_button_rect;
-using title_play_view::play_filter_key_button_rect;
+using title_play_view::play_filter_clear_option_for;
+using title_play_view::play_filter_key_options;
 using title_play_view::play_filter_level_slider_rect;
 using title_play_view::play_filter_modal_rect;
-using title_play_view::play_filter_source_button_rect;
+using title_play_view::play_filter_source_options;
 using title_play_view::preview_next_button_rect;
 using title_play_view::preview_play_button_rect;
 using title_play_view::preview_prev_button_rect;
@@ -49,11 +53,18 @@ constexpr int kPlaySongContextMenuItemCount = 1;
 constexpr int kPlayChartContextMenuItemCount = 1;
 
 Rectangle context_menu_item_rect(Rectangle menu_rect, int index = 0) {
-    return {menu_rect.x + kContextMenuInnerPadding,
-            menu_rect.y + kContextMenuInnerPadding + static_cast<float>(index) *
-                (song_select::layout::kContextMenuItemHeight + song_select::layout::kContextMenuItemSpacing),
-            menu_rect.width - kContextMenuInnerPadding * 2.0f,
-            song_select::layout::kContextMenuItemHeight};
+    const Rectangle content = {
+        menu_rect.x + kContextMenuInnerPadding,
+        menu_rect.y + kContextMenuInnerPadding,
+        menu_rect.width - kContextMenuInnerPadding * 2.0f,
+        menu_rect.height - kContextMenuInnerPadding * 2.0f,
+    };
+    return ui::vertical_list_row_rect(
+        content,
+        index,
+        song_select::layout::kContextMenuItemHeight,
+        song_select::layout::kContextMenuItemSpacing,
+        0.0f);
 }
 
 bool block_locked_play_if_needed(song_select::state& state,
@@ -85,6 +96,21 @@ bool apply_play_filter_change(song_select::state& state,
     return true;
 }
 
+bool left_pressed_outside(Rectangle rect, Vector2 mouse) {
+    return ui::is_mouse_button_pressed_outside(rect, mouse);
+}
+
+bool any_menu_button_pressed_outside(Rectangle rect, Vector2 mouse) {
+    const std::array<int, 2> mouse_buttons = {{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT}};
+    return ui::is_any_mouse_button_pressed_outside(rect,
+                                                   mouse,
+                                                   std::span<const int>(mouse_buttons));
+}
+
+bool left_pressed_outside_all(std::span<const Rectangle> rects, Vector2 mouse) {
+    return ui::is_mouse_button_pressed_outside(rects, mouse);
+}
+
 }  // namespace
 title_play_view::update_result update(song_select::state& state,
                                       title_play_view::mode view_mode,
@@ -97,9 +123,9 @@ title_play_view::update_result update(song_select::state& state,
     const bool preview_loading =
         preview.audio.status == song_select::preview_audio_loader::load_status::loading;
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-    const bool right_pressed = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
-    const float wheel = GetMouseWheelMove();
+    const bool left_pressed = ui::is_mouse_button_pressed();
+    const bool right_pressed = ui::is_mouse_button_pressed(MOUSE_BUTTON_RIGHT);
+    const float wheel = ui::mouse_wheel_move();
     const layout current = title_play_view::make_mode_layout(anim_t, origin_rect, view_mode);
     const bool play_mode = view_mode == mode::play;
     const bool create_mode = view_mode == mode::create;
@@ -117,14 +143,14 @@ title_play_view::update_result update(song_select::state& state,
         state.context_menu.target == song_select::context_menu_target::chart;
 
     if (state.confirmation_dialog.open) {
-        if (IsKeyPressed(KEY_ESCAPE)) {
+        if (ui::is_escape_pressed()) {
             state.confirmation_dialog = {};
         }
         return result;
     }
 
     if (play_song_menu_open || play_chart_menu_open) {
-        if (IsKeyPressed(KEY_ESCAPE)) {
+        if (ui::is_escape_pressed()) {
             song_select::close_context_menu(state);
             return result;
         }
@@ -144,7 +170,7 @@ title_play_view::update_result update(song_select::state& state,
             }
             return result;
         }
-        if ((left_pressed || right_pressed) && !ui::contains_point(state.context_menu.rect, mouse)) {
+        if (any_menu_button_pressed_outside(state.context_menu.rect, mouse)) {
             song_select::close_context_menu(state);
             return result;
         }
@@ -153,8 +179,8 @@ title_play_view::update_result update(song_select::state& state,
 
     if (song_select_mode && state.play_filter_modal_open) {
         const Rectangle modal = play_filter_modal_rect(current);
-        if (IsKeyPressed(KEY_ESCAPE) ||
-            (left_pressed && !ui::contains_point(modal, mouse))) {
+        if (ui::is_escape_pressed() ||
+            left_pressed_outside(modal, mouse)) {
             state.play_filter_modal_open = false;
             state.chart_level_filter_dragging = false;
             return result;
@@ -163,10 +189,12 @@ title_play_view::update_result update(song_select::state& state,
 
     if (play_mode && state.play_mod_modal_open) {
         const Rectangle modal = mod_modal_rect(current.ranking_column);
-        if (IsKeyPressed(KEY_ESCAPE) ||
-            (left_pressed &&
-             !ui::contains_point(modal, mouse) &&
-             !ui::contains_point(mod_button_rect(current.ranking_column), mouse))) {
+        const std::array<Rectangle, 2> blocking_rects = {{
+            modal,
+            mod_button_rect(current.ranking_column),
+        }};
+        if (ui::is_escape_pressed() ||
+            left_pressed_outside_all(std::span<const Rectangle>(blocking_rects), mouse)) {
             state.play_mod_modal_open = false;
             return result;
         }
@@ -183,7 +211,7 @@ title_play_view::update_result update(song_select::state& state,
         }
     }
 
-    if (ui::is_clicked(current.back_rect) || IsKeyPressed(KEY_ESCAPE)) {
+    if (ui::is_clicked(current.back_rect) || ui::is_escape_pressed()) {
         result.back_requested = true;
         return result;
     }
@@ -220,31 +248,26 @@ title_play_view::update_result update(song_select::state& state,
 
     if (song_select_mode && state.play_filter_modal_open && left_pressed) {
         const Rectangle filter_panel = play_filter_modal_rect(current);
-        const song_select::chart_source_filter source_values[] = {
-            song_select::chart_source_filter::all,
-            song_select::chart_source_filter::official,
-            song_select::chart_source_filter::community,
-        };
-        for (int index = 0; index < 3; ++index) {
-            if (ui::contains_point(play_filter_source_button_rect(filter_panel, index), mouse)) {
-                if (apply_play_filter_change(state, source_values[index],
+        for (const title_play_view::play_filter_source_option& option : play_filter_source_options(filter_panel)) {
+            if (ui::contains_point(option.rect, mouse)) {
+                if (apply_play_filter_change(state, option.value,
                                              state.chart_key_filter, state.chart_min_level, state.chart_max_level, result)) {
                     return result;
                 }
             }
         }
 
-        const int key_values[] = {0, 4, 5, 6, 7};
-        for (int index = 0; index < 5; ++index) {
-            if (ui::contains_point(play_filter_key_button_rect(filter_panel, index), mouse)) {
-                if (apply_play_filter_change(state, state.chart_source, key_values[index],
+        for (const title_play_view::play_filter_key_option& option : play_filter_key_options(filter_panel)) {
+            if (ui::contains_point(option.rect, mouse)) {
+                if (apply_play_filter_change(state, state.chart_source, option.value,
                                              state.chart_min_level, state.chart_max_level, result)) {
                     return result;
                 }
             }
         }
 
-        if (ui::contains_point(play_filter_clear_button_rect(filter_panel), mouse)) {
+        const title_play_view::play_filter_clear_option clear = play_filter_clear_option_for(filter_panel);
+        if (ui::contains_point(clear.rect, mouse)) {
             const bool search_changed = !state.play_search_input.value.empty();
             if (search_changed) {
                 state.play_search_input = {};
@@ -269,12 +292,12 @@ title_play_view::update_result update(song_select::state& state,
         }
     }
 
-    if (song_select_mode && state.play_filter_modal_open && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+    if (song_select_mode && state.play_filter_modal_open && ui::is_mouse_button_down()) {
         const Rectangle filter_panel = play_filter_modal_rect(current);
         const Rectangle slider = play_filter_level_slider_rect(filter_panel);
         const Rectangle min_chip = level_filter_chip_rect(slider, state.chart_min_level);
         const Rectangle max_chip = level_filter_chip_rect(slider, state.chart_max_level);
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (ui::is_mouse_button_pressed()) {
             if (ui::contains_point(max_chip, mouse)) {
                 state.chart_level_filter_dragging = true;
                 state.chart_level_filter_dragging_min = false;
@@ -295,7 +318,7 @@ title_play_view::update_result update(song_select::state& state,
             }
         }
     }
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+    if (ui::is_mouse_button_released()) {
         state.chart_level_filter_dragging = false;
     }
     if (song_select_mode && state.play_filter_modal_open &&
@@ -319,7 +342,7 @@ title_play_view::update_result update(song_select::state& state,
                 const float ratio = std::clamp((mouse.x - progress.x) / progress.width, 0.0f, 1.0f);
                 state.preview_bar_drag_position_seconds = preview_length * static_cast<double>(ratio);
             }
-            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            if (ui::is_mouse_button_down()) {
                 return result;
             }
             result.preview_seek_requested = true;
@@ -332,7 +355,7 @@ title_play_view::update_result update(song_select::state& state,
         }
     }
 
-    if (play_mode && !state.play_search_input.active && IsKeyPressed(KEY_ENTER) && has_selection) {
+    if (play_mode && !state.play_search_input.active && ui::is_enter_pressed() && has_selection) {
         const song_select::song_entry* song = song_select::selected_song(state);
         const song_select::chart_option* chart = song_select::selected_chart_for(state, filtered);
         if (block_locked_play_if_needed(state, song, chart)) {
@@ -533,27 +556,27 @@ title_play_view::update_result update(song_select::state& state,
     const std::vector<int> song_indices = song_select::filtered_song_indices(state);
     const auto selected_song_it = std::find(song_indices.begin(), song_indices.end(), state.selected_song_index);
     if (!state.play_search_input.active && !song_indices.empty() && selected_song_it != song_indices.end() &&
-        (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W))) {
+        ui::is_up_pressed()) {
         if (selected_song_it != song_indices.begin() &&
             song_select::apply_song_selection(state, *std::prev(selected_song_it), 0)) {
             result.song_selection_changed = true;
         }
     } else if (!state.play_search_input.active && !song_indices.empty() && selected_song_it != song_indices.end() &&
-               (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S))) {
+               ui::is_down_pressed()) {
         if (std::next(selected_song_it) != song_indices.end() &&
             song_select::apply_song_selection(state, *std::next(selected_song_it), 0)) {
             result.song_selection_changed = true;
         }
     }
 
-    if (!state.play_search_input.active && !filtered.empty() && (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A))) {
+    if (!state.play_search_input.active && !filtered.empty() && ui::is_left_pressed()) {
         const int next_index = std::clamp(state.difficulty_index - 1, 0, static_cast<int>(filtered.size()) - 1);
         if (next_index != state.difficulty_index) {
             state.difficulty_index = next_index;
             state.chart_change_anim_t = 1.0f;
             result.chart_selection_changed = true;
         }
-    } else if (!state.play_search_input.active && !filtered.empty() && (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D))) {
+    } else if (!state.play_search_input.active && !filtered.empty() && ui::is_right_pressed()) {
         const int next_index = std::clamp(state.difficulty_index + 1, 0, static_cast<int>(filtered.size()) - 1);
         if (next_index != state.difficulty_index) {
             state.difficulty_index = next_index;
@@ -564,32 +587,34 @@ title_play_view::update_result update(song_select::state& state,
 
     const Rectangle song_scroll_area = song_select_mode ? song_list_rect(current) : current.song_column;
     if (ui::contains_point(song_scroll_area, mouse) && wheel != 0.0f) {
-        state.scroll_y_target -= wheel * kWheelScrollStep;
+        state.scroll_y_target = ui::wheel_scrolled_target(state.scroll_y_target, wheel, kWheelScrollStep);
     } else if (ui::contains_point(current.chart_buttons_rect, mouse) && wheel != 0.0f) {
-        state.chart_scroll_y_target -= wheel * kWheelScrollStep;
+        state.chart_scroll_y_target =
+            ui::wheel_scrolled_target(state.chart_scroll_y_target, wheel, kWheelScrollStep);
     } else if (play_mode && ui::contains_point(current.ranking_list_rect, mouse) && wheel != 0.0f) {
-        state.ranking_panel.scroll_y_target -= wheel * kWheelScrollStep;
+        state.ranking_panel.scroll_y_target =
+            ui::wheel_scrolled_target(state.ranking_panel.scroll_y_target, wheel, kWheelScrollStep);
     }
 
-    state.scroll_y_target = std::clamp(
-        state.scroll_y_target, 0.0f,
+    state.scroll_y_target = ui::clamp_scroll_offset(
+        state.scroll_y_target,
         song_select_mode
             ? title_song_list_view::max_scroll(song_list_rect(current), state)
             : title_song_list_view::max_scroll(current.song_column, state));
     state.scroll_y = tween::damp(state.scroll_y, state.scroll_y_target, dt, 12.0f, 0.5f);
 
-    state.chart_scroll_y_target = std::clamp(
-        state.chart_scroll_y_target, 0.0f,
+    state.chart_scroll_y_target = ui::clamp_scroll_offset(
+        state.chart_scroll_y_target,
         title_center_view::max_chart_scroll(current.chart_buttons_rect, static_cast<int>(filtered.size())));
     state.chart_scroll_y = tween::damp(state.chart_scroll_y, state.chart_scroll_y_target, dt, 12.0f, 0.5f);
 
-    state.embedded_chart_scroll_y_target = std::clamp(state.embedded_chart_scroll_y_target, 0.0f, 0.0f);
+    state.embedded_chart_scroll_y_target = ui::clamp_scroll_offset(state.embedded_chart_scroll_y_target, 0.0f);
     state.embedded_chart_scroll_y =
         tween::damp(state.embedded_chart_scroll_y, state.embedded_chart_scroll_y_target, dt, 12.0f, 0.5f);
 
     if (play_mode) {
-        state.ranking_panel.scroll_y_target = std::clamp(
-            state.ranking_panel.scroll_y_target, 0.0f,
+        state.ranking_panel.scroll_y_target = ui::clamp_scroll_offset(
+            state.ranking_panel.scroll_y_target,
             title_ranking_view::max_scroll(current.ranking_list_rect, state.ranking_panel.listing));
         state.ranking_panel.scroll_y =
             tween::damp(state.ranking_panel.scroll_y, state.ranking_panel.scroll_y_target, dt, 12.0f, 0.5f);

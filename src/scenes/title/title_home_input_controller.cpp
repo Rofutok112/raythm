@@ -15,7 +15,7 @@ title_home_input_controller::result title_home_input_controller::update(
     float home_menu_anim,
     bool suppress_pointer_this_frame) {
     result output;
-    if (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+    if (ui::is_cancel_pressed()) {
         output.consumed = true;
         output.enter_title = true;
         return output;
@@ -41,14 +41,14 @@ title_home_input_controller::result title_home_input_controller::update(
         }
     }
 
-    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) {
+    if (ui::is_right_pressed()) {
         selected_index = (selected_index + 1) % static_cast<int>(title_home_view::entry_count());
     }
-    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) {
+    if (ui::is_left_pressed()) {
         selected_index = (selected_index - 1 + static_cast<int>(title_home_view::entry_count())) %
                          static_cast<int>(title_home_view::entry_count());
     }
-    if (IsKeyPressed(KEY_ENTER)) {
+    if (ui::is_enter_pressed()) {
         const title_home_view::entry& entry =
             title_home_view::entry_at(static_cast<std::size_t>(selected_index));
         output.consumed = true;

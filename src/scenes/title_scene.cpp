@@ -34,6 +34,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_frame.h"
+#include "ui_hit.h"
 #include "virtual_screen.h"
 
 namespace {
@@ -505,7 +506,7 @@ void title_scene::update_settings_mode(float dt) {
 }
 
 void title_scene::update_title_quit(float dt) {
-    if (mode_ == hub_mode::title && IsKeyDown(KEY_ESCAPE)) {
+    if (mode_ == hub_mode::title && ui::is_key_down(KEY_ESCAPE)) {
         esc_hold_t_ += dt;
         if (esc_hold_t_ >= 0.3f) {
             esc_hold_t_ = 0.0f;
@@ -689,7 +690,7 @@ void title_scene::update(float dt) {
         return;
     }
 
-    if (play_create_feature_.state().confirmation_dialog.open && IsKeyPressed(KEY_ESCAPE)) {
+    if (play_create_feature_.state().confirmation_dialog.open && ui::is_escape_pressed()) {
         play_create_feature_.cancel_confirmation();
         return;
     }

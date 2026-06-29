@@ -32,7 +32,7 @@ bool update_scrub(state& state,
         const float ratio = std::clamp((mouse.x - bar_rect.x) / bar_rect.width, 0.0f, 1.0f);
         state.preview_bar_drag_position_seconds = preview_length * static_cast<double>(ratio);
     }
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+    if (ui::is_mouse_button_down()) {
         return true;
     }
 

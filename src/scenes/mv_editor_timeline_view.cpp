@@ -9,12 +9,14 @@
 #include "ui_clip.h"
 #include "ui_draw.h"
 #include "ui_hit.h"
+#include "ui_scroll.h"
 #include "ui_text.h"
 #include "ui/icons/raythm_icons.h"
 
 namespace {
 
 constexpr float kTimelineRowHeight = 24.0f;
+constexpr float kTimelineBottomPadding = 20.0f;
 constexpr float kTimelineWheelStep = 44.0f;
 constexpr float kTimelineHorizontalWheelMs = 700.0f;
 
@@ -108,7 +110,7 @@ mv_editor_timeline_layer_row_result draw_mv_timeline_layer_name_row(Rectangle la
                           {lock_btn.x + lock_btn.width + 8.0f, layer_row.y,
                            delete_btn.x - lock_btn.x - lock_btn.width - 12.0f, layer_row.height},
                           selected ? g_theme->text : g_theme->text_muted, ui::text_align::left);
-    if (ui::is_hovered(layer_row) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    if (ui::is_hovered(layer_row) && ui::is_mouse_button_pressed()) {
         return {
             .action = mv_editor_timeline_layer_row_action::select,
             .layer_id = layer.id,
@@ -126,7 +128,7 @@ mv_editor_timeline_scrub_result timeline_scrub_result_for(bool lane_hovered,
                                                           double duration,
                                                           Vector2 mouse) {
     if (!lane_hovered ||
-        !IsMouseButtonDown(MOUSE_BUTTON_LEFT) ||
+        !ui::is_mouse_button_down() ||
         timeline_dragging ||
         timeline_span_hit) {
         return {};
@@ -152,7 +154,7 @@ mv_editor_timeline_drag_start_result timeline_drag_start_result_for(
     Rectangle right_handle,
     float timeline_mouse_x,
     double end_ms) {
-    if (locked || !IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    if (locked || !ui::is_mouse_button_pressed()) {
         return {};
     }
 
@@ -237,8 +239,25 @@ mv_editor_timeline_drag_update_result timeline_drag_update_result_for(
 
 mv_editor_timeline_drag_end_result timeline_drag_end_result_for(bool timeline_drag_active) {
     return {
-        .ended = timeline_drag_active && IsMouseButtonReleased(MOUSE_BUTTON_LEFT),
+        .ended = timeline_drag_active && ui::is_mouse_button_released(),
     };
+}
+
+float timeline_content_height(std::size_t row_count) {
+    return ui::vertical_list_content_height_with_trailing_padding(
+        row_count,
+        kTimelineRowHeight,
+        0.0f,
+        kTimelineBottomPadding);
+}
+
+constexpr float timeline_row_y(Rectangle track_area, int row_index, float scroll_offset) {
+    return ui::vertical_list_row_rect(
+        {track_area.x, track_area.y + 10.0f, track_area.width, track_area.height},
+        row_index,
+        kTimelineRowHeight,
+        0.0f,
+        scroll_offset).y;
 }
 
 } // namespace
@@ -272,6 +291,8 @@ mv_editor_timeline_view_result draw_mv_timeline_view(Rectangle panel,
     ui::surface(layer_name_area, with_alpha(g_theme->row, 145), g_theme->border_light, 1.0f);
 
     const double safe_duration = std::max(1.0, duration_ms);
+    const float content_height = timeline_content_height(composition.objects.size());
+    const float max_vertical_scroll = ui::max_scroll_offset(content_height, lane_area);
     const bool timeline_hovered = ui::contains_point(track_area, mouse);
     if (timeline_hovered && wheel != 0.0f) {
         if (ctrl_down) {
@@ -285,7 +306,8 @@ mv_editor_timeline_view_result draw_mv_timeline_view(Rectangle panel,
         } else if (shift_down) {
             result.horizontal_scroll_ms -= static_cast<double>(wheel) * kTimelineHorizontalWheelMs / result.zoom;
         } else {
-            result.vertical_scroll_offset -= wheel * kTimelineWheelStep;
+            result.vertical_scroll_offset = ui::wheel_scrolled_offset(
+                track_area, mouse, wheel, result.vertical_scroll_offset, max_vertical_scroll, kTimelineWheelStep);
         }
     }
 
@@ -293,11 +315,7 @@ mv_editor_timeline_view_result draw_mv_timeline_view(Rectangle panel,
     result.horizontal_scroll_ms = std::clamp(result.horizontal_scroll_ms,
                                              0.0,
                                              std::max(0.0, safe_duration - visible_duration_ms));
-    const float timeline_content_height =
-        static_cast<float>(composition.objects.size()) * kTimelineRowHeight + 20.0f;
-    result.vertical_scroll_offset = std::clamp(result.vertical_scroll_offset,
-                                               0.0f,
-                                               std::max(0.0f, timeline_content_height - lane_area.height));
+    result.vertical_scroll_offset = ui::clamp_scroll_offset(result.vertical_scroll_offset, max_vertical_scroll);
 
     {
         ui::scoped_clip_rect lane_grid_clip(lane_area);
@@ -314,15 +332,30 @@ mv_editor_timeline_view_result draw_mv_timeline_view(Rectangle panel,
 
     const double ms_per_pixel = visible_duration_ms / std::max(1.0f, lane_area.width);
     bool timeline_span_hit = false;
-    bool timeline_dragging = state.drag.active && IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+    bool timeline_dragging = state.drag.active && ui::is_mouse_button_down();
     mv_editor_timeline_drag_update_mode active_drag_mode = state.drag.mode;
     std::string active_drag_layer_id = state.drag.layer_id;
     float active_origin_mouse_x = state.drag.origin_mouse_x;
     double active_origin_start_ms = state.drag.origin_start_ms;
     double active_origin_duration_ms = state.drag.origin_duration_ms;
 
-    float row_y = track_area.y + 10.0f - result.vertical_scroll_offset;
-    for (const mv::composition::layer& layer : composition.objects) {
+    const Rectangle timeline_row_viewport{
+        track_area.x,
+        track_area.y + 10.0f,
+        track_area.width,
+        track_area.height,
+    };
+    const ui::index_range visible_rows = ui::vertical_list_visible_range(
+        composition.objects.size(),
+        timeline_row_viewport,
+        lane_area,
+        kTimelineRowHeight,
+        0.0f,
+        result.vertical_scroll_offset,
+        24.0f);
+    for (int row_index = visible_rows.begin; row_index < visible_rows.end; ++row_index) {
+        const mv::composition::layer& layer = composition.objects[static_cast<std::size_t>(row_index)];
+        const float row_y = timeline_row_y(track_area, row_index, result.vertical_scroll_offset);
         const Rectangle layer_row = {layer_name_area.x, row_y - 4.0f, layer_name_area.width, 24.0f};
         const bool selected = layer.id == selected_layer_id;
         {
@@ -396,11 +429,6 @@ mv_editor_timeline_view_result draw_mv_timeline_view(Rectangle panel,
                     ui::surface_fill(marker, marker_color);
                 }
             }
-        }
-
-        row_y += kTimelineRowHeight;
-        if (row_y > lane_area.y + lane_area.height - 12.0f) {
-            break;
         }
     }
 

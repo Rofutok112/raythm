@@ -10,6 +10,7 @@
 #include "ui_clip.h"
 #include "ui_draw.h"
 #include "ui_layout.h"
+#include "ui_scroll.h"
 #include "ui_tooltip.h"
 #include "ui/icons/raythm_icons.h"
 #include "shared/content_status_badge.h"
@@ -121,6 +122,15 @@ struct classic_chart_row_layout {
     Rectangle level_badge;
     Rectangle key_mode;
     Rectangle rank;
+};
+
+struct chart_row_view {
+    const song_select::chart_option* item = nullptr;
+    int index = -1;
+    Rectangle rect{};
+    bool selected = false;
+    bool locked = false;
+    unsigned char row_alpha = 255;
 };
 
 jacket_layout make_jacket_layout(Rectangle jacket_rect) {
@@ -279,9 +289,8 @@ classic_chart_row_layout make_classic_chart_row_layout(Rectangle row) {
     };
 }
 
-bool rect_visible_in(Rectangle viewport, Rectangle rect) {
-    return rect.y + rect.height >= viewport.y - kClipSlack &&
-           rect.y <= viewport.y + viewport.height + kClipSlack;
+Rectangle chart_button_rect_for(Rectangle area, int index, float scroll_y) {
+    return ui::vertical_list_row_rect(area, index, kChartButtonHeight, kChartButtonGap, scroll_y);
 }
 
 const char* rank_label(rank value) {
@@ -338,6 +347,28 @@ std::string format_score(int value) {
     return digits;
 }
 
+chart_row_view chart_row_view_for(const song_select::song_entry& song,
+                                  const song_select::chart_option& item,
+                                  int index,
+                                  Rectangle area,
+                                  float scroll_y,
+                                  int selected_index,
+                                  const title_center_view::draw_config& config) {
+    const Rectangle row = chart_button_rect_for(area, index, scroll_y);
+    const bool selected = index == selected_index;
+    const bool hovered = ui::is_hovered(row);
+    return {
+        .item = &item,
+        .index = index,
+        .rect = row,
+        .selected = selected,
+        .locked = content_is_play_locked(song.song.meta, item.meta),
+        .row_alpha = selected ? config.selected_row_alpha
+            : hovered ? config.hover_row_alpha
+                      : config.normal_row_alpha,
+    };
+}
+
 void draw_source_tag(Rectangle rect, content_status status, unsigned char alpha) {
     const Color color = content_status_badge::color(status);
     ui::surface(rect,
@@ -361,18 +392,9 @@ unsigned char scale_alpha(unsigned char alpha, float scale) {
     return static_cast<unsigned char>(std::clamp(static_cast<float>(alpha) * scale, 0.0f, 255.0f));
 }
 
-Rectangle centered_square(Rectangle rect, float size) {
-    return {
-        rect.x + (rect.width - size) * 0.5f,
-        rect.y + (rect.height - size) * 0.5f,
-        size,
-        size,
-    };
-}
-
 void draw_locked_overlay(Rectangle rect, unsigned char alpha, float icon_size) {
     ui::backdrop(rect, with_alpha(g_theme->bg, scale_alpha(alpha, 0.48f)));
-    raythm_icons::draw_lock(centered_square(rect, icon_size), with_alpha(g_theme->slow, alpha), 3.0f);
+    raythm_icons::draw_lock(ui::centered_square(rect, icon_size), with_alpha(g_theme->slow, alpha), 3.0f);
 }
 
 void draw_preview_jacket(const title_preview_snapshot& preview,
@@ -425,22 +447,26 @@ void draw_compact_song_info(const song_select::song_entry& song,
                           layout.genre_label,
                           with_alpha(t.accent, config.alpha), ui::text_align::left);
 
-    float tag_x = layout.genre_lane.x;
+    ui::wrapped_layout_cursor genre_tags =
+        ui::wrapped_cursor(layout.genre_lane, 8.0f, layout.genre_lane.height);
     int drawn = 0;
     const auto draw_genre_tag = [&](const std::string& label) {
         if (label.empty() || drawn >= 3) {
             return;
         }
         const float width = std::clamp(ui::measure_text_size(label.c_str(), 12.0f).x + 20.0f, 70.0f, 132.0f);
-        if (tag_x + width > layout.genre_lane.x + layout.genre_lane.width) {
+        if (width > layout.genre_lane.width) {
             return;
         }
-        draw_compact_song_chip({tag_x, layout.genre_lane.y, width, layout.genre_lane.height},
+        const std::optional<Rectangle> tag_rect = genre_tags.next(width, layout.genre_lane.height);
+        if (!tag_rect.has_value()) {
+            return;
+        }
+        draw_compact_song_chip(*tag_rect,
                                label.c_str(),
                                with_alpha(t.row_soft, static_cast<unsigned char>(config.normal_row_alpha * 0.85f)),
                                with_alpha(t.accent, config.alpha),
                                with_alpha(t.accent, config.alpha));
-        tag_x += width + 8.0f;
         ++drawn;
     };
     for (const std::string& label : song.song.meta.genres) {
@@ -453,27 +479,31 @@ void draw_compact_song_info(const song_select::song_entry& song,
     ui::draw_text_in_rect("キーワード", 12,
                           layout.keyword_label,
                           with_alpha(t.accent, config.alpha), ui::text_align::left);
-    float keyword_x = layout.keyword_lane.x;
+    ui::wrapped_layout_cursor keyword_tags =
+        ui::wrapped_cursor(layout.keyword_lane, 8.0f, layout.keyword_lane.height);
     int keywords = 0;
     for (const std::string& keyword : song.song.meta.keywords) {
         if (keyword.empty() || keywords >= 3) {
             continue;
         }
         const float width = std::clamp(ui::measure_text_size(keyword.c_str(), 12.0f).x + 20.0f, 76.0f, 132.0f);
-        if (keyword_x + width > layout.keyword_lane.x + layout.keyword_lane.width) {
+        if (width > layout.keyword_lane.width) {
             break;
         }
-        draw_compact_song_chip({keyword_x, layout.keyword_lane.y, width, layout.keyword_lane.height},
+        const std::optional<Rectangle> keyword_rect = keyword_tags.next(width, layout.keyword_lane.height);
+        if (!keyword_rect.has_value()) {
+            break;
+        }
+        draw_compact_song_chip(*keyword_rect,
                                keyword.c_str(),
                                with_alpha(t.row_soft, static_cast<unsigned char>(config.normal_row_alpha * 0.65f)),
                                with_alpha(t.border_light, config.alpha),
                                with_alpha(t.text_secondary, config.alpha));
-        keyword_x += width + 8.0f;
         ++keywords;
     }
     if (keywords == 0) {
         ui::draw_text_in_rect("-", 14,
-                              {keyword_x, layout.keyword_lane.y + 2.0f, 40.0f, 22.0f},
+                              {keyword_tags.x, layout.keyword_lane.y + 2.0f, 40.0f, 22.0f},
                               with_alpha(t.text_muted, config.alpha), ui::text_align::left);
     }
 }
@@ -596,6 +626,13 @@ void draw_compact_chart_row(const song_select::chart_option& item,
     }
 }
 
+void draw_compact_chart_row(const chart_row_view& row, const title_center_view::draw_config& config) {
+    if (row.item == nullptr) {
+        return;
+    }
+    draw_compact_chart_row(*row.item, row.rect, row.selected, row.locked, row.row_alpha, config);
+}
+
 void draw_classic_chart_row(const song_select::chart_option& item,
                             Rectangle row,
                             bool selected,
@@ -635,38 +672,36 @@ void draw_classic_chart_row(const song_select::chart_option& item,
     }
 }
 
+void draw_classic_chart_row(const chart_row_view& row, const title_center_view::draw_config& config) {
+    if (row.item == nullptr) {
+        return;
+    }
+    draw_classic_chart_row(*row.item, row.rect, row.selected, row.locked, row.row_alpha, config);
+}
+
 }  // namespace
 
 namespace title_center_view {
 
 float chart_list_content_height(int count) {
-    if (count <= 0) {
-        return 0.0f;
-    }
-    return static_cast<float>(count) * (kChartButtonHeight + kChartButtonGap) - kChartButtonGap;
+    return ui::vertical_list_content_height(count, kChartButtonHeight, kChartButtonGap);
 }
 
 float max_chart_scroll(Rectangle area, int count) {
-    return std::max(0.0f, chart_list_content_height(count) - area.height);
+    return ui::max_scroll_offset(chart_list_content_height(count), area);
 }
 
 Rectangle chart_button_rect(Rectangle area, int index, float scroll_y) {
-    return {
-        area.x,
-        area.y + static_cast<float>(index) * (kChartButtonHeight + kChartButtonGap) - scroll_y,
-        area.width,
-        kChartButtonHeight
-    };
+    return chart_button_rect_for(area, index, scroll_y);
 }
 
 int hit_test_chart(Rectangle area, float scroll_y, Vector2 point, int count) {
     if (!ui::contains_point(area, point)) {
         return -1;
     }
-    for (int index = 0; index < count; ++index) {
-        if (ui::contains_point(chart_button_rect(area, index, scroll_y), point)) {
-            return index;
-        }
+    const int index = ui::vertical_list_index_at_y(point.y, area, kChartButtonHeight, kChartButtonGap, scroll_y);
+    if (index >= 0 && index < count && ui::contains_point(chart_button_rect(area, index, scroll_y), point)) {
+        return index;
     }
     return -1;
 }
@@ -714,24 +749,28 @@ void draw(const song_select::state& state,
     }
 
     ui::scoped_clip_rect clip(config.chart_buttons_rect);
-    for (int i = 0; i < static_cast<int>(filtered.size()); ++i) {
+    const ui::index_range visible_rows = ui::vertical_list_visible_range(
+        filtered.size(),
+        config.chart_buttons_rect,
+        kChartButtonHeight,
+        kChartButtonGap,
+        state.chart_scroll_y,
+        kClipSlack);
+    for (int i = visible_rows.begin; i < visible_rows.end; ++i) {
         const song_select::chart_option& item = *filtered[static_cast<size_t>(i)];
-        const Rectangle row = chart_button_rect(config.chart_buttons_rect, i, state.chart_scroll_y);
-        if (!rect_visible_in(config.chart_buttons_rect, row)) {
-            continue;
-        }
-
-        const bool selected = i == state.difficulty_index;
-        const bool hovered = ui::is_hovered(row);
-        const bool locked = content_is_play_locked(song->song.meta, item.meta);
-        const unsigned char row_alpha = selected ? config.selected_row_alpha
-            : hovered ? config.hover_row_alpha
-                      : config.normal_row_alpha;
+        const chart_row_view row = chart_row_view_for(
+            *song,
+            item,
+            i,
+            config.chart_buttons_rect,
+            state.chart_scroll_y,
+            state.difficulty_index,
+            config);
         if (config.compact_song_header) {
-            draw_compact_chart_row(item, row, selected, locked, row_alpha, config);
+            draw_compact_chart_row(row, config);
             continue;
         }
-        draw_classic_chart_row(item, row, selected, locked, row_alpha, config);
+        draw_classic_chart_row(row, config);
     }
 }
 

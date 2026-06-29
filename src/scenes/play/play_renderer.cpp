@@ -13,6 +13,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_scroll.h"
 #include "raymath.h"
 #include "rlgl.h"
 
@@ -643,9 +644,13 @@ void draw_lane_layer_texture(const Texture2D& texture, Color tint) {
 void draw_lane_layer_texture_scissor_fade(const Texture2D& texture, float hidden_end_y, float fade_end_y) {
     const int full_y = static_cast<int>(std::ceil(fade_end_y));
     if (full_y < kScreenHeight) {
-        BeginScissorMode(0, full_y, kScreenWidth, kScreenHeight - full_y);
+        const ui::scoped_clip_rect clip({
+            0.0f,
+            static_cast<float>(full_y),
+            static_cast<float>(kScreenWidth),
+            static_cast<float>(kScreenHeight - full_y),
+        });
         draw_lane_layer_texture(texture, WHITE);
-        EndScissorMode();
     }
 
     if (fade_end_y <= hidden_end_y) {
@@ -662,9 +667,13 @@ void draw_lane_layer_texture_scissor_fade(const Texture2D& texture, float hidden
         const int scissor_height = std::max(1, scissor_bottom - scissor_y);
         const float alpha_t = std::clamp((t0 + t1) * 0.5f, 0.0f, 1.0f);
         const unsigned char alpha = static_cast<unsigned char>(255.0f * alpha_t * alpha_t);
-        BeginScissorMode(0, scissor_y, kScreenWidth, scissor_height);
+        const ui::scoped_clip_rect clip({
+            0.0f,
+            static_cast<float>(scissor_y),
+            static_cast<float>(kScreenWidth),
+            static_cast<float>(scissor_height),
+        });
         draw_lane_layer_texture(texture, with_alpha(WHITE, alpha));
-        EndScissorMode();
     }
 }
 
@@ -1119,13 +1128,14 @@ void draw_overlay(const play_session_state& state, const Texture2D* jacket_textu
         ui::surface(panel, with_alpha(g_theme->panel, 185), g_theme->border, 2.0f);
         ui::draw_text_in_rect("MULTIPLAY", 18, {panel.x + 16.0f, panel.y + 10.0f, panel.width - 32.0f, 24.0f},
                               g_theme->text_muted, ui::text_align::left);
+        const Rectangle score_rows = {panel.x + 16.0f, panel.y + 40.0f, panel.width - 32.0f, panel.height - 40.0f};
         for (int i = 0; i < static_cast<int>(state.multiplayer_scores.size()); ++i) {
             const play_multiplayer_score_row& score = state.multiplayer_scores[static_cast<size_t>(i)];
             const std::string row = std::to_string(i + 1) + ". " + score.display_name + "  " +
                 std::to_string(score.score) + "  " + TextFormat("%.2f%%", score.accuracy);
+            const Rectangle row_rect = ui::vertical_list_row_rect(score_rows, i, 24.0f, 6.0f, 0.0f);
             ui::draw_text_in_rect(row.c_str(), 18,
-                                  {panel.x + 16.0f, panel.y + 40.0f + static_cast<float>(i) * 30.0f,
-                                   panel.width - 32.0f, 24.0f},
+                                  row_rect,
                                   score.failed ? g_theme->error : g_theme->text, ui::text_align::left);
         }
     }

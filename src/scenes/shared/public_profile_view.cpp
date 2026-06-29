@@ -1,6 +1,5 @@
 #include "shared/public_profile_view.h"
 
-#include <algorithm>
 #include <array>
 #include <cctype>
 #include <string>
@@ -10,7 +9,10 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_hit.h"
+#include "ui_layout.h"
 #include "ui_modal.h"
+#include "ui_scroll.h"
 #include "virtual_screen.h"
 
 namespace public_profile_view {
@@ -96,6 +98,36 @@ struct modal_layout {
     ui::draw_layer layer = ui::draw_layer::modal;
 };
 
+struct tab_descriptor {
+    tab value = tab::overview;
+    const char* label = "";
+};
+
+struct tab_button_layout {
+    tab_descriptor descriptor{};
+    Rectangle rect{};
+};
+
+enum class header_action_style {
+    close,
+    relationship,
+};
+
+struct header_action_button {
+    Rectangle rect{};
+    const char* label = "";
+    command_type command = command_type::none;
+    bool enabled = true;
+    header_action_style style = header_action_style::close;
+};
+
+constexpr std::array<tab_descriptor, kTabCount> kTabs = {{
+    {tab::overview, "OVERVIEW"},
+    {tab::best_rc, "BEST RC"},
+    {tab::links, "LINKS"},
+    {tab::social, "SOCIAL"},
+}};
+
 std::string avatar_label(const auth::public_profile& profile) {
     const std::string& source = profile.display_name.empty() ? profile.id : profile.display_name;
     std::string result;
@@ -141,12 +173,56 @@ profile_header_layout make_profile_header_layout(Rectangle modal) {
     };
 }
 
-Rectangle tab_rect(Rectangle modal, int index) {
+Rectangle tab_bar_rect_for(Rectangle modal) {
     return {
-        modal.x + kContentOuterPadding + static_cast<float>(index) * (kTabWidth + kTabGap),
+        modal.x + kContentOuterPadding,
         modal.y + kHeaderHeight,
-        kTabWidth,
+        modal.width - kContentOuterPadding * 2.0f,
         kTabHeight,
+    };
+}
+
+std::array<Rectangle, kTabCount> tab_rects_for(Rectangle modal) {
+    std::array<Rectangle, kTabCount> tabs{};
+    ui::hstack(tab_bar_rect_for(modal),
+               kTabWidth,
+               kTabGap,
+               tabs);
+    return tabs;
+}
+
+std::array<tab_button_layout, kTabCount> tab_buttons_for(const modal_layout& layout) {
+    std::array<tab_button_layout, kTabCount> buttons{};
+    for (std::size_t index = 0; index < buttons.size(); ++index) {
+        buttons[index] = {
+            .descriptor = kTabs[index],
+            .rect = layout.tab_rects[index],
+        };
+    }
+    return buttons;
+}
+
+header_action_button close_header_action_for(const modal_layout& layout) {
+    return {
+        .rect = layout.close_button_rect,
+        .label = "CLOSE",
+        .command = command_type::close,
+        .enabled = true,
+        .style = header_action_style::close,
+    };
+}
+
+header_action_button relationship_header_action_for(const modal_layout& layout,
+                                                    const auth::public_profile& profile,
+                                                    bool operation_active) {
+    const public_profile_state::relationship_action_view relationship_action =
+        public_profile_state::relationship_action_for(profile, operation_active);
+    return {
+        .rect = layout.relationship_button_rect,
+        .label = relationship_action.label,
+        .command = command_type::start_relationship_action,
+        .enabled = relationship_action.enabled,
+        .style = header_action_style::relationship,
     };
 }
 
@@ -161,10 +237,8 @@ modal_layout make_layout(float open_anim, ui::draw_layer layer = ui::draw_layer:
     const ui::rect_pair close_split = ui::split_trailing(header_actions, kCloseButtonWidth, kHeaderActionGap);
     const ui::rect_pair relationship_split =
         ui::split_trailing(close_split.first, kRelationshipButtonWidth, kHeaderActionGap);
-    std::array<Rectangle, kTabCount> tabs{};
-    for (int i = 0; i < kTabCount; ++i) {
-        tabs[static_cast<size_t>(i)] = tab_rect(modal, i);
-    }
+    const Rectangle tab_bar = tab_bar_rect_for(modal);
+    const std::array<Rectangle, kTabCount> tabs = tab_rects_for(modal);
     return {
         .modal_rect = modal,
         .content_rect = {
@@ -175,48 +249,19 @@ modal_layout make_layout(float open_anim, ui::draw_layer layer = ui::draw_layer:
         },
         .close_button_rect = close_split.second,
         .relationship_button_rect = relationship_split.second,
-        .tab_bar_rect = {
-            modal.x + kContentOuterPadding,
-            modal.y + kHeaderHeight,
-            modal.width - kContentOuterPadding * 2.0f,
-            kTabHeight,
-        },
+        .tab_bar_rect = tab_bar,
         .tab_rects = tabs,
         .header = make_profile_header_layout(modal),
         .layer = layer,
     };
 }
 
-tab tab_for_index(int index) {
-    switch (index) {
-    case 1:
-        return tab::best_rc;
-    case 2:
-        return tab::links;
-    case 3:
-        return tab::social;
-    default:
-        return tab::overview;
-    }
-}
-
-float max_link_scroll(Rectangle content, int item_count) {
-    const float content_height =
-        static_cast<float>(item_count) * (kLinkRowHeight + kLinkRowGap) - kLinkRowGap;
-    return std::max(0.0f, content_height - content.height);
-}
-
-float max_best_rating_scroll(Rectangle content, int item_count) {
-    return max_link_scroll(content, item_count);
+float link_list_content_height(int item_count) {
+    return ui::vertical_list_content_height(item_count, kLinkRowHeight, kLinkRowGap);
 }
 
 Rectangle link_row_rect(Rectangle content, int index, float scroll_y) {
-    return {
-        content.x,
-        content.y + static_cast<float>(index) * (kLinkRowHeight + kLinkRowGap) - scroll_y,
-        content.width,
-        kLinkRowHeight,
-    };
+    return ui::vertical_list_row_rect(content, index, kLinkRowHeight, kLinkRowGap, scroll_y);
 }
 
 constexpr metric_card_layout metric_card_layout_for(Rectangle rect) {
@@ -253,15 +298,7 @@ constexpr label_value_layout summary_item_layout_for(Rectangle summary, float x,
 overview_layout overview_layout_for(Rectangle content) {
     overview_layout layout{};
     constexpr float gap = 12.0f;
-    const float card_width = (content.width - gap * 3.0f) / 4.0f;
-    for (int i = 0; i < kTabCount; ++i) {
-        layout.metric_cards[static_cast<size_t>(i)] = {
-            content.x + static_cast<float>(i) * (card_width + gap),
-            content.y,
-            card_width,
-            92.0f,
-        };
-    }
+    ui::hstack_fill({content.x, content.y, content.width, 92.0f}, gap, layout.metric_cards);
     const Rectangle summary{content.x, content.y + 118.0f, content.width, 178.0f};
     layout.summary_panel = summary;
     layout.summary_title = {summary.x + 18.0f, summary.y + 16.0f, summary.width - 36.0f, 26.0f};
@@ -317,19 +354,31 @@ void draw_metric_card(Rectangle rect, const char* label, const std::string& valu
     ui::draw_text_in_rect(value.c_str(), 23, card.value, tone, ui::text_align::left);
 }
 
-void draw_relationship_button(const model& state, const auth::public_profile& profile, const modal_layout& layout) {
+void draw_header_action_button(const header_action_button& button, ui::draw_layer layer) {
     const auto& t = *g_theme;
-    const public_profile_state::relationship_action_view relationship_action =
-        public_profile_state::relationship_action_for(profile, state.relationship_operation_active);
-    ui::button(layout.relationship_button_rect, relationship_action.label, {
-        .layer = layout.layer,
-        .font_size = 13,
-        .border_width = 1.5f,
-        .bg = relationship_action.enabled ? t.row_selected : t.row,
-        .bg_hover = relationship_action.enabled ? t.row_active : t.row_hover,
-        .text_color = relationship_action.enabled ? t.accent : t.text_muted,
+    if (button.style == header_action_style::relationship) {
+        ui::button(button.rect, button.label, {
+            .layer = layer,
+            .font_size = 13,
+            .border_width = 1.5f,
+            .bg = button.enabled ? t.row_selected : t.row,
+            .bg_hover = button.enabled ? t.row_active : t.row_hover,
+            .text_color = button.enabled ? t.accent : t.text_muted,
+            .custom_colors = true,
+            .interactive = button.enabled,
+        });
+        return;
+    }
+
+    ui::button(button.rect, button.label, {
+        .layer = layer,
+        .font_size = 14,
+        .border_width = 2.0f,
+        .bg = t.row_soft,
+        .bg_hover = t.row_soft_hover,
+        .text_color = t.text_muted,
         .custom_colors = true,
-        .interactive = relationship_action.enabled,
+        .interactive = button.enabled,
     });
 }
 
@@ -337,12 +386,9 @@ void draw_tab_bar(const model& state, const modal_layout& layout) {
     const auto& t = *g_theme;
     ui::bar_surface(layout.tab_bar_rect, with_alpha(t.bg, 70), with_alpha(t.border, 180));
 
-    const char* tab_labels[] = {"OVERVIEW", "BEST RC", "LINKS", "SOCIAL"};
-    for (int i = 0; i < kTabCount; ++i) {
-        const tab current_tab = tab_for_index(i);
-        const bool selected = current_tab == state.selected_tab;
-        const Rectangle rect = layout.tab_rects[static_cast<size_t>(i)];
-        ui::tab_button(rect, tab_labels[i], {
+    for (const tab_button_layout& button : tab_buttons_for(layout)) {
+        const bool selected = button.descriptor.value == state.selected_tab;
+        ui::tab_button(button.rect, button.descriptor.label, {
             .layer = layout.layer,
             .font_size = 14,
             .selected = selected,
@@ -467,16 +513,16 @@ void draw_best_rc(const model& state, const auth::public_profile& profile, Recta
     }
 
     ui::section(content);
-    const float scroll = std::clamp(
-        state.best_rating_scroll,
-        0.0f,
-        max_best_rating_scroll(content, static_cast<int>(profile.best_rating_records.size())));
+    const ui::scroll_offset_state scroll =
+        ui::scroll_offset_state_for(
+            content,
+            link_list_content_height(static_cast<int>(profile.best_rating_records.size())),
+            state.best_rating_scroll);
     ui::scoped_clip_rect clip(content);
-    for (int i = 0; i < static_cast<int>(profile.best_rating_records.size()); ++i) {
-        const Rectangle row = link_row_rect(content, i, scroll);
-        if (row.y + row.height < content.y || row.y > content.y + content.height) {
-            continue;
-        }
+    const ui::index_range visible_rows = ui::vertical_list_visible_range(
+        profile.best_rating_records.size(), content, kLinkRowHeight, kLinkRowGap, scroll.offset);
+    for (int i = visible_rows.begin; i < visible_rows.end; ++i) {
+        const Rectangle row = link_row_rect(content, i, scroll.offset);
         draw_best_rc_row(row, profile.best_rating_records[static_cast<size_t>(i)], i);
     }
 }
@@ -489,16 +535,16 @@ void draw_links(const model& state, const auth::public_profile& profile, Rectang
     }
 
     ui::section(content);
-    const float scroll = std::clamp(
-        state.link_scroll,
-        0.0f,
-        max_link_scroll(content, static_cast<int>(profile.external_links.size())));
+    const ui::scroll_offset_state scroll =
+        ui::scroll_offset_state_for(
+            content,
+            link_list_content_height(static_cast<int>(profile.external_links.size())),
+            state.link_scroll);
     ui::scoped_clip_rect clip(content);
-    for (int i = 0; i < static_cast<int>(profile.external_links.size()); ++i) {
-        const Rectangle row = link_row_rect(content, i, scroll);
-        if (row.y + row.height < content.y || row.y > content.y + content.height) {
-            continue;
-        }
+    const ui::index_range visible_rows = ui::vertical_list_visible_range(
+        profile.external_links.size(), content, kLinkRowHeight, kLinkRowGap, scroll.offset);
+    for (int i = visible_rows.begin; i < visible_rows.end; ++i) {
+        const Rectangle row = link_row_rect(content, i, scroll.offset);
         ui::surface(row, with_alpha(t.row, 205), with_alpha(t.border, 205), 1.2f);
         const link_row_layout row_layout = link_row_layout_for(row);
         const auth::external_link& link = profile.external_links[static_cast<size_t>(i)];
@@ -564,7 +610,8 @@ void draw_profile_body(const model& state, const modal_layout& layout) {
     const std::string plays_text = TextFormat("%d plays", profile.rating.eligible_play_count);
     ui::draw_text_in_rect(plays_text.c_str(), 12, header.rating_plays, t.text_muted, ui::text_align::right);
 
-    draw_relationship_button(state, profile, layout);
+    draw_header_action_button(relationship_header_action_for(layout, profile, state.relationship_operation_active),
+                              layout.layer);
     draw_tab_bar(state, layout);
 
     if (state.selected_tab == tab::best_rc) {
@@ -576,19 +623,6 @@ void draw_profile_body(const model& state, const modal_layout& layout) {
     } else {
         draw_overview(profile, content);
     }
-}
-
-void draw_close_button(Rectangle rect, ui::draw_layer layer) {
-    const auto& t = *g_theme;
-    ui::button(rect, "CLOSE", {
-        .layer = layer,
-        .font_size = 14,
-        .border_width = 2.0f,
-        .bg = t.row_soft,
-        .bg_hover = t.row_soft_hover,
-        .text_color = t.text_muted,
-        .custom_colors = true,
-    });
 }
 
 }  // namespace
@@ -604,15 +638,14 @@ scroll_offsets clamped_scroll_offsets(const model& state, ui::draw_layer layer) 
     }
 
     const auth::public_profile& profile = *state.result.profile;
+    const float link_content_height = link_list_content_height(static_cast<int>(profile.external_links.size()));
+    const float best_rating_content_height =
+        link_list_content_height(static_cast<int>(profile.best_rating_records.size()));
     return {
-        .link_scroll = std::clamp(
-            state.link_scroll,
-            0.0f,
-            max_link_scroll(layout.content_rect, static_cast<int>(profile.external_links.size()))),
-        .best_rating_scroll = std::clamp(
-            state.best_rating_scroll,
-            0.0f,
-            max_best_rating_scroll(layout.content_rect, static_cast<int>(profile.best_rating_records.size()))),
+        .link_scroll = ui::scroll_offset_state_for(
+            layout.content_rect, link_content_height, state.link_scroll).offset,
+        .best_rating_scroll = ui::scroll_offset_state_for(
+            layout.content_rect, best_rating_content_height, state.best_rating_scroll).offset,
     };
 }
 
@@ -625,41 +658,46 @@ input_result handle_input(const model& state, ui::draw_layer layer) {
     };
     const modal_layout layout = make_layout(state.open_anim, layer);
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const float wheel = GetMouseWheelMove();
+    const float wheel = ui::mouse_wheel_move();
     scroll_offsets scroll = clamped_scroll_offsets(state, layer);
     if (scroll.link_scroll != state.link_scroll ||
         scroll.best_rating_scroll != state.best_rating_scroll) {
         result.scroll_changed = true;
         result.scroll = scroll;
     }
-    if (ui::is_clicked(layout.close_button_rect, layout.layer)) {
-        return action({.type = command_type::close});
+    const header_action_button close_action = close_header_action_for(layout);
+    if (close_action.enabled && ui::is_clicked(close_action.rect, layout.layer)) {
+        return action({.type = close_action.command});
     }
     if (state.result.success &&
-        state.result.profile.has_value() &&
-        public_profile_state::relationship_action_for(
-            *state.result.profile,
-            state.relationship_operation_active).enabled &&
-        ui::is_clicked(layout.relationship_button_rect, layout.layer)) {
-        return action({.type = command_type::start_relationship_action});
+        state.result.profile.has_value()) {
+        const header_action_button relationship_action =
+            relationship_header_action_for(layout, *state.result.profile, state.relationship_operation_active);
+        if (relationship_action.enabled && ui::is_clicked(relationship_action.rect, layout.layer)) {
+            return action({.type = relationship_action.command});
+        }
     }
     if (state.result.success && state.result.profile.has_value()) {
         const auth::public_profile& profile = *state.result.profile;
-        for (int i = 0; i < kTabCount; ++i) {
-            if (ui::is_clicked(layout.tab_rects[static_cast<size_t>(i)], layout.layer)) {
+        for (const tab_button_layout& button : tab_buttons_for(layout)) {
+            if (ui::is_clicked(button.rect, layout.layer)) {
                 return action({
                     .type = command_type::select_tab,
-                    .selected_tab = tab_for_index(i),
+                    .selected_tab = button.descriptor.value,
                 });
             }
         }
         if (state.selected_tab == tab::links &&
             wheel != 0.0f &&
             ui::contains_point(layout.content_rect, mouse)) {
-            scroll.link_scroll = std::clamp(
-                scroll.link_scroll - wheel * kWheelStep,
-                0.0f,
-                max_link_scroll(layout.content_rect, static_cast<int>(profile.external_links.size())));
+            const ui::scroll_offset_state scroll_state = ui::wheel_scrolled_offset_state(
+                layout.content_rect,
+                mouse,
+                wheel,
+                link_list_content_height(static_cast<int>(profile.external_links.size())),
+                scroll.link_scroll,
+                kWheelStep);
+            scroll.link_scroll = scroll_state.offset;
             result.scroll_changed = true;
             result.scroll = scroll;
             return result;
@@ -667,10 +705,14 @@ input_result handle_input(const model& state, ui::draw_layer layer) {
         if (state.selected_tab == tab::best_rc &&
             wheel != 0.0f &&
             ui::contains_point(layout.content_rect, mouse)) {
-            scroll.best_rating_scroll = std::clamp(
-                scroll.best_rating_scroll - wheel * kWheelStep,
-                0.0f,
-                max_best_rating_scroll(layout.content_rect, static_cast<int>(profile.best_rating_records.size())));
+            const ui::scroll_offset_state scroll_state = ui::wheel_scrolled_offset_state(
+                layout.content_rect,
+                mouse,
+                wheel,
+                link_list_content_height(static_cast<int>(profile.best_rating_records.size())),
+                scroll.best_rating_scroll,
+                kWheelStep);
+            scroll.best_rating_scroll = scroll_state.offset;
             result.scroll_changed = true;
             result.scroll = scroll;
             return result;
@@ -689,7 +731,7 @@ void draw(const model& state, ui::draw_layer layer, bool draw_backdrop) {
         }
         const modal_layout layout = make_layout(state.open_anim, layer);
         ui::panel(layout.modal_rect);
-        draw_close_button(layout.close_button_rect, layout.layer);
+        draw_header_action_button(close_header_action_for(layout), layout.layer);
         draw_profile_body(state, layout);
     });
 }

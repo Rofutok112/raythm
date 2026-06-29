@@ -30,7 +30,7 @@ inline Rectangle animated_modal_rect(Rectangle target, float open_anim,
 }
 
 inline bool modal_outside_released(Rectangle modal, Vector2 point, int mouse_button = MOUSE_BUTTON_LEFT) {
-    return IsMouseButtonReleased(mouse_button) && !contains_point(modal, point);
+    return is_mouse_button_released_outside(modal, point, mouse_button);
 }
 
 }  // namespace ui

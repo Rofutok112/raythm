@@ -12,7 +12,9 @@
 #include "title/online_download_preview_controller.h"
 #include "tween.h"
 #include "ui_draw.h"
+#include "ui_hit.h"
 #include "ui_notice.h"
+#include "ui_scroll.h"
 #include "virtual_screen.h"
 
 namespace title_online_view {
@@ -36,7 +38,7 @@ void reset_browse_scrolls(state& state) {
 }
 
 bool handle_back_or_close_input(state& state, update_result& result) {
-    if (state.detail_open && (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))) {
+    if (state.detail_open && ui::is_cancel_pressed()) {
         state.detail_open = false;
         state.preview_bar_dragging = false;
         state.preview_bar_resume_after_drag = false;
@@ -44,7 +46,7 @@ bool handle_back_or_close_input(state& state, update_result& result) {
         reset_chart_scroll(state);
         return true;
     }
-    if (!state.detail_open && (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))) {
+    if (!state.detail_open && ui::is_cancel_pressed()) {
         result.back_requested = true;
         return true;
     }
@@ -174,7 +176,7 @@ void set_level_input(ui::text_input_state& input, float value, float default_val
 
 bool update_level_range_from_slider(state& state, Rectangle chart_list, Vector2 mouse) {
     const Rectangle slider = detail::chart_level_slider_rect(chart_list);
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+    if (ui::is_mouse_button_released()) {
         state.chart_level_filter_dragging = false;
     }
     float min_level = chart_level_value(state.min_level_input.value, kChartFilterMinLevel);
@@ -185,7 +187,7 @@ bool update_level_range_from_slider(state& state, Rectangle chart_list, Vector2 
 
     const Rectangle min_chip = song_select::level_filter::chip_rect(slider, min_level);
     const Rectangle max_chip = song_select::level_filter::chip_rect(slider, max_level);
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    if (ui::is_mouse_button_pressed()) {
         if (ui::contains_point(max_chip, mouse)) {
             state.chart_level_filter_dragging = true;
             state.chart_level_filter_dragging_min = false;
@@ -194,7 +196,7 @@ bool update_level_range_from_slider(state& state, Rectangle chart_list, Vector2 
             state.chart_level_filter_dragging_min = true;
         }
     }
-    if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT) || !state.chart_level_filter_dragging) {
+    if (!ui::is_mouse_button_down() || !state.chart_level_filter_dragging) {
         return false;
     }
 
@@ -243,7 +245,7 @@ bool handle_sidebar_clicks(state& state,
                            online_catalog::data_controller& data_controller,
                            const layout& current,
                            update_result& result) {
-    if (state.detail_open || !IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+    if (state.detail_open || !ui::is_mouse_button_released()) {
         return false;
     }
 
@@ -342,28 +344,44 @@ void update_overview_shelf_scrolls(state& state, float dt) {
     }
 }
 
+bool chart_list_accepts_click(const state& state,
+                              const song_entry_state* song,
+                              Rectangle chart_list_rect,
+                              Vector2 mouse,
+                              bool left_pressed) {
+    return state.detail_open &&
+           left_pressed &&
+           song != nullptr &&
+           ui::contains_point(chart_list_rect, mouse);
+}
+
+bool clicked_downloadable_chart_icon(const song_entry_state& song,
+                                     const chart_entry_state& chart,
+                                     Rectangle chart_card,
+                                     Vector2 mouse) {
+    return detail::can_download_chart(song, chart) &&
+           ui::contains_point(detail::chart_download_icon_rect(chart_card), mouse);
+}
+
 bool handle_chart_click(state& state,
                         Rectangle chart_list_rect,
                         Vector2 mouse,
                         bool left_pressed,
                         update_result& result) {
-    if (!state.detail_open || !left_pressed) {
-        return false;
-    }
-
     const song_entry_state* song = selected_song(state);
-    if (song == nullptr || !ui::contains_point(chart_list_rect, mouse)) {
+    if (!chart_list_accepts_click(state, song, chart_list_rect, mouse, left_pressed)) {
         return false;
     }
 
     if (!state.download_in_progress) {
         const auto chart_indices = detail::filtered_chart_indices(state);
-        for (int display_index = 0; display_index < static_cast<int>(chart_indices.size()); ++display_index) {
+        const ui::index_range visible_charts =
+            detail::visible_chart_range(chart_list_rect, static_cast<int>(chart_indices.size()), state.chart_scroll_y);
+        for (int display_index = visible_charts.begin; display_index < visible_charts.end; ++display_index) {
             const int index = chart_indices[static_cast<size_t>(display_index)];
             const chart_entry_state& chart = song->charts[static_cast<size_t>(index)];
             const Rectangle card = detail::chart_row_rect(chart_list_rect, display_index, state.chart_scroll_y);
-            if (!detail::can_download_chart(*song, chart) ||
-                !ui::contains_point(detail::chart_download_icon_rect(card), mouse)) {
+            if (!clicked_downloadable_chart_icon(*song, chart, card, mouse)) {
                 continue;
             }
 
@@ -523,13 +541,13 @@ void handle_keyboard_navigation(state& state,
         int display_index = selected_it == indices.end() ? 0 : static_cast<int>(selected_it - indices.begin());
 
         int next_display_index = display_index;
-        if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) {
+        if (ui::is_left_pressed()) {
             next_display_index = std::max(0, display_index - 1);
-        } else if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) {
+        } else if (ui::is_right_pressed()) {
             next_display_index = std::min(static_cast<int>(indices.size()) - 1, display_index + 1);
-        } else if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
+        } else if (ui::is_up_pressed()) {
             next_display_index = std::max(0, display_index - detail::kSongGridColumns);
-        } else if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
+        } else if (ui::is_down_pressed()) {
             next_display_index = std::min(static_cast<int>(indices.size()) - 1,
                                           display_index + detail::kSongGridColumns);
         }
@@ -541,7 +559,7 @@ void handle_keyboard_navigation(state& state,
             result.song_selection_changed = true;
         }
 
-        if (IsKeyPressed(KEY_ENTER) && selected_song(state) != nullptr) {
+        if (ui::is_enter_pressed() && selected_song(state) != nullptr) {
             state.detail_open = true;
             request_charts_for_selected_song(state, data_controller);
         }
@@ -554,13 +572,13 @@ void handle_keyboard_navigation(state& state,
         int display_index = selected_it == chart_indices.end() ? 0 : static_cast<int>(selected_it - chart_indices.begin());
 
         int next_display_index = display_index;
-        if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) {
+        if (ui::is_left_pressed()) {
             next_display_index = std::max(0, display_index - 1);
-        } else if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) {
+        } else if (ui::is_right_pressed()) {
             next_display_index = std::min(static_cast<int>(chart_indices.size()) - 1, display_index + 1);
-        } else if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
+        } else if (ui::is_up_pressed()) {
             next_display_index = std::max(0, display_index - detail::kChartGridColumns);
-        } else if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
+        } else if (ui::is_down_pressed()) {
             next_display_index = std::min(static_cast<int>(chart_indices.size()) - 1,
                                           display_index + detail::kChartGridColumns);
         }
@@ -583,21 +601,25 @@ void update_scroll_positions(state& state,
     const int chart_count = static_cast<int>(detail::filtered_chart_indices(state).size());
 
     if (!state.detail_open && ui::contains_point(song_list_rect, mouse) && wheel != 0.0f) {
-        state.song_scroll_y_target -= wheel * 54.0f;
+        state.song_scroll_y_target =
+            ui::wheel_scrolled_target(state.song_scroll_y_target, wheel, 54.0f);
     } else if (state.detail_open && ui::contains_point(chart_list_rect, mouse) && wheel != 0.0f) {
-        state.chart_scroll_y_target -= wheel * 42.0f;
+        state.chart_scroll_y_target =
+            ui::wheel_scrolled_target(state.chart_scroll_y_target, wheel, 42.0f);
     }
 
-    state.song_scroll_y_target = std::clamp(state.song_scroll_y_target, 0.0f,
-                                            detail::max_song_scroll(state, song_list_rect, filtered_song_count));
+    state.song_scroll_y_target = ui::clamp_scroll_offset(
+        state.song_scroll_y_target,
+        detail::max_song_scroll(state, song_list_rect, filtered_song_count));
     state.song_scroll_y = tween::damp(state.song_scroll_y, state.song_scroll_y_target, dt, 12.0f, 0.5f);
     if (!state.detail_open &&
         state.song_scroll_y_target >= std::max(0.0f, detail::max_song_scroll(state, song_list_rect, filtered_song_count) - 120.0f)) {
         request_next_song_page(state, data_controller, state.mode);
     }
 
-    state.chart_scroll_y_target = std::clamp(state.chart_scroll_y_target, 0.0f,
-                                             detail::max_chart_scroll(chart_list_rect, chart_count));
+    state.chart_scroll_y_target = ui::clamp_scroll_offset(
+        state.chart_scroll_y_target,
+        detail::max_chart_scroll(chart_list_rect, chart_count));
     state.chart_scroll_y = tween::damp(state.chart_scroll_y, state.chart_scroll_y_target, dt, 12.0f, 0.5f);
     if (state.detail_open && song != nullptr && song->charts_has_more &&
         state.chart_scroll_y_target >= std::max(0.0f, detail::max_chart_scroll(chart_list_rect, chart_count) - 80.0f)) {
@@ -616,8 +638,8 @@ update_result update(state& state,
     update_result result;
     const layout current = make_layout(anim_t, origin_rect);
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const bool left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-    const float wheel = GetMouseWheelMove();
+    const bool left_pressed = ui::is_mouse_button_pressed();
+    const float wheel = ui::mouse_wheel_move();
     state.jackets.poll();
     const float detail_target = state.detail_open ? 1.0f : 0.0f;
     const float detail_lerp_speed = state.detail_open ? 6.5f : 10.0f;

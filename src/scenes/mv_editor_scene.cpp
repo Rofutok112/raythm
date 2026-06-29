@@ -24,8 +24,10 @@
 #include "ui_clip.h"
 #include "ui_draw.h"
 #include "ui_frame.h"
+#include "ui_hit.h"
 #include "ui_inspector.h"
 #include "ui_layout.h"
+#include "ui_scroll.h"
 #include "ui_text.h"
 #include "ui_text_input.h"
 #include "virtual_screen.h"
@@ -705,7 +707,7 @@ void mv_editor_scene::update(float dt) {
         ui::register_hit_region(modal_layout.modal, ui::draw_layer::modal);
     }
 
-    if (IsKeyPressed(KEY_ESCAPE)) {
+    if (ui::is_escape_pressed()) {
         if (metadata_modal_open_) {
             close_metadata_modal();
             return;
@@ -715,20 +717,19 @@ void mv_editor_scene::update(float dt) {
     }
 
     if (metadata_modal_open_ &&
-        IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-        !ui::contains_point(modal_layout.modal, virtual_screen::get_virtual_mouse())) {
+        ui::is_mouse_button_pressed_outside(modal_layout.modal, virtual_screen::get_virtual_mouse())) {
         close_metadata_modal();
         return;
     }
 
     if (!inspector_text_input_active() && !name_input_.active && !author_input_.active) {
-        const bool ctrl_down = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-        const bool shift_down = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-        if (ctrl_down && IsKeyPressed(KEY_S)) {
+        const bool ctrl_down = ui::is_key_down(KEY_LEFT_CONTROL) || ui::is_key_down(KEY_RIGHT_CONTROL);
+        const bool shift_down = ui::is_shift_down();
+        if (ctrl_down && ui::is_key_pressed(KEY_S)) {
             save_mv();
-        } else if (ctrl_down && !shift_down && IsKeyPressed(KEY_Z)) {
+        } else if (ctrl_down && !shift_down && ui::is_key_pressed(KEY_Z)) {
             undo_edit();
-        } else if (ctrl_down && (IsKeyPressed(KEY_Y) || (shift_down && IsKeyPressed(KEY_Z)))) {
+        } else if (ctrl_down && (ui::is_key_pressed(KEY_Y) || (shift_down && ui::is_key_pressed(KEY_Z)))) {
             redo_edit();
         }
     }
@@ -1259,11 +1260,11 @@ void mv_editor_scene::draw() {
     const Rectangle preview_panel = frame_layout.preview_panel;
     const Rectangle inspector_panel = frame_layout.inspector_panel;
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
-    const float wheel = GetMouseWheelMove();
-    const bool shift_down = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-    const bool ctrl_down = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    const float wheel = ui::mouse_wheel_move();
+    const bool shift_down = ui::is_shift_down();
+    const bool ctrl_down = ui::is_key_down(KEY_LEFT_CONTROL) || ui::is_key_down(KEY_RIGHT_CONTROL);
     bool context_menu_opened_this_frame = false;
-    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+    if (ui::is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)) {
         context_menu_open_ = true;
         context_menu_opened_this_frame = true;
         context_menu_position_ = mouse;
@@ -1375,7 +1376,7 @@ void mv_editor_scene::draw() {
         }
 
         if (ui::contains_point(preview, mouse) &&
-            IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+            ui::is_mouse_button_pressed() &&
             preview_drag_mode_ == mv_preview_drag_mode::none &&
             !context_menu_open_) {
             mv_editor_preview_drag_start_result preview_drag_start_result;
@@ -1496,12 +1497,11 @@ void mv_editor_scene::draw() {
         for (const mv::composition::component& component : layer->components) {
             inspector_content_height += component_inspector_card_height(component, color_picker_for(component)) + 10.0f;
         }
-        const float inspector_max_scroll = std::max(0.0f, inspector_content_height - inspector_view.height);
-        inspector_scroll_offset_ = std::clamp(inspector_scroll_offset_, 0.0f, inspector_max_scroll);
-        if (ui::contains_point(inspector_view, mouse) && wheel != 0.0f && !shift_down && !ctrl_down) {
-            inspector_scroll_offset_ = std::clamp(
-                inspector_scroll_offset_ - wheel * kInspectorWheelStep,
-                0.0f, inspector_max_scroll);
+        const float inspector_max_scroll = ui::max_scroll_offset(inspector_content_height, inspector_view);
+        inspector_scroll_offset_ = ui::clamp_scroll_offset(inspector_scroll_offset_, inspector_max_scroll);
+        if (!shift_down && !ctrl_down) {
+            inspector_scroll_offset_ = ui::wheel_scrolled_offset(
+                inspector_view, mouse, wheel, inspector_scroll_offset_, inspector_max_scroll, kInspectorWheelStep);
         }
         const ui::scrollbar_interaction inspector_scrollbar_result =
             ui::vertical_scrollbar(inspector_scrollbar,
@@ -1572,7 +1572,7 @@ void mv_editor_scene::draw() {
                 validate_composition();
                 inspector_edit_pending_ = true;
             }
-            if (inspector_edit_pending_ && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+            if (inspector_edit_pending_ && ui::is_mouse_button_released()) {
                 commit_history("Edit Layer");
             }
         }

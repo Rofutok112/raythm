@@ -35,6 +35,30 @@ struct slider_row_definition {
     slider_display_format display_format;
 };
 
+enum class system_selector_kind {
+    language,
+    fullscreen,
+    theme,
+};
+
+struct system_selector_definition {
+    localization::text_key label;
+    std::size_t row_index = 0;
+    system_selector_kind kind = system_selector_kind::language;
+};
+
+struct bool_selector_definition {
+    localization::text_key label;
+    std::size_t row_index = 0;
+    bool game_settings::* value = nullptr;
+};
+
+struct offset_stepper_button {
+    Rectangle rect{};
+    const char* label = "";
+    int delta = 0;
+};
+
 constexpr std::array<slider_row_definition, 5> kGameplaySliders = {{
     {text_key::note_speed, &game_settings::note_speed, kMinNoteSpeed, kMaxNoteSpeed, slider_display_format::note_speed},
     {text_key::camera_angle, &game_settings::camera_angle_degrees, 5.0f, 90.0f, slider_display_format::degrees},
@@ -52,6 +76,18 @@ constexpr std::array<slider_row_definition, 3> kAudioSliders = {{
     {text_key::se_volume, &game_settings::se_volume, 0.0f, 1.0f, slider_display_format::integer_percent},
     {text_key::hitsound_pan, &game_settings::hitsound_pan_strength, 0.0f, 1.0f, slider_display_format::integer_percent},
 }};
+
+constexpr std::array<system_selector_definition, 3> kSystemSelectors = {{
+    {text_key::language, 0, system_selector_kind::language},
+    {text_key::display, 1, system_selector_kind::fullscreen},
+    {text_key::theme, 2, system_selector_kind::theme},
+}};
+
+constexpr bool_selector_definition kLoudnessSelector{
+    text_key::loudness_normalization,
+    3,
+    &game_settings::loudness_normalization_enabled,
+};
 
 std::string format_offset_label(int offset_ms) {
     return (offset_ms > 0 ? "+" : "") + std::to_string(offset_ms) + " ms";
@@ -98,6 +134,42 @@ void draw_settings_selector_row(Rectangle row, localization::text_key label, con
     ui::value_selector(row, ltr(label), value, settings::value_selector_options());
 }
 
+const char* system_selector_value(const game_settings& settings, system_selector_kind kind) {
+    switch (kind) {
+        case system_selector_kind::language:
+            return localization::locale_display_name(settings.ui_locale);
+        case system_selector_kind::fullscreen:
+            return settings.fullscreen ? ltr(text_key::fullscreen) : ltr(text_key::windowed);
+        case system_selector_kind::theme:
+            return settings.dark_mode ? ltr(text_key::dark) : ltr(text_key::light);
+    }
+    return "";
+}
+
+void apply_system_selector(settings_page_update_result& result,
+                           const game_settings& settings,
+                           system_selector_kind kind) {
+    switch (kind) {
+        case system_selector_kind::language:
+            result.locale = settings.ui_locale == localization::locale::english
+                ? localization::locale::japanese
+                : localization::locale::english;
+            break;
+        case system_selector_kind::fullscreen:
+            result.bool_changes.push_back({
+                &game_settings::fullscreen,
+                !settings.fullscreen,
+            });
+            break;
+        case system_selector_kind::theme:
+            result.bool_changes.push_back({
+                &game_settings::dark_mode,
+                !settings.dark_mode,
+            });
+            break;
+    }
+}
+
 float slider_value_from_mouse(const slider_row_definition& slider, const Rectangle& row) {
     const float ratio = settings::slider_ratio_from_mouse(row);
     return slider.min_value + ratio * (slider.max_value - slider.min_value);
@@ -111,6 +183,23 @@ ui::indexed_drag_result update_slider_drag(const std::array<slider_row_definitio
     return ui::update_indexed_drag(std::span<const Rectangle>(rows.data(), sliders.size()),
                                    drag_state,
                                    settings::kLayer);
+}
+
+template <std::size_t SliderCount, std::size_t RowCount>
+void append_slider_drag_change(settings_page_update_result& result,
+                               const std::array<slider_row_definition, SliderCount>& sliders,
+                               const std::array<Rectangle, RowCount>& rows,
+                               ui::indexed_drag_state& drag_state) {
+    const ui::indexed_drag_result slider_drag = update_slider_drag(sliders, rows, drag_state);
+    if (!slider_drag.dragging) {
+        return;
+    }
+
+    const std::size_t index = static_cast<std::size_t>(slider_drag.active_index);
+    result.float_changes.push_back({
+        sliders[index].value,
+        slider_value_from_mouse(sliders[index], rows[index]),
+    });
 }
 
 template <std::size_t SliderCount, std::size_t RowCount>
@@ -131,19 +220,54 @@ bool selector_clicked(const Rectangle& row) {
            ui::is_clicked(settings::arrow_right_rect(row), settings::kLayer);
 }
 
+const char* bool_selector_value(const game_settings& settings, const bool_selector_definition& selector) {
+    return settings.*(selector.value) ? ltr(text_key::enabled) : ltr(text_key::disabled);
+}
+
+void append_bool_selector_change(settings_page_update_result& result,
+                                 const game_settings& settings,
+                                 const bool_selector_definition& selector) {
+    if (selector.value == nullptr || !selector_clicked(settings::kGeneralRows[selector.row_index])) {
+        return;
+    }
+    result.bool_changes.push_back({
+        selector.value,
+        !(settings.*(selector.value)),
+    });
+}
+
+void draw_bool_selector_row(const game_settings& settings, const bool_selector_definition& selector) {
+    draw_settings_selector_row(settings::kGeneralRows[selector.row_index],
+                               selector.label,
+                               bool_selector_value(settings, selector));
+}
+
+std::array<offset_stepper_button, 4> offset_stepper_buttons_for(const settings::offset_stepper_layout& layout) {
+    const std::array<Rectangle, 4> buttons = settings::offset_stepper_button_rects(layout);
+    std::array<offset_stepper_button, 4> result{};
+    for (std::size_t i = 0; i < buttons.size(); ++i) {
+        result[i] = {
+            .rect = buttons[i],
+            .label = settings::kOffsetStepperLabels[i],
+            .delta = settings::kOffsetStepperDeltas[i],
+        };
+    }
+    return result;
+}
+
+ui::button_state draw_offset_stepper_button(const offset_stepper_button& button) {
+    return ui::button(button.rect, button.label, {
+        .layer = settings::kLayer,
+        .font_size = 22,
+    });
+}
+
 int offset_stepper_delta(Rectangle row) {
     const settings::offset_stepper_layout layout = settings::global_offset_stepper_layout(row);
-    if (ui::is_clicked(layout.double_left_rect, settings::kLayer)) {
-        return -5;
-    }
-    if (ui::is_clicked(layout.single_left_rect, settings::kLayer)) {
-        return -1;
-    }
-    if (ui::is_clicked(layout.single_right_rect, settings::kLayer)) {
-        return 1;
-    }
-    if (ui::is_clicked(layout.double_right_rect, settings::kLayer)) {
-        return 5;
+    for (const offset_stepper_button& button : offset_stepper_buttons_for(layout)) {
+        if (ui::is_clicked(button.rect, settings::kLayer)) {
+            return button.delta;
+        }
     }
     return 0;
 }
@@ -162,22 +286,9 @@ void draw_settings_stepper_row(Rectangle row,
     });
     ui::draw_text_in_rect(ltr(label), 22, layout.label_rect, g_theme->text, ui::text_align::left);
     ui::draw_text_in_rect(display_value, 22, layout.value_rect, g_theme->text_dim, ui::text_align::right);
-    ui::button(layout.double_left_rect, "<<", {
-        .layer = settings::kLayer,
-        .font_size = 22,
-    });
-    ui::button(layout.single_left_rect, "<", {
-        .layer = settings::kLayer,
-        .font_size = 22,
-    });
-    ui::button(layout.single_right_rect, ">", {
-        .layer = settings::kLayer,
-        .font_size = 22,
-    });
-    ui::button(layout.double_right_rect, ">>", {
-        .layer = settings::kLayer,
-        .font_size = 22,
-    });
+    for (const offset_stepper_button& button : offset_stepper_buttons_for(layout)) {
+        draw_offset_stepper_button(button);
+    }
 }
 
 }  // namespace
@@ -195,16 +306,7 @@ void settings_gameplay_page::prepare_frame() {
 
 settings_page_update_result settings_gameplay_page::update() {
     settings_page_update_result result;
-    const ui::indexed_drag_result slider_drag = update_slider_drag(kGameplaySliders,
-                                                                   settings::kGameplayRows,
-                                                                   slider_drag_);
-    if (slider_drag.dragging) {
-        const std::size_t index = static_cast<std::size_t>(slider_drag.active_index);
-        result.float_changes.push_back({
-            kGameplaySliders[index].value,
-            slider_value_from_mouse(kGameplaySliders[index], settings::kGameplayRows[index]),
-        });
-    }
+    append_slider_drag_change(result, kGameplaySliders, settings::kGameplayRows, slider_drag_);
 
     if (const int delta = offset_stepper_delta(settings::kGameplayRows[5]); delta != 0) {
         result.int_changes.push_back({
@@ -236,31 +338,14 @@ void settings_audio_page::reset_interaction() {
 
 settings_page_update_result settings_audio_page::update() {
     settings_page_update_result result;
-    const ui::indexed_drag_result slider_drag = update_slider_drag(kAudioSliders,
-                                                                   settings::kGeneralRows,
-                                                                   slider_drag_);
-    if (slider_drag.dragging) {
-        const std::size_t index = static_cast<std::size_t>(slider_drag.active_index);
-        result.float_changes.push_back({
-            kAudioSliders[index].value,
-            slider_value_from_mouse(kAudioSliders[index], settings::kGeneralRows[index]),
-        });
-    }
-
-    if (selector_clicked(settings::kGeneralRows[3])) {
-        result.bool_changes.push_back({
-            &game_settings::loudness_normalization_enabled,
-            !settings_.loudness_normalization_enabled,
-        });
-    }
+    append_slider_drag_change(result, kAudioSliders, settings::kGeneralRows, slider_drag_);
+    append_bool_selector_change(result, settings_, kLoudnessSelector);
     return result;
 }
 
 void settings_audio_page::draw() const {
     draw_slider_rows(settings_, kAudioSliders, settings::kGeneralRows);
-
-    draw_settings_selector_row(settings::kGeneralRows[3], text_key::loudness_normalization,
-                               settings_.loudness_normalization_enabled ? ltr(text_key::enabled) : ltr(text_key::disabled));
+    draw_bool_selector_row(settings_, kLoudnessSelector);
 }
 
 settings_video_page::settings_video_page(game_settings& settings)
@@ -304,35 +389,20 @@ void settings_system_page::reset_interaction() {
 
 settings_page_update_result settings_system_page::update() {
     settings_page_update_result result;
-    if (selector_clicked(settings::kGeneralRows[0])) {
-        result.locale = settings_.ui_locale == localization::locale::english
-            ? localization::locale::japanese
-            : localization::locale::english;
-    }
-
-    if (selector_clicked(settings::kGeneralRows[1])) {
-        result.bool_changes.push_back({
-            &game_settings::fullscreen,
-            !settings_.fullscreen,
-        });
-    }
-
-    if (selector_clicked(settings::kGeneralRows[2])) {
-        result.bool_changes.push_back({
-            &game_settings::dark_mode,
-            !settings_.dark_mode,
-        });
+    for (const system_selector_definition& selector : kSystemSelectors) {
+        if (selector_clicked(settings::kGeneralRows[selector.row_index])) {
+            apply_system_selector(result, settings_, selector.kind);
+        }
     }
     return result;
 }
 
 void settings_system_page::draw() const {
-    draw_settings_selector_row(settings::kGeneralRows[0], text_key::language,
-                               localization::locale_display_name(settings_.ui_locale));
-    draw_settings_selector_row(settings::kGeneralRows[1], text_key::display,
-                               settings_.fullscreen ? ltr(text_key::fullscreen) : ltr(text_key::windowed));
-    draw_settings_selector_row(settings::kGeneralRows[2], text_key::theme,
-                               settings_.dark_mode ? ltr(text_key::dark) : ltr(text_key::light));
+    for (const system_selector_definition& selector : kSystemSelectors) {
+        draw_settings_selector_row(settings::kGeneralRows[selector.row_index],
+                                   selector.label,
+                                   system_selector_value(settings_, selector.kind));
+    }
 }
 
 settings_key_config_page::settings_key_config_page(game_settings& settings) : settings_(settings) {

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,7 @@
 #include "ui_clip.h"
 #include "ui_draw.h"
 #include "ui_layout.h"
+#include "ui_scroll.h"
 #include "ui_tooltip.h"
 #include "ui/icons/raythm_icons.h"
 
@@ -103,6 +105,18 @@ struct chart_list_layout {
     Rectangle viewport;
 };
 
+struct song_row_entry {
+    int visible_index = -1;
+    int song_index = -1;
+    Rectangle rect{};
+};
+
+struct song_row_view {
+    const song_select::song_entry* song = nullptr;
+    song_row_entry entry{};
+    bool selected = false;
+};
+
 song_list_header_layout make_song_list_header_layout(Rectangle column) {
     const Rectangle full = {
         column.x,
@@ -182,6 +196,25 @@ float row_height(const song_select::state& state, int index) {
     (void)state;
     (void)index;
     return kSongRowHeight;
+}
+
+template <typename VisitRow>
+void for_each_song_row(const song_select::state& state, Rectangle area, float scroll_y, VisitRow visit_row) {
+    const std::vector<int> indices = song_select::filtered_song_indices(state);
+    float row_y = area.y + kInitialRowOffsetY - scroll_y;
+    for (int visible = 0; visible < static_cast<int>(indices.size()); ++visible) {
+        const int song_index = indices[static_cast<size_t>(visible)];
+        const float height = row_height(state, song_index);
+        const song_row_entry entry{
+            .visible_index = visible,
+            .song_index = song_index,
+            .rect = {area.x, row_y, area.width, height},
+        };
+        if (!visit_row(entry)) {
+            break;
+        }
+        row_y += height + kSongRowGap;
+    }
 }
 
 std::vector<std::string> genre_labels(const song_meta& meta) {
@@ -298,12 +331,30 @@ chart_list_layout make_chart_list_layout(Rectangle row) {
     return make_chart_list_layout_for_area(chart_area_rect(row));
 }
 
-Rectangle row_rect_at_y(Rectangle area, float y, float height) {
+constexpr Rectangle fixed_song_rows_viewport(Rectangle area) {
+    return ui::vertical_viewport_after_top_inset(area, kInitialRowOffsetY);
+}
+
+song_row_entry fixed_song_row_entry_for(Rectangle area, int visible_index, int song_index, float scroll_y) {
     return {
-        area.x,
-        y,
-        area.width,
-        height,
+        .visible_index = visible_index,
+        .song_index = song_index,
+        .rect = ui::vertical_list_row_rect(
+            fixed_song_rows_viewport(area),
+            visible_index,
+            kSongRowHeight,
+            kSongRowGap,
+            scroll_y),
+    };
+}
+
+song_row_view song_row_view_for(const song_select::state& state, const song_row_entry& entry) {
+    return {
+        .song = entry.song_index >= 0 && entry.song_index < static_cast<int>(state.songs.size())
+            ? &state.songs[static_cast<size_t>(entry.song_index)]
+            : nullptr,
+        .entry = entry,
+        .selected = entry.song_index == state.selected_song_index,
     };
 }
 
@@ -313,17 +364,11 @@ Rectangle chart_list_viewport_rect(Rectangle chart_area) {
 
 Rectangle chart_row_rect(Rectangle chart_area, int index, float scroll_y) {
     const Rectangle viewport = chart_list_viewport_rect(chart_area);
-    return {
-        viewport.x,
-        viewport.y + static_cast<float>(index) * (kChartRowHeight + kChartRowGap) - scroll_y,
-        viewport.width,
-        kChartRowHeight,
-    };
+    return ui::vertical_list_row_rect(viewport, index, kChartRowHeight, kChartRowGap, scroll_y);
 }
 
 bool rect_visible_in(Rectangle viewport, Rectangle rect) {
-    return rect.y + rect.height >= viewport.y - kClipSlack &&
-           rect.y <= viewport.y + viewport.height + kClipSlack;
+    return ui::rect_visible_in_viewport(rect, viewport, kClipSlack);
 }
 
 void draw_tag(Rectangle rect, const std::string& label, unsigned char alpha) {
@@ -338,13 +383,7 @@ void draw_tag(Rectangle rect, const std::string& label, unsigned char alpha) {
 void draw_status_tag(Rectangle rect, content_status status, unsigned char alpha, int font_size = 11) {
     const Color color = content_status_badge::color(status);
     if (status == content_status::modified) {
-        const float icon_size = std::max(1.0f, std::min(rect.width, rect.height) - 1.0f);
-        const Rectangle icon_rect = {
-            rect.x + (rect.width - icon_size) * 0.5f,
-            rect.y + (rect.height - icon_size) * 0.5f,
-            icon_size,
-            icon_size,
-        };
+        const Rectangle icon_rect = ui::inscribed_square(rect, 0.5f);
         raythm_icons::draw_triangle_alert(icon_rect, with_alpha(color, alpha), 2.6f);
         ui::enqueue_hover_tooltip(icon_rect, "変更されています", alpha);
         return;
@@ -362,18 +401,9 @@ void draw_lock_icon(Rectangle rect, unsigned char alpha) {
     raythm_icons::draw_lock(rect, with_alpha(g_theme->slow, alpha), 2.4f);
 }
 
-Rectangle centered_square(Rectangle rect, float size) {
-    return {
-        rect.x + (rect.width - size) * 0.5f,
-        rect.y + (rect.height - size) * 0.5f,
-        size,
-        size,
-    };
-}
-
 void draw_locked_row_overlay(Rectangle row, unsigned char alpha) {
     ui::backdrop(row, with_alpha(g_theme->bg, static_cast<unsigned char>((static_cast<int>(alpha) * 120) / 255)));
-    draw_lock_icon(centered_square(row, 24.0f), alpha);
+    draw_lock_icon(ui::centered_square(row, 24.0f), alpha);
 }
 
 float status_tag_gap(content_status status) {
@@ -475,6 +505,13 @@ void draw_compact_song_row(const song_select::song_entry& song,
     content_status_badge::draw_compound(layout.status_badge, song.source_status, song.status, config.alpha, 12);
 }
 
+void draw_compact_song_row(const song_row_view& row, const title_song_list_view::draw_config& config) {
+    if (row.song == nullptr) {
+        return;
+    }
+    draw_compact_song_row(*row.song, row.entry.rect, row.selected, config);
+}
+
 void draw_song_jacket(const song_select::state& state,
                       const song_select::song_entry& song,
                       Rectangle jacket_rect,
@@ -531,19 +568,22 @@ void draw_expanded_song_row(const song_select::state& state,
                       layout.artist,
                       12, with_alpha(t.text_secondary, config.alpha), config.now);
 
-    float tag_x = layout.tag_lane.x;
-    const float tag_end_x = layout.tag_lane.x + layout.tag_lane.width;
+    ui::wrapped_layout_cursor tags =
+        ui::wrapped_cursor(layout.tag_lane, kExpandedTagGap, layout.tag_lane.height);
     int tags_drawn = 0;
     for (const std::string& label : genre_labels(song.song.meta)) {
         if (label.empty() || tags_drawn >= 2) {
             continue;
         }
         const float width = std::clamp(ui::measure_text_size(label.c_str(), kTagFontSize).x + 20.0f, 66.0f, 124.0f);
-        if (tag_x + width > tag_end_x) {
+        if (width > layout.tag_lane.width) {
             break;
         }
-        draw_tag({tag_x, layout.tag_lane.y, width, layout.tag_lane.height}, label, config.alpha);
-        tag_x += width + kExpandedTagGap;
+        const std::optional<Rectangle> tag_rect = tags.next(width, layout.tag_lane.height);
+        if (!tag_rect.has_value()) {
+            break;
+        }
+        draw_tag(*tag_rect, label, config.alpha);
         ++tags_drawn;
     }
 
@@ -557,6 +597,15 @@ void draw_expanded_song_row(const song_select::state& state,
     }
     draw_status_tags(layout.status_tags,
                      song.source_status, song.status, config.alpha, 11);
+}
+
+void draw_expanded_song_row(const song_select::state& state,
+                            const song_row_view& row,
+                            const title_song_list_view::draw_config& config) {
+    if (row.song == nullptr) {
+        return;
+    }
+    draw_expanded_song_row(state, *row.song, row.entry.rect, row.selected, config);
 }
 
 void draw_chart_header(const chart_list_layout& layout, unsigned char alpha) {
@@ -661,11 +710,10 @@ void draw_embedded_chart_list(const song_select::state& state,
     ui::scoped_clip_rect chart_clip(chart_layout.viewport);
     title_song_list_view::draw_config chart_config = config;
     chart_config.alpha = chart_alpha;
-    for (int chart_index = 0; chart_index < static_cast<int>(filtered.size()); ++chart_index) {
+    const ui::index_range visible_charts = ui::vertical_list_visible_range(
+        filtered.size(), chart_layout.viewport, kChartRowHeight, kChartRowGap, config.embedded_chart_scroll_y);
+    for (int chart_index = visible_charts.begin; chart_index < visible_charts.end; ++chart_index) {
         const Rectangle chart_row = chart_row_rect(chart_layout.area, chart_index, config.embedded_chart_scroll_y);
-        if (!rect_visible_in(chart_layout.viewport, chart_row)) {
-            continue;
-        }
         draw_chart_row(song,
                        *filtered[static_cast<size_t>(chart_index)],
                        chart_row,
@@ -679,66 +727,50 @@ void draw_embedded_chart_list(const song_select::state& state,
 namespace title_song_list_view {
 
 float content_height(int count) {
-    if (count <= 0) {
-        return 0.0f;
-    }
-    return static_cast<float>(count) * (kSongRowHeight + kSongRowGap) - kSongRowGap;
+    return ui::vertical_list_content_height(count, kSongRowHeight, kSongRowGap);
 }
 
 float content_height(const song_select::state& state) {
-    const std::vector<int> indices = song_select::filtered_song_indices(state);
-    if (indices.empty()) {
-        return 0.0f;
-    }
-    float total = kInitialRowOffsetY;
-    for (int visible = 0; visible < static_cast<int>(indices.size()); ++visible) {
-        total += row_height(state, indices[static_cast<size_t>(visible)]);
-        if (visible + 1 < static_cast<int>(indices.size())) {
-            total += kSongRowGap;
-        }
-    }
+    float total = 0.0f;
+    for_each_song_row(state, {}, 0.0f, [&](const song_row_entry& entry) {
+        total = entry.rect.y + entry.rect.height;
+        return true;
+    });
     return total;
 }
 
 float max_scroll(Rectangle area, int count) {
-    return std::max(0.0f, content_height(count) - area.height + kScrollPadding);
+    return ui::max_scroll_offset(content_height(count), area, kScrollPadding);
 }
 
 float max_scroll(Rectangle area, const song_select::state& state) {
-    return std::max(0.0f, title_song_list_view::content_height(state) - area.height + kScrollPadding);
+    return ui::max_scroll_offset(title_song_list_view::content_height(state), area, kScrollPadding);
 }
 
 Rectangle row_rect(Rectangle area, int index, float scroll_y) {
-    return {
-        area.x,
-        area.y + kInitialRowOffsetY + static_cast<float>(index) * (kSongRowHeight + kSongRowGap) - scroll_y,
-        area.width,
-        kSongRowHeight
-    };
+    return fixed_song_row_entry_for(area, index, index, scroll_y).rect;
 }
 
 Rectangle row_rect(const song_select::state& state, Rectangle area, int index, float scroll_y) {
-    const std::vector<int> indices = song_select::filtered_song_indices(state);
-    float y = area.y + kInitialRowOffsetY - scroll_y;
-    for (int visible = 0; visible < static_cast<int>(indices.size()); ++visible) {
-        const int song_index = indices[static_cast<size_t>(visible)];
-        const float height = row_height(state, song_index);
-        if (song_index == index) {
-            return row_rect_at_y(area, y, height);
+    Rectangle result{};
+    for_each_song_row(state, area, scroll_y, [&](const song_row_entry& entry) {
+        if (entry.song_index == index) {
+            result = entry.rect;
+            return false;
         }
-        y += height + kSongRowGap;
-    }
-    return {};
+        return true;
+    });
+    return result;
 }
 
 int hit_test(Rectangle area, float scroll_y, Vector2 point, int count) {
     if (!ui::contains_point(area, point)) {
         return -1;
     }
-    for (int index = 0; index < count; ++index) {
-        if (ui::contains_point(row_rect(area, index, scroll_y), point)) {
-            return index;
-        }
+    const Rectangle rows_viewport = fixed_song_rows_viewport(area);
+    const int index = ui::vertical_list_index_at_y(point.y, rows_viewport, kSongRowHeight, kSongRowGap, scroll_y);
+    if (index >= 0 && index < count && ui::contains_point(row_rect(area, index, scroll_y), point)) {
+        return index;
     }
     return -1;
 }
@@ -747,16 +779,15 @@ int hit_test(const song_select::state& state, Rectangle area, float scroll_y, Ve
     if (!ui::contains_point(area, point)) {
         return -1;
     }
-    const std::vector<int> indices = song_select::filtered_song_indices(state);
-    float y = area.y + kInitialRowOffsetY - scroll_y;
-    for (const int song_index : indices) {
-        const float height = row_height(state, song_index);
-        if (ui::contains_point(row_rect_at_y(area, y, height), point)) {
-            return song_index;
+    int result = -1;
+    for_each_song_row(state, area, scroll_y, [&](const song_row_entry& entry) {
+        if (ui::contains_point(entry.rect, point)) {
+            result = entry.song_index;
+            return false;
         }
-        y += height + kSongRowGap;
-    }
-    return -1;
+        return true;
+    });
+    return result;
 }
 
 Rectangle selected_chart_list_rect(const song_select::state& state, Rectangle area, float scroll_y) {
@@ -789,9 +820,8 @@ float max_embedded_chart_scroll(const song_select::state& state, Rectangle area,
     if (filtered.empty()) {
         return 0.0f;
     }
-    const float content =
-        static_cast<float>(filtered.size()) * (kChartRowHeight + kChartRowGap) - kChartRowGap;
-    return std::max(0.0f, content - viewport.height + kEmbeddedChartScrollPadding);
+    const float content = ui::vertical_list_content_height(filtered.size(), kChartRowHeight, kChartRowGap);
+    return ui::max_scroll_offset(content, viewport, kEmbeddedChartScrollPadding);
 }
 
 chart_hit hit_test_chart(const song_select::state& state,
@@ -820,10 +850,9 @@ chart_hit hit_test_chart(const song_select::state& state,
         return {};
     }
     const auto filtered = song_select::filtered_charts_for_selected_song(state);
-    for (int index = 0; index < static_cast<int>(filtered.size()); ++index) {
-        if (ui::contains_point(chart_row_rect(charts, index, chart_scroll_y), point)) {
-            return {song_index, index};
-        }
+    const int index = ui::vertical_list_index_at_y(point.y, viewport, kChartRowHeight, kChartRowGap, chart_scroll_y);
+    if (index >= 0 && index < static_cast<int>(filtered.size())) {
+        return {song_index, index};
     }
     return {};
 }
@@ -843,15 +872,20 @@ void draw(const song_select::state& state, const draw_config& config) {
         draw_song_list_header(config.column_rect, static_cast<int>(indices.size()), false, config.alpha);
 
         ui::scoped_clip_rect clip(config.column_rect);
-        for (int visible = 0; visible < static_cast<int>(indices.size()); ++visible) {
+        const ui::index_range visible_rows = ui::vertical_list_visible_range(
+            indices.size(),
+            fixed_song_rows_viewport(config.column_rect),
+            config.column_rect,
+            kSongRowHeight,
+            kSongRowGap,
+            state.scroll_y,
+            kClipSlack);
+        for (int visible = visible_rows.begin; visible < visible_rows.end; ++visible) {
             const int i = indices[static_cast<size_t>(visible)];
-            const song_select::song_entry& song = state.songs[static_cast<size_t>(i)];
-            const Rectangle row = row_rect(config.column_rect, visible, state.scroll_y);
-            if (!rect_visible_in(config.column_rect, row)) {
-                continue;
-            }
-
-            draw_compact_song_row(song, row, i == state.selected_song_index, config);
+            const song_row_view row = song_row_view_for(
+                state,
+                fixed_song_row_entry_for(config.column_rect, visible, i, state.scroll_y));
+            draw_compact_song_row(row, config);
         }
         return;
     }
@@ -862,25 +896,21 @@ void draw(const song_select::state& state, const draw_config& config) {
     }
 
     ui::scoped_clip_rect clip(config.column_rect);
-    float row_y = config.column_rect.y + kInitialRowOffsetY - state.scroll_y;
-    for (const int i : indices) {
-        const song_select::song_entry& song = state.songs[static_cast<size_t>(i)];
-        const float current_row_height = row_height(state, i);
-        const Rectangle row = row_rect_at_y(config.column_rect, row_y, current_row_height);
-        row_y += current_row_height + kSongRowGap;
-        if (row.width <= 0.0f || row.height <= 0.0f) {
-            continue;
+    for_each_song_row(state, config.column_rect, state.scroll_y, [&](const song_row_entry& entry) {
+        const song_row_view row = song_row_view_for(state, entry);
+        if (row.song == nullptr || row.entry.rect.width <= 0.0f || row.entry.rect.height <= 0.0f) {
+            return true;
         }
-        if (!rect_visible_in(config.column_rect, row)) {
-            continue;
+        if (!rect_visible_in(config.column_rect, row.entry.rect)) {
+            return true;
         }
 
-        const bool selected = i == state.selected_song_index;
-        draw_expanded_song_row(state, song, row, selected, config);
-        if (selected) {
-            draw_embedded_chart_list(state, song, row, config);
+        draw_expanded_song_row(state, row, config);
+        if (row.selected) {
+            draw_embedded_chart_list(state, *row.song, row.entry.rect, config);
         }
-    }
+        return true;
+    });
 }
 
 }  // namespace title_song_list_view

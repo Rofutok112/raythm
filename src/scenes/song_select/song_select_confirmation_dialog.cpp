@@ -1,8 +1,11 @@
 #include "song_select/song_select_confirmation_dialog.h"
 
+#include <array>
+
 #include "song_select/song_select_layout.h"
 #include "theme.h"
 #include "ui_draw.h"
+#include "ui_layout.h"
 
 namespace {
 
@@ -16,27 +19,90 @@ struct confirmation_dialog_layout {
     Rectangle title;
     Rectangle message;
     Rectangle hint;
-    Rectangle confirm_button;
-    Rectangle cancel_button;
+    std::array<Rectangle, 2> buttons;
 };
 
 confirmation_dialog_layout make_confirmation_dialog_layout(Rectangle panel) {
-    const float buttons_left =
-        panel.x + (panel.width - (kDialogButtonWidth * 2.0f + kDialogButtonGap)) * 0.5f;
     const float buttons_y = panel.y + panel.height - kDialogButtonHeight - kDialogButtonBottomPadding;
+    const Rectangle button_row = {panel.x, buttons_y, panel.width, kDialogButtonHeight};
+    std::array<Rectangle, 2> buttons{};
+    ui::centered_hstack(button_row, kDialogButtonWidth, kDialogButtonHeight, kDialogButtonGap, buttons);
     return {
         panel,
         {panel.x + 20.0f, panel.y + 22.0f, panel.width - 40.0f, 30.0f},
         {panel.x + 28.0f, panel.y + 76.0f, panel.width - 56.0f, 40.0f},
         {panel.x + 28.0f, panel.y + 104.0f, panel.width - 56.0f, 22.0f},
-        {buttons_left, buttons_y, kDialogButtonWidth, kDialogButtonHeight},
-        {buttons_left + kDialogButtonWidth + kDialogButtonGap, buttons_y,
-         kDialogButtonWidth, kDialogButtonHeight},
+        buttons,
     };
 }
 
-ui::button_state enqueue_confirmation_button(Rectangle rect, const std::string& label, Color tone) {
-    return ui::queued_toned_action_button(rect, label.c_str(), tone, {
+struct confirmation_button_descriptor {
+    song_select::confirmation_command command = song_select::confirmation_command::none;
+    bool confirm = false;
+    const char* label = "";
+};
+
+struct confirmation_button {
+    song_select::confirmation_command command = song_select::confirmation_command::none;
+    std::string label;
+    Color tone{};
+    Rectangle rect{};
+};
+
+struct confirmation_dialog_content {
+    std::string title;
+    std::string message;
+    std::string hint;
+    std::string confirm_label;
+    bool danger_action = false;
+};
+
+constexpr std::array<confirmation_button_descriptor, 2> kConfirmationButtons = {{
+    {song_select::confirmation_command::confirm, true, ""},
+    {song_select::confirmation_command::cancel, false, "CANCEL"},
+}};
+
+confirmation_dialog_content confirmation_dialog_content_for(
+    const song_select::confirmation_dialog_state& dialog_state) {
+    const bool deleting_song = dialog_state.action == song_select::pending_confirmation_action::delete_song;
+    const bool deleting_chart = dialog_state.action == song_select::pending_confirmation_action::delete_chart;
+    const bool deleting_mv = dialog_state.action == song_select::pending_confirmation_action::delete_mv;
+    const bool danger_action = deleting_song || deleting_chart || deleting_mv;
+    return {
+        dialog_state.title.empty()
+            ? (deleting_song ? "Delete Song" : deleting_chart ? "Delete Chart" : "Confirm Action")
+            : dialog_state.title,
+        dialog_state.message.empty()
+            ? (deleting_song
+                ? "This will remove the song and linked local charts."
+                : "This will remove the selected local chart file.")
+            : dialog_state.message,
+        dialog_state.hint.empty()
+            ? (danger_action ? "This action cannot be undone." : "")
+            : dialog_state.hint,
+        dialog_state.confirm_label.empty()
+            ? (danger_action ? "DELETE" : "CONFIRM")
+            : dialog_state.confirm_label,
+        danger_action,
+    };
+}
+
+confirmation_button confirmation_button_for(const confirmation_button_descriptor& descriptor,
+                                            Rectangle rect,
+                                            const std::string& confirm_label,
+                                            bool danger_action) {
+    return {
+        .command = descriptor.command,
+        .label = descriptor.confirm ? confirm_label : std::string(descriptor.label),
+        .tone = descriptor.confirm
+            ? (danger_action ? g_theme->error : g_theme->accent)
+            : g_theme->text_muted,
+        .rect = rect,
+    };
+}
+
+ui::button_state enqueue_confirmation_button(const confirmation_button& button) {
+    return ui::queued_toned_action_button(button.rect, button.label.c_str(), button.tone, {
         .layer = song_select::layout::kModalLayer,
         .font_size = 16,
         .border_width = 1.5f,
@@ -55,6 +121,39 @@ void enqueue_confirmation_panel(Rectangle rect, bool danger_action) {
     } else {
         ui::queued_panel(rect, song_select::layout::kModalLayer);
     }
+}
+
+void enqueue_confirmation_text(const confirmation_dialog_layout& dialog_layout,
+                               const confirmation_dialog_content& content) {
+    ui::enqueue_text_in_rect(content.title.c_str(), 28,
+                             dialog_layout.title,
+                             g_theme->text, ui::text_align::center, song_select::layout::kModalLayer);
+    ui::enqueue_text_in_rect(content.message.c_str(), 18,
+                             dialog_layout.message,
+                             g_theme->text_secondary, ui::text_align::center, song_select::layout::kModalLayer);
+    if (!content.hint.empty()) {
+        ui::enqueue_text_in_rect(content.hint.c_str(), 16,
+                                 dialog_layout.hint,
+                                 content.danger_action ? g_theme->text_secondary : g_theme->text_hint,
+                                 ui::text_align::center, song_select::layout::kModalLayer);
+    }
+}
+
+song_select::confirmation_command enqueue_confirmation_buttons(
+    const confirmation_dialog_layout& dialog_layout,
+    const confirmation_dialog_content& content) {
+    for (std::size_t i = 0; i < kConfirmationButtons.size(); ++i) {
+        const confirmation_button button =
+            confirmation_button_for(
+                kConfirmationButtons[i],
+                dialog_layout.buttons[i],
+                content.confirm_label,
+                content.danger_action);
+        if (enqueue_confirmation_button(button).clicked) {
+            return button.command;
+        }
+    }
+    return song_select::confirmation_command::none;
 }
 
 }  // namespace
@@ -81,52 +180,14 @@ confirmation_command draw_confirmation_dialog(const state& state) {
         return confirmation_command::none;
     }
 
-    const bool deleting_song = state.confirmation_dialog.action == pending_confirmation_action::delete_song;
-    const bool deleting_chart = state.confirmation_dialog.action == pending_confirmation_action::delete_chart;
-    const bool deleting_mv = state.confirmation_dialog.action == pending_confirmation_action::delete_mv;
-    const bool danger_action = deleting_song || deleting_chart || deleting_mv;
-    const std::string title = state.confirmation_dialog.title.empty()
-        ? (deleting_song ? "Delete Song" : deleting_chart ? "Delete Chart" : "Confirm Action")
-        : state.confirmation_dialog.title;
-    const std::string message = state.confirmation_dialog.message.empty()
-        ? (deleting_song
-            ? "This will remove the song and linked local charts."
-            : "This will remove the selected local chart file.")
-        : state.confirmation_dialog.message;
-    const std::string hint = state.confirmation_dialog.hint.empty()
-        ? (danger_action ? "This action cannot be undone." : "")
-        : state.confirmation_dialog.hint;
-    const std::string confirm_label = state.confirmation_dialog.confirm_label.empty()
-        ? (danger_action ? "DELETE" : "CONFIRM")
-        : state.confirmation_dialog.confirm_label;
+    const confirmation_dialog_content content =
+        confirmation_dialog_content_for(state.confirmation_dialog);
     const confirmation_dialog_layout dialog_layout = make_confirmation_dialog_layout(layout::kConfirmDialogRect);
 
     ui::enqueue_fullscreen_overlay(g_theme->pause_overlay, ui::draw_layer::overlay);
-    enqueue_confirmation_panel(dialog_layout.panel, danger_action);
-    ui::enqueue_text_in_rect(title.c_str(), 28,
-                             dialog_layout.title,
-                             g_theme->text, ui::text_align::center, layout::kModalLayer);
-    ui::enqueue_text_in_rect(message.c_str(), 18,
-                             dialog_layout.message,
-                             g_theme->text_secondary, ui::text_align::center, layout::kModalLayer);
-    if (!hint.empty()) {
-        ui::enqueue_text_in_rect(hint.c_str(), 16,
-                                 dialog_layout.hint,
-                                 danger_action ? g_theme->text_secondary : g_theme->text_hint,
-                                 ui::text_align::center, layout::kModalLayer);
-    }
-    const ui::button_state confirm =
-        enqueue_confirmation_button(dialog_layout.confirm_button, confirm_label, danger_action ? g_theme->error : g_theme->accent);
-    const ui::button_state cancel =
-        enqueue_confirmation_button(dialog_layout.cancel_button, "CANCEL", g_theme->text_muted);
-
-    if (confirm.clicked) {
-        return confirmation_command::confirm;
-    }
-    if (cancel.clicked) {
-        return confirmation_command::cancel;
-    }
-    return confirmation_command::none;
+    enqueue_confirmation_panel(dialog_layout.panel, content.danger_action);
+    enqueue_confirmation_text(dialog_layout, content);
+    return enqueue_confirmation_buttons(dialog_layout, content);
 }
 
 }  // namespace song_select

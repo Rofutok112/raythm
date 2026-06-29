@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "ui_scroll.h"
+
 namespace {
 bool timing_event_sort_less(const timing_event& left, size_t left_index,
                             const timing_event& right, size_t right_index) {
@@ -46,13 +48,13 @@ void editor_timing_selection_service::select_event(editor_scene_sync_context& sy
             constexpr float kTimingRowHeight = 30.0f;
             constexpr float kTimingRowGap = 4.0f;
             constexpr float kTimingListViewportHeight = 174.0f;
-            const float row_top = static_cast<float>(std::distance(timing_indices.begin(), it)) * (kTimingRowHeight + kTimingRowGap);
-            const float row_bottom = row_top + kTimingRowHeight;
-            if (row_top < list_scroll_offset) {
-                list_scroll_offset = row_top;
-            } else if (row_bottom > list_scroll_offset + kTimingListViewportHeight) {
-                list_scroll_offset = row_bottom - kTimingListViewportHeight;
-            }
+            list_scroll_offset = ui::vertical_list_scroll_offset_with_index_visible(
+                list_scroll_offset,
+                static_cast<int>(std::distance(timing_indices.begin(), it)),
+                timing_indices.size(),
+                kTimingListViewportHeight,
+                kTimingRowHeight,
+                kTimingRowGap);
         }
     }
 }

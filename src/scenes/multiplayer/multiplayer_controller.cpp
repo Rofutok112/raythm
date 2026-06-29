@@ -8,6 +8,7 @@
 #include "network/friend_client.h"
 #include "network/json_helpers.h"
 #include "raylib.h"
+#include "ui_hit.h"
 
 namespace multiplayer {
 namespace {
@@ -517,17 +518,17 @@ void on_enter(state& state) {
 
 update_result update(state& state, float dt) {
     update_result result;
-    if (!modal_open(state) && IsKeyPressed(KEY_ESCAPE)) {
+    if (!modal_open(state) && ui::is_escape_pressed()) {
         if (state.screen == screen_mode::room) {
             state.command = ui_command::leave_room;
         } else {
             result.back_requested = true;
         }
-    } else if (!modal_open(state) && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+    } else if (!modal_open(state) && ui::is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)) {
         if (state.screen != screen_mode::room) {
             result.back_requested = true;
         }
-    } else if (modal_open(state) && IsKeyPressed(KEY_ESCAPE)) {
+    } else if (modal_open(state) && ui::is_escape_pressed()) {
         state.modal = modal_mode::none;
     }
 
@@ -588,11 +589,11 @@ update_result update(state& state, float dt) {
         }
     }
 
-    if (!modal_open(state) && state.screen == screen_mode::list && IsKeyPressed(KEY_R)) {
+    if (!modal_open(state) && state.screen == screen_mode::list && ui::is_key_pressed(KEY_R)) {
         refresh_rooms(state);
     }
     if (!modal_open(state) && state.screen == screen_mode::room && state.current_room.has_value() &&
-        IsKeyPressed(KEY_F5)) {
+        ui::is_key_pressed(KEY_F5)) {
         start_operation(state,
                         pending_operation::refresh_room,
                         std::async(std::launch::async,
@@ -602,13 +603,13 @@ update_result update(state& state, float dt) {
                         "Refreshing room...");
     }
 
-    if (state.modal == modal_mode::password && IsKeyPressed(KEY_ENTER)) {
+    if (state.modal == modal_mode::password && ui::is_enter_pressed()) {
         state.command = ui_command::submit_password;
         result.open_song_select_requested = handle_command(state) || result.open_song_select_requested;
-    } else if (state.modal == modal_mode::create_room && IsKeyPressed(KEY_ENTER) && !operation_busy(state)) {
+    } else if (state.modal == modal_mode::create_room && ui::is_enter_pressed() && !operation_busy(state)) {
         state.command = ui_command::submit_create_room;
         result.open_song_select_requested = handle_command(state) || result.open_song_select_requested;
-    } else if (state.screen == screen_mode::room && state.chat_input.active && IsKeyPressed(KEY_ENTER)) {
+    } else if (state.screen == screen_mode::room && state.chat_input.active && ui::is_enter_pressed()) {
         state.command = ui_command::send_chat;
         result.open_song_select_requested = handle_command(state) || result.open_song_select_requested;
     }

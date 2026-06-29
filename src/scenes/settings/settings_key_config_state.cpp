@@ -9,24 +9,66 @@
 #include "settings/settings_layout.h"
 #include "theme.h"
 #include "ui_draw.h"
+#include "ui_hit.h"
 
 namespace {
 
-void draw_key_slot_row(Rectangle row_rect, int index, const char* key_label, bool selected, bool listening) {
+struct key_slot_row {
+    Rectangle rect{};
+    int index = 0;
+    const char* key_label = "";
+    bool selected = false;
+    bool listening = false;
+};
+
+int key_count_for_mode(int mode) {
+    return mode == 0 ? 4 : 6;
+}
+
+const char* key_mode_label(int mode) {
+    return mode == 0 ? "4K" : "6K";
+}
+
+std::span<KeyboardKey> key_span_for_mode(game_settings& settings, int mode) {
+    return mode == 0
+        ? std::span<KeyboardKey>(settings.keys.keys_4)
+        : std::span<KeyboardKey>(settings.keys.keys_6);
+}
+
+std::span<const KeyboardKey> key_span_for_mode(const game_settings& settings, int mode) {
+    return mode == 0
+        ? std::span<const KeyboardKey>(settings.keys.keys_4)
+        : std::span<const KeyboardKey>(settings.keys.keys_6);
+}
+
+key_slot_row key_slot_row_for(int index, const KeyboardKey* keys, int selected_slot, bool listening) {
+    const bool selected = selected_slot == index;
+    const bool is_listening = selected && listening;
+    return {
+        .rect = settings::key_slot_rect(index),
+        .index = index,
+        .key_label = is_listening ? localization::tr(localization::text_key::press_a_key)
+                                  : get_key_name(keys[index]),
+        .selected = selected,
+        .listening = is_listening,
+    };
+}
+
+void draw_key_slot_row(const key_slot_row& row) {
     const auto& theme = *g_theme;
-    const ui::row_state row_state = ui::row(row_rect, {
+    const ui::row_state row_state = ui::row(row.rect, {
         .layer = settings::kLayer,
         .border_width = 2.0f,
-        .bg = selected ? theme.row_selected : theme.row,
-        .bg_hover = selected ? theme.row_active : theme.row_hover,
-        .border_color = selected ? theme.border_active : theme.border,
+        .bg = row.selected ? theme.row_selected : theme.row,
+        .bg_hover = row.selected ? theme.row_active : theme.row_hover,
+        .border_color = row.selected ? theme.border_active : theme.border,
         .custom_colors = true,
     });
     const settings::key_slot_layout layout = settings::key_slot_layout_for(row_state.visual);
-    ui::draw_text_in_rect(TextFormat("%s %d", localization::tr(localization::text_key::lane), index + 1),
+    ui::draw_text_in_rect(TextFormat("%s %d", localization::tr(localization::text_key::lane), row.index + 1),
                           24, layout.label_rect, theme.text, ui::text_align::left);
-    ui::draw_text_in_rect(key_label, 24, layout.value_rect,
-                          listening ? theme.error : theme.text_dim, ui::text_align::right);
+    ui::draw_text_in_rect(row.key_label, 24, layout.value_rect,
+                          row.listening ? theme.error : theme.text_dim, ui::text_align::right);
 }
 
 void draw_key_config_error(const std::string& message, float timer, int visible_key_count) {
@@ -38,6 +80,22 @@ void draw_key_config_error(const std::string& message, float timer, int visible_
     ui::draw_text_in_rect(message.c_str(), 22,
                           settings::key_config_error_rect(visible_key_count),
                           with_alpha(theme.error, alpha), ui::text_align::left);
+}
+
+int clicked_key_slot(std::span<const KeyboardKey> keys, int selected_slot, bool listening) {
+    for (int i = 0; i < static_cast<int>(keys.size()); ++i) {
+        const key_slot_row row = key_slot_row_for(i, keys.data(), selected_slot, listening);
+        if (ui::is_clicked(row.rect, settings::kLayer)) {
+            return row.index;
+        }
+    }
+    return -1;
+}
+
+void draw_key_slot_rows(std::span<const KeyboardKey> keys, int selected_slot, bool listening) {
+    for (int i = 0; i < static_cast<int>(keys.size()); ++i) {
+        draw_key_slot_row(key_slot_row_for(i, keys.data(), selected_slot, listening));
+    }
 }
 
 }  // namespace
@@ -73,7 +131,7 @@ void settings_key_config_state::show_error(const std::string& message) {
 }
 
 void settings_key_config_state::handle_listening(game_settings& settings) {
-    if (IsKeyPressed(KEY_ESCAPE)) {
+    if (ui::is_escape_pressed()) {
         listening_ = false;
         return;
     }
@@ -88,10 +146,8 @@ void settings_key_config_state::handle_listening(game_settings& settings) {
         return;
     }
 
-    std::span<KeyboardKey> keys = mode_ == 0
-        ? std::span<KeyboardKey>(settings.keys.keys_4)
-        : std::span<KeyboardKey>(settings.keys.keys_6);
-    const int count = mode_ == 0 ? 4 : 6;
+    std::span<KeyboardKey> keys = key_span_for_mode(settings, mode_);
+    const int count = static_cast<int>(keys.size());
     for (int i = 0; i < count; ++i) {
         if (i != slot_ && keys[static_cast<std::size_t>(i)] == static_cast<KeyboardKey>(pressed)) {
             show_error(TextFormat("%s: %s (%s %d)",
@@ -122,36 +178,24 @@ void settings_key_config_state::update(game_settings& settings) {
         return;
     }
 
-    const int max_keys = mode_ == 0 ? 4 : 6;
-    for (int i = 0; i < max_keys; ++i) {
-        const Rectangle row_rect = settings::key_slot_rect(i);
-        if (ui::is_clicked(row_rect, settings::kLayer)) {
-            if (slot_ == i) {
-                listening_ = true;
-                error_.clear();
-            } else {
-                slot_ = i;
-            }
-            return;
+    const std::span<const KeyboardKey> keys = key_span_for_mode(settings, mode_);
+    const int clicked_slot = clicked_key_slot(keys, slot_, listening_);
+    if (clicked_slot >= 0) {
+        if (slot_ == clicked_slot) {
+            listening_ = true;
+            error_.clear();
+        } else {
+            slot_ = clicked_slot;
         }
     }
 }
 
 void settings_key_config_state::draw(const game_settings& settings) const {
     ui::value_selector(settings::kKeyModeRect, localization::tr(localization::text_key::mode),
-                       mode_ == 0 ? "4K" : "6K", settings::value_selector_options());
+                       key_mode_label(mode_), settings::value_selector_options());
 
-    const std::span<const KeyboardKey> keys = mode_ == 0
-        ? std::span<const KeyboardKey>(settings.keys.keys_4)
-        : std::span<const KeyboardKey>(settings.keys.keys_6);
-    const int count = mode_ == 0 ? 4 : 6;
-    for (int i = 0; i < count; ++i) {
-        const bool selected = slot_ == i;
-        const bool is_listening = selected && listening_;
-        const Rectangle row_rect = settings::key_slot_rect(i);
-        const char* key_label = is_listening ? localization::tr(localization::text_key::press_a_key)
-                                             : get_key_name(keys[static_cast<std::size_t>(i)]);
-        draw_key_slot_row(row_rect, i, key_label, selected, is_listening);
-    }
+    const std::span<const KeyboardKey> keys = key_span_for_mode(settings, mode_);
+    draw_key_slot_rows(keys, slot_, listening_);
+    const int count = key_count_for_mode(mode_);
     draw_key_config_error(error_, error_timer_, count);
 }

@@ -8,6 +8,7 @@
 #include "data_models.h"
 #include "scene.h"
 #include "shared/square_image_picker.h"
+#include "song_create/song_create_timing_panel.h"
 #include "ui_draw.h"
 #include "ui_text_input.h"
 
@@ -47,6 +48,10 @@ private:
     bool import_midi_timing(const std::string& midi_path);
     std::vector<timing_event> validated_timing_events(float base_bpm, bool& ok);
     void update_metronome(float dt);
+    song_create::timing_panel::state_refs timing_panel_state_refs();
+    song_create::timing_panel::callbacks timing_panel_callbacks();
+    song_create::timing_panel::config timing_panel_config() const;
+    void apply_timing_modal_result(const song_create::timing_panel::modal_result& result);
     void go_back_to_song_select(const std::string& preferred_song_id = "");
     bool is_edit_mode() const;
 

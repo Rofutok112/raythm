@@ -4,6 +4,7 @@
 
 #include "theme.h"
 #include "ui_draw.h"
+#include "ui_layout.h"
 
 namespace song_create::saved_view {
 
@@ -22,17 +23,30 @@ struct saved_view_layout {
     std::array<Rectangle, 2> buttons;
 };
 
-float saved_button_row_width() {
-    return kSavedButtonWidth * 2.0f + kSavedButtonGap;
-}
+struct saved_action_definition {
+    action value;
+    const char* label;
+};
+
+struct saved_text_line {
+    Rectangle rect;
+    const char* text;
+    int font_size;
+    Color color;
+};
+
+constexpr std::array<saved_action_definition, 2> kSavedActions = {{
+    {action::add_chart, "ADD CHART"},
+    {action::add_later, "ADD LATER"},
+}};
 
 saved_view_layout saved_view_layout_for(Rectangle card_rect, int screen_width) {
-    const float total_width = saved_button_row_width();
-    const float start_x = (static_cast<float>(screen_width) - total_width) * 0.5f;
     std::array<Rectangle, 2> buttons{};
-    ui::hstack_fill({start_x, kCenterY + 67.5f, total_width, kSavedButtonHeight},
-                    kSavedButtonGap,
-                    buttons);
+    ui::centered_hstack({0.0f, kCenterY + 67.5f, static_cast<float>(screen_width), kSavedButtonHeight},
+                        kSavedButtonWidth,
+                        kSavedButtonHeight,
+                        kSavedButtonGap,
+                        buttons);
     return {
         {card_rect.x + kCardContentInsetX, card_rect.y + 42.0f,
          card_rect.width - kCardContentInsetX * 2.0f, 51.0f},
@@ -44,21 +58,44 @@ saved_view_layout saved_view_layout_for(Rectangle card_rect, int screen_width) {
     };
 }
 
+std::array<ui::action_button_definition<action>, kSavedActions.size()> saved_action_buttons_for(
+    const saved_view_layout& layout) {
+    std::array<ui::action_button_definition<action>, kSavedActions.size()> buttons{};
+    for (std::size_t i = 0; i < buttons.size(); ++i) {
+        buttons[i] = {
+            .rect = layout.buttons[i],
+            .label = kSavedActions[i].label,
+            .action = kSavedActions[i].value,
+        };
+    }
+    return buttons;
+}
+
+std::array<saved_text_line, 3> saved_text_lines_for(const saved_view_layout& layout,
+                                                    const song_data& created_song) {
+    return {{
+        {layout.title, "Song has been created.", 24, g_theme->text},
+        {layout.song, created_song.meta.title.c_str(), 22, g_theme->text_secondary},
+        {layout.message, "What would you like to do next?", 20, g_theme->text_muted},
+    }};
+}
+
 }  // namespace
 
 action draw(const song_data& created_song, Rectangle card_rect, int screen_width) {
     const saved_view_layout layout = saved_view_layout_for(card_rect, screen_width);
-    ui::draw_text_in_rect("Song has been created.", 24, layout.title, g_theme->text, ui::text_align::center);
-    ui::draw_text_in_rect(created_song.meta.title.c_str(), 22, layout.song,
-                          g_theme->text_secondary, ui::text_align::center);
-    ui::draw_text_in_rect("What would you like to do next?", 20, layout.message,
-                          g_theme->text_muted, ui::text_align::center);
-
-    if (ui::button(layout.buttons[0], "ADD CHART", {.font_size = 16}).clicked) {
-        return action::add_chart;
+    for (const saved_text_line& line : saved_text_lines_for(layout, created_song)) {
+        ui::draw_text_in_rect(line.text, line.font_size, line.rect, line.color, ui::text_align::center);
     }
-    if (ui::button(layout.buttons[1], "ADD LATER", {.font_size = 16}).clicked) {
-        return action::add_later;
+
+    const std::array<ui::action_button_definition<action>, kSavedActions.size()> buttons =
+        saved_action_buttons_for(layout);
+    const auto clicked_action = ui::draw_action_buttons<action>(buttons, {
+        .font_size = 16,
+        .border_width = 2.0f,
+    });
+    if (clicked_action.has_value()) {
+        return *clicked_action;
     }
     return action::none;
 }

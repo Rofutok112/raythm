@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <span>
 
 #include "theme.h"
 #include "ui_draw.h"
@@ -83,7 +84,7 @@ Vector2 layer_base_size_canvas(const mv::composition::mv_composition& compositio
     }
     if (source.type == "TextRenderer") {
         const std::string text = source.text.empty() ? "Text" : source.text;
-        const Vector2 measured = MeasureTextEx(GetFontDefault(), text.c_str(), 44.0f, 1.0f);
+        const Vector2 measured = ui::measure_default_text(text.c_str(), 44.0f);
         return {std::max(1.0f, measured.x), std::max(1.0f, measured.y)};
     }
     if (source.type == "ShapeRenderer" && (source.shape.empty() || source.shape == "rect")) {
@@ -105,59 +106,6 @@ Vector2 layer_base_size_canvas(const mv::composition::mv_composition& compositio
     return {480.0f, 270.0f};
 }
 
-void draw_title_style_spectrum(Rectangle area, float opacity, double visual_time_ms,
-                               const std::array<float, 128>* spectrum) {
-    constexpr int kBars = 64;
-    const float alpha = std::clamp(opacity, 0.0f, 1.0f);
-    const float gap = 3.0f;
-    const float bar_w = std::max(2.0f, (area.width - gap * static_cast<float>(kBars - 1)) /
-                                           static_cast<float>(kBars));
-    const float baseline = area.y + area.height;
-    const float block_height = 8.0f;
-    const float block_gap = 4.0f;
-    const Color base_low = with_opacity({107, 33, 168, 255}, alpha * (128.0f / 255.0f));
-    const Color base_mid = with_opacity({168, 85, 247, 255}, alpha * (178.0f / 255.0f));
-    const Color base_top = with_opacity({216, 180, 254, 255}, alpha * (230.0f / 255.0f));
-    const Color peak_glow = with_opacity({216, 180, 254, 255}, alpha * (110.0f / 255.0f));
-    const Color peak_color = with_opacity({216, 180, 254, 255}, alpha * (166.0f / 255.0f));
-    const float phase = static_cast<float>(visual_time_ms / 260.0);
-
-    for (int i = 0; i < kBars; ++i) {
-        const float ratio = static_cast<float>(i) / static_cast<float>(kBars - 1);
-        float normalized = 0.0f;
-        if (spectrum != nullptr) {
-            const std::size_t start = static_cast<std::size_t>(i) * spectrum->size() / kBars;
-            const std::size_t end = std::max(start + 1, static_cast<std::size_t>(i + 1) * spectrum->size() / kBars);
-            float sum = 0.0f;
-            for (std::size_t j = start; j < end && j < spectrum->size(); ++j) {
-                sum += std::sqrt(std::max(0.0f, (*spectrum)[j])) * 8.0f;
-            }
-            normalized = std::clamp(sum / static_cast<float>(std::max<std::size_t>(1, end - start)), 0.0f, 1.0f);
-        } else {
-            const float bass_bias = 1.0f - ratio * 0.35f;
-            const float wave = 0.42f + 0.34f * std::sin(phase + ratio * 9.0f) +
-                               0.18f * std::sin(phase * 0.55f + ratio * 27.0f);
-            normalized = std::clamp(wave * bass_bias, 0.0f, 1.0f);
-        }
-
-        const float height = normalized * area.height;
-        const float x = area.x + static_cast<float>(i) * (bar_w + gap);
-        ui::block_spectrum_bar(x,
-                               baseline,
-                               bar_w,
-                               height,
-                               area.height,
-                               normalized * area.height,
-                               block_height,
-                               block_gap,
-                               base_low,
-                               base_mid,
-                               base_top,
-                               peak_glow,
-                               peak_color);
-    }
-}
-
 std::array<Rectangle, 8> preview_transform_handles(Rectangle bounds) {
     const float size = kPreviewHandleSize;
     const float half = size * 0.5f;
@@ -175,6 +123,10 @@ std::array<Rectangle, 8> preview_transform_handles(Rectangle bounds) {
         {cx - half, bottom - half, size, size},
         {right - half, bottom - half, size, size},
     }};
+}
+
+void draw_preview_selection_frame(Rectangle bounds, Color color = {}) {
+    ui::frame(bounds, color.a > 0 ? color : g_theme->border_active, 1.5f);
 }
 
 mv_preview_drag_mode preview_drag_mode_for_handle(int index) {
@@ -237,7 +189,7 @@ void draw_mv_preview_background(Rectangle preview,
 
 void draw_preview_transform_overlay(Rectangle bounds, bool locked) {
     const Color line = locked ? with_alpha(g_theme->text_muted, 170) : g_theme->border_active;
-    DrawRectangleLinesEx(bounds, 1.5f, line);
+    draw_preview_selection_frame(bounds, line);
     for (const Rectangle handle : preview_transform_handles(bounds)) {
         ui::surface(handle, locked ? with_alpha(g_theme->row, 180) : g_theme->accent, g_theme->bg, 1.0f);
     }
@@ -256,7 +208,7 @@ Rectangle layer_preview_bounds(Rectangle preview,
     if (source != nullptr && source->type == "TextRenderer") {
         const std::string text = source->text.empty() ? "Text" : source->text;
         const float font_size = std::clamp(44.0f * transform.scale_y * (preview.height / 1080.0f), 10.0f, 72.0f);
-        const Vector2 size = MeasureTextEx(GetFontDefault(), text.c_str(), font_size, 1.0f);
+        const Vector2 size = ui::measure_default_text(text.c_str(), font_size);
         return {position.x - size.x * transform.anchor_x,
                 position.y - size.y * transform.anchor_y,
                 size.x,
@@ -327,12 +279,11 @@ void draw_preview_layer(Rectangle preview,
     if (source.type == "TextRenderer") {
         const std::string text = source.text.empty() ? "Text" : source.text;
         const float font_size = std::clamp(44.0f * transform.scale_y * (preview.height / 1080.0f), 10.0f, 72.0f);
-        const Vector2 size = MeasureTextEx(GetFontDefault(), text.c_str(), font_size, 1.0f);
+        const Vector2 size = ui::measure_default_text(text.c_str(), font_size);
         const Vector2 origin = {size.x * transform.anchor_x, size.y * transform.anchor_y};
-        DrawTextPro(GetFontDefault(), text.c_str(), position, origin, transform.rotation_deg, font_size, 1.0f, fill);
+        ui::draw_default_text_pro(text.c_str(), position, origin, transform.rotation_deg, font_size, fill);
         if (selected) {
-            DrawRectangleLinesEx({position.x - origin.x, position.y - origin.y, size.x, size.y}, 1.5f,
-                                 g_theme->border_active);
+            draw_preview_selection_frame({position.x - origin.x, position.y - origin.y, size.x, size.y});
         }
         return;
     }
@@ -344,10 +295,9 @@ void draw_preview_layer(Rectangle preview,
                              * preview.height;
         const Rectangle rect = {position.x, position.y, rect_w, rect_h};
         const Vector2 origin = {rect_w * transform.anchor_x, rect_h * transform.anchor_y};
-        DrawRectanglePro(rect, origin, transform.rotation_deg, fill);
+        ui::draw_rect_pro(rect, origin, transform.rotation_deg, fill);
         if (selected) {
-            DrawRectangleLinesEx({position.x - origin.x, position.y - origin.y, rect_w, rect_h}, 1.5f,
-                                 g_theme->border_active);
+            draw_preview_selection_frame({position.x - origin.x, position.y - origin.y, rect_w, rect_h});
         }
         return;
     }
@@ -360,10 +310,9 @@ void draw_preview_layer(Rectangle preview,
         const Rectangle src = {0.0f, 0.0f, static_cast<float>(texture->width), static_cast<float>(texture->height)};
         const Rectangle dest = {position.x, position.y, rect_w, rect_h};
         const Vector2 origin = {rect_w * transform.anchor_x, rect_h * transform.anchor_y};
-        DrawTexturePro(*texture, src, dest, origin, transform.rotation_deg, fill);
+        ui::draw_texture(*texture, src, dest, fill, origin, transform.rotation_deg);
         if (selected) {
-            DrawRectangleLinesEx({position.x - origin.x, position.y - origin.y, rect_w, rect_h}, 1.5f,
-                                 g_theme->border_active);
+            draw_preview_selection_frame({position.x - origin.x, position.y - origin.y, rect_w, rect_h});
         }
         return;
     }
@@ -385,16 +334,16 @@ void draw_preview_layer(Rectangle preview,
         const float cell_h = area.height / 8.0f;
         for (int i = 0; i <= 16; ++i) {
             const float x = area.x + std::fmod((static_cast<float>(i) - phase_x) * cell_w + area.width, area.width);
-            DrawLineEx({x, area.y}, {x, area.y + area.height}, i % 4 == 0 ? 2.0f : 1.0f,
-                       i % 4 == 0 ? major : minor);
+            ui::draw_line_ex({x, area.y}, {x, area.y + area.height}, i % 4 == 0 ? 2.0f : 1.0f,
+                             i % 4 == 0 ? major : minor);
         }
         for (int i = 0; i <= 8; ++i) {
             const float y = area.y + std::fmod((static_cast<float>(i) - phase_y) * cell_h + area.height, area.height);
-            DrawLineEx({area.x, y}, {area.x + area.width, y}, i % 4 == 0 ? 2.0f : 1.0f,
-                       i % 4 == 0 ? major : minor);
+            ui::draw_line_ex({area.x, y}, {area.x + area.width, y}, i % 4 == 0 ? 2.0f : 1.0f,
+                             i % 4 == 0 ? major : minor);
         }
         if (selected) {
-            DrawRectangleLinesEx(area, 1.5f, g_theme->border_active);
+            draw_preview_selection_frame(area);
         }
         return;
     }
@@ -432,13 +381,13 @@ void draw_preview_layer(Rectangle preview,
             const float y = center_y - wave * envelope * area.height * 0.38f;
             const Vector2 current = {x, y};
             if (i > 0) {
-                DrawLineEx(previous, current, 5.0f, shadow);
-                DrawLineEx(previous, current, 2.0f, line);
+                ui::draw_line_ex(previous, current, 5.0f, shadow);
+                ui::draw_line_ex(previous, current, 2.0f, line);
             }
             previous = current;
         }
         if (selected) {
-            DrawRectangleLinesEx(area, 1.5f, g_theme->border_active);
+            draw_preview_selection_frame(area);
         }
         return;
     }
@@ -452,44 +401,22 @@ void draw_preview_layer(Rectangle preview,
                                 position.y - rect_h * transform.anchor_y,
                                 rect_w, rect_h};
         if (source.shape == "title") {
-            draw_title_style_spectrum(area, transform.opacity, visual_time_ms - layer.start_ms, spectrum);
+            ui::draw_title_spectrum(
+                area, transform.opacity, visual_time_ms - layer.start_ms,
+                spectrum != nullptr ? std::span<const float>(*spectrum) : std::span<const float>{});
             if (selected) {
-                DrawRectangleLinesEx(area, 1.5f, g_theme->border_active);
+                draw_preview_selection_frame(area);
             }
             return;
         }
         const Color base = parse_color(source.fill.empty() ? "#38bdf8" : source.fill);
         const Color bar = with_opacity(base, 0.72f * transform.opacity);
         const Color peak = with_opacity(base, 0.95f * transform.opacity);
-        constexpr int kBars = 32;
-        const float gap = 3.0f;
-        const float bar_w = std::max(2.0f, (area.width - gap * static_cast<float>(kBars - 1)) /
-                                               static_cast<float>(kBars));
-        for (int i = 0; i < kBars; ++i) {
-            const float ratio = static_cast<float>(i) / static_cast<float>(kBars - 1);
-            float normalized = 0.0f;
-            if (spectrum != nullptr) {
-                const std::size_t start = static_cast<std::size_t>(i) * spectrum->size() / kBars;
-                const std::size_t end = std::max(start + 1, static_cast<std::size_t>(i + 1) * spectrum->size() / kBars);
-                float sum = 0.0f;
-                for (std::size_t j = start; j < end && j < spectrum->size(); ++j) {
-                    sum += std::sqrt(std::max(0.0f, (*spectrum)[j])) * 8.0f;
-                }
-                normalized = std::clamp(sum / static_cast<float>(std::max<std::size_t>(1, end - start)), 0.04f, 1.0f);
-            } else {
-                const float phase = static_cast<float>((visual_time_ms - layer.start_ms) / 260.0);
-                const float bass_bias = 1.0f - ratio * 0.45f;
-                const float wave = 0.45f + 0.35f * std::sin(phase + ratio * 9.0f) +
-                                   0.20f * std::sin(phase * 0.55f + ratio * 27.0f);
-                normalized = std::clamp(wave * bass_bias, 0.08f, 1.0f);
-            }
-            const float height = normalized * area.height;
-            const float x = area.x + static_cast<float>(i) * (bar_w + gap);
-            const Rectangle rect = {x, area.y + area.height - height, bar_w, height};
-            ui::solid_spectrum_bar(rect, bar, peak);
-        }
+        ui::draw_solid_spectrum(
+            area, bar, peak, visual_time_ms - layer.start_ms,
+            spectrum != nullptr ? std::span<const float>(*spectrum) : std::span<const float>{});
         if (selected) {
-            DrawRectangleLinesEx(area, 1.5f, g_theme->border_active);
+            draw_preview_selection_frame(area);
         }
     }
 }
@@ -500,7 +427,7 @@ mv_editor_preview_drag_update_result preview_drag_update_result_for(
     Vector2 mouse,
     Vector2 origin_mouse,
     Rectangle origin_rect) {
-    if (layer_id.empty() || mode == mv_preview_drag_mode::none || !IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+    if (layer_id.empty() || mode == mv_preview_drag_mode::none || !ui::is_mouse_button_down()) {
         return {};
     }
 
@@ -548,11 +475,17 @@ mv_editor_preview_drag_start_result preview_drag_start_result_for_selected_handl
     return {};
 }
 
+bool preview_layer_body_accepts_pointer(const mv::composition::layer& candidate,
+                                        Rectangle bounds,
+                                        Vector2 mouse) {
+    return preview_transformable(candidate) && ui::contains_point(bounds, mouse);
+}
+
 mv_editor_preview_drag_start_result preview_drag_start_result_for_layer_body(
     const mv::composition::layer& candidate,
     Rectangle bounds,
     Vector2 mouse) {
-    if (!preview_transformable(candidate) || !ui::contains_point(bounds, mouse)) {
+    if (!preview_layer_body_accepts_pointer(candidate, bounds, mouse)) {
         return {};
     }
 
@@ -581,6 +514,6 @@ mv_editor_preview_drag_end_result preview_drag_end_result_for(bool drag_active,
         };
     }
     return {
-        .ended = IsMouseButtonReleased(MOUSE_BUTTON_LEFT),
+        .ended = ui::is_mouse_button_released(),
     };
 }

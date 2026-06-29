@@ -1,5 +1,8 @@
 #include "editor/view/editor_modal_view.h"
 
+#include <array>
+#include <span>
+
 #include "editor/view/editor_layout.h"
 #include "theme.h"
 #include "ui_draw.h"
@@ -20,6 +23,44 @@ bool accepts_chart_file_character(int codepoint, const std::string&) {
            codepoint == '_' ||
            codepoint == '.';
 }
+
+enum class modal_button_action {
+    save,
+    discard,
+    cancel,
+    submit,
+    confirm,
+};
+
+std::array<ui::action_button_definition<modal_button_action>, 3> unsaved_changes_buttons() {
+    return {{
+        {layout::unsaved_save_button_rect(), "SAVE", modal_button_action::save},
+        {layout::unsaved_discard_button_rect(), "DISCARD", modal_button_action::discard},
+        {layout::unsaved_cancel_button_rect(), "CANCEL", modal_button_action::cancel},
+    }};
+}
+
+std::array<ui::action_button_definition<modal_button_action>, 2> save_dialog_buttons() {
+    return {{
+        {layout::save_submit_button_rect(), "SAVE", modal_button_action::submit},
+        {layout::save_cancel_button_rect(), "CANCEL", modal_button_action::cancel},
+    }};
+}
+
+std::array<ui::action_button_definition<modal_button_action>, 2> key_count_confirmation_buttons() {
+    return {{
+        {layout::key_count_confirm_button_rect(), "CONFIRM", modal_button_action::confirm},
+        {layout::key_count_cancel_button_rect(), "CANCEL", modal_button_action::cancel},
+    }};
+}
+
+void draw_modal_buttons(std::span<const ui::action_button_definition<modal_button_action>> buttons) {
+    (void)ui::queued_draw_action_buttons<modal_button_action>(buttons, {
+        .layer = ui::draw_layer::modal,
+        .font_size = 16,
+        .border_width = 1.5f,
+    });
+}
 }
 
 void editor_modal_view::draw_unsaved_changes_dialog() {
@@ -38,21 +79,7 @@ void editor_modal_view::draw_unsaved_changes_dialog() {
                               layout::kUnsavedChangesRect.width - 56.0f, 24.0f},
                              g_theme->text, ui::text_align::center, ui::draw_layer::modal);
 
-    ui::queued_button(layout::unsaved_save_button_rect(), "SAVE", {
-        .layer = ui::draw_layer::modal,
-        .font_size = 16,
-        .border_width = 1.5f,
-    });
-    ui::queued_button(layout::unsaved_discard_button_rect(), "DISCARD", {
-        .layer = ui::draw_layer::modal,
-        .font_size = 16,
-        .border_width = 1.5f,
-    });
-    ui::queued_button(layout::unsaved_cancel_button_rect(), "CANCEL", {
-        .layer = ui::draw_layer::modal,
-        .font_size = 16,
-        .border_width = 1.5f,
-    });
+    draw_modal_buttons(unsaved_changes_buttons());
 }
 
 editor_modal_view_result editor_modal_view::draw_save_dialog(save_dialog_state& state) {
@@ -87,16 +114,7 @@ editor_modal_view_result editor_modal_view::draw_save_dialog(save_dialog_state& 
                               g_theme->error, ui::text_align::left);
     }
 
-    ui::queued_button(layout::save_submit_button_rect(), "SAVE", {
-        .layer = ui::draw_layer::modal,
-        .font_size = 16,
-        .border_width = 1.5f,
-    });
-    ui::queued_button(layout::save_cancel_button_rect(), "CANCEL", {
-        .layer = ui::draw_layer::modal,
-        .font_size = 16,
-        .border_width = 1.5f,
-    });
+    draw_modal_buttons(save_dialog_buttons());
     return result;
 }
 
@@ -116,14 +134,5 @@ void editor_modal_view::draw_key_count_confirmation(int pending_key_count) {
                               layout::kMetadataConfirmRect.width - 56.0f, 24.0f},
                              g_theme->text, ui::text_align::center, ui::draw_layer::modal);
 
-    ui::queued_button(layout::key_count_confirm_button_rect(), "CONFIRM", {
-        .layer = ui::draw_layer::modal,
-        .font_size = 16,
-        .border_width = 1.5f,
-    });
-    ui::queued_button(layout::key_count_cancel_button_rect(), "CANCEL", {
-        .layer = ui::draw_layer::modal,
-        .font_size = 16,
-        .border_width = 1.5f,
-    });
+    draw_modal_buttons(key_count_confirmation_buttons());
 }

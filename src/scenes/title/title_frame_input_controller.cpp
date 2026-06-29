@@ -7,6 +7,7 @@
 #include "title/title_home_input_controller.h"
 #include "title/title_layout.h"
 #include "ui_draw.h"
+#include "ui_hit.h"
 #include "ui_notice.h"
 #include "virtual_screen.h"
 #include "platform/window_chrome.h"
@@ -28,7 +29,7 @@ bool update_home_pointer_suppression(bool& suppress_home_pointer_until_release) 
         return false;
     }
 
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+    if (ui::is_mouse_button_down() || ui::is_mouse_button_down(MOUSE_BUTTON_RIGHT)) {
         return true;
     }
 
@@ -58,8 +59,7 @@ bool handle_login_dialog_input(title::frame_input_context& context) {
     if (!play_state.login_dialog.open) {
         return false;
     }
-    if ((IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) &&
-        !context.auth_controller.request_active) {
+    if (ui::is_cancel_pressed() && !context.auth_controller.request_active) {
         play_state.login_dialog.open = false;
         return true;
     }
@@ -76,8 +76,7 @@ bool handle_login_dialog_input(title::frame_input_context& context) {
         account_dialog_anchor,
         title_layout::screen_rect(),
         ui::draw_layer::modal);
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
-        !ui::contains_point(login_layout.dialog_rect, virtual_screen::get_virtual_mouse())) {
+    if (ui::is_mouse_button_released_outside(login_layout.dialog_rect, virtual_screen::get_virtual_mouse())) {
         play_state.login_dialog.open = false;
         return true;
     }
@@ -152,7 +151,7 @@ bool left_click_for_title_home(float home_menu_anim) {
         home_menu_anim >= kAccountChipInteractiveThreshold && ui::is_hovered(rating_rankings_chip_rect);
     const bool friends_hovered =
         home_menu_anim >= kAccountChipInteractiveThreshold && ui::is_hovered(friends_chip_rect);
-    return IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+    return ui::is_mouse_button_pressed() &&
            !window_chrome::is_pointer_over_chrome() &&
            !account_hovered &&
            !refresh_hovered &&
@@ -198,8 +197,8 @@ frame_input_result update_frame_input(frame_input_context& context) {
 
     if (context.mode == common_mode::title) {
         const bool left_click = left_click_for_title_home(context.home_menu_anim);
-        const bool right_click = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
-        if (IsKeyPressed(KEY_ENTER) || left_click || right_click) {
+        const bool right_click = ui::is_mouse_button_pressed(MOUSE_BUTTON_RIGHT);
+        if (ui::is_enter_pressed() || left_click || right_click) {
             return {
                 .consumed = true,
                 .enter_home = true,

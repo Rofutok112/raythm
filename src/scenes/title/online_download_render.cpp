@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,7 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_layout.h"
 #include "ui_text_input.h"
 #include "ui/icons/raythm_icons.h"
 #include "virtual_screen.h"
@@ -167,16 +169,6 @@ preview_ranking_row_layout preview_ranking_row_layout_for(Rectangle table, int i
         .score = {row.x + 270.0f, row.y + 5.0f, 128.0f, 16.0f},
         .accuracy = {row.x + 424.0f, row.y + 5.0f, 78.0f, 16.0f},
         .clear = {row.x + row.width - 54.0f, row.y + 4.0f, 44.0f, 18.0f},
-    };
-}
-
-Rectangle centered_icon_rect(Rectangle rect, float inset) {
-    const float size = std::max(1.0f, std::min(rect.width, rect.height) - inset * 2.0f);
-    return {
-        rect.x + (rect.width - size) * 0.5f,
-        rect.y + (rect.height - size) * 0.5f,
-        size,
-        size
     };
 }
 
@@ -580,15 +572,19 @@ void draw_toned_button(Rectangle rect,
                        unsigned char base_alpha,
                        unsigned char hover_alpha) {
     const auto& t = *g_theme;
-    const Color base = with_alpha(lerp_color(t.section, tone, 0.14f), base_alpha);
-    const Color hover = with_alpha(lerp_color(t.section, tone, 0.28f), hover_alpha);
-    ui::button(rect, label, {
+    ui::toned_action_button(rect, label, tone, {
         .font_size = font_size,
         .border_width = 1.4f,
-        .bg = base,
-        .bg_hover = hover,
+        .bg_mix = 0.14f,
+        .bg_hover_mix = 0.28f,
+        .border_mix = 0.0f,
+        .bg_alpha = base_alpha,
+        .bg_hover_alpha = hover_alpha,
+        .border_alpha = alpha,
         .text_color = with_alpha(t.text, alpha),
-        .custom_colors = true,
+        .bg_base = t.section,
+        .bg_hover_base = t.section,
+        .border_base = t.border,
     });
 }
 
@@ -800,9 +796,9 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                     const Color icon = with_alpha(enabled ? t.text : t.text_muted,
                                                   enabled ? grid_alpha : static_cast<unsigned char>(grid_alpha / 3));
                     if (next) {
-                        raythm_icons::draw_chevron_right(centered_icon_rect(rect, 8.0f), icon, 3.0f);
+                        raythm_icons::draw_chevron_right(ui::inscribed_square(rect, 8.0f), icon, 3.0f);
                     } else {
-                        raythm_icons::draw_chevron_left(centered_icon_rect(rect, 8.0f), icon, 3.0f);
+                        raythm_icons::draw_chevron_left(ui::inscribed_square(rect, 8.0f), icon, 3.0f);
                     }
                 };
                 draw_shelf_arrow(prev_arrow, false, can_prev);
@@ -810,7 +806,9 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
             }
         }
 
-        for (int display_index = 0; display_index < static_cast<int>(indices.size()); ++display_index) {
+        const ui::index_range visible_songs =
+            detail::visible_song_range(state, current.song_grid_rect, static_cast<int>(indices.size()), state.song_scroll_y);
+        for (int display_index = visible_songs.begin; display_index < visible_songs.end; ++display_index) {
             const int song_index = indices[static_cast<size_t>(display_index)];
             const song_entry_state& song = songs[static_cast<size_t>(song_index)];
             Rectangle card = detail::song_row_rect(state, current.song_grid_rect, display_index, state.song_scroll_y);
@@ -887,8 +885,10 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
             const auto draw_card_tag_row = [&](const std::vector<std::string>& labels,
                                                float y,
                                                bool keyword) {
-                float tag_x = jacket_rect.x + jacket_rect.width + 16.0f;
+                const float start_x = jacket_rect.x + jacket_rect.width + 16.0f;
                 const float max_x = card.x + card.width - 18.0f;
+                ui::wrapped_layout_cursor tags =
+                    ui::wrapped_cursor({start_x, y, max_x - start_x, 20.0f}, 7.0f, 20.0f);
                 for (const std::string& label : labels) {
                     if (label.empty()) {
                         continue;
@@ -896,14 +896,16 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                     const Color tag_color = keyword ? keyword_color_for_label(label) : genre_color_for_label(label);
                     const float width = std::clamp(ui::measure_body_text_size(label.c_str(), 11.0f).x + 16.0f,
                                                    58.0f, 118.0f);
-                    if (tag_x + width > max_x) {
+                    if (width > max_x - start_x) {
                         break;
                     }
-                    const Rectangle tag_rect = {tag_x, y, width, 20.0f};
-                    ui::surface(tag_rect, with_alpha(button_base, row_alpha), with_alpha(tag_color, grid_alpha), 1.0f);
-                    draw_browse_body_text_in_rect(label.c_str(), 11, tag_rect,
+                    const std::optional<Rectangle> tag_rect = tags.next(width, 20.0f);
+                    if (!tag_rect.has_value()) {
+                        break;
+                    }
+                    ui::surface(*tag_rect, with_alpha(button_base, row_alpha), with_alpha(tag_color, grid_alpha), 1.0f);
+                    draw_browse_body_text_in_rect(label.c_str(), 11, *tag_rect,
                                           with_alpha(tag_color, grid_alpha), ui::text_align::center);
-                    tag_x += width + 7.0f;
                 }
             };
             draw_card_tag_row(genre_labels(song.song.song.meta), jacket_rect.y + 54.0f, false);
@@ -1009,10 +1011,14 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                                               Color fallback_color,
                                               int color_mode,
                                               int max_rows) {
-            float x = current.preview_panel_rect.x + 24.0f;
-            float row_y = y;
-            int row = 0;
+            const float x = current.preview_panel_rect.x + 24.0f;
             const float max_x = current.preview_panel_rect.x + current.preview_panel_rect.width - 24.0f;
+            const float tag_height = 30.0f;
+            const float row_step = 38.0f;
+            const float content_height =
+                max_rows <= 0 ? 0.0f : tag_height + static_cast<float>(max_rows - 1) * row_step;
+            ui::wrapped_layout_cursor tags =
+                ui::wrapped_cursor({x, y, max_x - x, content_height}, 8.0f, row_step);
             for (const std::string& label : labels) {
                 if (label.empty()) {
                     continue;
@@ -1021,19 +1027,16 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
                     : color_mode == 2             ? keyword_color_for_label(label)
                                                   : fallback_color;
                 const float width = std::clamp(ui::measure_body_text_size(label.c_str(), 13.0f).x + 22.0f, 70.0f, 150.0f);
-                if (x + width > max_x) {
-                    ++row;
-                    if (row >= max_rows) {
-                        break;
-                    }
-                    x = current.preview_panel_rect.x + 24.0f;
-                    row_y += 38.0f;
+                if (width > max_x - x) {
+                    break;
                 }
-                const Rectangle tag_rect = {x, row_y, width, 30.0f};
-                ui::surface(tag_rect, with_alpha(button_base, normal_row_alpha), with_alpha(color, alpha), 1.0f);
-                draw_browse_body_text_in_rect(label.c_str(), 13, tag_rect,
+                const std::optional<Rectangle> tag_rect = tags.next(width, tag_height);
+                if (!tag_rect.has_value()) {
+                    break;
+                }
+                ui::surface(*tag_rect, with_alpha(button_base, normal_row_alpha), with_alpha(color, alpha), 1.0f);
+                draw_browse_body_text_in_rect(label.c_str(), 13, *tag_rect,
                                       with_alpha(color, alpha), ui::text_align::center);
-                x += width + 8.0f;
             }
         };
         draw_preview_tag_row(genre_labels(song->song.song.meta), bar.y + 64.0f, t.accent, 1, 2);
@@ -1407,14 +1410,12 @@ void draw(state& state, const title_audio_controller& audio_controller, float an
         draw_browse_body_text_in_rect(chart_empty, 28, placeholder, with_alpha(t.text, detail_alpha), ui::text_align::center);
     }
 
-    for (int display_index = 0; display_index < static_cast<int>(chart_indices.size()); ++display_index) {
+    const ui::index_range visible_charts =
+        detail::visible_chart_range(current.chart_list_rect, static_cast<int>(chart_indices.size()), state.chart_scroll_y);
+    for (int display_index = visible_charts.begin; display_index < visible_charts.end; ++display_index) {
         const int index = chart_indices[static_cast<size_t>(display_index)];
         const chart_entry_state& item = song->charts[static_cast<size_t>(index)];
         const Rectangle card = detail::chart_row_rect(current.chart_list_rect, display_index, state.chart_scroll_y);
-        if (card.y + card.height < current.chart_list_rect.y - 4.0f ||
-            card.y > current.chart_list_rect.y + current.chart_list_rect.height + 4.0f) {
-            continue;
-        }
 
         const bool selected = chart != nullptr && index == detail::selected_chart_index_ref(state);
         const bool hovered = ui::is_hovered(card);

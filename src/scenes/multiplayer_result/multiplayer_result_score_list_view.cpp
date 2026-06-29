@@ -1,12 +1,16 @@
 #include "multiplayer_result/multiplayer_result_score_list_view.h"
 
-#include <algorithm>
-#include <cctype>
+#include <array>
+#include <optional>
+#include <string>
+#include <vector>
 
-#include "shared/avatar_texture_cache.h"
+#include "multiplayer_result/multiplayer_result_widgets.h"
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_hit.h"
+#include "ui_scroll.h"
 #include "virtual_screen.h"
 
 namespace multiplayer_result::score_list {
@@ -32,6 +36,30 @@ struct row_layout {
     Rectangle accent;
 };
 
+struct score_row_descriptor {
+    Rectangle rect{};
+    const play_multiplayer_score_row* score = nullptr;
+    int rank_index = 0;
+    bool self = false;
+    bool selected = false;
+};
+
+struct score_stat_column {
+    const char* label;
+    Rectangle rect;
+};
+
+struct score_stat_value {
+    Rectangle rect;
+    std::string text;
+    int font_size;
+    Color color;
+};
+
+std::string score_key_for(const play_multiplayer_score_row& score) {
+    return !score.user_id.empty() ? score.user_id : score.display_name;
+}
+
 constexpr row_layout row_layout_for(Rectangle row) {
     const Rectangle content = ui::inset(row, ui::edge_insets{0.0f, 28.0f, 0.0f, 18.0f});
     const ui::rect_pair rank_split = ui::split_columns(content, 50.0f, 6.0f);
@@ -53,51 +81,52 @@ constexpr row_layout row_layout_for(Rectangle row) {
 }
 
 float content_height(int row_count) {
-    if (row_count <= 0) {
-        return kListViewportRect.height;
-    }
-    return static_cast<float>(row_count) * kRowHeight +
-        static_cast<float>(std::max(0, row_count - 1)) * kRowGap;
+    return ui::vertical_list_content_height(row_count, kRowHeight, kRowGap, kListViewportRect.height);
 }
 
-Color rank_color(int rank_index) {
-    if (rank_index == 0) {
-        return g_theme->all_perfect;
-    }
-    if (rank_index == 1) {
-        return g_theme->slow;
-    }
-    if (rank_index == 2) {
-        return g_theme->fast;
-    }
-    return g_theme->text_muted;
+std::array<score_stat_column, 3> score_stat_columns_for(const row_layout& layout) {
+    return {{
+        {"SCORE", layout.score},
+        {"ACC", layout.accuracy},
+        {"COMBO", layout.combo},
+    }};
 }
 
-std::string avatar_label_for(const std::string& name) {
-    std::string result;
-    result.reserve(2);
-    for (char ch : name) {
-        if (std::isalnum(static_cast<unsigned char>(ch))) {
-            result.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
-            if (result.size() == 2) {
-                break;
-            }
-        }
-    }
-    return result.empty() ? "?" : result;
+score_row_descriptor score_row_descriptor_for(const std::vector<play_multiplayer_score_row>& scores,
+                                              int index,
+                                              const std::string& self_user_id,
+                                              const std::string& selected_score_key,
+                                              float scroll_y) {
+    const play_multiplayer_score_row& score = scores[static_cast<size_t>(index)];
+    return {
+        .rect = ui::vertical_list_row_rect(kListViewportRect, index, kRowHeight, kRowGap, scroll_y),
+        .score = &score,
+        .rank_index = index,
+        .self = !self_user_id.empty() && score.user_id == self_user_id,
+        .selected = score_key_for(score) == selected_score_key,
+    };
 }
 
-void draw_profile_image_slot(Rectangle rect,
-                             const std::string& avatar_url,
-                             const std::string& display_name,
-                             const std::string& base_url) {
-    avatar_texture_cache::draw_avatar(rect,
-                                      avatar_url,
-                                      avatar_label_for(display_name),
-                                      with_alpha(g_theme->section, 235),
-                                      g_theme->text_secondary,
-                                      13,
-                                      base_url);
+std::optional<std::string> score_row_key_at(const std::vector<play_multiplayer_score_row>& scores,
+                                            Vector2 point,
+                                            float scroll_y) {
+    if (!ui::contains_point(kListViewportRect, point)) {
+        return std::nullopt;
+    }
+    const int index = ui::vertical_list_index_at_y(point.y, kListViewportRect, kRowHeight, kRowGap, scroll_y);
+    if (index < 0 || index >= static_cast<int>(scores.size())) {
+        return std::nullopt;
+    }
+    return score_key_for(scores[static_cast<size_t>(index)]);
+}
+
+std::array<score_stat_value, 3> score_stat_values_for(const row_layout& layout,
+                                                      const play_multiplayer_score_row& score) {
+    return {{
+        {layout.score, widgets::format_score(score.score), 22, g_theme->text},
+        {layout.accuracy, TextFormat("%.1f%%", score.accuracy), 20, g_theme->fast},
+        {layout.combo, std::to_string(score.combo), 20, g_theme->text_secondary},
+    }};
 }
 
 void draw_chip(Rectangle rect, const char* text, Color color, int font_size = 18) {
@@ -105,71 +134,56 @@ void draw_chip(Rectangle rect, const char* text, Color color, int font_size = 18
     ui::draw_text_in_rect(text, font_size, rect, color, ui::text_align::center);
 }
 
-std::string format_score(int score) {
-    std::string value = std::to_string(std::max(0, score));
-    for (int i = static_cast<int>(value.size()) - 3; i > 0; i -= 3) {
-        value.insert(static_cast<size_t>(i), ",");
-    }
-    return value;
-}
-
 void draw_header(Rectangle rect) {
     const row_layout header_layout = row_layout_for(rect);
-    ui::draw_text_in_rect("SCORE", 16, header_layout.score, g_theme->text_muted, ui::text_align::right);
-    ui::draw_text_in_rect("ACC", 16, header_layout.accuracy, g_theme->text_muted, ui::text_align::right);
-    ui::draw_text_in_rect("COMBO", 16, header_layout.combo, g_theme->text_muted, ui::text_align::right);
+    for (const score_stat_column& column : score_stat_columns_for(header_layout)) {
+        ui::draw_text_in_rect(column.label, 16, column.rect, g_theme->text_muted, ui::text_align::right);
+    }
 }
 
-void draw_row(Rectangle row_rect,
-              const play_multiplayer_score_row& score,
-              int rank_index,
-              bool self,
-              bool selected,
-              const std::string& avatar_base_url) {
-    const row_layout layout = row_layout_for(row_rect);
-    const Color bg = selected
+void draw_row(const score_row_descriptor& row, const std::string& avatar_base_url) {
+    const play_multiplayer_score_row& score = *row.score;
+    const row_layout layout = row_layout_for(row.rect);
+    const Color bg = row.selected
         ? with_alpha(g_theme->row_soft_selected, 245)
-        : (self ? with_alpha(g_theme->row_selected, 218) : g_theme->row);
-    ui::row(row_rect, {
-        .border_width = selected ? 3.0f : 1.5f,
+        : (row.self ? with_alpha(g_theme->row_selected, 218) : g_theme->row);
+    ui::row(row.rect, {
+        .border_width = row.selected ? 3.0f : 1.5f,
         .bg = bg,
-        .bg_hover = selected ? g_theme->row_soft_selected_hover : g_theme->row_hover,
-        .border_color = selected ? g_theme->border_active : g_theme->border,
+        .bg_hover = row.selected ? g_theme->row_soft_selected_hover : g_theme->row_hover,
+        .border_color = row.selected ? g_theme->border_active : g_theme->border,
         .custom_colors = true,
     });
-    ui::draw_text_in_rect(TextFormat("#%d", rank_index + 1), 27,
+    ui::draw_text_in_rect(TextFormat("#%d", row.rank_index + 1), 27,
                           layout.rank,
-                          rank_color(rank_index), ui::text_align::left);
-    draw_profile_image_slot(layout.avatar,
-                            score.avatar_url,
-                            score.display_name,
-                            avatar_base_url);
+                          widgets::podium_rank_color(row.rank_index), ui::text_align::left);
+    widgets::draw_profile_image_slot(layout.avatar,
+                                     score.avatar_url,
+                                     score.display_name,
+                                     avatar_base_url);
     {
         ui::scoped_clip_rect name_clip(layout.name);
         ui::draw_text_in_rect(score.display_name.c_str(), 20, layout.name,
                               score.failed ? g_theme->text_muted : g_theme->text,
                               ui::text_align::left);
     }
-    if (self) {
+    if (row.self) {
         draw_chip(layout.self_chip, "YOU", g_theme->accent, 13);
     }
-    ui::draw_text_in_rect(format_score(score.score).c_str(), 22,
-                          layout.score,
-                          g_theme->text, ui::text_align::right);
-    ui::draw_text_in_rect(TextFormat("%.1f%%", score.accuracy), 20,
-                          layout.accuracy,
-                          g_theme->fast, ui::text_align::right);
-    ui::draw_text_in_rect(std::to_string(score.combo).c_str(), 20,
-                          layout.combo,
-                          g_theme->text_secondary, ui::text_align::right);
+    for (const score_stat_value& value : score_stat_values_for(layout, score)) {
+        ui::draw_text_in_rect(value.text.c_str(), value.font_size, value.rect, value.color, ui::text_align::right);
+    }
+    const Color accent_color = row.selected
+        ? widgets::podium_rank_color(row.rank_index)
+        : (score.failed ? g_theme->error : g_theme->success);
     ui::accent_bar(layout.accent,
-                   selected ? rank_color(rank_index) : (score.failed ? g_theme->error : g_theme->success));
+                   accent_color);
 }
 
 }  // namespace
 
 std::string score_key(const play_multiplayer_score_row& score) {
-    return !score.user_id.empty() ? score.user_id : score.display_name;
+    return score_key_for(score);
 }
 
 interaction_result handle_input(const std::vector<play_multiplayer_score_row>& scores,
@@ -178,21 +192,19 @@ interaction_result handle_input(const std::vector<play_multiplayer_score_row>& s
                                 float current_scrollbar_drag_offset) {
     interaction_result result;
     const float list_content_height = content_height(static_cast<int>(scores.size()));
-    const float max_scroll = std::max(0.0f, list_content_height - kListViewportRect.height);
-    float next_scroll_y = std::clamp(current_scroll_y, 0.0f, max_scroll);
+    ui::scroll_offset_state scroll_state =
+        ui::scroll_offset_state_for(kListViewportRect, list_content_height, current_scroll_y);
+    float next_scroll_y = scroll_state.offset;
     bool next_scrollbar_dragging = current_scrollbar_dragging;
     float next_scrollbar_drag_offset = current_scrollbar_drag_offset;
 
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
     if (ui::contains_point(kListViewportRect, mouse)) {
-        next_scroll_y = std::clamp(next_scroll_y - GetMouseWheelMove() * 46.0f, 0.0f, max_scroll);
-        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-            const float local_y = mouse.y - kListViewportRect.y + next_scroll_y;
-            const int index = static_cast<int>(local_y / (kRowHeight + kRowGap));
-            const float row_local_y = local_y - static_cast<float>(index) * (kRowHeight + kRowGap);
-            if (index >= 0 && index < static_cast<int>(scores.size()) && row_local_y <= kRowHeight) {
-                result.selected_score_key = score_key(scores[static_cast<size_t>(index)]);
-            }
+        scroll_state = ui::wheel_scrolled_offset_state(
+            kListViewportRect, mouse, ui::mouse_wheel_move(), list_content_height, next_scroll_y, 46.0f);
+        next_scroll_y = scroll_state.offset;
+        if (ui::is_mouse_button_released()) {
+            result.selected_score_key = score_row_key_at(scores, mouse, next_scroll_y);
         }
     }
 
@@ -228,17 +240,12 @@ void draw(const std::vector<play_multiplayer_score_row>& scores,
     const float list_content_height = content_height(static_cast<int>(scores.size()));
     {
         ui::scoped_clip_rect clip(kListViewportRect);
-        float y = kListViewportRect.y - scroll_y;
-        for (int i = 0; i < static_cast<int>(scores.size()); ++i) {
-            const play_multiplayer_score_row& score = scores[static_cast<size_t>(i)];
-            const bool self = !self_user_id.empty() && score.user_id == self_user_id;
-            const bool selected = score_key(score) == selected_score_key;
-            const Rectangle row_rect{kListViewportRect.x, y, kListViewportRect.width, kRowHeight};
-            if (row_rect.y + row_rect.height >= kListViewportRect.y &&
-                row_rect.y <= kListViewportRect.y + kListViewportRect.height) {
-                draw_row(row_rect, score, i, self, selected, avatar_base_url);
-            }
-            y += kRowHeight + kRowGap;
+        const ui::index_range visible_rows = ui::vertical_list_visible_range(
+            scores.size(), kListViewportRect, kRowHeight, kRowGap, scroll_y);
+        for (int i = visible_rows.begin; i < visible_rows.end; ++i) {
+            const score_row_descriptor row =
+                score_row_descriptor_for(scores, i, self_user_id, selected_score_key, scroll_y);
+            draw_row(row, avatar_base_url);
         }
     }
     ui::scrollbar(kListScrollbarRect, list_content_height, scroll_y, {

@@ -8,6 +8,7 @@
 #include "song_select/song_select_layout.h"
 #include "theme.h"
 #include "ui_draw.h"
+#include "ui_hit.h"
 
 namespace song_select {
 
@@ -122,16 +123,66 @@ std::vector<context_menu_item_entry> build_context_menu_entries(const state& sta
     return entries;
 }
 
+std::vector<ui::context_menu_item> context_menu_items_for(
+    const std::vector<context_menu_item_entry>& entries) {
+    std::vector<ui::context_menu_item> items;
+    items.reserve(entries.size());
+    for (const context_menu_item_entry& entry : entries) {
+        items.push_back(entry.item);
+    }
+    return items;
+}
+
+context_menu_command command_for_clicked_item(const std::vector<context_menu_item_entry>& entries,
+                                              int clicked_index) {
+    if (clicked_index < 0 || clicked_index >= static_cast<int>(entries.size())) {
+        return context_menu_command::none;
+    }
+    return entries[static_cast<size_t>(clicked_index)].command_on_click;
+}
+
+ui::context_menu_options context_menu_options() {
+    return {
+        .layer = layout::kContextMenuLayer,
+        .font_size = 16,
+        .item_height = layout::kContextMenuItemHeight,
+        .item_spacing = layout::kContextMenuItemSpacing,
+    };
+}
+
+context_menu_command draw_context_menu_items(Rectangle menu_rect,
+                                             const std::vector<context_menu_item_entry>& entries) {
+    const std::vector<ui::context_menu_item> items = context_menu_items_for(entries);
+    const auto [clicked_index] = ui::context_menu(menu_rect, items, context_menu_options());
+    return command_for_clicked_item(entries, clicked_index);
+}
+
+context_menu_command context_menu_dismiss_command(Rectangle menu_rect) {
+    return ui::is_mouse_button_released_outside(menu_rect, layout::kContextMenuLayer)
+        ? context_menu_command::close_menu
+        : context_menu_command::none;
+}
+
+state context_menu_query_state(const state& source,
+                               context_menu_target target,
+                               context_menu_section section,
+                               int song_index,
+                               int chart_index) {
+    state query = source;
+    query.context_menu.target = target;
+    query.context_menu.section = section;
+    query.context_menu.song_index = song_index;
+    query.context_menu.chart_index = chart_index;
+    return query;
+}
+
 }  // namespace
 
 int context_menu_item_count(const state& state, context_menu_target target, context_menu_section section,
                             int song_index, int chart_index) {
-    song_select::state temp_state = state;
-    temp_state.context_menu.target = target;
-    temp_state.context_menu.section = section;
-    temp_state.context_menu.song_index = song_index;
-    temp_state.context_menu.chart_index = chart_index;
-    return static_cast<int>(build_context_menu_entries(temp_state).size());
+    const song_select::state query =
+        context_menu_query_state(state, target, section, song_index, chart_index);
+    return static_cast<int>(build_context_menu_entries(query).size());
 }
 
 context_menu_command draw_context_menu(const state& state) {
@@ -144,28 +195,13 @@ context_menu_command draw_context_menu(const state& state) {
         return context_menu_command::none;
     }
 
-    std::vector<ui::context_menu_item> items;
-    items.reserve(entries.size());
-    for (const auto& e : entries) {
-        items.push_back(e.item);
+    const context_menu_command clicked_command =
+        draw_context_menu_items(state.context_menu.rect, entries);
+    if (clicked_command != context_menu_command::none) {
+        return clicked_command;
     }
 
-    const auto [clicked_index] = ui::context_menu(state.context_menu.rect, items, {
-        .layer = layout::kContextMenuLayer,
-        .font_size = 16,
-        .item_height = layout::kContextMenuItemHeight,
-        .item_spacing = layout::kContextMenuItemSpacing,
-    });
-
-    if (clicked_index >= 0 && clicked_index < static_cast<int>(entries.size())) {
-        return entries[static_cast<size_t>(clicked_index)].command_on_click;
-    }
-
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
-        !ui::is_hovered(state.context_menu.rect, layout::kContextMenuLayer)) {
-        return context_menu_command::close_menu;
-    }
-    return context_menu_command::none;
+    return context_menu_dismiss_command(state.context_menu.rect);
 }
 
 }  // namespace song_select

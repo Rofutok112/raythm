@@ -1,6 +1,7 @@
 #include "title/title_header_view.h"
 
 #include <algorithm>
+#include <array>
 #include <string>
 
 #include "localization/localization.h"
@@ -51,6 +52,12 @@ struct top_bar_chip_layout {
     Rectangle badge{};
 };
 
+struct top_bar_icon_button_layout {
+    Rectangle rect{};
+    ui::icon_draw_fn draw_icon = nullptr;
+    float icon_inset = 17.0f;
+};
+
 struct header_copy_keyframe {
     Rectangle title{};
     Rectangle subtitle{};
@@ -92,6 +99,15 @@ constexpr top_bar_chip_layout friends_chip_layout_for(Rectangle chip) {
     return {
         .badge = {chip.x + chip.width - 26.0f, chip.y + 12.0f, 18.0f, 18.0f},
     };
+}
+
+std::array<top_bar_icon_button_layout, 4> top_bar_icon_buttons_for(const title_header_view::draw_config& config) {
+    return {{
+        {config.settings_chip_rect, raythm_icons::draw_settings_gear, 17.0f},
+        {config.refresh_chip_rect, raythm_icons::draw_refresh, 17.0f},
+        {config.rating_rankings_chip_rect, raythm_icons::draw_trophy, 17.0f},
+        {config.friends_chip_rect, raythm_icons::draw_friends, 17.0f},
+    }};
 }
 
 constexpr Rectangle top_bar_rect_for_visible(Rectangle visible) {
@@ -183,22 +199,20 @@ void draw_top_bar_item_background(Rectangle rect, Color bg, unsigned char alpha)
     }
 }
 
-void draw_top_bar_icon_button(Rectangle rect,
-                              ui::icon_draw_fn draw_icon,
-                              float icon_inset,
+void draw_top_bar_icon_button(const top_bar_icon_button_layout& button,
                               Color icon_color,
                               Color icon_hover_color,
                               unsigned char alpha) {
     const auto& t = *g_theme;
-    draw_top_bar_item_background(rect, t.row_hover, alpha);
-    ui::icon_button(rect, draw_icon, {
+    draw_top_bar_item_background(button.rect, t.row_hover, alpha);
+    ui::icon_button(button.rect, button.draw_icon, {
         .border_width = 0.0f,
         .bg = {0, 0, 0, 1},
         .bg_hover = {0, 0, 0, 1},
         .icon_color = with_alpha(icon_color, alpha),
         .icon_hover_color = with_alpha(icon_hover_color, alpha),
         .border_color = {0, 0, 0, 1},
-        .icon_inset = icon_inset,
+        .icon_inset = button.icon_inset,
         .icon_stroke_width = 3.0f,
         .border_alpha_tracks_fill = false,
     });
@@ -270,14 +284,9 @@ void draw_top_bar_controls(const title_header_view::draw_config& config) {
                     with_alpha(t.border, static_cast<unsigned char>(150.0f * bar_t)),
                     2.0f);
 
-    draw_top_bar_icon_button(config.settings_chip_rect, raythm_icons::draw_settings_gear,
-                             17.0f, bar_muted, bar_text, account_alpha);
-    draw_top_bar_icon_button(config.refresh_chip_rect, raythm_icons::draw_refresh,
-                             17.0f, bar_muted, bar_text, account_alpha);
-    draw_top_bar_icon_button(config.rating_rankings_chip_rect, raythm_icons::draw_trophy,
-                             17.0f, bar_muted, bar_text, account_alpha);
-    draw_top_bar_icon_button(config.friends_chip_rect, raythm_icons::draw_friends,
-                             17.0f, bar_muted, bar_text, account_alpha);
+    for (const top_bar_icon_button_layout& button : top_bar_icon_buttons_for(config)) {
+        draw_top_bar_icon_button(button, bar_muted, bar_text, account_alpha);
+    }
     if (config.friends_badge_count > 0) {
         const top_bar_chip_layout friends_layout = friends_chip_layout_for(config.friends_chip_rect);
         ui::surface_fill(friends_layout.badge, with_alpha(t.error, account_alpha));

@@ -125,6 +125,18 @@ struct keyword_editor_layout {
     Rectangle add_button;
 };
 
+struct keyword_add_button {
+    Rectangle rect;
+    const char* label;
+    bool enabled;
+};
+
+struct genre_suggestion_button {
+    Rectangle rect;
+    const char* label;
+    bool enabled;
+};
+
 tag_field_layout tag_field_layout_for(Rectangle row, float text_input_label_width) {
     const ui::rect_pair columns = ui::split_columns(row, text_input_label_width, kFieldColumnGap);
     const Rectangle label = ui::inset(
@@ -163,23 +175,32 @@ keyword_editor_layout keyword_editor_layout_for(Rectangle row, float text_input_
     return {field, controls.first, controls.second};
 }
 
-std::optional<Rectangle> take_wrapped_rect(Rectangle bounds,
-                                           float width,
-                                           float height,
-                                           float gap,
-                                           float row_step,
-                                           float& x,
-                                           float& y) {
-    if (x + width > bounds.x + bounds.width && x > bounds.x) {
-        x = bounds.x;
-        y += row_step;
-    }
-    if (y + height > bounds.y + bounds.height) {
-        return std::nullopt;
-    }
-    Rectangle result = {x, y, width, height};
-    x += width + gap;
-    return result;
+keyword_add_button keyword_add_button_for(const keyword_editor_layout& layout, bool maxed) {
+    return {
+        .rect = layout.add_button,
+        .label = "ADD",
+        .enabled = !maxed,
+    };
+}
+
+float genre_suggestion_button_width(const std::string& label) {
+    const float text_width = ui::measure_text_size(label.c_str(), 13.0f).x;
+    return std::min(std::max(kSuggestionMinWidth, text_width + kSuggestionTextPadding),
+                    kSuggestionMaxWidth);
+}
+
+ui::button_state draw_genre_suggestion_button(const genre_suggestion_button& button,
+                                              ui::draw_layer layer) {
+    const Color disabled_bg = with_alpha(g_theme->section, 120);
+    return ui::button(button.rect, button.label, {
+        .layer = layer,
+        .font_size = 13,
+        .border_width = 1.2f,
+        .bg = button.enabled ? with_alpha(g_theme->section, 235) : disabled_bg,
+        .bg_hover = button.enabled ? with_alpha(g_theme->row_hover, 255) : disabled_bg,
+        .text_color = button.enabled ? g_theme->text : g_theme->text_muted,
+        .custom_colors = true,
+    });
 }
 
 bool wide_text_filter(int codepoint, const std::string&) {
@@ -300,14 +321,12 @@ std::optional<size_t> draw_chip_list(Rectangle rect,
                                      int font_size,
                                      ui::draw_layer layer) {
     std::optional<size_t> remove_index;
-    float x = rect.x;
-    float y = rect.y;
+    ui::wrapped_layout_cursor chips = ui::wrapped_cursor(rect, kChipGap, kChipRowStep);
     for (size_t index = 0; index < values.size(); ++index) {
         const std::string& value = values[index];
         const float measured = ui::measure_text_size(value.c_str(), static_cast<float>(font_size)).x;
         const float width = std::min(std::max(kChipMinWidth, measured + 34.0f), kChipMaxWidth);
-        const std::optional<Rectangle> chip_rect =
-            take_wrapped_rect(rect, width, kChipHeight, kChipGap, kChipRowStep, x, y);
+        const std::optional<Rectangle> chip_rect = chips.next(width, kChipHeight);
         if (!chip_rect.has_value()) {
             break;
         }
@@ -334,35 +353,38 @@ std::optional<std::string> draw_genre_suggestions(Rectangle suggestions_rect,
                                                   bool maxed,
                                                   ui::draw_layer layer) {
     std::optional<std::string> add_label;
-    float x = suggestions_rect.x;
-    float y = suggestions_rect.y;
+    ui::wrapped_layout_cursor suggestion_rows =
+        ui::wrapped_cursor(suggestions_rect, kChipGap, kSuggestionRowStep);
     for (const std::string& suggestion : suggestions) {
-        const float text_width = ui::measure_text_size(suggestion.c_str(), 13.0f).x;
-        const float width =
-            std::min(std::max(kSuggestionMinWidth, text_width + kSuggestionTextPadding),
-                     kSuggestionMaxWidth);
-        const std::optional<Rectangle> button_rect =
-            take_wrapped_rect(suggestions_rect, width, kSuggestionHeight, kChipGap,
-                              kSuggestionRowStep, x, y);
+        const float width = genre_suggestion_button_width(suggestion);
+        const std::optional<Rectangle> button_rect = suggestion_rows.next(width, kSuggestionHeight);
         if (!button_rect.has_value()) {
             break;
         }
-        const Color base = maxed ? with_alpha(g_theme->section, 120) : with_alpha(g_theme->section, 235);
-        const Color hover = maxed ? with_alpha(g_theme->section, 120) : with_alpha(g_theme->row_hover, 255);
-        const ui::button_state state = ui::button(*button_rect, suggestion.c_str(), {
-            .layer = layer,
-            .font_size = 13,
-            .border_width = 1.2f,
-            .bg = base,
-            .bg_hover = hover,
-            .text_color = maxed ? g_theme->text_muted : g_theme->text,
-            .custom_colors = true,
-        });
-        if (!maxed && state.clicked && !add_label.has_value()) {
+        const genre_suggestion_button button = {
+            .rect = *button_rect,
+            .label = suggestion.c_str(),
+            .enabled = !maxed,
+        };
+        const ui::button_state state = draw_genre_suggestion_button(button, layer);
+        if (button.enabled && state.clicked && !add_label.has_value()) {
             add_label = suggestion;
         }
     }
     return add_label;
+}
+
+ui::button_state draw_keyword_add_button(const keyword_add_button& button, ui::draw_layer layer) {
+    const Color disabled_bg = with_alpha(g_theme->section, 120);
+    return ui::button(button.rect, button.label, {
+        .layer = layer,
+        .font_size = 14,
+        .border_width = 1.2f,
+        .bg = button.enabled ? g_theme->section : disabled_bg,
+        .bg_hover = button.enabled ? g_theme->row_hover : disabled_bg,
+        .text_color = button.enabled ? g_theme->text : g_theme->text_muted,
+        .custom_colors = true,
+    });
 }
 
 }  // namespace
@@ -473,16 +495,9 @@ keyword_editor_result draw_keyword_editor(Rectangle row,
             .filter = wide_text_filter,
             .label_width = 0.0f,
         });
-    const ui::button_state add_button = ui::button(layout.add_button, "ADD", {
-        .layer = layer,
-        .font_size = 14,
-        .border_width = 1.2f,
-        .bg = maxed ? with_alpha(g_theme->section, 120) : g_theme->section,
-        .bg_hover = maxed ? with_alpha(g_theme->section, 120) : g_theme->row_hover,
-        .text_color = maxed ? g_theme->text_muted : g_theme->text,
-        .custom_colors = true,
-    });
-    if (!maxed && (input_result.submitted || add_button.clicked)) {
+    const keyword_add_button add_button = keyword_add_button_for(layout, maxed);
+    const ui::button_state add_state = draw_keyword_add_button(add_button, layer);
+    if (add_button.enabled && (input_result.submitted || add_state.clicked)) {
         result.add_requested = true;
     }
     return result;

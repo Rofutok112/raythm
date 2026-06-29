@@ -31,6 +31,7 @@
 #include "raylib_file_io.h"
 #include "song_select/song_select_navigation.h"
 #include "ui_frame.h"
+#include "ui_hit.h"
 #include "virtual_screen.h"
 
 namespace {
@@ -237,10 +238,10 @@ void play_scene::update(float dt) {
 
     play_update_context context;
     context.dt = dt;
-    context.escape_pressed = IsKeyPressed(KEY_ESCAPE);
-    context.enter_pressed = IsKeyPressed(KEY_ENTER);
-    context.left_click_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-    context.backspace_pressed = IsKeyPressed(KEY_BACKSPACE);
+    context.escape_pressed = ui::is_escape_pressed();
+    context.enter_pressed = ui::is_enter_pressed();
+    context.left_click_pressed = ui::is_mouse_button_pressed(MOUSE_BUTTON_LEFT);
+    context.backspace_pressed = ui::is_key_pressed(KEY_BACKSPACE);
     context.window_focused = IsWindowFocused();
 
     if (advance_deferred_load_start()) {

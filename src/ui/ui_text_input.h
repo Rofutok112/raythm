@@ -8,6 +8,7 @@
 
 #include "platform/windows_input_source.h"
 #include "raylib.h"
+#include "ui_clip.h"
 #include "ui_draw.h"
 #include "virtual_screen.h"
 
@@ -362,9 +363,8 @@ inline void draw_marquee_text_role(const char* text,
         } else if (align == text_align::right) {
             draw_x = clip_rect.x + clip_rect.width - text_width;
         }
-        begin_scissor_rect(clip_rect);
+        scoped_clip_rect clip(clip_rect);
         draw_text_role_f(role, text, draw_x, draw_y, font_size, color);
-        EndScissorMode();
         return;
     }
 
@@ -380,9 +380,8 @@ inline void draw_marquee_text_role(const char* text,
     } else if (cycle_t >= kPauseSeconds + travel_time) {
         offset = overflow;
     }
-    begin_scissor_rect(clip_rect);
+    scoped_clip_rect clip(clip_rect);
     draw_text_role_f(role, text, clip_rect.x - offset, draw_y, font_size, color);
-    EndScissorMode();
 }
 
 inline text_input_result text_input_core(Rectangle rect, text_input_state& state,
@@ -470,9 +469,10 @@ inline text_input_result text_input_core(Rectangle rect, text_input_state& state
         }
         state.active = true;
 
-        if (CheckCollisionPointRec(GetMousePosition(), input_rect)) {
+        const Vector2 mouse = virtual_screen::get_virtual_mouse();
+        if (contains_point(input_rect, mouse)) {
             const std::string visual_value = visual_value_for_state();
-            const float local_x = GetMousePosition().x - text_rect.x - active_text_offset(visual_value) +
+            const float local_x = mouse.x - text_rect.x - active_text_offset(visual_value) +
                                   state.scroll_x;
             state.cursor = text_input_cursor_from_mouse(visual_value, local_x, font_size);
             clear_text_input_selection(state);
@@ -481,7 +481,7 @@ inline text_input_result text_input_core(Rectangle rect, text_input_state& state
             state.cursor = utf8_codepoint_count(state.value);
             clear_text_input_selection(state);
         }
-    } else if (state.active && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !hovered) {
+    } else if (state.active && is_mouse_button_pressed() && !hovered) {
         apply_default_if_empty();
         state.active = false;
         state.mouse_selecting = false;
@@ -489,8 +489,8 @@ inline text_input_result text_input_core(Rectangle rect, text_input_state& state
         result.deactivated = true;
     }
 
-    if (state.active && state.mouse_selecting && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        const Vector2 mouse = GetMousePosition();
+    if (state.active && state.mouse_selecting && is_mouse_button_down()) {
+        const Vector2 mouse = virtual_screen::get_virtual_mouse();
         const std::string visual_value = visual_value_for_state();
         const float local_x = mouse.x - text_rect.x - active_text_offset(visual_value) + state.scroll_x;
         const size_t mouse_cursor = text_input_cursor_from_mouse(visual_value, local_x, font_size);
@@ -498,7 +498,7 @@ inline text_input_result text_input_core(Rectangle rect, text_input_state& state
         state.has_selection = state.cursor != state.selection_anchor;
     }
 
-    if (state.mouse_selecting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+    if (state.mouse_selecting && is_mouse_button_released()) {
         state.mouse_selecting = false;
     }
 
@@ -662,7 +662,7 @@ inline text_input_result text_input_core(Rectangle rect, text_input_state& state
                           {text_rect.x, text_rect.y + kTextInputBaselineNudge, text_rect.width, text_rect.height},
                           text_color, text_align::left);
     } else {
-        begin_scissor_rect(input_rect);
+        scoped_clip_rect clip(input_rect);
 
         if (state.has_selection) {
             const auto [selection_start, selection_end] = text_input_selection_range(state);
@@ -709,8 +709,6 @@ inline text_input_result text_input_core(Rectangle rect, text_input_state& state
                             input_rect.height - kTextInputSelectionInsetTotalY},
                            g_theme->text);
         }
-
-        EndScissorMode();
     }
 
     return result;
@@ -802,14 +800,14 @@ inline text_input_result search_text_input(Rectangle rect,
             state.cursor = utf8_codepoint_count(state.value);
             clear_text_input_selection(state);
         }
-    } else if (state.active && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !hovered) {
+    } else if (state.active && is_mouse_button_pressed() && !hovered) {
         state.active = false;
         state.mouse_selecting = false;
         clear_text_input_selection(state);
         result.deactivated = true;
     }
 
-    if (state.active && state.mouse_selecting && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+    if (state.active && state.mouse_selecting && is_mouse_button_down()) {
         const Vector2 mouse = virtual_screen::get_virtual_mouse();
         const float local_x = mouse.x - text_rect.x + state.scroll_x;
         const size_t mouse_cursor = text_input_cursor_from_mouse(state.value, local_x, options.font_size);
@@ -817,7 +815,7 @@ inline text_input_result search_text_input(Rectangle rect,
         state.has_selection = state.cursor != state.selection_anchor;
     }
 
-    if (state.mouse_selecting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+    if (state.mouse_selecting && is_mouse_button_released()) {
         state.mouse_selecting = false;
     }
 
@@ -976,7 +974,7 @@ inline text_input_result search_text_input(Rectangle rect,
     } else if (!state.active) {
         draw_text_role_f(options.role, display_value.c_str(), text_rect.x, text_y, options.font_size, text_color);
     } else {
-        begin_scissor_rect(text_rect);
+        scoped_clip_rect clip(text_rect);
 
         if (state.has_selection) {
             const auto [selection_start, selection_end] = text_input_selection_range(state);
@@ -1025,8 +1023,6 @@ inline text_input_result search_text_input(Rectangle rect,
             draw_rect_span({cursor_x, text_rect.y + 8.0f, 1.5f, text_rect.height - 16.0f},
                            with_alpha(g_theme->text, options.alpha));
         }
-
-        EndScissorMode();
     }
 
     return result;

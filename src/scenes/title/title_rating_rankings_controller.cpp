@@ -8,6 +8,7 @@
 #include "localization/localization.h"
 #include "raylib.h"
 #include "tween.h"
+#include "ui_hit.h"
 
 void title_rating_rankings_controller::reset() {
     state_ = {};
@@ -69,12 +70,12 @@ bool title_rating_rankings_controller::handle_input() {
         return false;
     }
     if (suppress_background_close_until_release_) {
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        if (ui::is_mouse_button_down_or_released()) {
             return true;
         }
         suppress_background_close_until_release_ = false;
     }
-    if ((IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) && !state_.loading) {
+    if (ui::is_cancel_pressed() && !state_.loading) {
         close();
         return true;
     }

@@ -8,6 +8,7 @@
 #include "title/online_download_remote_client.h"
 #include "title/title_audio_controller.h"
 #include "title/online_download_view.h"
+#include "ui_scroll.h"
 
 namespace title_online_view::detail {
 
@@ -114,6 +115,7 @@ float max_song_scroll(Rectangle area, int count);
 float max_song_scroll(const state& state, Rectangle area, int count);
 Rectangle song_row_rect(Rectangle area, int display_index, float scroll_y);
 Rectangle song_row_rect(const state& state, Rectangle area, int display_index, float scroll_y);
+ui::index_range visible_song_range(const state& state, Rectangle area, int count, float scroll_y, float slack = 4.0f);
 Rectangle overview_shelf_track_rect(Rectangle area);
 Rectangle overview_shelf_prev_button_rect(Rectangle area, int shelf_row, float scroll_y);
 Rectangle overview_shelf_next_button_rect(Rectangle area, int shelf_row, float scroll_y);
@@ -129,6 +131,7 @@ chart_list_header_layout chart_list_header_layout_for(Rectangle detail_panel);
 Rectangle chart_empty_placeholder_rect(Rectangle chart_list);
 float max_chart_scroll(Rectangle area, int count);
 Rectangle chart_row_rect(Rectangle area, int index, float scroll_y);
+ui::index_range visible_chart_range(Rectangle area, int count, float scroll_y, float slack = 4.0f);
 Rectangle chart_download_icon_rect(Rectangle chart_card);
 chart_row_layout chart_row_layout_for(Rectangle chart_card);
 inline Rectangle preview_panel_open_button_rect(Rectangle panel) {

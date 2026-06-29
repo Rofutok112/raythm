@@ -1,6 +1,7 @@
 #include "shared/square_image_picker.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <string>
@@ -94,10 +95,12 @@ struct picker_action_button {
     bool primary = false;
 };
 
-constexpr picker_action_button kActionButtons[] = {
-    {picker_action::cancel, kLayout.cancel_button, "CANCEL", false},
-    {picker_action::apply, kLayout.apply_button, "APPLY", true},
-};
+constexpr std::array<picker_action_button, 2> picker_action_buttons_for(const picker_layout& layout) {
+    return {{
+        {picker_action::cancel, layout.cancel_button, "CANCEL", false},
+        {picker_action::apply, layout.apply_button, "APPLY", true},
+    }};
+}
 
 constexpr Rectangle zoom_track_rect(Rectangle zoom_row) {
     return {
@@ -115,7 +118,7 @@ float zoom_for_mouse_x(Rectangle zoom_row, float mouse_x) {
 }
 
 picker_action clicked_picker_action() {
-    for (const picker_action_button& button : kActionButtons) {
+    for (const picker_action_button& button : picker_action_buttons_for(kLayout)) {
         if (ui::is_clicked(button.rect, ui::draw_layer::modal)) {
             return button.action;
         }
@@ -130,6 +133,17 @@ ui::slider_options zoom_slider_options() {
         .track_top_offset = kZoomTrackTopOffset,
         .label_width = kZoomLabelWidth,
     };
+}
+
+bool crop_drag_started(Rectangle crop_dest, Vector2 mouse) {
+    return ui::is_mouse_button_pressed() &&
+           ui::contains_point(crop_dest, mouse) &&
+           !ui::is_blocked_by_higher_layer(crop_dest, ui::draw_layer::modal);
+}
+
+bool zoom_row_dragged() {
+    return ui::is_mouse_button_down() &&
+           ui::is_hovered(kLayout.zoom_row, ui::draw_layer::modal);
 }
 
 bool write_png_image_file(const Image& image, const std::filesystem::path& destination) {
@@ -147,39 +161,20 @@ bool write_png_image_file(const Image& image, const std::filesystem::path& desti
     return ok;
 }
 
-Rectangle fit_rect(Rectangle bounds, int width, int height) {
-    if (width <= 0 || height <= 0) {
-        return bounds;
-    }
-
-    const float scale = std::min(bounds.width / static_cast<float>(width),
-                                 bounds.height / static_cast<float>(height));
-    const float draw_w = static_cast<float>(width) * scale;
-    const float draw_h = static_cast<float>(height) * scale;
-    return {
-        bounds.x + (bounds.width - draw_w) * 0.5f,
-        bounds.y + (bounds.height - draw_h) * 0.5f,
-        draw_w,
-        draw_h,
-    };
+Rectangle image_source_space(int width, int height) {
+    return {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)};
 }
 
-Rectangle map_source_to_dest(Rectangle source, Rectangle image_dest, int width, int height) {
-    const float scale_x = image_dest.width / static_cast<float>(width);
-    const float scale_y = image_dest.height / static_cast<float>(height);
-    return {
-        image_dest.x + source.x * scale_x,
-        image_dest.y + source.y * scale_y,
-        source.width * scale_x,
-        source.height * scale_y,
-    };
+Rectangle image_preview_rect(Rectangle bounds, int width, int height) {
+    return ui::aspect_fit_rect(bounds, static_cast<float>(width), static_cast<float>(height));
 }
 
-Vector2 map_dest_to_source(Vector2 point, Rectangle image_dest, int width, int height) {
-    return {
-        (point.x - image_dest.x) * static_cast<float>(width) / image_dest.width,
-        (point.y - image_dest.y) * static_cast<float>(height) / image_dest.height,
-    };
+Rectangle map_source_to_preview(Rectangle source, Rectangle image_dest, int width, int height) {
+    return ui::map_rect_between(source, image_source_space(width, height), image_dest);
+}
+
+Vector2 map_preview_to_source(Vector2 point, Rectangle image_dest, int width, int height) {
+    return ui::map_point_between(point, image_dest, image_source_space(width, height));
 }
 
 float crop_size_for_zoom(int width, int height, float zoom) {
@@ -194,24 +189,27 @@ Rectangle clamped_crop_rect(Rectangle crop, int width, int height) {
     return crop;
 }
 
+ui::button_options picker_action_button_options(const ui_theme& theme, bool primary) {
+    if (primary) {
+        return {
+            .layer = ui::draw_layer::modal,
+            .font_size = 14,
+            .border_width = 2.0f,
+            .bg = theme.row_active,
+            .bg_hover = theme.row_hover,
+            .text_color = theme.text,
+            .custom_colors = true,
+        };
+    }
+    return {
+        .layer = ui::draw_layer::modal,
+        .font_size = 14,
+    };
+}
+
 void draw_picker_action_buttons(const ui_theme& theme) {
-    for (const picker_action_button& button : kActionButtons) {
-        if (button.primary) {
-            ui::button(button.rect, button.label, {
-                .layer = ui::draw_layer::modal,
-                .font_size = 14,
-                .border_width = 2.0f,
-                .bg = theme.row_active,
-                .bg_hover = theme.row_hover,
-                .text_color = theme.text,
-                .custom_colors = true,
-            });
-        } else {
-            ui::button(button.rect, button.label, {
-                .layer = ui::draw_layer::modal,
-                .font_size = 14,
-            });
-        }
+    for (const picker_action_button& button : picker_action_buttons_for(kLayout)) {
+        ui::button(button.rect, button.label, picker_action_button_options(theme, button.primary));
     }
 }
 
@@ -273,7 +271,7 @@ void state::update() {
     ui::register_hit_region(kLayout.dialog, ui::draw_layer::modal);
 
     const picker_action action = clicked_picker_action();
-    if (IsKeyPressed(KEY_ESCAPE) || action == picker_action::cancel) {
+    if (ui::is_cancel_pressed() || action == picker_action::cancel) {
         canceled_ = true;
         close();
         return;
@@ -284,24 +282,22 @@ void state::update() {
         return;
     }
 
-    const Rectangle image_dest = fit_rect(kLayout.preview, image_width_, image_height_);
-    const Rectangle crop_dest = map_source_to_dest(source_crop_rect(), image_dest, image_width_, image_height_);
+    const Rectangle image_dest = image_preview_rect(kLayout.preview, image_width_, image_height_);
+    const Rectangle crop_dest = map_source_to_preview(source_crop_rect(), image_dest, image_width_, image_height_);
     const Vector2 mouse = virtual_screen::get_virtual_mouse();
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-        ui::contains_point(crop_dest, mouse) &&
-        !ui::is_blocked_by_higher_layer(crop_dest, ui::draw_layer::modal)) {
+    if (crop_drag_started(crop_dest, mouse)) {
         dragging_ = true;
         drag_offset_ = {
             mouse.x - (crop_dest.x + crop_dest.width * 0.5f),
             mouse.y - (crop_dest.y + crop_dest.height * 0.5f),
         };
     }
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+    if (ui::is_mouse_button_released()) {
         dragging_ = false;
     }
-    if (dragging_ && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        const Vector2 source = map_dest_to_source(
+    if (dragging_ && ui::is_mouse_button_down()) {
+        const Vector2 source = map_preview_to_source(
             {mouse.x - drag_offset_.x, mouse.y - drag_offset_.y},
             image_dest,
             image_width_,
@@ -310,8 +306,7 @@ void state::update() {
         clamp_center();
     }
 
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
-        ui::is_hovered(kLayout.zoom_row, ui::draw_layer::modal)) {
+    if (zoom_row_dragged()) {
         set_zoom(zoom_for_mouse_x(kLayout.zoom_row, mouse.x));
     }
 }
@@ -329,10 +324,10 @@ void state::draw() const {
     ui::surface(kLayout.preview, with_alpha(t.panel, 235), t.border_light, 1.5f);
 
     if (texture_loaded_ && texture_.id != 0) {
-        const Rectangle image_dest = fit_rect(kLayout.preview, image_width_, image_height_);
+        const Rectangle image_dest = image_preview_rect(kLayout.preview, image_width_, image_height_);
         ui::draw_texture(texture_, image_dest);
 
-        const Rectangle crop_dest = map_source_to_dest(source_crop_rect(), image_dest, image_width_, image_height_);
+        const Rectangle crop_dest = map_source_to_preview(source_crop_rect(), image_dest, image_width_, image_height_);
         ui::dim_outside_rect(image_dest, crop_dest, with_alpha(BLACK, 105));
         ui::frame(crop_dest, t.accent, 3.0f);
         ui::frame(ui::inset(crop_dest, -4.0f), with_alpha(t.bg, 210), 1.5f);

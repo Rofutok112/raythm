@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -257,8 +258,10 @@ inline color_row_result draw_color_row(Rectangle body, float y,
         16.0f,
         std::max(10.0f, row.height - 12.0f)
     };
-    draw_rect_f(swatch, current);
-    draw_rect_lines(swatch, 1.0f, picker_state.open ? g_theme->border_active : g_theme->border_light);
+    color_swatch(swatch, current, {
+        .roundness = 0.0f,
+        .border_color = picker_state.open ? g_theme->border_active : g_theme->border_light,
+    });
     if (is_clicked(swatch, layer)) {
         picker_state.open = !picker_state.open;
         picker_state.active_channel = -1;
@@ -276,9 +279,9 @@ inline color_row_result draw_color_row(Rectangle body, float y,
         body.width,
         color_picker_height(style) - 4.0f
     };
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-        !ui::contains_point(picker, GetMousePosition()) &&
-        !ui::contains_point(row, GetMousePosition())) {
+    const Vector2 mouse = virtual_screen::get_virtual_mouse();
+    const std::array<Rectangle, 2> picker_close_exclusions{picker, row};
+    if (is_mouse_button_pressed_outside(picker_close_exclusions, mouse)) {
         picker_state.open = false;
         picker_state.active_channel = -1;
         return result;
@@ -302,7 +305,7 @@ inline color_row_result draw_color_row(Rectangle body, float y,
         {90, 220, 120, 255},
         {100, 170, 255, 255},
     };
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+    if (is_mouse_button_released()) {
         picker_state.active_channel = -1;
     }
     for (int channel = 0; channel < 3; ++channel) {
@@ -318,20 +321,21 @@ inline color_row_result draw_color_row(Rectangle body, float y,
             6.0f
         };
         const float ratio = static_cast<float>(*channels[channel]) / 255.0f;
-        draw_rect_f(track, g_theme->slider_track);
-        draw_rect_f({track.x, track.y, track.width * ratio, track.height}, fills[channel]);
-        const Rectangle thumb = {track.x + track.width * ratio - 3.0f, track.y - 4.0f, 6.0f, 14.0f};
-        draw_rect_f(thumb, picker_state.active_channel == channel ? g_theme->border_active : g_theme->slider_knob);
+        channel_slider_track(track, ratio, fills[channel], picker_state.active_channel == channel, {
+            .thumb_width = 6.0f,
+            .thumb_height = 14.0f,
+            .thumb_top_offset = -4.0f,
+        });
         draw_text_in_rect(std::to_string(static_cast<int>(*channels[channel])).c_str(),
                           static_cast<int>(style.font_size),
                           {track.x + track.width + 8.0f, row_y, 30.0f, style.row_height},
                           g_theme->text, text_align::right);
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && ui::contains_point(track, GetMousePosition())) {
+        if (ui::is_mouse_button_pressed(track, MOUSE_BUTTON_LEFT, draw_layer::overlay)) {
             picker_state.active_channel = channel;
             picker_state.edit_started = false;
         }
-        if (picker_state.active_channel == channel && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            const float next_ratio = std::clamp((GetMousePosition().x - track.x) / track.width, 0.0f, 1.0f);
+        if (picker_state.active_channel == channel && is_mouse_button_down()) {
+            const float next_ratio = std::clamp((mouse.x - track.x) / track.width, 0.0f, 1.0f);
             const unsigned char next_value = static_cast<unsigned char>(std::round(next_ratio * 255.0f));
             if (*channels[channel] != next_value) {
                 *channels[channel] = next_value;

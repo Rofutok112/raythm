@@ -16,6 +16,7 @@
 #include "song_select/song_select_layout.h"
 #include "tween.h"
 #include "ui_notice.h"
+#include "ui_scroll.h"
 
 namespace {
 
@@ -958,13 +959,15 @@ float scroll_offset_for_selected_song(const state& state) {
 
     const float row_bottom = row_top + expanded_row_height(state, state.selected_song_index);
     const float view_height = layout::kSongListViewRect.height;
-    const float max_scroll = std::max(0.0f, content_height(state) - view_height);
+    const float max_scroll = ui::max_scroll_offset(content_height(state), view_height);
 
-    float scroll = std::clamp(row_top - 12.0f, 0.0f, max_scroll);
-    if (row_bottom + 12.0f > scroll + view_height) {
-        scroll = std::clamp(row_bottom + 12.0f - view_height, 0.0f, max_scroll);
-    }
-    return scroll;
+    return ui::scroll_offset_with_item_visible(
+        row_top - 12.0f,
+        row_top,
+        row_bottom,
+        view_height,
+        max_scroll,
+        12.0f);
 }
 
 std::string fallback_song_id_after_song_delete(const state& state, int song_index) {

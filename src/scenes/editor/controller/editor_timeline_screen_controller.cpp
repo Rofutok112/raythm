@@ -20,6 +20,10 @@ editor_timeline_viewport_model viewport_model(const editor_timeline_screen_contr
     return {&context.state, context.transport.audio_length_tick, context.viewport};
 }
 
+bool timeline_content_accepts_cursor(const editor_timeline_screen_controller::cursor_context& context) {
+    return ui::contains_point(context.metrics.content_rect(), context.mouse);
+}
+
 editor_timeline_note make_timeline_note(const note_data& note) {
     return {
         note.type == note_type::hold ? editor_timeline_note_type::hold :
@@ -188,7 +192,7 @@ int mouse_cursor(const cursor_context& context) {
         }
     }
 
-    if (!ui::contains_point(context.metrics.content_rect(), context.mouse)) {
+    if (!timeline_content_accepts_cursor(context)) {
         return MOUSE_CURSOR_DEFAULT;
     }
 

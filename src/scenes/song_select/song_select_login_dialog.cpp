@@ -8,6 +8,8 @@
 #include "tween.h"
 #include "ui_draw.h"
 #include "ui_layout.h"
+#include "ui_scroll.h"
+#include "ui_hit.h"
 
 namespace {
 
@@ -69,9 +71,44 @@ struct verify_mode_layout {
 };
 
 struct auth_mode_layout {
-    Rectangle login_tab;
-    Rectangle signup_tab;
+    std::array<Rectangle, 2> tabs{};
 };
+
+struct auth_tab_descriptor {
+    song_select::login_dialog_mode mode = song_select::login_dialog_mode::login;
+    song_select::login_dialog_state_action state_action = song_select::login_dialog_state_action::none;
+    const char* label = "";
+};
+
+struct account_action_button {
+    song_select::login_dialog_command command = song_select::login_dialog_command::none;
+    const char* label = "";
+    int font_size = 14;
+    Rectangle rect{};
+};
+
+struct auth_tab_button {
+    auth_tab_descriptor tab{};
+    Rectangle rect{};
+    bool selected = false;
+};
+
+struct verify_action_button {
+    song_select::login_dialog_command command = song_select::login_dialog_command::none;
+    const char* label = "";
+    Rectangle rect{};
+};
+
+struct primary_form_action_button {
+    song_select::login_dialog_command command = song_select::login_dialog_command::none;
+    const char* label = "";
+    Rectangle rect{};
+};
+
+constexpr std::array<auth_tab_descriptor, 2> kAuthTabs = {{
+    {song_select::login_dialog_mode::login, song_select::login_dialog_state_action::show_login, "LOGIN"},
+    {song_select::login_dialog_mode::signup, song_select::login_dialog_state_action::show_signup, "SIGN UP"},
+}};
 
 login_dialog_frame_layout make_frame_layout(Rectangle dialog_rect) {
     const Rectangle body = {
@@ -93,12 +130,7 @@ float centered_footer_button_y(const Rectangle& dialog_rect, float content_botto
 
 Rectangle make_row(const Rectangle& dialog_rect, int index) {
     const login_dialog_frame_layout frame = make_frame_layout(dialog_rect);
-    return {
-        frame.body.x,
-        dialog_rect.y + kBodyTop + static_cast<float>(index) * (kRowHeight + kRowGap),
-        frame.body.width,
-        kRowHeight,
-    };
+    return ui::vertical_list_row_rect(frame.body, index, kRowHeight, kRowGap, 0.0f);
 }
 
 account_mode_layout make_account_mode_layout(Rectangle dialog_rect) {
@@ -132,6 +164,34 @@ account_mode_layout make_account_mode_layout(Rectangle dialog_rect) {
     };
 }
 
+std::array<account_action_button, 3> account_action_buttons_for(const account_mode_layout& layout) {
+    return {{
+        {song_select::login_dialog_command::request_profile, "PROFILE", 16, layout.profile},
+        {song_select::login_dialog_command::request_restore, "REFRESH", 14, layout.refresh},
+        {song_select::login_dialog_command::request_logout, "LOGOUT", 14, layout.logout},
+    }};
+}
+
+std::array<auth_tab_button, kAuthTabs.size()> auth_tab_buttons_for(const auth_mode_layout& layout,
+                                                                   song_select::login_dialog_mode mode) {
+    std::array<auth_tab_button, kAuthTabs.size()> buttons{};
+    for (std::size_t i = 0; i < buttons.size(); ++i) {
+        buttons[i] = {
+            .tab = kAuthTabs[i],
+            .rect = layout.tabs[i],
+            .selected = mode == kAuthTabs[i].mode,
+        };
+    }
+    return buttons;
+}
+
+std::array<verify_action_button, 2> verify_action_buttons_for(const verify_mode_layout& layout) {
+    return {{
+        {song_select::login_dialog_command::request_resend_code, "RESEND", layout.resend},
+        {song_select::login_dialog_command::request_verify, "VERIFY", layout.verify},
+    }};
+}
+
 verify_mode_layout make_verify_mode_layout(Rectangle dialog_rect) {
     const login_dialog_frame_layout frame = make_frame_layout(dialog_rect);
     const Rectangle title = {frame.body.x, dialog_rect.y + kBodyTop, frame.body.width, 30.0f};
@@ -162,10 +222,9 @@ auth_mode_layout make_auth_mode_layout(Rectangle dialog_rect) {
     const login_dialog_frame_layout frame = make_frame_layout(dialog_rect);
     const Rectangle tab_row = {frame.body.x, dialog_rect.y + kTabTop, frame.body.width, kTabHeight};
     const float tab_width = (tab_row.width - kButtonGap) * 0.5f;
-    return {
-        {tab_row.x, tab_row.y, tab_width, tab_row.height},
-        {tab_row.x + tab_width + kButtonGap, tab_row.y, tab_width, tab_row.height},
-    };
+    auth_mode_layout layout{};
+    ui::hstack(tab_row, tab_width, kButtonGap, layout.tabs);
+    return layout;
 }
 
 Rectangle make_primary_form_button_rect(Rectangle dialog_rect, Rectangle last_input_rect) {
@@ -178,6 +237,17 @@ Rectangle make_primary_form_button_rect(Rectangle dialog_rect, Rectangle last_in
     };
     return ui::place(button_row, kPrimaryButtonWidth, kButtonHeight,
                      ui::anchor::center, ui::anchor::center);
+}
+
+primary_form_action_button primary_form_action_button_for(Rectangle dialog_rect,
+                                                          Rectangle last_input_rect,
+                                                          bool signup) {
+    return {
+        signup ? song_select::login_dialog_command::request_register
+               : song_select::login_dialog_command::request_login,
+        signup ? "SIGN UP" : "LOGIN",
+        make_primary_form_button_rect(dialog_rect, last_input_rect),
+    };
 }
 
 Rectangle dialog_rect_for(const song_select::state& state) {
@@ -302,6 +372,10 @@ ui::button_state draw_tab(Rectangle rect, const char* label, bool selected, ui::
     });
 }
 
+ui::button_state draw_tab(const auth_tab_button& button, ui::draw_layer layer) {
+    return draw_tab(button.rect, button.tab.label, button.selected, layer);
+}
+
 ui::button_state draw_dialog_button(Rectangle rect, const char* label, int font_size,
                                     ui::draw_layer layer, bool enabled) {
     return ui::queued_action_button(rect, label, {
@@ -312,10 +386,116 @@ ui::button_state draw_dialog_button(Rectangle rect, const char* label, int font_
     });
 }
 
+ui::button_state draw_dialog_button(const account_action_button& button, ui::draw_layer layer, bool enabled) {
+    return draw_dialog_button(button.rect, button.label, button.font_size, layer, enabled);
+}
+
+ui::button_state draw_dialog_button(const verify_action_button& button, ui::draw_layer layer, bool enabled) {
+    return draw_dialog_button(button.rect, button.label, 15, layer, enabled);
+}
+
+ui::button_state draw_dialog_button(const primary_form_action_button& button,
+                                    ui::draw_layer layer,
+                                    bool enabled) {
+    return draw_dialog_button(button.rect, button.label, 16, layer, enabled);
+}
+
 struct login_dialog_interaction {
     song_select::login_dialog_command command = song_select::login_dialog_command::none;
     song_select::login_dialog_state_action state_action = song_select::login_dialog_state_action::none;
 };
+
+struct auth_form_fields_result {
+    bool submitted = false;
+    Rectangle last_input_rect{};
+};
+
+song_select::login_dialog_command draw_account_actions(const account_mode_layout& layout,
+                                                       ui::draw_layer layer,
+                                                       bool request_active) {
+    for (const account_action_button& button : account_action_buttons_for(layout)) {
+        if (draw_dialog_button(button, layer, !request_active).clicked && !request_active) {
+            return button.command;
+        }
+    }
+    return song_select::login_dialog_command::none;
+}
+
+song_select::login_dialog_command draw_verify_actions(const verify_mode_layout& layout,
+                                                      const ui::text_input_result& code_result,
+                                                      ui::draw_layer layer,
+                                                      bool request_active) {
+    for (const verify_action_button& button : verify_action_buttons_for(layout)) {
+        const bool submitted_verify =
+            button.command == song_select::login_dialog_command::request_verify && code_result.submitted;
+        if ((draw_dialog_button(button, layer, !request_active).clicked || submitted_verify) && !request_active) {
+            return button.command;
+        }
+    }
+    return song_select::login_dialog_command::none;
+}
+
+song_select::login_dialog_state_action draw_auth_tabs(const auth_mode_layout& layout,
+                                                      song_select::login_dialog_mode mode,
+                                                      ui::draw_layer layer,
+                                                      bool request_active) {
+    for (const auth_tab_button& button : auth_tab_buttons_for(layout, mode)) {
+        if (draw_tab(button, layer).clicked && !request_active) {
+            return button.tab.state_action;
+        }
+    }
+    return song_select::login_dialog_state_action::none;
+}
+
+auth_form_fields_result draw_auth_form_fields(Rectangle dialog_rect,
+                                              song_select::login_dialog_state& dialog_state,
+                                              bool signup,
+                                              ui::draw_layer layer) {
+    int row = 0;
+    bool submitted = false;
+    if (signup) {
+        const ui::text_input_result display_name_result = ui::text_input(
+            make_row(dialog_rect, row++), dialog_state.display_name_input, "Name", "Display name",
+            login_text_input_options(layer, 32));
+        submitted = submitted || display_name_result.submitted;
+    }
+
+    const ui::text_input_result email_result = ui::text_input(
+        make_row(dialog_rect, row++), dialog_state.email_input, "Email", "name@example.com",
+        login_text_input_options(layer, 64));
+    submitted = submitted || email_result.submitted;
+
+    const ui::text_input_result password_result = ui::text_input(
+        make_row(dialog_rect, row++), dialog_state.password_input, "Pass", "Password",
+        login_text_input_options(layer, 64, true));
+    submitted = submitted || password_result.submitted;
+
+    if (signup) {
+        const ui::text_input_result confirm_result = ui::text_input(
+            make_row(dialog_rect, row++), dialog_state.password_confirmation_input, "Confirm", "Repeat password",
+            login_text_input_options(layer, 64, true));
+        submitted = submitted || confirm_result.submitted;
+    }
+
+    return {
+        .submitted = submitted,
+        .last_input_rect = make_row(dialog_rect, row - 1),
+    };
+}
+
+song_select::login_dialog_command draw_primary_form_action(Rectangle dialog_rect,
+                                                           const auth_form_fields_result& form_fields,
+                                                           bool signup,
+                                                           ui::draw_layer layer,
+                                                           bool request_active) {
+    const primary_form_action_button primary_button =
+        primary_form_action_button_for(dialog_rect, form_fields.last_input_rect, signup);
+    if ((draw_dialog_button(primary_button, layer, !request_active).clicked || form_fields.submitted) &&
+        !request_active) {
+        return primary_button.command;
+    }
+    return song_select::login_dialog_command::none;
+}
 
 }  // namespace
 
@@ -355,17 +535,8 @@ login_dialog_layout make_login_dialog_layout(const auth_state& auth_state,
 
 namespace {
 
-login_dialog_interaction draw_login_dialog_view(const song_select::auth_state& auth_state,
-                                                song_select::login_dialog_state& dialog_state,
-                                                const song_select::login_dialog_layout& layout,
-                                                bool request_active) {
-    if (!dialog_state.open) {
-        return {};
-    }
-
+void draw_login_dialog_frame(Rectangle dialog_rect) {
     const auto& theme = *g_theme;
-    const Rectangle dialog_rect = layout.dialog_rect;
-    const ui::draw_layer layer = layout.layer;
     const login_dialog_frame_layout frame = make_frame_layout(dialog_rect);
 
     ui::panel(dialog_rect);
@@ -375,117 +546,113 @@ login_dialog_interaction draw_login_dialog_view(const song_select::auth_state& a
     ui::draw_text_in_rect("Connect to raythm-Server", 14,
                           frame.subtitle,
                           theme.text_secondary, ui::text_align::left);
+}
 
-    if (auth_state.logged_in) {
-        const account_mode_layout account_layout = make_account_mode_layout(dialog_rect);
+login_dialog_interaction draw_account_mode(const song_select::auth_state& auth_state,
+                                           Rectangle dialog_rect,
+                                           ui::draw_layer layer,
+                                           bool request_active) {
+    const auto& theme = *g_theme;
+    const account_mode_layout account_layout = make_account_mode_layout(dialog_rect);
 
-        ui::draw_text_in_rect("Signed in", 20, account_layout.signed_in, theme.success, ui::text_align::left);
-        ui::draw_text_in_rect(auth_state.display_name.empty() ? auth_state.email.c_str() : auth_state.display_name.c_str(),
-                              18,
-                              account_layout.display_name,
-                              theme.text_secondary,
-                              ui::text_align::left);
-        ui::draw_text_in_rect(auth_state.email.c_str(),
-                              14,
-                              account_layout.email,
-                              theme.text_muted,
-                              ui::text_align::left);
-        ui::draw_text_in_rect(auth_state.email_verified
-                                  ? "Email verified"
-                                  : "Verify on the Web to submit online scores.",
-                              13,
-                              account_layout.verification,
-                              auth_state.email_verified ? theme.success : theme.error,
-                              ui::text_align::left);
-        if (draw_dialog_button(account_layout.profile, "PROFILE", 16, layer, !request_active).clicked && !request_active) {
-            return {.command = song_select::login_dialog_command::request_profile};
-        }
-        if (draw_dialog_button(account_layout.refresh, "REFRESH", 14, layer, !request_active).clicked) {
-            return {.command = song_select::login_dialog_command::request_restore};
-        }
-        if (draw_dialog_button(account_layout.logout, "LOGOUT", 14, layer, !request_active).clicked) {
-            return {.command = song_select::login_dialog_command::request_logout};
-        }
-        return {};
+    ui::draw_text_in_rect("Signed in", 20, account_layout.signed_in, theme.success, ui::text_align::left);
+    ui::draw_text_in_rect(auth_state.display_name.empty() ? auth_state.email.c_str() : auth_state.display_name.c_str(),
+                          18,
+                          account_layout.display_name,
+                          theme.text_secondary,
+                          ui::text_align::left);
+    ui::draw_text_in_rect(auth_state.email.c_str(),
+                          14,
+                          account_layout.email,
+                          theme.text_muted,
+                          ui::text_align::left);
+    ui::draw_text_in_rect(auth_state.email_verified
+                              ? "Email verified"
+                              : "Verify on the Web to submit online scores.",
+                          13,
+                          account_layout.verification,
+                          auth_state.email_verified ? theme.success : theme.error,
+                          ui::text_align::left);
+    if (const song_select::login_dialog_command command =
+            draw_account_actions(account_layout, layer, request_active);
+        command != song_select::login_dialog_command::none) {
+        return {.command = command};
     }
+    return {};
+}
 
-    if (dialog_state.mode == song_select::login_dialog_mode::verify) {
-        const verify_mode_layout verify_layout = make_verify_mode_layout(dialog_rect);
+login_dialog_interaction draw_verify_mode(song_select::login_dialog_state& dialog_state,
+                                          Rectangle dialog_rect,
+                                          ui::draw_layer layer,
+                                          bool request_active) {
+    const auto& theme = *g_theme;
+    const verify_mode_layout verify_layout = make_verify_mode_layout(dialog_rect);
 
-        ui::draw_text_in_rect(verification_title(dialog_state.verification), 20,
-                              verify_layout.title, theme.text, ui::text_align::left);
-        ui::draw_text_in_rect(dialog_state.verification_email.c_str(), 14,
-                              verify_layout.email, theme.text_muted, ui::text_align::left);
-        const ui::text_input_result code_result = ui::text_input(
-            verify_layout.code, dialog_state.verification_code_input, "Code", "6 digit code",
-            login_text_input_options(layer, 12));
+    ui::draw_text_in_rect(verification_title(dialog_state.verification), 20,
+                          verify_layout.title, theme.text, ui::text_align::left);
+    ui::draw_text_in_rect(dialog_state.verification_email.c_str(), 14,
+                          verify_layout.email, theme.text_muted, ui::text_align::left);
+    const ui::text_input_result code_result = ui::text_input(
+        verify_layout.code, dialog_state.verification_code_input, "Code", "6 digit code",
+        login_text_input_options(layer, 12));
 
-        if (draw_dialog_button(verify_layout.resend, "RESEND", 15, layer, !request_active).clicked) {
-            return {.command = song_select::login_dialog_command::request_resend_code};
-        }
-        if ((draw_dialog_button(verify_layout.verify, "VERIFY", 15, layer, !request_active).clicked ||
-             code_result.submitted) &&
-            !request_active) {
-            return {.command = song_select::login_dialog_command::request_verify};
-        }
-        return {};
+    if (const song_select::login_dialog_command command =
+            draw_verify_actions(verify_layout, code_result, layer, request_active);
+        command != song_select::login_dialog_command::none) {
+        return {.command = command};
     }
+    return {};
+}
 
+login_dialog_interaction draw_auth_form_mode(song_select::login_dialog_state& dialog_state,
+                                             Rectangle dialog_rect,
+                                             ui::draw_layer layer,
+                                             bool request_active) {
     login_dialog_interaction interaction;
-    const bool signup = dialog_state.mode == song_select::login_dialog_mode::signup;
     const auth_mode_layout auth_layout = make_auth_mode_layout(dialog_rect);
 
-    if (draw_tab(auth_layout.login_tab, "LOGIN", !signup, layer).clicked && !request_active) {
-        interaction.state_action = song_select::login_dialog_state_action::show_login;
-    }
-    if (draw_tab(auth_layout.signup_tab, "SIGN UP", signup, layer).clicked && !request_active) {
-        interaction.state_action = song_select::login_dialog_state_action::show_signup;
-    }
+    interaction.state_action = draw_auth_tabs(auth_layout, dialog_state.mode, layer, request_active);
 
-    int row = 0;
-    bool submitted = false;
-    if (signup) {
-        const ui::text_input_result display_name_result = ui::text_input(
-            make_row(dialog_rect, row++), dialog_state.display_name_input, "Name", "Display name",
-            login_text_input_options(layer, 32));
-        submitted = submitted || display_name_result.submitted;
-    }
+    const bool signup = dialog_state.mode == song_select::login_dialog_mode::signup;
+    const auth_form_fields_result form_fields =
+        draw_auth_form_fields(dialog_rect, dialog_state, signup, layer);
 
-    const ui::text_input_result email_result = ui::text_input(
-        make_row(dialog_rect, row++), dialog_state.email_input, "Email", "name@example.com",
-        login_text_input_options(layer, 64));
-    submitted = submitted || email_result.submitted;
-
-    const ui::text_input_result password_result = ui::text_input(
-        make_row(dialog_rect, row++), dialog_state.password_input, "Pass", "Password",
-        login_text_input_options(layer, 64, true));
-    submitted = submitted || password_result.submitted;
-
-    if (signup) {
-        const ui::text_input_result confirm_result = ui::text_input(
-            make_row(dialog_rect, row++), dialog_state.password_confirmation_input, "Confirm", "Repeat password",
-            login_text_input_options(layer, 64, true));
-        submitted = submitted || confirm_result.submitted;
-    }
-
-    if (IsKeyPressed(KEY_TAB) && !request_active) {
-        interaction.state_action = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)
+    if (ui::is_tab_pressed() && !request_active) {
+        interaction.state_action = ui::is_shift_down()
             ? song_select::login_dialog_state_action::focus_previous
             : song_select::login_dialog_state_action::focus_next;
     }
 
-    const Rectangle last_input_rect = make_row(dialog_rect, row - 1);
-    const Rectangle primary_rect = make_primary_form_button_rect(dialog_rect, last_input_rect);
-
-    const char* primary_label = signup ? "SIGN UP" : "LOGIN";
-    if ((draw_dialog_button(primary_rect, primary_label, 16, layer, !request_active).clicked || submitted) &&
-        !request_active) {
-        interaction.command = signup
-            ? song_select::login_dialog_command::request_register
-            : song_select::login_dialog_command::request_login;
+    if (const song_select::login_dialog_command command =
+            draw_primary_form_action(dialog_rect, form_fields, signup, layer, request_active);
+        command != song_select::login_dialog_command::none) {
+        interaction.command = command;
     }
 
     return interaction;
+}
+
+login_dialog_interaction draw_login_dialog_view(const song_select::auth_state& auth_state,
+                                                song_select::login_dialog_state& dialog_state,
+                                                const song_select::login_dialog_layout& layout,
+                                                bool request_active) {
+    if (!dialog_state.open) {
+        return {};
+    }
+
+    const Rectangle dialog_rect = layout.dialog_rect;
+    const ui::draw_layer layer = layout.layer;
+    draw_login_dialog_frame(dialog_rect);
+
+    if (auth_state.logged_in) {
+        return draw_account_mode(auth_state, dialog_rect, layer, request_active);
+    }
+
+    if (dialog_state.mode == song_select::login_dialog_mode::verify) {
+        return draw_verify_mode(dialog_state, dialog_rect, layer, request_active);
+    }
+
+    return draw_auth_form_mode(dialog_state, dialog_rect, layer, request_active);
 }
 
 }  // namespace

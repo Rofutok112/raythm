@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <optional>
 #include <span>
 
 #include "raylib.h"
@@ -17,6 +18,48 @@ struct rect_pair {
 struct scroll_metrics {
     float max_scroll;
     Rectangle thumb_rect;
+};
+
+struct vertical_layout_cursor {
+    float x = 0.0f;
+    float y = 0.0f;
+    float width = 0.0f;
+    float gap = 0.0f;
+
+    constexpr Rectangle next(float height) {
+        const Rectangle rect{x, y, width, height};
+        y += height + gap;
+        return rect;
+    }
+
+    constexpr Rectangle peek(float height) const {
+        return {x, y, width, height};
+    }
+
+    constexpr void skip(float amount) {
+        y += amount;
+    }
+};
+
+struct wrapped_layout_cursor {
+    Rectangle bounds = {};
+    float x = 0.0f;
+    float y = 0.0f;
+    float gap = 0.0f;
+    float row_step = 0.0f;
+
+    constexpr std::optional<Rectangle> next(float width, float height) {
+        if (x + width > bounds.x + bounds.width && x > bounds.x) {
+            x = bounds.x;
+            y += row_step;
+        }
+        if (y + height > bounds.y + bounds.height) {
+            return std::nullopt;
+        }
+        const Rectangle rect{x, y, width, height};
+        x += width + gap;
+        return rect;
+    }
 };
 
 // ── 型定義 ──────────────────────────────────────────────
@@ -113,6 +156,81 @@ constexpr Rectangle center(Rectangle parent, float w, float h) {
     return place(parent, w, h, anchor::center, anchor::center);
 }
 
+constexpr Rectangle centered_square(Rectangle parent, float size) {
+    return center(parent, size, size);
+}
+
+constexpr Rectangle inscribed_square(Rectangle parent, float inset_amount = 0.0f) {
+    const float size = std::max(1.0f, std::min(parent.width, parent.height) - inset_amount * 2.0f);
+    return centered_square(parent, size);
+}
+
+constexpr Rectangle aspect_fit_rect(Rectangle bounds, float content_width, float content_height) {
+    if (content_width <= 0.0f || content_height <= 0.0f || bounds.width <= 0.0f || bounds.height <= 0.0f) {
+        return bounds;
+    }
+
+    const float scale = std::min(bounds.width / content_width, bounds.height / content_height);
+    const float width = content_width * scale;
+    const float height = content_height * scale;
+    return center(bounds, width, height);
+}
+
+constexpr Rectangle scaled_from_center(Rectangle anchor,
+                                       Rectangle target,
+                                       float scale,
+                                       Vector2 center_offset = {0.0f, 0.0f}) {
+    const Vector2 center_point = {
+        anchor.x + anchor.width * 0.5f + center_offset.x,
+        anchor.y + anchor.height * 0.5f + center_offset.y,
+    };
+    const float width = target.width * scale;
+    const float height = target.height * scale;
+    return {
+        center_point.x - width * 0.5f,
+        center_point.y - height * 0.5f,
+        width,
+        height,
+    };
+}
+
+constexpr Rectangle map_rect_between(Rectangle rect, Rectangle from_space, Rectangle to_space) {
+    if (from_space.width == 0.0f || from_space.height == 0.0f) {
+        return {to_space.x, to_space.y, 0.0f, 0.0f};
+    }
+    const float scale_x = to_space.width / from_space.width;
+    const float scale_y = to_space.height / from_space.height;
+    return {
+        to_space.x + (rect.x - from_space.x) * scale_x,
+        to_space.y + (rect.y - from_space.y) * scale_y,
+        rect.width * scale_x,
+        rect.height * scale_y,
+    };
+}
+
+constexpr Rectangle translated(Rectangle rect, float dx, float dy) {
+    return {
+        rect.x + dx,
+        rect.y + dy,
+        rect.width,
+        rect.height,
+    };
+}
+
+constexpr Rectangle translated(Rectangle rect, Vector2 delta) {
+    return translated(rect, delta.x, delta.y);
+}
+
+constexpr Vector2 map_point_between(Vector2 point, Rectangle from_space, Rectangle to_space) {
+    if (from_space.width == 0.0f || from_space.height == 0.0f) {
+        return {to_space.x, to_space.y};
+    }
+    return {
+        to_space.x + (point.x - from_space.x) * to_space.width / from_space.width,
+        to_space.y + (point.y - from_space.y) * to_space.height / from_space.height,
+    };
+}
+
 // parent を左右2カラムに分割する。first_width が左カラム幅、spacing が列間。
 constexpr rect_pair split_columns(Rectangle parent, float first_width, float spacing = 0.0f) {
     return {
@@ -173,6 +291,29 @@ inline scroll_metrics vertical_scroll_metrics(Rectangle track_rect, float conten
 
 // ── スタック ────────────────────────────────────────────
 
+constexpr vertical_layout_cursor vertical_cursor(Rectangle first_row, float spacing) {
+    return {
+        first_row.x,
+        first_row.y,
+        first_row.width,
+        spacing,
+    };
+}
+
+constexpr vertical_layout_cursor vertical_cursor(float x, float y, float width, float spacing) {
+    return {x, y, width, spacing};
+}
+
+constexpr wrapped_layout_cursor wrapped_cursor(Rectangle bounds, float gap, float row_step) {
+    return {
+        bounds,
+        bounds.x,
+        bounds.y,
+        gap,
+        row_step,
+    };
+}
+
 // 垂直スタック。parent 内に item_height 高の要素を spacing 間隔で上から並べる。
 // 幅は parent に合わせる。
 inline int vstack(Rectangle parent, float item_height, float spacing,
@@ -197,6 +338,32 @@ inline int hstack(Rectangle parent, float item_width, float spacing,
         x += item_width + spacing;
     }
     return count;
+}
+
+inline float stack_content_width(int item_count, float item_width, float spacing) {
+    if (item_count <= 0) {
+        return 0.0f;
+    }
+    return static_cast<float>(item_count) * item_width +
+           static_cast<float>(item_count - 1) * spacing;
+}
+
+inline int centered_hstack(Rectangle parent,
+                           float item_width,
+                           float item_height,
+                           float spacing,
+                           std::span<Rectangle> out) {
+    const int count = static_cast<int>(out.size());
+    const float total_width = stack_content_width(count, item_width, spacing);
+    return hstack({
+                      parent.x + (parent.width - total_width) * 0.5f,
+                      parent.y + (parent.height - item_height) * 0.5f,
+                      total_width,
+                      item_height,
+                  },
+                  item_width,
+                  spacing,
+                  out);
 }
 
 // 水平スタック（可変幅）。item_widths の各幅を spacing 間隔で左から並べる。

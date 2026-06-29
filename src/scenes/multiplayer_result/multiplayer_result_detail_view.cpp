@@ -1,8 +1,11 @@
 #include "multiplayer_result/multiplayer_result_detail_view.h"
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <string>
 
+#include "multiplayer_result/multiplayer_result_widgets.h"
 #include "theme.h"
 #include "ui_draw.h"
 
@@ -36,6 +39,109 @@ constexpr Rectangle kSelectedSummaryDividerRect{kSelectedRankRect.x + kSelectedR
                                                 160.0f,
                                                 0.0f,
                                                 162.0f};
+constexpr std::array<float, 2> kFastSlowColumnWidths{112.0f, 112.0f};
+
+struct count_column_layout {
+    Rectangle label;
+    Rectangle divider;
+    Rectangle value;
+};
+
+struct fast_slow_panel_layout {
+    count_column_layout fast;
+    count_column_layout slow;
+    Rectangle divider;
+};
+
+struct judgement_definition {
+    const char* label;
+    size_t score_index;
+};
+
+struct judgement_row_layout {
+    Rectangle row;
+    Rectangle label;
+    Rectangle value;
+};
+
+struct selected_metric_descriptor {
+    Rectangle rect;
+    const char* label;
+    std::string value;
+    Color value_color;
+};
+
+constexpr std::array<judgement_definition, 5> kJudgements{{
+    {"Perfect", 0},
+    {"Great", 1},
+    {"Good", 2},
+    {"Bad", 3},
+    {"Miss", 4},
+}};
+
+count_column_layout count_column_layout_for(Rectangle column) {
+    return {
+        {column.x, column.y, column.width, 24.0f},
+        {column.x, column.y + 30.0f, 50.0f, 2.0f},
+        {column.x, column.y + 42.0f, column.width, 38.0f},
+    };
+}
+
+fast_slow_panel_layout fast_slow_panel_layout_for(Rectangle rect) {
+    std::array<Rectangle, 2> columns{};
+    ui::hstack_widths(ui::inset(rect, ui::edge_insets{22.0f, 26.0f, 22.0f, 26.0f}),
+                      kFastSlowColumnWidths,
+                      58.0f,
+                      columns);
+    return {
+        count_column_layout_for(columns[0]),
+        count_column_layout_for(columns[1]),
+        {rect.x + rect.width * 0.5f, rect.y + 24.0f, 0.0f, rect.height - 48.0f},
+    };
+}
+
+std::array<judgement_row_layout, kJudgements.size()> judgement_row_layouts_for(Rectangle rect) {
+    const Rectangle judge_content = ui::inset(rect, ui::edge_insets::symmetric(24.0f, 22.0f));
+    std::array<Rectangle, kJudgements.size()> rows{};
+    ui::vstack_fill(judge_content, 0.0f, rows);
+
+    std::array<judgement_row_layout, kJudgements.size()> layouts{};
+    for (size_t i = 0; i < layouts.size(); ++i) {
+        const ui::rect_pair columns = ui::split_columns(rows[i], 220.0f, 20.0f);
+        layouts[i] = {rows[i], columns.first, columns.second};
+    }
+    return layouts;
+}
+
+std::array<selected_metric_descriptor, 3> selected_metric_descriptors_for(
+    const play_multiplayer_score_row& score,
+    bool has_details) {
+    return {{
+        {kSelectedAccuracyRect,
+         "Accuracy",
+         TextFormat("%.2f%%", score.accuracy),
+         g_theme->fast},
+        {kSelectedComboRect,
+         "Max Combo",
+         std::to_string(score.combo),
+         g_theme->accent},
+        {kSelectedOffsetRect,
+         "Avg Offset",
+         has_details ? TextFormat("%+.1fms", score.avg_offset) : "--",
+         g_theme->text_secondary},
+    }};
+}
+
+Color judgement_color(size_t score_index) {
+    switch (score_index) {
+        case 0: return g_theme->judge_perfect;
+        case 1: return g_theme->judge_great;
+        case 2: return g_theme->judge_good;
+        case 3: return g_theme->judge_bad;
+        case 4: return g_theme->judge_miss;
+        default: return g_theme->text_muted;
+    }
+}
 
 const char* rank_label(rank value) {
     switch (value) {
@@ -63,14 +169,6 @@ Color result_rank_color(rank value) {
     return g_theme->rank_f;
 }
 
-std::string format_score(int score) {
-    std::string value = std::to_string(std::max(0, score));
-    for (int i = static_cast<int>(value.size()) - 3; i > 0; i -= 3) {
-        value.insert(static_cast<size_t>(i), ",");
-    }
-    return value;
-}
-
 void draw_result_panel(Rectangle rect, Color border = {0, 0, 0, 0}) {
     const Color resolved_border = border.a > 0 ? border : g_theme->border;
     ui::surface(rect, with_alpha(g_theme->panel, 214), resolved_border, 1.5f);
@@ -88,56 +186,39 @@ void draw_compact_metric(Rectangle rect, const char* label, const char* value, C
 
 void draw_fast_slow_panel(Rectangle rect, bool has_details, int fast_count, int slow_count) {
     ui::surface(rect, g_theme->section, g_theme->border_light, 1.5f);
-    const float column_widths[] = {112.0f, 112.0f};
-    Rectangle columns[2]{};
-    ui::hstack_widths(ui::inset(rect, ui::edge_insets{22.0f, 26.0f, 22.0f, 26.0f}),
-                      column_widths,
-                      58.0f,
-                      columns);
-    const Rectangle left = columns[0];
-    const Rectangle right = columns[1];
+    const fast_slow_panel_layout layout = fast_slow_panel_layout_for(rect);
     const Color fast_color = has_details ? g_theme->fast : g_theme->text_muted;
     const Color slow_color = has_details ? g_theme->slow : g_theme->text_muted;
-    ui::draw_text_in_rect("FAST", 18, {left.x, left.y, left.width, 24.0f}, fast_color, ui::text_align::left);
-    ui::divider({left.x, left.y + 30.0f, 50.0f, 2.0f}, fast_color);
+    ui::draw_text_in_rect("FAST", 18, layout.fast.label, fast_color, ui::text_align::left);
+    ui::divider(layout.fast.divider, fast_color);
     ui::draw_text_in_rect(has_details ? std::to_string(fast_count).c_str() : "--", 34,
-                          {left.x, left.y + 42.0f, left.width, 38.0f}, fast_color, ui::text_align::left);
-    ui::draw_line_ex({rect.x + rect.width * 0.5f, rect.y + 24.0f},
-                     {rect.x + rect.width * 0.5f, rect.y + rect.height - 24.0f},
+                          layout.fast.value, fast_color, ui::text_align::left);
+    ui::draw_line_ex({layout.divider.x, layout.divider.y},
+                     {layout.divider.x, layout.divider.y + layout.divider.height},
                      1.0f, g_theme->border);
-    ui::draw_text_in_rect("SLOW", 18, {right.x, right.y, right.width, 24.0f}, slow_color, ui::text_align::left);
-    ui::divider({right.x, right.y + 30.0f, 50.0f, 2.0f}, slow_color);
+    ui::draw_text_in_rect("SLOW", 18, layout.slow.label, slow_color, ui::text_align::left);
+    ui::divider(layout.slow.divider, slow_color);
     ui::draw_text_in_rect(has_details ? std::to_string(slow_count).c_str() : "--", 34,
-                          {right.x, right.y + 42.0f, right.width, 38.0f}, slow_color, ui::text_align::left);
+                          layout.slow.value, slow_color, ui::text_align::left);
 }
 
 void draw_judgement_breakdown(Rectangle rect, const play_multiplayer_score_row& score, bool has_details) {
     draw_result_panel(rect);
-    const Rectangle judge_content = ui::inset(rect, ui::edge_insets::symmetric(24.0f, 22.0f));
-    const char* judge_labels[5] = {"Perfect", "Great", "Good", "Bad", "Miss"};
-    const Color judge_colors[5] = {
-        g_theme->judge_perfect,
-        g_theme->judge_great,
-        g_theme->judge_good,
-        g_theme->judge_bad,
-        g_theme->judge_miss,
-    };
-    Rectangle judge_rows[5]{};
-    ui::vstack_fill(judge_content, 0.0f, judge_rows);
-    for (int i = 0; i < 5; ++i) {
-        const Rectangle row_rect = judge_rows[i];
-        const ui::rect_pair row_columns = ui::split_columns(row_rect, 220.0f, 20.0f);
-        ui::draw_text_in_rect(judge_labels[i], 26, row_columns.first,
-                              has_details ? judge_colors[i] : g_theme->text_muted,
+    const std::array<judgement_row_layout, kJudgements.size()> rows = judgement_row_layouts_for(rect);
+    for (size_t i = 0; i < kJudgements.size(); ++i) {
+        const judgement_definition& judgement = kJudgements[i];
+        const judgement_row_layout& row = rows[i];
+        ui::draw_text_in_rect(judgement.label, 26, row.label,
+                              has_details ? judgement_color(judgement.score_index) : g_theme->text_muted,
                               ui::text_align::left);
         const std::string count_text = has_details
-            ? std::to_string(score.judge_counts[static_cast<size_t>(i)])
+            ? std::to_string(score.judge_counts[judgement.score_index])
             : "--";
-        ui::draw_text_in_rect(count_text.c_str(), 34, row_columns.second,
+        ui::draw_text_in_rect(count_text.c_str(), 34, row.value,
                               g_theme->text, ui::text_align::right);
-        if (i < 4) {
-            ui::draw_line_ex({row_rect.x, row_rect.y + row_rect.height},
-                             {row_rect.x + row_rect.width, row_rect.y + row_rect.height},
+        if (i + 1 < kJudgements.size()) {
+            ui::draw_line_ex({row.row.x, row.row.y + row.row.height},
+                             {row.row.x + row.row.width, row.row.y + row.row.height},
                              1.0f,
                              g_theme->border_light);
         }
@@ -162,7 +243,7 @@ void draw(const play_multiplayer_score_row& score, bool has_details) {
                      1.5f,
                      g_theme->border);
 
-    ui::draw_text_in_rect(format_score(score.score).c_str(), 82,
+    ui::draw_text_in_rect(widgets::format_score(score.score).c_str(), 82,
                           kSelectedScoreRect,
                           g_theme->text, ui::text_align::right);
     ui::divider(kSelectedScoreDividerRect, selected_rank_color);
@@ -176,13 +257,9 @@ void draw(const play_multiplayer_score_row& score, bool has_details) {
          (has_details && score.is_full_combo ? g_theme->full_combo : g_theme->success));
     ui::draw_text_in_rect(clear_label, 28, kSelectedClearRect, clear_color, ui::text_align::right);
 
-    draw_compact_metric(kSelectedAccuracyRect,
-                        "Accuracy", TextFormat("%.2f%%", score.accuracy), g_theme->fast);
-    draw_compact_metric(kSelectedComboRect,
-                        "Max Combo", std::to_string(score.combo).c_str(), g_theme->accent);
-    draw_compact_metric(kSelectedOffsetRect,
-                        "Avg Offset", has_details ? TextFormat("%+.1fms", score.avg_offset) : "--",
-                        g_theme->text_secondary);
+    for (const selected_metric_descriptor& metric : selected_metric_descriptors_for(score, has_details)) {
+        draw_compact_metric(metric.rect, metric.label, metric.value.c_str(), metric.value_color);
+    }
     draw_fast_slow_panel(kSelectedFastSlowRect, has_details, score.fast_count, score.slow_count);
 
     draw_judgement_breakdown(kSelectedJudgementRect, score, has_details);

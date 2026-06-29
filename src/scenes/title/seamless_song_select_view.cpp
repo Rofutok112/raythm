@@ -1,6 +1,7 @@
 #include "title/seamless_song_select_view.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iterator>
 #include <optional>
@@ -30,6 +31,8 @@
 #include "tween.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_layout.h"
+#include "ui_scroll.h"
 #include "ui_text_input.h"
 #include "ui_tooltip.h"
 #include "ui/icons/raythm_icons.h"
@@ -42,24 +45,61 @@ constexpr float kContextMenuInnerPadding = 6.0f;
 constexpr int kPlaySongContextMenuItemCount = 1;
 constexpr int kPlayChartContextMenuItemCount = 1;
 
-Rectangle centered_icon_rect(Rectangle rect, float inset) {
-    const float size = std::max(1.0f, std::min(rect.width, rect.height) - inset * 2.0f);
+Rectangle context_menu_item_rect(Rectangle menu_rect, int index = 0) {
+    const Rectangle content = {
+        menu_rect.x + kContextMenuInnerPadding,
+        menu_rect.y + kContextMenuInnerPadding,
+        menu_rect.width - kContextMenuInnerPadding * 2.0f,
+        menu_rect.height - kContextMenuInnerPadding * 2.0f,
+    };
+    return ui::vertical_list_row_rect(
+        content,
+        index,
+        song_select::layout::kContextMenuItemHeight,
+        song_select::layout::kContextMenuItemSpacing,
+        0.0f);
+}
+
+struct delete_context_menu_layout {
+    Rectangle menu{};
+    Rectangle item{};
+    Rectangle visual{};
+    Rectangle accent{};
+    Rectangle label{};
+};
+
+struct delete_context_menu_style {
+    Color fill{};
+    Color border{};
+    Color accent{};
+    Color text{};
+};
+
+delete_context_menu_layout delete_context_menu_layout_for(Rectangle menu_rect, bool pressed) {
+    const Rectangle item = context_menu_item_rect(menu_rect);
+    const Rectangle visual = pressed ? ui::inset(item, 1.5f) : item;
     return {
-        rect.x + (rect.width - size) * 0.5f,
-        rect.y + (rect.height - size) * 0.5f,
-        size,
-        size
+        .menu = menu_rect,
+        .item = item,
+        .visual = visual,
+        .accent = {
+            visual.x + 10.0f,
+            visual.y + 9.0f,
+            4.0f,
+            std::max(0.0f, visual.height - 18.0f),
+        },
+        .label = {visual.x + 24.0f, visual.y, visual.width - 34.0f, visual.height},
     };
 }
 
-Rectangle context_menu_item_rect(Rectangle menu_rect, int index = 0) {
+delete_context_menu_style delete_context_menu_style_for(bool hovered) {
+    const auto& t = *g_theme;
+    const Color bg = hovered ? t.row_hover : t.row;
     return {
-        menu_rect.x + kContextMenuInnerPadding,
-        menu_rect.y + kContextMenuInnerPadding +
-            static_cast<float>(index) *
-                (song_select::layout::kContextMenuItemHeight + song_select::layout::kContextMenuItemSpacing),
-        menu_rect.width - kContextMenuInnerPadding * 2.0f,
-        song_select::layout::kContextMenuItemHeight
+        .fill = with_alpha(lerp_color(bg, t.error, hovered ? 0.16f : 0.08f), 228),
+        .border = with_alpha(lerp_color(t.border, t.error, 0.35f), 220),
+        .accent = with_alpha(t.error, 220),
+        .text = t.text,
     };
 }
 
@@ -221,6 +261,14 @@ void draw_play_search_input(Rectangle rect,
     });
 }
 
+bool play_filters_active(const song_select::state& state) {
+    return state.chart_source != song_select::chart_source_filter::all ||
+           !state.play_search_input.value.empty() ||
+           state.chart_key_filter != 0 ||
+           std::fabs(state.chart_min_level - kChartFilterMinLevel) > 0.001f ||
+           std::fabs(state.chart_max_level - kChartFilterMaxLevel) > 0.001f;
+}
+
 void draw_play_filter_panel(const title_play_view::layout& current,
                             song_select::state& state,
                             unsigned char alpha,
@@ -247,14 +295,9 @@ void draw_play_filter_panel(const title_play_view::layout& current,
     draw_play_search_input(search, state.play_search_input, alpha, button_base, t.row_soft_hover,
                            button_selected, normal_row_alpha, normal_row_alpha, selected_row_alpha);
 
-    const bool filters_active = state.chart_source != song_select::chart_source_filter::all ||
-                                !state.play_search_input.value.empty() ||
-                                state.chart_key_filter != 0 ||
-                                std::fabs(state.chart_min_level - kChartFilterMinLevel) > 0.001f ||
-                                std::fabs(state.chart_max_level - kChartFilterMaxLevel) > 0.001f;
     song_select::filter_widget::filter_icon_button(play_filter_button_rect(panel), {
         .border_width = 1.2f,
-        .active = filters_active || state.play_filter_modal_open,
+        .active = play_filters_active(state) || state.play_filter_modal_open,
         .base = button_base,
         .hover = button_base,
         .active_base = button_selected,
@@ -269,6 +312,81 @@ void draw_play_filter_panel(const title_play_view::layout& current,
         .active_hover_alpha = selected_row_alpha,
         .icon_alpha = alpha,
     });
+}
+
+struct filter_option_button {
+    Rectangle rect{};
+    const char* label = "";
+    bool selected = false;
+};
+
+struct filter_option_style {
+    unsigned char alpha = 255;
+    unsigned char normal_row_alpha = 255;
+    unsigned char selected_row_alpha = 255;
+    Color button_base{};
+    Color button_selected{};
+};
+
+std::array<filter_option_button, 3> source_filter_buttons(Rectangle panel,
+                                                          song_select::chart_source_filter selected_source) {
+    std::array<filter_option_button, 3> buttons{};
+    const std::array<play_filter_source_option, 3> options = play_filter_source_options(panel);
+    for (std::size_t i = 0; i < options.size(); ++i) {
+        buttons[i] = {
+            .rect = options[i].rect,
+            .label = options[i].label,
+            .selected = selected_source == options[i].value,
+        };
+    }
+    return buttons;
+}
+
+std::array<filter_option_button, 5> key_filter_buttons(Rectangle panel, int selected_key_filter) {
+    std::array<filter_option_button, 5> buttons{};
+    const std::array<play_filter_key_option, 5> options = play_filter_key_options(panel);
+    for (std::size_t i = 0; i < options.size(); ++i) {
+        buttons[i] = {
+            .rect = options[i].rect,
+            .label = options[i].label,
+            .selected = selected_key_filter == options[i].value,
+        };
+    }
+    return buttons;
+}
+
+void draw_filter_option_button(const filter_option_button& button, const filter_option_style& style) {
+    const auto& t = *g_theme;
+    song_select::filter_widget::option_button(button.rect, button.label, {
+        .font_size = 11,
+        .border_width = 1.0f,
+        .selected = button.selected,
+        .base = style.button_base,
+        .hover = t.row_soft_hover,
+        .selected_base = style.button_selected,
+        .selected_hover = t.row_soft_hover,
+        .text = t.text,
+        .selected_text = t.text,
+        .normal_alpha = style.normal_row_alpha,
+        .hover_alpha = style.normal_row_alpha,
+        .selected_alpha = style.selected_row_alpha,
+        .selected_hover_alpha = style.normal_row_alpha,
+        .text_alpha = style.alpha,
+    });
+}
+
+template <std::size_t Count>
+void draw_filter_option_buttons(const std::array<filter_option_button, Count>& buttons,
+                                const filter_option_style& style) {
+    for (const filter_option_button& button : buttons) {
+        draw_filter_option_button(button, style);
+    }
+}
+
+void draw_filter_heading(Rectangle panel, const char* label, float y, unsigned char alpha) {
+    ui::draw_text_in_rect(label, 12,
+                          {panel.x + 18.0f, y, panel.width - 36.0f, 18.0f},
+                          with_alpha(g_theme->accent, alpha), ui::text_align::left);
 }
 
 void draw_play_filter_modal(const title_play_view::layout& current,
@@ -290,55 +408,27 @@ void draw_play_filter_modal(const title_play_view::layout& current,
                 with_alpha(t.border_active, alpha),
                 1.4f);
 
-    const auto draw_heading = [&](const char* label, float y) {
-        ui::draw_text_in_rect(label, 12, {panel.x + 18.0f, y, panel.width - 36.0f, 18.0f},
-                              with_alpha(t.accent, alpha), ui::text_align::left);
-    };
-    const auto draw_button = [&](Rectangle rect, const char* label, bool selected) {
-        song_select::filter_widget::option_button(rect, label, {
-            .font_size = 11,
-            .border_width = 1.0f,
-            .selected = selected,
-            .base = button_base,
-            .hover = t.row_soft_hover,
-            .selected_base = button_selected,
-            .selected_hover = t.row_soft_hover,
-            .text = t.text,
-            .selected_text = t.text,
-            .normal_alpha = normal_row_alpha,
-            .hover_alpha = normal_row_alpha,
-            .selected_alpha = selected_row_alpha,
-            .selected_hover_alpha = normal_row_alpha,
-            .text_alpha = alpha,
-        });
+    const filter_option_style option_style{
+        .alpha = alpha,
+        .normal_row_alpha = normal_row_alpha,
+        .selected_row_alpha = selected_row_alpha,
+        .button_base = button_base,
+        .button_selected = button_selected,
     };
     ui::draw_text_in_rect("FILTER", 16, {panel.x + 18.0f, panel.y + 16.0f, panel.width - 36.0f, 24.0f},
                           with_alpha(t.text, alpha), ui::text_align::left);
-    draw_heading("SOURCE", panel.y + 60.0f);
-    draw_button(play_filter_source_button_rect(panel, 0), "ALL",
-                state.chart_source == song_select::chart_source_filter::all);
-    draw_button(play_filter_source_button_rect(panel, 1), "OFFICIAL",
-                state.chart_source == song_select::chart_source_filter::official);
-    draw_button(play_filter_source_button_rect(panel, 2), "COMMUNITY",
-                state.chart_source == song_select::chart_source_filter::community);
+    draw_filter_heading(panel, "SOURCE", panel.y + 60.0f, alpha);
+    draw_filter_option_buttons(source_filter_buttons(panel, state.chart_source), option_style);
 
-    draw_heading("LEVEL", panel.y + 164.0f);
+    draw_filter_heading(panel, "LEVEL", panel.y + 164.0f, alpha);
     const Rectangle range = play_filter_level_slider_rect(panel);
     song_select::level_filter::draw_range_slider(range, state.chart_min_level, state.chart_max_level, alpha);
 
-    draw_heading("KEYS", panel.y + 292.0f);
-    const char* key_labels[] = {"ALL", "4K", "5K", "6K", "7K"};
-    for (int i = 0; i < 5; ++i) {
-        draw_button(play_filter_key_button_rect(panel, i), key_labels[i],
-                    state.chart_key_filter == (i == 0 ? 0 : i + 3));
-    }
+    draw_filter_heading(panel, "KEYS", panel.y + 292.0f, alpha);
+    draw_filter_option_buttons(key_filter_buttons(panel, state.chart_key_filter), option_style);
 
-    const bool filters_active = state.chart_source != song_select::chart_source_filter::all ||
-                                !state.play_search_input.value.empty() ||
-                                state.chart_key_filter != 0 ||
-                                std::fabs(state.chart_min_level - kChartFilterMinLevel) > 0.001f ||
-                                std::fabs(state.chart_max_level - kChartFilterMaxLevel) > 0.001f;
-    draw_button(play_filter_clear_button_rect(panel), "CLEAR FILTERS", filters_active);
+    const play_filter_clear_option clear = play_filter_clear_option_for(panel);
+    draw_filter_option_button({clear.rect, clear.label, play_filters_active(state)}, option_style);
 }
 
 const char* difficulty_factor_label(const std::string& name) {
@@ -439,7 +529,7 @@ float status_badge_width(content_status status) {
 void draw_square_status_badge(Rectangle rect, content_status status, unsigned char alpha, int font_size = 10) {
     const Color color = content_status_badge::color(status);
     if (status == content_status::modified) {
-        raythm_icons::draw_triangle_alert(centered_icon_rect(rect, 1.0f), with_alpha(color, alpha), 2.6f);
+        raythm_icons::draw_triangle_alert(ui::inscribed_square(rect, 1.0f), with_alpha(color, alpha), 2.6f);
         return;
     }
 
@@ -452,7 +542,7 @@ void enqueue_modified_status_tooltip(Rectangle badge_rect, content_status status
     if (status != content_status::modified) {
         return;
     }
-    ui::enqueue_hover_tooltip(centered_icon_rect(badge_rect, 1.0f), "変更されています", alpha);
+    ui::enqueue_hover_tooltip(ui::inscribed_square(badge_rect, 1.0f), "変更されています", alpha);
 }
 
 std::optional<chart_difficulty::difficulty_breakdown> cached_difficulty_breakdown(const song_select::chart_option* chart) {
@@ -503,22 +593,27 @@ struct difficulty_factor_row_layout {
 };
 
 difficulty_factor_row_layout difficulty_factor_row_rects(Rectangle rect, int index) {
-    const float row_y = rect.y + 24.0f + static_cast<float>(index) * kDifficultyFactorRowHeight;
+    const Rectangle row = ui::vertical_list_row_rect(
+        {rect.x, rect.y + 24.0f, rect.width, rect.height - 24.0f},
+        index,
+        kDifficultyFactorRowHeight,
+        0.0f,
+        0.0f);
     const Rectangle label = {
         rect.x,
-        row_y - 2.0f,
+        row.y - 2.0f,
         kDifficultyFactorLabelWidth,
         kDifficultyFactorRowHeight,
     };
     const Rectangle bar_track = {
         rect.x + kDifficultyFactorLabelWidth,
-        row_y + 4.0f,
+        row.y + 4.0f,
         rect.width - kDifficultyFactorLabelWidth - kDifficultyFactorValueWidth,
         9.0f,
     };
     const Rectangle value = {
         bar_track.x + bar_track.width + 6.0f,
-        row_y - 2.0f,
+        row.y - 2.0f,
         kDifficultyFactorValueWidth - 6.0f,
         kDifficultyFactorRowHeight,
     };
@@ -789,7 +884,7 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
         enqueue_modified_status_tooltip(selected.source_badge, chart->source_status, alpha);
         if (play_locked) {
             ui::backdrop(selected.source_badge, with_alpha(t.bg, scaled_alpha(alpha, 0.54f)));
-            raythm_icons::draw_lock(centered_icon_rect(selected.source_badge, 3.0f),
+            raythm_icons::draw_lock(ui::inscribed_square(selected.source_badge, 3.0f),
                                     with_alpha(t.slow, alpha), 2.7f);
             ui::draw_text_in_rect(lock_reason.c_str(), 12, selected.lock_reason,
                                   with_alpha(t.slow, alpha), ui::text_align::left);
@@ -853,7 +948,7 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
                 with_alpha(mods_active ? t.accent : t.border_light, alpha),
                 mods_active ? 1.6f : 1.0f);
     raythm_icons::draw_settings_gear(
-        centered_icon_rect({mods_visual.x + 14.0f, mods_visual.y, 42.0f, mods_visual.height}, 8.0f),
+        ui::inscribed_square({mods_visual.x + 14.0f, mods_visual.y, 42.0f, mods_visual.height}, 8.0f),
         with_alpha(mods_active ? t.accent : t.text_secondary, alpha), 3.0f);
     ui::draw_text_in_rect("MODS", 18, {mods_visual.x + 62.0f, mods_visual.y + 8.0f, 112.0f, 24.0f},
                           with_alpha(t.text, alpha), ui::text_align::left);
@@ -875,7 +970,7 @@ void draw_preview_and_start_panel(const title_play_view::layout& current,
                    .custom_colors = true,
                });
     if (play_locked) {
-        raythm_icons::draw_lock(centered_icon_rect(start_rect, 18.0f), with_alpha(t.slow, alpha), 3.2f);
+        raythm_icons::draw_lock(ui::inscribed_square(start_rect, 18.0f), with_alpha(t.slow, alpha), 3.2f);
     }
 }
 
@@ -944,30 +1039,21 @@ void draw_mod_modal(const title_play_view::layout& current,
 }
 
 void enqueue_delete_context_menu(Rectangle menu_rect, const char* label) {
-    const auto& t = *g_theme;
     const Rectangle item_rect = context_menu_item_rect(menu_rect);
     const bool hovered = ui::is_hovered(item_rect, song_select::layout::kContextMenuLayer);
     const bool pressed = ui::is_pressed(item_rect, song_select::layout::kContextMenuLayer);
-    const Rectangle visual = pressed ? ui::inset(item_rect, 1.5f) : item_rect;
-    const Color bg = hovered ? t.row_hover : t.row;
-    const Color fill = with_alpha(lerp_color(bg, t.error, hovered ? 0.16f : 0.08f), 228);
-    const Color border = with_alpha(lerp_color(t.border, t.error, 0.35f), 220);
+    const delete_context_menu_layout layout = delete_context_menu_layout_for(menu_rect, pressed);
+    const delete_context_menu_style style = delete_context_menu_style_for(hovered);
     const std::string label_copy = label != nullptr ? label : "";
 
     ui::enqueue_draw_command(song_select::layout::kContextMenuLayer,
-                             [menu_rect, item_rect, visual, fill, border, label_copy]() {
-        ui::section(menu_rect);
-        ui::surface(visual, fill, border, 1.5f);
-        const Rectangle accent = {
-            visual.x + 10.0f,
-            visual.y + 9.0f,
-            4.0f,
-            std::max(0.0f, visual.height - 18.0f),
-        };
-        ui::accent_bar(accent, with_alpha(g_theme->error, 220));
+                             [layout, style, label_copy]() {
+        ui::section(layout.menu);
+        ui::surface(layout.visual, style.fill, style.border, 1.5f);
+        ui::accent_bar(layout.accent, style.accent);
         ui::draw_text_in_rect(label_copy.c_str(), 16,
-                              {visual.x + 24.0f, visual.y, visual.width - 34.0f, visual.height},
-                              g_theme->text, ui::text_align::left);
+                              layout.label,
+                              style.text, ui::text_align::left);
     });
 }
 

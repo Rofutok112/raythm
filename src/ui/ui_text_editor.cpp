@@ -7,9 +7,12 @@
 #include <sstream>
 
 #include "platform/windows_input_source.h"
+#include "ui_clip.h"
 #include "ui_font.h"
 #include "ui_coord.h"
+#include "ui_hit.h"
 #include "ui_layout.h"
+#include "ui_scroll.h"
 #include "virtual_screen.h"
 
 namespace ui {
@@ -237,8 +240,7 @@ void draw_line_text(const std::string& line, float x, float y,
                     kColorSwatchSize,
                     kColorSwatchSize
                 };
-                DrawRectangleRounded(swatch_rect, 0.22f, 4, swatch_color);
-                DrawRectangleRoundedLinesEx(swatch_rect, 0.22f, 4, 1.0f, with_alpha(g_theme->border_light, 220));
+                color_swatch(swatch_rect, swatch_color);
             }
             consumed += static_cast<int>(span.text.size());
         }
@@ -347,8 +349,8 @@ bool draw_color_picker(Rectangle picker_rect, text_editor_state& state, text_edi
     }
 
     const float pad = kColorPickerPadding;
-    DrawRectangleRounded(picker_rect, 0.12f, 6, with_alpha(g_theme->panel, 248));
-    DrawRectangleRoundedLinesEx(picker_rect, 0.12f, 6, 1.0f, g_theme->border_active);
+    rounded_surface(picker_rect, 0.12f, 6, with_alpha(g_theme->panel, 248),
+                    g_theme->border_active, 1.0f);
 
     const Rectangle preview_rect = {
         picker_rect.x + pad,
@@ -356,8 +358,7 @@ bool draw_color_picker(Rectangle picker_rect, text_editor_state& state, text_edi
         34.0f,
         kColorPickerPreviewHeight
     };
-    DrawRectangleRounded(preview_rect, 0.18f, 4, state.color_picker.color);
-    DrawRectangleRoundedLinesEx(preview_rect, 0.18f, 4, 1.0f, with_alpha(g_theme->border_light, 220));
+    color_swatch(preview_rect, state.color_picker.color, {.roundness = 0.18f});
 
     const std::string hex_label = format_color_literal_token(state.color_picker.color,
                                                              state.color_picker.quote,
@@ -382,7 +383,7 @@ bool draw_color_picker(Rectangle picker_rect, text_editor_state& state, text_edi
     const int channel_count = state.color_picker.has_alpha ? 4 : 3;
     bool picker_changed = false;
 
-    if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+    if (!is_mouse_button_down()) {
         state.color_picker.active_channel = -1;
     }
 
@@ -405,22 +406,21 @@ bool draw_color_picker(Rectangle picker_rect, text_editor_state& state, text_edi
         draw_text_auto(TextFormat("%c", channel_labels[channel]),
                        {row_rect.x, row_rect.y + 4.0f}, 13.0f, 0.5f, g_theme->text_secondary);
 
-        draw_rect_f(track_rect, g_theme->slider_track);
         const float ratio = static_cast<float>(*channel_ptrs[channel]) / 255.0f;
-        draw_rect_f(track_rect.x, track_rect.y, track_rect.width * ratio, track_rect.height, channel_colors[channel]);
-        const float knob_x = track_rect.x + track_rect.width * ratio;
-        draw_rect_f(knob_x - 5.0f, track_rect.y - 6.0f, 10.0f, 22.0f,
-                    state.color_picker.active_channel == channel ? g_theme->border_active : g_theme->slider_knob);
+        channel_slider_track(track_rect,
+                             ratio,
+                             channel_colors[channel],
+                             state.color_picker.active_channel == channel);
 
         draw_text_auto(TextFormat("%3d", static_cast<int>(*channel_ptrs[channel])),
                        {track_rect.x + track_rect.width + 8.0f, row_rect.y + 4.0f},
                        13.0f, 0.5f, g_theme->text_secondary);
 
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse, row_rect)) {
+        if (is_mouse_button_pressed(row_rect, MOUSE_BUTTON_LEFT, draw_layer::overlay)) {
             state.color_picker.active_channel = channel;
         }
 
-        if (state.color_picker.active_channel == channel && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        if (state.color_picker.active_channel == channel && is_mouse_button_down()) {
             const float next_ratio = std::clamp((mouse.x - track_rect.x) / track_rect.width, 0.0f, 1.0f);
             const unsigned char next_value = static_cast<unsigned char>(std::lround(next_ratio * 255.0f));
             if (*channel_ptrs[channel] != next_value) {
@@ -462,15 +462,14 @@ void clamp_cursor(text_editor_state& state) {
 }
 
 void ensure_cursor_visible(text_editor_state& state, float line_height, float view_height) {
-    float cursor_y = state.cursor_line * line_height;
-    if (cursor_y < state.scroll_offset) {
-        state.scroll_offset = cursor_y;
-    }
-    if (cursor_y + line_height > state.scroll_offset + view_height) {
-        state.scroll_offset = cursor_y + line_height - view_height;
-    }
-    float max_scroll = std::max(0.0f, static_cast<float>(state.lines.size()) * line_height - view_height);
-    state.scroll_offset = std::clamp(state.scroll_offset, 0.0f, max_scroll);
+    const float cursor_y = state.cursor_line * line_height;
+    const float max_scroll = max_scroll_offset(static_cast<float>(state.lines.size()) * line_height, view_height);
+    state.scroll_offset = scroll_offset_with_item_visible(
+        state.scroll_offset,
+        cursor_y,
+        cursor_y + line_height,
+        view_height,
+        max_scroll);
 }
 
 bool key_action(int key) {
@@ -715,7 +714,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
         collect_visible_color_swatches(state, rect, text_rect, line_height, style, highlighter);
     int hovered_swatch_index = -1;
     for (int i = 0; i < static_cast<int>(swatch_hits.size()); ++i) {
-        if (CheckCollisionPointRec(mouse, swatch_hits[static_cast<size_t>(i)].rect)) {
+        if (contains_point(swatch_hits[static_cast<size_t>(i)].rect, mouse)) {
             hovered_swatch_index = i;
             break;
         }
@@ -726,8 +725,8 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
         ensure_color_picker_anchor(state, rect, text_rect, line_height, style, highlighter, picker_rect);
 
     const bool pointer_on_swatch = hovered_swatch_index >= 0;
-    const bool pointer_on_picker = has_picker_rect && CheckCollisionPointRec(mouse, picker_rect);
-    const bool hovered = CheckCollisionPointRec(mouse, rect) || pointer_on_picker;
+    const bool pointer_on_picker = has_picker_rect && contains_point(picker_rect, mouse);
+    const bool hovered = contains_point(rect, mouse) || pointer_on_picker;
     text_editor_completion_result completion;
     if (completer != nullptr && state.active && !state.mouse_selecting) {
         completion = completer(state.lines, state.cursor_line, state.cursor_col);
@@ -745,7 +744,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
     }
 
     // Activation / deactivation
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    if (is_mouse_button_pressed()) {
         if (hovered) {
             if (!state.active) {
                 state.active = true;
@@ -775,8 +774,8 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
     };
 
     // Click to set cursor position + start mouse selection
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-        CheckCollisionPointRec(mouse, text_rect) &&
+    if (is_mouse_button_pressed() &&
+        contains_point(text_rect, mouse) &&
         !pointer_on_swatch &&
         !pointer_on_picker) {
         auto pos = mouse_to_cursor(mouse);
@@ -790,7 +789,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
     }
 
     // Drag to extend selection
-    if (state.mouse_selecting && IsMouseButtonDown(MOUSE_BUTTON_LEFT) && !pointer_on_picker) {
+    if (state.mouse_selecting && is_mouse_button_down() && !pointer_on_picker) {
         auto pos = mouse_to_cursor(mouse);
         state.cursor_line = pos.line;
         state.cursor_col = pos.col;
@@ -802,7 +801,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
     }
 
     // Release mouse button ends drag
-    if (state.mouse_selecting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+    if (state.mouse_selecting && is_mouse_button_released()) {
         state.mouse_selecting = false;
     }
 
@@ -1078,12 +1077,12 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
 
     // Mouse wheel scroll
     if (hovered) {
-        float wheel = GetMouseWheelMove();
+        float wheel = mouse_wheel_move();
         if (wheel != 0.0f) {
-            state.scroll_offset -= wheel * line_height * 3.0f;
-            float content_h = static_cast<float>(state.lines.size()) * line_height;
-            float max_scroll = std::max(0.0f, content_h - rect.height);
-            state.scroll_offset = std::clamp(state.scroll_offset, 0.0f, max_scroll);
+            const float content_h = static_cast<float>(state.lines.size()) * line_height;
+            const float max_scroll = max_scroll_offset(content_h, rect);
+            state.scroll_offset = wheel_scrolled_offset(
+                rect, virtual_screen::get_virtual_mouse(), wheel, state.scroll_offset, max_scroll, line_height * 3.0f);
         }
     }
 
@@ -1098,7 +1097,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
     }
 
     int clicked_swatch_index = -1;
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    if (is_mouse_button_pressed()) {
         clicked_swatch_index = hovered_swatch_index;
     }
 
@@ -1108,142 +1107,143 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
     }
 
     if (state.color_picker.open) {
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+        if (is_mouse_button_pressed() &&
             clicked_swatch_index < 0 &&
-            !CheckCollisionPointRec(mouse, picker_rect)) {
+            !contains_point(picker_rect, mouse)) {
             close_color_picker(state);
         }
     }
 
     // ---- Rendering ----
-    begin_scissor_rect(rect);
+    {
+        scoped_clip_rect clip(rect);
 
-    // Background
-    draw_rect_f(rect, g_theme->section);
-    draw_rect_lines(rect, 1.5f, state.active ? g_theme->border_active : g_theme->border_light);
+        // Background
+        draw_rect_f(rect, g_theme->section);
+        draw_rect_lines(rect, 1.5f, state.active ? g_theme->border_active : g_theme->border_light);
 
-    // Gutter background
-    Rectangle gutter_bg = {rect.x + 1.5f, rect.y + 1.5f, gutter_width - 1.5f, rect.height - 3.0f};
-    draw_rect_f(gutter_bg, with_alpha(g_theme->panel, 200));
+        // Gutter background
+        Rectangle gutter_bg = {rect.x + 1.5f, rect.y + 1.5f, gutter_width - 1.5f, rect.height - 3.0f};
+        draw_rect_f(gutter_bg, with_alpha(g_theme->panel, 200));
 
-    // Visible line range
-    int first_visible = std::max(0, static_cast<int>(state.scroll_offset / line_height));
-    int last_visible = std::min(static_cast<int>(state.lines.size()) - 1,
-                                static_cast<int>((state.scroll_offset + rect.height) / line_height));
+        // Visible line range
+        int first_visible = std::max(0, static_cast<int>(state.scroll_offset / line_height));
+        int last_visible = std::min(static_cast<int>(state.lines.size()) - 1,
+                                    static_cast<int>((state.scroll_offset + rect.height) / line_height));
 
-    // Selection range (computed once for rendering)
-    text_editor_cursor sel_from = {}, sel_to = {};
-    if (state.has_selection) {
-        auto [a, b] = selection_range(state);
-        sel_from = a;
-        sel_to = b;
-    }
+        // Selection range (computed once for rendering)
+        text_editor_cursor sel_from = {}, sel_to = {};
+        if (state.has_selection) {
+            auto [a, b] = selection_range(state);
+            sel_from = a;
+            sel_to = b;
+        }
 
-    for (int i = first_visible; i <= last_visible; i++) {
-        float y = rect.y + i * line_height - state.scroll_offset;
+        for (int i = first_visible; i <= last_visible; i++) {
+            float y = rect.y + i * line_height - state.scroll_offset;
 
-        // Selection highlight
-        if (state.has_selection && i >= sel_from.line && i <= sel_to.line) {
-            int line_len = static_cast<int>(state.lines[i].size());
-            int sel_start_col = (i == sel_from.line) ? sel_from.col : 0;
-            int sel_end_col = (i == sel_to.line) ? sel_to.col : line_len;
-            float x0 = text_rect.x + kTextPadLeft +
-                        measure_line_prefix_width(state.lines[i], sel_start_col, style, highlighter);
-            float x1 = text_rect.x + kTextPadLeft +
-                        measure_line_prefix_width(state.lines[i], sel_end_col, style, highlighter);
-            if (i != sel_to.line && sel_end_col == line_len) {
-                x1 += measure_text_width(" ", style);  // extend past line end
+            // Selection highlight
+            if (state.has_selection && i >= sel_from.line && i <= sel_to.line) {
+                int line_len = static_cast<int>(state.lines[i].size());
+                int sel_start_col = (i == sel_from.line) ? sel_from.col : 0;
+                int sel_end_col = (i == sel_to.line) ? sel_to.col : line_len;
+                float x0 = text_rect.x + kTextPadLeft +
+                            measure_line_prefix_width(state.lines[i], sel_start_col, style, highlighter);
+                float x1 = text_rect.x + kTextPadLeft +
+                            measure_line_prefix_width(state.lines[i], sel_end_col, style, highlighter);
+                if (i != sel_to.line && sel_end_col == line_len) {
+                    x1 += measure_text_width(" ", style);  // extend past line end
+                }
+                if (x1 > x0) {
+                    draw_rect_f({x0, y, x1 - x0, line_height}, Color{60, 120, 220, 80});
+                }
             }
-            if (x1 > x0) {
-                draw_rect_f({x0, y, x1 - x0, line_height}, Color{60, 120, 220, 80});
+
+            // Line number (right-aligned in gutter)
+            const char* line_num_text = TextFormat("%3d", i + 1);
+            float num_width = measure_text_width(line_num_text, style);
+            float num_x = rect.x + gutter_width - kGutterPadding - num_width;
+            draw_text_auto(line_num_text, {num_x, y + style.line_spacing * 0.5f},
+                           static_cast<float>(style.font_size), style.letter_spacing, g_theme->text_dim);
+
+            // Line text
+            if (!state.lines[i].empty()) {
+                draw_line_text(state.lines[i],
+                               text_rect.x + kTextPadLeft,
+                               y + style.line_spacing * 0.5f,
+                               style, highlighter);
             }
         }
 
-        // Line number (right-aligned in gutter)
-        const char* line_num_text = TextFormat("%3d", i + 1);
-        float num_width = measure_text_width(line_num_text, style);
-        float num_x = rect.x + gutter_width - kGutterPadding - num_width;
-        draw_text_auto(line_num_text, {num_x, y + style.line_spacing * 0.5f},
-                       static_cast<float>(style.font_size), style.letter_spacing, g_theme->text_dim);
+        // Error squiggly underlines
+        for (const auto& marker : state.error_markers) {
+            int line_idx = marker.line - 1;  // markers are 1-based
+            if (line_idx < first_visible || line_idx > last_visible) continue;
+            if (line_idx < 0 || line_idx >= static_cast<int>(state.lines.size())) continue;
 
-        // Line text
-        if (!state.lines[i].empty()) {
-            draw_line_text(state.lines[i],
-                           text_rect.x + kTextPadLeft,
-                           y + style.line_spacing * 0.5f,
-                           style, highlighter);
+            float y = rect.y + line_idx * line_height - state.scroll_offset;
+            float underline_y = y + style.line_spacing * 0.5f + static_cast<float>(style.font_size) + 1.0f;
+
+            const std::string& ln = state.lines[line_idx];
+            int c0 = marker.col_start;
+            int c1 = marker.col_end;
+            // If col range is zero/invalid, underline the whole line
+            if (c0 == 0 && c1 == 0) {
+                // Find first non-space char
+                c0 = 0;
+                while (c0 < static_cast<int>(ln.size()) && (ln[c0] == ' ' || ln[c0] == '\t')) c0++;
+                c1 = static_cast<int>(ln.size());
+            }
+            if (c1 <= c0) c1 = std::max(c0 + 1, static_cast<int>(ln.size()));
+            c1 = std::min(c1, static_cast<int>(ln.size()));
+
+            float x0 = text_rect.x + kTextPadLeft + measure_line_prefix_width(ln, c0, style, highlighter);
+            float x1 = text_rect.x + kTextPadLeft + measure_line_prefix_width(ln, c1, style, highlighter);
+            if (x1 <= x0) x1 = x0 + measure_text_width("x", style);  // minimum width
+
+            draw_squiggly_line(x0, x1, underline_y, Color{255, 80, 80, 220});
+
+            // Check hover for tooltip
+            Rectangle squiggly_area = {x0, y, x1 - x0, line_height};
+            if (contains_point(squiggly_area, mouse) && !marker.message.empty()) {
+                constexpr float kTooltipPad = 6.0f;
+                constexpr float kTooltipFontSize = 12.0f;
+                constexpr float kTooltipLetterSpacing = 0.0f;
+                const Vector2 tooltip_size = measure_text_size(marker.message.c_str(),
+                                                               kTooltipFontSize, kTooltipLetterSpacing);
+                float tw = tooltip_size.x + kTooltipPad * 2.0f;
+                float th = tooltip_size.y + kTooltipPad * 2.0f;
+                float tx = std::min(mouse.x, rect.x + rect.width - tw - 4.0f);
+                tx = std::max(tx, rect.x + 4.0f);
+                float ty = underline_y + 4.0f;
+                rounded_surface({tx, ty, tw, th}, 0.2f, 4,
+                                Color{40, 40, 40, 230},
+                                Color{255, 80, 80, 180}, 1.0f);
+                draw_text_auto(marker.message.c_str(), {tx + kTooltipPad, ty + kTooltipPad},
+                               kTooltipFontSize, kTooltipLetterSpacing, Color{255, 200, 200, 255});
+            }
         }
+
+        // Cursor (blinking)
+        if (state.active) {
+            double blink = GetTime() - state.last_input_time;
+            bool show_cursor = (std::fmod(blink, 1.0) < 0.6) || blink < 0.4;
+            if (show_cursor) {
+                const std::string& cur_line = state.lines[state.cursor_line];
+                float cursor_x = text_rect.x + kTextPadLeft +
+                                measure_line_prefix_width(cur_line, state.cursor_col, style, highlighter);
+                float cursor_y = rect.y + state.cursor_line * line_height - state.scroll_offset;
+                draw_rect_f({cursor_x, cursor_y + 1.0f, 2.0f, line_height - 2.0f}, g_theme->text);
+            }
+        }
+
+        // Scrollbar
+        scrollbar(scrollbar_rect, content_height, state.scroll_offset, {
+            .track_color = g_theme->scrollbar_track,
+            .thumb_color = g_theme->scrollbar_thumb,
+            .custom_colors = true,
+        });
     }
-
-    // Error squiggly underlines
-    for (const auto& marker : state.error_markers) {
-        int line_idx = marker.line - 1;  // markers are 1-based
-        if (line_idx < first_visible || line_idx > last_visible) continue;
-        if (line_idx < 0 || line_idx >= static_cast<int>(state.lines.size())) continue;
-
-        float y = rect.y + line_idx * line_height - state.scroll_offset;
-        float underline_y = y + style.line_spacing * 0.5f + static_cast<float>(style.font_size) + 1.0f;
-
-        const std::string& ln = state.lines[line_idx];
-        int c0 = marker.col_start;
-        int c1 = marker.col_end;
-        // If col range is zero/invalid, underline the whole line
-        if (c0 == 0 && c1 == 0) {
-            // Find first non-space char
-            c0 = 0;
-            while (c0 < static_cast<int>(ln.size()) && (ln[c0] == ' ' || ln[c0] == '\t')) c0++;
-            c1 = static_cast<int>(ln.size());
-        }
-        if (c1 <= c0) c1 = std::max(c0 + 1, static_cast<int>(ln.size()));
-        c1 = std::min(c1, static_cast<int>(ln.size()));
-
-        float x0 = text_rect.x + kTextPadLeft + measure_line_prefix_width(ln, c0, style, highlighter);
-        float x1 = text_rect.x + kTextPadLeft + measure_line_prefix_width(ln, c1, style, highlighter);
-        if (x1 <= x0) x1 = x0 + measure_text_width("x", style);  // minimum width
-
-        draw_squiggly_line(x0, x1, underline_y, Color{255, 80, 80, 220});
-
-        // Check hover for tooltip
-        Rectangle squiggly_area = {x0, y, x1 - x0, line_height};
-        if (CheckCollisionPointRec(mouse, squiggly_area) && !marker.message.empty()) {
-            constexpr float kTooltipPad = 6.0f;
-            constexpr float kTooltipFontSize = 12.0f;
-            constexpr float kTooltipLetterSpacing = 0.0f;
-            const Vector2 tooltip_size = measure_text_size(marker.message.c_str(),
-                                                           kTooltipFontSize, kTooltipLetterSpacing);
-            float tw = tooltip_size.x + kTooltipPad * 2.0f;
-            float th = tooltip_size.y + kTooltipPad * 2.0f;
-            float tx = std::min(mouse.x, rect.x + rect.width - tw - 4.0f);
-            tx = std::max(tx, rect.x + 4.0f);
-            float ty = underline_y + 4.0f;
-            DrawRectangleRounded({tx, ty, tw, th}, 0.2f, 4, Color{40, 40, 40, 230});
-            DrawRectangleRoundedLinesEx({tx, ty, tw, th}, 0.2f, 4, 1.0f, Color{255, 80, 80, 180});
-            draw_text_auto(marker.message.c_str(), {tx + kTooltipPad, ty + kTooltipPad},
-                           kTooltipFontSize, kTooltipLetterSpacing, Color{255, 200, 200, 255});
-        }
-    }
-
-    // Cursor (blinking)
-    if (state.active) {
-        double blink = GetTime() - state.last_input_time;
-        bool show_cursor = (std::fmod(blink, 1.0) < 0.6) || blink < 0.4;
-        if (show_cursor) {
-            const std::string& cur_line = state.lines[state.cursor_line];
-            float cursor_x = text_rect.x + kTextPadLeft +
-                            measure_line_prefix_width(cur_line, state.cursor_col, style, highlighter);
-            float cursor_y = rect.y + state.cursor_line * line_height - state.scroll_offset;
-            draw_rect_f({cursor_x, cursor_y + 1.0f, 2.0f, line_height - 2.0f}, g_theme->text);
-        }
-    }
-
-    // Scrollbar
-    scrollbar(scrollbar_rect, content_height, state.scroll_offset, {
-        .track_color = g_theme->scrollbar_track,
-        .thumb_color = g_theme->scrollbar_thumb,
-        .custom_colors = true,
-    });
-
-    EndScissorMode();
 
     if (!completion.items.empty()) {
         const std::string& cur_line = state.lines[state.cursor_line];
@@ -1280,7 +1280,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
                 menu_rect.width,
                 kCompletionRowHeight
             };
-            const bool hovered_item = CheckCollisionPointRec(mouse, item_rect);
+            const bool hovered_item = contains_point(item_rect, mouse);
             const bool selected_item = i == state.completion_index;
             draw_rect_f(item_rect,
                         selected_item ? g_theme->row_selected :
@@ -1290,7 +1290,7 @@ text_editor_result draw_text_editor(Rectangle rect, text_editor_state& state,
                            completion_font_size, completion_letter_spacing,
                            selected_item ? g_theme->text : g_theme->text_secondary);
 
-            if (hovered_item && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (hovered_item && is_mouse_button_pressed()) {
                 state.completion_index = i;
                 if (replace_range_on_line(state, state.cursor_line,
                                           completion.replace_start, completion.replace_end,

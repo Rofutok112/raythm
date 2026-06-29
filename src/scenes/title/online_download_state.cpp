@@ -10,6 +10,7 @@
 #include "services/content_sync_service.h"
 #include "theme.h"
 #include "ui_hit.h"
+#include "ui_scroll.h"
 
 namespace title_online_view {
 namespace {
@@ -95,11 +96,7 @@ float parse_filter_float(const std::string& value, float fallback) {
 }
 
 float song_list_content_height(int count) {
-    if (count <= 0) {
-        return 0.0f;
-    }
-    const int rows = (count + detail::kSongGridColumns - 1) / detail::kSongGridColumns;
-    return static_cast<float>(rows) * (kSongCardHeight + kSongGridGapY) - kSongGridGapY;
+    return ui::vertical_grid_content_height(count, detail::kSongGridColumns, kSongCardHeight, kSongGridGapY);
 }
 
 float overview_shelf_card_width(Rectangle area) {
@@ -134,11 +131,7 @@ float overview_song_list_content_height(const state& state) {
 }
 
 float chart_list_content_height(int count) {
-    if (count <= 0) {
-        return 0.0f;
-    }
-    const int rows = (count + detail::kChartGridColumns - 1) / detail::kChartGridColumns;
-    return static_cast<float>(rows) * (kChartCardHeight + kChartGridGapY) - kChartGridGapY;
+    return ui::vertical_grid_content_height(count, detail::kChartGridColumns, kChartCardHeight, kChartGridGapY);
 }
 
 }  // namespace
@@ -177,7 +170,7 @@ std::vector<overview_shelf_row> overview_shelf_rows(const state& state) {
         overview_shelf_row row;
         row.key = shelf.key;
         row.total_count = total_count;
-        row.scroll_x = std::clamp(raw_scroll, 0.0f, max_scroll);
+        row.scroll_x = ui::clamp_scroll_offset(raw_scroll, max_scroll);
         row.song_indices = std::move(shelf_indices);
         rows.push_back(std::move(row));
     }
@@ -351,12 +344,12 @@ void ensure_selection_valid(state& state) {
 }
 
 float max_song_scroll(Rectangle area, int count) {
-    return std::max(0.0f, song_list_content_height(count) - area.height + 4.0f);
+    return ui::max_scroll_offset(song_list_content_height(count), area, 4.0f);
 }
 
 float max_song_scroll(const state& state, Rectangle area, int count) {
     if (detail::uses_overview_shelves(state)) {
-        return std::max(0.0f, overview_song_list_content_height(state) - area.height + 4.0f);
+        return ui::max_scroll_offset(overview_song_list_content_height(state), area, 4.0f);
     }
     return max_song_scroll(area, count);
 }
@@ -365,14 +358,15 @@ Rectangle song_row_rect(Rectangle area, int display_index, float scroll_y) {
     const float width =
         (area.width - static_cast<float>(kSongGridColumns - 1) * kSongGridGapX) /
         static_cast<float>(kSongGridColumns);
-    const int row = display_index / kSongGridColumns;
-    const int column = display_index % kSongGridColumns;
-    return {
-        area.x + static_cast<float>(column) * (width + kSongGridGapX),
-        area.y + static_cast<float>(row) * (kSongCardHeight + kSongGridGapY) - scroll_y,
+    return ui::vertical_grid_item_rect(
+        area,
+        display_index,
+        kSongGridColumns,
         width,
-        kSongCardHeight
-    };
+        kSongCardHeight,
+        kSongGridGapX,
+        kSongGridGapY,
+        scroll_y);
 }
 
 Rectangle song_row_rect(const state& state, Rectangle area, int display_index, float scroll_y) {
@@ -391,6 +385,20 @@ Rectangle song_row_rect(const state& state, Rectangle area, int display_index, f
         remaining_index -= row_count;
     }
     return song_row_rect(area, display_index, scroll_y);
+}
+
+ui::index_range visible_song_range(const state& state, Rectangle area, int count, float scroll_y, float slack) {
+    if (detail::uses_overview_shelves(state)) {
+        return {0, std::max(0, count)};
+    }
+    return ui::vertical_grid_visible_index_range(
+        count,
+        area,
+        kSongGridColumns,
+        kSongCardHeight,
+        kSongGridGapY,
+        scroll_y,
+        slack);
 }
 
 Rectangle overview_shelf_track_rect(Rectangle area) {
@@ -420,42 +428,61 @@ Rectangle overview_shelf_next_button_rect(Rectangle area, int shelf_row, float s
     };
 }
 
-Rectangle sidebar_button_rect(Rectangle sidebar, int index) {
+Rectangle sidebar_button_stack(Rectangle sidebar, float title_y) {
     return {
         sidebar.x + kSidebarXInset,
-        sidebar.y + kSidebarDiscoveryTitleY + kSidebarTitleToButtonGap +
-            static_cast<float>(index) * (kSidebarButtonHeight + kSidebarButtonGap),
+        sidebar.y + title_y + kSidebarTitleToButtonGap,
         sidebar.width - kSidebarXInset * 2.0f,
-        kSidebarButtonHeight,
+        sidebar.height - title_y - kSidebarTitleToButtonGap,
     };
+}
+
+Rectangle sidebar_button_rect(Rectangle sidebar, int index) {
+    return ui::vertical_list_row_rect(
+        sidebar_button_stack(sidebar, kSidebarDiscoveryTitleY),
+        index,
+        kSidebarButtonHeight,
+        kSidebarButtonGap,
+        0.0f);
 }
 
 Rectangle source_button_rect(Rectangle sidebar, int index) {
-    return {
-        sidebar.x + kSidebarXInset,
-        sidebar.y + kSidebarSourceTitleY + kSidebarTitleToButtonGap +
-            static_cast<float>(index) * (kSidebarButtonHeight + kSidebarButtonGap),
-        sidebar.width - kSidebarXInset * 2.0f,
+    return ui::vertical_list_row_rect(
+        sidebar_button_stack(sidebar, kSidebarSourceTitleY),
+        index,
         kSidebarButtonHeight,
-    };
+        kSidebarButtonGap,
+        0.0f);
 }
 
 float max_chart_scroll(Rectangle area, int count) {
-    return std::max(0.0f, chart_list_content_height(count) - area.height + 4.0f);
+    return ui::max_scroll_offset(chart_list_content_height(count), area, 4.0f);
 }
 
 Rectangle chart_row_rect(Rectangle area, int index, float scroll_y) {
     const float width =
         (area.width - static_cast<float>(kChartGridColumns - 1) * kChartGridGapX) /
         static_cast<float>(kChartGridColumns);
-    const int row = index / kChartGridColumns;
-    const int column = index % kChartGridColumns;
-    return {
-        area.x + static_cast<float>(column) * (width + kChartGridGapX),
-        area.y + static_cast<float>(row) * (kChartCardHeight + kChartGridGapY) - scroll_y,
+    return ui::vertical_grid_item_rect(
+        area,
+        index,
+        kChartGridColumns,
         width,
-        kChartCardHeight
-    };
+        kChartCardHeight,
+        kChartGridGapX,
+        kChartGridGapY,
+        scroll_y);
+}
+
+ui::index_range visible_chart_range(Rectangle area, int count, float scroll_y, float slack) {
+    return ui::vertical_grid_visible_index_range(
+        count,
+        area,
+        kChartGridColumns,
+        kChartCardHeight,
+        kChartGridGapY,
+        scroll_y,
+        slack);
 }
 
 Rectangle chart_download_icon_rect(Rectangle chart_card) {
@@ -529,7 +556,9 @@ int hit_test_song_list(const state& state, Rectangle area, Vector2 point) {
         return -1;
     }
 
-    for (int display_index = 0; display_index < static_cast<int>(indices.size()); ++display_index) {
+    const ui::index_range visible_range =
+        visible_song_range(state, area, static_cast<int>(indices.size()), state.song_scroll_y);
+    for (int display_index = visible_range.begin; display_index < visible_range.end; ++display_index) {
         if (ui::contains_point(song_row_rect(state, area, display_index, state.song_scroll_y), point)) {
             return indices[static_cast<size_t>(display_index)];
         }
@@ -544,7 +573,9 @@ int hit_test_chart_list(const state& state, Rectangle area, Vector2 point) {
     }
 
     const auto indices = filtered_chart_indices(state);
-    for (int display_index = 0; display_index < static_cast<int>(indices.size()); ++display_index) {
+    const ui::index_range visible_range =
+        visible_chart_range(area, static_cast<int>(indices.size()), state.chart_scroll_y);
+    for (int display_index = visible_range.begin; display_index < visible_range.end; ++display_index) {
         if (ui::contains_point(chart_row_rect(area, display_index, state.chart_scroll_y), point)) {
             return indices[static_cast<size_t>(display_index)];
         }

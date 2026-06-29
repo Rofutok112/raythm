@@ -174,7 +174,7 @@ void editor_scene::update(float dt) {
 
     if ((metadata_modal_open_ || timing_modal_open_) &&
         !metadata_panel_.key_count_confirm_open &&
-        IsKeyPressed(KEY_ESCAPE)) {
+        ui::is_escape_pressed()) {
         metadata_modal_open_ = false;
         timing_modal_open_ = false;
         metadata_panel_.difficulty_input.active = false;
@@ -185,13 +185,14 @@ void editor_scene::update(float dt) {
         return;
     }
 
-    const bool ctrl_down = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-    const bool ctrl_s_pressed = ctrl_down && IsKeyPressed(KEY_S);
+    const bool ctrl_down = ui::is_key_down(KEY_LEFT_CONTROL) || ui::is_key_down(KEY_RIGHT_CONTROL);
+    const bool shift_down = ui::is_shift_down();
+    const bool ctrl_s_pressed = ctrl_down && ui::is_key_pressed(KEY_S);
     const bool save_dialog_submit = save_dialog_.submit_requested ||
         (save_dialog_.open && (ctrl_s_pressed ||
                                ui::is_clicked(layout::save_submit_button_rect(), ui::draw_layer::modal)));
     save_dialog_.submit_requested = false;
-    const bool playtest_requested = IsKeyPressed(KEY_F5) ||
+    const bool playtest_requested = ui::is_key_pressed(KEY_F5) ||
         playtest_button_requested_ ||
         (!has_blocking_modal() && ui::is_clicked(layout::kHeaderPlaytestButtonRect));
     playtest_button_requested_ = false;
@@ -203,11 +204,11 @@ void editor_scene::update(float dt) {
         &metadata_panel_,
         &save_dialog_,
         &unsaved_changes_dialog_,
-        IsKeyPressed(KEY_ESCAPE),
+        ui::is_escape_pressed(),
         ui::is_clicked(layout::kBackButtonRect),
         ctrl_s_pressed,
         playtest_requested,
-        IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
+        shift_down,
         has_active_metadata_input(),
         timing_panel_.active_input_field != editor_timing_input_field::none,
         timing_panel_.bar_pick_mode,
@@ -264,15 +265,15 @@ void editor_scene::update(float dt) {
         &hitsounds_,
         has_blocking_modal(),
         false,
-        IsKeyPressed(KEY_SPACE),
-        IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
-        IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
-        IsKeyPressed(KEY_C),
-        IsKeyPressed(KEY_V),
-        IsKeyPressed(KEY_D),
-        IsKeyPressed(KEY_Z),
-        IsKeyPressed(KEY_Y),
-        IsKeyPressed(KEY_DELETE),
+        ui::is_key_pressed(KEY_SPACE),
+        ctrl_down,
+        shift_down,
+        ui::is_key_pressed(KEY_C),
+        ui::is_key_pressed(KEY_V),
+        ui::is_key_pressed(KEY_D),
+        ui::is_key_pressed(KEY_Z),
+        ui::is_key_pressed(KEY_Y),
+        ui::is_key_pressed(KEY_DELETE),
     });
     if (shortcut_result.restore_scroll_tick.has_value()) {
         scroll_to_tick(*shortcut_result.restore_scroll_tick);
@@ -293,17 +294,17 @@ void editor_scene::update(float dt) {
         metrics,
         mouse,
         ui::is_hovered(content, ui::draw_layer::base),
-        IsMouseButtonPressed(MOUSE_BUTTON_LEFT),
-        IsMouseButtonDown(MOUSE_BUTTON_LEFT),
-        IsMouseButtonReleased(MOUSE_BUTTON_LEFT),
-        IsMouseButtonPressed(MOUSE_BUTTON_RIGHT),
-        IsKeyPressed(KEY_ESCAPE),
-        IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
-        IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
+        ui::is_mouse_button_pressed(MOUSE_BUTTON_LEFT),
+        ui::is_mouse_button_down(MOUSE_BUTTON_LEFT),
+        ui::is_mouse_button_released(MOUSE_BUTTON_LEFT),
+        ui::is_mouse_button_pressed(MOUSE_BUTTON_RIGHT),
+        ui::is_escape_pressed(),
+        shift_down,
+        ctrl_down,
         editor_timeline_viewport::snap_division(viewport_),
         note_palette_,
-        IsMouseButtonDown(MOUSE_BUTTON_RIGHT),
-        IsMouseButtonReleased(MOUSE_BUTTON_RIGHT),
+        ui::is_mouse_button_down(MOUSE_BUTTON_RIGHT),
+        ui::is_mouse_button_released(MOUSE_BUTTON_RIGHT),
     });
     if (timeline_result.request_apply_selected_timing) {
         editor_timing_action_controller::apply_selected_timing_event(timing_action_context());
@@ -595,8 +596,8 @@ void editor_scene::apply_scroll_and_zoom(float dt) {
     }
     viewport_ = editor_timeline_viewport::apply_scroll_and_zoom(viewport_model(), {
         mouse,
-        GetMouseWheelMove(),
-        IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
+        ui::mouse_wheel_move(),
+        ui::is_key_down(KEY_LEFT_CONTROL) || ui::is_key_down(KEY_RIGHT_CONTROL),
         transport_.audio_playing || transport_.pre_audio_playing,
         transport_.playback_tick,
         dt,

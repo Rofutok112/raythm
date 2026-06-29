@@ -2,21 +2,37 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <vector>
 
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
 #include "ui_hit.h"
+#include "ui_scroll.h"
 #include "ui_text.h"
 
 namespace {
 
 constexpr float kHierarchyRowHeight = 34.0f;
+constexpr float kHierarchyRowGap = 6.0f;
+constexpr float kProjectRowGap = 5.0f;
 constexpr float kPanelWheelStep = 44.0f;
 
 struct scroll_panel_layout {
     Rectangle viewport = {};
     Rectangle scrollbar = {};
+};
+
+enum class project_panel_row_kind {
+    header,
+    asset,
+};
+
+struct project_panel_row {
+    project_panel_row_kind kind = project_panel_row_kind::header;
+    ui::vertical_stack_item metrics = {};
+    const char* header_label = nullptr;
+    const mv::composition::asset_ref* asset = nullptr;
 };
 
 void draw_section_title(Rectangle rect, const char* title, const char* subtitle = nullptr) {
@@ -76,6 +92,59 @@ std::size_t layer_index_by_id(const mv::composition::mv_composition& composition
     return static_cast<std::size_t>(std::distance(composition.objects.begin(), it));
 }
 
+float hierarchy_content_height(std::size_t row_count) {
+    return ui::vertical_list_content_height_with_trailing_padding(
+        row_count,
+        kHierarchyRowHeight,
+        kHierarchyRowGap,
+        kHierarchyRowGap);
+}
+
+float project_content_height(int row_count) {
+    return ui::vertical_list_content_height_with_trailing_padding(
+        row_count,
+        kHierarchyRowHeight,
+        kProjectRowGap,
+        kProjectRowGap);
+}
+
+constexpr Rectangle hierarchy_row_rect(Rectangle viewport, int index, float scroll_offset) {
+    return ui::vertical_list_row_rect(viewport, index, kHierarchyRowHeight, kHierarchyRowGap, scroll_offset);
+}
+
+std::vector<project_panel_row> project_panel_rows_for(const mv::composition::mv_composition& composition) {
+    std::vector<project_panel_row> rows;
+    rows.reserve(composition.assets.size() + 2);
+    float y = 0.0f;
+    auto push_header = [&](const char* label) {
+        rows.push_back({
+            .kind = project_panel_row_kind::header,
+            .metrics = {y, 22.0f},
+            .header_label = label,
+        });
+        y += 28.0f;
+    };
+    auto push_assets = [&](const char* type) {
+        for (const mv::composition::asset_ref& asset : composition.assets) {
+            if (asset.type != type) {
+                continue;
+            }
+            rows.push_back({
+                .kind = project_panel_row_kind::asset,
+                .metrics = {y, kHierarchyRowHeight},
+                .asset = &asset,
+            });
+            y += kHierarchyRowHeight + kProjectRowGap;
+        }
+    };
+
+    push_header("Images");
+    push_assets("image");
+    push_header("Scripts");
+    push_assets("script");
+    return rows;
+}
+
 } // namespace
 
 mv_editor_hierarchy_result draw_mv_hierarchy_panel(Rectangle panel,
@@ -99,13 +168,15 @@ mv_editor_hierarchy_result draw_mv_hierarchy_panel(Rectangle panel,
     const scroll_panel_layout hierarchy_layout = hierarchy_scroll_layout_for(panel);
     const Rectangle layer_view = hierarchy_layout.viewport;
     const Rectangle hierarchy_scrollbar = hierarchy_layout.scrollbar;
-    const float content_height =
-        static_cast<float>(composition.objects.size()) * (kHierarchyRowHeight + 6.0f);
-    const float max_scroll = std::max(0.0f, content_height - layer_view.height);
+    const float content_height = hierarchy_content_height(composition.objects.size());
+    ui::scroll_offset_state scroll_state =
+        ui::scroll_offset_state_for(layer_view, content_height, result.scroll_offset);
 
-    result.scroll_offset = std::clamp(result.scroll_offset, 0.0f, max_scroll);
-    if (ui::contains_point(layer_view, mouse) && wheel != 0.0f && !shift_down && !ctrl_down) {
-        result.scroll_offset = std::clamp(result.scroll_offset - wheel * kPanelWheelStep, 0.0f, max_scroll);
+    result.scroll_offset = scroll_state.offset;
+    if (!shift_down && !ctrl_down) {
+        scroll_state = ui::wheel_scrolled_offset_state(
+            layer_view, mouse, wheel, content_height, result.scroll_offset, kPanelWheelStep);
+        result.scroll_offset = scroll_state.offset;
     }
 
     bool dragging = result.scrollbar_dragging;
@@ -121,10 +192,12 @@ mv_editor_hierarchy_result draw_mv_hierarchy_panel(Rectangle panel,
 
     {
         ui::scoped_clip_rect clip(layer_view);
-        float y = layer_view.y - result.scroll_offset;
-        for (const mv::composition::layer& layer : composition.objects) {
+        const ui::index_range visible_rows = ui::vertical_list_visible_range(
+            composition.objects.size(), layer_view, kHierarchyRowHeight, kHierarchyRowGap, result.scroll_offset);
+        for (int row_index = visible_rows.begin; row_index < visible_rows.end; ++row_index) {
+            const mv::composition::layer& layer = composition.objects[static_cast<std::size_t>(row_index)];
             const std::size_t layer_index = layer_index_by_id(composition, layer.id);
-            const Rectangle row = {layer_view.x, y, layer_view.width, kHierarchyRowHeight};
+            const Rectangle row = hierarchy_row_rect(layer_view, row_index, result.scroll_offset);
             const bool selected = layer.id == selected_layer_id;
             const auto state = ui::selectable_row(row, selected, 1.5f);
             if (state.clicked) {
@@ -169,7 +242,6 @@ mv_editor_hierarchy_result draw_mv_hierarchy_panel(Rectangle panel,
                     result.move_direction = -1;
                 }
             }
-            y += kHierarchyRowHeight + 6.0f;
         }
     }
     ui::scrollbar(hierarchy_scrollbar, content_height, result.scroll_offset, {
@@ -204,12 +276,15 @@ mv_editor_project_panel_result draw_mv_project_panel(Rectangle panel,
     const Rectangle project_view = project_layout.viewport;
     const Rectangle project_scrollbar = project_layout.scrollbar;
     const int row_count = static_cast<int>(composition.assets.size()) + 2;
-    const float content_height = static_cast<float>(row_count) * (kHierarchyRowHeight + 5.0f);
-    const float max_scroll = std::max(0.0f, content_height - project_view.height);
+    const float content_height = project_content_height(row_count);
+    ui::scroll_offset_state scroll_state =
+        ui::scroll_offset_state_for(project_view, content_height, result.scroll_offset);
 
-    result.scroll_offset = std::clamp(result.scroll_offset, 0.0f, max_scroll);
-    if (ui::contains_point(project_view, mouse) && wheel != 0.0f && !shift_down && !ctrl_down) {
-        result.scroll_offset = std::clamp(result.scroll_offset - wheel * kPanelWheelStep, 0.0f, max_scroll);
+    result.scroll_offset = scroll_state.offset;
+    if (!shift_down && !ctrl_down) {
+        scroll_state = ui::wheel_scrolled_offset_state(
+            project_view, mouse, wheel, content_height, result.scroll_offset, kPanelWheelStep);
+        result.scroll_offset = scroll_state.offset;
     }
 
     bool dragging = result.scrollbar_dragging;
@@ -225,14 +300,22 @@ mv_editor_project_panel_result draw_mv_project_panel(Rectangle panel,
 
     {
         ui::scoped_clip_rect clip(project_view);
-        float y = project_view.y - result.scroll_offset;
-        auto draw_project_header = [&](const char* label) {
-            const Rectangle row = {project_view.x, y, project_view.width, 22.0f};
-            ui::draw_text_in_rect(label, 11, row, g_theme->text_muted, ui::text_align::left);
-            y += 28.0f;
-        };
-        auto draw_asset_row = [&](const mv::composition::asset_ref& asset) {
-            const Rectangle row = {project_view.x, y, project_view.width, kHierarchyRowHeight};
+        const std::vector<project_panel_row> rows = project_panel_rows_for(composition);
+        const ui::index_range visible_rows = ui::vertical_stack_visible_range(
+            static_cast<int>(rows.size()),
+            [&](int index) {
+                return rows[static_cast<std::size_t>(index)].metrics;
+            },
+            project_view,
+            result.scroll_offset);
+        for (int row_index = visible_rows.begin; row_index < visible_rows.end; ++row_index) {
+            const project_panel_row& item = rows[static_cast<std::size_t>(row_index)];
+            const Rectangle row = ui::vertical_stack_item_rect(project_view, item.metrics, result.scroll_offset);
+            if (item.kind == project_panel_row_kind::header) {
+                ui::draw_text_in_rect(item.header_label, 11, row, g_theme->text_muted, ui::text_align::left);
+                continue;
+            }
+            const mv::composition::asset_ref& asset = *item.asset;
             const bool selected = asset.id == selected_asset_id;
             const auto state = ui::selectable_row(row, selected, 1.5f);
             if (state.clicked) {
@@ -247,19 +330,6 @@ mv_editor_project_panel_result draw_mv_project_panel(Rectangle panel,
             ui::draw_text_in_rect(meta.c_str(), 9,
                                   {row.x + 10.0f, row.y + 18.0f, row.width - 20.0f, 15.0f},
                                   g_theme->text_muted, ui::text_align::left);
-            y += kHierarchyRowHeight + 5.0f;
-        };
-        draw_project_header("Images");
-        for (const mv::composition::asset_ref& asset : composition.assets) {
-            if (asset.type == "image") {
-                draw_asset_row(asset);
-            }
-        }
-        draw_project_header("Scripts");
-        for (const mv::composition::asset_ref& asset : composition.assets) {
-            if (asset.type == "script") {
-                draw_asset_row(asset);
-            }
         }
     }
     ui::scrollbar(project_scrollbar, content_height, result.scroll_offset, {

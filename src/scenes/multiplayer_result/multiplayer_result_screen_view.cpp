@@ -1,8 +1,11 @@
 #include "multiplayer_result/multiplayer_result_screen_view.h"
 
+#include <array>
+
 #include "scene_common.h"
 #include "theme.h"
 #include "ui_draw.h"
+#include "ui_hit.h"
 #include "virtual_screen.h"
 
 namespace multiplayer_result::screen_view {
@@ -16,6 +19,18 @@ constexpr Rectangle kRankingTitleRect{kRankingPanelRect.x + 30.0f, kRankingPanel
 constexpr Rectangle kRankingDividerRect{kRankingPanelRect.x + 30.0f, kRankingPanelRect.y + 80.0f, 590.0f, 3.0f};
 constexpr Rectangle kRankingCountRect{kRankingPanelRect.x + 402.0f, kRankingPanelRect.y + 30.0f, 176.0f, 34.0f};
 constexpr float kSongSelectTopBarHeight = 70.0f;
+constexpr std::array<Rectangle, 3> kColumnRects{
+    kLeftPanelRect,
+    kMainPanelRect,
+    kRankingPanelRect,
+};
+
+struct back_button_descriptor {
+    Rectangle rect;
+    const char* label;
+    bool enabled;
+    ui::button_options options;
+};
 
 void draw_background() {
     draw_scene_background(*g_theme);
@@ -45,19 +60,46 @@ void draw_song_select_column(Rectangle rect) {
     ui::surface(rect, with_alpha(g_theme->section, fill_alpha), with_alpha(g_theme->border_light, 255), 1.2f);
 }
 
+const char* back_button_label(bool returning) {
+    return returning ? "Returning..." : "Back to Room";
+}
+
+ui::button_options back_button_options(bool returning) {
+    const unsigned char normal_row_alpha = g_theme->row_soft_alpha;
+    const unsigned char hover_row_alpha = g_theme->row_soft_hover_alpha;
+    const Color back_bg = returning ? g_theme->row_soft_selected : g_theme->row_soft;
+    return {
+        .font_size = 24,
+        .border_width = 1.5f,
+        .bg = with_alpha(back_bg, normal_row_alpha),
+        .bg_hover = with_alpha(g_theme->row_soft_hover, hover_row_alpha),
+        .text_color = g_theme->text,
+        .custom_colors = true,
+    };
+}
+
+back_button_descriptor back_button_descriptor_for(bool returning) {
+    return {
+        kBackButtonRect,
+        back_button_label(returning),
+        !returning,
+        back_button_options(returning),
+    };
+}
+
 }  // namespace
 
 action_result handle_input(bool returning) {
     action_result result;
-    if (returning) {
+    const back_button_descriptor back_button = back_button_descriptor_for(returning);
+    if (!back_button.enabled) {
         return result;
     }
 
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_ESCAPE)) {
+    if (ui::is_enter_pressed() || ui::is_escape_pressed()) {
         result.back_requested = true;
     }
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
-        ui::contains_point(kBackButtonRect, virtual_screen::get_virtual_mouse())) {
+    if (ui::is_mouse_button_released(back_button.rect, MOUSE_BUTTON_LEFT)) {
         result.back_requested = true;
     }
     return result;
@@ -66,9 +108,9 @@ action_result handle_input(bool returning) {
 void draw_frame() {
     draw_background();
     draw_song_select_top_bar();
-    draw_song_select_column(kLeftPanelRect);
-    draw_song_select_column(kMainPanelRect);
-    draw_song_select_column(kRankingPanelRect);
+    for (const Rectangle column : kColumnRects) {
+        draw_song_select_column(column);
+    }
 }
 
 void draw_ranking_header(int player_count) {
@@ -80,18 +122,8 @@ void draw_ranking_header(int player_count) {
 
 action_result draw_back_button(bool returning) {
     action_result result;
-    const unsigned char normal_row_alpha = g_theme->row_soft_alpha;
-    const unsigned char hover_row_alpha = g_theme->row_soft_hover_alpha;
-    const Color back_bg = returning ? g_theme->row_soft_selected : g_theme->row_soft;
-    if (ui::button(kBackButtonRect, returning ? "Returning..." : "Back to Room", {
-            .font_size = 24,
-            .border_width = 1.5f,
-            .bg = with_alpha(back_bg, normal_row_alpha),
-            .bg_hover = with_alpha(g_theme->row_soft_hover, hover_row_alpha),
-            .text_color = g_theme->text,
-            .custom_colors = true,
-        }).clicked &&
-        !returning) {
+    const back_button_descriptor back_button = back_button_descriptor_for(returning);
+    if (ui::button(back_button.rect, back_button.label, back_button.options).clicked && back_button.enabled) {
         result.back_requested = true;
     }
     return result;

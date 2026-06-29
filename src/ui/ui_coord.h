@@ -59,6 +59,26 @@ inline void draw_text_f(const char* text, float x, float y, int font_size, Color
     draw_text_auto(text, {x, y}, static_cast<float>(font_size), 0.0f, color);
 }
 
+inline Vector2 measure_default_text(const char* text, float font_size, float spacing = 1.0f) {
+    if (text == nullptr || *text == '\0') {
+        return {};
+    }
+    return MeasureTextEx(GetFontDefault(), text, font_size, spacing);
+}
+
+inline void draw_default_text_pro(const char* text,
+                                  Vector2 position,
+                                  Vector2 origin,
+                                  float rotation,
+                                  float font_size,
+                                  Color color,
+                                  float spacing = 1.0f) {
+    if (text == nullptr || *text == '\0') {
+        return;
+    }
+    DrawTextPro(GetFontDefault(), text, position, origin, rotation, font_size, spacing, color);
+}
+
 // float 座標で DrawLine を呼び出す。
 inline void draw_line_f(float x1, float y1, float x2, float y2, Color color) {
     DrawLineEx({snap_pixel(x1), snap_pixel(y1)},
@@ -77,6 +97,13 @@ inline void draw_triangle(Vector2 a, Vector2 b, Vector2 c, Color color) {
                  {snap_pixel(b.x), snap_pixel(b.y)},
                  {snap_pixel(c.x), snap_pixel(c.y)},
                  color);
+}
+
+inline void draw_rect_pro(Rectangle rect, Vector2 origin, float rotation, Color color) {
+    if (rect.width <= 0.0f || rect.height <= 0.0f) {
+        return;
+    }
+    DrawRectanglePro(rect, origin, rotation, color);
 }
 
 inline Rectangle texture_source_rect(const Texture2D& texture, bool flip_y = false) {

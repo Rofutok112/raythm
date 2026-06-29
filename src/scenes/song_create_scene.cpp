@@ -30,6 +30,7 @@
 #include "song_select/song_select_navigation.h"
 #include "theme.h"
 #include "ui_frame.h"
+#include "ui_hit.h"
 #include "ui_text.h"
 #include "ui_text_input.h"
 #include "virtual_screen.h"
@@ -252,6 +253,63 @@ std::vector<timing_event> song_create_scene::validated_timing_events(float base_
         ok);
 }
 
+song_create::timing_panel::state_refs song_create_scene::timing_panel_state_refs() {
+    return {
+        bpm_input_, offset_input_, timing_bar_input_, timing_bpm_input_,
+        timing_numerator_input_, timing_denominator_input_, timing_events_,
+        selected_timing_event_index_, metronome_enabled_,
+        timing_event_scroll_offset_, timing_event_scrollbar_dragging_,
+        timing_event_scrollbar_drag_offset_, timing_import_status_, error_,
+    };
+}
+
+song_create::timing_panel::callbacks song_create_scene::timing_panel_callbacks() {
+    return {
+        [this] { ensure_timing_events_initialized(); },
+    };
+}
+
+song_create::timing_panel::config song_create_scene::timing_panel_config() const {
+    return {kScreenRect, kTimingModalRect, kTextInputLabelWidth, kLayer, kModalLayer};
+}
+
+void song_create_scene::apply_timing_modal_result(const song_create::timing_panel::modal_result& result) {
+    const song_create::timing_panel::editor_result& editor = result.editor;
+    if (editor.event_scroll_changed) {
+        timing_event_scroll_offset_ = editor.event_scroll_offset;
+    }
+    if (editor.event_scrollbar_drag_state_changed) {
+        timing_event_scrollbar_dragging_ = editor.event_scrollbar_dragging;
+        timing_event_scrollbar_drag_offset_ = editor.event_scrollbar_drag_offset;
+    }
+    if (editor.selected_event_index.has_value() && flush_selected_timing_event_inputs()) {
+        selected_timing_event_index_ = *editor.selected_event_index;
+        sync_selected_timing_inputs();
+        error_.clear();
+    }
+    if (editor.add_event_type.has_value()) {
+        add_timing_event(*editor.add_event_type);
+    }
+    if (editor.delete_selected_event_requested) {
+        delete_selected_timing_event();
+    }
+    if (editor.stop_metronome_requested) {
+        stop_timing_preview();
+    }
+    if (editor.start_metronome_requested && start_timing_preview()) {
+        metronome_enabled_ = true;
+    }
+    if (result.import_midi_requested) {
+        const std::string path = file_dialog::open_midi_file();
+        if (!path.empty()) {
+            import_midi_timing(path);
+        }
+    }
+    if (result.close_requested) {
+        close_timing_modal();
+    }
+}
+
 void song_create_scene::update_metronome(float dt) {
     if (!metronome_enabled_ || !selected_timing_event_index_.has_value() ||
         *selected_timing_event_index_ >= timing_events_.size()) {
@@ -340,51 +398,8 @@ void song_create_scene::draw() {
     if (timing_modal_open_) {
         const song_create::timing_panel::modal_result timing_modal =
             song_create::timing_panel::draw_modal(
-            {
-                bpm_input_, offset_input_, timing_bar_input_, timing_bpm_input_,
-                timing_numerator_input_, timing_denominator_input_, timing_events_,
-                selected_timing_event_index_, metronome_enabled_,
-                timing_event_scroll_offset_, timing_event_scrollbar_dragging_,
-                timing_event_scrollbar_drag_offset_, timing_import_status_, error_,
-            },
-            {
-                [this] { ensure_timing_events_initialized(); },
-            },
-            {kScreenRect, kTimingModalRect, kTextInputLabelWidth, kLayer, kModalLayer});
-        const song_create::timing_panel::editor_result& timing_editor = timing_modal.editor;
-        if (timing_editor.event_scroll_changed) {
-            timing_event_scroll_offset_ = timing_editor.event_scroll_offset;
-        }
-        if (timing_editor.event_scrollbar_drag_state_changed) {
-            timing_event_scrollbar_dragging_ = timing_editor.event_scrollbar_dragging;
-            timing_event_scrollbar_drag_offset_ = timing_editor.event_scrollbar_drag_offset;
-        }
-        if (timing_editor.selected_event_index.has_value() && flush_selected_timing_event_inputs()) {
-            selected_timing_event_index_ = *timing_editor.selected_event_index;
-            sync_selected_timing_inputs();
-            error_.clear();
-        }
-        if (timing_editor.add_event_type.has_value()) {
-            add_timing_event(*timing_editor.add_event_type);
-        }
-        if (timing_editor.delete_selected_event_requested) {
-            delete_selected_timing_event();
-        }
-        if (timing_editor.stop_metronome_requested) {
-            stop_timing_preview();
-        }
-        if (timing_editor.start_metronome_requested && start_timing_preview()) {
-            metronome_enabled_ = true;
-        }
-        if (timing_modal.import_midi_requested) {
-            const std::string path = file_dialog::open_midi_file();
-            if (!path.empty()) {
-                import_midi_timing(path);
-            }
-        }
-        if (timing_modal.close_requested) {
-            close_timing_modal();
-        }
+                timing_panel_state_refs(), timing_panel_callbacks(), timing_panel_config());
+        apply_timing_modal_result(timing_modal);
     }
 
     virtual_screen::end();
@@ -395,7 +410,7 @@ void song_create_scene::draw() {
 
 void song_create_scene::update_song_metadata() {
     if (timing_modal_open_) {
-        if (IsKeyPressed(KEY_ESCAPE)) {
+        if (ui::is_escape_pressed()) {
             close_timing_modal();
         }
         return;
@@ -414,14 +429,14 @@ void song_create_scene::update_song_metadata() {
         return;
     }
 
-    if (IsKeyPressed(KEY_ESCAPE)) {
+    if (ui::is_escape_pressed()) {
         go_back_to_song_select(editing_song_.has_value() ? editing_song_->meta.song_id : "");
         return;
     }
 }
 
 void song_create_scene::update_song_saved() {
-    if (IsKeyPressed(KEY_ESCAPE)) {
+    if (ui::is_escape_pressed()) {
         go_back_to_song_select(created_song_.meta.song_id);
         return;
     }
@@ -438,18 +453,7 @@ void song_create_scene::draw_song_metadata() {
             [this](Rectangle rect) {
                 const song_create::timing_panel::summary_result timing_summary =
                     song_create::timing_panel::draw_summary(
-                    rect,
-                    {
-                        bpm_input_, offset_input_, timing_bar_input_, timing_bpm_input_,
-                        timing_numerator_input_, timing_denominator_input_, timing_events_,
-                        selected_timing_event_index_, metronome_enabled_,
-                        timing_event_scroll_offset_, timing_event_scrollbar_dragging_,
-                        timing_event_scrollbar_drag_offset_, timing_import_status_, error_,
-                    },
-                    {
-                        [this] { ensure_timing_events_initialized(); },
-                    },
-                    {kScreenRect, kTimingModalRect, kTextInputLabelWidth, kLayer, kModalLayer});
+                        rect, timing_panel_state_refs(), timing_panel_callbacks(), timing_panel_config());
                 return timing_summary.open_requested;
             },
         },

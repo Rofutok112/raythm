@@ -10,11 +10,6 @@
 
 namespace {
 
-Color with_alpha_scale(Color color, float alpha_scale) {
-    color.a = static_cast<unsigned char>(std::clamp(alpha_scale, 0.0f, 1.0f) * 255.0f);
-    return color;
-}
-
 template <std::size_t N>
 float average_bucket_energy(const std::array<float, N>& spectrum, int begin, int end) {
     if (begin >= end) {
@@ -187,35 +182,10 @@ void title_spectrum_visualizer::draw(const Rectangle& rect, float alpha_scale) c
     }
 
     const float clamped_alpha = std::clamp(alpha_scale, 0.0f, 1.0f);
-    const float gap = 3.0f;
-    const float bar_width =
-        (rect.width - gap * static_cast<float>(kBarCount - 1)) / static_cast<float>(kBarCount);
-    const float baseline = rect.y + rect.height;
-    const float max_height = rect.height * 1.0f;
-    const float block_height = 8.0f;
-    const float block_gap = 4.0f;
-    const Color base_low = with_alpha_scale({107, 33, 168, 255}, clamped_alpha * (128.0f / 255.0f));
-    const Color base_mid = with_alpha_scale({168, 85, 247, 255}, clamped_alpha * (178.0f / 255.0f));
-    const Color base_top = with_alpha_scale({216, 180, 254, 255}, clamped_alpha * (230.0f / 255.0f));
-    const Color peak_glow = with_alpha_scale({216, 180, 254, 255}, clamped_alpha * (110.0f / 255.0f));
-    const Color peak_color = with_alpha_scale({216, 180, 254, 255}, clamped_alpha * (166.0f / 255.0f));
-
-    for (int i = 0; i < kBarCount; ++i) {
-        const float value = std::clamp(bars_[static_cast<size_t>(i)], 0.0f, 1.0f);
-        const float height = value * max_height;
-        const float x = rect.x + static_cast<float>(i) * (bar_width + gap);
-        ui::block_spectrum_bar(x,
-                               baseline,
-                               bar_width,
-                               height,
-                               max_height,
-                               std::clamp(peaks_[static_cast<size_t>(i)], 0.0f, 1.0f) * max_height,
-                               block_height,
-                               block_gap,
-                               base_low,
-                               base_mid,
-                               base_top,
-                               peak_glow,
-                               peak_color);
-    }
+    ui::draw_block_spectrum(rect, bars_, peaks_, {
+        .alpha_scale = clamped_alpha,
+        .gap = 3.0f,
+        .block_height = 8.0f,
+        .block_gap = 4.0f,
+    });
 }

@@ -1,9 +1,11 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cmath>
 #include <functional>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -175,6 +177,16 @@ struct row_action_layout_options {
     float right_padding = 14.0f;
 };
 
+enum class row_action_slot : int {
+    right = 0,
+    middle = 1,
+    left = 2,
+};
+
+constexpr int row_action_slot_index(row_action_slot slot) {
+    return static_cast<int>(slot);
+}
+
 struct action_button_options {
     draw_layer layer = draw_layer::base;
     int font_size = 16;
@@ -208,6 +220,14 @@ struct toned_action_button_options {
     Color bg_base = {};
     Color bg_hover_base = {};
     Color border_base = {};
+};
+
+template <typename Action>
+struct action_button_definition {
+    Rectangle rect{};
+    const char* label = "";
+    Action action{};
+    bool enabled = true;
 };
 
 using icon_draw_fn = void (*)(Rectangle, Color, float);
@@ -309,6 +329,30 @@ struct surface_options {
     bool custom_colors = false;
 };
 
+struct color_swatch_options {
+    float roundness = 0.22f;
+    int segments = 4;
+    float border_width = 1.0f;
+    Color border_color = {};
+};
+
+struct channel_slider_track_options {
+    Color track_color = {};
+    Color thumb_color = {};
+    Color active_thumb_color = {};
+    float thumb_width = 10.0f;
+    float thumb_height = 22.0f;
+    float thumb_top_offset = -6.0f;
+};
+
+struct block_spectrum_options {
+    float alpha_scale = 1.0f;
+    float gap = 3.0f;
+    float block_height = 8.0f;
+    float block_gap = 4.0f;
+    float min_bar_width = 0.0f;
+};
+
 struct progress_bar_options {
     Color bg = {};
     Color fill = {};
@@ -386,6 +430,12 @@ inline Rectangle row_action_rect(Rectangle row, int slot_from_right,
     };
 }
 
+inline Rectangle row_action_rect(Rectangle row,
+                                 row_action_slot slot,
+                                 row_action_layout_options options = {}) {
+    return row_action_rect(row, row_action_slot_index(slot), options);
+}
+
 inline button_state button(Rectangle rect, const char* label, button_options options = {}) {
     const bool hovered = options.interactive && is_hovered(rect, options.layer);
     const bool pressed = options.interactive && is_pressed(rect, options.layer);
@@ -405,6 +455,45 @@ inline button_state row_action_button(Rectangle row,
                                       button_options button_options = {},
                                       row_action_layout_options layout_options = {}) {
     return button(row_action_rect(row, slot_from_right, layout_options), label, button_options);
+}
+
+inline button_state row_action_button(Rectangle row,
+                                      row_action_slot slot,
+                                      const char* label,
+                                      button_options button_options = {},
+                                      row_action_layout_options layout_options = {}) {
+    return row_action_button(row, row_action_slot_index(slot), label, button_options, layout_options);
+}
+
+inline button_state row_action_label(Rectangle row,
+                                     int slot_from_right,
+                                     const char* label,
+                                     button_options button_options = {},
+                                     row_action_layout_options layout_options = {}) {
+    button_options.interactive = false;
+    return row_action_button(row, slot_from_right, label, button_options, layout_options);
+}
+
+inline button_state row_action_label(Rectangle row,
+                                     row_action_slot slot,
+                                     const char* label,
+                                     button_options button_options = {},
+                                     row_action_layout_options layout_options = {}) {
+    return row_action_label(row, row_action_slot_index(slot), label, button_options, layout_options);
+}
+
+inline bool row_action_clicked(Rectangle row,
+                               int slot_from_right,
+                               draw_layer layer = draw_layer::base,
+                               row_action_layout_options layout_options = {}) {
+    return is_clicked(row_action_rect(row, slot_from_right, layout_options), layer);
+}
+
+inline bool row_action_clicked(Rectangle row,
+                               row_action_slot slot,
+                               draw_layer layer = draw_layer::base,
+                               row_action_layout_options layout_options = {}) {
+    return row_action_clicked(row, row_action_slot_index(slot), layer, layout_options);
 }
 
 inline button_options action_button_to_button_options(action_button_options options) {
@@ -435,6 +524,20 @@ inline button_options action_button_to_button_options(action_button_options opti
 
 inline button_state action_button(Rectangle rect, const char* label, action_button_options options = {}) {
     return button(rect, label, action_button_to_button_options(options));
+}
+
+template <typename Action>
+inline std::optional<Action> draw_action_buttons(std::span<const action_button_definition<Action>> buttons,
+                                                 action_button_options options = {}) {
+    for (const action_button_definition<Action>& definition : buttons) {
+        action_button_options button_options = options;
+        button_options.enabled = button_options.enabled && definition.enabled;
+        const button_state state = action_button(definition.rect, definition.label, button_options);
+        if (button_options.enabled && state.clicked) {
+            return definition.action;
+        }
+    }
+    return std::nullopt;
 }
 
 inline action_button_options toned_action_button_to_action_button_options(Color tone,
@@ -478,14 +581,17 @@ inline button_state toned_row_action_button(Rectangle row,
                                button_options);
 }
 
+inline button_state toned_row_action_button(Rectangle row,
+                                            row_action_slot slot,
+                                            const char* label,
+                                            Color tone,
+                                            toned_action_button_options button_options = {},
+                                            row_action_layout_options layout_options = {}) {
+    return toned_row_action_button(row, row_action_slot_index(slot), label, tone, button_options, layout_options);
+}
+
 inline Rectangle icon_rect(Rectangle rect, float inset) {
-    const float size = std::max(1.0f, std::min(rect.width, rect.height) - inset * 2.0f);
-    return {
-        rect.x + (rect.width - size) * 0.5f,
-        rect.y + (rect.height - size) * 0.5f,
-        size,
-        size,
-    };
+    return inscribed_square(rect, inset);
 }
 
 inline button_state icon_button(Rectangle rect, icon_draw_fn draw_icon, icon_button_options options = {}) {
@@ -609,6 +715,39 @@ inline void rounded_surface(Rectangle rect,
     }
 }
 
+inline void color_swatch(Rectangle rect, Color fill, color_swatch_options options = {}) {
+    DrawRectangleRounded(rect, options.roundness, options.segments, fill);
+    if (options.border_width > 0.0f) {
+        const Color border = options.border_color.a > 0
+            ? options.border_color
+            : with_alpha(g_theme->border_light, 220);
+        DrawRectangleRoundedLinesEx(rect, options.roundness, options.segments,
+                                    options.border_width, border);
+    }
+}
+
+inline Rectangle channel_slider_track(Rectangle track_rect, float ratio, Color fill,
+                                      bool active, channel_slider_track_options options = {}) {
+    const Color track_color = options.track_color.a > 0 ? options.track_color : g_theme->slider_track;
+    const Color thumb_color = options.thumb_color.a > 0 ? options.thumb_color : g_theme->slider_knob;
+    const Color active_thumb_color = options.active_thumb_color.a > 0
+        ? options.active_thumb_color
+        : g_theme->border_active;
+    const float clamped = std::clamp(ratio, 0.0f, 1.0f);
+    draw_rect_f(track_rect, track_color);
+    draw_rect_f({track_rect.x, track_rect.y, track_rect.width * clamped, track_rect.height}, fill);
+
+    const float thumb_x = track_rect.x + track_rect.width * clamped - options.thumb_width * 0.5f;
+    const Rectangle thumb = {
+        thumb_x,
+        track_rect.y + options.thumb_top_offset,
+        options.thumb_width,
+        options.thumb_height,
+    };
+    draw_rect_f(thumb, active ? active_thumb_color : thumb_color);
+    return thumb;
+}
+
 inline void frame(Rectangle rect, Color border_color, float border_width = 1.0f) {
     draw_rect_lines(rect, border_width, border_color);
 }
@@ -695,6 +834,133 @@ inline void solid_spectrum_bar(Rectangle rect, Color bar, Color peak,
     }
     surface_fill(rect, bar);
     surface_fill({rect.x, rect.y, rect.width, std::max(min_peak_height, rect.height * peak_ratio)}, peak);
+}
+
+inline void draw_block_spectrum(Rectangle area,
+                                std::span<const float> values,
+                                std::span<const float> peaks,
+                                block_spectrum_options options = {}) {
+    if (area.width <= 0.0f || area.height <= 0.0f || values.empty()) {
+        return;
+    }
+
+    const int bar_count = static_cast<int>(values.size());
+    const float alpha = std::clamp(options.alpha_scale, 0.0f, 1.0f);
+    const float bar_width = std::max(
+        options.min_bar_width,
+        (area.width - options.gap * static_cast<float>(bar_count - 1)) / static_cast<float>(bar_count));
+    const float baseline = area.y + area.height;
+    const Color base_low = with_alpha({107, 33, 168, 255}, static_cast<unsigned char>(128.0f * alpha));
+    const Color base_mid = with_alpha({168, 85, 247, 255}, static_cast<unsigned char>(178.0f * alpha));
+    const Color base_top = with_alpha({216, 180, 254, 255}, static_cast<unsigned char>(230.0f * alpha));
+    const Color peak_glow = with_alpha({216, 180, 254, 255}, static_cast<unsigned char>(110.0f * alpha));
+    const Color peak_color = with_alpha({216, 180, 254, 255}, static_cast<unsigned char>(166.0f * alpha));
+
+    for (int i = 0; i < bar_count; ++i) {
+        const float value = std::clamp(values[static_cast<std::size_t>(i)], 0.0f, 1.0f);
+        const float peak = peaks.empty()
+            ? value
+            : std::clamp(peaks[static_cast<std::size_t>(std::min<int>(i, static_cast<int>(peaks.size()) - 1))],
+                         0.0f,
+                         1.0f);
+        block_spectrum_bar(area.x + static_cast<float>(i) * (bar_width + options.gap),
+                           baseline,
+                           bar_width,
+                           value * area.height,
+                           area.height,
+                           peak * area.height,
+                           options.block_height,
+                           options.block_gap,
+                           base_low,
+                           base_mid,
+                           base_top,
+                           peak_glow,
+                           peak_color);
+    }
+}
+
+inline float spectrum_bar_value(std::span<const float> spectrum,
+                                int index,
+                                int bar_count,
+                                float fallback_ratio,
+                                double visual_time_ms,
+                                float bass_rolloff,
+                                float fallback_base,
+                                float fallback_wave_a,
+                                float fallback_wave_b,
+                                float min_value,
+                                float max_value) {
+    const float ratio = bar_count > 1
+        ? static_cast<float>(index) / static_cast<float>(bar_count - 1)
+        : 0.0f;
+    if (!spectrum.empty()) {
+        const std::size_t start = static_cast<std::size_t>(index) * spectrum.size() /
+                                  static_cast<std::size_t>(std::max(1, bar_count));
+        const std::size_t end = std::max(
+            start + 1,
+            static_cast<std::size_t>(index + 1) * spectrum.size() /
+                static_cast<std::size_t>(std::max(1, bar_count)));
+        float sum = 0.0f;
+        for (std::size_t i = start; i < end && i < spectrum.size(); ++i) {
+            sum += std::sqrt(std::max(0.0f, spectrum[i])) * 8.0f;
+        }
+        return std::clamp(
+            sum / static_cast<float>(std::max<std::size_t>(1, end - start)),
+            min_value,
+            max_value);
+    }
+
+    const float phase = static_cast<float>(visual_time_ms / 260.0);
+    const float bass_bias = 1.0f - ratio * bass_rolloff;
+    const float wave = fallback_base + fallback_wave_a * std::sin(phase + ratio * 9.0f) +
+                       fallback_wave_b * std::sin(phase * 0.55f + ratio * 27.0f);
+    return std::clamp(wave * bass_bias, fallback_ratio, max_value);
+}
+
+inline void draw_title_spectrum(Rectangle area,
+                                float opacity,
+                                double visual_time_ms,
+                                std::span<const float> spectrum = {}) {
+    constexpr int kBars = 64;
+    const float gap = 3.0f;
+    constexpr float kBlockHeight = 8.0f;
+    constexpr float kBlockGap = 4.0f;
+    std::array<float, kBars> values{};
+
+    for (int i = 0; i < kBars; ++i) {
+        values[static_cast<std::size_t>(i)] = spectrum_bar_value(
+            spectrum, i, kBars, 0.0f, visual_time_ms,
+            0.35f, 0.42f, 0.34f, 0.18f, 0.0f, 1.0f);
+    }
+    draw_block_spectrum(area, values, values, {
+        .alpha_scale = opacity,
+        .gap = gap,
+        .block_height = kBlockHeight,
+        .block_gap = kBlockGap,
+        .min_bar_width = 2.0f,
+    });
+}
+
+inline void draw_solid_spectrum(Rectangle area,
+                                Color bar,
+                                Color peak,
+                                double visual_time_ms,
+                                std::span<const float> spectrum = {}) {
+    constexpr int kBars = 32;
+    const float gap = 3.0f;
+    const float bar_width = std::max(2.0f, (area.width - gap * static_cast<float>(kBars - 1)) /
+                                               static_cast<float>(kBars));
+    std::array<Rectangle, kBars> bars{};
+    hstack({area.x, area.y, area.width, area.height}, bar_width, gap, bars);
+
+    for (int i = 0; i < kBars; ++i) {
+        const float normalized = spectrum_bar_value(
+            spectrum, i, kBars, 0.08f, visual_time_ms,
+            0.45f, 0.45f, 0.35f, 0.20f, 0.04f, 1.0f);
+        const float height = normalized * area.height;
+        const Rectangle bar_rect = bars[static_cast<std::size_t>(i)];
+        solid_spectrum_bar({bar_rect.x, area.y + area.height - height, bar_width, height}, bar, peak);
+    }
 }
 
 inline void placeholder(Rectangle rect, const char* label, placeholder_options options = {}) {
@@ -873,6 +1139,20 @@ inline button_state queued_button(Rectangle rect, const char* label, button_opti
 
 inline button_state queued_action_button(Rectangle rect, const char* label, action_button_options options = {}) {
     return queued_button(rect, label, action_button_to_button_options(options));
+}
+
+template <typename Action>
+inline std::optional<Action> queued_draw_action_buttons(std::span<const action_button_definition<Action>> buttons,
+                                                        action_button_options options = {}) {
+    for (const action_button_definition<Action>& definition : buttons) {
+        action_button_options button_options = options;
+        button_options.enabled = button_options.enabled && definition.enabled;
+        const button_state state = queued_action_button(definition.rect, definition.label, button_options);
+        if (button_options.enabled && state.clicked) {
+            return definition.action;
+        }
+    }
+    return std::nullopt;
 }
 
 inline button_state queued_toned_action_button(Rectangle rect, const char* label, Color tone,
@@ -1056,15 +1336,18 @@ inline dropdown_state dropdown(Rectangle trigger_rect, Rectangle menu_rect,
     int clicked_index = -1;
     if (open) {
         section(menu_rect);
-        Rectangle item_rect = {menu_rect.x + 6.0f, menu_rect.y + 6.0f, menu_rect.width - 12.0f, options.item_height};
+        vertical_layout_cursor menu_items =
+            vertical_cursor({menu_rect.x + 6.0f, menu_rect.y + 6.0f,
+                             menu_rect.width - 12.0f, options.item_height},
+                            options.item_spacing);
         for (int i = 0; i < static_cast<int>(items.size()); ++i) {
+            const Rectangle item_rect = menu_items.next(options.item_height);
             const row_state option_row = selectable_row(item_rect, i == selected_index, 1.5f);
             draw_text_in_rect(items[i], options.font_size, inset(option_row.visual, edge_insets::symmetric(0.0f, 12.0f)),
                               i == selected_index ? g_theme->text : g_theme->text_dim, text_align::left);
             if (option_row.clicked) {
                 clicked_index = i;
             }
-            item_rect.y += options.item_height + options.item_spacing;
         }
     }
 
@@ -1120,11 +1403,15 @@ inline dropdown_state queued_dropdown(Rectangle trigger_rect, Rectangle menu_rec
 
     int clicked_index = -1;
     if (open) {
-        Rectangle item_rect = {menu_rect.x + 6.0f, menu_rect.y + 6.0f, menu_rect.width - 12.0f, options.item_height};
+        vertical_layout_cursor menu_items =
+            vertical_cursor({menu_rect.x + 6.0f, menu_rect.y + 6.0f,
+                             menu_rect.width - 12.0f, options.item_height},
+                            options.item_spacing);
         std::vector<row_state> item_states;
         item_states.reserve(option_copies.size());
 
         for (int i = 0; i < static_cast<int>(option_copies.size()); ++i) {
+            const Rectangle item_rect = menu_items.next(options.item_height);
             const bool item_pressed = is_pressed(item_rect, options.menu_layer);
             const row_state option_row = {
                 is_hovered(item_rect, options.menu_layer),
@@ -1136,14 +1423,17 @@ inline dropdown_state queued_dropdown(Rectangle trigger_rect, Rectangle menu_rec
             if (option_row.clicked) {
                 clicked_index = i;
             }
-            item_rect.y += options.item_height + options.item_spacing;
         }
 
         enqueue_draw_command(options.menu_layer, [menu_rect, options, selected_index, option_copies = std::move(option_copies),
                                           item_states = std::move(item_states)]() {
             section(menu_rect);
-            Rectangle draw_item_rect = {menu_rect.x + 6.0f, menu_rect.y + 6.0f, menu_rect.width - 12.0f, options.item_height};
+            vertical_layout_cursor menu_items =
+                vertical_cursor({menu_rect.x + 6.0f, menu_rect.y + 6.0f,
+                                 menu_rect.width - 12.0f, options.item_height},
+                                options.item_spacing);
             for (int i = 0; i < static_cast<int>(option_copies.size()); ++i) {
+                const Rectangle draw_item_rect = menu_items.next(options.item_height);
                 const row_state& option_row = item_states[static_cast<size_t>(i)];
                 detail::draw_row_visual(draw_item_rect, option_row.hovered, option_row.pressed,
                                         i == selected_index ? g_theme->row_selected : g_theme->row,
@@ -1153,7 +1443,6 @@ inline dropdown_state queued_dropdown(Rectangle trigger_rect, Rectangle menu_rec
                 draw_text_in_rect(option_copies[static_cast<size_t>(i)].c_str(), options.font_size,
                                   inset(option_row.visual, edge_insets::symmetric(0.0f, 12.0f)),
                                   i == selected_index ? g_theme->text : g_theme->text_dim, text_align::left);
-                draw_item_rect.y += options.item_height + options.item_spacing;
             }
         });
     }
@@ -1168,7 +1457,10 @@ inline context_menu_state context_menu(Rectangle menu_rect,
     register_hit_region(menu_rect, options.layer);
 
     int clicked_index = -1;
-    Rectangle item_rect = {menu_rect.x + 6.0f, menu_rect.y + 6.0f, menu_rect.width - 12.0f, options.item_height};
+    vertical_layout_cursor menu_items =
+        vertical_cursor({menu_rect.x + 6.0f, menu_rect.y + 6.0f,
+                         menu_rect.width - 12.0f, options.item_height},
+                        options.item_spacing);
     std::vector<std::string> item_labels;
     std::vector<bool> item_enabled;
     std::vector<context_menu_item::kind> item_kinds;
@@ -1179,6 +1471,7 @@ inline context_menu_state context_menu(Rectangle menu_rect,
     item_states.reserve(items.size());
 
     for (int i = 0; i < static_cast<int>(items.size()); ++i) {
+        const Rectangle item_rect = menu_items.next(options.item_height);
         const context_menu_item::kind kind = items[static_cast<size_t>(i)].item_kind;
         const bool enabled = items[static_cast<size_t>(i)].enabled && kind == context_menu_item::kind::action;
         const bool pressed = enabled && is_mouse_button_down(item_rect, MOUSE_BUTTON_LEFT, options.layer);
@@ -1195,7 +1488,6 @@ inline context_menu_state context_menu(Rectangle menu_rect,
         if (state.clicked) {
             clicked_index = i;
         }
-        item_rect.y += options.item_height + options.item_spacing;
     }
 
     enqueue_draw_command(options.layer, [menu_rect, options,
@@ -1204,8 +1496,12 @@ inline context_menu_state context_menu(Rectangle menu_rect,
                                  item_kinds = std::move(item_kinds),
                                  item_states = std::move(item_states)]() {
         section(menu_rect);
-        Rectangle draw_item_rect = {menu_rect.x + 6.0f, menu_rect.y + 6.0f, menu_rect.width - 12.0f, options.item_height};
+        vertical_layout_cursor menu_items =
+            vertical_cursor({menu_rect.x + 6.0f, menu_rect.y + 6.0f,
+                             menu_rect.width - 12.0f, options.item_height},
+                            options.item_spacing);
         for (int i = 0; i < static_cast<int>(item_labels.size()); ++i) {
+            const Rectangle draw_item_rect = menu_items.next(options.item_height);
             const bool enabled = item_enabled[static_cast<size_t>(i)];
             const context_menu_item::kind kind = item_kinds[static_cast<size_t>(i)];
             const row_state& state = item_states[static_cast<size_t>(i)];
@@ -1230,7 +1526,6 @@ inline context_menu_state context_menu(Rectangle menu_rect,
                                   inset(state.visual, edge_insets::symmetric(0.0f, 12.0f)),
                                   enabled ? g_theme->text : g_theme->text_muted, text_align::left);
             }
-            draw_item_rect.y += options.item_height + options.item_spacing;
         }
     });
 
@@ -1328,8 +1623,8 @@ inline float slider_relative(Rectangle row_rect, const char* label, const char* 
 
     const bool drag_target_hovered = options.drag_blocked_by_layer
         ? is_hovered(row_rect, options.layer)
-        : CheckCollisionPointRec(virtual_screen::get_virtual_mouse(), row_rect);
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && drag_target_hovered) {
+        : contains_point(row_rect, virtual_screen::get_virtual_mouse());
+    if (is_mouse_button_down() && drag_target_hovered) {
         return slider_ratio_from_mouse(slider_row.visual, track_left_inset, track_right_inset, options);
     }
     return -1.0f;
@@ -1352,7 +1647,7 @@ inline void scrollbar(Rectangle track_rect, float content_height, float scroll_o
 inline scrollbar_interaction vertical_scrollbar(Rectangle track_rect, float content_height, float scroll_offset,
                                                 bool& dragging, float& drag_offset,
                                                 scrollbar_options options = {}) {
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+    if (is_mouse_button_released()) {
         dragging = false;
     }
 
@@ -1368,9 +1663,9 @@ inline scrollbar_interaction vertical_scrollbar(Rectangle track_rect, float cont
 
     const bool track_pressed = options.drag_blocked_by_layer
         ? is_hovered(track_rect, options.layer)
-        : CheckCollisionPointRec(mouse, track_rect);
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && track_pressed) {
-        if (CheckCollisionPointRec(mouse, metrics.thumb_rect)) {
+        : contains_point(track_rect, mouse);
+    if (is_mouse_button_pressed() && track_pressed) {
+        if (contains_point(metrics.thumb_rect, mouse)) {
             dragging = true;
             drag_offset = mouse.y - metrics.thumb_rect.y;
         } else {
@@ -1382,7 +1677,7 @@ inline scrollbar_interaction vertical_scrollbar(Rectangle track_rect, float cont
         }
     }
 
-    if (dragging && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+    if (dragging && is_mouse_button_down()) {
         const float available = std::max(1.0f, track_rect.height - metrics.thumb_rect.height);
         const float thumb_top = std::clamp(mouse.y - drag_offset - track_rect.y, 0.0f, available);
         next_offset = metrics.max_scroll * (thumb_top / available);

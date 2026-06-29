@@ -10,6 +10,7 @@
 #include "ui_clip.h"
 #include "ui_draw.h"
 #include "ui_hit.h"
+#include "ui_scroll.h"
 #include "ui_text_input.h"
 #include "virtual_screen.h"
 
@@ -213,7 +214,7 @@ right_panel_automation_graph_view_result draw_right_panel_automation_graph_view(
         point.multiplier = snap_automation_multiplier(
             automation_snap_candidates(guides, pinned_multiplier),
             automation_multiplier_at_t(guides, mult_t),
-            IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
+            ui::is_shift_down());
         point.curve_to_next = curve;
         return point;
     };
@@ -265,7 +266,7 @@ right_panel_automation_graph_view_result draw_right_panel_automation_graph_view(
     }
 
     const bool graph_hovered = ui::contains_point(graph, view_model.mouse);
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && graph_hovered) {
+    if (ui::is_mouse_button_pressed() && graph_hovered) {
         if (hovered_point.has_value()) {
             result.actions.panel_result.selected_scroll_event_index = hovered_point;
             timing_state.automation_drag_point_index = hovered_point;
@@ -280,7 +281,7 @@ right_panel_automation_graph_view_result draw_right_panel_automation_graph_view(
             timing_state.automation_pending_add = true;
         }
     }
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+    if (ui::is_mouse_button_released()) {
         if (timing_state.automation_pending_add &&
             graph_hovered &&
             !timing_state.automation_drag_point_index.has_value()) {
@@ -290,7 +291,7 @@ right_panel_automation_graph_view_result draw_right_panel_automation_graph_view(
         timing_state.automation_drag_point_index.reset();
         timing_state.automation_pending_add = false;
     }
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
+    if (ui::is_mouse_button_down() &&
         timing_state.automation_drag_point_index.has_value() &&
         *timing_state.automation_drag_point_index < points.size()) {
         const std::size_t point_index = *timing_state.automation_drag_point_index;
@@ -371,14 +372,14 @@ editor_right_panel_view_result draw_timeline_automation_view(const timeline_auto
     const int first_snap_tick = std::max(0, (model.min_tick / snap_interval) * snap_interval);
     for (int tick = first_snap_tick; tick <= model.max_tick; tick += snap_interval) {
         const float y = model.metrics.tick_to_y(tick);
-        if (y >= automation_graph.y && y <= automation_graph.y + automation_graph.height) {
+        if (ui::y_visible_in_viewport(y, automation_graph)) {
             ui::draw_line_f(automation_graph.x, y, automation_graph.x + automation_graph.width, y,
                             with_alpha(t.editor_grid_snap, 165));
         }
     }
     for (const editor_meter_map::grid_line& line : model.grid_lines) {
         const float y = model.metrics.tick_to_y(line.tick);
-        if (y < automation_graph.y || y > automation_graph.y + automation_graph.height) {
+        if (!ui::y_visible_in_viewport(y, automation_graph)) {
             continue;
         }
         const Color color = line.major ? t.editor_grid_major : t.editor_grid_minor;
@@ -415,7 +416,7 @@ editor_right_panel_view_result draw_timeline_automation_view(const timeline_auto
             automation_multiplier_at_t(
                 guides,
                 std::clamp((mouse.x - automation_graph.x) / automation_graph.width, 0.0f, 1.0f)),
-            IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
+            ui::is_shift_down());
         point.curve_to_next = curve;
         return point;
     };
@@ -463,7 +464,7 @@ editor_right_panel_view_result draw_timeline_automation_view(const timeline_auto
 
     const bool automation_hovered =
         ui::contains_point(automation_graph, mouse) && !guide_input_interacting && !snap_ui_hovered;
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && automation_hovered) {
+    if (ui::is_mouse_button_pressed() && automation_hovered) {
         if (hovered_point.has_value()) {
             result.panel_result.selected_scroll_event_index = hovered_point;
             timing_state.automation_drag_point_index = hovered_point;
@@ -477,14 +478,14 @@ editor_right_panel_view_result draw_timeline_automation_view(const timeline_auto
             timing_state.automation_drag_point_index.reset();
             timing_state.automation_pending_add = true;
         }
-    } else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && guide_input_interacting) {
+    } else if (ui::is_mouse_button_pressed() && guide_input_interacting) {
         timing_state.automation_drag_point_index.reset();
         timing_state.automation_pending_add = false;
-    } else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && snap_ui_hovered) {
+    } else if (ui::is_mouse_button_pressed() && snap_ui_hovered) {
         timing_state.automation_drag_point_index.reset();
         timing_state.automation_pending_add = false;
     }
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+    if (ui::is_mouse_button_released()) {
         if (timing_state.automation_pending_add &&
             automation_hovered &&
             !timing_state.automation_drag_point_index.has_value()) {
@@ -493,7 +494,7 @@ editor_right_panel_view_result draw_timeline_automation_view(const timeline_auto
         timing_state.automation_drag_point_index.reset();
         timing_state.automation_pending_add = false;
     }
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) &&
+    if (ui::is_mouse_button_down() &&
         !snap_ui_hovered &&
         timing_state.automation_drag_point_index.has_value() &&
         *timing_state.automation_drag_point_index < model.scroll_automation.size()) {
@@ -504,7 +505,7 @@ editor_right_panel_view_result draw_timeline_automation_view(const timeline_auto
                            model.scroll_automation[*timing_state.automation_drag_point_index].multiplier));
         result.panel_result.selected_scroll_event_index = timing_state.automation_drag_point_index;
     }
-    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && !snap_ui_hovered && hovered_point.has_value()) {
+    if (ui::is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) && !snap_ui_hovered && hovered_point.has_value()) {
         result.panel_result.selected_scroll_event_index = hovered_point;
         result.panel_result.delete_selected_scroll = true;
     }

@@ -12,6 +12,7 @@
 #include "theme.h"
 #include "tween.h"
 #include "ui_draw.h"
+#include "ui_hit.h"
 
 namespace {
 
@@ -146,7 +147,7 @@ void title_settings_overlay::update(float dt) {
         return;
     }
 
-    if (IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+    if (ui::is_cancel_pressed()) {
         request_close();
         return;
     }

@@ -7,6 +7,7 @@
 #include "title/title_friends_effects.h"
 #include "title/title_friends_reducer.h"
 #include "tween.h"
+#include "ui_hit.h"
 
 void title_friends_controller::reset() {
     state_ = {};
@@ -57,12 +58,12 @@ bool title_friends_controller::handle_input() {
         return false;
     }
     if (state_.suppress_background_close_until_release) {
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        if (ui::is_mouse_button_down_or_released()) {
             return true;
         }
         state_.suppress_background_close_until_release = false;
     }
-    if ((IsKeyPressed(KEY_ESCAPE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) && !state_.operation_active) {
+    if (ui::is_cancel_pressed() && !state_.operation_active) {
         close();
         return true;
     }

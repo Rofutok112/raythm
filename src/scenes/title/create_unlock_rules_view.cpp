@@ -1,6 +1,8 @@
 #include "title/create_unlock_rules_view.h"
 
 #include <algorithm>
+#include <array>
+#include <span>
 #include <string>
 
 #include "scene_common.h"
@@ -8,6 +10,7 @@
 #include "ui_clip.h"
 #include "ui_draw.h"
 #include "ui_hit.h"
+#include "ui_scroll.h"
 #include "virtual_screen.h"
 
 namespace title_create_unlock_rules_view {
@@ -30,6 +33,10 @@ constexpr float kRuleListPadding = 12.0f;
 constexpr float kRuleListScrollbarWidth = 8.0f;
 constexpr float kRuleListScrollbarGap = 6.0f;
 constexpr float kRuleListWheelStep = 72.0f;
+constexpr float kRuleTitleTop = 6.0f;
+constexpr float kRuleTitleHeight = 20.0f;
+constexpr float kRuleSummaryTop = 31.0f;
+constexpr float kRuleSummaryHeight = 18.0f;
 
 struct unlock_rules_layout {
     Rectangle dialog;
@@ -52,6 +59,13 @@ struct rule_list_layout {
     Rectangle scrollbar;
 };
 
+struct modal_action_button {
+    Rectangle rect{};
+    const char* label = "";
+    bool enabled = true;
+    command_type command = command_type::none;
+};
+
 constexpr unlock_rules_layout make_layout() {
     return {
         .dialog = kDialogRect,
@@ -70,37 +84,24 @@ constexpr unlock_rules_layout make_layout() {
 
 constexpr rule_list_layout rule_list_layout_for(Rectangle section) {
     const Rectangle content = ui::inset(section, kRuleListPadding);
-    const Rectangle scrollbar = {
-        content.x + content.width - kRuleListScrollbarWidth,
-        content.y,
-        kRuleListScrollbarWidth,
-        content.height,
-    };
-    const Rectangle viewport = {
-        content.x,
-        content.y,
-        content.width - kRuleListScrollbarWidth - kRuleListScrollbarGap,
-        content.height,
-    };
-    return {.section = section, .content = content, .viewport = viewport, .scrollbar = scrollbar};
+    const ui::rect_pair split = ui::split_trailing(content, kRuleListScrollbarWidth, kRuleListScrollbarGap);
+    return {.section = section, .content = content, .viewport = split.first, .scrollbar = split.second};
 }
 
 float rule_list_content_height(std::size_t count, float viewport_height) {
-    if (count == 0) {
-        return viewport_height;
-    }
-    const float rows = static_cast<float>(count) * kRowHeight;
-    const float gaps = static_cast<float>(count - 1) * kRowGap;
-    return std::max(viewport_height, rows + gaps);
+    return ui::vertical_list_content_height(count, kRowHeight, kRowGap, viewport_height);
 }
 
 Rectangle rule_row_rect(Rectangle viewport, int index, float scroll_y) {
-    return {
-        viewport.x,
-        viewport.y + static_cast<float>(index) * (kRowHeight + kRowGap) - scroll_y,
-        viewport.width,
-        kRowHeight,
-    };
+    return ui::vertical_list_row_rect(viewport, index, kRowHeight, kRowGap, scroll_y);
+}
+
+Rectangle rule_row_title_rect(Rectangle row_content) {
+    return ui::vertical_span_rect(row_content, row_content.y + kRuleTitleTop, kRuleTitleHeight);
+}
+
+Rectangle rule_row_summary_rect(Rectangle row_content) {
+    return ui::vertical_span_rect(row_content, row_content.y + kRuleSummaryTop, kRuleSummaryHeight);
 }
 
 void capture_command(command& target, command_type type, int index = -1) {
@@ -122,6 +123,29 @@ ui::button_state draw_modal_button(Rectangle rect, const char* label, int font_s
     });
 }
 
+std::array<modal_action_button, 4> footer_action_buttons(const unlock_rules_layout& layout, const model& data) {
+    return {{
+        {.rect = layout.add, .label = "ADD", .enabled = !data.busy && data.can_add, .command = command_type::add_rule},
+        {.rect = layout.remove,
+         .label = "REMOVE",
+         .enabled = !data.busy && data.can_remove,
+         .command = command_type::remove_rule},
+        {.rect = layout.validate,
+         .label = data.validate_label.c_str(),
+         .enabled = !data.busy,
+         .command = command_type::validate},
+        {.rect = layout.save, .label = data.save_label.c_str(), .enabled = !data.busy, .command = command_type::save},
+    }};
+}
+
+void draw_modal_action_buttons(std::span<const modal_action_button> buttons, command& action) {
+    for (const modal_action_button& button : buttons) {
+        if (draw_modal_button(button.rect, button.label, 16).clicked && button.enabled) {
+            capture_command(action, button.command);
+        }
+    }
+}
+
 ui::row_state draw_modal_rule_row(Rectangle rect, bool selected) {
     const auto& t = *g_theme;
     return ui::row(rect, {
@@ -138,7 +162,7 @@ ui::row_state draw_modal_rule_row(Rectangle rect, bool selected) {
 
 float max_rule_list_scroll(std::size_t rule_count) {
     const rule_list_layout list = rule_list_layout_for(kRuleListRect);
-    return std::max(0.0f, rule_list_content_height(rule_count, list.content.height) - list.content.height);
+    return ui::max_scroll_offset(rule_list_content_height(rule_count, list.content.height), list.content);
 }
 
 draw_result draw(const model& data) {
@@ -165,10 +189,11 @@ draw_result draw(const model& data) {
 
     ui::section(list_layout.section);
     const float list_content_height = rule_list_content_height(data.rules.size(), list_layout.content.height);
-    const float max_scroll = std::max(0.0f, list_content_height - list_layout.content.height);
-    const bool list_scrollable = max_scroll > 0.0f;
+    ui::scroll_offset_state scroll_state =
+        ui::scroll_offset_state_for(list_layout.content, list_content_height, result.rule_list_scroll_y);
+    const bool list_scrollable = scroll_state.max_scroll > 0.0f;
     const Rectangle rule_viewport = list_scrollable ? list_layout.viewport : list_layout.content;
-    result.rule_list_scroll_y = std::clamp(result.rule_list_scroll_y, 0.0f, max_scroll);
+    result.rule_list_scroll_y = scroll_state.offset;
 
     const ui::scrollbar_interaction scrollbar = ui::vertical_scrollbar(
         list_layout.scrollbar,
@@ -182,26 +207,31 @@ draw_result draw(const model& data) {
     if (scrollbar.changed || scrollbar.dragging) {
         result.rule_list_scroll_y = scrollbar.scroll_offset;
     }
-    if (ui::is_hovered(rule_viewport, ui::draw_layer::modal) && GetMouseWheelMove() != 0.0f) {
-        result.rule_list_scroll_y =
-            std::clamp(result.rule_list_scroll_y - GetMouseWheelMove() * kRuleListWheelStep, 0.0f, max_scroll);
+    const float wheel = ui::mouse_wheel_move();
+    if (ui::is_hovered(rule_viewport, ui::draw_layer::modal)) {
+        scroll_state = ui::wheel_scrolled_offset_state(
+            rule_viewport,
+            virtual_screen::get_virtual_mouse(),
+            wheel,
+            list_content_height,
+            result.rule_list_scroll_y,
+            kRuleListWheelStep);
+        result.rule_list_scroll_y = scroll_state.offset;
     }
     {
         ui::scoped_clip_rect clip(rule_viewport);
-        for (int i = 0; i < static_cast<int>(data.rules.size()); ++i) {
+        const ui::index_range visible_rows = ui::vertical_list_visible_range(
+            data.rules.size(), rule_viewport, kRowHeight, kRowGap, result.rule_list_scroll_y);
+        for (int i = visible_rows.begin; i < visible_rows.end; ++i) {
             const Rectangle row = rule_row_rect(rule_viewport, i, result.rule_list_scroll_y);
-            if (row.y + row.height < rule_viewport.y ||
-                row.y > rule_viewport.y + rule_viewport.height) {
-                continue;
-            }
             const rule_item& item = data.rules[static_cast<std::size_t>(i)];
             const ui::row_state state = draw_modal_rule_row(row, item.selected);
             const Rectangle row_content = ui::inset(row, ui::edge_insets::symmetric(0.0f, 12.0f));
             ui::draw_text_in_rect(item.title.c_str(), 15,
-                                  {row_content.x, row_content.y + 6.0f, row_content.width, 20.0f},
+                                  rule_row_title_rect(row_content),
                                   item.selected ? t.text : t.text_dim, ui::text_align::left);
             ui::draw_text_in_rect(item.summary.c_str(), 11,
-                                  {row_content.x, row_content.y + 31.0f, row_content.width, 18.0f},
+                                  rule_row_summary_rect(row_content),
                                   t.text_muted, ui::text_align::left);
             if (state.clicked && ui::contains_point(rule_viewport, virtual_screen::get_virtual_mouse())) {
                 capture_command(result.action, command_type::select_rule, i);
@@ -281,18 +311,7 @@ draw_result draw(const model& data) {
         }
     }
 
-    if (draw_modal_button(layout.add, "ADD", 16).clicked && !data.busy && data.can_add) {
-        capture_command(result.action, command_type::add_rule);
-    }
-    if (draw_modal_button(layout.remove, "REMOVE", 16).clicked && !data.busy && data.can_remove) {
-        capture_command(result.action, command_type::remove_rule);
-    }
-    if (draw_modal_button(layout.validate, data.validate_label.c_str(), 16).clicked && !data.busy) {
-        capture_command(result.action, command_type::validate);
-    }
-    if (draw_modal_button(layout.save, data.save_label.c_str(), 16).clicked && !data.busy) {
-        capture_command(result.action, command_type::save);
-    }
+    draw_modal_action_buttons(footer_action_buttons(layout, data), result.action);
     ui::draw_text_in_rect(data.message.c_str(), 14, layout.message,
                           data.dirty ? t.accent : t.text_muted, ui::text_align::left);
 

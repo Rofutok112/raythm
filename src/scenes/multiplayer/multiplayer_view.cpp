@@ -15,6 +15,9 @@
 #include "theme.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_hit.h"
+#include "ui_layout.h"
+#include "ui_scroll.h"
 #include "ui/icons/raythm_icons.h"
 #include "ui_notice.h"
 #include "ui_text_input.h"
@@ -63,6 +66,8 @@ constexpr float kQueueWheelStep = 120.0f;
 constexpr Rectangle kCreateModalRect{610.0f, 250.0f, 700.0f, 430.0f};
 constexpr Rectangle kPasswordModalRect{660.0f, 310.0f, 600.0f, 300.0f};
 constexpr Rectangle kInviteModalRect{560.0f, 210.0f, 800.0f, 620.0f};
+constexpr float kInviteFriendRowHeight = 72.0f;
+constexpr float kInviteFriendRowGap = 10.0f;
 constexpr int kRoomGridColumns = 3;
 constexpr float kRoomCardGap = 16.0f;
 constexpr float kRoomCardHeight = 132.0f;
@@ -71,6 +76,8 @@ constexpr float kChatMessagePaddingX = 12.0f;
 constexpr float kChatMessagePaddingY = 9.0f;
 constexpr float kChatLineHeight = 21.0f;
 constexpr float kMemberAvatarSize = 40.0f;
+constexpr float kMemberRowHeight = 56.0f;
+constexpr float kMemberRowGap = 10.0f;
 
 struct room_card_layout {
     Rectangle card = {};
@@ -204,6 +211,25 @@ struct invite_friends_modal_interaction {
     std::string selected_user_id;
 };
 
+struct queue_row_action_button {
+    ui_command command = ui_command::none;
+    Rectangle rect{};
+    void (*draw_icon)(Rectangle, Color, float) = nullptr;
+    Color bg{};
+    Color bg_hover{};
+    Color icon{};
+    Color icon_hover{};
+    bool enabled = true;
+    float inset = 8.0f;
+};
+
+struct invite_friend_action_button {
+    std::string user_id;
+    Rectangle rect{};
+    const char* label = "";
+    bool enabled = true;
+};
+
 bool busy(const state& state) {
     return state.pending != pending_operation::none;
 }
@@ -239,11 +265,11 @@ bool queue_item_installed(const state& state, const std::string& item_id) {
 }
 
 float queue_content_height(const room_detail& room) {
-    if (room.queue.empty()) {
-        return 0.0f;
-    }
-    return static_cast<float>(room.queue.size()) * kQueueRowHeight +
-           static_cast<float>(room.queue.size() - 1) * kQueueRowGap;
+    return ui::vertical_list_content_height(room.queue.size(), kQueueRowHeight, kQueueRowGap);
+}
+
+constexpr Rectangle queue_row_rect(int index, float scroll_y) {
+    return ui::vertical_list_row_rect(kQueueListRect, index, kQueueRowHeight, kQueueRowGap, scroll_y);
 }
 
 ui::notice_tone status_notice_tone(const std::string& message) {
@@ -303,17 +329,18 @@ void draw_panel_title(Rectangle rect, const char* title) {
 }
 
 room_card_layout room_card_layout_for(int index) {
-    const int column = index % kRoomGridColumns;
-    const int row_index = index / kRoomGridColumns;
     const float card_width =
         (kListViewRect.width - kRoomCardGap * static_cast<float>(kRoomGridColumns - 1)) /
         static_cast<float>(kRoomGridColumns);
-    const Rectangle card{
-        kListViewRect.x + static_cast<float>(column) * (card_width + kRoomCardGap),
-        kListViewRect.y + static_cast<float>(row_index) * (kRoomCardHeight + kRoomCardGap),
+    const Rectangle card = ui::vertical_grid_item_rect(
+        kListViewRect,
+        index,
+        kRoomGridColumns,
         card_width,
         kRoomCardHeight,
-    };
+        kRoomCardGap,
+        kRoomCardGap,
+        0.0f);
     return {
         .card = card,
         .title = {card.x + 24.0f, card.y + 14.0f, card.width - 48.0f, 34.0f},
@@ -334,6 +361,19 @@ member_row_layout member_row_layout_for(Rectangle row, bool host) {
         .presence_icon = {row.x + row.width - 104.0f, row.y + 14.0f, 28.0f, 28.0f},
         .ready_icon = {row.x + row.width - 56.0f, row.y + 14.0f, 28.0f, 28.0f},
     };
+}
+
+constexpr Rectangle member_rows_viewport() {
+    return {
+        kMemberPanelRect.x + 16.0f,
+        kMemberPanelRect.y + 72.0f,
+        kMemberPanelRect.width - 32.0f,
+        kMemberPanelRect.height - 84.0f,
+    };
+}
+
+constexpr Rectangle member_row_rect(int index) {
+    return ui::vertical_list_row_rect(member_rows_viewport(), index, kMemberRowHeight, kMemberRowGap, 0.0f);
 }
 
 queue_preview_layout queue_preview_layout_for() {
@@ -362,6 +402,71 @@ queue_row_layout queue_row_layout_for(Rectangle row, float action_width) {
 
 Rectangle queue_row_action_rect(Rectangle row, float right_x) {
     return {right_x, row.y + 22.0f, 42.0f, 42.0f};
+}
+
+std::vector<queue_row_action_button> queue_row_action_buttons_for(Rectangle row,
+                                                                  float start_x,
+                                                                  bool can_remove,
+                                                                  bool self_host,
+                                                                  bool can_move_up,
+                                                                  bool can_move_down,
+                                                                  bool can_download) {
+    std::vector<queue_row_action_button> buttons;
+    float action_x = start_x;
+    if (can_remove) {
+        action_x -= 42.0f;
+        buttons.push_back({
+            .command = ui_command::remove_queue_item,
+            .rect = queue_row_action_rect(row, action_x),
+            .draw_icon = raythm_icons::draw_trash_2,
+            .bg = lerp_color(g_theme->row, g_theme->error, 0.08f),
+            .bg_hover = lerp_color(g_theme->row_hover, g_theme->error, 0.18f),
+            .icon = g_theme->error,
+            .icon_hover = lerp_color(g_theme->error, WHITE, 0.18f),
+            .enabled = true,
+            .inset = 8.0f,
+        });
+        action_x -= 8.0f;
+    }
+    if (self_host) {
+        action_x -= 48.0f;
+        buttons.push_back({
+            .command = ui_command::move_queue_item_down,
+            .rect = queue_row_action_rect(row, action_x),
+            .draw_icon = raythm_icons::draw_chevron_down,
+            .bg = g_theme->row,
+            .bg_hover = g_theme->row_hover,
+            .icon = g_theme->text_muted,
+            .enabled = can_move_down,
+            .inset = 8.0f,
+        });
+        action_x -= 46.0f;
+        buttons.push_back({
+            .command = ui_command::move_queue_item_up,
+            .rect = queue_row_action_rect(row, action_x),
+            .draw_icon = raythm_icons::draw_chevron_up,
+            .bg = g_theme->row,
+            .bg_hover = g_theme->row_hover,
+            .icon = g_theme->text_muted,
+            .enabled = can_move_up,
+            .inset = 8.0f,
+        });
+        action_x -= 8.0f;
+    }
+    if (can_download) {
+        action_x -= 42.0f;
+        buttons.push_back({
+            .command = ui_command::none,
+            .rect = queue_row_action_rect(row, action_x),
+            .draw_icon = raythm_icons::draw_download,
+            .bg = g_theme->accent,
+            .bg_hover = g_theme->row_hover,
+            .icon = g_theme->text,
+            .enabled = true,
+            .inset = 8.0f,
+        });
+    }
+    return buttons;
 }
 
 chat_panel_layout chat_panel_layout_for() {
@@ -436,6 +541,22 @@ invite_friend_row_layout invite_friend_row_layout_for(Rectangle row) {
     };
 }
 
+invite_friend_action_button invite_friend_action_button_for(const invite_friend_row_layout& layout,
+                                                            const friend_client::social_user& user,
+                                                            const state& state) {
+    const bool selected = state.selected_invite_user_id == user.id;
+    return {
+        .user_id = user.id,
+        .rect = layout.invite_button,
+        .label = selected || state.pending == pending_operation::invite_friend ? "Sending..." : "Invite",
+        .enabled = !busy(state) && !user.id.empty(),
+    };
+}
+
+constexpr Rectangle invite_friend_row_rect(Rectangle viewport, int index) {
+    return ui::vertical_list_row_rect(viewport, index, kInviteFriendRowHeight, kInviteFriendRowGap, 0.0f);
+}
+
 size_t utf8_codepoint_length(unsigned char ch) {
     if ((ch & 0x80) == 0) {
         return 1;
@@ -484,16 +605,6 @@ std::vector<std::string> wrap_chat_text(const std::string& text, float max_width
     return lines;
 }
 
-Rectangle centered_icon_rect(Rectangle rect, float inset) {
-    const float size = std::max(1.0f, std::min(rect.width, rect.height) - inset * 2.0f);
-    return {
-        rect.x + (rect.width - size) * 0.5f,
-        rect.y + (rect.height - size) * 0.5f,
-        size,
-        size
-    };
-}
-
 Color member_presence_color(const room_member& member) {
     if (member.status == "PLAYING") {
         return g_theme->accent;
@@ -534,11 +645,11 @@ std::string friend_avatar_label(const friend_client::social_user& user) {
 void draw_member_presence_icon(Rectangle rect, const room_member& member) {
     const Color color = member_presence_color(member);
     if (member.status == "PLAYING") {
-        raythm_icons::draw_play(centered_icon_rect(rect, 4.0f), color, 3.0f);
+        raythm_icons::draw_play(ui::inscribed_square(rect, 4.0f), color, 3.0f);
     } else if (member.connected) {
-        raythm_icons::draw_note_tap(centered_icon_rect(rect, 4.0f), color, 3.0f);
+        raythm_icons::draw_note_tap(ui::inscribed_square(rect, 4.0f), color, 3.0f);
     } else {
-        raythm_icons::draw_clock_3(centered_icon_rect(rect, 2.0f), color, 3.0f);
+        raythm_icons::draw_clock_3(ui::inscribed_square(rect, 2.0f), color, 3.0f);
     }
 }
 
@@ -576,6 +687,45 @@ ui::button_state draw_icon_button(Rectangle rect,
         .icon_inset = inset,
         .icon_stroke_width = 3.0f,
     });
+}
+
+ui::button_state draw_queue_row_action_button(const queue_row_action_button& button) {
+    return draw_icon_button(button.rect,
+                            button.draw_icon,
+                            button.bg,
+                            button.bg_hover,
+                            button.icon,
+                            button.enabled,
+                            button.inset,
+                            button.icon_hover);
+}
+
+ui::button_state draw_invite_friend_action_button(const invite_friend_action_button& button) {
+    return ui::queued_button(button.rect,
+                             localization::tr_literal(button.label), {
+                                 .layer = ui::draw_layer::modal,
+                                 .font_size = 14,
+                             });
+}
+
+modal_command_interaction draw_modal_footer_buttons(const std::array<Rectangle, 2>& buttons,
+                                                    const char* primary_label,
+                                                    ui_command primary_command,
+                                                    bool primary_enabled) {
+    modal_command_interaction interaction;
+    const std::array<ui::action_button_definition<ui_command>, 2> footer_buttons = {{
+        {buttons[0], localization::tr(localization::text_key::cancel), ui_command::cancel_modal},
+        {buttons[1], primary_label, primary_enabled ? primary_command : ui_command::none},
+    }};
+    const auto command = ui::queued_draw_action_buttons<ui_command>(footer_buttons, {
+        .layer = ui::draw_layer::modal,
+        .font_size = 18,
+        .border_width = 2.0f,
+    });
+    if (command.has_value()) {
+        interaction.command = *command;
+    }
+    return interaction;
 }
 
 queue_preview_interaction draw_queue_preview_controls(const state& state, const room_detail& room) {
@@ -720,11 +870,19 @@ member_panel_interaction draw_members(const state& state, const room_detail& roo
     if (invite_button.clicked && invite_available && !busy(state)) {
         interaction.invite_requested = true;
     }
-    Rectangle row{kMemberPanelRect.x + 16.0f, kMemberPanelRect.y + 72.0f, kMemberPanelRect.width - 32.0f, 56.0f};
+    const Rectangle rows_viewport = member_rows_viewport();
+    std::vector<const room_member*> visible_members;
+    visible_members.reserve(room.members.size());
     for (const room_member& member : room.members) {
-        if (!visible_member_status(member.status)) {
-            continue;
+        if (visible_member_status(member.status)) {
+            visible_members.push_back(&member);
         }
+    }
+    const ui::index_range visible_rows = ui::vertical_list_fitting_range(
+        visible_members.size(), rows_viewport, kMemberRowHeight, kMemberRowGap, 0.0f);
+    for (int i = visible_rows.begin; i < visible_rows.end; ++i) {
+        const room_member& member = *visible_members[static_cast<size_t>(i)];
+        const Rectangle row = member_row_rect(i);
         const bool self = (!state.self_user_id.empty() && member.user_id == state.self_user_id);
         const ui::row_state member_row = ui::row(row, {
             .border_width = 1.5f,
@@ -748,17 +906,13 @@ member_panel_interaction draw_members(const state& state, const room_detail& roo
                                           state.auth.server_url);
         ui::draw_text_in_rect(name.c_str(), 19, layout.name, g_theme->text, ui::text_align::left);
         if (host) {
-            raythm_icons::draw_crown(centered_icon_rect(layout.host_icon, 2.0f), g_theme->slow, 3.0f);
+            raythm_icons::draw_crown(ui::inscribed_square(layout.host_icon, 2.0f), g_theme->slow, 3.0f);
         }
         draw_member_presence_icon(layout.presence_icon, member);
         if (member.ready) {
-            raythm_icons::draw_circle_check(centered_icon_rect(layout.ready_icon, 2.0f), g_theme->success, 3.0f);
+            raythm_icons::draw_circle_check(ui::inscribed_square(layout.ready_icon, 2.0f), g_theme->success, 3.0f);
         } else {
-            raythm_icons::draw_clock_3(centered_icon_rect(layout.ready_icon, 2.0f), g_theme->text_muted, 3.0f);
-        }
-        row.y += row.height + 10.0f;
-        if (row.y + row.height > kMemberPanelRect.y + kMemberPanelRect.height - 12.0f) {
-            break;
+            raythm_icons::draw_clock_3(ui::inscribed_square(layout.ready_icon, 2.0f), g_theme->text_muted, 3.0f);
         }
     }
     return interaction;
@@ -812,14 +966,15 @@ queue_panel_interaction draw_queue(const state& state, const room_detail& room) 
         return interaction;
     }
 
-    const float max_scroll = std::max(0.0f, queue_content_height(room) - kQueueListRect.height);
+    const float max_scroll = ui::max_scroll_offset(queue_content_height(room), kQueueListRect);
     float queue_scroll_y = state.queue_scroll_y;
     float queue_scroll_y_target = state.queue_scroll_y_target;
     if (ui::is_hovered(kQueueListRect)) {
-        queue_scroll_y_target -= GetMouseWheelMove() * kQueueWheelStep;
+        queue_scroll_y_target =
+            ui::wheel_scrolled_target(queue_scroll_y_target, ui::mouse_wheel_move(), kQueueWheelStep);
     }
-    queue_scroll_y_target = std::clamp(queue_scroll_y_target, 0.0f, max_scroll);
-    queue_scroll_y = std::clamp(queue_scroll_y, 0.0f, max_scroll);
+    queue_scroll_y_target = ui::clamp_scroll_offset(queue_scroll_y_target, max_scroll);
+    queue_scroll_y = ui::clamp_scroll_offset(queue_scroll_y, max_scroll);
     if (std::abs(queue_scroll_y - queue_scroll_y_target) < 0.5f) {
         queue_scroll_y = queue_scroll_y_target;
     } else {
@@ -831,18 +986,11 @@ queue_panel_interaction draw_queue(const state& state, const room_detail& room) 
 
     {
         ui::scoped_clip_rect clip(kQueueListRect);
-        int queue_index = 0;
-        for (const room_queue_item& item : room.queue) {
-            Rectangle row{
-                kQueueListRect.x,
-                kQueueListRect.y + static_cast<float>(queue_index) * (kQueueRowHeight + kQueueRowGap) - queue_scroll_y,
-                kQueueListRect.width,
-                kQueueRowHeight,
-            };
-            if (row.y + row.height < kQueueListRect.y || row.y > kQueueListRect.y + kQueueListRect.height) {
-                ++queue_index;
-                continue;
-            }
+        const ui::index_range visible_rows = ui::vertical_list_visible_range(
+            room.queue.size(), kQueueListRect, kQueueRowHeight, kQueueRowGap, queue_scroll_y);
+        for (int queue_index = visible_rows.begin; queue_index < visible_rows.end; ++queue_index) {
+            const room_queue_item& item = room.queue[static_cast<std::size_t>(queue_index)];
+            const Rectangle row = queue_row_rect(queue_index, queue_scroll_y);
             const bool has_level = item.level > 0.0f;
             const Color level_color = has_level ? difficulty_level_color(item.level) : g_theme->accent;
             const bool hovered = ui::is_hovered(row);
@@ -871,58 +1019,31 @@ queue_panel_interaction draw_queue(const state& state, const room_detail& room) 
             ui::draw_text_in_rect(localization::tr_literal(installed ? "Installed" : "Not installed"), 13,
                                   row_layout.install_status,
                                   installed ? g_theme->success : g_theme->text_muted, ui::text_align::left);
-            float action_x = row.x + row.width - 16.0f;
-            if (can_remove) {
-                action_x -= 42.0f;
-                if (draw_icon_button(queue_row_action_rect(row, action_x),
-                                     raythm_icons::draw_trash_2,
-                                     lerp_color(g_theme->row, g_theme->error, 0.08f),
-                                     lerp_color(g_theme->row_hover, g_theme->error, 0.18f),
-                                     g_theme->error,
-                                     true,
-                                     8.0f,
-                                     lerp_color(g_theme->error, WHITE, 0.18f)).clicked &&
-                    !busy(state)) {
-                    interaction.selected_queue_item_id = item.id;
-                    interaction.command = ui_command::remove_queue_item;
+            const bool can_move_up = queue_index > 0;
+            const bool can_move_down = queue_index + 1 < static_cast<int>(room.queue.size());
+            const std::vector<queue_row_action_button> action_buttons =
+                queue_row_action_buttons_for(row,
+                                             row.x + row.width - 16.0f,
+                                             can_remove,
+                                             self_host,
+                                             can_move_up,
+                                             can_move_down,
+                                             can_download);
+            for (const queue_row_action_button& button : action_buttons) {
+                if (!draw_queue_row_action_button(button).clicked || !button.enabled || busy(state)) {
+                    continue;
                 }
-                action_x -= 8.0f;
-            }
-            if (self_host) {
-                const bool can_move_up = queue_index > 0;
-                const bool can_move_down = queue_index + 1 < static_cast<int>(room.queue.size());
-                action_x -= 48.0f;
-                if (draw_icon_button(queue_row_action_rect(row, action_x),
-                                     raythm_icons::draw_chevron_down,
-                                     g_theme->row, g_theme->row_hover, g_theme->text_muted,
-                                     can_move_down, 8.0f).clicked &&
-                    can_move_down && !busy(state)) {
-                    interaction.selected_queue_item_id = item.id;
-                    interaction.command = ui_command::move_queue_item_down;
-                }
-                action_x -= 46.0f;
-                if (draw_icon_button(queue_row_action_rect(row, action_x),
-                                     raythm_icons::draw_chevron_up,
-                                     g_theme->row, g_theme->row_hover, g_theme->text_muted,
-                                     can_move_up, 8.0f).clicked &&
-                    can_move_up && !busy(state)) {
-                    interaction.selected_queue_item_id = item.id;
-                    interaction.command = ui_command::move_queue_item_up;
-                }
-                action_x -= 8.0f;
-            }
-            if (can_download) {
-                action_x -= 42.0f;
-                if (draw_icon_button(queue_row_action_rect(row, action_x),
-                                     raythm_icons::draw_download,
-                                     g_theme->accent, g_theme->row_hover, g_theme->text, true, 8.0f).clicked &&
-                    !busy(state)) {
+                if (button.draw_icon == raythm_icons::draw_download) {
                     interaction.download_song_id = item.song_id;
                     interaction.download_chart_id = item.chart_id;
                     interaction.download_requested = true;
+                    continue;
+                }
+                if (button.command != ui_command::none) {
+                    interaction.selected_queue_item_id = item.id;
+                    interaction.command = button.command;
                 }
             }
-            ++queue_index;
         }
     }
     ui::scrollbar(kQueueScrollbarTrackRect,
@@ -942,7 +1063,7 @@ chat_panel_interaction draw_chat(state& state, const room_detail& room) {
     const chat_panel_layout layout = chat_panel_layout_for();
     struct chat_row {
         std::vector<std::string> lines;
-        float height = 0.0f;
+        ui::vertical_stack_item metrics = {};
     };
     std::vector<chat_row> rows;
     const Rectangle message_area = layout.message_area;
@@ -952,10 +1073,10 @@ chat_panel_interaction draw_chat(state& state, const room_detail& room) {
         const chat_message& message = room.chat[static_cast<size_t>(i)];
         chat_row row;
         row.lines = wrap_chat_text(message.display_name + ": " + message.message, text_width, 16);
-        row.height = std::max(42.0f,
-                              kChatMessagePaddingY * 2.0f +
-                              static_cast<float>(row.lines.size()) * kChatLineHeight);
-        const float next_total = total_height + (rows.empty() ? 0.0f : kChatMessageGap) + row.height;
+        row.metrics.height = std::max(42.0f,
+                                      kChatMessagePaddingY * 2.0f +
+                                      static_cast<float>(row.lines.size()) * kChatLineHeight);
+        const float next_total = total_height + (rows.empty() ? 0.0f : kChatMessageGap) + row.metrics.height;
         if (next_total > message_area.height && !rows.empty()) {
             break;
         }
@@ -963,16 +1084,41 @@ chat_panel_interaction draw_chat(state& state, const room_detail& room) {
         rows.push_back(std::move(row));
     }
     std::reverse(rows.begin(), rows.end());
-    float y = message_area.y + std::max(0.0f, message_area.height - total_height);
-    for (const chat_row& row : rows) {
-        const Rectangle box{message_area.x, y, message_area.width, row.height};
-        ui::surface(box, with_alpha(g_theme->row, 190), with_alpha(g_theme->border_light, 190), 1.0f);
-        float text_y = box.y + kChatMessagePaddingY;
-        for (const std::string& line : row.lines) {
-            ui::draw_text_f(line.c_str(), box.x + kChatMessagePaddingX, text_y, 16, g_theme->text_muted);
-            text_y += kChatLineHeight;
+    float row_y = 0.0f;
+    for (chat_row& row : rows) {
+        row.metrics.y = row_y;
+        row_y += row.metrics.height + kChatMessageGap;
+    }
+    const float stack_height = ui::vertical_stack_content_height(
+        static_cast<int>(rows.size()),
+        [&](int index) {
+            return rows[static_cast<std::size_t>(index)].metrics;
+        });
+    const Rectangle row_viewport{
+        message_area.x,
+        message_area.y + std::max(0.0f, message_area.height - stack_height),
+        message_area.width,
+        message_area.height,
+    };
+    {
+        ui::scoped_clip_rect clip(message_area);
+        const ui::index_range visible_rows = ui::vertical_stack_visible_range(
+            static_cast<int>(rows.size()),
+            [&](int index) {
+                return rows[static_cast<std::size_t>(index)].metrics;
+            },
+            row_viewport,
+            0.0f);
+        for (int row_index = visible_rows.begin; row_index < visible_rows.end; ++row_index) {
+            const chat_row& row = rows[static_cast<std::size_t>(row_index)];
+            const Rectangle box = ui::vertical_stack_item_rect(row_viewport, row.metrics, 0.0f);
+            ui::surface(box, with_alpha(g_theme->row, 190), with_alpha(g_theme->border_light, 190), 1.0f);
+            float text_y = box.y + kChatMessagePaddingY;
+            for (const std::string& line : row.lines) {
+                ui::draw_text_f(line.c_str(), box.x + kChatMessagePaddingX, text_y, 16, g_theme->text_muted);
+                text_y += kChatLineHeight;
+            }
         }
-        y += row.height + kChatMessageGap;
     }
     const ui::text_input_result chat_result =
         ui::text_input(layout.composer_input, state.chat_input, "", localization::tr_literal("Message..."), {
@@ -1132,25 +1278,15 @@ create_room_modal_interaction draw_create_modal(state& state) {
         interaction.toggle_host_only = true;
     }
 
-    const ui::button_state cancel =
-        ui::queued_button(layout.footer_buttons[0],
-                          localization::tr(localization::text_key::cancel), {
-                              .layer = ui::draw_layer::modal,
-                              .font_size = 18,
-                          });
-    const ui::button_state create =
-        ui::queued_button(layout.footer_buttons[1],
-                          busy(state)
-                              ? localization::tr(localization::text_key::creating)
-                              : localization::tr(localization::text_key::create), {
-                              .layer = ui::draw_layer::modal,
-                              .font_size = 18,
-                          });
-    if (cancel.clicked) {
-        interaction.command = ui_command::cancel_modal;
-    }
-    if (create.clicked && !busy(state)) {
-        interaction.command = ui_command::submit_create_room;
+    const modal_command_interaction footer =
+        draw_modal_footer_buttons(layout.footer_buttons,
+                                  busy(state)
+                                      ? localization::tr(localization::text_key::creating)
+                                      : localization::tr(localization::text_key::create),
+                                  ui_command::submit_create_room,
+                                  !busy(state));
+    if (footer.command != ui_command::none) {
+        interaction.command = footer.command;
     }
     return interaction;
 }
@@ -1177,23 +1313,13 @@ modal_command_interaction draw_password_modal(state& state) {
     if (password_result.submitted && !busy(state)) {
         interaction.command = ui_command::submit_password;
     }
-    const ui::button_state cancel =
-        ui::queued_button(layout.footer_buttons[0],
-                          localization::tr(localization::text_key::cancel), {
-                              .layer = ui::draw_layer::modal,
-                              .font_size = 18,
-                          });
-    const ui::button_state join =
-        ui::queued_button(layout.footer_buttons[1],
-                          busy(state) ? localization::tr_literal("Joining...") : localization::tr_literal("Join"), {
-                              .layer = ui::draw_layer::modal,
-                              .font_size = 18,
-                          });
-    if (cancel.clicked) {
-        interaction.command = ui_command::cancel_modal;
-    }
-    if (join.clicked && !busy(state)) {
-        interaction.command = ui_command::submit_password;
+    const modal_command_interaction footer =
+        draw_modal_footer_buttons(layout.footer_buttons,
+                                  busy(state) ? localization::tr_literal("Joining...") : localization::tr_literal("Join"),
+                                  ui_command::submit_password,
+                                  !busy(state));
+    if (footer.command != ui_command::none) {
+        interaction.command = footer.command;
     }
     return interaction;
 }
@@ -1236,11 +1362,11 @@ invite_friends_modal_interaction draw_invite_friends_modal(const state& state) {
     }
 
     ui::scoped_clip_rect clip(viewport);
-    Rectangle row{viewport.x, viewport.y, viewport.width, 72.0f};
-    for (const friend_client::social_user& user : state.invite_friends.friends) {
-        if (row.y + row.height > viewport.y + viewport.height) {
-            break;
-        }
+    const ui::index_range visible_rows = ui::vertical_list_fitting_range(
+        state.invite_friends.friends.size(), viewport, kInviteFriendRowHeight, kInviteFriendRowGap, 0.0f);
+    for (int i = visible_rows.begin; i < visible_rows.end; ++i) {
+        const friend_client::social_user& user = state.invite_friends.friends[static_cast<size_t>(i)];
+        const Rectangle row = invite_friend_row_rect(viewport, i);
         ui::row(row, {
             .layer = ui::draw_layer::modal,
             .border_width = 1.5f,
@@ -1269,18 +1395,12 @@ invite_friends_modal_interaction draw_invite_friends_modal(const state& state) {
                               row_layout.status,
                               user.online_status == "offline" ? g_theme->text_muted : g_theme->success,
                               ui::text_align::left);
-        const bool selected = state.selected_invite_user_id == user.id;
-        const ui::button_state invite =
-            ui::queued_button(row_layout.invite_button,
-                              localization::tr_literal(selected || state.pending == pending_operation::invite_friend ? "Sending..." : "Invite"), {
-                                  .layer = ui::draw_layer::modal,
-                                  .font_size = 14,
-                              });
-        if (invite.clicked && !busy(state) && !user.id.empty()) {
-            interaction.selected_user_id = user.id;
+        const invite_friend_action_button invite_button =
+            invite_friend_action_button_for(row_layout, user, state);
+        if (draw_invite_friend_action_button(invite_button).clicked && invite_button.enabled) {
+            interaction.selected_user_id = invite_button.user_id;
             interaction.command = ui_command::send_room_invite;
         }
-        row.y += row.height + 10.0f;
     }
     return interaction;
 }

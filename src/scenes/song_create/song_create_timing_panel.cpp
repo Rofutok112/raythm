@@ -1,6 +1,5 @@
 #include "song_create/song_create_timing_panel.h"
 
-#include <algorithm>
 #include <array>
 #include <string>
 
@@ -8,10 +7,17 @@
 #include "song_create/song_create_timing_service.h"
 #include "theme.h"
 #include "ui_clip.h"
+#include "ui_hit.h"
+#include "ui_scroll.h"
 #include "ui_text.h"
+#include "virtual_screen.h"
 
 namespace song_create::timing_panel {
 namespace {
+
+constexpr float kTimingEventRowHeight = 28.0f;
+constexpr float kTimingEventRowGap = 5.0f;
+constexpr float kTimingEventWheelStep = 42.0f;
 
 bool numeric_filter(int codepoint, const std::string&) {
     return (codepoint >= '0' && codepoint <= '9') || codepoint == '.';
@@ -56,6 +62,41 @@ struct timing_editor_layout {
     Rectangle metronome;
 };
 
+enum class timing_editor_action {
+    add_bpm,
+    add_meter,
+    delete_selected,
+};
+
+struct timing_editor_action_definition {
+    timing_editor_action action;
+    const char* label;
+};
+
+struct timing_button_descriptor {
+    Rectangle rect;
+    const char* label;
+    int font_size;
+    ui::draw_layer layer;
+    Color bg;
+    Color bg_hover;
+    Color text;
+    float border_width;
+};
+
+struct timing_event_row {
+    const timing_event* event = nullptr;
+    std::size_t index = 0;
+    Rectangle rect{};
+    bool selected = false;
+};
+
+constexpr std::array<timing_editor_action_definition, 3> kTimingEditorActions = {{
+    {timing_editor_action::add_bpm, "Add BPM"},
+    {timing_editor_action::add_meter, "Add Time Sig"},
+    {timing_editor_action::delete_selected, "Delete"},
+}};
+
 bool parse_int_text(const std::string& text, int& value) {
     if (text.empty()) {
         return false;
@@ -90,19 +131,34 @@ bool parse_float_text(const std::string& text, float& value) {
     }
 }
 
-ui::button_state timing_button(Rectangle rect, const char* label, int font_size,
-                               ui::draw_layer layer,
-                               Color bg = g_theme->row,
-                               Color bg_hover = g_theme->row_hover,
-                               Color text = g_theme->text,
-                               float border_width = 2.0f) {
-    return ui::button(rect, localization::tr_literal(label), {
-        .layer = layer,
+timing_button_descriptor timing_button_for(Rectangle rect,
+                                           const char* label,
+                                           int font_size,
+                                           ui::draw_layer layer,
+                                           Color bg = g_theme->row,
+                                           Color bg_hover = g_theme->row_hover,
+                                           Color text = g_theme->text,
+                                           float border_width = 2.0f) {
+    return {
+        .rect = rect,
+        .label = label,
         .font_size = font_size,
-        .border_width = border_width,
+        .layer = layer,
         .bg = bg,
         .bg_hover = bg_hover,
-        .text_color = text,
+        .text = text,
+        .border_width = border_width,
+    };
+}
+
+ui::button_state draw_timing_button(const timing_button_descriptor& button) {
+    return ui::button(button.rect, localization::tr_literal(button.label), {
+        .layer = button.layer,
+        .font_size = button.font_size,
+        .border_width = button.border_width,
+        .bg = button.bg,
+        .bg_hover = button.bg_hover,
+        .text_color = button.text,
         .custom_colors = true,
     });
 }
@@ -206,20 +262,73 @@ timing_editor_layout editor_layout_for(Rectangle rect) {
 }
 
 float timing_event_list_content_height(std::size_t event_count, float row_height, float row_gap, float fallback_height) {
-    if (event_count == 0) {
-        return fallback_height;
-    }
-    return static_cast<float>(event_count) * row_height +
-           static_cast<float>(std::max<int>(0, static_cast<int>(event_count) - 1)) * row_gap;
+    return ui::vertical_list_content_height(event_count, row_height, row_gap, fallback_height);
 }
 
 Rectangle timing_event_row_rect(Rectangle list_view, std::size_t index, float row_height, float row_gap, float scroll) {
+    return ui::vertical_list_row_rect(list_view, static_cast<int>(index), row_height, row_gap, scroll);
+}
+
+timing_event_row timing_event_row_for(Rectangle list_view,
+                                      const state_refs& state,
+                                      std::size_t index,
+                                      float scroll) {
     return {
-        list_view.x,
-        list_view.y + static_cast<float>(index) * (row_height + row_gap) - scroll,
-        list_view.width,
-        row_height,
+        .event = index < state.events.size() ? &state.events[index] : nullptr,
+        .index = index,
+        .rect = timing_event_row_rect(
+            list_view,
+            index,
+            kTimingEventRowHeight,
+            kTimingEventRowGap,
+            scroll),
+        .selected = state.selected_event_index.has_value() && *state.selected_event_index == index,
     };
+}
+
+std::array<ui::action_button_definition<timing_editor_action>, kTimingEditorActions.size()>
+timing_editor_action_buttons_for(const timing_editor_layout& layout) {
+    std::array<ui::action_button_definition<timing_editor_action>, kTimingEditorActions.size()> buttons{};
+    for (std::size_t i = 0; i < buttons.size(); ++i) {
+        buttons[i] = {
+            .rect = layout.action_buttons[i],
+            .label = localization::tr_literal(kTimingEditorActions[i].label),
+            .action = kTimingEditorActions[i].action,
+        };
+    }
+    return buttons;
+}
+
+ui::row_state draw_timing_event_row(const timing_event_row& row,
+                                    const editor_meter_map& meter_map,
+                                    ui::draw_layer layer) {
+    if (row.event == nullptr) {
+        return {};
+    }
+
+    const ui::row_state row_state = timing_selectable_row(row.rect, row.selected, layer, 1.2f);
+    const std::string label =
+        std::string(timing_type_label(row.event->type)) + " " + meter_map.bar_beat_label(row.event->tick);
+    ui::draw_label_value(ui::inset(row_state.visual, ui::edge_insets::symmetric(0.0f, 8.0f)),
+                         label.c_str(), timing_value_label(*row.event).c_str(), 14,
+                         row.selected ? g_theme->text : g_theme->text_secondary,
+                         row.selected ? g_theme->text : g_theme->text_muted,
+                         160.0f);
+    return row_state;
+}
+
+void apply_timing_editor_action(editor_result& result, timing_editor_action action) {
+    switch (action) {
+        case timing_editor_action::add_bpm:
+            result.add_event_type = timing_event_type::bpm;
+            break;
+        case timing_editor_action::add_meter:
+            result.add_event_type = timing_event_type::meter;
+            break;
+        case timing_editor_action::delete_selected:
+            result.delete_selected_event_requested = true;
+            break;
+    }
 }
 
 }  // namespace
@@ -249,10 +358,9 @@ summary_result draw_summary(Rectangle rect, state_refs state, const callbacks& a
                               g_theme->text_muted, ui::text_align::left);
     }
 
-    if (ui::button(layout.edit_button, "EDIT", {
-            .layer = view_config.base_layer,
-            .font_size = 15,
-        }).clicked) {
+    const timing_button_descriptor edit_button =
+        timing_button_for(layout.edit_button, "EDIT", 15, view_config.base_layer);
+    if (draw_timing_button(edit_button).clicked) {
         result.open_requested = true;
     }
     return result;
@@ -281,8 +389,10 @@ modal_result draw_modal(state_refs state, const callbacks& actions, const config
         .label_width = 118.0f,
     });
 
-    if (timing_button(layout.import_button, "IMPORT MIDI", 13, view_config.modal_layer,
-                      g_theme->section, g_theme->row_hover, g_theme->text, 1.5f).clicked) {
+    const timing_button_descriptor import_button =
+        timing_button_for(layout.import_button, "IMPORT MIDI", 13, view_config.modal_layer,
+                          g_theme->section, g_theme->row_hover, g_theme->text, 1.5f);
+    if (draw_timing_button(import_button).clicked) {
         result.import_midi_requested = true;
     }
     ui::draw_text_in_rect(
@@ -291,8 +401,10 @@ modal_result draw_modal(state_refs state, const callbacks& actions, const config
         ui::text_align::left);
 
     result.editor = draw_editor(layout.editor, view_config.modal_layer, state, actions);
-    if (timing_button(layout.done_button, "DONE", 14, view_config.modal_layer,
-                      g_theme->row_active, g_theme->row_hover, g_theme->text).clicked) {
+    const timing_button_descriptor done_button =
+        timing_button_for(layout.done_button, "DONE", 14, view_config.modal_layer,
+                          g_theme->row_active, g_theme->row_hover, g_theme->text);
+    if (draw_timing_button(done_button).clicked) {
         result.close_requested = true;
     }
     return result;
@@ -308,12 +420,15 @@ editor_result draw_editor(Rectangle rect, ui::draw_layer layer, state_refs state
     const timing_editor_layout layout = editor_layout_for(rect);
     ui::draw_text_in_rect("Song Timing", 16, layout.label, g_theme->text_secondary, ui::text_align::left);
 
-    const float row_height = 28.0f;
-    const float row_gap = 5.0f;
     const float content_height =
-        timing_event_list_content_height(state.events.size(), row_height, row_gap, layout.list_view.height);
-    const float max_scroll = std::max(0.0f, content_height - layout.list_view.height);
-    float event_scroll_offset = std::clamp(state.event_scroll_offset, 0.0f, max_scroll);
+        timing_event_list_content_height(
+            state.events.size(),
+            kTimingEventRowHeight,
+            kTimingEventRowGap,
+            layout.list_view.height);
+    ui::scroll_offset_state event_scroll =
+        ui::scroll_offset_state_for(layout.list_view, content_height, state.event_scroll_offset);
+    float event_scroll_offset = event_scroll.offset;
     bool event_scrollbar_dragging = state.event_scrollbar_dragging;
     float event_scrollbar_drag_offset = state.event_scrollbar_drag_offset;
     const ui::scrollbar_interaction scrollbar = ui::vertical_scrollbar(
@@ -325,9 +440,16 @@ editor_result draw_editor(Rectangle rect, ui::draw_layer layer, state_refs state
     if (scrollbar.changed || scrollbar.dragging) {
         event_scroll_offset = scrollbar.scroll_offset;
     }
-    const float mouse_wheel = GetMouseWheelMove();
-    if (ui::is_hovered(layout.list_view, layer) && mouse_wheel != 0.0f) {
-        event_scroll_offset = std::clamp(event_scroll_offset - mouse_wheel * 42.0f, 0.0f, max_scroll);
+    const float mouse_wheel = ui::mouse_wheel_move();
+    if (ui::is_hovered(layout.list_view, layer)) {
+        event_scroll = ui::wheel_scrolled_offset_state(
+            layout.list_view,
+            virtual_screen::get_virtual_mouse(),
+            mouse_wheel,
+            content_height,
+            event_scroll_offset,
+            kTimingEventWheelStep);
+        event_scroll_offset = event_scroll.offset;
     }
     if (event_scroll_offset != state.event_scroll_offset) {
         result.event_scroll_changed = true;
@@ -342,21 +464,15 @@ editor_result draw_editor(Rectangle rect, ui::draw_layer layer, state_refs state
     const editor_meter_map meter_map = song_create::timing_service::build_meter_map(state.events, 480);
     {
         ui::scoped_clip_rect clip_scope(layout.list_view);
-        for (size_t index = 0; index < state.events.size(); ++index) {
-            const timing_event& event = state.events[index];
-            const bool selected = state.selected_event_index.has_value() && *state.selected_event_index == index;
-            const Rectangle row = timing_event_row_rect(layout.list_view, index, row_height, row_gap,
-                                                        event_scroll_offset);
-            const ui::row_state row_state = timing_selectable_row(row, selected, layer, 1.2f);
+        const ui::index_range visible_rows = ui::vertical_list_visible_range(
+            state.events.size(), layout.list_view, kTimingEventRowHeight, kTimingEventRowGap, event_scroll_offset);
+        for (int index = visible_rows.begin; index < visible_rows.end; ++index) {
+            const timing_event_row row =
+                timing_event_row_for(layout.list_view, state, static_cast<std::size_t>(index), event_scroll_offset);
+            const ui::row_state row_state = draw_timing_event_row(row, meter_map, layer);
             if (row_state.clicked) {
-                result.selected_event_index = index;
+                result.selected_event_index = row.index;
             }
-            const std::string label = std::string(timing_type_label(event.type)) + " " + meter_map.bar_beat_label(event.tick);
-            ui::draw_label_value(ui::inset(row_state.visual, ui::edge_insets::symmetric(0.0f, 8.0f)),
-                                 label.c_str(), timing_value_label(event).c_str(), 14,
-                                 selected ? g_theme->text : g_theme->text_secondary,
-                                 selected ? g_theme->text : g_theme->text_muted,
-                                 160.0f);
         }
     }
     ui::scrollbar(layout.scrollbar, content_height, event_scroll_offset, {
@@ -366,14 +482,15 @@ editor_result draw_editor(Rectangle rect, ui::draw_layer layer, state_refs state
         .custom_colors = true,
     });
 
-    if (timing_button(layout.action_buttons[0], "Add BPM", 13, layer).clicked) {
-        result.add_event_type = timing_event_type::bpm;
-    }
-    if (timing_button(layout.action_buttons[1], "Add Time Sig", 13, layer).clicked) {
-        result.add_event_type = timing_event_type::meter;
-    }
-    if (timing_button(layout.action_buttons[2], "Delete", 13, layer).clicked) {
-        result.delete_selected_event_requested = true;
+    const std::array<ui::action_button_definition<timing_editor_action>, kTimingEditorActions.size()> action_buttons =
+        timing_editor_action_buttons_for(layout);
+    const auto clicked_action = ui::draw_action_buttons<timing_editor_action>(action_buttons, {
+        .layer = layer,
+        .font_size = 13,
+        .border_width = 2.0f,
+    });
+    if (clicked_action.has_value()) {
+        apply_timing_editor_action(result, *clicked_action);
     }
 
     const bool has_selection = state.selected_event_index.has_value() &&
@@ -422,9 +539,11 @@ editor_result draw_editor(Rectangle rect, ui::draw_layer layer, state_refs state
 
     const Color metro_base = state.metronome_enabled ? g_theme->accent : g_theme->section;
     const Color metro_text = state.metronome_enabled ? g_theme->panel : g_theme->text;
-    if (timing_button(layout.metronome,
-                      state.metronome_enabled ? "Metronome On" : "Metronome",
-                      13, layer, metro_base, g_theme->row_hover, metro_text, 1.2f).clicked) {
+    const timing_button_descriptor metronome_button =
+        timing_button_for(layout.metronome,
+                          state.metronome_enabled ? "Metronome On" : "Metronome",
+                          13, layer, metro_base, g_theme->row_hover, metro_text, 1.2f);
+    if (draw_timing_button(metronome_button).clicked) {
         if (state.metronome_enabled) {
             result.stop_metronome_requested = true;
         } else {

@@ -1,10 +1,12 @@
 #include "title/seamless_song_select_layout.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "scene_common.h"
 #include "tween.h"
+#include "ui_layout.h"
 
 namespace title_play_view {
 namespace {
@@ -35,20 +37,6 @@ constexpr Vector2 kSeedRankingHeaderOffset = {522.0f, -276.0f};
 constexpr Vector2 kSeedRankingSourceLocalOffset = {627.0f, -285.0f};
 constexpr Vector2 kSeedRankingSourceOnlineOffset = {768.0f, -285.0f};
 constexpr Vector2 kSeedRankingListOffset = {522.0f, 30.0f};
-Rectangle centered_scaled_rect(Rectangle anchor, Rectangle target, float scale, Vector2 offset = {0.0f, 0.0f}) {
-    const Vector2 center = {
-        anchor.x + anchor.width * 0.5f + offset.x,
-        anchor.y + anchor.height * 0.5f + offset.y,
-    };
-    const float width = target.width * scale;
-    const float height = target.height * scale;
-    return {
-        center.x - width * 0.5f,
-        center.y - height * 0.5f,
-        width,
-        height,
-    };
-}
 
 Rectangle fallback_origin_rect() {
     return kFallbackOriginRect;
@@ -75,22 +63,22 @@ layout make_layout_for_targets(float anim_t,
     const float t = tween::ease_out_cubic(anim_t);
     const Rectangle origin = resolve_origin_rect(origin_rect);
 
-    const Rectangle seed_song = centered_scaled_rect(origin, song_rect, 0.68f, kSeedSongOffset);
-    const Rectangle seed_main = centered_scaled_rect(origin, main_rect, 0.74f, kSeedMainOffset);
-    const Rectangle seed_ranking = centered_scaled_rect(origin, ranking_rect, 0.68f, kSeedRankingOffset);
-    const Rectangle seed_back = centered_scaled_rect(origin, kPlayBackButtonRect, 0.9f, kSeedBackOffset);
-    const Rectangle seed_jacket = centered_scaled_rect(origin, jacket_rect, 0.82f, kSeedJacketOffset);
-    const Rectangle seed_meta = centered_scaled_rect(origin, meta_rect, 0.8f, kSeedMetaOffset);
-    const Rectangle seed_chart_detail = centered_scaled_rect(origin, chart_detail_rect, 0.76f, kSeedChartDetailOffset);
-    const Rectangle seed_chart_buttons = centered_scaled_rect(origin, chart_buttons_rect, 0.88f, kSeedChartButtonsOffset);
-    const Rectangle seed_ranking_header = centered_scaled_rect(origin, ranking_header_rect, 0.7f, kSeedRankingHeaderOffset);
+    const Rectangle seed_song = ui::scaled_from_center(origin, song_rect, 0.68f, kSeedSongOffset);
+    const Rectangle seed_main = ui::scaled_from_center(origin, main_rect, 0.74f, kSeedMainOffset);
+    const Rectangle seed_ranking = ui::scaled_from_center(origin, ranking_rect, 0.68f, kSeedRankingOffset);
+    const Rectangle seed_back = ui::scaled_from_center(origin, kPlayBackButtonRect, 0.9f, kSeedBackOffset);
+    const Rectangle seed_jacket = ui::scaled_from_center(origin, jacket_rect, 0.82f, kSeedJacketOffset);
+    const Rectangle seed_meta = ui::scaled_from_center(origin, meta_rect, 0.8f, kSeedMetaOffset);
+    const Rectangle seed_chart_detail = ui::scaled_from_center(origin, chart_detail_rect, 0.76f, kSeedChartDetailOffset);
+    const Rectangle seed_chart_buttons = ui::scaled_from_center(origin, chart_buttons_rect, 0.88f, kSeedChartButtonsOffset);
+    const Rectangle seed_ranking_header = ui::scaled_from_center(origin, ranking_header_rect, 0.7f, kSeedRankingHeaderOffset);
     const Rectangle seed_ranking_source_friends =
-        centered_scaled_rect(origin, ranking_source_friends_rect, 0.8f, kSeedRankingSourceOnlineOffset);
+        ui::scaled_from_center(origin, ranking_source_friends_rect, 0.8f, kSeedRankingSourceOnlineOffset);
     const Rectangle seed_ranking_source_local =
-        centered_scaled_rect(origin, ranking_source_local_rect, 0.8f, kSeedRankingSourceLocalOffset);
+        ui::scaled_from_center(origin, ranking_source_local_rect, 0.8f, kSeedRankingSourceLocalOffset);
     const Rectangle seed_ranking_source_online =
-        centered_scaled_rect(origin, ranking_source_online_rect, 0.8f, kSeedRankingSourceOnlineOffset);
-    const Rectangle seed_ranking_list = centered_scaled_rect(origin, ranking_list_rect, 0.7f, kSeedRankingListOffset);
+        ui::scaled_from_center(origin, ranking_source_online_rect, 0.8f, kSeedRankingSourceOnlineOffset);
+    const Rectangle seed_ranking_list = ui::scaled_from_center(origin, ranking_list_rect, 0.7f, kSeedRankingListOffset);
 
     return {
         tween::lerp(seed_back, kPlayBackButtonRect, t),
@@ -249,19 +237,48 @@ Rectangle play_filter_modal_rect(const layout& current) {
 
 Rectangle play_filter_source_button_rect(Rectangle panel, int index) {
     const float source_y = panel.y + 90.0f;
-    const float source_w = (panel.width - 48.0f) / 3.0f;
-    return {panel.x + 18.0f + static_cast<float>(index) * (source_w + 6.0f), source_y, source_w, 36.0f};
+    std::array<Rectangle, 3> buttons{};
+    ui::hstack_fill({panel.x + 18.0f, source_y, panel.width - 36.0f, 36.0f}, 6.0f, buttons);
+    return buttons[static_cast<std::size_t>(index)];
 }
 
 Rectangle play_filter_key_button_rect(Rectangle panel, int index) {
     constexpr float kKeyWidth = 46.0f;
     constexpr float kKeyGap = 7.0f;
-    const float keys_x = panel.x + (panel.width - (kKeyWidth * 5.0f + kKeyGap * 4.0f)) * 0.5f;
-    return {keys_x + static_cast<float>(index) * (kKeyWidth + kKeyGap), panel.y + 318.0f, kKeyWidth, 30.0f};
+    constexpr int kKeyCount = 5;
+    const float group_width = kKeyWidth * static_cast<float>(kKeyCount) + kKeyGap * static_cast<float>(kKeyCount - 1);
+    std::array<Rectangle, kKeyCount> buttons{};
+    ui::hstack({panel.x + (panel.width - group_width) * 0.5f, panel.y + 318.0f, group_width, 30.0f},
+               kKeyWidth,
+               kKeyGap,
+               buttons);
+    return buttons[static_cast<std::size_t>(index)];
+}
+
+std::array<play_filter_source_option, 3> play_filter_source_options(Rectangle panel) {
+    return {{
+        {play_filter_source_button_rect(panel, 0), "ALL", song_select::chart_source_filter::all},
+        {play_filter_source_button_rect(panel, 1), "OFFICIAL", song_select::chart_source_filter::official},
+        {play_filter_source_button_rect(panel, 2), "COMMUNITY", song_select::chart_source_filter::community},
+    }};
+}
+
+std::array<play_filter_key_option, 5> play_filter_key_options(Rectangle panel) {
+    return {{
+        {play_filter_key_button_rect(panel, 0), "ALL", 0},
+        {play_filter_key_button_rect(panel, 1), "4K", 4},
+        {play_filter_key_button_rect(panel, 2), "5K", 5},
+        {play_filter_key_button_rect(panel, 3), "6K", 6},
+        {play_filter_key_button_rect(panel, 4), "7K", 7},
+    }};
 }
 
 Rectangle play_filter_clear_button_rect(Rectangle panel) {
     return {panel.x + 18.0f, panel.y + 378.0f, panel.width - 36.0f, 42.0f};
+}
+
+play_filter_clear_option play_filter_clear_option_for(Rectangle panel) {
+    return {play_filter_clear_button_rect(panel), "CLEAR FILTERS"};
 }
 
 Rectangle play_filter_level_slider_rect(Rectangle panel) {

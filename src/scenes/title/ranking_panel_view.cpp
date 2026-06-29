@@ -1,6 +1,7 @@
 #include "title/ranking_panel_view.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <cstdio>
@@ -14,6 +15,7 @@
 #include "tween.h"
 #include "ui_clip.h"
 #include "ui_draw.h"
+#include "ui_scroll.h"
 
 namespace {
 
@@ -24,6 +26,7 @@ constexpr float kEmptyMessageHeight = 42.0f;
 constexpr float kHeaderRowHeight = 38.0f;
 constexpr float kBrowseRankRowHeight = 56.0f;
 constexpr float kBrowseRankRowStep = 61.0f;
+constexpr float kBrowseRankRowGap = kBrowseRankRowStep - kBrowseRankRowHeight;
 constexpr float kAvatarSize = 44.0f;
 constexpr float kRevealOffsetX = 0.0f;
 constexpr float kClipSlack = 6.0f;
@@ -39,6 +42,13 @@ struct ranking_columns {
     float clear_width = 56.0f;
 };
 
+struct source_button_layout {
+    ranking_service::source source = ranking_service::source::local;
+    const char* label = "";
+    Rectangle rect{};
+    bool available = true;
+};
+
 struct ranking_header_layout {
     Rectangle clip{};
     Rectangle placement{};
@@ -47,6 +57,18 @@ struct ranking_header_layout {
     Rectangle date{};
     Rectangle accuracy{};
     Rectangle clear{};
+};
+
+struct ranking_header_cell {
+    const char* label = "";
+    Rectangle rect{};
+    ui::text_align align = ui::text_align::left;
+};
+
+struct ranking_title_bar {
+    const char* label = "";
+    Rectangle label_rect{};
+    std::array<source_button_layout, 3> source_buttons{};
 };
 
 struct ranking_row_layout {
@@ -59,6 +81,16 @@ struct ranking_row_layout {
     Rectangle date{};
     Rectangle accuracy{};
     Rectangle clear{};
+};
+
+struct ranking_entry_row {
+    const ranking_service::entry* entry = nullptr;
+    int placement = 0;
+    bool self_entry = false;
+    Rectangle body{};
+    unsigned char row_alpha = 255;
+    unsigned char content_alpha = 255;
+    Color row_base{};
 };
 
 constexpr ranking_columns ranking_columns_for(Rectangle rect) {
@@ -74,22 +106,19 @@ constexpr ranking_columns ranking_columns_for(Rectangle rect) {
     };
 }
 
+constexpr Rectangle ranking_row_viewport(Rectangle list_rect) {
+    return ui::vertical_viewport_after_top_inset(
+        ui::inset(list_rect, ui::edge_insets{0.0f, 10.0f, 0.0f, 10.0f}),
+        kHeaderRowHeight);
+}
+
 constexpr Rectangle ranking_row_rect(Rectangle list_rect, int index, float scroll_y) {
-    return {
-        list_rect.x + 10.0f,
-        list_rect.y + kHeaderRowHeight - scroll_y + static_cast<float>(index) * kBrowseRankRowStep,
-        list_rect.width - 20.0f,
-        kBrowseRankRowHeight,
-    };
+    const Rectangle row_viewport = ranking_row_viewport(list_rect);
+    return ui::vertical_list_row_rect(row_viewport, index, kBrowseRankRowHeight, kBrowseRankRowGap, scroll_y);
 }
 
 constexpr Rectangle entries_clip_rect_for(Rectangle list_rect) {
-    return {
-        list_rect.x,
-        list_rect.y + kHeaderRowHeight,
-        list_rect.width,
-        std::max(0.0f, list_rect.height - kHeaderRowHeight),
-    };
+    return ui::vertical_viewport_after_top_inset(list_rect, kHeaderRowHeight);
 }
 
 constexpr Rectangle empty_message_rect_for(Rectangle list_rect) {
@@ -108,11 +137,6 @@ constexpr Rectangle revealed_ranking_row_rect(Rectangle base_row, float reveal_t
         base_row.width,
         base_row.height,
     };
-}
-
-constexpr bool ranking_row_visible(Rectangle row, Rectangle list_rect) {
-    return row.y + row.height >= list_rect.y - kClipSlack &&
-           row.y <= list_rect.y + list_rect.height + kClipSlack;
 }
 
 constexpr ranking_header_layout ranking_header_layout_for(Rectangle list_rect) {
@@ -171,6 +195,66 @@ Color rank_color(rank value) {
         case rank::f: return theme.rank_f;
     }
     return theme.text_secondary;
+}
+
+std::array<source_button_layout, 3> source_buttons_for(const title_ranking_view::draw_config& config) {
+    return {{
+        {
+            .source = ranking_service::source::friends,
+            .label = "FRIENDS",
+            .rect = config.source_friends_rect,
+            .available = title_ranking_view::source_available(config, ranking_service::source::friends),
+        },
+        {
+            .source = ranking_service::source::online,
+            .label = "GLOBAL",
+            .rect = config.source_online_rect,
+            .available = title_ranking_view::source_available(config, ranking_service::source::online),
+        },
+        {
+            .source = ranking_service::source::local,
+            .label = "LOCAL",
+            .rect = config.source_local_rect,
+            .available = title_ranking_view::source_available(config, ranking_service::source::local),
+        },
+    }};
+}
+
+const char* ranking_title_label_for(ranking_service::source displayed_source) {
+    if (displayed_source == ranking_service::source::online) {
+        return "GLOBAL RANKING";
+    }
+    if (displayed_source == ranking_service::source::friends) {
+        return "FRIEND RANKING";
+    }
+    return "ローカルランキング";
+}
+
+ranking_title_bar ranking_title_bar_for(const title_ranking_view::draw_config& config,
+                                        ranking_service::source displayed_source) {
+    const float first_source_x =
+        config.source_availability.online_sources_available ? config.source_friends_rect.x : config.source_local_rect.x;
+    const float header_width = std::max(120.0f, first_source_x - config.header_rect.x - 12.0f);
+    return {
+        .label = ranking_title_label_for(displayed_source),
+        .label_rect = {config.header_rect.x, config.header_rect.y, header_width, config.header_rect.height},
+        .source_buttons = source_buttons_for(config),
+    };
+}
+
+std::array<ranking_header_cell, 6> ranking_header_cells_for(const ranking_header_layout& layout) {
+    return {{
+        {.label = "#", .rect = layout.placement, .align = ui::text_align::left},
+        {.label = "PLAYER", .rect = layout.player, .align = ui::text_align::left},
+        {.label = "SCORE", .rect = layout.score, .align = ui::text_align::right},
+        {.label = "DATE", .rect = layout.date, .align = ui::text_align::right},
+        {.label = "ACC", .rect = layout.accuracy, .align = ui::text_align::right},
+        {.label = "CLEAR", .rect = layout.clear, .align = ui::text_align::right},
+    }};
+}
+
+bool source_button_contains(const source_button_layout& button, Vector2 point) {
+    return button.available && ui::is_hovered(button.rect) && ui::contains_point(button.rect, point);
 }
 
 std::string format_score(int value) {
@@ -285,14 +369,74 @@ bool is_self_entry(const ranking_service::entry& entry,
            panel.best_entry->score == entry.score;
 }
 
-void draw_source_button(Rectangle rect,
-                        const char* label,
-                        ranking_service::source source,
+ranking_entry_row ranking_entry_row_for(const ranking_service::entry& entry,
+                                        int index,
+                                        const song_select::ranking_panel_state& panel,
+                                        const title_ranking_view::draw_config& config,
+                                        Rectangle body,
+                                        float reveal_t) {
+    const auto& t = *g_theme;
+    return {
+        .entry = &entry,
+        .placement = entry.placement > 0 ? entry.placement : index + 1,
+        .self_entry = is_self_entry(entry, panel, config),
+        .body = body,
+        .row_alpha = static_cast<unsigned char>(config.normal_row_alpha * reveal_t),
+        .content_alpha = static_cast<unsigned char>(config.alpha * reveal_t),
+        .row_base = index % 2 == 0 ? t.section : config.button_base,
+    };
+}
+
+void draw_ranking_entry_row(const ranking_entry_row& row,
+                            Rectangle list_rect,
+                            const std::string& avatar_base_url) {
+    if (row.entry == nullptr) {
+        return;
+    }
+
+    const auto& t = *g_theme;
+    const ranking_service::entry& entry = *row.entry;
+    const ranking_row_layout row_layout = ranking_row_layout_for(row.body, list_rect);
+    ui::surface_fill(row.body,
+                     with_alpha(row.self_entry ? lerp_color(row.row_base, t.accent, 0.13f) : row.row_base,
+                                row.row_alpha));
+    if (row.self_entry) {
+        ui::accent_bar(row_layout.accent,
+                       with_alpha(t.accent, static_cast<unsigned char>(row.content_alpha * 0.72f)));
+        ui::frame(row.body, with_alpha(t.accent, static_cast<unsigned char>(row.content_alpha * 0.34f)), 1.0f);
+    }
+    ui::draw_text_in_rect(TextFormat("%d", row.placement), 18,
+                          row_layout.placement,
+                          with_alpha(t.text, row.content_alpha), ui::text_align::left);
+    draw_avatar(row_layout.avatar, entry, row.content_alpha, avatar_base_url);
+    draw_marquee_text(entry.player_display_name.empty() ? "Unknown Player" : entry.player_display_name.c_str(),
+                      row_layout.player,
+                      17, with_alpha(t.text, row.content_alpha), GetTime());
+    ui::draw_text_in_rect(format_score(entry.score).c_str(), 14,
+                          row_layout.score,
+                          with_alpha(t.text_secondary, row.content_alpha), ui::text_align::right);
+    ui::draw_text_in_rect(format_relative_recorded_at(entry.recorded_at).c_str(), 13,
+                          row_layout.date,
+                          with_alpha(t.text_muted, row.content_alpha), ui::text_align::right);
+    ui::draw_text_in_rect(TextFormat("%.2f%%", entry.accuracy), 14,
+                          row_layout.accuracy,
+                          with_alpha(t.text_secondary, row.content_alpha), ui::text_align::right);
+    const rank clear_rank = entry.clear_rank();
+    ui::draw_text_in_rect(rank_label(clear_rank), 17,
+                          row_layout.clear,
+                          with_alpha(rank_color(clear_rank), row.content_alpha), ui::text_align::right);
+}
+
+void draw_source_button(const source_button_layout& button,
                         ranking_service::source displayed_source,
                         const title_ranking_view::draw_config& config) {
+    if (!button.available) {
+        return;
+    }
+
     const auto& t = *g_theme;
-    const bool selected = displayed_source == source;
-    ui::button(rect, label, {
+    const bool selected = displayed_source == button.source;
+    ui::button(button.rect, button.label, {
         .font_size = 14,
         .border_width = 1.5f,
         .bg = with_alpha(selected ? config.button_selected : config.button_base,
@@ -304,30 +448,103 @@ void draw_source_button(Rectangle rect,
     });
 }
 
+void draw_ranking_title_bar(const ranking_title_bar& title_bar,
+                            ranking_service::source displayed_source,
+                            const title_ranking_view::draw_config& config) {
+    const auto& t = *g_theme;
+    ui::draw_text_in_rect(title_bar.label,
+                          16,
+                          title_bar.label_rect,
+                          with_alpha(t.accent, config.alpha),
+                          ui::text_align::left);
+    for (const source_button_layout& button : title_bar.source_buttons) {
+        draw_source_button(button, displayed_source, config);
+    }
+}
+
+void draw_ranking_header(const ranking_header_layout& header, unsigned char alpha) {
+    const auto& t = *g_theme;
+    ui::scoped_clip_rect header_clip(header.clip);
+    for (const ranking_header_cell& cell : ranking_header_cells_for(header)) {
+        ui::draw_text_in_rect(cell.label,
+                              11,
+                              cell.rect,
+                              with_alpha(t.text_muted, alpha),
+                              cell.align);
+    }
+}
+
+std::string ranking_empty_message_for(const song_select::ranking_panel_state& panel,
+                                      song_select::ranking_load_controller::load_status status) {
+    if (!panel.listing.message.empty()) {
+        return panel.listing.message;
+    }
+    return status == song_select::ranking_load_controller::load_status::failed
+        ? "ランキングを読み込めませんでした。"
+        : "ランキングはまだありません。";
+}
+
+void draw_ranking_status_message(const char* message, Rectangle list_rect, unsigned char alpha) {
+    ui::draw_text_in_rect(message,
+                          13,
+                          empty_message_rect_for(list_rect),
+                          with_alpha(g_theme->text_muted, alpha),
+                          ui::text_align::left);
+}
+
+void draw_ranking_entries(const song_select::ranking_panel_state& panel,
+                          const title_ranking_view::draw_config& config) {
+    const Rectangle row_viewport = ranking_row_viewport(config.list_rect);
+    const ui::index_range visible_rows = ui::vertical_list_visible_range(
+        panel.listing.entries.size(),
+        row_viewport,
+        config.list_rect,
+        kBrowseRankRowHeight,
+        kBrowseRankRowGap,
+        panel.scroll_y,
+        kClipSlack);
+    for (int i = visible_rows.begin; i < visible_rows.end; ++i) {
+        const ranking_service::entry& entry = panel.listing.entries[static_cast<size_t>(i)];
+        const float row_reveal_t =
+            tween::ease_out_quad(std::clamp((panel.reveal_anim - static_cast<float>(i) * 0.075f) / 0.24f,
+                                            0.0f,
+                                            1.0f));
+        if (row_reveal_t <= 0.0f) {
+            continue;
+        }
+
+        const Rectangle base_row = ranking_row_rect(config.list_rect, i, panel.scroll_y);
+        const Rectangle row = revealed_ranking_row_rect(base_row, row_reveal_t);
+        draw_ranking_entry_row(
+            ranking_entry_row_for(entry, i, panel, config, row, row_reveal_t),
+            config.list_rect,
+            config.avatar_base_url);
+    }
+}
+
 }  // namespace
 
 namespace title_ranking_view {
 
 float content_height(const ranking_service::listing& listing) {
     const size_t count = listing.entries.empty() ? 1 : listing.entries.size();
-    return kHeaderRowHeight + static_cast<float>(count) * kBrowseRankRowStep;
+    return kHeaderRowHeight +
+        ui::vertical_list_content_height_with_trailing_padding(
+            count,
+            kBrowseRankRowHeight,
+            kBrowseRankRowGap,
+            kBrowseRankRowGap);
 }
 
 float max_scroll(Rectangle list_rect, const ranking_service::listing& listing) {
-    return std::max(0.0f, content_height(listing) - list_rect.height + kScrollPadding);
+    return ui::max_scroll_offset(content_height(listing), list_rect, kScrollPadding);
 }
 
 std::optional<ranking_service::source> hit_test_source(const draw_config& config, Vector2 point) {
-    if (source_available(config, ranking_service::source::friends) &&
-        ui::is_hovered(config.source_friends_rect) && ui::contains_point(config.source_friends_rect, point)) {
-        return ranking_service::source::friends;
-    }
-    if (ui::is_hovered(config.source_local_rect) && ui::contains_point(config.source_local_rect, point)) {
-        return ranking_service::source::local;
-    }
-    if (source_available(config, ranking_service::source::online) &&
-        ui::is_hovered(config.source_online_rect) && ui::contains_point(config.source_online_rect, point)) {
-        return ranking_service::source::online;
+    for (const source_button_layout& button : source_buttons_for(config)) {
+        if (source_button_contains(button, point)) {
+            return button.source;
+        }
     }
     return std::nullopt;
 }
@@ -343,13 +560,13 @@ std::optional<std::string> hit_test_profile_user_id(const song_select::ranking_p
         return std::nullopt;
     }
 
-    for (int i = 0; i < static_cast<int>(panel.listing.entries.size()); ++i) {
-        const ranking_service::entry& entry = panel.listing.entries[static_cast<size_t>(i)];
-        if (entry.player_user_id.empty()) {
-            continue;
-        }
-        const Rectangle row = ranking_row_rect(config.list_rect, i, panel.scroll_y);
-        if (ui::contains_point(row, point)) {
+    const Rectangle row_viewport = ranking_row_viewport(config.list_rect);
+    const int index = ui::vertical_list_index_at_y(
+        point.y, row_viewport, kBrowseRankRowHeight, kBrowseRankRowGap, panel.scroll_y);
+    if (index >= 0 && index < static_cast<int>(panel.listing.entries.size())) {
+        const ranking_service::entry& entry = panel.listing.entries[static_cast<size_t>(index)];
+        const Rectangle row = ranking_row_rect(config.list_rect, index, panel.scroll_y);
+        if (ui::contains_point(row, point) && !entry.player_user_id.empty()) {
             return entry.player_user_id;
         }
     }
@@ -360,116 +577,29 @@ void draw(const song_select::ranking_panel_state& panel, const draw_config& conf
     const auto& t = *g_theme;
     const ranking_service::source displayed_source =
         song_select::ranking_source_policy::effective_source(config.source_availability, panel.selected_source);
-    const char* header_label = "ローカルランキング";
-    if (displayed_source == ranking_service::source::online) {
-        header_label = "GLOBAL RANKING";
-    } else if (displayed_source == ranking_service::source::friends) {
-        header_label = "FRIEND RANKING";
-    }
-    const float first_source_x =
-        config.source_availability.online_sources_available ? config.source_friends_rect.x : config.source_local_rect.x;
-    const float header_width = std::max(120.0f, first_source_x - config.header_rect.x - 12.0f);
-    ui::draw_text_in_rect(header_label,
-                          16, {config.header_rect.x, config.header_rect.y, header_width, config.header_rect.height},
-                          with_alpha(t.accent, config.alpha), ui::text_align::left);
-    if (config.source_availability.online_sources_available) {
-        draw_source_button(config.source_friends_rect, "FRIENDS", ranking_service::source::friends,
-                           displayed_source, config);
-        draw_source_button(config.source_online_rect, "GLOBAL", ranking_service::source::online,
-                           displayed_source, config);
-    }
-    draw_source_button(config.source_local_rect, "LOCAL", ranking_service::source::local, displayed_source, config);
+    draw_ranking_title_bar(ranking_title_bar_for(config, displayed_source), displayed_source, config);
 
     ui::surface(config.list_rect,
                 with_alpha(config.button_base, config.normal_row_alpha),
                 with_alpha(t.border_light, config.alpha),
                 1.0f);
-    const ranking_header_layout list_header = ranking_header_layout_for(config.list_rect);
-    {
-        ui::scoped_clip_rect header_clip(list_header.clip);
-        ui::draw_text_in_rect("#", 11, list_header.placement,
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
-        ui::draw_text_in_rect("PLAYER", 11, list_header.player,
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
-        ui::draw_text_in_rect("SCORE", 11, list_header.score,
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
-        ui::draw_text_in_rect("DATE", 11, list_header.date,
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
-        ui::draw_text_in_rect("ACC", 11, list_header.accuracy,
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
-        ui::draw_text_in_rect("CLEAR", 11, list_header.clear,
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::right);
-    }
+    draw_ranking_header(ranking_header_layout_for(config.list_rect), config.alpha);
 
-    const float reveal_anim = panel.reveal_anim;
     const Rectangle entries_clip_rect = entries_clip_rect_for(config.list_rect);
     ui::scoped_clip_rect entries_clip(entries_clip_rect);
     const auto ranking_status = config.ranking_snapshot.status;
     if (ranking_status == song_select::ranking_load_controller::load_status::loading) {
-        ui::draw_text_in_rect("ランキング読み込み中...", 13,
-                              empty_message_rect_for(config.list_rect),
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
+        draw_ranking_status_message("ランキング読み込み中...", config.list_rect, config.alpha);
         return;
     }
 
     if (!panel.listing.available || panel.listing.entries.empty()) {
-        std::string message = panel.listing.message;
-        if (message.empty()) {
-            message = ranking_status == song_select::ranking_load_controller::load_status::failed
-                ? "ランキングを読み込めませんでした。"
-                : "ランキングはまだありません。";
-        }
-        ui::draw_text_in_rect(message.c_str(), 13,
-                              empty_message_rect_for(config.list_rect),
-                              with_alpha(t.text_muted, config.alpha), ui::text_align::left);
+        const std::string message = ranking_empty_message_for(panel, ranking_status);
+        draw_ranking_status_message(message.c_str(), config.list_rect, config.alpha);
         return;
     }
 
-    for (int i = 0; i < static_cast<int>(panel.listing.entries.size()); ++i) {
-        const ranking_service::entry& entry = panel.listing.entries[static_cast<size_t>(i)];
-        const float row_reveal_t =
-            tween::ease_out_quad(std::clamp((reveal_anim - static_cast<float>(i) * 0.075f) / 0.24f, 0.0f, 1.0f));
-        if (row_reveal_t <= 0.0f) {
-            continue;
-        }
-
-        const Rectangle base_row = ranking_row_rect(config.list_rect, i, panel.scroll_y);
-        const Rectangle row = revealed_ranking_row_rect(base_row, row_reveal_t);
-        if (!ranking_row_visible(row, config.list_rect)) {
-            continue;
-        }
-
-        const unsigned char row_alpha = static_cast<unsigned char>(config.normal_row_alpha * row_reveal_t);
-        const unsigned char content_alpha = static_cast<unsigned char>(config.alpha * row_reveal_t);
-        const bool self_entry = is_self_entry(entry, panel, config);
-        const Color row_base = i % 2 == 0 ? t.section : config.button_base;
-        ui::surface_fill(row, with_alpha(self_entry ? lerp_color(row_base, t.accent, 0.13f) : row_base, row_alpha));
-        const ranking_row_layout row_layout = ranking_row_layout_for(row, config.list_rect);
-        if (self_entry) {
-            ui::accent_bar(row_layout.accent,
-                           with_alpha(t.accent, static_cast<unsigned char>(content_alpha * 0.72f)));
-            ui::frame(row, with_alpha(t.accent, static_cast<unsigned char>(content_alpha * 0.34f)), 1.0f);
-        }
-        ui::draw_text_in_rect(TextFormat("%d", entry.placement > 0 ? entry.placement : i + 1), 18,
-                              row_layout.placement,
-                              with_alpha(t.text, content_alpha), ui::text_align::left);
-        draw_avatar(row_layout.avatar, entry, content_alpha, config.avatar_base_url);
-        draw_marquee_text(entry.player_display_name.empty() ? "Unknown Player" : entry.player_display_name.c_str(),
-                          row_layout.player,
-                          17, with_alpha(t.text, content_alpha), GetTime());
-        ui::draw_text_in_rect(format_score(entry.score).c_str(), 14,
-                              row_layout.score,
-                              with_alpha(t.text_secondary, content_alpha), ui::text_align::right);
-        ui::draw_text_in_rect(format_relative_recorded_at(entry.recorded_at).c_str(), 13,
-                              row_layout.date,
-                              with_alpha(t.text_muted, content_alpha), ui::text_align::right);
-        ui::draw_text_in_rect(TextFormat("%.2f%%", entry.accuracy), 14,
-                              row_layout.accuracy,
-                              with_alpha(t.text_secondary, content_alpha), ui::text_align::right);
-        ui::draw_text_in_rect(rank_label(entry.clear_rank()), 17,
-                              row_layout.clear,
-                              with_alpha(rank_color(entry.clear_rank()), content_alpha), ui::text_align::right);
-    }
+    draw_ranking_entries(panel, config);
 }
 
 }  // namespace title_ranking_view

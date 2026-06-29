@@ -26,6 +26,13 @@ Rectangle context_menu_rect_for(Vector2 position, int item_count) {
     return rect;
 }
 
+bool should_close_context_menu(Rectangle menu_rect, Vector2 mouse, bool opened_this_frame = false) {
+    if (opened_this_frame) {
+        return false;
+    }
+    return ui::is_mouse_button_pressed_outside(menu_rect, mouse);
+}
+
 } // namespace
 
 mv_editor_context_menu_result draw_mv_context_menu(mv_editor_context_menu_target target,
@@ -66,7 +73,7 @@ mv_editor_context_menu_result draw_mv_context_menu(mv_editor_context_menu_target
             default: return {.action = mv_editor_context_menu_action::close};
             }
         }
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !ui::contains_point(menu_rect, mouse)) {
+        if (should_close_context_menu(menu_rect, mouse)) {
             return {.action = mv_editor_context_menu_action::close};
         }
         return {};
@@ -92,7 +99,7 @@ mv_editor_context_menu_result draw_mv_context_menu(mv_editor_context_menu_target
             default: return {.action = mv_editor_context_menu_action::close};
             }
         }
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !ui::contains_point(menu_rect, mouse)) {
+        if (should_close_context_menu(menu_rect, mouse)) {
             return {.action = mv_editor_context_menu_action::close};
         }
         return {};
@@ -153,7 +160,7 @@ mv_editor_context_menu_result draw_mv_context_menu(mv_editor_context_menu_target
                 return {.action = mv_editor_context_menu_action::close};
             }
         }
-        if (!opened_this_frame && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !ui::contains_point(menu_rect, mouse)) {
+        if (should_close_context_menu(menu_rect, mouse, opened_this_frame)) {
             return {.action = mv_editor_context_menu_action::close};
         }
         return {};
@@ -177,7 +184,7 @@ mv_editor_context_menu_result draw_mv_context_menu(mv_editor_context_menu_target
             default: return {.action = mv_editor_context_menu_action::close};
             }
         }
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !ui::contains_point(menu_rect, mouse)) {
+        if (should_close_context_menu(menu_rect, mouse)) {
             return {.action = mv_editor_context_menu_action::close};
         }
         return {};

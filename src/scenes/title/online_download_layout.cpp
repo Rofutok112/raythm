@@ -1,6 +1,7 @@
 #include "title/online_download_internal.h"
 
 #include <algorithm>
+#include <array>
 
 #include "scene_common.h"
 #include "title/title_layout.h"
@@ -46,21 +47,6 @@ constexpr Vector2 kSeedChartListOffset = {297.0f, 66.0f};
 constexpr float kPreviewBarBottomInset = (kContentRect.y + kContentRect.height) - kPreviewBarRect.y;
 constexpr float kPreviewButtonBottomInset = (kContentRect.y + kContentRect.height) - kPreviewPlayRect.y;
 constexpr float kActionButtonBottomInset = (kContentRect.y + kContentRect.height) - kPrimaryActionRect.y;
-
-Rectangle centered_scaled_rect(Rectangle anchor, Rectangle target, float scale, Vector2 offset = {0.0f, 0.0f}) {
-    const Vector2 center = {
-        anchor.x + anchor.width * 0.5f + offset.x,
-        anchor.y + anchor.height * 0.5f + offset.y,
-    };
-    const float width = target.width * scale;
-    const float height = target.height * scale;
-    return {
-        center.x - width * 0.5f,
-        center.y - height * 0.5f,
-        width,
-        height,
-    };
-}
 
 Rectangle fallback_origin_rect() {
     return kFallbackOriginRect;
@@ -221,33 +207,33 @@ Rectangle chart_empty_placeholder_rect(Rectangle chart_list) {
 
 Rectangle chart_source_button_rect(Rectangle chart_list, int index) {
     const float button_width = (chart_list.width - 52.0f) * 0.5f;
-    const float x = chart_list.x + 20.0f + static_cast<float>(index % 2) * (button_width + 12.0f);
-    const float y = chart_list.y + 124.0f + static_cast<float>(index / 2) * 42.0f;
-    return {
-        x,
-        y,
-        button_width,
-        36.0f,
-    };
+    std::array<Rectangle, 4> buttons{};
+    ui::grid({chart_list.x + 20.0f, chart_list.y + 124.0f, chart_list.width - 40.0f, 78.0f},
+             2,
+             button_width,
+             36.0f,
+             12.0f,
+             6.0f,
+             buttons);
+    return buttons[static_cast<std::size_t>(index)];
 }
 
 Rectangle chart_key_button_rect(Rectangle chart_list, int index) {
     const float group_width = kChartKeyButtonWidth + kChartKeyButtonStep * 4.0f;
-    return {
-        chart_list.x + (chart_list.width - group_width) * 0.5f + static_cast<float>(index) * kChartKeyButtonStep,
-        chart_list.y + 470.0f,
-        kChartKeyButtonWidth,
-        30.0f,
-    };
+    std::array<Rectangle, 5> buttons{};
+    ui::hstack({chart_list.x + (chart_list.width - group_width) * 0.5f, chart_list.y + 470.0f, group_width, 30.0f},
+               kChartKeyButtonWidth,
+               kChartKeyButtonStep - kChartKeyButtonWidth,
+               buttons);
+    return buttons[static_cast<std::size_t>(index)];
 }
 
 Rectangle chart_status_button_rect(Rectangle chart_list, int index) {
-    return {
-        chart_list.x + 20.0f + static_cast<float>(index) * ((chart_list.width - 52.0f) / 3.0f + 6.0f),
-        chart_list.y + 262.0f,
-        (chart_list.width - 52.0f) / 3.0f,
-        36.0f,
-    };
+    std::array<Rectangle, 3> buttons{};
+    ui::hstack_fill({chart_list.x + 20.0f, chart_list.y + 262.0f, chart_list.width - 40.0f, 36.0f},
+                    6.0f,
+                    buttons);
+    return buttons[static_cast<std::size_t>(index)];
 }
 
 Rectangle chart_clear_button_rect(Rectangle chart_list) {
@@ -275,22 +261,22 @@ layout make_layout(float anim_t, Rectangle origin_rect) {
     const Rectangle origin = resolve_origin_rect(origin_rect);
     const Rectangle target_search = sidebar_search_rect(kSidebarRect);
 
-    const Rectangle seed_back = centered_scaled_rect(origin, kBackRect, 0.9f, kSeedBackOffset);
-    const Rectangle seed_official_tab = centered_scaled_rect(origin, kOfficialTabRect, 0.84f, kSeedOfficialTabOffset);
-    const Rectangle seed_community_tab = centered_scaled_rect(origin, kCommunityTabRect, 0.84f, kSeedCommunityTabOffset);
-    const Rectangle seed_owned_tab = centered_scaled_rect(origin, kOwnedTabRect, 0.84f, kSeedOwnedTabOffset);
-    const Rectangle seed_search = centered_scaled_rect(origin, target_search, 0.86f, kSeedSearchOffset);
-    const Rectangle seed_content = centered_scaled_rect(origin, kContentRect, 0.84f, kSeedContentOffset);
-    const Rectangle seed_detail_left = centered_scaled_rect(origin, kDetailLeftRect, 0.78f, kSeedDetailLeftOffset);
-    const Rectangle seed_detail_right = centered_scaled_rect(origin, kDetailRightRect, 0.8f, kSeedDetailRightOffset);
-    const Rectangle seed_detail_preview = centered_scaled_rect(origin, kDetailPreviewRect, 0.8f, kSeedDetailPreviewOffset);
-    const Rectangle seed_chart_list = centered_scaled_rect(origin, kChartListRect, 0.84f, kSeedChartListOffset);
+    const Rectangle seed_back = ui::scaled_from_center(origin, kBackRect, 0.9f, kSeedBackOffset);
+    const Rectangle seed_official_tab = ui::scaled_from_center(origin, kOfficialTabRect, 0.84f, kSeedOfficialTabOffset);
+    const Rectangle seed_community_tab = ui::scaled_from_center(origin, kCommunityTabRect, 0.84f, kSeedCommunityTabOffset);
+    const Rectangle seed_owned_tab = ui::scaled_from_center(origin, kOwnedTabRect, 0.84f, kSeedOwnedTabOffset);
+    const Rectangle seed_search = ui::scaled_from_center(origin, target_search, 0.86f, kSeedSearchOffset);
+    const Rectangle seed_content = ui::scaled_from_center(origin, kContentRect, 0.84f, kSeedContentOffset);
+    const Rectangle seed_detail_left = ui::scaled_from_center(origin, kDetailLeftRect, 0.78f, kSeedDetailLeftOffset);
+    const Rectangle seed_detail_right = ui::scaled_from_center(origin, kDetailRightRect, 0.8f, kSeedDetailRightOffset);
+    const Rectangle seed_detail_preview = ui::scaled_from_center(origin, kDetailPreviewRect, 0.8f, kSeedDetailPreviewOffset);
+    const Rectangle seed_chart_list = ui::scaled_from_center(origin, kChartListRect, 0.84f, kSeedChartListOffset);
     const Rectangle current_content = tween::lerp(seed_content, kContentRect, t);
     const Rectangle current_sidebar = tween::lerp(seed_content, kSidebarRect, t);
     const Rectangle current_detail_left = tween::lerp(seed_detail_left, kDetailLeftRect, t);
     const Rectangle current_detail_right = tween::lerp(seed_detail_right, kDetailRightRect, t);
     const Rectangle current_detail_preview = tween::lerp(seed_detail_preview, kDetailPreviewRect, t);
-    const Rectangle current_jacket = tween::lerp(centered_scaled_rect(origin, kHeroJacketRect, 0.82f), kHeroJacketRect, t);
+    const Rectangle current_jacket = tween::lerp(ui::scaled_from_center(origin, kHeroJacketRect, 0.82f), kHeroJacketRect, t);
     const Rectangle current_preview_bar = {
         current_detail_preview.x + 30.0f,
         current_detail_preview.y + 326.0f,

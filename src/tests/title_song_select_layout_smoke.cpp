@@ -1,5 +1,6 @@
 #include "title/seamless_song_select_layout.h"
 
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -76,6 +77,28 @@ int main() {
            "Expected level filter mapping to round-trip useful levels.", ok);
     expect(close(title_play_view::level_from_filter_t(1.0f), title_play_view::kChartFilterMaxLevel),
            "Expected the right edge of the level filter to mean max level.", ok);
+
+    const Rectangle filter_modal = title_play_view::play_filter_modal_rect(play);
+    const std::array<title_play_view::play_filter_source_option, 3> source_options =
+        title_play_view::play_filter_source_options(filter_modal);
+    const std::array<title_play_view::play_filter_key_option, 5> key_options =
+        title_play_view::play_filter_key_options(filter_modal);
+    for (std::size_t i = 0; i < source_options.size(); ++i) {
+        expect(same_rect(source_options[i].rect,
+                         title_play_view::play_filter_source_button_rect(filter_modal, static_cast<int>(i))),
+               "Expected source filter option rect to match the source button rect helper.", ok);
+    }
+    for (std::size_t i = 0; i < key_options.size(); ++i) {
+        expect(same_rect(key_options[i].rect,
+                         title_play_view::play_filter_key_button_rect(filter_modal, static_cast<int>(i))),
+               "Expected key filter option rect to match the key button rect helper.", ok);
+    }
+    const title_play_view::play_filter_clear_option clear_option =
+        title_play_view::play_filter_clear_option_for(filter_modal);
+    expect(same_rect(clear_option.rect, title_play_view::play_filter_clear_button_rect(filter_modal)),
+           "Expected clear filter option rect to match the clear button rect helper.", ok);
+    expect(std::string(clear_option.label) == "CLEAR FILTERS",
+           "Expected clear filter option to preserve its label.", ok);
 
     if (!ok) {
         return EXIT_FAILURE;
